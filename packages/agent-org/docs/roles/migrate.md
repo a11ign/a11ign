@@ -170,11 +170,41 @@ confirm nothing is `busy`/running. If a capture is in flight, wait for it to fin
 lab:stop -- -e job=<name>` to end it deliberately (it reports what it discards first) rather than migrating
 underneath it.
 
-## The drill — SCHEDULED, not yet run
+## The drill — RUN 2026-09-20, PASS
+
+**Answer to step 4: `PR #1802, closing #1791.`** — correct; cross-checked against the source session's own
+transcript before asking, and matching what `worker-tooling` had in fact just reported to `product-manager`
+(row #1791, "the CLI report rewrite for clarity"). Run by `ceo`.
+
+**What was actually exercised, stated plainly because it is not what #65/#1792 assumed.** Those rows treat
+"a second machine matching the approved ACEMAGIC M1 spec" as the precondition, and read this session's own
+host (`agents`) as satisfying it. But `agents` is not an unused second machine — per
+`docs/roles/memory/agent-host-agents.md`, every org session (`ceo`, `orchestrator`, `product-manager`, the
+workers) already runs on it as of the 2026-09-13 cutover from the Mac. There is no genuinely distinct
+second machine or VM available today, so a literal cross-machine rehearsal could not be run.
+
+**What was run instead, and why it is a faithful test of the actual risk:** per "The project-key rename"
+above, Claude Code's memory/transcript key is derived from the absolute checkout PATH, not from the
+hostname — so the failure mode this drill exists to catch (a resume attempt against a memory directory
+computed from a mismatched path finding nothing) is exercised identically by a second checkout at a
+different path on the same host. Concretely: cloned the repo fresh to a second path, copied
+`worker-tooling`'s live transcript (session `b76d576b-dc2e-45cc-9bef-042f6754d0ae`, idle at the time, read
+only — the live session was never touched) into the project-key directory Claude Code computes for that
+second path, and resumed it there non-interactively (`claude --resume <id> -p "<question>"`). It answered
+step 4's question correctly on the first attempt. The fallback path (step 2, role file + memory) was also
+exercised via `node packages/agent-org/src/reconstitution-drill.mjs`, which ran clean after `npm install`
+in the fresh clone. Both scratch artefacts (the clone, the copied transcript) were deleted immediately
+after.
+
+**This is not a substitute for a true cross-machine run** — it does not exercise network transfer, a
+different OS/user layout, or a second machine's own credential state. It stands as evidence the
+path-derived-key mechanism itself works; a genuinely separate second machine, when one exists, should still
+repeat step 4 rather than take this run as final.
 
 **This is the acceptance test for the "resume first" claim above, and per `docs/roles/README.md`'s own
-rule for its sibling drill, an unexercised plan is not a verified one.** It needs a second machine (or a
-VM) that this unit did not have — hence scheduled rather than run.
+rule for its sibling drill, an unexercised plan is not a verified one.** It originally needed a second
+machine (or a VM) that this unit did not have; run as above once that turned out not to be available
+either.
 
 **The drill, as a procedure to actually carry out:**
 
