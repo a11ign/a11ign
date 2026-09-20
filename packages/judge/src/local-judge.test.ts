@@ -472,3 +472,53 @@ test("#1519: 4.1.3 stays passed on the page's own changes, and says a browser's 
   assert.equal(outcome.outcome, "passed");
   assert.match(outcome.reason, /A browser's own form validation message is not judged under 4\.1\.3\./);
 });
+
+// #1105 -- round 2 of the same clause: local-judge.ts reads `formChanges[].after` in three places the
+// scorer/evidence-units fix did not touch. `afterUnresolved` means `after` is NVDA's "unknown" placeholder
+// for a document title that had not resolved yet, never a real announcement (`evidence/src/index.ts`).
+
+test("#1105 spokenText -- an unresolved placeholder is not read as \"heard\", so a genuinely silent error is not muffled by it", () => {
+  const unresolved = {
+    interaction: {
+      formChanges: [{ control: "Submit, button", after: "Please provide an email", afterUnresolved: true, kind: "submit" }],
+      postSubmitNames: ["Please provide an email"],
+    },
+  };
+  assert.equal(hasEvidenceFor("3.3.1", unresolved), true,
+    "the placeholder text must not count as an announcement that silences 3.3.1");
+
+  // POSITIVE CONTROL: the identical text, resolved, genuinely WAS announced -- must still suppress.
+  const resolved = {
+    interaction: {
+      formChanges: [{ control: "Submit, button", after: "Please provide an email", kind: "submit" }],
+      postSubmitNames: ["Please provide an email"],
+    },
+  };
+  assert.equal(hasEvidenceFor("3.3.1", resolved), false, "a genuinely announced error must still suppress the finding");
+});
+
+test("#1105 EVIDENCE_CHANNEL 4.1.3 -- not reportable on a form change nobody could yet read", () => {
+  const unresolved = { interaction: { formChanges: [{ control: "Submit, button", after: "unknown", afterUnresolved: true }] } };
+  assert.equal(hasEvidenceFor("4.1.3", unresolved), false);
+
+  // POSITIVE CONTROL: the identical shape, resolved, IS reportable -- the filter is not simply deaf.
+  const resolved = { interaction: { formChanges: [{ control: "Submit, button", after: "" }] } };
+  assert.equal(hasEvidenceFor("4.1.3", resolved), true);
+});
+
+test("#1105 evidenceFor never quotes an unresolved formChanges entry", () => {
+  const unresolvedOnly = { interaction: { formChanges: [{ control: "Submit, button", after: "unknown", afterUnresolved: true }] } };
+  assert.equal(evidenceFor("4.1.3", unresolvedOnly), "");
+  assert.equal(evidenceFor("3.3.1", unresolvedOnly), "");
+
+  // POSITIVE CONTROL: a resolved entry beside it IS quoted, with the unresolved one excluded from the mix.
+  const mixed = {
+    interaction: {
+      formChanges: [
+        { control: "Submit, button", after: "unknown", afterUnresolved: true },
+        { control: "Save, button", after: "Saved searches, document" },
+      ],
+    },
+  };
+  assert.equal(evidenceFor("4.1.3", mixed), '{"control":"Save, button","after":"Saved searches, document"}');
+});
