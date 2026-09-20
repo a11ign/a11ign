@@ -254,3 +254,26 @@ early, "nothing was said" and "we stopped listening" become the same observation
 `capture-core.mjs` throwing `ReferenceError` at import, and **neither `npm run lint` nor `tsc --noEmit`
 caught it**. For `.mjs`, `node -e "import('./path.mjs')"` is the only real check.
 
+
+### NVDA can announce "unknown" for a document whose title has not resolved yet (#1105)
+
+A submit that navigates can catch `activateAndCaptureDelta` before the new document's accessible name is
+available, and NVDA's placeholder for "not yet" is the bare word `"unknown"` — indistinguishable from
+real page speech to everything downstream. Two independent sightings (2 of 170 form-probe records) led
+to a bounded repeat-capture measurement across the four populations they came from: **11 of 32 (34.4%)**,
+ranging 0% to 62.5% per population, well above the opening sighting.
+
+This is NOT a page that has no title — 7 of 8 same-page repeats of the affected `claim` population, and
+every repeat of `order`, read the real title. It is a race, but `baselineWaitedMs` (the row's own
+suggested discriminator) does not resolve it cleanly: `claim`'s `"unknown"` captures all sat at the
+~300ms floor while its clean siblings waited longer, consistent with a race a longer wait would fix —
+but `booking` showed the opposite, one `"unknown"` capture outwaiting four of its own clean siblings. So
+"wait longer" is not proven to catch every case.
+
+The fix is both, not either: `waitPastUnresolvedTitle` retries once more (the same shape as
+`waitPastControlState`'s retry for a control's own re-announcement) when the delta reads as the
+placeholder, and `pageSpeechAfterRetries` records `afterUnresolved: true` on the `formChanges` entry
+whenever `after` still reads as the placeholder once that retry has run — so a capture whose race the
+retry does not catch is still marked as "not yet readable" rather than read as a real announcement by
+whatever consumes `formChanges[].after` next.
+
