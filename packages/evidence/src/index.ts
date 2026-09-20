@@ -179,6 +179,14 @@ export interface CaptureInteraction {
      */
     baselineQuiet?: boolean;
     baselineWaitedMs?: number;
+    /**
+     * Set when `after` still reads as NVDA's "unknown" placeholder once `waitPastUnresolvedTitle`'s retry has
+     * run (#1105) -- a submit that navigated whose destination title had not resolved. Present only when
+     * `true`; absent means either resolved or not a case this retry applies to, and a reader must never build
+     * a finding on `after` when this is set, since it is not yet known whether it names a real announcement.
+     * Written conditionally, `capture-probes.mjs`'s `activateAndCaptureDelta`, `CAPTURE_PROTOCOL_VERSION` 20.
+     */
+    afterUnresolved?: boolean;
   }[];
   postSubmitFields: string[];
   /**
