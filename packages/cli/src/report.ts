@@ -17,7 +17,22 @@ import { layerOf, orderByLayer, LAYER_LABEL, type ExperienceLayer } from "@a11ig
 import { notAConformanceClaim, type ConformanceRequirement }
   from "@a11ign/evidence/conformance";
 import { outcomeTally, type CriterionOutcome } from "@a11ign/judge/outcomes";
+import { WCAG_22_AA } from "@a11ign/evidence/wcag";
 import { documentsSpannedSentence, insideFrame } from "./action/summary.js";
+
+/**
+ * A bare criterion number, with its plain-language name appended when we know it -- "4.1.2 Name,
+ * Role, Value" rather than "4.1.2". Axe and the PDF layer report only the number (see `AxeFinding`'s
+ * and `PdfFinding`'s own `wcag: string[]`); the lived-experience layer's own findings already carry the
+ * name baked into `finding.wcag` at the point they are produced (`local-judge.ts`'s `criterionLabel`,
+ * `rules.ts`'s own literal strings), so this is never applied there. A stranger who has not memorised
+ * WCAG's numbering meets "4.1.2" on its own as a fact with no content; the name is what lets them judge
+ * whether the finding matters to them without looking anything up.
+ */
+function withCriterionName(num: string): string {
+  const name = WCAG_22_AA.find((c) => c.num === num)?.name;
+  return name ? `${num} ${name}` : num;
+}
 
 /** How much offending markup to quote as evidence. Enough to recognise the element, not the page. */
 const EVIDENCE_CHARS = 100;
@@ -94,6 +109,9 @@ function howToReadThisSection(): string[] {
     "                This is normal, not a malfunction -- most of what a real page produces lands here.",
     "  inapplicable  nothing of this kind is on the page to be right or wrong about",
     "  untested      nothing here checks this criterion yet",
+    "(Same split, two vocabularies: an ASSERTED finding is what makes a criterion asserted, an INDICATOR",
+    " finding is what makes one referred -- \"asserted\"/\"referred\" just also cover criteria no finding",
+    " mentions at all.)",
   ];
 }
 
@@ -103,6 +121,14 @@ function howToReadThisSection(): string[] {
  * "not run" and "0 violations" must never look alike: one means the visual criteria are unchecked,
  * the other means they were checked and passed. Reporting silence as a clean bill of health is the
  * single most misleading thing this tool could do.
+ *
+ * Every violation prints ASSERTED, unconditionally. A stranger reading this cold had no way to tell that
+ * apart from the lived-experience layer's own INDICATOR findings below it -- the legend defines the two
+ * words but nothing on an axe-core line actually carried either one, so the tag had to be inferred rather
+ * than read. It is never anything else: an axe-core rule match is a DOM fact read directly, the same
+ * class of evidence as the rules layer's own `1.1.1:missing-alt`/`4.1.2:unnamed-control`, and ADR 0021's
+ * addendum settles that an axe-core `violated` is asserted and attributed to axe-core, never softened to
+ * a referral.
  */
 function axeSection(axe: AxeFinding[] | null): string[] {
   // #1596: a finding inside an embedded frame is not silently the page's own. `insideFrame` is #1388's rule, imported so
@@ -116,7 +142,8 @@ function axeSection(axe: AxeFinding[] | null): string[] {
   ];
   for (const finding of axe ?? []) {
     const marker = insideFrame(finding) ? "  (in a frame; origin not examined)" : "";
-    lines.push(`  [${finding.impact}] ${finding.wcag.join(", ") || "(no SC)"}  ${finding.rule}: ${finding.help}${marker}`);
+    lines.push(`  [${finding.impact}] ${finding.wcag.map(withCriterionName).join(", ") || "(no SC)"}  ASSERTED  `
+      + `${finding.rule}: ${finding.help}${marker}`);
     if (finding.nodes[0]) lines.push(`     evidence: ${finding.nodes[0].html.slice(0, EVIDENCE_CHARS)}`);
   }
   if (framed > 0) lines.push(FRAME_CAVEAT);
@@ -140,8 +167,11 @@ function pdfSection(pdf: PdfFinding[] | null | undefined): string[] {
     lines.push(`${pdf.length} finding(s):`);
     for (const finding of pdf) {
       const page = finding.page ? ` (page ${finding.page})` : "";
-      lines.push(`  [${finding.impact}] ${finding.wcag.join(", ") || "(no SC)"}  ${finding.rule}: `
-        + `${finding.help}${page}`);
+      // Same reasoning as `axeSection`'s own ASSERTED tag: this layer reads the tag tree's structural
+      // facts (an untagged document, a missing `/Lang`, a `Figure` with no `/Alt`) directly, never by
+      // rendering or inference, so it is the same class of claim as a rule-layer or axe-core finding.
+      lines.push(`  [${finding.impact}] ${finding.wcag.map(withCriterionName).join(", ") || "(no SC)"}  ASSERTED  `
+        + `${finding.rule}: ${finding.help}${page}`);
     }
   }
   return lines;
@@ -247,7 +277,7 @@ function outcomesSection(outcomes: CriterionOutcome[] | undefined): string[] {
       o.outcome === "failed" || o.outcome === "cantTell",
   )) {
     const by = outcome.assessor ? ` · ${outcome.assessor}` : "";
-    lines.push(`    [${HUMAN_OUTCOME_TAG[outcome.outcome]}${by}] ${outcome.criterion} — ${outcome.reason}`);
+    lines.push(`    [${HUMAN_OUTCOME_TAG[outcome.outcome]}${by}] ${withCriterionName(outcome.criterion)} — ${outcome.reason}`);
   }
   return lines;
 }
