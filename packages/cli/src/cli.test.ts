@@ -37,7 +37,7 @@ import { stripComments } from "@a11ign/evidence/source-text";
 import {
   applyArg, parseArgs, conformanceFor, captureViaWorker, errorReason, describeWorkerError, warnUnverified,
   witnessArtifactRoot, witnessArtifactSlug, writeWitnessArtifact, reportWitnessArtifact,
-  earlyContainmentWatcher,
+  earlyContainmentWatcher, runPdfLayer,
   type CaptureResponse, type CaptureRequest,
 } from "./cli.js";
 
@@ -479,4 +479,75 @@ test("reportWitnessArtifact: --no-keep says so explicitly rather than staying si
 test("--no-keep parses to keep:false; the default is true", () => {
   assert.equal(parseArgs(["https://example.com"]).keep, true);
   assert.equal(parseArgs(["https://example.com", "--no-keep"]).keep, false);
+});
+
+/**
+ * #68's own acceptance test, run directly: a PDF target reaches `runPdfLayer`, never `leaseWorker`, and a
+ * finding from the new layer appears in the printed report, labelled with its layer, alongside the
+ * existing sections. `@a11ign/pdf`'s own tests cover the tag-tree reading itself (tagged/untagged, alt
+ * text, language) in depth; this file only proves the CLI's WIRING -- one minimal untagged PDF is enough
+ * for that.
+ */
+async function capturedStdoutAsync(run: () => Promise<void>): Promise<string> {
+  const original = console.log;
+  let out = "";
+  console.log = ((chunk: string) => { out += `${chunk}\n`; }) as typeof console.log;
+  try {
+    await run();
+  } finally {
+    console.log = original;
+  }
+  return out;
+}
+
+/** One untagged, one-page PDF, hand-built exactly like `@a11ign/pdf`'s own fixture -- enough to produce
+ *  one real `pdf-untagged` finding without re-testing the parser this file does not own. */
+function untaggedPdfBytes(): Uint8Array {
+  const content = "BT /F1 16 Tf 50 150 Td (Hello world) Tj ET\n";
+  const objs = [
+    "", "<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Resources << /Font << /F1 5 0 R >> >> "
+      + "/Contents 4 0 R >>",
+    `<< /Length ${content.length} >>\nstream\n${content}endstream`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+  ];
+  let pdf = "%PDF-1.7\n";
+  const offsets: number[] = [0];
+  for (let i = 1; i < objs.length; i++) {
+    offsets[i] = Buffer.byteLength(pdf, "latin1");
+    pdf += `${i} 0 obj\n${objs[i]}\nendobj\n`;
+  }
+  const xrefOffset = Buffer.byteLength(pdf, "latin1");
+  pdf += `xref\n0 ${objs.length}\n0000000000 65535 f \n`;
+  for (let i = 1; i < objs.length; i++) pdf += `${String(offsets[i]).padStart(10, "0")} 00000 n \n`;
+  pdf += `trailer\n<< /Size ${objs.length} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  return new Uint8Array(Buffer.from(pdf, "latin1"));
+}
+
+test("runPdfLayer: a finding from the PDF layer appears in the report, labelled with its layer", async () => {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async () => new Response(untaggedPdfBytes() as BodyInit, { status: 200 })) as typeof fetch;
+  try {
+    const out = await capturedStdoutAsync(() => runPdfLayer(parseArgs(["https://example.com/report.pdf"])));
+    assert.match(out, /-- PDF layer \(accessibility tag tree\)/, "the section is labelled with its layer");
+    assert.match(out, /pdf-untagged/, "the untagged finding is in the report");
+    assert.match(out, /-- Lived-experience layer/, "the existing sections are still alongside it");
+    assert.match(out, /not run\. This target has no live page to navigate/,
+      "no worker was leased for a PDF target, and the report says so honestly rather than inventing a verdict");
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test("runPdfLayer: --json emits the findings as parseable JSON, not just the text report", async () => {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async () => new Response(untaggedPdfBytes() as BodyInit, { status: 200 })) as typeof fetch;
+  try {
+    const out = await capturedStdoutAsync(
+      () => runPdfLayer(parseArgs(["https://example.com/report.pdf", "--json"])));
+    const parsed = JSON.parse(out) as { pdf: { rule: string }[] };
+    assert.ok(parsed.pdf.some((f) => f.rule === "pdf-untagged"));
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });
