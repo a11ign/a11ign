@@ -127,6 +127,15 @@ whether they are followed.
   closed 64 minutes later, and it sat idle with a healthy fleet and five runnable rows; `ceo` wrote
   *"no need to re-check before tomorrow's fire"* on #1234 and was re-woken 2h later for ~18 more
   identical answers; `orchestrator` worked out the control-plane SSH route, wrote it down, and stopped.
+- **Waiting on ANOTHER SESSION TO ANSWER → label the row `answer:<session>`.** Measured overnight
+  2026-09-20: `orchestrator` needed a ruling from `product-manager`, wrote the question as a comment on
+  #914, and **nothing in this org reads comments** — it asked five times over 6.5 hours.
+  `product-manager`'s own reply: *"I should have confirmed sooner rather than let five asks go unanswered
+  since 01:55Z."* Both behaved correctly; the escalation path simply had no mechanism behind it.
+  **Removing the label IS the act of answering**, so there is nothing to remember. A label and not a
+  GitHub assignee because only four accounts are assignable here and the eight sessions share them —
+  an assignee cannot say WHICH session owes the answer. `answer:<session>` joins `session:*`/`hold:*`:
+  one label per session, never one per instance.
 - **Waiting on another row → `gh issue edit <n> --add-blocked-by <m>`** (or `--blocked-by` at filing).
   This is **GitHub's own dependency edge**, not a convention this repo invented: the UI renders it and
   `gh issue list --json blockedBy` returns it in the call the gate already makes.
