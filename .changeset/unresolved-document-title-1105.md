@@ -1,5 +1,6 @@
 ---
 "@a11ign/nvda-worker": patch
+"@a11ign/evidence": patch
 ---
 
 **`CAPTURE_PROTOCOL_VERSION` moves 19 -> 20.** `interaction.formChanges[].after` intermittently recorded
@@ -11,3 +12,6 @@ retry has run, so a race the retry misses is marked as not-yet-readable rather t
 announcement. Both changes move what a capture's evidence means, so no capture is dispatched at this code
 until the bump is on main and deployed; the confirming repeat-capture round is `orchestrator`'s, per
 product-manager's 2026-09-20 re-laning ruling on #1105.
+
+**`@a11ign/evidence`'s published `CaptureInteraction["formChanges"]` now declares `afterUnresolved?: boolean`**,
+the new field above -- present only when set, absent on every capture taken before this bump.

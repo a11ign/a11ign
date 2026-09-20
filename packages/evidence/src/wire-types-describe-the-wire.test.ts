@@ -225,10 +225,35 @@ function literalAt(source: string, open: number): string {
   throw new Error("unbalanced object literal in capture-probes.mjs");
 }
 
+/**
+ * `body`'s own top-level commas, so a part that itself contains `{}`/`()`/`[]` (a spread's conditional
+ * value, #1105's `...(afterUnresolved ? { afterUnresolved: true } : {})`) is not mistaken for two parts.
+ */
+function topLevelParts(body: string): string[] {
+  const parts: string[] = []; let depth = 0; let start = 0;
+  for (let i = 0; i < body.length; i++) {
+    if ("{([".includes(body[i])) depth++;
+    else if ("})]".includes(body[i])) depth--;
+    else if (body[i] === "," && depth === 0) { parts.push(body.slice(start, i)); start = i + 1; }
+  }
+  parts.push(body.slice(start));
+  return parts.map((p) => p.trim()).filter(Boolean);
+}
+
+/**
+ * Field names named inside a `...(cond ? { a: 1 } : { b: 2 })`-shaped spread. Such a field is written only
+ * conditionally, so this reports it as WRITTEN (the type must still declare it) without asking whether it is
+ * ever a literal `null` the way a direct field can be -- #1105 is the first field to arrive this way.
+ */
+function spreadFieldNames(part: string): string[] {
+  return [...part.matchAll(/([A-Za-z_$][\w$]*)\s*:/g)].map((m) => m[1]);
+}
+
 /** Field names, and the fields written as a literal `null`, of one single-level object literal body. */
 function literalFields(body: string): { keys: string[]; nulls: string[] } {
   const keys: string[] = []; const nulls: string[] = [];
-  for (const part of body.split(",").map((p) => p.trim()).filter(Boolean)) {
+  for (const part of topLevelParts(body)) {
+    if (part.startsWith("...")) { keys.push(...spreadFieldNames(part)); continue; }
     const named = part.match(/^([A-Za-z_$][\w$]*)\s*:\s*([^]*)$/);
     const key = named ? named[1] : (part.match(/^[A-Za-z_$][\w$]*$/) ?? [])[0];
     assert.ok(key, `could not read a field name from "${part}" -- the producer's literal changed shape`);
@@ -264,10 +289,20 @@ test("#1616 every stateChanges field the producer writes is declared, and so is 
 
 test("#1616 every formChanges field the producer writes is declared, and none of them is null", () => {
   const source = readFileSync(PROBES_PATH, "utf8");
-  const match = source.match(/const entry = \{([^}]*)\};\s*\n\s*interaction\.formChanges\.push\(entry\)/);
-  assert.ok(match, "the formChanges entry literal (capture-probes.mjs:2531-2532) has moved -- this test checks nothing");
-  const { keys: written, nulls } = literalFields(match[1]);
-  const declared: Required<FormChange> = { control: "", after: "", kind: "", baselineQuiet: false, baselineWaitedMs: 0 };
+  // `[^}]*` (the check's original shape) stops at the FIRST `}`, so it cannot read a literal that itself
+  // nests one -- #1105's conditional spread does exactly that. `literalAt` already reads a balanced
+  // literal for `stateChangeSites` above; this walks the same way rather than re-deriving a second parser.
+  const open = source.match(/const entry = \{/);
+  assert.ok(open, "the formChanges entry literal (capture-probes.mjs) has moved -- this test checks nothing");
+  const openIndex = (open.index as number) + open[0].length - 1;
+  const body = literalAt(source, openIndex);
+  const afterLiteral = source.slice(openIndex + 1 + body.length);
+  assert.ok(/^\}\s*;\s*\n\s*interaction\.formChanges\.push\(entry\)/.test(afterLiteral),
+    "the formChanges entry is no longer pushed right after it is built -- this test checks nothing");
+  const { keys: written, nulls } = literalFields(body);
+  const declared: Required<FormChange> = {
+    control: "", after: "", kind: "", baselineQuiet: false, baselineWaitedMs: 0, afterUnresolved: false,
+  };
   assert.ok(written.length > 0, "#1123: the formChanges fields read from the producer are empty -- the extraction is blind");
   const undeclared = written.filter((key) => !Object.keys(declared).includes(key));
   assert.deepEqual(undeclared, [], `the producer writes a formChanges field the type does not declare: ${undeclared.join(", ")}`);
