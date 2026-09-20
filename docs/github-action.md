@@ -252,8 +252,8 @@ Run locally through `action-dry-run.sh`, full setup, both layers, LOCAL judge �
 `4.1.2` violations inside the page's embedded YouTube player (`aria-allowed-attr`, `aria-prohibited-attr`,
 `button-name`). Reproduced on every measurement taken of this page — the V1 rehearsal's original run, its
 re-run, and a fresh capture at commit `a8894c27`, 2026-09-17. (Announcement, heading and landmark counts
-are the stable part; how many links or form fields a run reaches on this page varies with whether the task
-follows a link into a second document — see #1663.)
+are the stable part; how many links or form fields a run reaches on this page varies run to run for a
+cause not yet pinned (page volatility or landing-document variance — see #1663).)
 
 **`news.ycombinator.com` — a real site, not built for accessibility.** 151 announcements, 3 findings, all
 true positives: the search box is announced as a bare `edit` with no label (3.3.2, 4.1.2) and the logo has
