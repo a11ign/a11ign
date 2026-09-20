@@ -469,7 +469,12 @@ const ENTER_ACTIVATES: ReadonlySet<string> = new Set([
  * controls, or no expandable state on a side). The rule then asserts on `from === to`; `announcedStateChanges`
  * lists `from !== to`. One helper so a gate cannot be loosened for one of them and not the other.
  */
-function readDisclosurePair(change: { control?: string; after?: string | null }): { from: string; to: string } | null {
+function readDisclosurePair(
+  change: { control?: string; after?: string | null; afterUnresolved?: boolean },
+): { from: string; to: string } | null {
+  // #1105: `after` is NVDA's "unknown" placeholder for a document whose title had not resolved yet, not
+  // an announcement -- read no further, whatever `statesOf` would otherwise make of the literal string.
+  if (change.afterUnresolved) return null;
   // The ROLE gate comes first: a combo box that stays collapsed after Enter is correct behaviour, and
   // asserting from it is this tool's worst error.
   if (!enterActivates(change.control)) return null;
@@ -589,7 +594,9 @@ function addErrorWithoutRemedy(input: RuleInput, add: AddFinding): void {
   const submitted = changes.filter((change) => change.kind === "submit");
   if (!submitted.length) return;
   const spoken = [
-    ...submitted.map((change) => String(change.after ?? "")),
+    // #1105: `afterUnresolved` means `after` is NVDA's "unknown" placeholder for a document title that
+    // had not resolved yet, not an announcement the page made -- a finding must never be built on it.
+    ...submitted.filter((change) => !change.afterUnresolved).map((change) => String(change.after ?? "")),
     ...(input.interaction?.postSubmitFields ?? []).map((value) => String(value)),
   ].filter((text) => ANNOUNCED_ERROR_TEXT.test(text));
   if (!spoken.length) return;                                    // 3.3.1's finding, not this one

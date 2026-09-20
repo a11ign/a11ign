@@ -426,10 +426,15 @@ function interactionBlock(input: JudgeInput): string {
 // silently. This keeps single-channel flakiness from causing false positives.
 function formSubmitLines(it: NonNullable<JudgeInput["interaction"]>): string[] {
   const lines: string[] = [];
-  if (it.formChanges?.length) {
+  // #1105: `afterUnresolved` means `after` is NVDA's "unknown" placeholder for a document title that had
+  // not resolved yet, not an announcement the page made. Same treatment as #1616's `after: null` above --
+  // omitted from the prompt rather than printed as "unknown", which the model would read as the page
+  // saying nothing identifiable.
+  const resolved = (it.formChanges ?? []).filter((s) => !s.afterUnresolved);
+  if (resolved.length) {
     lines.push(
       `Announced immediately after the submit (4.1.3 Status Messages — an accessible form announces the error here without moving focus). Naming the error ("there is a problem", "email is required") satisfies it; an EMPTY ("") or page/button re-read means no status was announced: ` +
-        it.formChanges.map((s) => `"${s.control}" -> "${s.after}"`).join("; ")
+        resolved.map((s) => `"${s.control}" -> "${s.after}"`).join("; ")
     );
   }
   if (it.postSubmitFields?.length) {
