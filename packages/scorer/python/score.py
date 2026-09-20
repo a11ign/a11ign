@@ -88,6 +88,12 @@ def append_changes(units: list[dict[str, str]], channel: str, changes: Any) -> N
     for change in changes or []:
         if not isinstance(change, dict):
             continue
+        # #1105: mirrors `appendChangeUnits`'s own guard (`evidence-units.ts`) -- `afterUnresolved` means
+        # `after` is NVDA's "unknown" placeholder for a document title that had not resolved yet, never a
+        # real announcement, so the entry is omitted rather than encoded. `evidence-units-parity.test.ts`
+        # pins this file against that one; a divergence here fails that test, not this one.
+        if change.get("afterUnresolved"):
+            continue
         control = change.get("control", "")
         after = change.get("after", "")
         if isinstance(control, str) and isinstance(after, str) and control + after:

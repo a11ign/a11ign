@@ -128,6 +128,18 @@ export interface CaptureEvidence {
 
 const nonEmpty = (value: unknown): boolean => Array.isArray(value) && value.length > 0;
 
+/**
+ * The `formChanges` entries whose `after` names something real -- never NVDA's "unknown" placeholder for
+ * a document title that had not resolved yet (#1105). `evidence/src/index.ts`'s own comment on the field
+ * is explicit: "a reader must never build a finding on `after` when this is set, since it is not yet
+ * known whether it names a real announcement." Every site below that reads `.after` as TEXT, or asks
+ * whether a form change is simply PRESENT, must read this rather than the raw channel -- the same cut
+ * `resolved_form_changes` makes on the Python side (`screenreader_features.py`) and `appendChangeUnits`
+ * makes in `evidence-units.ts`.
+ */
+const resolvedFormChanges = (c: CaptureEvidence): NonNullable<NonNullable<CaptureEvidence["interaction"]>["formChanges"]> =>
+  (c.interaction?.formChanges ?? []).filter((change) => !change.afterUnresolved);
+
 /** NVDA announces an editable field with an `edit` role; a button is not a field needing a label. */
 const hasEditableField = (fields: string[] = []): boolean =>
   fields.some((f) => /\bedit(\s+text)?\b|\bcombo\s*box\b|\bcheck\s*box\b|\bradio\b|\bspin\s*button\b/i.test(f));
@@ -171,7 +183,7 @@ const spokenText = (c: CaptureEvidence): string => [
   ...(c.transcript ?? []),
   ...(c.structure?.formFields ?? []),
   ...(c.interaction?.postSubmitFields ?? []),
-  ...(c.interaction?.formChanges ?? []).map((change) => change.after ?? ""),
+  ...resolvedFormChanges(c).map((change) => change.after ?? ""),
 ].join(" ").toLowerCase();
 
 /**
@@ -275,7 +287,10 @@ const EVIDENCE_CHANNEL: Record<string, (c: CaptureEvidence) => boolean> = {
   "3.3.1": (c) => submitDidNotNavigate(c) && submitWasProbed(c) && errorEvidencePermits(c),
   // Status Messages is about a change the page ANNOUNCES nothing for. A result count that appears in the
   // tree and never in speech is the canonical example in WCAG's own understanding document.
-  "4.1.3": (c) => nonEmpty(c.interaction?.formChanges) || nonEmpty(c.interaction?.stateChanges)
+  // `nonEmpty(formChanges)` alone would rule this reportable on an entry nobody could yet read -- the
+  // same shape `applicability.py`'s `_measured_form_change` closes for the trained-scorer path. Only a
+  // RESOLVED entry counts as evidence that a form change is present.
+  "4.1.3": (c) => nonEmpty(resolvedFormChanges(c)) || nonEmpty(c.interaction?.stateChanges)
     || statusShownButNotAnnounced(c),
   // FOUR independent channels, any one of which is sufficient — measured 2026-09-06 against every
   // capture on disk where the deterministic rule actually reports 4.1.2 (`packages/judge` audit
@@ -367,8 +382,8 @@ export function evidenceFor(criterion: string, capture: CaptureEvidence): string
     // `postSubmitFields` is on `interaction`, not `structure` — the field re-read AFTER a submit is an
     // interaction result, not page structure. Written as `s.postSubmitFields` first, which typecheck
     // caught; left unchecked it would have quoted the wrong channel as this criterion's evidence.
-    case "3.3.1": return first(i.postSubmitFields, (i.formChanges ?? []).map((c) => JSON.stringify(c)));
-    case "4.1.3": return first((i.formChanges ?? []).map((c) => JSON.stringify(c)), (i.stateChanges ?? []).map((c) => JSON.stringify(c)));
+    case "3.3.1": return first(i.postSubmitFields, resolvedFormChanges(capture).map((c) => JSON.stringify(c)));
+    case "4.1.3": return first(resolvedFormChanges(capture).map((c) => JSON.stringify(c)), (i.stateChanges ?? []).map((c) => JSON.stringify(c)));
     case "4.1.2": return first(s.formFields, i.controls);
     default: return "";
   }

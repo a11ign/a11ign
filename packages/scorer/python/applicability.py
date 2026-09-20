@@ -97,6 +97,21 @@ def _measured_state_change(record: Record) -> bool:
     return any(not change.get("error") for change in changes)
 
 
+def _measured_form_change(record: Record) -> bool:
+    """A form change was actually READ -- an unresolved document title does not make the subtype
+    applicable. The same shape as `_measured_state_change` above, one channel over (#1105).
+
+    `_interacted("formChanges")` counted an entry whose `after` still reads as NVDA's "unknown" placeholder
+    for a document title that had not resolved (`afterUnresolved: true`, `capture-probes.mjs`'s
+    retry-and-flag producer). So a capture whose only form-change entry could not yet be read satisfied the
+    precondition for `4.1.3:form-activation-silent`, on a page nobody successfully learned anything about.
+    """
+    # Filtered HERE for the identical reason `_measured_state_change` gives above -- pinned equal by
+    # `test_unresolved_form_change_is_not_evidence.py` against `screenreader_features.resolved_form_changes`.
+    changes = _interaction(record).get("formChanges") or []
+    return any(not change.get("afterUnresolved") for change in changes)
+
+
 def _interacted(field: str) -> Callable[[Record], bool]:
     """The capture actually performed the interaction this subtype reasons about."""
     def present(record: Record) -> bool:
@@ -157,7 +172,7 @@ SUBTYPE_REQUIRES: dict[str, Callable[[Record], bool]] = {
     # A claim about a form SUBMISSION. Same shape: the error being unspoken is the finding, so the
     # precondition is that the form was submitted at all.
     "3.3.1:validation-error-silent": _interacted("postSubmitFields"),
-    "4.1.3:form-activation-silent": _interacted("formChanges"),
+    "4.1.3:form-activation-silent": _measured_form_change,
 }
 
 #: Subtypes with NO precondition, and why each is a decision rather than a gap.

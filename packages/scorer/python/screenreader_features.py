@@ -675,6 +675,21 @@ def measured_state_changes(changes: list[dict[str, Any]]) -> list[dict[str, Any]
     return [change for change in changes if not change.get("error")]
 
 
+def resolved_form_changes(changes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The form-change entries whose `after` names something real -- never NVDA's "unknown" placeholder
+    for a document title that had not resolved yet (#1105).
+
+    `capture-probes.mjs`'s retry-and-flag producer sets `afterUnresolved: true` on an entry when `after`
+    still reads as that placeholder once `waitPastUnresolvedTitle`'s own retry has run. Present only when
+    true, and `evidence/src/index.ts`'s own comment on the field is explicit: "a reader must never build a
+    finding on `after` when this is set, since it is not yet known whether it names a real announcement."
+    Every feature below that reads `after`'s TEXT, or asks whether a form change is simply PRESENT, must
+    read this list rather than the raw channel -- mirroring `appendChangeUnits`'s identical cut on the
+    TypeScript side (`evidence-units.ts`), which omits the same entries from the model's text evidence.
+    """
+    return [change for change in changes if not change.get("afterUnresolved")]
+
+
 def vague_link_lacks_context(record: dict[str, Any]) -> bool:
     """A vague link name with nothing around it to disambiguate.
 
@@ -917,15 +932,19 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
         for change, (before, after) in zip(state_changes, state_pairs)
     ))
 
-    values["form_change_present"] = float(bool(form_changes))
-    cross_with_observation(values, record, "form_change", "formChanges", bool(form_changes))
-    values["form_change_nonempty"] = float(any(change.get("after", "").strip() for change in form_changes))
+    # #1105: every feature below reads the RESOLVED list, never the raw channel -- an entry whose `after`
+    # is only NVDA's unresolved-title placeholder is not known to be present, empty, or anything else. See
+    # `resolved_form_changes`'s own comment.
+    readable_form_changes = resolved_form_changes(form_changes)
+    values["form_change_present"] = float(bool(readable_form_changes))
+    cross_with_observation(values, record, "form_change", "formChanges", bool(readable_form_changes))
+    values["form_change_nonempty"] = float(any(change.get("after", "").strip() for change in readable_form_changes))
     # SILENCE claims consult `baselineQuiet`; presence claims do not. See `soundly_measured`.
     values["form_change_empty"] = float(
-        any(not change.get("after", "").strip() for change in soundly_measured(form_changes))
+        any(not change.get("after", "").strip() for change in soundly_measured(readable_form_changes))
     )
     values["status_update_announced"] = float(
-        any(STATUS_UPDATE.match(change.get("after", "").strip()) for change in form_changes)
+        any(STATUS_UPDATE.match(change.get("after", "").strip()) for change in readable_form_changes)
     )
     values["post_submit_present"] = float(bool(post_submit_fields))
     # `postSubmitFields` IS NOT CROSSED. It was, and the pair was WITHDRAWN before the verdict rather than
@@ -957,7 +976,7 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
     # row. Re-cross this channel when that case exists and its captures are on disk, never before.
     values["validation_error_announced"] = float(
         any(ERROR_WORD.search(value) for value in post_submit_fields)
-        or any(ERROR_WORD.search(change.get("after", "")) for change in form_changes)
+        or any(ERROR_WORD.search(change.get("after", "")) for change in readable_form_changes)
     )
     # THE SILENT ACTIVATION MUST BE A SUBMIT, and `kind` has travelled with the evidence to say so since
     # protocol 8 while nothing read it.
@@ -982,7 +1001,7 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
     # and reading their absence as "not a submit" would silently make this feature deaf on every one of
     # them -- absence read as a negative, which is the defect this whole schema revision is about.
     submitted_silently = [
-        change for change in soundly_measured(form_changes)
+        change for change in soundly_measured(readable_form_changes)
         if change.get("kind", "submit") == "submit" and not change.get("after", "").strip()
     ]
     values["validation_error_missing"] = float(

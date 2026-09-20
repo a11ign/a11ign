@@ -119,6 +119,21 @@ const CAPTURES: { name: string; capture: ScorableCapture }[] = [
     name: "empty transcript, empty everything",
     capture: { transcript: [], structure: null, interaction: null },
   },
+  {
+    // #1105: `afterUnresolved` entries must vanish from BOTH implementations' evidence units, not just
+    // agree with each other while both leak -- the second assertion below checks that directly.
+    name: "a form submit whose after is NVDA's unresolved-title placeholder, beside a resolved one",
+    capture: {
+      transcript: [],
+      structure: { headings: [], formFields: [], tableCells: [] },
+      interaction: {
+        formChanges: [
+          { control: "Submit, button", after: "unknown", afterUnresolved: true },
+          { control: "Save, button", after: "Saved searches, document" },
+        ],
+      },
+    },
+  },
 ];
 
 test("evidenceUnits (TypeScript) and evidence_units (Python) produce IDENTICAL unit lists", () => {
@@ -128,6 +143,20 @@ test("evidenceUnits (TypeScript) and evidence_units (Python) produce IDENTICAL u
     assert.deepEqual(python, ts,
       `${name}: Python and TypeScript disagree -- Python: ${JSON.stringify(python)}, TS: ${JSON.stringify(ts)}`);
   }
+});
+
+test("#1105 neither implementation emits a form-change unit for an unresolved entry", () => {
+  const capture: ScorableCapture = {
+    transcript: [],
+    structure: { headings: [], formFields: [], tableCells: [] },
+    interaction: {
+      formChanges: [{ control: "Submit, button", after: "unknown", afterUnresolved: true }],
+    },
+  };
+  const ts = evidenceUnits(capture);
+  const python = pythonEvidenceUnits(capture);
+  assert.equal(ts.some((u) => u.channel === "form-change"), false, "TypeScript must not encode the unresolved entry");
+  assert.equal(python.some((u) => u.channel === "form-change"), false, "Python must not encode the unresolved entry");
 });
 
 test("neither implementation emits a landmark-navigation unit, however many landmarks the capture carries", () => {
