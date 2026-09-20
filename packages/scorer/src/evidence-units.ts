@@ -46,9 +46,11 @@ export interface EvidenceUnit {
  * A before/after pair as the capture records it, DERIVED from the wire's state-change element (#1603) -- a state
  * change and a form change share `control` and `after`. Looser on purpose: this encoder reads text off whatever
  * arrives, so both fields are optional, and `after` admits `null` because a failed disclosure read records
- * `after: null` (`capture-probes.mjs:2343`).
+ * `after: null` (`capture-probes.mjs:2343`). `afterUnresolved` is only ever written on a `formChanges` entry
+ * (`evidence/src/index.ts`), never a `stateChanges` one, but the two share this type so it is declared here.
  */
-type CapturedChange = Partial<Omit<CaptureInteraction["stateChanges"][number], "after">> & { after?: string | null };
+type CapturedChange = Partial<Omit<CaptureInteraction["stateChanges"][number], "after">>
+  & { after?: string | null; afterUnresolved?: boolean };
 
 /** Exactly the capture fields the model is allowed to see. See the note above on why this is not `CaptureResult`. */
 export interface ScorableCapture {
@@ -81,7 +83,12 @@ function appendTextUnits(units: EvidenceUnit[], channel: string, values: string[
 }
 
 function appendChangeUnits(units: EvidenceUnit[], channel: string, changes: CapturedChange[] | undefined): void {
-  for (const { control, after } of changes || []) {
+  for (const { control, after, afterUnresolved } of changes || []) {
+    // #1105: `afterUnresolved` means `after` is NVDA's "unknown" placeholder for a document title that
+    // had not resolved yet, not an announcement the page made -- a reader must never build a finding on
+    // it, per `evidence/src/index.ts`'s own comment on the field. The model has no way to tell a real
+    // "unknown" announcement from this one, so the entry is omitted entirely rather than encoded as text.
+    if (afterUnresolved) continue;
     const text = control + " -> " + after;
     if (text.length > 0) units.push({ channel, text });
   }
