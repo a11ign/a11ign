@@ -806,6 +806,23 @@ test("the LANGUAGE census reaches the rule layer, and an absent one is not 'no l
   assert.equal(older?.documentLang, undefined);
 });
 
+test("headingHidden reaches the rule layer too -- the same defect this file just paid for once (#1811)", () => {
+  // #1549 split the worker's heading count into `heading` (rendered) and `headingHidden` (CSS-hidden), but
+  // never touched this function -- so a page whose headings are ALL hidden read `heading: 0` here exactly
+  // like a page that never rendered, which is a different finding. Same shape as the `documentLang` case
+  // just above: the worker recorded the field, this hop dropped it, and every downstream reader saw nothing.
+  const allHidden = domCensus({
+    diagnostics: [{ event: "domCensus", heading: 0, headingHidden: 40 }],
+  } as never);
+  assert.equal(allHidden?.heading, 0);
+  assert.equal(allHidden?.headingHidden, 40, "MUTATION: dropping this field reads `undefined` here, which "
+    + "every caller must treat as 'cannot say', not as the 0 that routes a rendered page into 'did not render'");
+
+  // ABSENT IS NOT ZERO, same rule as `documentLang`: a capture taken before #1549 never recorded this field.
+  const preHiddenCount = domCensus({ diagnostics: [{ event: "domCensus", heading: 40 }] } as never);
+  assert.equal(preHiddenCount?.headingHidden, undefined, "a capture predating #1549 must read 'cannot say'");
+});
+
 test("a census whose CDP target was never confirmed reads as ABSENT, not as its own numbers", () => {
   // The bathingwaters/lbhf shape, reproduced directly: two real page-type targets competed and neither
   // matched the URL this capture navigated to. `targetMatch: "fallback"` alone cannot say whether the
