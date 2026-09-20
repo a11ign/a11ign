@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { reportLines, type Report } from "./report.js";
 import { renderSummary, type RunResult } from "./action/summary.js";
+import type { Judgment } from "@a11ign/judge";
 
 const verdict = {
   taskCompletable: false,
@@ -19,7 +20,7 @@ const verdict = {
       issue: "The illustration has no alternative text.", evidence: "\"graphic\"",
     },
   ],
-} as unknown as Report["verdict"];
+} as unknown as Judgment;
 
 const base: Report = {
   url: "https://example.com/booking",

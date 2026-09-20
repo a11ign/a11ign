@@ -12,6 +12,7 @@
 import type { Judgment } from "@a11ign/judge";
 import { taskVerdictLabel, judgeBackend } from "@a11ign/judge";
 import type { AxeFinding } from "./scan/axe.js";
+import type { PdfFinding } from "@a11ign/pdf";
 import { layerOf, orderByLayer, LAYER_LABEL, type ExperienceLayer } from "@a11ign/judge/layers";
 import { notAConformanceClaim, type ConformanceRequirement }
   from "@a11ign/evidence/conformance";
@@ -26,9 +27,20 @@ export interface Report {
   task: string;
   screenReader: string;
   announcements: number;
-  verdict: Judgment;
+  /**
+   * Absent for a target the lived-experience layer never runs against at all (ADR 0036's PDF layer: no
+   * live page to navigate, so no worker is leased and no capture is taken) — distinct from `axe`'s
+   * `null`, which means a layer that COULD have run did not. See `livedExperienceSection`.
+   */
+  verdict?: Judgment;
   /** null when the rule-based layer did not run — distinct from "ran and found nothing". */
   axe: AxeFinding[] | null;
+  /**
+   * The PDF layer's findings (ADR 0036, #68) — undefined for an ordinary run this field predates or that
+   * never considered a PDF target, null when the target WAS a PDF but could not be fetched or read, an
+   * array (possibly empty) once the tag tree was actually read.
+   */
+  pdf?: PdfFinding[] | null;
   /**
    * What this run establishes against WCAG's five CONFORMANCE REQUIREMENTS (§5.2), which govern whether
    * a conformance claim is valid at all and are not success criteria. Optional so an older caller still
@@ -108,6 +120,30 @@ function axeSection(axe: AxeFinding[] | null): string[] {
     if (finding.nodes[0]) lines.push(`     evidence: ${finding.nodes[0].html.slice(0, EVIDENCE_CHARS)}`);
   }
   if (framed > 0) lines.push(FRAME_CAVEAT);
+  return lines;
+}
+
+/**
+ * The PDF layer's section (ADR 0036, #68) — a new field alongside `axe`, never a change to what either
+ * carries. Three states, not two: `undefined` is a report from before this field existed (or one that
+ * never considered a PDF target at all) and says so the same passive way `conformance`/`outcomes` do;
+ * `null` is a PDF target this run could not fetch or read; an array is the tag tree actually read,
+ * possibly empty (tagged, alt text present, language declared — a genuinely clean PDF).
+ */
+function pdfSection(pdf: PdfFinding[] | null | undefined): string[] {
+  const lines = ["-- PDF layer (accessibility tag tree): tagging, alt text, document language --"];
+  if (pdf === undefined) {
+    lines.push("NOT REPORTED for this run.");
+  } else if (pdf === null) {
+    lines.push("not run. The PDF could not be fetched or read.");
+  } else {
+    lines.push(`${pdf.length} finding(s):`);
+    for (const finding of pdf) {
+      const page = finding.page ? ` (page ${finding.page})` : "";
+      lines.push(`  [${finding.impact}] ${finding.wcag.join(", ") || "(no SC)"}  ${finding.rule}: `
+        + `${finding.help}${page}`);
+    }
+  }
   return lines;
 }
 
@@ -305,6 +341,23 @@ function screenReaderRuntimeLine(environment?: Record<string, string>): string[]
   return [`Screen reader runtime: ${parts.join(", ")}.`];
 }
 
+/**
+ * `findingsSection`, guarded for a target the lived-experience layer never ran against at all — a PDF
+ * (ADR 0036, #68): no live page, so no worker is leased and no `Judgment` exists to report. Parallels
+ * `axeSection`'s own "not run" line rather than inventing a placeholder `Judgment`, which would be
+ * reporting an opinion nothing actually formed.
+ */
+function livedExperienceSection(
+  verdict: Judgment | undefined, screenReader: string, announcements: number,
+  environment?: Record<string, string>,
+): string[] {
+  if (!verdict) {
+    return [`-- Lived-experience layer (${screenReader}) --`,
+      "not run. This target has no live page to navigate; nothing here should be read as checked or clean."];
+  }
+  return findingsSection(verdict, screenReader, announcements, environment);
+}
+
 function findingsSection(
   verdict: Judgment, screenReader: string, announcements: number, environment?: Record<string, string>,
 ): string[] {
@@ -353,7 +406,7 @@ function documentsSpannedLead(conformance: Report["conformance"]): string[] {
 
 /** The whole report, ready to print. */
 export function reportLines(
-  { url, task, screenReader, announcements, verdict, axe, conformance, outcomes, environment }: Report,
+  { url, task, screenReader, announcements, verdict, axe, pdf, conformance, outcomes, environment }: Report,
 ): string[] {
   return [
     "",
@@ -369,7 +422,9 @@ export function reportLines(
     "",
     ...axeSection(axe),
     "",
-    ...findingsSection(verdict, screenReader, announcements, environment),
+    ...pdfSection(pdf),
+    "",
+    ...livedExperienceSection(verdict, screenReader, announcements, environment),
     "",
     ...outcomesSection(outcomes),
     "",

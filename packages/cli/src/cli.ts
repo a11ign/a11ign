@@ -20,7 +20,8 @@
  */
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
-import { judge } from "@a11ign/judge";
+import { judge, type Judgment } from "@a11ign/judge";
+import { looksLikePdfUrl, scanPdfTagTree } from "@a11ign/pdf";
 import { scanWithAxe, axeAvailable, type AxeFinding, type AxeBrowserChannel } from "./scan/axe.js";
 import { fetchPageTitle } from "./scan/page-title.js";
 import { loadAxeResults, warnOnUrlMismatch } from "./scan/axe-results.js";
@@ -295,6 +296,29 @@ async function planOnly(args: Args): Promise<boolean> {
 }
 
 /**
+ * The PDF layer's own run (ADR 0036, #68). `main` routes here on `looksLikePdfUrl`, BEFORE `leaseWorker`
+ * is ever called -- a PDF target leases no worker, opens no browser and drives no NVDA, which is itself
+ * informative about the layer contract (#68's own "What this row is NOT" / Fleet sections: "may need no
+ * fleet at all"). A fetch/parse failure is reported as `pdf: null` ("not run"), never thrown -- one
+ * layer's evidence failing to arrive should not crash the whole run.
+ */
+export async function runPdfLayer(args: Args): Promise<void> {
+  process.stderr.write(`Scanning ${args.url} (PDF accessibility tag tree; no fleet, no browser, no NVDA) ...\n`);
+  const result = await scanPdfTagTree(args.url);
+  if (!result.ok) process.stderr.write(`WARNING: ${result.error}\n`);
+  const findings = result.ok ? result.findings : null;
+  if (args.json) {
+    console.log(JSON.stringify({ url: args.url, task: args.task, pdf: findings }, null, 2));
+    return;
+  }
+  printReport({
+    url: args.url, task: args.task,
+    screenReader: "not applicable — a PDF has no live page to navigate",
+    announcements: 0, verdict: undefined, axe: null, pdf: findings,
+  });
+}
+
+/**
  * The states this run will drive, in the order it will drive them.
  *
  * ERROR STATES FIRST, then file order. A success submission may navigate away, and the less destructive
@@ -409,6 +433,7 @@ async function refuseIfNothingListening(worker: string): Promise<void> {
 async function main(): Promise<void> {
   const args = parseArgs();
   if (await planOnly(args)) return;
+  if (looksLikePdfUrl(args.url)) { await runPdfLayer(args); return; }
   const lease = await leaseWorker(args);
   process.stderr.write(`Using ${lease.worker} (${describeSource(lease.source)})\n`);
   if (lease.source === "default") await refuseIfNothingListening(lease.worker);
@@ -854,7 +879,10 @@ export function examineWithinTheSite(cap: CaptureResponse):
 export function printJson(
   { url, task, cap, verdict, ruleFindings, captureVerified, unverifiedReason, conformance, outcomes,
     leftSite: left, artifactPath }: {
-    url: string; task: string; cap: CaptureResponse; verdict: Report["verdict"];
+    // Always a real Judgment here: printJson serves only `runWitness`'s NVDA-capture path, which always
+    // judges before reaching this call. A PDF-target run (no live page, no `Judgment`) never calls it —
+    // see `runPdfLayer`'s own JSON output.
+    url: string; task: string; cap: CaptureResponse; verdict: Judgment;
     ruleFindings: AxeFinding[] | null; captureVerified: boolean; unverifiedReason?: CaptureDoubt;
     conformance: ConformanceRequirement[]; outcomes: CriterionOutcome[]; leftSite: LeftSite | null;
     artifactPath: string | null;

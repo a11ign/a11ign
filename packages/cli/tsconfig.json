@@ -11,6 +11,7 @@
   "references": [
     { "path": "../evidence" },
     { "path": "../judge" },
+    { "path": "../pdf" },
     { "path": "../scorer" },
     { "path": "../worker-fleet" }
   ]

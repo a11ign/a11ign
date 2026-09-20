@@ -1,0 +1,43 @@
+{
+  "name": "@a11ign/pdf",
+  "version": "0.0.0",
+  "description": "The PDF layer (ADR 0036's second layer, #68): reads a PDF's own accessibility tag tree -- tagged/untagged, the document language, alt text on figures -- with no browser, no NVDA and no fleet.",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/a11ign/a11ign.git",
+    "directory": "packages/pdf"
+  },
+  "homepage": "https://github.com/a11ign/a11ign",
+  "keywords": [
+    "accessibility",
+    "a11y",
+    "wcag",
+    "pdf"
+  ],
+  "dependencies": {
+    "pdf-lib": "^1.17.1"
+  },
+  "scripts": {
+    "prepack": "tsc --build"
+  }
+}
