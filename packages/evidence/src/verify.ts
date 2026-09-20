@@ -235,6 +235,16 @@ export function domCensus(capture: CapturedAnnouncements):
   {
     heading?: number; link?: number; graphic?: number; landmark?: number; formField?: number;
     /**
+     * Headings the DOM carries that the page does not RENDER -- CSS-hidden below a breakpoint, in a
+     * closed panel, `display: none`. Split out of `heading` by #1549 so a rendered count stops crediting
+     * headings nobody could ever reach; a reader that wants "every heading in the DOM, reachable or not"
+     * needs `heading + headingHidden`, not `heading` alone (#1811 -- `heading` alone read a page whose
+     * headings are ALL hidden exactly like a page that never rendered, which is a different finding).
+     *
+     * Absent on every capture taken before #1549, which reads as "cannot say" and never as "none hidden".
+     */
+    headingHidden?: number;
+    /**
      * How many TAB STOPS the page has — the only truthful denominator for "did focus reach everything".
      *
      * Absent on every capture taken before the census learned to count them, which reads as "cannot say"
@@ -288,6 +298,7 @@ export function domCensus(capture: CapturedAnnouncements):
     return {
       heading: num(record.heading), link: num(record.link), graphic: num(record.graphic),
       landmark: num(record.landmark), formField: num(record.formField), tabbable: num(record.tabbable),
+      headingHidden: num(record.headingHidden),
       unnamedGraphics: Array.isArray(record.unnamedGraphics)
         ? record.unnamedGraphics.filter((n): n is string => typeof n === "string")
         : undefined,
