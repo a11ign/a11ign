@@ -49,7 +49,35 @@ test("an axe finding with no success criterion still renders", () => {
     impact: "serious", wcag: [], rule: "region", help: "All content should be in landmarks",
     nodes: [{ html: "<div>orphan</div>" }],
   }] as unknown as Report["axe"];
-  assert.match(render({ axe }), /\(no SC\)\s+region: All content should be in landmarks/);
+  assert.match(render({ axe }), /\(no SC\)\s+ASSERTED\s+region: All content should be in landmarks/);
+});
+
+test("an axe finding names its criterion, not just its number -- a stranger has not memorised WCAG", () => {
+  const axe = [{
+    impact: "serious", wcag: ["1.4.3"], rule: "color-contrast", help: "Elements must meet contrast ratio",
+    nodes: [{ html: "<p>low contrast</p>" }],
+  }] as unknown as Report["axe"];
+  assert.match(render({ axe }), /1\.4\.3 Contrast \(Minimum\)/);
+});
+
+test("every axe-core violation is tagged ASSERTED, not left for the reader to infer", () => {
+  // A blind read of a real report found the three axe-core lines carried neither ASSERTED nor
+  // INDICATOR -- the legend defines both words, but nothing on the line itself said which one applied,
+  // so the reader had to guess from "violation" and the absence of the other tag. A rule match is a DOM
+  // fact read directly, the same class of claim as a rules-layer finding, so it is always ASSERTED.
+  const axe = [{
+    impact: "critical", wcag: ["4.1.2"], rule: "button-name", help: "Buttons must have discernible text",
+    nodes: [{ html: "<button></button>" }],
+  }] as unknown as Report["axe"];
+  assert.match(render({ axe }), /\[critical\] 4\.1\.2 Name, Role, Value {2}ASSERTED {2}button-name/);
+});
+
+test("a PDF-layer finding is tagged ASSERTED too -- a structural read, not an inference", () => {
+  const pdf = [{
+    rule: "pdf-untagged", wcag: ["1.3.1"], impact: "critical",
+    help: "The document has no accessibility tag tree.",
+  }] as unknown as Report["pdf"];
+  assert.match(render({ pdf }), /\[critical\] 1\.3\.1 Info and Relationships {2}ASSERTED {2}pdf-untagged/);
 });
 
 test("findings are grouped Perceive before Interact, however they arrive", () => {
@@ -254,6 +282,14 @@ test("#40: the vocabulary explanation appears before any finding, axe section or
     "a stranger must meet the vocabulary before the first jargon-bearing section, not partway through it");
 });
 
+test("the legend says how the finding-level and outcome-level vocabularies line up", () => {
+  // A blind read found ASSERTED/INDICATOR (findings) and asserted/referred (outcomes) confusing on
+  // their own -- two vocabularies for what is, by design, one split, with no line saying so.
+  const output = render();
+  assert.match(output, /an ASSERTED finding is what makes a criterion asserted/i);
+  assert.match(output, /an INDICATOR\s+finding is what makes one referred/i);
+});
+
 test("#40: the legend is not repeated -- one explanation, not three slightly different ones", () => {
   // This repo's own most-repeated defect is a fact stated twice, drifting. Pins that the OLD conditional
   // legend text and the OLD inline cantTell/untested gloss are both gone now that howToReadThisSection
@@ -298,6 +334,15 @@ test("#242: `cantTell` appears exactly once -- the legend's parenthetical -- nev
   assert.match(output, /\[REFERRED\]/, "the per-outcome tag for a criterion needing a person's eyes");
   assert.match(output, /asserted 1/, "and in the tally line");
   assert.match(output, /referred 1/);
+});
+
+test("a per-criterion outcome names its criterion, not just its number", () => {
+  // `CriterionOutcome.criterion` is a bare number ("1.1.1") everywhere it is produced -- it is also
+  // the machine-readable field EARL and `--json` read, so it stays bare there. Only the text report
+  // decorates it with the name a stranger needs to judge whether the criterion is one they care about.
+  const outcomes = [{ criterion: "1.1.1", outcome: "cantTell" as const, reason: "the scorer abstained" }];
+  const output = render({ outcomes });
+  assert.match(output, /\[REFERRED\] 1\.1\.1 Non-text Content — the scorer abstained/);
 });
 
 test("and IS printed when there are findings, because then it describes them", () => {
@@ -346,7 +391,8 @@ test("#1596: rehearsal 3's frame-hosted axe findings are counted, marked and cav
 test("#1596 CONTROL: a top-level axe finding prints as it did before, unmarked, with no split count and no caveat", () => {
   const out = axeLayer(render({ axe: axeOf(axeRow("color-contrast", ["#main > p"])) }));
   assert.match(out, /\n1 violation\(s\):\n/);
-  assert.deepEqual(findingLines(out), ["  [serious] 4.1.2  color-contrast: color-contrast help"]);
+  assert.deepEqual(findingLines(out),
+    ["  [serious] 4.1.2 Name, Role, Value  ASSERTED  color-contrast: color-contrast help"]);
   assert.doesNotMatch(out, /in a frame|inside a frame|embedded frame/);
 });
 
