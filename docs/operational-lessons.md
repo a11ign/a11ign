@@ -1013,6 +1013,17 @@ direction** — both exist to act on a worker that is busy AND wedged, so the ch
 case. `busy-worker-guard.test.ts` DISCOVERS every playbook targeting `a11y_workers` and fails until a new
 one is classified; a test naming `provision-role.yml` by hand could never have seen `deploy.yml`.
 
+**#1829's addendum (2026-09-21): the exemption is now scoped to ONE named worker, never the fleet.** Both
+plays default `hosts:` to `a11y_workers` (the whole group), and one session dispatching a capture made that
+theoretical; a second session able to dispatch one of its own (#1817) makes it a real collision — a
+`fleet:recover`/bare `restart.yml` run with no limit could reboot the exact box the other session is
+mid-capture on, through the one guard built to bypass the capturing-worker check. `recover.yml` and
+`restart.yml` each now refuse in their own first task unless resolved to exactly one host
+(`ansible_play_hosts_all | length == 1`, the same shape `os-rollback.yml` already used for a different
+reason); `fleet-playbook.mjs`'s `osRollbackRefusal` refuses `npm run fleet:recover` upstream of that for the
+same reason, but `restart.yml` has no JS entry point to refuse it upstream at all — it is dispatched as a
+bare `ansible-playbook restart.yml`, so the in-play assert is the only guard that sees every call.
+
 `fleet:status` is the "which box is the problem" answer: per worker, its state, its `/health.code`, and —
 for a busy one — the case it is on, how long it has been there and the phase it is IN, read from
 `/progress`, which every worker has served since forever and nothing consumed. It surfaces a **degraded**
