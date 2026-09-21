@@ -409,6 +409,28 @@ export function activationBudgetFromDiagnostics(
 }
 
 /**
+ * WHY "form control(s)" HERE CAN BE A DIFFERENT NUMBER FROM THE RENDER LINE'S `formField` — #1855, from
+ * two blind reads of #1851's own fixture that both flagged `formField=1` two sentences before "18 form
+ * control(s) found" as looking like a typo or a bug.
+ *
+ * They are two different alphabets, not a contradiction. The render line above (`identitySentence`,
+ * `renderSentence` always runs immediately before this in every branch below) counts `formField` with a
+ * narrow DOM selector — literal text-entry shapes only: `input`, `select`, `textarea`, `role=textbox`,
+ * `role=combobox` (`browser-session.mjs`'s own "NVDA'S OWN FORM-FIELD ALPHABET" comment names exactly why
+ * that count is right for what IT does and wrong as an oracle here). This count instead totals every stop
+ * the screen reader's OWN quick-navigation key made walking the rendered page, over a much wider role set
+ * that also includes buttons, checkboxes, radios, switches and sliders. A page with one text input and
+ * seventeen buttons legitimately reads `formField=1` on the render line and "18 form control(s)" here.
+ */
+function formFieldAlphabetNote(input: ConformanceScopeInput): string {
+  if (typeof input.documentIdentity?.shape?.formField !== "number") return "";
+  return " (This counts every stop the screen reader's own \"next form field\" key made -- buttons, "
+    + "checkboxes, radios, switches and sliders included, not only text inputs -- which is a wider "
+    + "alphabet than the `formField` figure on the render line above, read from the raw markup by a "
+    + "narrower DOM selector. The two legitimately differ; neither number is wrong.)";
+}
+
+/**
  * WHICH CONTROLS WERE NEVER ACTIVATED, AND WHY — #677 part 2, the same rule as part 1 one level in.
  *
  * A control the budget refused produces no `formChanges` entry and no `stateChanges` entry, which is
@@ -423,12 +445,13 @@ export function activationBudgetFromDiagnostics(
 function activationSentence(input: ConformanceScopeInput): string {
   const budget = input.activationBudget;
   if (!budget || budget.fields === 0) return "";
+  const note = formFieldAlphabetNote(input);
   if (!budget.exhausted) {
-    return ` Every one of the ${budget.fields} form control(s) found was offered to the activation probe.`;
+    return ` Every one of the ${budget.fields} form control(s) found was offered to the activation probe.${note}`;
   }
   return ` ${budget.skipped} of ${budget.fields} form control(s) were NOT ACTIVATED — the per-field`
     + " activation probe's budget ran out, so any absence of interaction evidence among them is a"
-    + " statement about this capture and not about the page.";
+    + ` statement about this capture and not about the page.${note}`;
 }
 
 /** The coverage sentence, or "" when there is no ground truth to state it against. */
@@ -454,6 +477,13 @@ function coverageSentence(input: ConformanceScopeInput): string {
       + (c.examined === "partial" ? " (partial)" : ""));
   const unexamined = coverage.filter((c) => c.examined === "not-examined");
   const gaps = coverage.filter((c) => !c.complete && c.examined !== "not-examined");
+  // A TYPE WHOSE REACH EXCEEDS THE CENSUS IS NOT A SHORTFALL, AND MUST NOT SHARE THE SHORTFALL SENTENCE
+  // -- #1855. Measured on a real report: `landmark 15/13` (reach EXCEEDS the census) sat in the same
+  // sentence as `link 13/70` (a genuine shortfall), and the trailing "a shortfall here is a coverage
+  // question about this tool" read as though it applied to landmark's number too. It does not: `complete`
+  // is `reached >= reachable`, so an exceeding type is already `complete` and never lands in `gaps` --
+  // but nothing said so, which is the missing sentence rather than a wrong one.
+  const exceeds = coverage.filter((c) => c.examined !== "not-examined" && c.reached > c.reachable);
   // Say WHAT the numerator is. The sweep de-duplicates by announcement (`seenKeys`), so two images with the
   // same alt text collapse to one entry, while the census counts elements. On a page with 66 images and 47
   // distinct alt values those are different denominators, and reporting "5 of 66" as though it were elements
@@ -469,9 +499,14 @@ function coverageSentence(input: ConformanceScopeInput): string {
         + " this capture is TRUNCATED and every conclusion drawn from it is bounded by the same budget."
         + " That is not a statement about the page."
       : "")
+    + (exceeds.length
+      ? ` Reach ABOVE the count for ${exceeds.map((c) => c.type).join(", ")} is not an error: the sweep`
+        + " walks what the screen reader announces and the census walks the accessibility tree, and the two"
+        + " can legitimately disagree (the same element announced more than once, e.g. a link inside a list)."
+      : "")
     + (gaps.length
       ? " A shortfall here is a coverage question about this tool, not a finding about the page."
-      : unexamined.length ? "" : " Every type with ground truth was reached in full.");
+      : unexamined.length || exceeds.length ? "" : " Every type with ground truth was reached in full.");
 }
 
 /**

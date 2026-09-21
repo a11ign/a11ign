@@ -629,6 +629,36 @@ test("a nonsense denominator is clamped rather than printed", () => {
   assert.equal(graphic.reachable, 0);
 });
 
+/**
+ * #1855 — measured on a real report: `landmark 15/13` (reach EXCEEDS the census) sat in the same sentence
+ * as `link 13/70` (a genuine shortfall), and the trailing "a shortfall here is a coverage question about
+ * this tool" read as though it applied to landmark's number too. It must not: exceeding the census is a
+ * different, harmless fact (the sweep announced the same distinct name more than once), and the sentence
+ * has to say that FOR THE TYPE THAT EXCEEDED rather than let one caveat cover both.
+ */
+const w3Shape = {
+  assessedCriteria: [], screenReader: "NVDA", ruleLayerRan: true, sweeps: [],
+  census: { heading: 19, landmark: 13, link: 75, graphic: 3 },
+  swept: { heading: 19, landmark: 15, link: 13, graphic: 1 },
+};
+
+test("a type whose reach exceeds the census is named as fine, separately from a real shortfall", () => {
+  const said = conformanceScope(w3Shape).find((r) => r.number === 2)!.establishes;
+  assert.match(said, /landmark 15\/13/, "the exceeding number is still printed plainly");
+  assert.match(said, /Reach ABOVE the count for landmark is not an error/);
+  assert.match(said, /A shortfall here is a coverage question about this tool, not a finding about the page/,
+    "link 13\\/70 is a genuine shortfall and still needs its own caveat");
+});
+
+test("reach exceeding the census with NO other shortfall gets the exceeds note, not the old blanket line", () => {
+  const said = conformanceScope({
+    ...w3Shape, census: { landmark: 13 }, swept: { landmark: 15 },
+  }).find((r) => r.number === 2)!.establishes;
+  assert.match(said, /Reach ABOVE the count for landmark is not an error/);
+  assert.doesNotMatch(said, /Every type with ground truth was reached in full/,
+    "that sentence undersells an exceeding type -- it reads as an exact match, not as more than expected");
+});
+
 test("censusElementCounts returns the RAW counts, with no distinct laid over them", () => {
   const raw = censusElementCounts([
     { event: "structureCensus", graphic: 63, graphicUnnamed: 38, link: 76, distinct: { graphic: 61 } }]);
@@ -666,6 +696,45 @@ test("no budget, or no controls, states nothing at all", () => {
   assert.doesNotMatch(withBudget(null), /activation probe|NOT ACTIVATED|form control/);
   assert.doesNotMatch(withBudget({ fields: 0, allowed: 0, skipped: 0, exhausted: false }),
     /activation probe|NOT ACTIVATED|form control/);
+});
+
+/**
+ * #1855 — a real report read `Render (domCensus): ..., formField=1, ...` two sentences before "Every one
+ * of the 18 form control(s) found was offered to the activation probe", and two independent fresh readers
+ * both flagged the gap as a contradiction. It is not one: `domCensus.formField` is a narrow DOM selector
+ * (`input`/`select`/`textarea`/`role=textbox`/`role=combobox`); the activation count is every stop the
+ * screen reader's own quick-navigation key made over a wider role set including buttons, checkboxes,
+ * radios, switches and sliders. The report must say so, and only when there is a render-line number for
+ * the reader to have been confused by in the first place.
+ */
+const withBudgetAndRender = (
+  budget: ConformanceScopeInput["activationBudget"], identity?: ConformanceScopeInput["documentIdentity"],
+) => conformanceScope({ assessedCriteria: [], screenReader: "NVDA", ruleLayerRan: true, sweeps: [],
+  activationBudget: budget, documentIdentity: identity }).find((r) => r.number === 2)!.limitation;
+
+test("the form-control count explains itself against the render line's own formField figure", () => {
+  const identity = documentIdentity({ diagnostics: [{ event: "domCensus", formField: 1, tabbable: 78 }] });
+  const said = withBudgetAndRender({ fields: 18, allowed: 18, skipped: 0, exhausted: false }, identity);
+  assert.match(said, /formField=1/, "the render line's own number is still printed");
+  assert.match(said, /Every one of the 18 form control\(s\) found was offered/);
+  assert.match(said, /wider alphabet than the `formField` figure on the render line above/);
+  assert.match(said, /legitimately differ/);
+});
+
+test("the same note covers the NOT ACTIVATED branch, not only the clean one", () => {
+  const identity = documentIdentity({ diagnostics: [{ event: "domCensus", formField: 2 }] });
+  const said = withBudgetAndRender({ fields: 50, allowed: 30, skipped: 20, exhausted: true }, identity);
+  assert.match(said, /20 of 50 form control\(s\) were NOT ACTIVATED/);
+  assert.match(said, /wider alphabet than the `formField` figure on the render line above/);
+});
+
+test("no note when there is no render-line formField figure to have looked contradictory", () => {
+  // No `documentIdentity` at all (the plain `withBudget` fixture above) already covers the "no identity"
+  // case implicitly; this covers an identity that read OTHER counts but never `formField`.
+  const identity = documentIdentity({ diagnostics: [{ event: "domCensus", tabbable: 78, heading: 19 }] });
+  const said = withBudgetAndRender({ fields: 18, allowed: 18, skipped: 0, exhausted: false }, identity);
+  assert.match(said, /Every one of the 18 form control\(s\) found was offered/);
+  assert.doesNotMatch(said, /wider alphabet/);
 });
 
 test("activationBudgetFromDiagnostics reads the mark, and absence is null rather than a zeroed budget", () => {

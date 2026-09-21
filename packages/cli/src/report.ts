@@ -100,6 +100,13 @@ export interface Report {
  * reason: each is used below this legend (confidence and Support inside the lived-experience section,
  * `ACT` in the outcomes header, `§5.x` in the conformance section), so each is explained here first,
  * once, rather than glossed inline at every site it appears.
+ *
+ * #1855 is round 3 of the same blind read, against #1851's own fixture: two more independent readers,
+ * unprompted, both named the SAME two further gaps -- a severity word appears on every finding, but
+ * nothing said the rule-based layer's own severity words and the lived-experience layer's own severity
+ * words are two separate scales rather than one ranking; and "guidepup"/"domCensus" appear as bare names
+ * (screenReaderRuntimeLine, the conformance section's render line) with no gloss, unlike every other term
+ * here. Both folded in below for the same reason as #1851's four: each is used further down this report.
  */
 function howToReadThisSection(): string[] {
   return [
@@ -108,12 +115,21 @@ function howToReadThisSection(): string[] {
     "  ASSERTED    a confirmed problem -- the evidence establishes it directly. Fix it.",
     "  INDICATOR   a likely problem, but this check is looser than the criterion itself.",
     "              Have a person confirm it before treating it as a failure.",
+    "Each finding and axe-core violation also carries a severity word, but the two layers use their OWN",
+    "separate scales, not one shared ranking: axe-core's own words are minor/moderate/serious/critical;",
+    "the lived-experience layer's own words are minor/moderate/serious/blocker. A `critical` from axe-core",
+    "and a BLOCKER from the lived-experience layer are each assessor's own top word -- not the same",
+    "severity, and not comparable across the two.",
     "Each finding carries a confidence from 0 (no confidence) to 1 (full confidence); an \"overall",
     "confidence\" line is the WEAKEST finding's number, not an average -- a report is only as good as its",
     "shakiest claim.",
     "A \"Support\" line, where present, says how closely this page's evidence resembles the pages the",
     "scorer was validated on. That is a check on the SCORER's confidence here, not a finding about the",
     "page -- outside its range means trust the rest of this report a little less, not that the page failed.",
+    "A \"Screen reader runtime\" line, where present, names \"guidepup\" alongside the screen reader --",
+    "guidepup is the client library that drives the screen reader and turns its speech into the text this",
+    "report reads; its version matters because this tool's scorer was validated against evidence one",
+    "specific guidepup build produced.",
     "Per-criterion outcomes (further down) use a wider vocabulary than \"finding\":",
     "  passed        checked, and this criterion is fine",
     "  asserted      this FAILS the criterion -- the evidence establishes it directly (ACT: `failed`)",
@@ -124,11 +140,17 @@ function howToReadThisSection(): string[] {
     "(Same split, two vocabularies: an ASSERTED finding is what makes a criterion asserted, an INDICATOR",
     " finding is what makes one referred -- \"asserted\"/\"referred\" just also cover criteria no finding",
     " mentions at all. \"ACT\" is W3C's Accessibility Conformance Testing framework -- the words above are",
-    " this report's own translation of it, so you do not need to have read it to use this report.)",
+    " this report's own translation of it, so you do not need to have read it to use this report. Only",
+    " asserted and referred criteria are listed by name below; passed, inapplicable and untested are given",
+    " as totals only, because there is nothing to act on for any one of them -- naming every fine or",
+    " not-yet-tested criterion would bury the ones that need a person's attention.)",
     "Further down, a WCAG conformance section (§5.2) lists five things a formal conformance CLAIM needs;",
     "this report is evidence toward that, never the claim itself. §5.2/§5.3 are WCAG's own section",
     "numbers, printed so you can look one up if you want to -- nothing here depends on you already knowing",
-    "them.",
+    "them. That section's \"Render (domCensus)\" line counts elements directly in the page's markup (not",
+    "the accessibility tree) to say which document was examined; other counts nearby come from the screen",
+    "reader's own walk over a different, wider set of roles, so the two can legitimately disagree -- see",
+    "the render line's own note when that happens.",
   ];
 }
 
