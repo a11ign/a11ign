@@ -94,6 +94,12 @@ export interface Report {
  * own rule about a fact stated twice applied to prose rather than to code: the two other explanations
  * this replaced were correct on their own and would have drifted from this one the first time either was
  * edited alone.
+ *
+ * #1851 folded in the four terms #1802's own blind read named as the report's remaining jargon --
+ * `confidence`'s 0-1 scale, the `Support`/novelty line, `ACT`, and the `§5.x` citations -- for the same
+ * reason: each is used below this legend (confidence and Support inside the lived-experience section,
+ * `ACT` in the outcomes header, `§5.x` in the conformance section), so each is explained here first,
+ * once, rather than glossed inline at every site it appears.
  */
 function howToReadThisSection(): string[] {
   return [
@@ -102,6 +108,12 @@ function howToReadThisSection(): string[] {
     "  ASSERTED    a confirmed problem -- the evidence establishes it directly. Fix it.",
     "  INDICATOR   a likely problem, but this check is looser than the criterion itself.",
     "              Have a person confirm it before treating it as a failure.",
+    "Each finding carries a confidence from 0 (no confidence) to 1 (full confidence); an \"overall",
+    "confidence\" line is the WEAKEST finding's number, not an average -- a report is only as good as its",
+    "shakiest claim.",
+    "A \"Support\" line, where present, says how closely this page's evidence resembles the pages the",
+    "scorer was validated on. That is a check on the SCORER's confidence here, not a finding about the",
+    "page -- outside its range means trust the rest of this report a little less, not that the page failed.",
     "Per-criterion outcomes (further down) use a wider vocabulary than \"finding\":",
     "  passed        checked, and this criterion is fine",
     "  asserted      this FAILS the criterion -- the evidence establishes it directly (ACT: `failed`)",
@@ -111,7 +123,12 @@ function howToReadThisSection(): string[] {
     "  untested      nothing here checks this criterion yet",
     "(Same split, two vocabularies: an ASSERTED finding is what makes a criterion asserted, an INDICATOR",
     " finding is what makes one referred -- \"asserted\"/\"referred\" just also cover criteria no finding",
-    " mentions at all.)",
+    " mentions at all. \"ACT\" is W3C's Accessibility Conformance Testing framework -- the words above are",
+    " this report's own translation of it, so you do not need to have read it to use this report.)",
+    "Further down, a WCAG conformance section (§5.2) lists five things a formal conformance CLAIM needs;",
+    "this report is evidence toward that, never the claim itself. §5.2/§5.3 are WCAG's own section",
+    "numbers, printed so you can look one up if you want to -- nothing here depends on you already knowing",
+    "them.",
   ];
 }
 

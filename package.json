@@ -164,6 +164,8 @@
     "fleet:inventory-install": "node packages/control/src/fleet-playbook.mjs --playbook=inventory-install.yml",
     "fleet:control-host-install": "node packages/control/src/fleet-playbook.mjs --playbook=control-host-install.yml",
     "corpus:release": "node packages/lab/scripts/corpus-release.mjs",
+    "host:check": "node packages/agent-org/src/host-units.mjs",
+    "host:install": "node packages/agent-org/src/host-units.mjs --install",
     "stash:whose": "node packages/agent-org/src/stash-whose.mjs",
     "pr:hold": "node packages/agent-org/src/pr-hold.mjs",
     "pr:release": "node packages/agent-org/src/pr-hold.mjs --release",
