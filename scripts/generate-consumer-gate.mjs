@@ -468,6 +468,46 @@ export function currentHeadSha() {
 }
 
 /**
+ * The two paths a stale-pin-on-arrival can come from (#1721): `currentHeadSha` bakes `git rev-parse
+ * HEAD`, which is necessarily the commit's own PARENT while that commit is being formed -- so an edit to
+ * either file, landing in the SAME commit as the regenerated one, is invisible to the pin this write is
+ * about to bake.
+ */
+const GENERATION_INPUTS = ["README.md", "scripts/generate-consumer-gate.mjs"];
+
+/**
+ * Refuses when `git status --porcelain -- README.md scripts/generate-consumer-gate.mjs`'s own output
+ * names either file as modified, staged, or untracked -- the exact shape that produced `2728c8126`'s
+ * stale pin (#1721): the edit about to land in the SAME commit as the regenerated file is invisible to
+ * the pin regeneration bakes, because `currentHeadSha` reads `git rev-parse HEAD`, not the tree that is
+ * about to be committed.
+ *
+ * A pure predicate over the status text, taking it as a parameter -- the same shape
+ * `refuseAnythingButJobsAtTopLevel` and `pinActionRef`'s own pattern check take -- not a second
+ * `execFileSync` call buried in `main`.
+ *
+ * @param {string} porcelainStatus
+ */
+export function refuseDirtyGenerationInputs(porcelainStatus) {
+  for (const line of porcelainStatus.split("\n")) {
+    if (line.trim() === "") continue;
+    const path = line.slice(3);
+    const offender = GENERATION_INPUTS.find((input) => path === input || path.endsWith(`/${input}`));
+    if (offender === undefined) continue;
+    throw new Error(`${offender} has an uncommitted or staged change -- commit it separately, then regenerate `
+      + "(node scripts/generate-consumer-gate.mjs): the pin this write would bake is `git rev-parse HEAD`, which "
+      + "cannot see an edit about to land in the same commit as the regenerated file, so writing now would ship "
+      + "a pin already stale on arrival (#1721)");
+  }
+}
+
+/** `GENERATION_INPUTS`' own dirtiness, read fresh at generation time -- the write path's own precondition. */
+function currentGenerationInputsStatus() {
+  return execFileSync("git", ["status", "--porcelain", "--", ...GENERATION_INPUTS],
+    { cwd: REPO, env: sandboxGitEnv(), encoding: "utf8" });
+}
+
+/**
  * Pure end-to-end build: README text + the sha to pin -> the full generated workflow text.
  * @param {string} readmeText
  * @param {string} sha
@@ -515,6 +555,7 @@ function main() {
       + "the commit actually running, at dispatch time.");
     return;
   }
+  refuseDirtyGenerationInputs(currentGenerationInputsStatus());
   writeFileSync(OUT, workflow);
   console.log(`WROTE  ${OUT}`);
 }
