@@ -475,6 +475,11 @@ export function currentHeadSha() {
  */
 const GENERATION_INPUTS = ["README.md", "scripts/generate-consumer-gate.mjs"];
 
+/** @param {string} path @returns {string | undefined} the `GENERATION_INPUTS` entry `path` names, if any */
+function generationInputNamed(path) {
+  return GENERATION_INPUTS.find((input) => path === input || path.endsWith(`/${input}`));
+}
+
 /**
  * Refuses when `git status --porcelain -- README.md scripts/generate-consumer-gate.mjs`'s own output
  * names either file as modified, staged, or untracked -- the exact shape that produced `2728c8126`'s
@@ -491,8 +496,12 @@ const GENERATION_INPUTS = ["README.md", "scripts/generate-consumer-gate.mjs"];
 export function refuseDirtyGenerationInputs(porcelainStatus) {
   for (const line of porcelainStatus.split("\n")) {
     if (line.trim() === "") continue;
-    const path = line.slice(3);
-    const offender = GENERATION_INPUTS.find((input) => path === input || path.endsWith(`/${input}`));
+    // A rename/copy record's own path text is "SRC -> DST" (git's porcelain short format), never a single
+    // path -- a generation input renamed AWAY (SRC) or renamed/copied IN (DST) is an uncommitted/staged
+    // change to that input either way, so both sides are checked, not just the whole "SRC -> DST" string
+    // against a single equality (which matches neither and let a staged rename through silently).
+    const paths = line.slice(3).split(" -> ");
+    const offender = paths.map(generationInputNamed).find((name) => name !== undefined);
     if (offender === undefined) continue;
     throw new Error(`${offender} has an uncommitted or staged change -- commit it separately, then regenerate `
       + "(node scripts/generate-consumer-gate.mjs): the pin this write would bake is `git rev-parse HEAD`, which "
