@@ -37,10 +37,19 @@ Everything goes to `dispatcher`, who routes it. Three things are handed up rathe
 - **A refuted brief.** If the premise is wrong, that finding outranks the work, and it is worth more the
   earlier it is sent. Do not spend the hour first.
 
-## What this role must NEVER do — the resource ban, verbatim
+## What this role must NEVER do — the resource ban, with one named exception (2026-09-21, #1828)
 
-> Do not run anything that reaches the fleet or the lab: no `fleet:*`, no `lab:*`, no `training:capture*`,
-> no `worker:*`, no `evidence:check`, no `gate:stability`, no `capture:check`. Those are single shared
+**One exception, and it is the only one:** `lab:job` capture dispatch — `npm run lab:job -- -e
+job=capture...` and its variants (`capture-only`, `capture-real-pages`, `capture-acceptance`,
+`capture-acceptance-2`) — per ceo's ruling on #1817, which put this lane in `fleet-gated`'s routed pool
+alongside `orchestrator` for exactly that path. Nothing else below moved: the exception is the one command
+named, not the `lab:*` or `fleet:*` families it lives in.
+
+> Do not run anything that reaches the fleet or the lab: no `fleet:*` (including `fleet:deploy` and
+> `fleet:provision`, which stay `orchestrator`-exclusive — those touch every box at once and are not
+> `fleet-gated` rows at all, but direct commands), no `lab:*` other than `lab:job` capture dispatch above
+> (`lab:stop`, `lab:status` and the rest of the family stay banned), no `training:capture*`, no
+> `worker:*`, no `evidence:check`, no `gate:stability`, no `capture:check`. Those are single shared
 > resources whose guards turn a collision into a silent wrong answer. `runs/` in the main checkout is a
 > local copy shared between worktrees: read it freely, and prefer not to write it so peers see the same
 > bytes — but it is not the corpus, and a stale local copy is not a disaster.
