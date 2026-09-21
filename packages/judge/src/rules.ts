@@ -1368,9 +1368,9 @@ function looksLikeFurnitureNotNavigation(control: string, headingBefore: string,
 function addStaleRouteTitle(input: RuleInput, add: AddFinding): void {
   const route = input.interaction?.routeChange;
   // `route.control === null` is the applicability gate -- not probed, errored, or quick-nav reached the
-  // end of the links with nothing to activate. `routeChange.navigated` looks like the same check and is
-  // NOT: `probeRouteChange` sets it `true` on every successful activation regardless of whether the view
-  // actually moved, so it is a tautology relative to what this rule exists to establish (#250).
+  // end of the links with nothing to activate. `routeChange.navigated` is a DIFFERENT question (#250,
+  // fixed #1850): NVDA's own document-change announcement, not "the view moved" -- this rule's own
+  // premise is the heading pair, so `navigated` still is not read here.
   if (!route || route.error || route.control === null) return;
   // The probe reached the end of the links instead of activating one. See `NOTHING_FURTHER`.
   if (NOTHING_FURTHER.test(String(route.control ?? ""))) return;
@@ -1520,7 +1520,8 @@ function addKeyboardUnreachableControl(input: RuleInput, add: AddFinding): void 
 function addInertSkipLink(input: RuleInput, add: AddFinding): void {
   const route = input.interaction?.routeChange;
   // See `addStaleRouteTitle`'s comment: `route.control === null` is the applicability gate this rule
-  // actually needs, and `routeChange.navigated` is a tautology that must not be read as evidence (#250).
+  // actually needs. This rule's own evidence is where the next Tab landed, not whether the document
+  // navigated, so `routeChange.navigated` (real since #1850) still is not read here.
   if (!route || route.error || route.control === null) return;
   // It has to BE a skip link. The probe activates the first link on the page, which elsewhere is a logo or
   // a cookie banner — finding focus unmoved after activating one of those says nothing about bypassing.

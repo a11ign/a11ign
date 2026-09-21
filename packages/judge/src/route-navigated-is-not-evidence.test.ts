@@ -4,16 +4,18 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 /**
- * `routeChange.navigated` is `true` on every successful activation `probeRouteChange` records --
- * `capture-probes.mjs` sets it regardless of whether the view actually moved -- so a rule (or the corpus
- * predicates, or the Python featurizer) reading it as corroboration of navigation learns nothing: it
- * agrees with the evidence it is supposedly corroborating (#250). The real signal is
- * `titleBefore`/`titleAfter`/`headingBefore`/`headingAfter`; `route.control === null` is the correct
- * applicability gate ("was anything probed at all"). `addStaleRouteTitle`/`addInertSkipLink` in
- * `rules.ts` and `routeTitleIsStale`/`skipLinkIsInert` in `signal-predicates.mjs` all use it now --
- * TWO independent implementations of the same two rules, discovered a second time by a peer session
- * after this guard first shipped covering only `rules.ts`. That is exactly the shape this scan exists to
- * stop recurring: a hand-maintained file list is the thing that goes stale, not the pattern.
+ * `routeChange.navigated` WAS `true` on every successful activation `probeRouteChange` recorded,
+ * regardless of whether the view actually moved -- a tautology, fixed #1850, which now derives it from
+ * NVDA's own document-change announcement. This guard still forbids reading it in the two rules and the
+ * predicates below: neither has been measured against the new signal, and the real evidence for both
+ * findings is, and stays, `titleBefore`/`titleAfter`/`headingBefore`/`headingAfter`; `route.control ===
+ * null` is the correct applicability gate ("was anything probed at all"). `addStaleRouteTitle`/
+ * `addInertSkipLink` in `rules.ts` and `routeTitleIsStale`/`skipLinkIsInert` in `signal-predicates.mjs`
+ * all use it now -- TWO independent implementations of the same two rules, discovered a second time by a
+ * peer session after this guard first shipped covering only `rules.ts`. That is exactly the shape this
+ * scan exists to stop recurring: a hand-maintained file list is the thing that goes stale, not the
+ * pattern. A future row that wants `navigated` as evidence removes this guard's coverage for the one file
+ * it changes, deliberately, rather than this scan quietly losing its teeth everywhere at once.
  *
  * This scans SOURCE TEXT rather than asserting behaviour, because the hazard is a FUTURE line, not a
  * present one -- the same shape `structure-declarations.test.ts` uses for exactly the same reason: `tsc`
