@@ -330,6 +330,53 @@ test("#1851: the §5.x citations in the conformance section are glossed as WCAG'
     "a bare '(§5.2)' reads as an internal reference unless the report says whose numbering it is");
 });
 
+// #1855: round 3 of the same blind read, against #1851's own fixture -- two independent fresh readers
+// both flagged the SAME two further gaps: a severity word on every finding with no statement of whether
+// the rule-based layer's own scale and the lived-experience layer's own scale are one ranking, and
+// "guidepup"/"domCensus" appearing as bare names with no gloss, unlike every other term here.
+test("#1855: the legend says the two severity scales are separate, before any severity word is printed", () => {
+  const output = render();
+  const legendAt = output.indexOf("How to read this report");
+  const firstSeverity = output.indexOf("[SERIOUS]");
+  assert.match(output, /axe-core's own words are minor\/moderate\/serious\/critical/i);
+  assert.match(output, /lived-experience layer's own words are minor\/moderate\/serious\/blocker/i);
+  assert.match(output, /not the same\s+severity, and not comparable across the two/i,
+    "a stranger must be told a `critical` from axe-core and a BLOCKER from the lived-experience layer "
+    + "are not one shared ranking -- neither word says so on its own");
+  assert.ok(legendAt >= 0 && legendAt < firstSeverity, "explained before the first severity tag is printed");
+});
+
+test("#1855: `guidepup` is glossed in the legend before the screen-reader-runtime line names it", () => {
+  const output = render({
+    environment: { screenReader: "NVDA", screenReaderVersion: "2026.1.1", guidepupVersion: "0.31.0" },
+  });
+  const legendAt = output.indexOf("How to read this report");
+  const runtimeAt = output.indexOf("guidepup 0.31.0");
+  assert.match(output, /guidepup is\s+the client library that drives the screen reader/i,
+    "a stranger meeting the bare word \"guidepup\" has no way to know it is software, not a typo");
+  assert.ok(legendAt >= 0 && legendAt < runtimeAt, "glossed before the line that names it");
+});
+
+test("#1855: `domCensus` is glossed in the legend before the conformance section's render line names it", () => {
+  const output = render({
+    conformance: [{ number: 2, name: "Full pages",
+      establishes: "x", limitation: "Render (domCensus): tabbable=78, formField=1." }],
+  });
+  const legendAt = output.indexOf("How to read this report");
+  const renderAt = output.indexOf("Render (domCensus)");
+  assert.match(output, /counts elements directly in the page's markup \(not/i,
+    "a stranger meeting \"domCensus\" on the render line has no way to know what it counts");
+  assert.ok(legendAt >= 0 && legendAt < renderAt, "glossed before the line that names it");
+});
+
+test("#1855: the outcomes legend explains why only asserted/referred are itemized by name", () => {
+  const output = render();
+  assert.match(output, /passed, inapplicable and untested are given\s+as totals only/i,
+    "a stranger who notices asserted/referred listed by criterion and the other three are not deserves "
+    + "to be told that is deliberate, not an omission");
+  assert.match(output, /nothing to act on/i);
+});
+
 test("#40: the legend is not repeated -- one explanation, not three slightly different ones", () => {
   // This repo's own most-repeated defect is a fact stated twice, drifting. Pins that the OLD conditional
   // legend text and the OLD inline cantTell/untested gloss are both gone now that howToReadThisSection
