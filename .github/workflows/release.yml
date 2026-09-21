@@ -326,6 +326,23 @@ jobs:
           # header calls "the moment they are least able to check the result".
           NPM_CONFIG_PROVENANCE: "true"
 
+      # #1824: NOTHING ELSE IN THIS JOB COMMITS `release:version`'s RESULT BACK TO `main`. Measured on run
+      # 35544379475, the first real dispatch since 0.1.0: `packages/*/package.json` stayed at `0.0.0` after
+      # that publish, so this run recomputed the identical `0.1.0` target from the same stale base and
+      # `changeset publish` silently no-op'd all six already-published packages.
+      #
+      # SAME `if:` AS `Publish`, deliberately -- this must run exactly when a real publish just happened,
+      # never on a dry run (which never touched the registry, so committing a version nothing actually
+      # shipped would make `main` claim a version that does not exist) and never after a failed publish
+      # (the implicit `success()` every step carries already refuses that).
+      #
+      # `release-commit-version-bump.mjs` is idempotent: a dispatch with no new changesets finds no diff in
+      # the paths `release:version` can touch and commits nothing, which is #1824's own done-when -- a
+      # second real dispatch with no new changesets reports nothing pending to bump.
+      - name: Commit the version bump back to main
+        if: inputs.dry-run == false && inputs.confirm == 'publish-for-real'
+        run: node scripts/release-commit-version-bump.mjs
+
       - name: Say plainly what happened
         run: |
           if [ "${{ inputs.dry-run }}" = "false" ] && [ "${{ inputs.confirm }}" = "publish-for-real" ]; then

@@ -28,6 +28,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node packages/agent-org/src/parent-recheck-summary.mjs` — read a node:test TAP log and print its failing subtests by name -- #744, never a fixed tail
 - `node packages/agent-org/src/pr-hold.mjs` — take or release a hold on a pull request, the record merge-guard reads before treating it as free
 - `node packages/agent-org/src/pr-open.mjs` — check a PR body's Acceptance/Closes with the tree's own parser before gh pr create/edit sends it
+- `node packages/agent-org/src/prompt-session.mjs` — npm run prompt:session -- <label> "<text>"   (text may also come on stdin)
 - `node packages/agent-org/src/prune-worktrees.mjs` — remove fully-merged, clean linked worktrees, and name every other one as dirty
 - `node packages/agent-org/src/queue-stalled.mjs` — name the armed, green PRs that can never merge because they are behind and conflicting
 - `node packages/agent-org/src/queue-table.mjs` — print the pipeline's sections -- trunk, open PRs, stalled work, red checks on merged PRs,
@@ -77,6 +78,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/manifest-repository-check.mjs` — refuse a publish whose manifests name a different repository than the run publishing them
 - `node scripts/npm-token-liveness.mjs` — say whether the first-publish npm token is still present after it should have been revoked
 - `node scripts/prune-stale-workspace-scope.mjs` — remove a stale workspace-scope's node_modules symlinks a rename left behind
+- `node scripts/release-commit-version-bump.mjs` — commit changeset version's manifest bump and consumed changesets back to main after a real publish
 - `node scripts/release-gate-scope.mjs` — warn which release:gate stages release:gate:ci does not run, and how many
 - `node scripts/release-print-versions.mjs` — print the version each published package's manifest now holds
 - `node scripts/release-reuses-verdict.mjs` — does the release job need to run coverage itself, or can it reuse nightly's verdict for this sha
