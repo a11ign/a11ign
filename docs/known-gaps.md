@@ -25,7 +25,7 @@ entry names what is missing, what it would cost, and what would tell you it is f
 - [§32](#32-312s-corpus-is-built-and-proven-and-a-speech-only-rule-still-cannot-decide-it) 3.1.2's corpus is built and proven, and a SPEECH-ONLY RULE STILL CANNOT DECIDE IT
 - [§33](#33-reportemphasis-cannot-work-in-this-pipeline-nvda-implements-it-only-for-mshtml) reportEmphasis cannot work in this pipeline — NVDA implements it only for MSHTML
 - [§34](#34-the-browser-is-in-the-cache-key-and-2026-09-03-is-the-first-time-that-was-checked) The browser is in the cache key, and 2026-09-03 is the first time that was CHECKED
-- [§35](#35-11s-design-has-a-name-and-it-is-a-feature-cross-built-2026-09-03-verdict-pending) §11's design has a name, and it is a FEATURE CROSS — BUILT 2026-09-03, verdict PENDING
+- [§35](#35-11s-design-has-a-name-and-it-is-a-feature-cross-built-2026-09-03-shipped-2026-09-06-19d9f8eab) §11's design has a name, and it is a FEATURE CROSS — BUILT 2026-09-03, SHIPPED 2026-09-06 (19d9f8eab)
 - [§37](#37-the-35-hour-stall-diagnosed-desktop-preparation-sat-outside-every-guard-verified-current-2026-09-05) THE 3.5-HOUR STALL, DIAGNOSED — desktop preparation sat outside every guard — VERIFIED CURRENT 2026-09-05
 - [§38](#38-412s-settability-clause-cannot-be-assessed-by-this-tool-structurally-and-this-is-the-first-time-it-is-stated) 4.1.2's SETTABILITY clause cannot be assessed by this tool, structurally, and this is the first time it is stated
 - [§39](#39-247s-f55-lower-bound-is-unverified-because-no-capture-has-ever-recorded-a-real-script-blur) 2.4.7's F55 lower bound is unverified, because no capture has ever recorded a real script blur()
@@ -1716,10 +1716,16 @@ which vendor to read.
 
 ---
 
-## 35. §11's design has a name, and it is a FEATURE CROSS — BUILT 2026-09-03, verdict PENDING
+## 35. §11's design has a name, and it is a FEATURE CROSS — BUILT 2026-09-03, SHIPPED 2026-09-06 (`19d9f8eab`)
 
-**Audited 2026-09-05: still accurate.** `packages/scorer/models/schema-migration.json` at HEAD still reads
-`shippedSchema: v18`, `pendingSchema: v19` — the retrain this section is waiting on has not landed.
+**Shipped 2026-09-06, `19d9f8eab`.** That commit checked all four of this section's own stated revert
+conditions (listed with their results below), verified the shipped weights by hash against the
+acceptance artifact rather than trusting proximity — `model.safetensors` sha256 `16a648e8d025b352…`
+matches the acceptance artifact's `modelSha256` — and closed `packages/scorer/models/schema-migration.json`,
+which no longer exists on `origin/main`. The change SHIPPED; it did not revert. GitHub issue
+[#35](https://github.com/a11ign/a11ign/issues/35) (now closed) additionally re-confirmed the premise on a
+fresh 7,196-capture corpus on 2026-09-07: `formChanges` `emptyNotAsked` moved from the design's 61.7% to
+62.8%, still a majority-artefact rate, still justifying the shipped cross.
 
 **One dependency for gate 1 is now current, and wasn't as of this section's last edit.** `form_change_
 observed_absent` reached the tracked baseline as two apparent free vetoes on `3.3.1:validation-error-silent`
@@ -1731,11 +1737,11 @@ new column"* — will correctly read these two as unclosable rather than as a ne
 the retrain runs; before this classification landed, the same result would have looked like exactly the
 failure gate 1 exists to catch.
 
-**Built and committed; whether it SHIPS is not yet decided.** The encoding is in
-`screenreader_features.py`, the exporter emits `observation` as a sibling of `input`, and
-`schema-migration.json` declares v18 → v19 open. What has NOT happened is the retrain that would let the
-four gates below say whether it helped — the corpus recapture it must land between was still running when
-it was written. Until those gates run, this is an implemented hypothesis and nothing more.
+**Built, retrained, and shipped.** The encoding is in `screenreader_features.py`, the exporter emits
+`observation` as a sibling of `input`, and the retrain this paragraph used to say was still pending has
+since run and passed all four gates below — `19d9f8eab` closed `schema-migration.json` on 2026-09-06 on
+the strength of that result. This is no longer an implemented hypothesis; it is what the shipped model
+scores with.
 
 **The problem, now sized.** Ten of the 28 structured features are `float(bool(channel))`, and `any([])` is
 `False`, so `0` means both *the page has none* and *nothing looked*. Measured 2026-09-03 on the
@@ -1775,24 +1781,35 @@ carries a negative weight for a reason that is an artefact of the encoding — w
 protecting against. It is not `observed` handed to the model as a feature; it is the existing feature
 CROSSED with whether it was measured, so the model never sees "was this asked" as a separable signal.
 
-### What would have to be true to ship it
+### What had to be true to ship it, and what it showed
 
-- `scorer:shortcuts` — closable vetoes must FALL, and no head may gain one on a new column.
-- `rules:real-pages` — zero new findings against the 86 conformant pages.
-- Held-out acceptance must not regress.
+- `scorer:shortcuts` — closable vetoes must FALL, and no head may gain one on a new column. **Ran, inside
+  `candidate:gate` (`--model runs/model-candidate`), per `19d9f8eab`.**
+- `rules:real-pages` — zero new findings against the 86 conformant pages. **PASS — all 84 of 84
+  conformant real pages, 0 new findings, per `19d9f8eab`.**
+- Held-out acceptance must not regress. **Passed — `passed: true, failureReasons: []`, verified against
+  the shipped weights by hash rather than by proximity (`model.safetensors` sha256 `16a648e8d025b352…`
+  matches the acceptance artifact's `modelSha256`), per `19d9f8eab`.**
 - **The CONSTANT-COLUMN report in `scorer:shortcuts`** — neither new column may read one value across
   the whole corpus. **This gate was named `corpus:distribution` and that was wrong**: it checks whether an
   ARRAY FIELD is empty on every record, and a computed feature is neither a field nor present in the
   export, so it is structurally blind to exactly this. Nothing else could see it either — `starvation`
   asks about a subtype's positives, and the veto audit reads trained weights and, in its own recorded
   words, cannot see constancy at ONE. Built 2026-09-03 where every feature is already computed over every
-  record; it is what the dead `state_change_observed_*` pair would have tripped.
+  record; it is what the dead `state_change_observed_*` pair would have tripped. **Ran as part of
+  `scorer:shortcuts` in the same gate, per `19d9f8eab`.**
 
-**If it fails, it is recorded as REFUTED here and reverted**, the way `skip-link-target-not-focusable`
-was. That is a real possible outcome and this entry is not written to avoid it.
+**It did not fail.** All four gates above passed and `19d9f8eab` shipped it 2026-09-06. Had it failed, it
+would have been recorded as REFUTED here and reverted, the way `skip-link-target-not-focusable` was —
+that was a real possible outcome and this entry was not written to avoid it.
 
-**Sequencing:** it moves `FEATURE_SCHEMA_VERSION`, so it lands between a corpus recapture and the retrain
-that follows, never after — otherwise the retrain is paid twice.
+**Sequencing:** it moved `FEATURE_SCHEMA_VERSION`, landing between a corpus recapture and the retrain
+that followed, never after — otherwise the retrain would have been paid twice.
+
+**Whether to cross the remaining sweep channels (stage 2) is a separate, unfiled, optional question.**
+[#947](https://github.com/a11ign/a11ign/issues/947) gave the audit a real not-asked count for sweep
+channels, but nobody has reported that figure yet, and nothing requires it. It is not pending on this
+row.
 
 ### What building it settled, and what it did not
 
