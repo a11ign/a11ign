@@ -12,12 +12,12 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import {
   extractDocumentedJobsBlock, pinActionRef, substituteTarget, extractJobName, extractPinnedSha,
-  buildConsumerGateWorkflow, generate, currentHeadSha, README_PATH, OUT,
+  buildConsumerGateWorkflow, generate, currentHeadSha, refuseDirtyGenerationInputs, README_PATH, OUT,
 } from "../../../../scripts/generate-consumer-gate.mjs";
 import { sandboxGitEnv } from "../../../guards/src/git-env.mjs";
 
@@ -457,6 +457,59 @@ test("currentHeadSha: returns a real, full 40-character commit sha for this chec
   assert.match(sha, /^[0-9a-f]{40}$/);
   const real = execFileSync("git", ["rev-parse", "HEAD"], { cwd: REPO, env: sandboxGitEnv(), encoding: "utf8" }).trim();
   assert.equal(sha, real);
+});
+
+// --- refuseDirtyGenerationInputs: #1721's stale-pin-on-arrival guard ---
+//
+// currentHeadSha bakes `git rev-parse HEAD`, which is necessarily the commit's own PARENT while that
+// commit is still being formed -- so an edit to README.md or this generator, landing in the SAME commit
+// as the regenerated file, is invisible to the pin this write is about to bake (2728c8126's stale pin).
+
+for (const [label, statusLine, offender] of [
+  ["README.md, modified", " M README.md", "README.md"],
+  ["README.md, staged", "M  README.md", "README.md"],
+  ["the generator, untracked", "?? scripts/generate-consumer-gate.mjs", "scripts/generate-consumer-gate.mjs"],
+  // reviewer-2's not-convinced (#1838): a rename/copy porcelain record is "SRC -> DST", not a single
+  // path -- `line.slice(3) === input` and `.endsWith(\`/${input}\`)` both miss it on EITHER side, so a
+  // staged rename of a generation input slipped through silently. Both directions, both statuses.
+  ["README.md, renamed AWAY (source side)", "R  README.md -> README-renamed.md", "README.md"],
+  ["some other file renamed TO README.md (destination side)", "R  notes.md -> README.md", "README.md"],
+  ["some other file copied TO the generator (destination side)",
+    "C  scripts/other.mjs -> scripts/generate-consumer-gate.mjs", "scripts/generate-consumer-gate.mjs"],
+] as const) {
+  test(`refuseDirtyGenerationInputs: refuses when ${label} is dirty, naming the file`, () => {
+    assert.throws(() => refuseDirtyGenerationInputs(`${statusLine}\n`), new RegExp(`${offender.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} has an uncommitted or staged change`));
+  });
+}
+
+test("refuseDirtyGenerationInputs CONTROL: a clean status, a status naming only an unrelated file, or a "
+  + "rename between two unrelated files, does not refuse -- the positive control an emptiness assertion needs", () => {
+  assert.doesNotThrow(() => refuseDirtyGenerationInputs(""));
+  assert.doesNotThrow(() => refuseDirtyGenerationInputs(" M packages/lab/src/packaging/consumer-gate.test.ts\n"));
+  assert.doesNotThrow(() => refuseDirtyGenerationInputs("R  notes.md -> notes-renamed.md\n"));
+});
+
+test("main(): the write path refuses when README.md has an uncommitted change at generation time -- "
+  + "#1721's own shape, reproduced against the real checkout and restored immediately after. MUTATION "
+  + "TARGET: skip refuseDirtyGenerationInputs before writeFileSync in main() and this refusal disappears", () => {
+  const script = fileURLToPath(new URL("../../../../scripts/generate-consumer-gate.mjs", import.meta.url));
+  const readmePath = fileURLToPath(new URL("../../../../README.md", import.meta.url));
+  const original = readFileSync(readmePath, "utf8");
+  try {
+    writeFileSync(readmePath, `${original}\n`);
+    let threw = false;
+    try {
+      execFileSync("node", [script], { encoding: "utf8", stdio: "pipe" });
+    } catch (cause) {
+      threw = true;
+      const err = cause as { status?: number, stderr?: string };
+      assert.notEqual(err.status, 0);
+      assert.match(String(err.stderr), /README\.md has an uncommitted or staged change/);
+    }
+    assert.ok(threw, "the write path must refuse rather than write a pin that is stale on arrival");
+  } finally {
+    writeFileSync(readmePath, original);
+  }
 });
 
 // --- the checked-in file must match what generating from the CURRENT README produces ---
