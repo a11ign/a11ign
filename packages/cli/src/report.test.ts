@@ -290,6 +290,46 @@ test("the legend says how the finding-level and outcome-level vocabularies line 
   assert.match(output, /an INDICATOR\s+finding is what makes one referred/i);
 });
 
+// #1851: #1802's own closing blind-read named four terms still unglossed after #1791/#242 closed the
+// ASSERTED/INDICATOR split -- confidence's scale, the Support/novelty line, `ACT`, and `§5.x`. Each is
+// used further down in the report (confidence and Support inside the lived-experience section, `ACT` in
+// the outcomes header, `§5.x` in the conformance section), so each gets the same treatment
+// ASSERTED/INDICATOR did: explained once, in the shared legend, before the report reaches it.
+test("#1851: the legend states the confidence scale before any confidence number is printed", () => {
+  const output = render();
+  const legendAt = output.indexOf("How to read this report");
+  const firstConfidence = output.indexOf("(confidence", output.indexOf("finding(s):"));
+  assert.match(output, /confidence from 0 \(no confidence\) to 1 \(full confidence\)/,
+    "a bare 'confidence 0.9' means nothing to a reader never told what the number ranges over");
+  assert.ok(legendAt < firstConfidence, "the scale must be stated before the first per-finding number");
+});
+
+test("#1851: the legend explains what the Support/novelty line means, in the reader's own words", () => {
+  const scored = {
+    ...verdict,
+    findings: [],
+    novelty: { nearestTrainingCosine: 0.82, inSupport: true, floor: 0.7 },
+  } as Report["verdict"];
+  const output = render({ verdict: scored });
+  const legendAt = output.indexOf("How to read this report");
+  const supportAt = output.indexOf("Support: within");
+  assert.match(output, /how closely this page's evidence resembles the pages the/i,
+    "a stranger must be told what 'Support' measures, not left to guess from 'nearest training similarity'");
+  assert.ok(legendAt >= 0 && legendAt < supportAt, "explained before the line it describes, like every other term");
+});
+
+test("#1851: `ACT` is expanded once, in the legend, not left as a bare acronym", () => {
+  const output = render();
+  assert.match(output, /Accessibility Conformance Testing/,
+    "a stranger meeting '(W3C ACT)' on the outcomes header has no way to know what ACT stands for otherwise");
+});
+
+test("#1851: the §5.x citations in the conformance section are glossed as WCAG's own section numbers", () => {
+  const output = render();
+  assert.match(output, /WCAG's own section\s+numbers/,
+    "a bare '(§5.2)' reads as an internal reference unless the report says whose numbering it is");
+});
+
 test("#40: the legend is not repeated -- one explanation, not three slightly different ones", () => {
   // This repo's own most-repeated defect is a fact stated twice, drifting. Pins that the OLD conditional
   // legend text and the OLD inline cantTell/untested gloss are both gone now that howToReadThisSection
