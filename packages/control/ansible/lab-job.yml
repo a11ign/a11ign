@@ -3,7 +3,13 @@
 #
 #     ansible-playbook lab-job.yml -e job=train
 #     ansible-playbook lab-job.yml -e job=sweep -e model=runs/model-candidate
-#     ansible-playbook lab-job.yml -e job=capture-real-pages -e role=training -e shard=0/4 -e worker=a11y-worker-2
+#     ansible-playbook lab-job.yml -e job=capture-real-pages -e role=training -e shard=0/4
+#     ansible-playbook lab-job.yml -e job=evidence-check -e only=media-autoplay-audio -e worker=a11y-worker-2
+#
+# The `capture-real-pages` line carried `-e worker=a11y-worker-2` until #1956, and that job has REFUSED
+# `-e worker=` since it moved to the whole fleet — the file's first example was a command the file itself
+# rejects. `evidence-check` is where a named worker belongs now (#1948): optional there, and it aims a
+# narrowed read at one box rather than spreading it across the pool.
 #
 # ## Named jobs, never a command
 #
@@ -88,6 +94,16 @@
     # outside the interface and Ansible will discard it — there is no way to enumerate extra vars, so this
     # list is the boundary of what can be checked at all, and adding a parameter means adding it here.
     lab_caller_params: [only, out, role, shard, model, worker, workers, sample, subtype, feature, capture_root, captures_dir, apply]
+    # THE SHAPE OF AN `-e only=` VALUE, stated once because two jobs now take one. Ids are `[a-z0-9.+-]`
+    # and commas, so a path, a flag or a shell metacharacter is INEXPRESSIBLE rather than rejected — the
+    # containment `isValidCaptureId` uses, and the reason every parameter here is a name and not a path.
+    # A trailing `+` is how this corpus spells a whole family (`route-title-stale+`).
+    #
+    # A variable rather than the literal repeated in each assert: `capture-only` and `evidence-check` are
+    # validating the SAME parameter to the SAME shape, and this repo's record on a fact stated twice is
+    # that the copies drift. Each job keeps its own `fail_msg`, because what to do about a refusal is not
+    # the same in both.
+    lab_case_id_shape: '^[a-z0-9][a-z0-9.+-]{0,80}[+]?(,[a-z0-9][a-z0-9.+-]{0,80}[+]?)*$'
     # A parameter that reaches its command through a DERIVED FACT rather than by its own name. The
     # derivation below reads the job's own command, and a command saying `{{ lab_named_worker }}` cannot
     # say which parameter produced it — so the one indirection is declared, with its reason, rather than
@@ -502,8 +518,16 @@
       # were run by hand today, which is the same reason `evidence-check` and `export` are here.
       #
       # `gate:stability` captures 6 canary pages 5 times each and compares by CONTENT, so it needs a worker
-      # and takes ~25 min. One worker, like evidence-check and for the same reason: it is asking whether the
-      # PIPELINE is deterministic, and a second guest is a second variable.
+      # and takes ~25 min. ONE worker, REQUIRED, and the reason is this job's own rather than a shared one:
+      # it asks whether the PIPELINE is deterministic, so a second guest is a second variable and the
+      # question cannot be asked across a pool at all.
+      #
+      # This said "one worker, like evidence-check and for the same reason" (#1956). `evidence-check` moved
+      # to the fleet pool and the comparison went stale where a reader meets it FIRST, 700 lines before the
+      # refusal that says otherwise. It is stated on `stability`'s own terms now, because restating another
+      # entry's design is what let it drift: since #1948 `evidence-check` takes an OPTIONAL `-e worker=`,
+      # which is one box for a different reason — aiming a narrowed read at a named guest, not removing a
+      # variable — so the comparison would now be wrong in a second way.
       stability:
         params: {worker: required}
         # fleetVerdict/exitCodeFor, same 0/1/2 contract as gateVerdict -- see rules-gate's entry above for
@@ -989,8 +1013,38 @@
                   '--worker=http://' ~ hostvars[worker].ansible_host ~ ':8765'] }}"
         timeout: 1800
 
+      # `-e only=<family>` NARROWS THE CHECK TO ONE FAMILY, and without it a targeted question could not
+      # be dispatched at all. `evidence-check.mjs` has read `--only=` since it was written
+      # (`c.family ?? c.id).includes(only)`), the same shape as `--only=` on
+      # `capture-screenreader-dataset.mjs`, which `capture-only` exposes — the capability existed here too
+      # and no job could reach it. Measured 2026-09-22 on #1908: its acceptance is ten reads of
+      # `--only=media-autoplay-audio`, and the only dispatchable form sampled 24 cases at random across
+      # the whole corpus, so the family the row asks about might not be in the sample at all. The
+      # alternative was a ten-iteration loop typed over `ssh root@<lab>`, which is exactly the shape
+      # ADR 0013 exists to forbid.
+      #
+      # OPTIONAL, unlike `capture-only`'s, and the difference is what an empty value costs. An unnarrowed
+      # `capture-only` captures the WHOLE corpus — the four hours that job exists to avoid — while an
+      # unnarrowed `evidence-check` is the corpus-wide read this job has always been, and the one every
+      # existing caller wants. So the omitted case is the default here and a refusal there.
+      #
+      # Contained by the SAME shape as `capture-only`'s, `lab_case_id_shape`, for the same reason: it
+      # reaches an argv list and never a shell, but the value comes from the wire.
+      # `-e worker=<name>` AIMS THE CHECK AT ONE BOX, and without it #1908's ten reads cannot be run at
+      # all. Its acceptance is five reads against one worker and five against another — the two-worker
+      # form is load-bearing, because #1866's symptom was worker-state-dependent by its own record (the
+      # `.good` variant announced "unable to play media." on every capture after a worker's FIRST). This
+      # job's only dispatchable form spread the pool, and with `-e only=` narrowing the corpus to ONE case
+      # the pool spreads nothing: `drainAcrossPool` drains a shared queue and a case is indivisible, so one
+      # item is handled by whichever box wins a `/health` race. Which one that was is not a choice, and
+      # until this parameter existed it was not even reportable.
+      #
+      # OPTIONAL, and the omitted case is the pool: the corpus-wide read across the whole fleet is what
+      # every existing caller wants and what this job has always done. Same containment as `stability`'s —
+      # `-e worker=` is a NAME from the inventory and the command needs an ADDRESS, resolved through
+      # `lab_named_worker`, so `http://:8765` is inexpressible rather than merely rejected.
       evidence-check:
-        params: {sample: optional}
+        params: {sample: optional, only: optional, worker: optional}
         # ITS EXIT CODE IS THE ANSWER, not just a status: 0 safe to ship, 1 the evidence CHANGED so a
         # recapture is required, 2 it could not answer. All three are successful runs of the check; only a
         # crash is a failure. They stay non-zero-is-failure deliberately — 1 means "invalidate 2,122
@@ -1003,9 +1057,20 @@
           "2": >-
             INCONCLUSIVE — it could not compare enough captures to answer, which includes PARTIAL
             coverage and not only zero. Re-run it; do not read this as "unchanged".
+        # The `--only=` entry is APPENDED OR ABSENT, never rendered empty. `evidence-check.mjs` reads
+        # `flag("only", null)` and treats a falsy value as "no filter", so `--only=` would happen to work
+        # today — but that is a property of the script's current falsiness, not of this interface, and the
+        # list form says what is meant. `is defined` is also the spelling `lab-job.test.ts` derives
+        # OPTIONAL from, which is what keeps `params:` above and this argv from disagreeing.
+        #
+        # THE WORKERS ARE POSITIONAL, so naming one is a narrower LIST rather than a flag: the script
+        # takes every positional argument as a worker and pools across them. `[lab_named_worker]` is that
+        # list with one entry, which is the same code path a five-box dispatch takes — nothing here tells
+        # the script it is being aimed, and nothing in the script has to know.
         argv: "{{ [lab_tsx, 'packages/lab/scripts/evidence-check.mjs']
-                  + (lab_fleet_workers | split(','))
-                  + ['--sample=' ~ (sample | default(24) | int)] }}"
+                  + ([lab_named_worker] if worker is defined else (lab_fleet_workers | split(',')))
+                  + ['--sample=' ~ (sample | default(24) | int)]
+                  + (['--only=' ~ only] if only is defined else []) }}"
         timeout: 7200
 
   tasks:
@@ -1139,7 +1204,7 @@
       ansible.builtin.assert:
         that:
           - only is defined
-          - only is match('^[a-z0-9][a-z0-9.+-]{0,80}[+]?(,[a-z0-9][a-z0-9.+-]{0,80}[+]?)*$')
+          - only is match(lab_case_id_shape)
         fail_msg: >-
           capture-only needs -e only=<case-id> or a comma-separated list, e.g.
           -e only=route-title-stale+ for a whole family, or -e only=<exact-id> for one case. Ids only. Paste what
@@ -1164,14 +1229,20 @@
           -e model=<name> must be one of: candidate, multidefect, varied, scratch. It is a NAME, not a path —
           it becomes `runs/model-<name>`. Omit it entirely to measure the SHIPPED model, which is the default.
 
+    # BOTH stability gates, because both resolve the name through `lab_named_worker` and neither can
+    # render without it. `gate-stability` declared `worker: required` and nothing checked the name was one
+    # the inventory HAS: the fact below is built `when: worker in groups['a11y_workers']`, so a typo left
+    # it unset and the dispatch died on `'lab_named_worker' is undefined` — a message naming the derived
+    # fact rather than the parameter the operator mistyped, which sends the reader into this playbook to
+    # work out what they got wrong. Same clause, same reason, one task.
     - name: A stability gate names one worker from the inventory
-      when: job == 'stability'
+      when: job in ['stability', 'gate-stability']
       ansible.builtin.assert:
         that:
           - worker is defined
           - worker in groups['a11y_workers']
         fail_msg: >-
-          stability needs -e worker=<name from a11y_workers> ({{ groups['a11y_workers'] | join(', ') }}).
+          {{ job }} needs -e worker=<name from a11y_workers> ({{ groups['a11y_workers'] | join(', ') }}).
           One worker, on purpose: it asks whether the pipeline is deterministic, so a second guest is a
           second variable.
 
@@ -1217,14 +1288,28 @@
           Refusing to run: A11Y_WORKER would be {{ lab_named_worker | truncate(80) }}, which is not a worker
           address. Something has overridden the inventory.
 
-    - name: An evidence check names one worker, and a sample size that is a number
+    # `only` is OPTIONAL here, so the shape is asserted only when one was supplied — `only is not defined`
+    # is the corpus-wide read every existing caller already gets, not a missing argument. The same shape as
+    # `capture-only`'s above, from the same variable.
+    - name: An evidence check names a sample size that is a number, and a family that is a name
       when: job == 'evidence-check'
       ansible.builtin.assert:
         that:
           - (sample | default(24)) | int > 0
           - (sample | default(24)) | int <= 200
+          - only is not defined or only is match(lab_case_id_shape)
+          # A NAME FROM THE INVENTORY, asserted HERE as well as addressed above, because the address is
+          # built by a task guarded on `worker in groups['a11y_workers']` — so a name that is not a worker
+          # leaves `lab_named_worker` unset and the argv renders `'lab_named_worker' is undefined` at
+          # dispatch. That message names the fact rather than the parameter, which sends the reader into
+          # this playbook to work out what they mistyped.
+          - worker is not defined or worker in groups['a11y_workers']
         fail_msg: >-
-          evidence-check takes optionally -e sample=<1..200>. It no longer names a worker: it runs across the
+          evidence-check takes optionally -e sample=<1..200>, -e only=<family-or-case-id> and
+          -e worker=<name from a11y_workers> ({{ groups['a11y_workers'] | join(', ') }}), e.g.
+          -e only=media-autoplay-audio to read one family rather than a sample across the whole corpus,
+          and -e worker= to read it on ONE named box rather than wherever the pool happened to put it.
+          Ids and inventory names only, never a path or an address. Omit -e worker= and it runs across the
           whole fleet from the inventory, which is asserted to be an address list before it is used.
 
     # BUILT HERE, from the inventory, and then asserted — not interpolated straight into the env.
