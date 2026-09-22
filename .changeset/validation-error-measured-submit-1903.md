@@ -2,15 +2,17 @@
 "@a11ign/scorer": patch
 ---
 
-**`3.3.1:validation-error-silent` is now reported only when a submit's outcome was actually read (#1903).**
-When NVDA's re-read after a submit came back unresolved (`afterUnresolved`), #1105 correctly dropped that
-submit from the evidence, but the criterion stayed applicable, so the model scored a form that looked like
-"a submit with no announced error" when the outcome was simply not heard. `acceptance-b3-button-market/bad`,
-a page with no validation at all, false-positived on 3.3.1 in one repeat this way. The precondition now also
-needs a `formChanges` submit entry without `afterUnresolved` (an entry with no `kind` counts as a submit).
-Without one, 3.3.1 is unmeasured on that page instead of scored. A read, silent submit, which is the true
-positive's shape, stays applicable. No retrain: the gate runs after scoring and touches neither
-`model.safetensors` nor `FEATURE_SCHEMA_VERSION`.
+**`3.3.1:validation-error-silent` is no longer reported when a button's outcome was never read (#1903).**
+When NVDA's re-read after an activation came back unresolved (`afterUnresolved`), #1105 correctly dropped
+that entry from the evidence, but the criterion stayed applicable. So the model scored the form as "a submit
+with no announced error" when the outcome had simply not been heard. `acceptance-b3-button-market/bad`, a page
+with no validation at all, false-positived on 3.3.1 in one repeat this way. The precondition now also
+requires that no `formChanges` entry is `afterUnresolved`. Otherwise 3.3.1 is unmeasured on that page instead
+of scored. It covers every entry, not only `kind: "submit"`, because `kind` is read from the button's name,
+and a real submit named for its task ("Apply for a berth") is recorded as `taskButton`. A read, silent
+submit, which is the true positive's shape, stays applicable. No retrain: the gate runs after scoring and
+touches neither `model.safetensors` nor `FEATURE_SCHEMA_VERSION`.
 
-Not yet checked against the corpus: `applicability-audit` must still report `positives 171`, and the
-acceptance run must show `b3-button-market/bad` absent from 3.3.1's false positives in both repeats.
+Measured on the lab corpus (`with-realism` plus both acceptance repeats) with this rule: 171 labelled
+positives, 0 silenced, and `b3-button-market/bad` ruled out in repeat 2 only. The `applicability-audit` and
+`acceptance` jobs still need to confirm it.

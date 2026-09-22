@@ -96,7 +96,7 @@ def test_a_resolved_submit_still_reads_present_and_nonempty():
     assert values["form_change_nonempty"] == 1.0
 
 
-# ---- #1903: `3.3.1:validation-error-silent` requires a submit whose outcome was READ ----------------------
+# ---- #1903: `3.3.1:validation-error-silent` requires every activation's outcome READ -----------------------
 #
 # `acceptance-b3-button-market/bad`, repeat-2 as captured on the lab (`orchestrator`, 2026-09-22 09:59Z on
 # #1903): a real edit field and a real submit, but the submit's navigation read `"unknown"` and was flagged.
@@ -136,13 +136,22 @@ def test_a_silent_submit_that_was_read_is_the_finding_and_stays_applicable():
     assert validation_applicable(market([SILENT_BUT_RESOLVED])) is True
 
 
-def test_a_silent_non_submit_does_not_stand_in_for_the_submit():
-    # Only a SUBMIT's outcome is the subject; a task button's silence must not satisfy the precondition.
-    assert validation_applicable(market([MARKET_CANCEL])) is False
+def test_a_submit_recorded_as_a_task_button_stays_applicable():
+    # `acceptance-b2-error-vessel/bad` as captured: its real submit is named for its task, so `probeKindFor`
+    # recorded it as `taskButton`. The first #1903 rule required `kind == "submit"` and silenced this true
+    # positive, and `b3-error-badge`/`b3-error-taxi` with it (lab audit at 5f65fc8f9: silenced 6).
+    vessel = {"control": "Apply for a berth, button", "kind": "taskButton", "after": "", "baselineQuiet": True}
+    assert validation_applicable(market([vessel])) is True
 
 
-def test_an_entry_without_kind_counts_as_a_submit():
-    # Captures older than protocol 8 carry no `kind`; the same default `validation_error_missing` uses.
+def test_an_unread_task_button_is_unread_too():
+    # `kind` cannot say which entry was the submit, so an unread outcome of ANY kind might have been it.
+    unread = {**MARKET_CANCEL, "after": "unknown", "afterUnresolved": True}
+    assert validation_applicable(market([MARKET_SUBMIT_READ, unread])) is False
+
+
+def test_an_entry_without_kind_is_judged_the_same_way():
+    # Captures older than protocol 8 carry no `kind`.
     legacy = {"control": "Submit, button", "after": ""}
     assert validation_applicable(market([legacy])) is True
     assert validation_applicable(market([{**legacy, "afterUnresolved": True}])) is False
