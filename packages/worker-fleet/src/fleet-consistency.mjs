@@ -89,48 +89,109 @@ export const MUST_MATCH = [
 /** Edge policy values every guest must agree on, checked separately because they come from /diagnostics. */
 export const POLICY_MUST_MATCH = ["StartupBoostEnabled", "BackgroundModeEnabled"];
 
-/** @param {Record<string, unknown> | undefined} object @param {string} key */
-const get = (object, key) => (object ?? {})[key];
+/**
+ * Which fields the verdict is actually ABOUT -- #1997.
+ *
+ * `compared` NAMES the fields at least one guest reported a value for; `unchecked` names the ones that
+ * drew a value from NOBODY. The second list exists because `check()` below skips an absent value, which
+ * is right (a rolling deploy must not flag the guest it has not reached yet) and has a cost: a field no
+ * guest reports contributes no values, `new Set([]).size > 1` is false, and it reads as agreement.
+ * A field compared on nobody and a field equal on everybody produced the IDENTICAL verdict.
+ *
+ * Measured 2026-09-22T20:09Z on the live fleet, at the merge of #1953: nine fields at 10/10 guests and
+ * `displayMode` at 0/10, and `fleet:status` printed `fleet CONSISTENT across 10 of 10 -- these workers
+ * are interchangeable for capture`. The display was still not compared. Naming the two lists is what
+ * lets a reader tell "they agree" from "nobody was asked".
+ *
+ * `coverage` IS THE SAME QUESTION WITHOUT THE THRESHOLD -- #2019. The two lists above are a PARTITION on
+ * "did anybody report it", which answers 0-of-10 and says nothing about 1-of-10; `fleet:status` read the
+ * second as agreement about ten guests on the strength of one. So every asked field also carries how many
+ * of the asked guests actually reported it, and the verdict draws its own line. `compared`/`unchecked`
+ * stay because they are what a caller greps for the REMEDY -- a field at 0 sends a reader to the field,
+ * a field at k sends them to the boxes -- and `coverage` is the measurement both are derived from.
+ *
+ * @typedef {{field: string, reported: number, asked: number}} FieldReporters
+ * @typedef {{compared: string[], unchecked: string[], coverage: FieldReporters[]}} FieldCoverage
+ */
 
 /**
  * Compare guests field by field.
  *
  * @param {Array<{worker: string, environment?: Record<string, unknown>, policy?: Record<string, unknown>}>} guests
- * @returns {{consistent: boolean, mismatches: Mismatch[], compared: number}}
+ * @returns {{consistent: boolean, mismatches: Mismatch[], compared: number, fields: FieldCoverage}}
  *   `compared` is how many guests the verdict is actually ABOUT -- #920. A guest with no `environment`
  *   and no `policy` is dropped below before comparing, so it is not the length of what was passed in,
  *   and a caller that reports `consistent` without it is stating agreement over a set it cannot name.
+ *   `fields` is that same question one axis over: WHICH fields the verdict is about -- #1997.
  */
 export function fleetConsistency(guests) {
   const present = (guests ?? []).filter((g) => g && (g.environment || g.policy));
-  // One guest is trivially consistent with itself, and zero is not a fleet. Neither is a finding.
-  if (present.length < 2) return { consistent: true, mismatches: [], compared: present.length };
+  // One guest is trivially consistent with itself, and zero is not a fleet. Neither is a finding, and
+  // neither is a field nothing compared: with nobody to compare against, coverage is not a question yet.
+  if (present.length < 2) {
+    // A FRESH object rather than a shared constant: this is returned to a caller, and one shared literal
+    // is one `push` away from a coverage list that grows across unrelated readings.
+    return { consistent: true, mismatches: [], compared: present.length,
+      fields: { compared: [], unchecked: [], coverage: [] } };
+  }
 
   /** @type {Mismatch[]} */
   const mismatches = [];
+  /** @type {FieldCoverage} */
+  const fields = { compared: [], unchecked: [], coverage: [] };
   /**
    * @param {string} field
    * @param {string} why
-   * @param {(guest: {worker: string, environment?: Record<string, unknown>, policy?: Record<string, unknown>}) => unknown} read
+   * @param {(guest: {worker: string, environment?: Record<string, unknown>, policy?: Record<string, unknown>}) => Record<string, unknown> | undefined} source
+   *   the BLOCK this field lives in, not the value: coverage has to tell "the guest did not report this
+   *   field" from "this caller never collected that block at all", and only the block answers the second
+   * @param {string} key
    */
-  const check = (field, why, read) => {
+  const check = (field, why, source, key) => {
     /** @type {Record<string, unknown>} */
     const values = {};
+    // THE REPORTER COUNT IS COUNTED, NEVER READ OFF `values` -- #2019, and #2018 is why. The map is keyed
+    // by worker name, and a caller that supplies guests without one collapses every guest onto a single
+    // `undefined` key -- which `capture-real-pages.mjs` does -- so `Object.keys(values).length` reads 1
+    // for any number of reporting guests, understating coverage in exactly the cases a coverage number
+    // exists for. `asked` counts the guests that carried the BLOCK; `reported` counts the ones that
+    // carried a VALUE in it; both are incremented on the guest, so neither can be collapsed by a key.
+    let asked = 0;
+    let reported = 0;
     for (const guest of present) {
-      const value = read(guest);
+      const block = source(guest);
+      // A BLOCK THIS CALLER DID NOT COLLECT IS A FACT ABOUT THE PROBE, NOT THE FLEET. `/health` carries
+      // no policy, so every production caller passes `policy: undefined`; calling those fields
+      // "compared on nobody" would report a permanent gap on an axis nobody asked about, and drown the
+      // one this list exists to surface.
+      if (block === undefined || block === null) continue;
+      asked += 1;
+      const value = block[key];
       // Absent is not a mismatch: an older worker that does not report a field must not be flagged
       // against newer ones. Only DIFFERING known values are evidence of drift.
-      if (value !== undefined && value !== null) values[guest.worker] = value;
+      if (value !== undefined && value !== null) {
+        reported += 1;
+        values[guest.worker] = value;
+      }
+    }
+    // A FIELD NO GUEST REPORTED IS CANNOT ASK, NOT ALL AGREE. One value from one guest still counts as
+    // compared -- that is the rolling-deploy case the skip above is for, and it is a different claim
+    // from nobody having been asked at all. How MANY reported it is a third claim again, and it goes on
+    // `coverage` rather than into this partition: the lists answer the remedy, the count answers the
+    // verdict (#2019).
+    if (asked > 0) {
+      (reported > 0 ? fields.compared : fields.unchecked).push(field);
+      fields.coverage.push({ field, reported, asked });
     }
     if (new Set(Object.values(values)).size > 1) mismatches.push({ field, why, values });
   };
 
-  for (const { path, why } of MUST_MATCH) check(path, why, (g) => get(g.environment, path));
+  for (const { path, why } of MUST_MATCH) check(path, why, (g) => g.environment, path);
   for (const name of POLICY_MUST_MATCH) {
     check(`edgePolicy.${name}`, "guests with different browser behaviour are not interchangeable",
-      (g) => get(g.policy, name));
+      (g) => g.policy, name);
   }
-  return { consistent: mismatches.length === 0, mismatches, compared: present.length };
+  return { consistent: mismatches.length === 0, mismatches, compared: present.length, fields };
 }
 
 /**

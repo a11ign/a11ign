@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { fleetConsistency, describeMismatches, MUST_MATCH } from "./fleet-consistency.mjs";
+import { fleetConsistency, describeMismatches, MUST_MATCH, POLICY_MUST_MATCH } from "./fleet-consistency.mjs";
 
 /**
  * THE FIXTURE ADDRESSES, BUILT FROM OCTETS. #63's history purge replaced every RFC 1918 literal in the
@@ -233,4 +233,161 @@ test("a shortened worker label must still distinguish the workers", () => {
     values: { "http://203.0.113.83:8765": "151.0.1", [`http://${IP.h84}:8765`]: "150.0.9" },
   }])[0];
   assert.match(distinct, /\.83=151\.0\.1 \.84=150\.0\.9/);
+});
+
+// --- #1997: WHICH FIELDS WERE COMPARED, and the pair that must not look alike ---
+
+/** Every `MUST_MATCH` field reported, DERIVED, so a field added to the list cannot leave this stale. */
+const fullyReporting = (worker: string, over: Record<string, unknown> = {}) => ({
+  worker,
+  environment: { ...Object.fromEntries(MUST_MATCH.map(({ path }) => [path, `same-${path}`])), ...over },
+  policy: { StartupBoostEnabled: 0, BackgroundModeEnabled: 0 },
+});
+
+test("#1997: A FIELD COMPARED ON NOBODY IS NAMED, and does not look like a field everybody agrees on", () => {
+  // THE PAIR IS THE TEST. Measured 2026-09-22T20:09Z on the live fleet at the merge of #1953: nine
+  // fields at 10/10 guests, `displayMode` at 0/10, and `fleet:status` printed `fleet CONSISTENT across
+  // 10 of 10 -- these workers are interchangeable for capture`. Both halves below are `consistent: true`
+  // with the same `compared`, which is exactly why the verdict could not tell them apart -- so a single
+  // assertion on either one passes while the defect is present.
+  const everything = fleetConsistency([fullyReporting("http://a:8765"), fullyReporting("http://b:8765")]);
+  // ONE VARIABLE between the two fleets: same guests, same policy block, `displayMode` deleted. Anything
+  // else different and the pair stops being a control for this field and becomes a control for the axis.
+  const reportingAllBut = (worker: string) => {
+    const guest = fullyReporting(worker);
+    const { displayMode, ...rest } = guest.environment;
+    assert.equal(typeof displayMode, "string",
+      "the fixture must have HELD displayMode for deleting it to mean anything");
+    return { ...guest, environment: rest };
+  };
+  const blind = fleetConsistency([reportingAllBut("http://a:8765"), reportingAllBut("http://b:8765")]);
+
+  assert.equal(everything.consistent, true);
+  assert.equal(blind.consistent, true, "the absent-skip rule is unchanged: nobody reporting it is not a mismatch");
+  assert.equal(everything.compared, blind.compared, "and the GUEST count cannot tell these apart either");
+
+  assert.deepEqual(everything.fields.unchecked, [],
+    "a fleet reporting every MUST_MATCH field has nothing unchecked -- the positive control for the line below");
+  assert.deepEqual(blind.fields.unchecked, ["displayMode"],
+    "and the field NO guest reported is named, which is the whole distinction this row exists for");
+  const everyField = MUST_MATCH.length + POLICY_MUST_MATCH.length;
+  assert.equal(everything.fields.compared.length, everyField,
+    "every field this compares drew a value, so every one of them is named as compared");
+  assert.equal(blind.fields.compared.length, everyField - 1,
+    "and the blind fleet is short by exactly the one field, never by a whole axis");
+  assert.ok(!blind.fields.compared.includes("displayMode"),
+    "and it is not on both lists: compared and unchecked are a partition, not two views of the same set");
+});
+
+test("#1997: ONE guest reporting a field still counts as COMPARED, never as unchecked", () => {
+  // The rolling-deploy case the absent-skip rule exists for, and the line this row deliberately does not
+  // cross. A field the deploy has reached on one guest HAS been compared -- on the guests that have it --
+  // and calling that "compared on nobody" would flag every mid-deploy fleet for a field it can already
+  // see. That partial coverage still weakens the headline is true and is #2019's question, not this one.
+  const { consistent, fields } = fleetConsistency([
+    fullyReporting("http://new:8765", { displayMode: "1024x768" }),
+    { worker: "http://old:8765", environment: { browserVersion: "same-browserVersion" }, policy: undefined },
+  ]);
+  assert.equal(consistent, true, "a guest missing a field others report is still not a mismatch");
+  assert.ok(fields.compared.includes("displayMode"), "one value is a comparison, not a gap");
+  assert.deepEqual(fields.unchecked, [], "nothing here was asked of everybody and answered by nobody");
+});
+
+test("#1997: a block the CALLER never collected is not a field the fleet failed to report", () => {
+  // `fleet:status` and `doctor` both pass `policy: undefined` -- `/health` carries no policy block at all,
+  // so POLICY_MUST_MATCH is compared by nobody in production. That is a fact about the PROBE, and
+  // reporting it as "the guests do not report these" would print a permanent two-field gap on every
+  // reading and drown the one field that a deploy could actually fix.
+  const { fields } = fleetConsistency([
+    { worker: "http://a:8765", environment: fullyReporting("x").environment, policy: undefined },
+    { worker: "http://b:8765", environment: fullyReporting("y").environment, policy: undefined },
+  ]);
+  assert.deepEqual(fields.unchecked, []);
+  assert.ok(!fields.compared.some((f) => f.startsWith("edgePolicy.")),
+    "and it is not claimed as compared either: not asked is its own answer, on both lists");
+
+  // The positive control: a caller that DOES collect the block gets the policy fields on a list. Without
+  // this, the assertions above would pass on an implementation that dropped the policy axis entirely.
+  const collected = fleetConsistency([fullyReporting("http://a:8765"), fullyReporting("http://b:8765")]);
+  assert.ok(collected.fields.compared.includes("edgePolicy.StartupBoostEnabled"));
+  const empty = fleetConsistency([
+    { worker: "http://a:8765", environment: fullyReporting("x").environment, policy: {} },
+    { worker: "http://b:8765", environment: fullyReporting("y").environment, policy: {} },
+  ]);
+  assert.deepEqual(empty.fields.unchecked, ["edgePolicy.StartupBoostEnabled", "edgePolicy.BackgroundModeEnabled"],
+    "a policy block that was collected and holds neither value IS a field nobody reported");
+});
+
+// --- #2019: HOW MANY guests reported each field, not only whether any did ---
+
+test("#2019: THE PAIR -- a field every guest reports and a field ONE guest reports carry different counts", () => {
+  // The defect this row is about, at the layer that can still see it. Both fleets below are
+  // `consistent: true` with the same `compared` list and an empty `unchecked` -- #1997's partition cannot
+  // tell them apart, by design, because one guest reporting a field HAS been compared. The count is the
+  // only thing that differs, so it is the only thing `fleet:status` can draw its line from.
+  const everybody = fleetConsistency([fullyReporting("http://a:8765"), fullyReporting("http://b:8765"),
+    fullyReporting("http://c:8765")]);
+  const one = fleetConsistency([
+    fullyReporting("http://a:8765", { displayMode: "1024x768" }),
+    { worker: "http://b:8765", environment: { browserVersion: "same-browserVersion" }, policy: undefined },
+    { worker: "http://c:8765", environment: { browserVersion: "same-browserVersion" }, policy: undefined },
+  ]);
+  const displayOf = (verdict: ReturnType<typeof fleetConsistency>) =>
+    verdict.fields.coverage.find((entry) => entry.field === "displayMode");
+
+  assert.deepEqual(displayOf(everybody), { field: "displayMode", reported: 3, asked: 3 });
+  assert.deepEqual(displayOf(one), { field: "displayMode", reported: 1, asked: 3 },
+    "one guest of three, said as a count -- the reading `fleet:status` called interchangeable");
+
+  // #1997's answer is UNCHANGED on both, which is what makes this an addition rather than a re-decision.
+  assert.equal(one.consistent, true, "a guest missing a field others report is still not a mismatch");
+  assert.deepEqual(one.fields.unchecked, [], "and it is still COMPARED, not unchecked");
+  assert.ok(one.fields.compared.includes("displayMode"));
+});
+
+test("#2019: the reporter count is COUNTED -- guests with no `worker` name cannot collapse it", () => {
+  // #2018, which is why done-when 6 says counted rather than read. `values` is keyed by worker name, and
+  // `capture-real-pages.mjs` calls this with guests that carry none -- every one of them lands on a single
+  // `undefined` key, so `Object.keys(values).length` reads 1 however many guests reported. That understates
+  // coverage in exactly the case a coverage number exists for, and it would read as 1-of-3 on a fleet where
+  // all three answered. THE POSITIVE CONTROL for the counting is the pair above; this is the control for
+  // the SOURCE of the count.
+  const anonymous = () => ({ environment: fullyReporting("ignored").environment, policy: undefined });
+  // The cast is the POINT of the case, not a convenience: the type says every guest carries a `worker`,
+  // and `capture-real-pages.mjs` passes guests that do not, which is what #2018 measured.
+  const { fields } = fleetConsistency(
+    [anonymous(), anonymous(), anonymous()] as unknown as Parameters<typeof fleetConsistency>[0]);
+  const browser = fields.coverage.find(({ field }) => field === "browserVersion");
+  assert.deepEqual(browser, { field: "browserVersion", reported: 3, asked: 3 },
+    "three nameless guests reported it, and a count read off the values map would say one");
+});
+
+test("#2019: coverage counts the guests that carried the BLOCK, never all the guests", () => {
+  // `asked` is the denominator, and it is per-field because the two blocks are collected independently:
+  // `/health` carries no policy at all, so every production caller passes `policy: undefined`. Dividing by
+  // the guest count instead would report every policy field as 0-of-N on every real reading -- the
+  // permanent gap #1997 refused -- and would make the `k of N` line fire forever on a fact about the probe.
+  const { fields } = fleetConsistency([
+    fullyReporting("http://a:8765"),
+    { worker: "http://b:8765", environment: fullyReporting("x").environment, policy: undefined },
+  ]);
+  const policy = fields.coverage.find(({ field }) => field === "edgePolicy.StartupBoostEnabled");
+  assert.deepEqual(policy, { field: "edgePolicy.StartupBoostEnabled", reported: 1, asked: 1 },
+    "one guest carried the policy block and reported it: 1 of 1, not 1 of 2");
+  const browser = fields.coverage.find(({ field }) => field === "browserVersion");
+  assert.deepEqual(browser, { field: "browserVersion", reported: 2, asked: 2 },
+    "while the environment block, which both carried, has both as its denominator");
+});
+
+test("#2019: coverage is a row per ASKED field, so nothing on it is absent from the lists", () => {
+  // The lists and the counts are one measurement thresholded, and `fleet:status` now draws BOTH its
+  // clauses off the counts. A field on one and not the other would let those two readings disagree, which
+  // is the defect of this whole family one level up.
+  const { fields } = fleetConsistency([fullyReporting("http://a:8765"), fullyReporting("http://b:8765")]);
+  const named = fields.coverage.map(({ field }) => field).sort();
+  assert.deepEqual(named, [...fields.compared, ...fields.unchecked].sort(),
+    "every asked field is on the coverage, and the coverage names no field that was not asked");
+  assert.ok(fields.coverage.length > 0, "the positive control: a deepEqual of two empty lists passes");
+  assert.ok(fields.coverage.every(({ reported, asked }) => reported === asked),
+    "and a fully-reporting fleet has every field at N of N -- the control for the partial readings above");
 });
