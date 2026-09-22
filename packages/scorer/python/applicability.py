@@ -112,6 +112,25 @@ def _measured_form_change(record: Record) -> bool:
     return any(not change.get("afterUnresolved") for change in changes)
 
 
+def _carries_a_field_with_a_field_role(record: Record) -> bool:
+    """The page carries a form field that NVDA announced WITH A FIELD ROLE, in its form-field sweep or in
+    the post-submit re-read.
+
+    Not `_has("formFields")`: NVDA's form-field sweep lists BUTTONS too, so on a real capture `formFields`
+    is non-empty on every page that has a button (#1878, `orchestrator`'s 2026-09-22 reading of the lab's
+    acceptance records -- `status-progress-booking/bad` sweeps to `['Continue to dates, button']`).
+
+    `FORM_FIELD_ROLE` is imported rather than respelled -- the same set `validation_error_missing` reads --
+    and lazily, for the reason `_reads_as_an_unmarked_heading` gives. Its unanchored role match can hit a
+    role word in a field's NAME ("Radio items with hint"); that errs toward applicable, which silences
+    nothing, so it is the safe direction for a precondition.
+    """
+    from screenreader_features import FORM_FIELD_ROLE  # local, to keep this module dependency-free at import time
+
+    announced = (_structure(record).get("formFields") or []) + (_interaction(record).get("postSubmitFields") or [])
+    return any(FORM_FIELD_ROLE.search(value) for value in announced)
+
+
 def _interacted(field: str) -> Callable[[Record], bool]:
     """The capture actually performed the interaction this subtype reasons about."""
     def present(record: Record) -> bool:
@@ -183,18 +202,25 @@ SUBTYPE_REQUIRES: dict[str, Callable[[Record], bool]] = {
     # `postSubmitFields` (as `"<control name>, button"`, no field role) — `waitingStatusPair`/
     # `progressStatusPair`'s task buttons in `acceptance-matrix.mjs` do exactly this, with no `<input>`
     # anywhere on the page. `_interacted("postSubmitFields")` alone read that as "a form was submitted",
-    # so three of their held-out cases (`b3-status-waiting-tree`, `status-progress-booking`, and
-    # `b3-button-market` off its own unrelated 2.1.1 submit) fired 3.3.1 on a subject the page never had.
+    # so two of their held-out cases (`b3-status-waiting-tree`, `status-progress-booking`) fired 3.3.1 on
+    # a subject the page never had.
     # `validation_error_missing` already excludes them by requiring a field ROLE in `postSubmitFields`
     # (`FORM_FIELD_ROLE`, never `button`) — but a linear head only ADDS, so that 0 cannot veto whatever
     # else in the weighted combination reads these pages as positive; only a precondition can.
     #
     # The SUBJECT is a form having been submitted, which needs the page to carry an actual form field —
-    # a page-wide check, not limited to `postSubmitFields`, for the same reason `3.3.2:unnamed-form-field`
-    # reads `formFields` rather than the post-submit re-read: the field is the subject whether or not the
+    # a page-wide check, not limited to `postSubmitFields`: the field is the subject whether or not the
     # re-read afterward captured it. Both conditions stay ANDed rather than swapping one for the other,
     # so this cannot rule IN a page that has form fields somewhere but never actually submitted one.
-    "3.3.1:validation-error-silent": _all(_interacted("postSubmitFields"), _has("formFields")),
+    #
+    # #1894 first spelled "an actual form field" as `_has("formFields")`, and on real captures that ruled
+    # out nothing: NVDA's sweep lists buttons, so every task-button page carries one. The lab's
+    # `applicability-audit` passed it (silenced 0) and `acceptance` still listed all three cases — a
+    # precondition that rules nothing out also silences nothing. A field must carry a FIELD ROLE.
+    #
+    # `b3-button-market/bad` stays applicable and is meant to: it really has `Reference number, edit` and a
+    # real submit. Its fire is the model's boundary on a real form, #1903's, not a missing subject.
+    "3.3.1:validation-error-silent": _all(_interacted("postSubmitFields"), _carries_a_field_with_a_field_role),
     "4.1.3:form-activation-silent": _measured_form_change,
 }
 
