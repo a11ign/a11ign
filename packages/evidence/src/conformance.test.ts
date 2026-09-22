@@ -86,7 +86,7 @@ test("#1873: every truncated-sweep stop code is glossed in plain language, not l
     cap: /cap -- hit its own step limit before reaching the end of the page/,
     deadline: /deadline -- the capture's overall time budget ran out mid-sweep/,
     error: /error -- a round trip to the screen reader failed/,
-    silent: /silent -- the screen reader stopped responding/,
+    silent: /silent -- no new speech arrived after retries, cause unknown/,
     channelReset: /channelReset -- the screen reader's speech log was rebuilt mid-sweep/,
     focusModeStuck: /focusModeStuck -- the page trapped keyboard focus/,
   };
@@ -95,6 +95,20 @@ test("#1873: every truncated-sweep stop code is glossed in plain language, not l
     assert.match(fullPages.limitation, expected,
       `a stranger meeting a bare "${stop}" has no way to know what it means without this gloss`);
   }
+});
+
+// #1881: #1873's own reviewer flagged `silent`'s gloss as a stronger, definitive claim than
+// `awaitLateSpeech` (capture-probes.mjs) actually supports -- it retries at the same log offset
+// specifically because late speech is not the end of the page, and only reports `silent` once nothing
+// arrived after every retry. The producer never learns WHY nothing arrived, so the gloss must not
+// either.
+test("#1881: the `silent` gloss states what the producer actually guarantees, not a screen-reader failure", () => {
+  const [, fullPages] = conformanceScope({ ...CLEAN, sweeps: [{ type: "link", stop: "silent" }] });
+  assert.match(fullPages.limitation, /silent -- no new speech arrived after retries, cause unknown/);
+  assert.doesNotMatch(fullPages.limitation, /stopped responding/i,
+    "a fresh reader must not come away believing NVDA definitely failed");
+  assert.doesNotMatch(fullPages.limitation, /\bfailed\b/i,
+    "the honest state is an ambiguity the producer itself could not resolve, not a failure claim");
 });
 
 test("an untruncated run still admits iframes and post-interaction content", () => {
