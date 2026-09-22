@@ -21,7 +21,8 @@ import { validRef, PLAYBOOKS, LIMIT_PATTERN, SERIAL_PATTERN, PLAYBOOK_TIMEOUT_MS
   onTheControlPlane, journalScope, controlPlaneCheckout, osRollbackRefusal, staleRefRefusal,
   pinnedBuild, buildOf, buildStates, buildAssertion, buildGate, guestBuilds, linkGate, allowOfflineNames, linkGateFor,
   inventorySources, inventoryReadScript, parseInventoryReads, protocolGuardVerdict,
-  fleetHoldUntil, activeFleetHolds, allowHoldNumbers, sequenceHoldGate }
+  fleetHoldUntil, activeFleetHolds, allowHoldNumbers, sequenceHoldGate,
+  GH_TOKEN_FILE, ghEnvironment, fleetHoldReadRefusal, readFleetGatedIssues, tokenSetOf }
   from "./fleet-playbook.mjs";
 import { CONTROL_PLANE_CHECKOUT_PATH } from "./control-plane-checkout.mjs";
 import { protocolVerdict } from "../../worker-fleet/src/protocol-guard.mjs";
@@ -1089,8 +1090,101 @@ test("#1839: a gh failure refuses rather than reading as no hold -- \"could not 
   assert.ok(start > -1, "enforceSequenceHold must exist");
   const body = source.slice(start, source.indexOf("\n}\n", start));
   assert.match(body, /catch \(error\)/, "a gh failure must be caught, not left to crash the whole run uncaught");
-  assert.match(body, /Could not ask is not may proceed/,
+  assert.match(body, /fleetHoldReadRefusal\(/,
     "enforceSequenceHold must fail CLOSED on a gh error, matching every other gate in this file "
     + "(protocolGuardVerdict, gateFleet) rather than silently deploying through an unreachable GitHub");
   assert.match(body, /process\.exit\(2\)/, "the catch branch must actually exit refusing, not just print and fall through");
+});
+
+// #1875: the control plane's gh credential -- ceo's ruling of 2026-09-22 on that row.
+const GH_UNAUTHENTICATED = "To get started with GitHub CLI, please run:  gh auth login\n"
+  + "Alternatively, populate the GH_TOKEN environment variable with a GitHub API authentication token.\n";
+
+test("#1875: the token file is read into GH_TOKEN when it exists, and an explicit GH_TOKEN wins", () => {
+  const fromFile = ghEnvironment({ PATH: "/usr/bin" }, () => "github_pat_fixture\n");
+  assert.equal(fromFile.GH_TOKEN, "github_pat_fixture", "the file's token, trimmed of its trailing newline");
+  assert.equal(fromFile.PATH, "/usr/bin", "the rest of the environment passes through");
+
+  const explicit = ghEnvironment({ GH_TOKEN: "set-by-caller" }, () => { throw new Error("must not be read"); });
+  assert.equal(explicit.GH_TOKEN, "set-by-caller");
+});
+
+test("#1875: with no token file, gh runs in the environment it was given -- a gh login elsewhere still works", () => {
+  const env = { PATH: "/usr/bin" };
+  assert.equal(ghEnvironment(env, () => ""), env, "an absent file must not invent an empty GH_TOKEN");
+  assert.equal(ghEnvironment(env, () => "  \n"), env, "a blank file is no token either");
+  assert.equal("GH_TOKEN" in ghEnvironment(env, () => ""), false);
+});
+
+test("#1875: tokenless and unauthenticated, the refusal names the token file and this row, not gh auth login", () => {
+  const refusal = fleetHoldReadRefusal({ chosen: "deploy.yml", tokenSet: false,
+    error: { message: "Command failed: gh issue list", stderr: GH_UNAUTHENTICATED } });
+  assert.ok(refusal.includes(GH_TOKEN_FILE), `the refusal must name ${GH_TOKEN_FILE}: ${refusal}`);
+  assert.match(refusal, /#1875/);
+  assert.doesNotMatch(refusal, /gh auth login/, "an interactive login on a shared root box is what the ruling rejected");
+  assert.match(refusal, /^REFUSING deploy\.yml: .*Could not ask is not may proceed\.$/s);
+  assert.match(GH_TOKEN_FILE, /\/\.config\/a11y-witness\/gh-token$/, "the path ceo's ruling named, under this user's home");
+});
+
+test("#1875: with a credential present, the refusal keeps gh's own reason -- an expired token is not a missing one", () => {
+  const expired = fleetHoldReadRefusal({ chosen: "provision-role.yml", tokenSet: true,
+    error: { message: "Command failed: gh issue list", stderr: "HTTP 401: Bad credentials (https://api.github.com/graphql)\n" } });
+  assert.match(expired, /\(HTTP 401: Bad credentials/);
+  assert.ok(!expired.includes(GH_TOKEN_FILE), "a token that exists must not be reported as absent");
+  assert.match(expired, /Could not ask is not may proceed\.$/);
+
+  const loggedInElsewhere = fleetHoldReadRefusal({ chosen: "deploy.yml", tokenSet: false,
+    error: { message: "Command failed: gh issue list", stderr: "error connecting to api.github.com\n" } });
+  assert.match(loggedInElsewhere, /\(error connecting to api\.github\.com\)/,
+    "a host logged in the ordinary way (no token file) gets gh's reason, never advice about a file it should not have");
+
+  const noStderr = fleetHoldReadRefusal({ chosen: "deploy.yml", tokenSet: true, error: { message: "spawnSync gh ENOENT" } });
+  assert.match(noStderr, /\(spawnSync gh ENOENT\)/, "no stderr at all (gh missing, #1870) falls back to the error's own first line");
+});
+
+// reviewer-2 on #1910, 6d466546: `enforceSequenceHold` derived `tokenSet` from `existsSync`, so a blank token
+// file -- no token by `ghEnvironment`'s own reading, absent by bootstrap's `[ ! -s ]` -- took the credentialed
+// branch and passed gh's `gh auth login` hint through. Driven through the REAL reader, so the flag the
+// refusal reads is the one the read derived, not a value this test chose.
+/** What `enforceSequenceHold` would print for a read that fails with gh's unauthenticated text. */
+function refusalAfterRead(env: NodeJS.ProcessEnv, readToken: () => string): { refusal: string; ranWith: NodeJS.ProcessEnv } {
+  let ranWith: NodeJS.ProcessEnv = {};
+  const run = ((_cmd: string, _args: string[], opts: { env: NodeJS.ProcessEnv }) => {
+    ranWith = opts.env;
+    throw Object.assign(new Error("Command failed: gh issue list"), { stderr: GH_UNAUTHENTICATED });
+  }) as never;
+  try {
+    readFleetGatedIssues({ env, readToken, run });
+  } catch (error) {
+    return { refusal: fleetHoldReadRefusal({ chosen: "deploy.yml", error: error as never, tokenSet: tokenSetOf(error) }), ranWith };
+  }
+  throw new Error("the injected gh always fails, so the read must throw");
+}
+
+test("#1875: a BLANK token file is no credential -- the refusal names the file and this row, never gh auth login", () => {
+  for (const blank of ["", "  \n"]) {
+    const { refusal, ranWith } = refusalAfterRead({ PATH: "/usr/bin" }, () => blank);
+    assert.equal("GH_TOKEN" in ranWith, false, "gh ran tokenless, which is the state the refusal must describe");
+    assert.ok(refusal.includes(GH_TOKEN_FILE), `the refusal must name ${GH_TOKEN_FILE}: ${refusal}`);
+    assert.match(refusal, /#1875/);
+    assert.match(refusal, /is missing or empty/, "true of a blank file, where \"does not exist\" was not");
+    assert.doesNotMatch(refusal, /gh auth login/);
+  }
+});
+
+test("#1875 CONTROL: a non-blank token file, or an explicit GH_TOKEN, is a credential -- gh's own reason is kept", () => {
+  // The positive control for the test above: the same failing gh, with a token supplied, must NOT be
+  // reported as a missing file, or a refusal that always names the file would pass it.
+  const fromFile = refusalAfterRead({ PATH: "/usr/bin" }, () => "github_pat_fixture\n");
+  assert.equal(fromFile.ranWith.GH_TOKEN, "github_pat_fixture");
+  assert.ok(!fromFile.refusal.includes(GH_TOKEN_FILE), fromFile.refusal);
+  const explicit = refusalAfterRead({ GH_TOKEN: "set-by-caller" }, () => { throw new Error("must not be read"); });
+  assert.ok(!explicit.refusal.includes(GH_TOKEN_FILE), explicit.refusal);
+});
+
+test("#1875: a failure nobody classified (an unreadable token file, an injected reader) reads as credentialed", () => {
+  assert.equal(tokenSetOf(new Error("EACCES: permission denied")), true,
+    "an unreadable file exists, so the refusal keeps gh's reason rather than calling it missing");
+  assert.equal(tokenSetOf(Object.assign(new Error("x"), { tokenSet: false })), false);
+  assert.equal(tokenSetOf(null), true);
 });
