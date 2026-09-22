@@ -689,6 +689,36 @@ test("#253: a heading inside a dialog container is not evidence the DOCUMENT nav
     "an ordinary heading change must still be asserted -- this is a narrowing, not a mute");
 });
 
+/**
+ * #1867: `addStaleRouteTitle`'s own applicability guard used to bail on `headingBefore === headingAfter`
+ * alone, reading a held-steady SITE-CHROME heading (GOV.UK/mygov.scot's top-of-page heading, which does not
+ * change across a real navigation) as "nothing navigated" — even when the title genuinely differed and
+ * NVDA's own document-change confirmation (`routeChange.navigated`, real since #1850) said otherwise. A
+ * heading that changed is still evidence enough on its own; a heading that didn't now needs `navigated` to
+ * say a transition happened at all.
+ */
+test("#1867: a held-steady heading with NVDA's navigation confirmed reaches the title comparison", () => {
+  const route = (titleBefore: string, titleAfter: string, navigated: boolean) => ({
+    transcript: ["Home, document"], structure: {},
+    interaction: { routeChange: { control: "Vehicle tax, link", navigated,
+      titleBefore, titleAfter, headingBefore: "GOV.UK", headingAfter: "GOV.UK" } },
+  } as never);
+  assert.equal(ruleFindings(route("Home - GOV.UK", "Vehicle tax - GOV.UK", true))
+    .filter((f) => f.wcag.startsWith("2.4.2")).length, 0,
+    "the title genuinely updated -- a real navigation with the right title is not a finding");
+  assert.equal(ruleFindings(route("Home - GOV.UK", "Home - GOV.UK", true))
+    .filter((f) => f.wcag.startsWith("2.4.2")).length, 1,
+    "a confirmed navigation whose title never changed is exactly what this rule exists to catch -- the "
+      + "heading-equality guard used to hide this population entirely");
+  assert.equal(ruleFindings(route("Home - GOV.UK", "Vehicle tax - GOV.UK", false))
+    .filter((f) => f.wcag.startsWith("2.4.2")).length, 0,
+    "no navigation confirmed and the heading held steady -- nothing says a transition happened at all, "
+      + "so the guard still returns");
+  assert.equal(ruleFindings(route("Home - GOV.UK", "Home - GOV.UK", false))
+    .filter((f) => f.wcag.startsWith("2.4.2")).length, 0,
+    "same guard: an unconfirmed, held-steady heading must not be read as a stale-title failure either");
+});
+
 test("the 2.4.3 suppression counts a `section` container, which is what Edge 152 calls an unnamed form", () => {
   // THE REGRESSION A BROWSER UPGRADE WOULD HAVE CAUSED. `w3c/html-aria#423` made the `form` role
   // conditional on an accessible name, so Edge 152 announces an unnamed <form> as "section". This counter
