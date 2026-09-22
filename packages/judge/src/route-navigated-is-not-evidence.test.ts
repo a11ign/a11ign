@@ -15,14 +15,17 @@ import { join } from "node:path";
  * this guard first shipped covering only `rules.ts`. That is exactly the shape this scan exists to stop
  * recurring: a hand-maintained file list is the thing that goes stale, not the pattern.
  *
- * **`packages/judge/src/rules.ts` is now the documented exception (#1867).** `addStaleRouteTitle`'s own
- * heading-equality guard read a held-steady SITE-CHROME heading as "nothing navigated" even when the title
- * differed and NVDA's own document-change confirmation said otherwise -- the guard needed *some* signal a
- * navigation happened before comparing titles, and `navigated` is that signal for this one rule now that
- * it has been measured against it (`rules.test.ts`'s `#1867` cases). This is precisely what this guard's
- * own design anticipated: *"A future row that wants `navigated` as evidence removes this guard's coverage
- * for the one file it changes, deliberately, rather than this scan quietly losing its teeth everywhere at
- * once."* `signal-predicates.mjs` was not part of #1867's Region and stays covered.
+ * **`packages/judge/src/rules.ts` and `packages/lab/src/training/signal-predicates.mjs` are now the
+ * documented exceptions (#1867).** `addStaleRouteTitle`'s own heading-equality guard read a held-steady
+ * SITE-CHROME heading as "nothing navigated" even when the title differed and NVDA's own document-change
+ * confirmation said otherwise -- the guard needed *some* signal a navigation happened before comparing
+ * titles, and `navigated` is that signal for this one rule now that it has been measured against it
+ * (`rules.test.ts`'s `#1867` cases). This is precisely what this guard's own design anticipated: *"A future
+ * row that wants `navigated` as evidence removes this guard's coverage for the one file it changes,
+ * deliberately, rather than this scan quietly losing its teeth everywhere at once."* `signal-predicates.mjs`
+ * was not part of #1867's ORIGINAL Region -- product-manager widened it (PR #1871 review) once the reviewer
+ * found `routeTitleIsStale` there is the same guard's premise on the same shape, still trusting the heading
+ * proxy alone; it now carries the mirrored fix and the same documented exception.
  *
  * This scans SOURCE TEXT rather than asserting behaviour, because the hazard is a FUTURE line, not a
  * present one -- the same shape `structure-declarations.test.ts` uses for exactly the same reason: `tsc`
@@ -40,10 +43,12 @@ import { join } from "node:path";
  */
 const ROOT = join(import.meta.dirname, "../../..");
 const PY_FEATURIZER = { path: "packages/scorer/python/screenreader_features.py", sentinel: "def all_evidence" };
-/** The one file this guard's own design says a future row removes coverage for -- see the doc comment above. */
+/** The files this guard's own design says a future row removes coverage for -- see the doc comment above. */
 const NAVIGATED_EXCEPTIONS = new Map([
   ["packages/judge/src/rules.ts", "#1867: addStaleRouteTitle now reads it as the corroborating signal a "
     + "held-steady heading needs before it can still say nothing navigated"],
+  ["packages/lab/src/training/signal-predicates.mjs", "#1867 (Region widened): routeTitleIsStale mirrors "
+    + "addStaleRouteTitle's fix -- the same corroborating signal for the same held-steady-heading shape"],
 ]);
 
 /** Every non-test .ts/.mjs source file under packages/, as [path, text]. */
@@ -96,17 +101,20 @@ test("every TS/JS source that mentions routeChange is free of `.navigated` reads
   }
 });
 
-test("the #1867 exception is not silently outgrown -- rules.ts still reads `.navigated` exactly where expected", () => {
-  // A whole-file exception is coarser than the guard it replaces: if `rules.ts` ever stopped reading
-  // `.navigated` at all (the #1867 fix reverted or refactored away), this exception would keep silently
-  // exempting the file from a guard it no longer needs, and a REGRESSION back to the tautology-reading
-  // shape elsewhere in the same file would pass unnoticed. This is the guard on the guard.
-  const path = "packages/judge/src/rules.ts";
-  const [, text] = jsSources().find(([p]) => p === path) ?? [];
-  assert.ok(text, `${path} was not found by the discovery walk`);
-  assert.match(withoutComments(path, text as string), /\.navigated\b/,
-    `${path} no longer reads \`.navigated\` anywhere -- remove it from NAVIGATED_EXCEPTIONS so this file `
-      + "goes back under the ordinary guard above");
+test("no exception is silently outgrown -- every excepted file still reads `.navigated` somewhere", () => {
+  // A whole-file exception is coarser than the guard it replaces: if an excepted file ever stopped reading
+  // `.navigated` at all (the fix that earned the exception reverted or refactored away), the exception would
+  // keep silently exempting the file from a guard it no longer needs, and a REGRESSION back to the
+  // tautology-reading shape elsewhere in the same file would pass unnoticed. This is the guard on the guard --
+  // looped over every entry in NAVIGATED_EXCEPTIONS, not hand-listed, for the same reason the consumer scan
+  // above is discovered rather than hand-listed.
+  for (const [path] of NAVIGATED_EXCEPTIONS) {
+    const [, text] = jsSources().find(([p]) => p === path) ?? [];
+    assert.ok(text, `${path} was not found by the discovery walk`);
+    assert.match(withoutComments(path, text as string), /\.navigated\b/,
+      `${path} no longer reads \`.navigated\` anywhere -- remove it from NAVIGATED_EXCEPTIONS so this file `
+        + "goes back under the ordinary guard above");
+  }
 });
 
 test("the Python featurizer stays free of it too, checked against a known-present sentinel", () => {
