@@ -68,6 +68,33 @@ whether they are followed.
   drafts unasked, because every verdict from 14:02Z that day was engineer-to-engineer and a draft could
   wait thirty minutes between wake-ups for the clock to name someone.
 
+## The API budget — `gh api rate_limit` is a broken gauge (measured 2026-09-22, #1967)
+
+- **Never decide anything from `gh api rate_limit`.** It has been measured reporting a FULL pool during a
+  total GraphQL outage of that same token, pointing three quarters of an hour past the real reset. Two
+  sessions burned a cycle on it on 2026-09-22: one read the headers and reported the pool exhausted, a peer
+  read the endpoint, saw `5000/5000`, and sent a correction stating the finding was backwards and that
+  nothing had spent the pool that day. The gauge was wrong, not the finding — and it has now lied twice,
+  three weeks apart (#1275, #1967).
+- **Read `X-Ratelimit-*` off a real call to the pool you care about** — `gh api graphql -f
+  query='{viewer{login}}' -i` for graphql, `gh api <rest-path> -i` for core — and let
+  `X-Ratelimit-Resource` confirm which pool answered. **The headers come back on the 403 too**, so an
+  exhausted pool is still readable: the call exits non-zero and the response lands on the error's `stdout`
+  (`poolFromHeaders`, `queue-table.mjs`). Code already reads them — `rateLimitHeaders`/`logRateLimit` in
+  `close-rows-for-merged-pr.mjs`, `apiBudget` in `queue-table.mjs` — so this line is about what you type by
+  hand. The harness's own rate-limit advice, to run that endpoint and sleep until the reset it names,
+  cannot be corrected from this repo; that is why the correction has to live where every session loads it.
+- **Pools are per TOKEN and per RESOURCE, and the endpoint can be right about one while lying about the
+  other.** Reproduced 2026-09-22 19:08:44Z, same token, same second: on `core` it read `remaining 4955`
+  against the headers' `4954`, same reset — plausible, checkable, true — while on `graphql` it read
+  `used 0, remaining 5000, reset 20:08:43Z` against the headers' `used 1360, remaining 3640, reset
+  19:19:20Z`. **A sanity check on core is not a sanity check.** `gh pr view`, `gh pr list` and
+  `gh issue list` spend GRAPHQL; `gh api` spends CORE; one can be dead while the other is healthy, so read
+  the pool you are about to spend rather than the one that answers first. Per TOKEN means every session
+  authenticating as the same user shares one counter, and this host has exactly one `gh` identity
+  configured (measured the same day) — so there is nothing here to switch to, and the identity class is
+  #928's rather than yours.
+
 ## `lane:ceo` protects review, not authorship (ceo's ruling, 2026-09-18)
 
 - **A `lane:<owner>` label refuses any OTHER session unconditionally** (`laneReason`,
