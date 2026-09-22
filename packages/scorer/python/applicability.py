@@ -112,6 +112,33 @@ def _measured_form_change(record: Record) -> bool:
     return any(not change.get("afterUnresolved") for change in changes)
 
 
+def _no_unread_activation(record: Record) -> bool:
+    """No button the probe activated went UNREAD -- every outcome is known, even when it was silence.
+
+    `3.3.1:validation-error-silent` claims a submission was rejected without a word, so its subject is a
+    submit whose aftermath was HEARD. An entry with `afterUnresolved` was not heard: #1105's rule drops it
+    from `evidenceUnits`, and on `acceptance-b3-button-market/bad` (repeat-2, #1903) that cut left the model
+    an edit field, a submit with no outcome and a silent `Cancel` -- the silent-validation-error signature
+    with its one piece of counter-evidence removed. The other repeat, which read the submit's navigation,
+    did not fire. A cut that removes evidence must not be read as an absence, so an unread activation makes
+    the subtype unmeasured rather than scored.
+
+    EVERY ENTRY, NOT ONLY `kind == "submit"`, because `kind` is the capture's reading of the button's NAME
+    (`probeKindFor`: `SUBMIT_RE`, then a task word), never of `type="submit"`. `b2-error-vessel`'s real
+    submit, "Apply for a berth", is recorded as `taskButton`. The first version of this required a read
+    entry of kind `submit`, and the lab's `applicability-audit` at `5f65fc8f9` refused it: 6 labelled
+    positives silenced (`b2-error-vessel`, `b3-error-badge`, `b3-error-taxi`, both repeats), every one a
+    real submit named for its task. Which entry was the submit cannot be told from `kind`, so an unread
+    one of any kind might have been it. Measured on the same corpus with this rule: silenced 0, and
+    `b3-button-market/bad` repeat-2 ruled out while repeat-1 stays applicable.
+
+    A true positive's silent submit is `after: ""` with no `afterUnresolved`, so it stays applicable: this
+    rules out an outcome nobody read, never an outcome that was silent.
+    """
+    changes = _interaction(record).get("formChanges") or []
+    return not any(change.get("afterUnresolved") for change in changes)
+
+
 def _carries_a_field_with_a_field_role(record: Record) -> bool:
     """The page carries a form field that NVDA announced WITH A FIELD ROLE, in its form-field sweep or in
     the post-submit re-read.
@@ -218,9 +245,14 @@ SUBTYPE_REQUIRES: dict[str, Callable[[Record], bool]] = {
     # `applicability-audit` passed it (silenced 0) and `acceptance` still listed all three cases — a
     # precondition that rules nothing out also silences nothing. A field must carry a FIELD ROLE.
     #
-    # `b3-button-market/bad` stays applicable and is meant to: it really has `Reference number, edit` and a
-    # real submit. Its fire is the model's boundary on a real form, #1903's, not a missing subject.
-    "3.3.1:validation-error-silent": _all(_interacted("postSubmitFields"), _carries_a_field_with_a_field_role),
+    # And the submit must have been READ (#1903). `b3-button-market/bad` has a real form -- `Reference number,
+    # edit` and a real submit -- so both conditions above hold, and this comment used to call its fire the
+    # model's boundary. It was not: it fired in one repeat of two, the one whose submit read
+    # `after: "unknown", afterUnresolved: true`. #1105 cut that unread outcome from the evidence, and the
+    # model read the cut as silence. `_no_unread_activation` makes an unread outcome unmeasured instead.
+    "3.3.1:validation-error-silent": _all(
+        _interacted("postSubmitFields"), _carries_a_field_with_a_field_role, _no_unread_activation
+    ),
     "4.1.3:form-activation-silent": _measured_form_change,
 }
 
