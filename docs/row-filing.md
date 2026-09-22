@@ -49,6 +49,56 @@ rows seeded on 2026-09-06 being worked after they were already fixed. It also do
 headings rather than content — a `## Open-check` with nothing under it still refuses, because it asserts
 exactly what `row-claim` asserts (`hasTemplateField`'s "real content under it", not a bare heading match).
 
+## What makes an Open-check re-checkable by somebody else, later
+
+The claim-time gate asks only that the section has real content under it. These two rules are what make
+that content mean anything to whoever re-runs it, and each has now been paid for twice.
+
+**AN OPEN-CHECK NAMES A BEHAVIOUR THAT FLIPS, NEVER A GREP FOR AN IMPLEMENTATION SHAPE.** A grep answers a
+question about the TEXT of the code; the row is a claim about what the code DOES. The two come apart in
+both directions, which is why the green is not evidence either way: a filer can satisfy a grep with prose
+that changes nothing, and a real fix can leave the grepped shape exactly where it was. Ruled 2026-09-22 on
+a row whose own open-check grepped a branch listing for a row number — the listing names no row at all, so
+the check would have read a deliberately-kept control branch as an offender and cost it. **The same defect
+then landed one level down, inside that row's own PR, in a test.** An assertion written to hold a
+pool-free contract matched a `gh` argv containing `--jq`, and the call it had to catch carries `--json`:
+**it passed while the call went out.** The shape-free form is the repair, and it catches every `gh` rather
+than every `gh` somebody remembered to spell:
+
+```js
+assert.deepEqual(calls.filter((c) => c[0] === "gh"), []);
+```
+
+So state the check as the sentence that is FALSE today and TRUE once the row lands, run it before filing,
+and record which way it read. This is not only about row bodies: **any green read off a shape is a
+statement about the shape**, and reporting it as a statement about behaviour is the same error wherever it
+happens.
+
+**A MEASUREMENT TAKEN AGAINST LIVE `origin` HAS A SHELF LIFE, AND A BODY THAT DOES NOT NAME THE REF IT
+DEPENDED ON CANNOT BE RE-CHECKED.** Branches merge and are deleted; the command in the body keeps running
+and keeps answering, and its answer changes without the row saying anything. A demonstration published in
+a PR body was measured against a branch that merged and was deleted from origin days later, so the
+published command now correctly returns `null` — and reads as the defect being fixed. **The failure mode is
+not that the number went stale. It is that the re-checker cannot tell WHICH THING MOVED** — the code under
+test, or the fixture the command pointed at. Both produce the same output, and one means *this was fixed*
+while the other means *this was never true*. A reading with no named ref is not a weaker measurement; it
+is an unfalsifiable one.
+
+The buildable half: **a reading against live `origin` names the ref it used and states whether that ref is
+expected to survive.** Where a durable ref exists — a merge commit, a tag, a SHA — prefer it to a branch
+name, which is a moving pointer that may simply stop existing. Where none does, say so in the body, so a
+later re-check reads *the fixture is gone* rather than *the fix regressed*. One command settles whether a
+branch still exists on origin, and it is worth running while the row is being written rather than when it
+is being re-checked:
+
+```bash
+git ls-remote --heads origin '<the branch the reading used>'   # no output: the ref is already gone
+```
+
+**Neither rule is a new claim-time gate**, and neither should become one. Whether a check names a
+behaviour is not machine-decidable, which is exactly why `missingTemplateFields` asks only that the
+section has content under it. These are written rules because the thing they are about is a judgement.
+
 ## Writing a section that has no content: say so, never leave it blank
 
 Two rules from the 2026-09-09 backfill, in the guidance rather than in the heads of whoever did it.
