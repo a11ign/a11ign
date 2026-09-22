@@ -187,6 +187,13 @@ export interface CaptureInteraction {
      * Written conditionally, `capture-probes.mjs`'s `activateAndCaptureDelta`, `CAPTURE_PROTOCOL_VERSION` 20.
      */
     afterUnresolved?: boolean;
+    /**
+     * #1918: whether the activation dispatched a form `submit` event, measured by a capture-phase listener on
+     * the page (`installSubmitEventLog`, `browser-session.mjs`), because `kind` is only the button's NAME.
+     * Absent when it could not be said (no listener, a navigation replaced the document, an unconfirmed
+     * target) and on every capture before `CAPTURE_PROTOCOL_VERSION` 21. Read through `isSubmitActivation`.
+     */
+    submitted?: boolean;
   }[];
   postSubmitFields: string[];
   /**
@@ -358,5 +365,8 @@ export type { Channel, ParsedAnnouncement, ParsedObject } from "./announcement.j
 /** Where the examination ended, when an activation took the browser off the page's site (#1363). */
 export { addressBarHost, announcesANewWindow, leftSite, leftSiteReason, withinTheSite } from "./left-site.js";
 export type { LeftSite, ProbePhase, SiteBoundCapture } from "./left-site.js";
+
+/** Whether a form change was a form SUBMIT, measured or named (#1918). */
+export { isSubmitActivation } from "./submit-activation.js";
 
 /** Whether the capture examined enough of a channel to support a finding on it. */
