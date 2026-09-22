@@ -113,7 +113,21 @@ or
   body yet, so the review is the machine-readable **signal** alongside the comment's **evidence**, not a
   replacement for it. `(provisional)` has no separate review state — it stays a word in the text both
   places carry, because GitHub's approval is binary and this repo's own five-in-a-row rule already treats
-  a provisional `convinced` as actionable.
+  a provisional `convinced` as actionable for an instance off the line.
+- **A re-review answers every earlier blocker by name** (`ceo`'s ruling on #1882, 2026-09-22). When your
+  verdict at a new head follows a `not convinced` of yours on the same PR, list under the verdict line
+  EACH blocker you named before, with its file:line, and one of two words:
+
+  ```
+  Prior blocker: <what it was> (<file>:<line>) — fixed at `<head8>`.
+  Prior blocker: <what it was> (<file>:<line>) — still present.
+  ```
+
+  **A `convinced` that leaves out an open blocker of your own is not a verdict.** Stated because of #1879:
+  its `convinced (provisional)` at `7b1ca3fb` followed a `not convinced` at `74942469` whose blocker nothing
+  between the two heads had touched, said nothing about it, and the PR merged on it. Check a blocker
+  against the diff between the two heads, not against the author's comment that it is fixed; one line per
+  blocker costs you a line, and without it a later verdict can pass over an earlier finding silently.
 - **This review does not yet gate anything.** The merge-queue ruleset and branch protection continue to
   require nothing from it until an approval from this account is proven accepted on a live PR — a bot
   account that also opens PRs (`a11ign-ai-workers`) may find GitHub refuses its own review as
@@ -145,10 +159,19 @@ or
   where the pattern looked. On the line, a reader counting outstanding provisional verdicts can see which
   they are instead of assuming there are none.
 - **Since the line lifted (2026-09-13, #912: `reviewer` at 20:30Z, `reviewer-2` at 20:54Z, five of five
-  holding each), a provisional `convinced` IS the verdict: the author marks ready on it, and `ceo`
-  samples every fifth `convinced` per instance, counted from its lift in the verdict comments.** Before
-  the lift the rule was "`ceo` or `worker-judge` spot-checks it before the author marks ready", and it
-  held #1542 on 2026-09-14 for a sample that was not due. **A spot-check is
+  holding each), a provisional `convinced` from an instance OFF the line IS the verdict: the author marks
+  ready on it, and `ceo` samples every fifth `convinced` per instance, counted from its lift in the
+  verdict comments.** **As of 2026-09-22 that is `reviewer-2` only: `reviewer` is back ON the line, its
+  count at zero** (`ceo`'s ruling on #1882, comment 5774160221). #1879 merged at `7b1ca3fb` on a
+  reviewer-only `convinced (provisional)` that said nothing about the same reviewer's own `not convinced`
+  at `74942469` — the `silent` gloss, a blocker that held, and `git diff 74942469 7b1ca3fb --
+  packages/evidence/src/conformance.ts` is empty — so the defect reached `main` and #1881 fixed it
+  afterwards: the merged-defect case in the "After the lift" bullet below. Until `reviewer` has five consecutive verdicts
+  holding, its provisional `convinced` is NOT the verdict: `ceo` or `worker-judge` spot-checks it before
+  the author marks ready, so an author of an odd-numbered draft waits for the spot-check. `reviewer-2`'s
+  line is unaffected, because the count is per instance. Before the lift the rule was "`ceo` or
+  `worker-judge` spot-checks it before the author marks ready", and it held #1542 on 2026-09-14 for a
+  sample that was not due. **A spot-check is
   re-running the PR's Acceptance line and one Mutation in a fresh shallow clone and finding what the
   verdict says.** A
   *not convinced* counts as held when its named blocker reproduces. One miss restores that instance's
