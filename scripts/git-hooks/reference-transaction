@@ -26,18 +26,52 @@
 #
 # `A11Y_STASH_ANY=1 git stash push` overrides, and says so — the escape hatch is named because a guard
 # that stops work and offers no route out gets bypassed and then not consulted at all.
+#
+# POP/DROP/CLEAR ARE WARNED, NEVER REFUSED (#1872, repeating #290's shape: #1866 popped `worker-capture`'s
+# labelled stash from an unrelated branch, and the push-only refusal above did nothing to stop it). Git
+# gives this hook no reliable way to know a pop is WRONG before it happens — only that the entry it is
+# about to consume was made on a branch other than the one checked out here, which is exactly the fact
+# `npm run stash:whose` would have shown had someone thought to run it first. So this prints to stderr and
+# still exits 0: the same false-positive problem that ruled out refusing pop in #305 rules it out here too.
 [ "$1" = "prepared" ] || exit 0
 
 ZERO=0000000000000000000000000000000000000000
 
+# The entry a pop/drop/clear is about to discard is $old (refs/stash moves off it, to the next entry down
+# or to nothing at all). Warn when its subject names a branch other than the one checked out in THIS
+# worktree; say nothing for a same-branch pop or a subject the #290 parser cannot read (an unlabelled
+# legacy stash predating that guard) -- "I could not tell" must not be spelled the same as "found a
+# mismatch".
+warn_if_other_branch() {
+  subject=$(git log -1 --format=%s "$1" 2>/dev/null) || return 0
+  case "$subject" in
+    "WIP on "*": "*) branch=${subject#"WIP on "}; branch=${branch%%:*} ;;
+    "On "*": "*) branch=${subject#"On "}; branch=${branch%%:*} ;;
+    *) return 0 ;;
+  esac
+  current=$(git symbolic-ref --quiet --short HEAD 2>/dev/null)
+  [ "$branch" = "$current" ] && return 0
+  echo "WARNING: the stash you just removed was made on '$branch', not '${current:-<detached>}'." >&2
+  echo "  \`refs/stash\` is shared across every worktree -- this may not have been yours to take." >&2
+  echo "  \`npm run stash:whose\` lists what is left in the pile and whose branch it names." >&2
+}
+
 while read -r old new ref; do
   [ "$ref" = "refs/stash" ] || continue
-  [ "$new" = "$ZERO" ] && continue                      # dropping the ref is not a creation
+
+  if [ "$new" = "$ZERO" ]; then                         # last entry gone, or `clear`: not a creation
+    warn_if_other_branch "$old"
+    continue
+  fi
+
   [ -n "$A11Y_STASH_ANY" ] && continue
 
   # Already in the reflog => this ref is MOVING to an existing entry (pop/drop), not gaining a new one.
   short=$(git rev-parse --short=7 "$new" 2>/dev/null) || continue
-  if git reflog refs/stash 2>/dev/null | grep -q "^${short} "; then continue; fi
+  if git reflog refs/stash 2>/dev/null | grep -q "^${short} "; then
+    warn_if_other_branch "$old"
+    continue
+  fi
 
   # `git stash push` writes "WIP on <branch>: ..."; `push -m <msg>` writes "On <branch>: <msg>".
   # So the default subject IS the absence of a label, read off the object rather than off argv — which
