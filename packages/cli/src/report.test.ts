@@ -318,6 +318,23 @@ test("#1851: the legend explains what the Support/novelty line means, in the rea
   assert.ok(legendAt >= 0 && legendAt < supportAt, "explained before the line it describes, like every other term");
 });
 
+// Round 4 (#1873) of the same blind read -- #1855's own two readers named this as the other gap: #1851's
+// legend said which DIRECTION the Support number goes (outside range = trust less) but never what the
+// number itself measures on its own scale, unlike confidence's own "0 (no confidence) to 1 (full
+// confidence)" a few lines above it.
+test("#1873: the legend states the Support number's own scale, not just its direction", () => {
+  const scored = {
+    ...verdict, findings: [],
+    novelty: { nearestTrainingCosine: 0.82, inSupport: true, floor: 0.7 },
+  } as Report["verdict"];
+  const output = render({ verdict: scored });
+  const legendAt = output.indexOf("How to read this report");
+  const supportAt = output.indexOf("Support: within");
+  assert.match(output, /cosine similarity to the closest page the scorer trained on, from -1/i,
+    "a bare 'nearest training similarity 0.82' means nothing to a reader never told what the number ranges over");
+  assert.ok(legendAt >= 0 && legendAt < supportAt, "the scale must be stated before the first Support number");
+});
+
 test("#1851: `ACT` is expanded once, in the legend, not left as a bare acronym", () => {
   const output = render();
   assert.match(output, /Accessibility Conformance Testing/,

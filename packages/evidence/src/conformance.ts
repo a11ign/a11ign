@@ -44,6 +44,21 @@ export type SweepStop =
 
 const SWEEP_RAN_OUT: readonly SweepStop[] = ["exhausted", "repeat"];
 
+/**
+ * What each non-ran-out stop reason means, in plain language, for the reader of a rendered report --
+ * round 4 of #40's own jargon rounds (#1791/#1851/#1855). The six codes here are exactly the ones
+ * `truncatedSweeps` selects; `exhausted`/`repeat` never reach this map because they mean the page ran
+ * out, not us.
+ */
+const SWEEP_STOP_GLOSS: Record<Exclude<SweepStop, "exhausted" | "repeat">, string> = {
+  cap: "hit its own step limit before reaching the end of the page",
+  deadline: "the capture's overall time budget ran out mid-sweep",
+  error: "a round trip to the screen reader failed",
+  silent: "the screen reader stopped responding",
+  channelReset: "the screen reader's speech log was rebuilt mid-sweep, breaking continuity with what came before",
+  focusModeStuck: "the page trapped keyboard focus and the sweep could not recover control of it",
+};
+
 export interface SweepOutcome {
   /** The element type swept: "heading", "link", "landmark", ... */
   type: string;
@@ -906,7 +921,10 @@ function fullPages(input: ConformanceScopeInput): ConformanceRequirement {
         + renderSentence(input) + activationSentence(input),
     };
   }
-  const detail = truncated.map((s) => `${s.type} (${s.stop})`).join(", ");
+  const detail = truncated.map((s) => {
+    const gloss = s.stop && Object.hasOwn(SWEEP_STOP_GLOSS, s.stop) ? SWEEP_STOP_GLOSS[s.stop as keyof typeof SWEEP_STOP_GLOSS] : undefined;
+    return gloss ? `${s.type} (${s.stop} -- ${gloss})` : `${s.type} (${s.stop})`;
+  }).join(", ");
   return {
     number: 2,
     name: "Full pages",
