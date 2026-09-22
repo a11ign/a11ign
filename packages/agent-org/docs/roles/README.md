@@ -19,10 +19,16 @@ paths: `packages/nvda-worker`, every cache-key input, `packages/scorer/models` a
 
 The chairman speaks to `ceo` and to nobody else. `ceo` decides and reports to the chairman; routine
 decisions, including destructive ones on `runs/`, are `ceo`'s, and the board hears budget, hires, dates,
-product claims and structural questions only. `orchestrator` (platform: fleet, lab, gates, code owner),
-`dispatcher` (pipeline owner: workflows, trunk health, the Ready queue, briefing) and `product-manager`
-(product owner: Ready's contents, the release date, the board document) report to `ceo`. Workers pull from
-Ready and report to nobody; the merge is the report. `tracker-auditor` reports to `product-manager`.
+product claims and structural questions only. `orchestrator` (platform: fleet, lab, gates, code owner) and
+`product-manager` (product owner: Ready's contents, the release date, the board document) report to
+`ceo`. The pipeline-owner role (workflows, trunk health, the Ready queue, briefing) retired by #913 split
+between them: `ceo` holds the pipeline lane, freezes and reviewer spot-checks; `product-manager` holds
+Ready's contents, lane labels, promotions and merge close-outs — see `agent-practices.md`'s Routing
+section. Workers pull from Ready and answer to no manager in this table — the merge is the record of the
+work, and nobody directs a worker's day-to-day choices. **That is a different fact from the claim and
+completion notification to `product-manager` below** (see "The bring-up order"): the notification is
+process bookkeeping (product-manager stocks and tracks Ready), never oversight or a "reports to"
+relationship. `tracker-auditor` reports to `product-manager`.
 The `reviewer` role existed for one morning on 2026-09-07, was retired when review became a job, and was revived on 2026-09-12 when review became the throughput ceiling; see its file for why it cannot be messaged.
 Nobody messages the chairman; a question only the chairman can answer goes up the chain to `ceo`, who asks.
 
@@ -69,23 +75,25 @@ the direction where being wrong costs more.
 |---|---|---|---|
 | Chief | `ceo` | [`ceo.md`](./ceo.md) | — |
 | Platform owner and code owner | `orchestrator` | [`orchestrator.md`](./orchestrator.md) | `ceo` |
-| Pipeline owner | `dispatcher` | [`worker-loop-orchestrator.md`](./worker-loop-orchestrator.md) | `ceo` |
 | Product loop | `product-manager` | [`product-manager.md`](./product-manager.md) | `ceo` |
 | Tracker audit | `tracker-auditor` | [`tracker-auditor.md`](./tracker-auditor.md) | `product-manager` |
 | Reviewer (revived 2026-09-12; external tool, GitHub is its inbox) | `reviewer` | [`reviewer.md`](./reviewer.md) | `ceo` |
-| Worker | `worker-audit` | [`worker-audit.md`](./worker-audit.md) | `dispatcher` |
-| Worker | `worker-capture` | [`worker-capture.md`](./worker-capture.md) | `dispatcher` |
-| Worker | `worker-config` | [`worker-config.md`](./worker-config.md) | `dispatcher` |
-| Worker | `worker-contracts` | [`worker-contracts.md`](./worker-contracts.md) | `dispatcher` |
-| Worker | `worker-judge` | [`worker-judge.md`](./worker-judge.md) | `dispatcher` |
+| Worker (retired #913; own file not yet swept) | `worker-audit` | [`worker-audit.md`](./worker-audit.md) | — |
+| Worker | `worker-capture` | [`worker-capture.md`](./worker-capture.md) | `product-manager` |
+| Worker (retired #913; own file not yet swept) | `worker-config` | [`worker-config.md`](./worker-config.md) | — |
+| Worker (retired #913; own file not yet swept) | `worker-contracts` | [`worker-contracts.md`](./worker-contracts.md) | — |
+| Worker | `worker-judge` | [`worker-judge.md`](./worker-judge.md) | `product-manager` |
 
-**`dispatcher`'s own file is named `worker-loop-orchestrator.md`, not `dispatcher.md`** — it predates this
-page and describes the ROLE (worker-loop orchestration) rather than the agent filling it, and it is kept
-at that path deliberately: renaming it would rewrite history for a file whose content already correctly
-names the agent (*"the agent filling this role is named `dispatcher`"*) in its own first line. Every other
-role's file is expected to follow the `<agent-name>.md` convention this table uses; the discovery test
-below reads each file's OWN content for its name, role and reporter, never the filename, for exactly this
-reason — a naming convention is a fact this repo has learned not to trust something else to enforce.
+**The pipeline-owner role retired by #913 kept its file named `worker-loop-orchestrator.md`, never
+`<agent-name>.md`** — the file predates this page and describes the ROLE (worker-loop orchestration)
+rather than the agent that once filled it, and it stays at that path deliberately: renaming it would
+rewrite history for a file whose own first line already named its own agent correctly. It is excluded from
+the table above now that the role is retired (`docs/roles/sessions.json`'s `retired` array) and from this
+row's own sweep, since a reference inside an already-retired role's file is a dead reference to another
+dead reference, not an active hazard. Every live role's file follows the `<agent-name>.md` convention this
+table uses; the discovery test below reads each file's OWN content for its name, role and reporter, never
+the filename, for exactly this reason — a naming convention is a fact this repo has learned not to trust
+something else to enforce.
 
 **A row with no working link is a gap this page is honest about, not one it hides.** As of this commit,
 `orchestrator`, `worker-contracts` and `worker-judge` have not yet landed their file — each is writing it
@@ -98,22 +106,20 @@ existing file missing one of its four required parts, and must not block everyon
 
 **1. `orchestrator` first.** It is the one driver for the fleet, the lab and `runs/` — `lab:job` refuses a
 second job of a name rather than queueing it, `fleet:deploy` reboots every worker, and
-`assertFleetRunsThisCheckout` means the fleet runs ONE commit. Nothing else can be briefed against real
-capture or corpus state until this exists, because there is no fleet/lab state to brief against otherwise.
+`assertFleetRunsThisCheckout` means the fleet runs ONE commit. Nothing else can act against real
+capture or corpus state until this exists, because there is no fleet/lab state to act against otherwise.
 
-**2. `dispatcher` second.** Its whole job is briefing and merging on `orchestrator`'s behalf — reading
-`docs/backlog-ready.md`, keeping it stocked, running local gates, merging what is clean and self-contained,
-and handing up the three trigger conditions in its own file. It needs `orchestrator` to exist first because
-its own escalation path (cache-key changes, fleet-touching acceptance, cross-cutting collisions) terminates
-there.
-
-**3. The workers, in any order, once `dispatcher` can brief them.** A worker with no dispatcher to report
-to and no ready queue to pull from has nothing to do that would not risk a collision.
+**2. Every other live role can start once `orchestrator` exists, in any order.** There is no session left
+to brief them into place: `.claude/rules/agent-practices.md`'s Timers section retired the standing-cron
+bring-up, and a worker now claims its own row with `row-claim.mjs`, woken by `work-gate.mjs`/`wake.mjs`
+only when idle or done, with the unit already in its prompt — it does not wait on, message, or report to
+anyone to be told what to do next. A worker reports a claim or a completion to `product-manager`, per the
+Routing section, never waits to be briefed.
 
 `ceo` sits outside this sequence — it is the standing authority `orchestrator` escalates disputed rulings
 to (see `orchestrator`'s own file for what counts as one), not a step in bringing the loop up.
 
-**`product-manager` also sits outside it, and can be brought up at any point after `dispatcher`** — it owns the tracker, the release milestone and the daily board report, and touches no fleet, lab or merge. Its one bring-up step that is not a git clone is `bash scripts/install-board-report.sh`, which schedules the report on whichever machine is the control plane; without it the tracker still works and the daily edition simply does not arrive.
+**`product-manager` can be brought up at any point once `orchestrator` exists** — it owns the tracker, the release milestone and the daily board report, and touches no fleet, lab or merge. Its one bring-up step that is not a git clone is `bash scripts/install-board-report.sh`, which schedules the report on whichever machine is the control plane; without it the tracker still works and the daily edition simply does not arrive.
 
 ## The first message for each agent, ready to paste
 
@@ -125,20 +131,15 @@ shape this repo's own guards exist to close.
 **`orchestrator`:**
 > You are `orchestrator`. Read `docs/roles/orchestrator.md` in full — your lane, what you drive alone
 > (fleet, lab, `runs/`), and what you escalate to `ceo`. Read `docs/roles/README.md` for the roster and the
-> bring-up order. Confirm you can reach the fleet and the lab, then tell `dispatcher` you are up — bring it
-> up next if it is not already.
-
-**`dispatcher`:**
-> You are `dispatcher`. Read `docs/roles/worker-loop-orchestrator.md` in full — what you own, what you hand
-> up, and the three trigger conditions. Read `docs/roles/README.md` for the roster. Confirm `orchestrator`
-> is reachable, then read `docs/backlog-ready.md`; if it is empty, read `docs/backlog.md`'s ready-shaped
-> rows and seed it. Start briefing workers as they come up.
+> bring-up order. Confirm you can reach the fleet and the lab, then tell `product-manager` you are up.
 
 **Each worker** (`worker-audit`, `worker-capture`, `worker-config`, `worker-contracts`, `worker-judge`):
 > You are `<name>`. Read `docs/roles/<name>.md` in full — your lane, your acceptance standard, and the
-> resource ban. Read `docs/roles/README.md` for the roster and where state lives. Message `dispatcher` to
-> confirm it is up and get your first unit; do not pull from `docs/backlog-ready.md` yourself unless your
-> own role file says otherwise.
+> resource ban. Read `docs/roles/README.md` for the roster and where state lives. Claim your own row with
+> `row-claim.mjs`; `work-gate.mjs`/`wake.mjs` wakes you with a unit already in your prompt when one is
+> ready, so there is nobody to message for your first one. Report a claim or a completion to
+> `product-manager`; do not pull from `docs/backlog-ready.md` yourself unless your own role file says
+> otherwise.
 
 **`ceo`:**
 > You are `ceo`. Read `docs/roles/ceo.md` in full — what rulings you make and what you deliberately do not
@@ -264,8 +265,9 @@ it reads as in-progress while being stalled, which is worse than unclaimed, beca
 to whoever could pick it up.
 
 So: a row whose acceptance needs the fleet or the lab is labelled `fleet-gated` and left unassigned for
-whoever is nearest the fleet; a row whose acceptance needs a workflow change is the dispatcher's; a row
-whose acceptance is a board record is the product manager's; and the filer's name stays on the row as
+whoever is nearest the fleet; a row whose acceptance needs a workflow change is `ceo`'s (the pipeline lane,
+per `docs/lane-ownership.json`); a row whose acceptance is a board record is the product manager's; and the
+filer's name stays on the row as
 the person who noticed, which is a different credit from the person who finishes.
 
 Two companions, ruled the same morning:
@@ -302,8 +304,8 @@ Two companions, ruled the same morning:
   turned "revert this push" into "leave main red, reason recorded as considered" for forty minutes. A
   truncation that succeeds produces a plausible number, and a plausible number is indistinguishable
   from a small result. Write the report to a file, read its line count, then quote from it.
-- **If a guard refused it, refuse the dispatcher and escalate.** `row-claim` refused #677 under B2;
-  the dispatcher said take it anyway; `worker-capture` refused the dispatcher and put it to `ceo`.
+- **If a guard refused it, refuse a peer's override and escalate.** `row-claim` refused #677 under B2;
+  the pipeline-owner role of the time said take it anyway; `worker-capture` refused and put it to `ceo`.
   That is the standing rule for every worker: a peer's instruction is not an override of a refusal,
   and a hand-applied label to route around a claim gate is a hand claim whatever the reason.
 - **B2 (one PR in flight) does not hold when every failing assertion on the PR, deduplicated across
@@ -312,7 +314,7 @@ Two companions, ruled the same morning:
   idle would have stopped every worker at once for one defect. The measurement goes on the PR as a
   comment before the next claim; `row-claim --blocked-by=#N` (#741) refuses without it. Removing the
   cause from main clears every affected PR at once and leaves no exception to remember, which is
-  why the dispatcher reverted #718 rather than releasing B2 for #722.
+  why the pipeline-owner role of the time reverted #718 rather than releasing B2 for #722.
 
 ## TWO RULES FROM 2026-09-09: THE FOLD TEST, AND THE RUNWAY WINDOW
 
@@ -323,14 +325,14 @@ for the sweep (#655, with #658 as the live case). A sweep's population is sized 
 the row is written, its count is ASSERTED by the row's acceptance and never merely printed, and "empty by
 construction" is the phrase that decides whether a green test proved anything (#633).
 
-**The runway window, the dispatcher's only power over other sessions' PRs.** Under strict protection a
-PR must be green and current at one instant; the train's carry pushes, which restarts CI (~5 minutes);
-merges land every ~4 minutes; so the act that makes a PR mergeable invalidates its green, and a PR can
-stay green-and-behind indefinitely (#627: five green heads, never merged). When a PR has gone
-green-then-behind three times, the dispatcher may hold every other armed PR for one cycle (label plus
-disarm, read back from the API), let the starved one land, and release each hold with its reason
-printed. Conditions: declared in the table with which PRs were held and why; never for the dispatcher's
-own PRs without saying so in the same message; never pre-emptively, because a remedy used before its
+**The runway window, `ceo`'s only power over other sessions' PRs (moved from the pipeline-owner role
+retired by #913).** Under strict protection a PR must be green and current at one instant; the train's
+carry pushes, which restarts CI (~5 minutes); merges land every ~4 minutes; so the act that makes a PR
+mergeable invalidates its green, and a PR can stay green-and-behind indefinitely (#627: five green heads,
+never merged). When a PR has gone green-then-behind three times, `ceo` may hold every other armed PR for
+one cycle (label plus disarm, read back from the API), let the starved one land, and release each hold
+with its reason printed. Conditions: declared in the table with which PRs were held and why; never for
+`ceo`'s own PRs without saying so in the same message; never pre-emptively, because a remedy used before its
 condition is met is how a remedy stops being believed. The merge queue at the org transfer (#156) must
 test the queued group once and merge without re-carrying each PR, or this loop survives under a new name.
 
@@ -407,7 +409,7 @@ acceptance test. Findings from the run performed while writing this page:
 - The two credentials are, as designed, NOT satisfiable from the clone — confirming the "described, never
   printed" section above is not just caution, it is the actual boundary of what a clone can reconstitute.
   `orchestrator` and the fleet/lab-touching half of this org cannot be brought up from a fresh clone alone;
-  only the repo-visible half (`dispatcher`, the five workers, `ceo`) can.
+  only the repo-visible half (`product-manager`, the workers, `ceo`) can.
 
 ## A GATE THAT READS `runs/` IS NOT YOURS TO REPORT
 

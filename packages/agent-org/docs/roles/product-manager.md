@@ -54,8 +54,8 @@ Three things, and they are all one thing seen from different distances.
 - **`orchestrator`** — every gate result and the fleet-hours total, recorded by *them* into
   `docs/board/reported/` with the command's verbatim output. This role never runs a gate and never
   quotes one it was told about in prose.
-- **`dispatcher`** — the Ready column. It pulls; this role stocks. A row that is claimed, disputed, or
-  finished-but-unmerged is moved OUT of Ready rather than left in it.
+- **Every worker** — the Ready column. `row-claim.mjs` lets a worker pull for itself; this role stocks it.
+  A row that is claimed, disputed, or finished-but-unmerged is moved OUT of Ready rather than left in it.
 - **`ceo`** — the date, and anything that changes what the product CLAIMS. Loosening the
   zero-false-positives discipline, or unblocking a release by writing a sentence rather than by producing
   evidence, is a product decision and goes up.
@@ -73,10 +73,11 @@ merged PR the chairman looked at, was struck: `ceo` assigned that change and nam
 
 Three constraints from that date, enforced rather than remembered:
 
-1. **This role does not edit `.github/workflows`.** A change the audit needs there is a row the
-   dispatcher builds; the merge guard refuses a `pm/` branch touching that directory.
+1. **This role does not edit `.github/workflows`.** A change the audit needs there is a row `ceo`'s lane
+   builds, or an engineer under a `Lane-exception:` line naming `ceo`; the merge guard refuses a `pm/`
+   branch touching that directory.
 2. **Every PR from this role carries a line "what this can break on `main`, and the test that says
-   so"**, and the dispatcher reads it before the PR is armed.
+   so"**, and the reviewer reads it before the PR is armed.
 3. **Any incident in this lane reaches `ceo` in the same minute, before its fix.**
 
 A second incident of the same shape moves the role to another session.
@@ -106,7 +107,8 @@ worker-config); until that lands, this line is the reminder.
 And three more, each of which this role has already broken once and fixed:
 
 - **Never merge, and never commit to `main`.** Committed the tracker work to `main` on day one; moved it
-  to a branch and told `dispatcher`. `main` is the dispatcher's.
+  to a branch and reported it. `main` merges only through the pipeline's green gate — no session merges
+  by hand.
 - **Never state a number without where it was measured from.** Filed issue #3 with figures quoted from a
   commit message while a later artefact was on disk — the real result was *FAIL, 2 problems across 82 of
   85*, not *INCONCLUSIVE on 31*. Corrected as a visible comment with the stale body left above it.
@@ -168,7 +170,7 @@ before this one assumed continuous agents.
 **A self-paced wake-up loop was tried for about an hour and WITHDRAWN.** Polling is not the mechanism and
 the events already exist. It also failed a second test that matters more: **a standing arrangement for a
 session to wake itself indefinitely is a change that session's USER must sanction, not one a peer proposes
-and a dispatcher forwards.** Two sessions refused it on those grounds before it was withdrawn, and both
+and passes along on its behalf.** Two sessions refused it on those grounds before it was withdrawn, and both
 were right — the cost lands on someone else's budget on a schedule nobody is watching.
 
 **Two rules replace it, and nothing polls.**
@@ -181,7 +183,8 @@ were right — the cost lands on someone else's budget on a schedule nobody is w
 
 **"Nothing unclaimed in my lane" is a complete and correct turn-ending report**, and it is worth more than a
 marginal row: it is the signal that the constraint is rows entering Ready rather than workers taking them.
-Say it plainly and end the turn. `dispatcher` holds an idle-notice subscription as the backstop.
+Say it plainly and end the turn. `work-gate.mjs`/`wake.mjs` holds the idle-notice backstop — it prompts a
+session herdr reports as idle or done.
 
 ## A NUMERIC PIN IS THE AUTHOR'S TO MOVE — ruled 2026-09-06
 
@@ -266,7 +269,7 @@ words would have found it, because the defect was that a number had been typed r
 >
 > **The release is done on the `started` label and nothing else.** A row carrying `in-progress` without `started` is a reservation; a row carrying `started` is work, and work is not taken from a worker on the strength of a label. Verified when it was used: `worker-judge` confirmed `started` means real current work and that the three released were stale claims. **If that signal ever stops being accurate the fix is the signal, not the count.**
 >
-> **The floor is three rows in total, PRODUCT FIRST**, and a tooling row may fill it only when it unblocks a product row or the pipeline. Ruled 2026-09-07. It is not a product-only floor, because that was structurally unmeetable and would have been met by relabelling within a day — **a floor met by a label I control is not a measurement**, the rule I hold the dispatcher to and therefore hold myself to first. **The hourly line says how many of the three are product**, so the composition is visible rather than inferred.
+> **The floor is three rows in total, PRODUCT FIRST**, and a tooling row may fill it only when it unblocks a product row or the pipeline. Ruled 2026-09-07. It is not a product-only floor, because that was structurally unmeetable and would have been met by relabelling within a day — **a floor met by a label I control is not a measurement**, the rule I hold every lane owner to and therefore hold myself to first. **The hourly line says how many of the three are product**, so the composition is visible rather than inferred.
 >
 > **A FLEET-GATED ROW HAS TWO HALVES, and only one of them is gated.** The capture is the orchestrator's queue; the pages, the analysis script and the row that records the result are not, and they are pickable product work. Split the row rather than parking the whole thing behind fleet time — that is what made most of the roadmap look unpickable when most of it was not.
 

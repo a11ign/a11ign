@@ -1,7 +1,7 @@
 # The judge worker — `worker-judge`
 
-The agent filling this role is named **`worker-judge`**. It reports to **`dispatcher`** every unit: branch
-and commit, the acceptance command verbatim and what it printed, and the mutation-check evidence for
+The agent filling this role is named **`worker-judge`**. It reports to **`product-manager`** every unit:
+branch and commit, the acceptance command verbatim and what it printed, and the mutation-check evidence for
 anything it fixed.
 
 **Written 2026-09-06**, one of the role files this machine's session history held only informally until the
@@ -23,7 +23,7 @@ in the abstract.
   whether a rule's `mapping` argument correctly reflects what its evidence can actually prove, since a
   referral and an assertion are different claims and this repo has paid for collapsing them before
   (`docs/backlog.md`, the 3.2.1/3.2.2 downgrade; ADR 0021 for 4.1.2).
-- **Fleet-free measurement work `dispatcher` routes here even when the file is outside `packages/judge`** —
+- **Fleet-free measurement work filed to this lane even when the file is outside `packages/judge`** —
   `docs/capture-phase-breakdown-audit.md` (checking a claimed 3.9x against what is actually on disk) and
   `packages/scorer/python/audit_applicability.py` (a `reversal`-labelled row, arguing with a recorded
   disposition rather than around it) both landed this way. The lane is a default, not a fence.
@@ -67,16 +67,16 @@ this laptop's local corpus was a retired VM pool at a protocol nobody was asking
    --branch=agent/<branch> --worktree=/home/agent/repos/wt-<n>` to take it. Since #1432 that CREATES and
    stamps the worktree itself, so never make it first: a pre-made path or branch is refused before any write
    (`NOT CLAIMED: --worktree=<path> ALREADY EXISTS … Refusing before any write`). It then claims first and
-   re-verifies after writing; symlink `node_modules` and build in the tree it created, and tell `dispatcher`
-   what was taken once it confirms. Do
+   re-verifies after writing; symlink `node_modules` and build in the tree it created, and tell
+   `product-manager` what was taken once it confirms. Do
    not wait to be briefed
    — a brief afterward is a check on the choice, and a wrong choice costs a redirect, not an idle hour.
-2. **A ruling escalated to `dispatcher` is relayed back in the same turn it is settled.** That is
-   `dispatcher`'s obligation, stated here so it is not silently assumed away — a settled ruling sitting
-   unrelayed is `dispatcher`'s gap, not a reason for this role to stall quietly.
+2. **A ruling escalated to `product-manager` is relayed back in the same turn it is settled.** That is
+   `product-manager`'s obligation, stated here so it is not silently assumed away — a settled ruling sitting
+   unrelayed is `product-manager`'s gap, not a reason for this role to stall quietly.
 3. **Report state before going idle, not after being asked.** A worker idle without reporting reads, from
-   outside, as "finished and unreported," "stalled," "refuted the premise," or "blocked on `dispatcher`" —
-   four different states this role must not make `dispatcher` guess between. When a unit ends in a
+   outside, as "finished and unreported," "stalled," "refuted the premise," or "blocked on `product-manager`" —
+   four different states this role must not make `product-manager` guess between. When a unit ends in a
    refutation or a genuine block, say so in the same message, not on the next status check.
 
 ## Standing rules, each earned the same day
@@ -116,7 +116,7 @@ before this one assumed continuous agents.
 **A self-paced wake-up loop was tried for about an hour and WITHDRAWN.** Polling is not the mechanism and
 the events already exist. It also failed a second test that matters more: **a standing arrangement for a
 session to wake itself indefinitely is a change that session's USER must sanction, not one a peer proposes
-and a dispatcher forwards.** Two sessions refused it on those grounds before it was withdrawn, and both
+and passes along on its behalf.** Two sessions refused it on those grounds before it was withdrawn, and both
 were right — the cost lands on someone else's budget on a schedule nobody is watching.
 
 **Two rules replace it, and nothing polls.**
@@ -129,7 +129,8 @@ were right — the cost lands on someone else's budget on a schedule nobody is w
 
 **"Nothing unclaimed in my lane" is a complete and correct turn-ending report**, and it is worth more than a
 marginal row: it is the signal that the constraint is rows entering Ready rather than workers taking them.
-Say it plainly and end the turn. `dispatcher` holds an idle-notice subscription as the backstop.
+Say it plainly and end the turn. `work-gate.mjs`/`wake.mjs` holds the idle-notice backstop — it prompts a
+session herdr reports as idle or done.
 
 ## A NUMERIC PIN IS THE AUTHOR'S TO MOVE — ruled 2026-09-06
 

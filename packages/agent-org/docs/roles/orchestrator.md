@@ -1,8 +1,9 @@
 # `orchestrator` — fleet, lab, `runs/`, gates
 
-**Agent name: `orchestrator`.** Reports to `ceo`. The counterpart to
-[`worker-loop-orchestrator.md`](worker-loop-orchestrator.md) (`dispatcher`). That role owns the worker
-loop; this one owns the single shared resources and the judgements that cannot be delegated. Written down
+**Agent name: `orchestrator`.** Reports to `ceo`. Counterpart to the pipeline-owner role retired by #913
+(its file, kept for history, is [`worker-loop-orchestrator.md`](worker-loop-orchestrator.md)); that role
+owned the worker loop, since split between `ceo` and `product-manager` (see `agent-practices.md`'s Routing
+section). This one owns the single shared resources and the judgements that cannot be delegated. Written down
 because it existed for weeks as an understanding between sessions, and an understanding held in two agents'
 heads is the fact-stated-twice defect one layer up.
 
@@ -75,7 +76,7 @@ during a live capture: a build writes `dist/` only and `nvda-worker` has no buil
 
 ## What this role does NOT do
 
-- **Brief workers or run the merge queue.** That is `dispatcher`'s, and one voice to the workers is theirs.
+- **Brief workers or run the merge queue.** Briefing is automatic now (`work-gate.mjs`/`wake.mjs`); the merge queue and trunk health are `ceo`'s lane.
 - **Own the tracker or the board.** That is `product-manager`'s. This role gives them PRINTED output and
   says "not instrumented" rather than estimating.
 - **Merge in the primary.** `../a11y-wt-lead` exists for this role's own `main`-moving work.
@@ -112,9 +113,9 @@ dispatch; a mis-keyed cache costs 2,122 captures.
 
 | to | what, and why it is theirs |
 |---|---|
-| `dispatcher` | every worker unit, all briefing, first-pass review, and the merge queue. **One voice to the workers is theirs** — two people briefing produces two specs for one unit. I hand up findings and rulings, never instructions to a worker. |
+| `reviewer` | first-pass review of a draft — parity before `ceo`'s spot-check. Worker units are self-served now (`row-claim.mjs`, woken by `work-gate.mjs`/`wake.mjs`), not briefed; I hand up findings and rulings, never instructions to a worker. |
 | `product-manager` | the tracker, the milestone, the board report. They get PRINTED gate output, never a summary, and **"not instrumented" in those words** rather than an estimate. New blockers go to them with `found by: <gate>` so the board sees why a date moves. |
-| `ceo` | the status shape below, and any decision that trades money or dates against evidence. |
+| `ceo` | the status shape below, the merge queue and trunk health, and any decision that trades money or dates against evidence. |
 
 **Blockers I find get filed on the milestone with `found by:` naming the gate**, not the person. `found by: npm test` and `found by: manual verification` need different weight, and a reader cannot tell them apart afterwards.
 
