@@ -119,6 +119,13 @@ def _interacted(field: str) -> Callable[[Record], bool]:
     return present
 
 
+def _all(*predicates: Callable[[Record], bool]) -> Callable[[Record], bool]:
+    """Every one of these must hold — for a subject that needs more than one necessary condition."""
+    def present(record: Record) -> bool:
+        return all(predicate(record) for predicate in predicates)
+    return present
+
+
 #: What each subtype's claim is ABOUT. Absent it, the subtype is inapplicable and is not scored.
 #:
 #: Subtypes deliberately absent from this table are always applicable, and that is a decision rather than
@@ -170,8 +177,24 @@ SUBTYPE_REQUIRES: dict[str, Callable[[Record], bool]] = {
     # precondition is that a state change occurred — not that one was spoken.
     "4.1.2:state-change-silent": _measured_state_change,
     # A claim about a form SUBMISSION. Same shape: the error being unspoken is the finding, so the
-    # precondition is that the form was submitted at all.
-    "3.3.1:validation-error-silent": _interacted("postSubmitFields"),
+    # precondition is that the form was submitted at all — but `postSubmitFields` alone is not that.
+    #
+    # #1878: a bare `<button type="button">` re-read after ANY `probeForms` activation also lands in
+    # `postSubmitFields` (as `"<control name>, button"`, no field role) — `waitingStatusPair`/
+    # `progressStatusPair`'s task buttons in `acceptance-matrix.mjs` do exactly this, with no `<input>`
+    # anywhere on the page. `_interacted("postSubmitFields")` alone read that as "a form was submitted",
+    # so three of their held-out cases (`b3-status-waiting-tree`, `status-progress-booking`, and
+    # `b3-button-market` off its own unrelated 2.1.1 submit) fired 3.3.1 on a subject the page never had.
+    # `validation_error_missing` already excludes them by requiring a field ROLE in `postSubmitFields`
+    # (`FORM_FIELD_ROLE`, never `button`) — but a linear head only ADDS, so that 0 cannot veto whatever
+    # else in the weighted combination reads these pages as positive; only a precondition can.
+    #
+    # The SUBJECT is a form having been submitted, which needs the page to carry an actual form field —
+    # a page-wide check, not limited to `postSubmitFields`, for the same reason `3.3.2:unnamed-form-field`
+    # reads `formFields` rather than the post-submit re-read: the field is the subject whether or not the
+    # re-read afterward captured it. Both conditions stay ANDed rather than swapping one for the other,
+    # so this cannot rule IN a page that has form fields somewhere but never actually submitted one.
+    "3.3.1:validation-error-silent": _all(_interacted("postSubmitFields"), _has("formFields")),
     "4.1.3:form-activation-silent": _measured_form_change,
 }
 

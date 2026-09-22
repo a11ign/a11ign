@@ -24,6 +24,7 @@ So:
   git -C <dir> fetch origin
   git -C <dir> worktree add --detach /private/tmp/rv-<PR> origin/<head-branch>
   ln -sfn <dir>/node_modules /private/tmp/rv-<PR>/node_modules
+  ln -sfn <dir>/.venv /private/tmp/rv-<PR>/.venv
   # ... review, running every command with `-C /private/tmp/rv-<PR>` or from inside it ...
   git -C <dir> worktree remove --force /private/tmp/rv-<PR>
   ```
