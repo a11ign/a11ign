@@ -73,8 +73,28 @@ test("a truncated sweep makes requirement 2 report INCOMPLETE examination", () =
     sweeps: [{ type: "heading", stop: "exhausted" }, { type: "link", stop: "cap" }],
   });
   assert.match(fullPages.limitation, /INCOMPLETE/);
-  assert.match(fullPages.limitation, /link \(cap\)/);
+  assert.match(fullPages.limitation, /link \(cap -- hit its own step limit before reaching the end of the page\)/);
   assert.match(fullPages.limitation, /not evidence they are correct/);
+});
+
+// Round 4 of #40's own jargon rounds (#1791/#1851/#1855) -- #1855's own blind read named two more bare
+// terms it could not resolve from the report alone: a sweep-stop code like `deadline`/`channelReset`/
+// `focusModeStuck`, and the Support line's unscaled cosine number. This is the first: every non-ran-out
+// stop reason must read as a sentence a stranger can act on, not just a code they have to look up.
+test("#1873: every truncated-sweep stop code is glossed in plain language, not left bare", () => {
+  const glossed: Record<string, RegExp> = {
+    cap: /cap -- hit its own step limit before reaching the end of the page/,
+    deadline: /deadline -- the capture's overall time budget ran out mid-sweep/,
+    error: /error -- a round trip to the screen reader failed/,
+    silent: /silent -- the screen reader stopped responding/,
+    channelReset: /channelReset -- the screen reader's speech log was rebuilt mid-sweep/,
+    focusModeStuck: /focusModeStuck -- the page trapped keyboard focus/,
+  };
+  for (const [stop, expected] of Object.entries(glossed)) {
+    const [, fullPages] = conformanceScope({ ...CLEAN, sweeps: [{ type: "link", stop }] });
+    assert.match(fullPages.limitation, expected,
+      `a stranger meeting a bare "${stop}" has no way to know what it means without this gloss`);
+  }
 });
 
 test("an untruncated run still admits iframes and post-interaction content", () => {
