@@ -1046,12 +1046,18 @@ export const ACCEPTANCE_CASES = Object.freeze([
   linkPair({ id: "b3-link-taxi", title: "Licensing office", context: "Taxi drivers renew their licence every year.", vague: "Go", descriptive: "Renew a taxi driver's licence", task: "Renew a taxi driver's licence." }),
   linkPair({ id: "b3-link-plot", title: "Growing plots", context: "A growing plot becomes free most winters.", vague: "Details", descriptive: "Join the growing plot waiting list", task: "Join the growing plot waiting list." }),
   linkPair({ id: "b3-link-noise", title: "Environmental health", context: "Noise complaints are logged by the environmental team.", vague: "Here", descriptive: "Log a noise complaint", task: "Log a noise complaint." }),
-  headingPair({ id: "b3-heading-recycling", title: "Recycling guide", vague: "Info", descriptive: "What goes in each bin", task: "Find what goes in each bin." }),
+  // #1852: "Info" is not a member of `GENERIC_HEADINGS` (that set has "information", not the
+  // abbreviation) -- exact-match semantics, confirmed intentional by that file's own comment, so a real
+  // but off-vocabulary vague word reads as a false NEGATIVE (measured: 0.0865 on `2.4.6:regex`,
+  // acceptance-report.json). "Updates" is an existing member.
+  headingPair({ id: "b3-heading-recycling", title: "Recycling guide", vague: "Updates", descriptive: "What goes in each bin", task: "Find what goes in each bin." }),
   headingPair({ id: "b3-heading-pool", title: "Pool guide", vague: "Notes", descriptive: "Lane swimming times", task: "Find the lane swimming times." }),
   headingPair({ id: "b3-heading-badge", title: "Blue Badge guide", vague: "Details", descriptive: "Who can apply for a Blue Badge", task: "Find who can apply for a Blue Badge." }),
   headingPair({ id: "b3-heading-flytipping", title: "Fly-tipping guide", vague: "Stuff", descriptive: "How to report fly-tipping", task: "Find how to report fly-tipping." }),
   headingPair({ id: "b3-heading-treework", title: "Tree work guide", vague: "Overview", descriptive: "When consent is required", task: "Find when consent is required." }),
-  headingPair({ id: "b3-heading-taxi", title: "Taxi licence guide", vague: "General", descriptive: "Documents needed to renew", task: "Find the documents needed to renew." }),
+  // #1852: same defect as recycling above -- "General" is not a `GENERIC_HEADINGS` member (measured:
+  // 0.0476 on `2.4.6:regex`). "Miscellaneous" is an existing member, unused elsewhere in this batch.
+  headingPair({ id: "b3-heading-taxi", title: "Taxi licence guide", vague: "Miscellaneous", descriptive: "Documents needed to renew", task: "Find the documents needed to renew." }),
   headingPair({ id: "b3-heading-plot", title: "Growing plot guide", vague: "Welcome", descriptive: "Joining the waiting list", task: "Find how to join the waiting list." }),
   headingPair({ id: "b3-heading-noise", title: "Noise complaints guide", vague: "Things", descriptive: "What counts as a statutory nuisance", task: "Find what counts as a statutory nuisance." }),
   fakeHeadingPair({ id: "b3-fake-recycling", title: "Waste services", label: "Collection days", task: "Find the collection days." }),
@@ -1091,7 +1097,12 @@ export const ACCEPTANCE_CASES = Object.freeze([
   iconPair({ id: "b3-icon-filters", title: "Filters", label: "Open filters", task: "Open filters." }),
   iconPair({ id: "b3-icon-menu", title: "Navigation menu", label: "Open menu", task: "Open the menu." }),
   iconPair({ id: "b3-icon-notifications", title: "Notifications", label: "Open notifications", task: "Open notifications." }),
-  iconPair({ id: "b3-icon-help", title: "Help", label: "Open help", task: "Open help." }),
+  // #1852: title was bare "Help" -- an exact member of `GENERIC_HEADINGS`
+  // (packages/scorer/python/screenreader_features.py) -- so the page's own <h1>/<h2> heading, not the
+  // icon button this case is actually about, scored 1.0 on the UNRELATED 2.4.6 vague-heading head on
+  // BOTH variants (measured: acceptance-report.json, `2.4.6:regex` falsePositiveScores). "Support
+  // centre" keeps the icon's own purpose realistic without colliding with that fixed vocabulary.
+  iconPair({ id: "b3-icon-help", title: "Support centre", label: "Open help", task: "Open help." }),
   iconPair({ id: "b3-icon-profile", title: "Account", label: "Open your account", task: "Open your account." }),
   iconPair({ id: "b3-icon-print", title: "Print", label: "Print this page", task: "Print this page." }),
   disclosurePair({ id: "b3-disclosure-badge", title: "Blue Badge", control: "Blue Badge eligibility", task: "Open the Blue Badge eligibility details." }),
