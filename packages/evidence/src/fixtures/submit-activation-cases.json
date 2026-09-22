@@ -1,0 +1,12 @@
+{
+  "_why": "#1918: ONE case table for `isSubmitActivation` (submit-activation.ts) and `_is_submit` (screenreader_features.py). Both languages' tests read this file, so a change to either predicate that the other lacks fails a test.",
+  "cases": [
+    { "name": "a button named like a submit", "change": { "kind": "submit" }, "submit": true },
+    { "name": "a named submit the listener saw no event for keeps its pre-21 reading", "change": { "kind": "submit", "submitted": false }, "submit": true },
+    { "name": "a task-named button that measurably submitted a form (the #1918 shape)", "change": { "kind": "taskButton", "submitted": true }, "submit": true },
+    { "name": "a task-named button that dispatched no submit (a filter)", "change": { "kind": "taskButton", "submitted": false }, "submit": false },
+    { "name": "a task-named button nobody could measure (every pre-21 capture)", "change": { "kind": "taskButton" }, "submit": false },
+    { "name": "a disclosure (apache.org's search toggle)", "change": { "kind": "disclosure" }, "submit": false },
+    { "name": "a toggle", "change": { "kind": "toggle", "submitted": false }, "submit": false }
+  ]
+}

@@ -1010,9 +1010,20 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
     # Absent `kind` is treated as a submit, deliberately: captures older than protocol 8 carry no `kind`,
     # and reading their absence as "not a submit" would silently make this feature deaf on every one of
     # them -- absence read as a negative, which is the defect this whole schema revision is about.
+    #
+    # #1918: and `kind` is only the button's NAME. A real submit named for its task ("Apply for a berth")
+    # is recorded `taskButton`, so this read 0 on 3 of the 14 held-out positives in each acceptance repeat.
+    # `_is_submit` also accepts a MEASURED submit (`submitted: true`, protocol 21). It does not accept
+    # `taskButton` alone: that would make 26 silent 4.1.3 filter positives in the training corpus read 1
+    # here (measured 2026-09-22).
+    #
+    # NO SCHEMA BUMP, for the reason the errored-state-change fix above gives: no record captured before
+    # protocol 21 carries `submitted`, so this reads identically on every one of them, the training corpus
+    # included, and no weight file is scored against inputs it was not fitted to. The change shows only on
+    # a capture that measured a submit, which is what the recapture under 21 produces.
     submitted_silently = [
         change for change in soundly_measured(readable_form_changes)
-        if change.get("kind", "submit") == "submit" and not change.get("after", "").strip()
+        if _is_submit(change) and not change.get("after", "").strip()
     ]
     values["validation_error_missing"] = float(
         any(FORM_FIELD_ROLE.search(value) for value in post_submit_fields)
@@ -1029,6 +1040,16 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
     values["unnamed_graphic_present"] = float(any(UNNAMED_GRAPHIC.search(value) for value in all_evidence(record)))
     values["filename_graphic_present"] = float(any(FILENAME_GRAPHIC.search(value) for value in all_evidence(record)))
     return values
+
+
+def _is_submit(change: dict) -> bool:
+    """Was this form change a form SUBMIT? `isSubmitActivation` (`packages/evidence`) in Python, run against
+    the same case table (`packages/evidence/src/fixtures/submit-activation-cases.json`).
+
+    One deliberate difference: an absent `kind` reads as a submit here, for pre-protocol-8 captures (see the
+    comment at the call site). The TS consumers never had that reading.
+    """
+    return change.get("kind", "submit") == "submit" or change.get("submitted") is True
 
 
 def _onnx_encode(texts: list[str], encoder_root: Path, max_length: int):

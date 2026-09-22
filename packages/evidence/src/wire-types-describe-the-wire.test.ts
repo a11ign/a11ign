@@ -302,6 +302,7 @@ test("#1616 every formChanges field the producer writes is declared, and none of
   const { keys: written, nulls } = literalFields(body);
   const declared: Required<FormChange> = {
     control: "", after: "", kind: "", baselineQuiet: false, baselineWaitedMs: 0, afterUnresolved: false,
+    submitted: false,
   };
   assert.ok(written.length > 0, "#1123: the formChanges fields read from the producer are empty -- the extraction is blind");
   const undeclared = written.filter((key) => !Object.keys(declared).includes(key));

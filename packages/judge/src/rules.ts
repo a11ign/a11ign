@@ -25,7 +25,7 @@
  */
 import type { Channel, CaptureInteraction, CaptureStructure } from "@a11ign/evidence";
 import type { PageCensus, DomCensus, ProbeStates, Completeness } from "@a11ign/evidence/verify";
-import { parseAnnouncement, sameControlAnnounced } from "@a11ign/evidence";
+import { isSubmitActivation, parseAnnouncement, sameControlAnnounced } from "@a11ign/evidence";
 // The ONE list of criteria the rules may emit. Imported rather than restated: writing a second
 // copy here is the defect this file has recorded five times, and I made it once before deleting it.
 import { RULE_CRITERIA } from "./coverage.js";
@@ -591,7 +591,7 @@ const REMEDY_INSTRUCTION =
 
 function addErrorWithoutRemedy(input: RuleInput, add: AddFinding): void {
   const changes = input.interaction?.formChanges ?? [];
-  const submitted = changes.filter((change) => change.kind === "submit");
+  const submitted = changes.filter(isSubmitActivation); // #1918: measured or named, never the name alone
   if (!submitted.length) return;
   const spoken = [
     // #1105: `afterUnresolved` means `after` is NVDA's "unknown" placeholder for a document title that
