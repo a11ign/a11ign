@@ -24,8 +24,11 @@ product claims and structural questions only. `orchestrator` (platform: fleet, l
 `ceo`. The pipeline-owner role (workflows, trunk health, the Ready queue, briefing) retired by #913 split
 between them: `ceo` holds the pipeline lane, freezes and reviewer spot-checks; `product-manager` holds
 Ready's contents, lane labels, promotions and merge close-outs — see `agent-practices.md`'s Routing
-section. Workers pull from Ready and report to nobody; the merge is the report. `tracker-auditor` reports
-to `product-manager`.
+section. Workers pull from Ready and answer to no manager in this table — the merge is the record of the
+work, and nobody directs a worker's day-to-day choices. **That is a different fact from the claim and
+completion notification to `product-manager` below** (see "The bring-up order"): the notification is
+process bookkeeping (product-manager stocks and tracks Ready), never oversight or a "reports to"
+relationship. `tracker-auditor` reports to `product-manager`.
 The `reviewer` role existed for one morning on 2026-09-07, was retired when review became a job, and was revived on 2026-09-12 when review became the throughput ceiling; see its file for why it cannot be messaged.
 Nobody messages the chairman; a question only the chairman can answer goes up the chain to `ceo`, who asks.
 
