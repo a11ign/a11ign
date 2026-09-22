@@ -283,7 +283,17 @@ GENERIC_HEADINGS = {"welcome", "overview", "stuff", "things", "information", "no
 # surrounding context rescue them. See `vague_link_lacks_context` below, which computes the CONJUNCTION
 # this feature alone cannot represent, and that function's own header for why the un-conjoined version was
 # removed as a model input (fired on 22 of 44 conformant pages carrying "Details" inside a peer index).
-VAGUE_LINKS = {"read more", "learn more", "click here", "here", "this", "that", "details", "more", "go", "info"}
+VAGUE_LINKS = {
+    "read more", "learn more", "click here", "here", "this", "that", "details", "more", "go", "info",
+    # "click" alone (#1883): the raw NVDA transcript for the acceptance corpus's one two-word
+    # `vague` fixture (`b3-link-badge`, HTML text "Click here") is `"link, Click"` on both repeats
+    # (`runs/screenreader-acceptance/repeat-1.jsonl` and `repeat-2.jsonl`, captured 2026-09-22, two
+    # different fleet workers) -- confirmed against the other eleven `linkPair` fixtures, every one
+    # single-word, which all announce and match exactly. A bare "Click" gives no more indication of
+    # a link's destination than "Here" or "Go" already in this set, so it belongs on the same class
+    # of unrescuable-by-context vague names, independent of why NVDA announced it that way here.
+    "click",
+}
 
 GENERIC_GRAPHICS = {"photo", "image", "graphic", "picture"}
 
