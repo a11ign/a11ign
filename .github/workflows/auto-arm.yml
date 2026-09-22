@@ -210,6 +210,48 @@ jobs:
     # when a bootstrap script reaches for a workspace package.
     # #1103: not on workflow_run -- a gate completing changes nothing this job reads, and every `ci`
     # completion would otherwise add a run to the runs-per-merge count the CI reset measures.
+    #
+    # ## EXIT 2 (`CANNOT_ASK`) IS NOT A CLAIM ABOUT A PR, SO IT MUST NOT RED-CHECK ONE -- #1970
+    #
+    # This job asks ONE repo-wide question -- which open PRs is nothing arming? -- and it rides whichever
+    # `pull_request` event happened to fire. `EXIT.COULD_NOT_ARM` (1) means "I looked, and THESE PRs could
+    # not be armed": a finding, with PRs named. `EXIT.CANNOT_ASK` (2) means "I could not look": a claim
+    # about the API, with no PR in it. GitHub renders both identically, as a failed check on the PR whose
+    # event triggered the run -- a PR the sweep never listed, never read and never decided anything about.
+    #
+    # Measured 2026-09-22: `A11IGN_BOT_TOKEN`'s identity had its GraphQL pool exhausted ("API rate limit
+    # already exceeded for user ID 46429371"), so the sweep's very first call -- the `gh pr list` -- failed
+    # and it exited 2. TEN runs between 18:45:53Z and 19:10:08Z, charged as a red `sweep` to SEVEN distinct
+    # heads, a push on `main` among them. Not a transient: the failed job on run 35769346101 was re-run by
+    # hand at 19:03:51Z and failed identically.
+    #
+    # The script cannot fix this. It is handed no event, no triggering PR number and no notion that it is
+    # running inside a check context at all; the misattribution is a property of a repo-wide job running in
+    # a PER-PR CHECK context, which is a fact only THIS FILE holds (ceo's ruling on #1970, 2026-09-22 --
+    # `auto-arm-sweep.mjs` comes out of that row unchanged). `sweep` meets every clause of the
+    # `update-branch` category below but the trigger: it acts on OTHER open PRs, never on the triggering
+    # PR's own head, and it gates nothing -- `main`'s protection requires exactly one context, `gate`, and
+    # `sweep` is not in it. So a red run here withholds nothing, and charging one to a diff that did not
+    # earn it is the worst possible input to #600's absorbing state, where the train carries only green PRs
+    # and a PR red for one merge cycle can never catch up.
+    #
+    # WHAT MUST NOT HAPPEN IS SILENCE. #382's rule, already quoted in this file's `A11IGN_BOT_TOKEN`
+    # section: a job that cannot do its intended work must say which path it took, not go silent. So exit 2
+    # emits an `::error::` naming the outage and the path taken, and only THEN exits 0. A bare `|| true`
+    # fails `auto-arm-sweep.test.ts`, which runs this step's own text against a stubbed script.
+    #
+    # EXIT 1 IS UNTOUCHED AND STAYS RED. It names PRs, somebody must act on it, and red is how this repo
+    # makes an unarmed PR loud. Exit 1 carries a misattribution of its own -- a PR that `COULD_NOT_ARM` is
+    # generally not the PR whose event triggered the sweep either -- and #1970 deliberately did not widen
+    # into it: that is a different trade and wants its own measurement first.
+    #
+    # THE TWO ARE TOLD APART BY THE EXIT CODE, NEVER BY THE LOG TEXT. The script states the rule for the
+    # mirror case itself, in `mergedMeanwhile`: "THE STATE IS READ, NEVER THE EXIT CODE ... the message
+    # text cannot be trusted to tell them apart." Here the exit code IS the state. Matching `rate limit`
+    # out of stderr would re-import the guessing this change exists to remove, and would miss CANNOT_ASK's
+    # OTHER producer entirely: an unset `GITHUB_REPOSITORY`, a misconfigured job rather than a credential
+    # outage. That case is annotated and non-red here too, on the same argument -- it is not a claim about
+    # the triggering PR either -- and it stays exit 2 from the script, so every other caller still sees it.
     if: github.event_name != 'workflow_run'
     runs-on: ubuntu-latest
     steps:
@@ -226,7 +268,18 @@ jobs:
             echo "::warning::A11IGN_BOT_TOKEN is not set -- arming with GITHUB_TOKEN instead. A merge completed with it fires no workflow events (trunk.yml's closeRows, watchdogs and trunkGate/trunkBuildTest/decideRevert chain) -- see #416. And arming with it fires no auto_merge_enabled run, so update-branch does not sweep on arming and #1094 returns with no log line -- see #1094."
             export GH_TOKEN="$FALLBACK_TOKEN"
           fi
-          node packages/agent-org/src/auto-arm-sweep.mjs
+          # `|| status=$?` and not a bare call: the default shell is `bash -e`, which would abort the step
+          # before this can read the code. A command on the left of `||` does not trigger errexit.
+          status=0
+          node packages/agent-org/src/auto-arm-sweep.mjs || status=$?
+          # 2 is EXIT.CANNOT_ASK, whose meaning `auto-arm-sweep.mjs`'s header states as a contract:
+          # `2  a lookup failed. INCONCLUSIVE, never "fine"`. The CODE is read, never the message -- see
+          # this job's own comment above for why matching the text would re-import the defect.
+          if [ "$status" -eq 2 ]; then
+            echo "::error::CANNOT_ASK (exit 2): the sweep could not LIST the open pull requests, so it examined NO pull request at all -- including whichever one's event triggered this run. Nothing was armed for the duration of this run, and the standing queue is UNKNOWN, not drained. The CANNOT ASK line above names the lookup that failed; the two causes are an exhausted API rate limit pool for the arming identity, and an unset GITHUB_REPOSITORY. Reported as an annotation and deliberately NOT failed as a per-PR check, because this job asks a repo-wide question, acts only on OTHER PRs and gates nothing -- see #1970."
+            exit 0
+          fi
+          exit "$status"
 
   stalled:
     # NAME THE ARMED, GREEN PRs THAT CAN NEVER MERGE -- #361, the gap `sweep` above closes at the OTHER
