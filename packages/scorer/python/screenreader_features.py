@@ -1016,6 +1016,11 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
     # `_is_submit` also accepts a MEASURED submit (`submitted: true`, protocol 21). It does not accept
     # `taskButton` alone: that would make 26 silent 4.1.3 filter positives in the training corpus read 1
     # here (measured 2026-09-22).
+    #
+    # NO SCHEMA BUMP, for the reason the errored-state-change fix above gives: no record captured before
+    # protocol 21 carries `submitted`, so this reads identically on every one of them, the training corpus
+    # included, and no weight file is scored against inputs it was not fitted to. The change shows only on
+    # a capture that measured a submit, which is what the recapture under 21 produces.
     submitted_silently = [
         change for change in soundly_measured(readable_form_changes)
         if _is_submit(change) and not change.get("after", "").strip()
