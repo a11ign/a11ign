@@ -328,3 +328,61 @@ test("#1951: the installer REMOVES an orphan, disabling the timer before deletin
     [["enable", "--now", "a11ign-work-tick.timer"]],
     "and the shipped timer is still enabled afterwards -- removal must not skip the install");
 });
+
+// --- #1966: the gate shared a GitHub account with a human, and the org went down -----------------------
+//
+// MEASURED 2026-09-22. `a11ign-work-tick.service` set no GH_CONFIG_DIR, so `gh` read ~/.config/gh --
+// the CHAIRMAN's own login. A chairman session spent that account's 5000 GraphQL requests in an
+// afternoon of ordinary work, and every tick after it died:
+//
+//   GraphQL: API rate limit already exceeded for user ID 46429371
+//   CANNOT ASK: neither the pull-request list nor the Ready rows could be read.
+//
+// The refusal is correct and is why it was survivable. But nothing was woken for as long as it lasted,
+// and from inside the org the only symptom is silence -- which is what a healthy quiet queue looks like.
+//
+// NOT A CAPACITY PROBLEM. The gate's own usage is a few GraphQL calls every two minutes, well under 200
+// an hour against 5000. It is that a human's afternoon must not be able to stop the clock.
+
+/** Units that legitimately need no GitHub identity, each with the reason it is exempt. */
+const NO_GH_NEEDED: Record<string, string> = {
+  "a11ign-corpus-snapshot.service":
+    "tars local corpus roots; corpus-snapshot.mjs contains zero `gh` calls",
+};
+
+test("#1966: every shipped unit that reaches `gh` runs as the machine account, not a human", () => {
+  const services = shippedUnits().filter((u) => u.endsWith(".service"));
+  assert.ok(services.length > 0, "there are services to check");
+
+  const offenders = services
+    .filter((u) => !(u in NO_GH_NEEDED))
+    .filter((u) => !readFileSync(join(SHIPPED_DIR, u), "utf8").includes("GH_CONFIG_DIR="));
+
+  assert.deepEqual(offenders, [],
+    "a unit with no GH_CONFIG_DIR reads ~/.config/gh, which is the chairman's own login. When that "
+    + "account's pool empties -- and a single afternoon of human work empties it -- the unit dies with "
+    + "`CANNOT ASK`, and from inside the org that is indistinguishable from a quiet queue. If a unit "
+    + "genuinely needs no GitHub identity, add it to NO_GH_NEEDED with the reason.");
+});
+
+test("#1966: the exemption list is not a place to hide a unit that does reach gh", () => {
+  // An allowlist nobody re-reads is how this defect comes back. Each entry must name a real shipped
+  // unit, so a deleted or renamed one surfaces here rather than silently exempting nothing -- or worse,
+  // silently exempting a DIFFERENT unit that later takes the same name.
+  const shipped = new Set(shippedUnits());
+  for (const [unit, why] of Object.entries(NO_GH_NEEDED)) {
+    assert.ok(shipped.has(unit), `${unit} is exempted but no longer shipped -- drop the entry`);
+    assert.ok(why.length > 20, `${unit}'s exemption must say WHY, not just be listed`);
+  }
+});
+
+test("#1966 POSITIVE CONTROL: the check really reads the file, not just the name", () => {
+  // Without this, a typo in the property name would make the filter above vacuous and every unit would
+  // pass whether or not it carried the line.
+  const tick = readFileSync(join(SHIPPED_DIR, "a11ign-work-tick.service"), "utf8");
+  assert.match(tick, /GH_CONFIG_DIR=\/home\/agent\/workers\/gh/,
+    "the tick points at ~/workers/gh, which is a11ign-ai-workers");
+  const snapshot = readFileSync(join(SHIPPED_DIR, "a11ign-corpus-snapshot.service"), "utf8");
+  assert.doesNotMatch(snapshot, /GH_CONFIG_DIR/,
+    "and the exempt unit really does lack it -- so the exemption is doing work rather than decorating");
+});

@@ -403,6 +403,15 @@ const OTHER_HOME_DIRECTORIES: Record<string, string> = {
     + "nobody has measured, under a placeholder account -- see the boundary in this file's header.",
   "g": "`~/g` in a `claude-md-links.test.ts` fixture, a two-character stand-in for a path, not a "
     + "directory anybody has.",
+  // #1966. These are `GH_CONFIG_DIR` roots on the AGENT HOST, each holding one machine account's
+  // `hosts.yml`: `~/workers/gh` is `a11ign-ai-workers` and `~/reviewer/gh` is `a11ign-bot`. They are not
+  // checkouts and not the control plane -- they are the separation that stops a unit sharing a GitHub
+  // identity with the chairman, which on 2026-09-22 took the work tick down when his own account's
+  // GraphQL pool emptied.
+  "workers": "the agent host's `a11ign-ai-workers` gh config root (`~/workers/gh/hosts.yml`), named by "
+    + "a11ign-work-tick.service and a11ign-corpus-release-nightly.service so neither runs as a human.",
+  "reviewer": "the agent host's `a11ign-bot` gh config root (`~/reviewer/gh/hosts.yml`), the reviewers' "
+    + "own identity -- named in a11ign-work-tick.service's comment on why account separation exists.",
 };
 
 test("THE EXEMPTION IS THE FIELD, NOT THE FILE -- a quoted `command` in a reported record is not a use, "

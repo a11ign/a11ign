@@ -26,6 +26,32 @@ Environment=PATH=/home/agent/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin
 # sets this, and it is stated rather than assumed because the failure is the same silent CANNOT_ASK.
 Environment=HOME=/home/agent
 
+# THE GATE MUST NOT SHARE A GITHUB ACCOUNT WITH A HUMAN -- #1966, and the org was down for it.
+#
+# With no GH_CONFIG_DIR, `gh` reads ~/.config/gh, which is the CHAIRMAN's own login (DanBeckDev). On
+# 2026-09-22 a chairman session spent that account's 5000 GraphQL requests in an afternoon of ordinary
+# work -- reading PRs, filing rows, opening pull requests -- and every tick after that died:
+#
+#   GraphQL: API rate limit already exceeded for user ID 46429371
+#   CANNOT ASK: neither the pull-request list nor the Ready rows could be read. Nothing was examined.
+#
+# The refusal is correct and is why this was survivable: `work-gate.mjs` reports CANNOT ASK rather than
+# a quiet queue. But nothing was woken for as long as it lasted, and the cause was invisible from inside
+# the org -- the only symptom is silence, which is what a healthy quiet queue looks like too.
+#
+# `~/workers/gh` is `a11ign-ai-workers`, the machine account this org already maintains for exactly this
+# separation (`~/reviewer/gh` is `a11ign-bot`). The gate's own usage is tiny -- a few GraphQL calls every
+# two minutes, well under 200 an hour against 5000 -- so this is not about capacity. It is that a human's
+# afternoon must not be able to stop the clock.
+#
+# READ THE HEADERS, NOT THE ENDPOINT, if you ever come back to diagnose this. Measured the same second on
+# the same token: `X-Ratelimit-Remaining: 0, Used: 5000` on a real GraphQL call, while
+# `gh api rate_limit` reported `remaining=5000 used=0` and a reset 45 minutes later than the true one.
+# The endpoint is wrong about the number AND the reset; `product-manager` established this by putting
+# both instruments on one token in one second, after the chairman's session had twice taken the
+# endpoint's word for it.
+Environment=GH_CONFIG_DIR=/home/agent/workers/gh
+
 # THE CHECKOUT IS UPDATED FIRST, AND THIS IS THE `git pull` HALF OF THE LOOP.
 #
 # Without it the tick runs whatever code the box last pulled by hand, and so do the agents it wakes --

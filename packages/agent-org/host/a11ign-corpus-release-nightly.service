@@ -22,6 +22,13 @@ Environment=PATH=/home/agent/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin
 # the failure otherwise is silent, forever.
 Environment=HOME=/home/agent
 
+# SAME ACCOUNT SEPARATION AS a11ign-work-tick.service, and for the same measured reason (#1966). This
+# unit runs `npm run corpus:release` LOCALLY (corpus-release-nightly.mjs:143), which spawns
+# `gh release create`/`upload`/`download`. Without this it publishes the corpus backup as the CHAIRMAN
+# and spends the chairman's GraphQL pool -- the pool a chairman session emptied in an afternoon on
+# 2026-09-22, taking the work tick down with it.
+Environment=GH_CONFIG_DIR=/home/agent/workers/gh
+
 # #1911: `lab:fetch` needs A11Y_PVE_KEY (and A11Y_CONTROL_HOST_FILE), which a shell gets from its .zshenv and a
 # unit never does -- the unit failed every firing without them. The `-` is deliberate: a missing file is
 # left to corpus-release-nightly.mjs's own refusal, which names this file and says why, rather than to
