@@ -119,11 +119,16 @@ whether they are followed.
 
 **This replaces the 2026-09-19 deferral rather than sitting beside it; #1761 is closed out here.** That
 ruling withheld the requirement on a premise measured false at `75348436e`: it feared that "a bot account
-that also opens PRs (`a11ign-ai-workers`) may find GitHub refuses its own review as self-approval", but
-reviews are posted by `a11ign-bot` and PRs are opened by `a11ign-ai-workers` (68 of the last 100) and
-`DanBeckDev` (32). `a11ign-bot` is neither, so the collision cannot arise on the observed population. Its
-own clearing condition — the next real review — was met by #1968. Verdict-as-review took exactly as hoped:
-of the 40 most recent PRs, 28 carry a review, **every one** by `a11ign-bot`, against #1761's "0 of 25".
+that also opens PRs (`a11ign-ai-workers`) may find GitHub refuses its own review as self-approval". But
+reviews are posted by `a11ign-bot`, and PRs are opened by `a11ign-ai-workers` and `DanBeckDev`.
+**`a11ign-bot` is neither**, so the collision cannot arise on the observed population, and its own
+clearing condition — the next real review — was met by #1968.
+
+**The supporting splits are ROLLING counts: each is a reading at a named moment, never a present-tense
+fact.** The opening split was 68/32 of the last 100 at `75348436e`, and 76/24 some 26 hours later.
+Verdict-as-review took as hoped: 28 of the 40 most recent PRs carried a review at `75348436e`, **every
+one** by `a11ign-bot`, and 33 of 40 at 2026-09-22T23:45Z — against #1761's "0 of the last 25". Re-derive
+them before quoting them; what does not drift is the membership above.
 
 - **The failure it permitted happened.** #1971 on 2026-09-22: `added_to_merge_queue` 19:22:54Z, a
   `not convinced` verdict 19:23:43Z, `hold:product-manager` 19:26:46Z, **merged 19:27:28Z**. A verdict
@@ -149,7 +154,8 @@ of the 40 most recent PRs, 28 carry a review, **every one** by `a11ign-bot`, aga
   It also needs no admin, which matters because `a11ign-ai-workers` has `permissions.admin: false`.
 - **A 404 from `branches/main/protection` means absent OR forbidden, and must never be read as
   "unprotected".** `branches/main.protected` is the discriminator and needs no admin: measured
-  2026-09-23, protection 404s while `protected` reads `true`, so that 404 is FORBIDDEN. A verdict that
+  2026-09-22T23:05Z as `a11ign-ai-workers`, protection 404s while `protected` reads `true`, so that 404
+  is FORBIDDEN. A verdict that
   cannot read `bypass_pull_request_allowances` is `CANNOT_TELL`, loudly — never a pass.
 
 ## A waiting condition is DATA, not a sentence (chairman's direction, 2026-09-19)
