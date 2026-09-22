@@ -38,11 +38,16 @@ REAL_FORM = {
 }
 
 
+#: A submit whose outcome was read. Held constant across every case here so each one isolates the field-role
+#: condition; the unread-submit condition (#1903) is driven in `test_unresolved_form_change_is_not_evidence.py`.
+READ_SUBMIT = {"control": "Save changes, button", "after": "Market pitch list, document", "kind": "submit"}
+
+
 def record(post_submit=(), form_fields=()):
     return {
         "input": {
             "structure": {"formFields": list(form_fields)},
-            "interaction": {"postSubmitFields": list(post_submit)},
+            "interaction": {"postSubmitFields": list(post_submit), "formChanges": [READ_SUBMIT]},
         }
     }
 
@@ -62,8 +67,8 @@ def test_the_waiting_status_shape_is_not_a_submitted_form_either():
 
 
 def test_a_real_form_submission_stays_applicable():
-    # `b3-button-market`'s 3.3.1 fire is #1903's (the model's boundary on a real form); this precondition
-    # must NOT hide it, because its subject is really there.
+    # `b3-button-market` really has a form, so the field-role condition must NOT hide it. Its 3.3.1 fire was
+    # an UNREAD submit (#1903), which a different condition rules out -- not this one.
     assert applicable(**REAL_FORM) is True
 
 

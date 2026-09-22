@@ -94,3 +94,55 @@ def test_a_resolved_submit_still_reads_present_and_nonempty():
     values = features.structured_feature_values(record([RESOLVED]))
     assert values["form_change_present"] == 1.0
     assert values["form_change_nonempty"] == 1.0
+
+
+# ---- #1903: `3.3.1:validation-error-silent` requires a submit whose outcome was READ ----------------------
+#
+# `acceptance-b3-button-market/bad`, repeat-2 as captured on the lab (`orchestrator`, 2026-09-22 09:59Z on
+# #1903): a real edit field and a real submit, but the submit's navigation read `"unknown"` and was flagged.
+# #1105's cut removed it from the evidence, and the model read the gap as the silence 3.3.1 is about.
+
+validation_applicable = applicability.SUBTYPE_REQUIRES["3.3.1:validation-error-silent"]
+
+MARKET_FORM_FIELDS = ["Reference number, edit", "Cancel this booking, button", "Save changes, button"]
+MARKET_POST_SUBMIT = ["section, Reference number, edit", "Cancel this booking, button", "Save changes, button"]
+MARKET_CANCEL = {"control": "Cancel this booking, button", "after": "", "kind": "taskButton", "baselineQuiet": True}
+MARKET_SUBMIT_UNREAD = {"control": "Save changes, button", "after": "unknown", "afterUnresolved": True,
+                        "kind": "submit"}
+MARKET_SUBMIT_READ = {"control": "Save changes, button", "after": "Market pitch list, document", "kind": "submit"}
+
+
+def market(changes):
+    built = record(changes)
+    built["input"]["structure"]["formFields"] = list(MARKET_FORM_FIELDS)
+    built["input"]["interaction"]["postSubmitFields"] = list(MARKET_POST_SUBMIT)
+    return built
+
+
+def test_an_unread_submit_does_not_make_3_3_1_applicable():
+    # repeat-2 bad: the only submit is unread, and the silent Cancel is a task button, not a submit.
+    assert validation_applicable(market([MARKET_SUBMIT_UNREAD, MARKET_CANCEL])) is False
+
+
+def test_the_same_form_with_its_submit_read_stays_applicable():
+    # POSITIVE CONTROL for the test above: repeat-1 bad, identical but for the read submit. The subject is
+    # there, so the precondition must hold -- whether 3.3.1 then fires is the model's to decide.
+    assert validation_applicable(market([MARKET_SUBMIT_READ, MARKET_CANCEL])) is True
+
+
+def test_a_silent_submit_that_was_read_is_the_finding_and_stays_applicable():
+    # A true positive's shape: the submit resolved and nothing was said. Ruling this out would delete the
+    # very absence 3.3.1 exists to catch.
+    assert validation_applicable(market([SILENT_BUT_RESOLVED])) is True
+
+
+def test_a_silent_non_submit_does_not_stand_in_for_the_submit():
+    # Only a SUBMIT's outcome is the subject; a task button's silence must not satisfy the precondition.
+    assert validation_applicable(market([MARKET_CANCEL])) is False
+
+
+def test_an_entry_without_kind_counts_as_a_submit():
+    # Captures older than protocol 8 carry no `kind`; the same default `validation_error_missing` uses.
+    legacy = {"control": "Submit, button", "after": ""}
+    assert validation_applicable(market([legacy])) is True
+    assert validation_applicable(market([{**legacy, "afterUnresolved": True}])) is False
