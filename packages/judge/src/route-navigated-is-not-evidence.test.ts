@@ -6,16 +6,23 @@ import { join } from "node:path";
 /**
  * `routeChange.navigated` WAS `true` on every successful activation `probeRouteChange` recorded,
  * regardless of whether the view actually moved -- a tautology, fixed #1850, which now derives it from
- * NVDA's own document-change announcement. This guard still forbids reading it in the two rules and the
- * predicates below: neither has been measured against the new signal, and the real evidence for both
- * findings is, and stays, `titleBefore`/`titleAfter`/`headingBefore`/`headingAfter`; `route.control ===
- * null` is the correct applicability gate ("was anything probed at all"). `addStaleRouteTitle`/
- * `addInertSkipLink` in `rules.ts` and `routeTitleIsStale`/`skipLinkIsInert` in `signal-predicates.mjs`
- * all use it now -- TWO independent implementations of the same two rules, discovered a second time by a
- * peer session after this guard first shipped covering only `rules.ts`. That is exactly the shape this
- * scan exists to stop recurring: a hand-maintained file list is the thing that goes stale, not the
- * pattern. A future row that wants `navigated` as evidence removes this guard's coverage for the one file
- * it changes, deliberately, rather than this scan quietly losing its teeth everywhere at once.
+ * NVDA's own document-change announcement. This guard forbids reading it in files that have not been
+ * measured against the new signal: the real evidence for these findings is, and stays,
+ * `titleBefore`/`titleAfter`/`headingBefore`/`headingAfter`; `route.control === null` is the correct
+ * applicability gate ("was anything probed at all"). `addInertSkipLink` in `rules.ts` and
+ * `routeTitleIsStale`/`skipLinkIsInert` in `signal-predicates.mjs` still use it as their whole premise --
+ * TWO independent implementations of the same two rules, discovered a second time by a peer session after
+ * this guard first shipped covering only `rules.ts`. That is exactly the shape this scan exists to stop
+ * recurring: a hand-maintained file list is the thing that goes stale, not the pattern.
+ *
+ * **`packages/judge/src/rules.ts` is now the documented exception (#1867).** `addStaleRouteTitle`'s own
+ * heading-equality guard read a held-steady SITE-CHROME heading as "nothing navigated" even when the title
+ * differed and NVDA's own document-change confirmation said otherwise -- the guard needed *some* signal a
+ * navigation happened before comparing titles, and `navigated` is that signal for this one rule now that
+ * it has been measured against it (`rules.test.ts`'s `#1867` cases). This is precisely what this guard's
+ * own design anticipated: *"A future row that wants `navigated` as evidence removes this guard's coverage
+ * for the one file it changes, deliberately, rather than this scan quietly losing its teeth everywhere at
+ * once."* `signal-predicates.mjs` was not part of #1867's Region and stays covered.
  *
  * This scans SOURCE TEXT rather than asserting behaviour, because the hazard is a FUTURE line, not a
  * present one -- the same shape `structure-declarations.test.ts` uses for exactly the same reason: `tsc`
@@ -33,6 +40,11 @@ import { join } from "node:path";
  */
 const ROOT = join(import.meta.dirname, "../../..");
 const PY_FEATURIZER = { path: "packages/scorer/python/screenreader_features.py", sentinel: "def all_evidence" };
+/** The one file this guard's own design says a future row removes coverage for -- see the doc comment above. */
+const NAVIGATED_EXCEPTIONS = new Map([
+  ["packages/judge/src/rules.ts", "#1867: addStaleRouteTitle now reads it as the corroborating signal a "
+    + "held-steady heading needs before it can still say nothing navigated"],
+]);
 
 /** Every non-test .ts/.mjs source file under packages/, as [path, text]. */
 function jsSources(): [string, string][] {
@@ -76,11 +88,25 @@ test("every TS/JS source that mentions routeChange is free of `.navigated` reads
         + "file-extension filter moved, and the scan below would otherwise pass having examined nothing");
   }
   for (const [path, text] of consumers) {
+    if (NAVIGATED_EXCEPTIONS.has(path)) continue; // deliberate -- see NAVIGATED_EXCEPTIONS's own comment
     assert.doesNotMatch(withoutComments(path, text), /\.navigated\b/,
       `${path} reads \`.navigated\` outside a comment -- routeChange.navigated is a tautology on every `
         + "successful activation, not evidence that the view moved. Read titleBefore/titleAfter/"
         + "headingBefore/headingAfter instead, or route.control === null for \"was this even probed\".");
   }
+});
+
+test("the #1867 exception is not silently outgrown -- rules.ts still reads `.navigated` exactly where expected", () => {
+  // A whole-file exception is coarser than the guard it replaces: if `rules.ts` ever stopped reading
+  // `.navigated` at all (the #1867 fix reverted or refactored away), this exception would keep silently
+  // exempting the file from a guard it no longer needs, and a REGRESSION back to the tautology-reading
+  // shape elsewhere in the same file would pass unnoticed. This is the guard on the guard.
+  const path = "packages/judge/src/rules.ts";
+  const [, text] = jsSources().find(([p]) => p === path) ?? [];
+  assert.ok(text, `${path} was not found by the discovery walk`);
+  assert.match(withoutComments(path, text as string), /\.navigated\b/,
+    `${path} no longer reads \`.navigated\` anywhere -- remove it from NAVIGATED_EXCEPTIONS so this file `
+      + "goes back under the ordinary guard above");
 });
 
 test("the Python featurizer stays free of it too, checked against a known-present sentinel", () => {

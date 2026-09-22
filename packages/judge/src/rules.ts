@@ -1365,12 +1365,20 @@ function looksLikeFurnitureNotNavigation(control: string, headingBefore: string,
   return insideDialog(headingBefore) || insideDialog(headingAfter);
 }
 
+/**
+ * #1867: a held-steady heading alone is not "nothing navigated" -- the site chrome's own top-of-page
+ * heading does not change across a real navigation on GOV.UK/mygov.scot pages. A heading that DID change
+ * is evidence enough on its own; a heading that didn't needs NVDA's own document-change confirmation
+ * (`routeChange.navigated`, real since #1850) to say a transition happened at all.
+ */
+function headingAloneCannotSayNothingNavigated(headingBefore: string, headingAfter: string, navigated: boolean | undefined): boolean {
+  return headingBefore === headingAfter && !navigated;
+}
+
 function addStaleRouteTitle(input: RuleInput, add: AddFinding): void {
   const route = input.interaction?.routeChange;
   // `route.control === null` is the applicability gate -- not probed, errored, or quick-nav reached the
-  // end of the links with nothing to activate. `routeChange.navigated` is a DIFFERENT question (#250,
-  // fixed #1850): NVDA's own document-change announcement, not "the view moved" -- this rule's own
-  // premise is the heading pair, so `navigated` still is not read here.
+  // end of the links with nothing to activate.
   if (!route || route.error || route.control === null) return;
   // The probe reached the end of the links instead of activating one. See `NOTHING_FURTHER`.
   if (NOTHING_FURTHER.test(String(route.control ?? ""))) return;
@@ -1392,7 +1400,8 @@ function addStaleRouteTitle(input: RuleInput, add: AddFinding): void {
   // That is a MISSED finding rather than an invented one, which is the direction this file fails in
   // deliberately, and the comparison there was never between two known values anyway.
   if (!headingBefore || !headingAfter) return;
-  if (headingBefore === headingAfter) return; // nothing navigated; there is no transition to judge
+  // See `headingAloneCannotSayNothingNavigated`.
+  if (headingAloneCannotSayNothingNavigated(headingBefore, headingAfter, route.navigated)) return;
   // #253: a new-tab link, a modal, or a consent overlay switching PANELS all read as a route change under
   // this proxy -- the announced control or a heading change while the document itself never moved. See
   // `looksLikeFurnitureNotNavigation`.
