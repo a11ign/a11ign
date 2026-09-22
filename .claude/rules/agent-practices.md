@@ -203,6 +203,16 @@ whether they are followed.
   the raw call only for a RE-prompt about the same draft, where the reviewer's existing context is the
   point. `ceo`'s tick no longer does it; a draft with no verdict 30 minutes after the
   author's prompt is reported to `product-manager`, who re-prompts once and then tells `ceo`.
+- **ONE CALL IS ENOUGH, AND RETRYING IS NOW THE WRONG THING (#1966, 2026-09-22).** `prompt:session` used
+  to print `NOT PROMPTED: "reviewer" is working` and exit, and **that was the end of the order** — nothing
+  re-offered it, and nothing outside the author's own terminal knew one had existed. Measured while filing
+  draft #1963: three refusals in 4m37s, delivery only on the fourth, and only because the author held a
+  retry loop open inside its own turn. It now **queues** the order (exit `2` is `QUEUED`, not a failure)
+  and the next `npm run work:tick` delivers it, cleared, once the gate judges that session between tasks.
+  **Do not retry, and do not poll:** this command clears its target first, so a retry that lands the
+  instant a busy session goes idle wipes the review it interrupted — `reviewer` was mid-review of #1963
+  during that exact window. A refusal naming a session the org does not know is the one that is still
+  yours: that is a typo, it is NOT queued, and it says so.
 - **`ceo` keeps:** the publish order and every freeze decision, reviewer spot-checks, the board edition read,
   rulings that reach it through `product-manager`, and the chairman.
 - **Why (measured 2026-09-14, ceo's own inbound):** about half of one night's messages to `ceo` were
