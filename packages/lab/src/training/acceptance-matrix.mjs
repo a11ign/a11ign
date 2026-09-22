@@ -1040,7 +1040,11 @@ export const ACCEPTANCE_CASES = Object.freeze([
   imagePair({ id: "b3-missing-windmill", title: "Heritage windmill", description: "The windmill still turns on windy days.", file: "windmill.png", goodAlt: "Timber windmill with its sails turning", badAlt: null, subtype: "missing-alt", task: "Understand what the windmill looks like." }),
   linkPair({ id: "b3-link-recycling", title: "Waste services", context: "Household recycling is collected on alternate weeks.", vague: "Here", descriptive: "Check your recycling collection day", task: "Check your recycling collection day." }),
   linkPair({ id: "b3-link-pool", title: "Leisure centre", context: "The pool has reduced hours in January.", vague: "More", descriptive: "Read the pool's January opening hours", task: "Read the pool's January opening hours." }),
-  linkPair({ id: "b3-link-badge", title: "Parking services", context: "Blue Badge holders can renew online.", vague: "Click", descriptive: "Renew a Blue Badge online", task: "Renew a Blue Badge online." }),
+  // #1852: same defect as the headings above -- "Click" is not a `VAGUE_LINKS` member
+  // (`packages/scorer/python/screenreader_features.py`; that set has "click here", not the bare verb) --
+  // exact-match semantics, so the off-vocabulary word read as a false negative (measured: 0.0106 on
+  // `2.4.4:regex`, acceptance-report.json). "Click here" is the set's own member.
+  linkPair({ id: "b3-link-badge", title: "Parking services", context: "Blue Badge holders can renew online.", vague: "Click here", descriptive: "Renew a Blue Badge online", task: "Renew a Blue Badge online." }),
   linkPair({ id: "b3-link-flytipping", title: "Environmental enforcement", context: "Fly-tipping can be reported with a photo.", vague: "This", descriptive: "Report fly-tipping with a photo", task: "Report fly-tipping with a photo." }),
   linkPair({ id: "b3-link-treework", title: "Tree services", context: "Tree work near a protected oak needs consent.", vague: "Info", descriptive: "Apply for tree work consent", task: "Apply for tree work consent." }),
   linkPair({ id: "b3-link-taxi", title: "Licensing office", context: "Taxi drivers renew their licence every year.", vague: "Go", descriptive: "Renew a taxi driver's licence", task: "Renew a taxi driver's licence." }),
