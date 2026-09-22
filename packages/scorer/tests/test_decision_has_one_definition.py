@@ -35,16 +35,18 @@ DECIDERS = [
 #: still green and useless. A precise pattern that is wrong is worse than a broad one that is right.
 BARE_COMPARISON = re.compile(r">=[^\n]*threshold", re.IGNORECASE)
 
-#: ...but only where a SUBTYPE is being decided. Two threshold comparisons in the evaluator are
-#: legitimately not decisions and are excluded by SHAPE rather than by an allowlist, because a name-based
-#: exemption rots the moment a line moves:
+#: ...but only where a SUBTYPE is being decided. A threshold comparison in the evaluator that is
+#: legitimately not a decision is excluded by SHAPE rather than by an allowlist, because a name-based
+#: exemption rots the moment a line moves: `metrics()` counts an already-decided 0/1 array against a fixed
+#: cut; it is arithmetic over a verdict somebody else reached, not the verdict. It does not name a subtype
+#: on the line, and a subtype decision necessarily does.
 #:
-#:   - `metrics()` counts an already-decided 0/1 array against a fixed cut; it is arithmetic over a
-#:     verdict somebody else reached, not the verdict.
-#:   - the repeat-stability check asks whether ONE head's score crosses its cut between two captures of
-#:     the same page. That is a question about determinism, not a finding about a page.
-#:
-#: Neither names a subtype on the line, and a subtype decision necessarily does.
+#: This exempted a second one until #1927: the repeat-stability check, as "a question about determinism,
+#: not a finding about a page". It was a finding -- comparing raw scores, it failed the gate on a capture
+#: the product ruled inapplicable (#1921) -- and it now calls `applicability.decide` like everything else.
+#: The shape exemption still admits any comparison that does not name a subtype on its line; on 2026-09-22
+#: `metrics()` was the only one left in either decider. `test_acceptance_stability.py` pins the stability
+#: case behaviourally, because this guard is what let it through.
 SUBTYPE_ON_THE_LINE = re.compile(r"subtype", re.IGNORECASE)
 
 
