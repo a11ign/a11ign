@@ -3,9 +3,16 @@ submitted form.
 
 `_interacted("postSubmitFields")` alone is satisfied by ANY `probeForms` re-read, including a
 `<button type="button">` with no `<input>` anywhere on the page — `waitingStatusPair`/`progressStatusPair`
-in `acceptance-matrix.mjs` produce exactly that shape, and three of their held-out cases false-positived on
+in `acceptance-matrix.mjs` produce exactly that shape, and two of their held-out cases false-positived on
 3.3.1 as a result. The subject of this subtype's claim is a form having been SUBMITTED, which needs the
-page to actually carry a form field; `postSubmitFields` non-empty alone does not establish that.
+page to carry a field with a field ROLE; a non-empty list does not establish that.
+
+EVERY FIXTURE HERE IS THE CAPTURED SHAPE, and that is the point of the second attempt. #1894's fixtures
+modelled a task-button page with `formFields: []`, which no real capture has: NVDA's form-field sweep lists
+buttons, so `formFields` holds `"Continue to dates, button"` on the very pages this is about. Against that
+empty fixture, `_has("formFields")` looked like a fix and its mutation looked caught; against the lab's
+records it ruled out nothing (`orchestrator`, 2026-09-22 09:30Z on #1878). The values below are the lab's
+`formFields`/`postSubmitFields` for those cases, from that reading.
 
 Each case here is built to produce one verdict, and the pair is asserted to DIFFER: a test that cannot
 tell the two apart would pass against the very behaviour it exists to refuse.
@@ -18,6 +25,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
 import applicability  # noqa: E402
 
 SUBTYPE = "3.3.1:validation-error-silent"
+
+# `acceptance-status-progress-booking/bad`, as captured: the task button is in BOTH channels.
+TASK_BUTTON = {
+    "form_fields": ["Continue to dates, button"],
+    "post_submit": ["Continue to dates, button"],
+}
+# `acceptance-b3-button-market/bad`, as captured: a real `edit` field and a real submit.
+REAL_FORM = {
+    "form_fields": ["Reference number, edit", "Cancel this booking, button", "Save changes, button"],
+    "post_submit": ["section, Reference number, edit", "Cancel this booking, button", "Save changes, button"],
+}
 
 
 def record(post_submit=(), form_fields=()):
@@ -33,21 +51,38 @@ def applicable(post_submit=(), form_fields=()):
     return applicability.applicable(SUBTYPE, record(post_submit=post_submit, form_fields=form_fields))
 
 
-def test_a_bare_task_button_with_no_form_field_is_not_a_submitted_form():
-    # The `b3-status-waiting-tree` / `status-progress-booking` shape: a `<button type="button">` re-read
-    # into `postSubmitFields` as "Check consent, button", with no `<input>` on the page at all.
-    assert applicable(post_submit=["Check consent, button"], form_fields=[]) is False
+def test_a_task_button_swept_as_a_form_field_is_not_a_submitted_form():
+    # A non-empty `formFields` is what every page with a button has; it must not be read as a form.
+    assert applicable(**TASK_BUTTON) is False
 
 
-def test_a_genuine_form_submission_stays_applicable():
-    assert applicable(post_submit=["Email, edit"], form_fields=["Email, edit"]) is True
+def test_the_waiting_status_shape_is_not_a_submitted_form_either():
+    # `acceptance-b3-status-waiting-tree/bad`, the other case #1878 names — `waitingStatusPair`'s `taskButton`.
+    assert applicable(form_fields=["Check consent, button"], post_submit=["Check consent, button"]) is False
+
+
+def test_a_real_form_submission_stays_applicable():
+    # `b3-button-market`'s 3.3.1 fire is #1903's (the model's boundary on a real form); this precondition
+    # must NOT hide it, because its subject is really there.
+    assert applicable(**REAL_FORM) is True
 
 
 def test_the_two_are_distinguished_and_not_merely_both_ruled_out():
     # ANTI-VACUITY. If both read False the precondition has gone deaf rather than become precise.
-    bare_button = applicable(post_submit=["Check consent, button"], form_fields=[])
-    real_form = applicable(post_submit=["Email, edit"], form_fields=["Email, edit"])
-    assert bare_button != real_form, "the precondition cannot tell a task button from a form submission"
+    assert applicable(**TASK_BUTTON) != applicable(**REAL_FORM), (
+        "the precondition cannot tell a task button from a form submission"
+    )
+
+
+def test_a_field_role_seen_only_in_the_post_submit_re_read_is_enough():
+    # The field is the subject whether the sweep or the re-read caught it; a sweep that missed the field
+    # must not silence a submission whose re-read announced it.
+    assert applicable(form_fields=["Save, button"], post_submit=["Email, edit", "Save, button"]) is True
+
+
+def test_every_field_role_counts():
+    for role in ["edit", "combo box", "list box", "checkbox", "radio", "spin button"]:
+        assert applicable(form_fields=[f"Field, {role}"], post_submit=["Submit, button"]) is True, role
 
 
 def test_a_form_field_present_elsewhere_with_nothing_submitted_is_still_inapplicable():
