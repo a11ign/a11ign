@@ -47,6 +47,7 @@ def record_with(*announcements: str) -> dict:
     "link, Details",          # the held-out acceptance case: a lone link after prose
     "link, Click here",
     "link, More",
+    "link, Click",  # #1883: NVDA's actual announcement for the "Click here" acceptance fixture
 ])
 def test_a_vague_link_with_no_container_LACKS_context(announcement: str) -> None:
     assert features.vague_link_lacks_context(record_with(announcement)) is True
