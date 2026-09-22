@@ -337,6 +337,17 @@ export interface CaptureResult {
     innerWidth?: number;
     innerHeight?: number;
     devicePixelRatio?: number;
+    /**
+     * #1953: the SCREEN the capture ran on, as `"<width>x<height>"` (`"unknown"` when the read failed).
+     * Optional because a worker before it does not send it.
+     *
+     * Not the same value as `innerWidth` above and not the same fate: that one is what the page was laid
+     * out at, this one is what the desktop holds. `fleet-consistency`'s `MUST_MATCH` compares it -- the
+     * fleet was reported CONSISTENT and "interchangeable for capture" while running two display modes,
+     * because nothing reported the screen. It is NOT a cache-key input: `environmentKey` is an allowlist
+     * and this field is deliberately not on it.
+     */
+    displayMode?: string;
   };
 }
 
