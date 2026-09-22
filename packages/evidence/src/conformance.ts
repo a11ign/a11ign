@@ -54,7 +54,7 @@ const SWEEP_STOP_GLOSS: Record<Exclude<SweepStop, "exhausted" | "repeat">, strin
   cap: "hit its own step limit before reaching the end of the page",
   deadline: "the capture's overall time budget ran out mid-sweep",
   error: "a round trip to the screen reader failed",
-  silent: "the screen reader stopped responding",
+  silent: "no new speech arrived after retries, cause unknown",
   channelReset: "the screen reader's speech log was rebuilt mid-sweep, breaking continuity with what came before",
   focusModeStuck: "the page trapped keyboard focus and the sweep could not recover control of it",
 };
