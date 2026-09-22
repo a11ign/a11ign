@@ -14,6 +14,7 @@
 import type { CaptureInteraction, CaptureStructure } from "./index.js";
 import { servedPathOf } from "./document-identity.js";
 import { parseAnnouncement, isLandmarkRole } from "./announcement.js";
+import { isSubmitActivation } from "./submit-activation.js";
 
 /** Whatever a capture backend returned; only the announcement fields matter here. */
 export interface CapturedAnnouncements {
@@ -1245,7 +1246,7 @@ export function submitNavigatedTheDocument(capture: CapturedAnnouncements): bool
   }
   const formChanges = capture.interaction?.formChanges;
   if (!Array.isArray(formChanges)) return false;
-  return formChanges.some((change) => change?.kind === "submit"
+  return formChanges.some((change) => isSubmitActivation(change)
     && typeof change.after === "string" && DOCUMENT_ANNOUNCEMENT.test(change.after));
 }
 

@@ -40,7 +40,7 @@
 import { spawn } from "node:child_process";
 
 import type { CaptureInteraction, CaptureStructure } from "@a11ign/evidence";
-import { annotateCapture } from "@a11ign/evidence";
+import { annotateCapture, isSubmitActivation } from "@a11ign/evidence";
 import { scorerPaths as artefact } from "@a11ign/scorer";
 
 import { WCAG_22_AA } from "@a11ign/evidence/wcag";
@@ -151,9 +151,12 @@ const hasEditableField = (fields: string[] = []): boolean =>
  * and a submit — and 3.3.1 is only about the third. Older captures carry no `kind`, so they fall back to
  * `postSubmitFields`, which is populated only after a submit and is therefore the same claim by a weaker
  * route rather than a looser one.
+ *
+ * #1918: a SUBMIT here is `isSubmitActivation`, not `kind === "submit"`. `kind` is the button's name, so a
+ * submit named for its task was ruled inapplicable before any evidence about it was read.
  */
 const submitWasProbed = (c: CaptureEvidence): boolean =>
-  (c.interaction?.formChanges ?? []).some((change) => change.kind === "submit")
+  (c.interaction?.formChanges ?? []).some(isSubmitActivation)
   || (!(c.interaction?.formChanges ?? []).some((change) => change.kind !== undefined)
     && nonEmpty(c.interaction?.postSubmitFields));
 

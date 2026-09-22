@@ -79,3 +79,42 @@ def test_a_capture_predating_kind_still_counts_as_a_submit():
 
 def test_a_submit_that_announced_an_error_is_not_the_finding():
     assert missing([{"control": "Send, button", "kind": "submit", "after": "Enter a valid email"}]) == 0.0
+
+
+# ---- #1918: a submit named for its task ------------------------------------------------------------------
+#
+# `kind` is the button's NAME (`probeKindFor`), so "Apply for a berth" is recorded `taskButton` even though it
+# is a `<button type="submit">`. Protocol 21 records whether a `submit` event was dispatched. These three
+# cases are the held-out records' own shape (`acceptance-b3-error-badge/bad`, 2026-09-22) plus the
+# measurement that decided what NOT to accept.
+
+import json  # noqa: E402
+
+from screenreader_features import _is_submit  # noqa: E402
+
+CASES = json.loads((Path(__file__).resolve().parents[2] / "evidence" / "src" / "fixtures"
+                    / "submit-activation-cases.json").read_text())["cases"]
+
+
+def test_is_submit_answers_every_row_of_the_shared_case_table():
+    # The same table `submit-activation.test.ts` runs against `isSubmitActivation`.
+    assert {c["submit"] for c in CASES} == {True, False}, "a one-answer table passes a constant predicate"
+    wrong = [c["name"] for c in CASES if _is_submit(c["change"]) != c["submit"]]
+    assert wrong == []
+
+
+def test_a_task_named_submit_that_measurably_submitted_is_the_finding():
+    assert missing([{"control": "Apply for the badge, button", "kind": "taskButton", "after": "",
+                     "submitted": True}]) == 1.0
+
+
+def test_a_silent_filter_button_is_not():
+    # The 4.1.3 shape: a task button that announced nothing, beside an unrelated edit field. Accepting
+    # `taskButton` alone flipped 26 of these in the training corpus.
+    assert missing([{"control": "Show bags, button", "kind": "taskButton", "after": "",
+                     "submitted": False}]) == 0.0
+
+
+def test_a_task_button_nobody_measured_keeps_its_old_reading():
+    # Every capture before protocol 21. "Not asked" must not become "a submit".
+    assert missing([{"control": "Apply for the badge, button", "kind": "taskButton", "after": ""}]) == 0.0

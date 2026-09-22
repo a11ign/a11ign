@@ -522,3 +522,19 @@ test("#1105 evidenceFor never quotes an unresolved formChanges entry", () => {
   };
   assert.equal(evidenceFor("4.1.3", mixed), '{"control":"Save, button","after":"Saved searches, document"}');
 });
+
+test("#1918: 3.3.1 applies to a submit named for its task when the capture measured the submit", () => {
+  // `acceptance-b3-error-badge/bad`'s own shape: a real `<button type="submit">` whose name misses
+  // `SUBMIT_RE`, so `kind` is `taskButton`. Before protocol 21 nothing could say it submitted.
+  const taskNamed = (submitted?: boolean) => ({
+    interaction: {
+      formChanges: [{ control: "Apply for the badge, button", kind: "taskButton", after: "",
+        ...(submitted === undefined ? {} : { submitted }) }],
+      postSubmitFields: ["section, National Insurance number, edit", "Apply for the badge, button"],
+    },
+  });
+  assert.equal(hasEvidenceFor("3.3.1", taskNamed(true)), true, "a measured submit is a submit, whatever it is called");
+  // ...and a filter button stays out, measured or not, or 3.3.1 would apply on every silent 4.1.3 page.
+  assert.equal(hasEvidenceFor("3.3.1", taskNamed(false)), false);
+  assert.equal(hasEvidenceFor("3.3.1", taskNamed()), false, "a pre-21 capture keeps its old reading");
+});
