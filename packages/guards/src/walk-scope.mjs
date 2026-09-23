@@ -606,6 +606,12 @@ export async function readsDuring(run) {
 }
 
 /**
+ * A read `readsOutsideScope` refuses WHATEVER the scope: the marker is outside every subtree by construction.
+ * @param {string} path
+ */
+const isUnboundedRead = (path) => path.startsWith(WHOLE_REPOSITORY);
+
+/**
  * The reads a declaration does not cover: outside the scope and outside the guard's own import closure.
  *
  * The closure is excluded because a change to it already selects the guard PRECISELY, whatever its scope --
@@ -616,7 +622,54 @@ export async function readsDuring(run) {
  * @param {ReadonlySet<string>} ownFiles repo-relative paths in the guard's import closure
  */
 export function readsOutsideScope(reads, scope, ownFiles) {
-  return reads.filter((path) => path.startsWith(WHOLE_REPOSITORY) || (!ownFiles.has(path) && !inScope(path, scope)));
+  return reads.filter((path) => isUnboundedRead(path) || (!ownFiles.has(path) && !inScope(path, scope)));
+}
+
+/** How many of `outside` the message names before it elides the rest. */
+const PATHS_SHOWN = 8;
+
+/**
+ * The sample the refusal names.
+ *
+ * The remedy below turns on whether an unbounded read is present, so the sample that justifies it has to
+ * contain one -- and it does without sorting it here: `readsSoFar` returns the reads SORTED, and every
+ * marker begins `(`, which orders before any repo-relative path. A reorder here would be machinery no
+ * fixture could ever be seen to need.
+ *
+ * @param {readonly string[]} outside
+ */
+function namedSample(outside) {
+  return `${outside.slice(0, PATHS_SHOWN).join("; ")}${outside.length > PATHS_SHOWN ? "; ..." : ""}`;
+}
+
+/**
+ * The remedy this refusal may honestly offer.
+ *
+ * Widening is a real remedy only for ordinary paths. `readsOutsideScope` refuses the `WHOLE_REPOSITORY`
+ * marker whatever the scope, so no value of `WALK_SCOPE` covers one -- and a reader who followed the old
+ * unconditional "widen to cover these" against a marker widened to the repository root and was refused
+ * again, identically, with no hint the loop was by design (#2007, after #1968 paid that round).
+ *
+ * THE MIXED CASE IS DECIDED BY THE UNBOUNDED READ, not by branch order: a remedy has to clear EVERY path
+ * in the list, and widening leaves the marker refused however far it is widened. So removal is the only
+ * remedy that ends the refusal, and the message says what widening WOULD have covered rather than
+ * pretending the ordinary paths are not there.
+ *
+ * Failing closed on a child process stays correct and is not what this softens: undeclared is unbounded,
+ * which is the fail-safe direction `declared-walk-scope.test.ts` pins.
+ *
+ * @param {readonly string[]} outside
+ */
+function remedyFor(outside) {
+  const narrower = "A declaration narrower than the walk is a guard that stops running on a diff that would fail it";
+  const unboundedCount = outside.filter(isUnboundedRead).length;
+  if (unboundedCount === 0) return `${narrower} -- widen WALK_SCOPE to cover these, or remove it.`;
+  const ordinaryCount = outside.length - unboundedCount;
+  const widenWouldCover = ordinaryCount === 0 ? ""
+    : ` Widening would cover the other ${ordinaryCount} path(s) and leave the unbounded one(s) refused unchanged.`;
+  return `${narrower} -- but the walk left the process for ${unboundedCount} of these, so nothing can bound `
+    + `what it read there: NO value of WALK_SCOPE covers ${WHOLE_REPOSITORY}.${widenWouldCover}`
+    + " Remove the declaration -- undeclared is unbounded, which is the safe direction.";
 }
 
 /**
@@ -662,9 +715,7 @@ export async function declareWalkScope(testUrl) {
     const outside = readsOutsideScope(reads, scope, own);
     if (outside.length > 0) {
       throw new Error(`${relative(REPO_ROOT, testPath)} declares WALK_SCOPE ${JSON.stringify(scope)} and read `
-        + `${outside.length} path(s) outside it: ${outside.slice(0, 8).join("; ")}`
-        + `${outside.length > 8 ? "; ..." : ""}. A declaration narrower than the walk is a guard that stops `
-        + "running on a diff that would fail it -- widen WALK_SCOPE to cover these, or remove it.");
+        + `${outside.length} path(s) outside it: ${namedSample(outside)}. ${remedyFor(outside)}`);
     }
   });
 }
