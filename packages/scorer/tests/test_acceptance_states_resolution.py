@@ -25,8 +25,12 @@ def load():
 
 
 def report_from(*repeats):
+    # `report_skeleton` takes the RECORDS per file since #1918, not a count of them, so that the record
+    # count and the capture-protocol census cannot be two projections of one thing that disagree. These
+    # records carry only what this file's subject needs: `resolution` counts them and reads nothing off
+    # them. The census over the same fixtures is pinned in `test_acceptance_states_capture_protocol.py`.
     return load().report_skeleton(
-        {f"runs/screenreader-acceptance/repeat-{i}.jsonl": n for i, n in enumerate(repeats, 1)},
+        {f"runs/screenreader-acceptance/repeat-{i}.jsonl": [{}] * n for i, n in enumerate(repeats, 1)},
         artifact={},
         diagnostic=False,
     )
