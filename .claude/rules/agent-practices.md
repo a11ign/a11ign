@@ -91,9 +91,23 @@ whether they are followed.
   19:19:20Z`. **A sanity check on core is not a sanity check.** `gh pr view`, `gh pr list` and
   `gh issue list` spend GRAPHQL; `gh api` spends CORE; one can be dead while the other is healthy, so read
   the pool you are about to spend rather than the one that answers first. Per TOKEN means every session
-  authenticating as the same user shares one counter, and this host has exactly one `gh` identity
-  configured (measured the same day) — so there is nothing here to switch to, and the identity class is
-  #928's rather than yours.
+  authenticating as the same ACCOUNT shares one counter — and which account you are is not a constant
+  here. The default `~/.config/gh` authenticates as a person (`DanBeckDev`), and
+  `GH_CONFIG_DIR=/home/agent/workers/gh` as `a11ign-ai-workers` — which is what
+  `a11ign-work-tick.service` sets. So an exhausted pool always has a healthy-looking neighbour, and
+  **you must not switch to the other config to get past your own limit.** One export changes who every
+  subsequent write is attributed to; nobody has ruled that a blocked session may spend the other
+  account's quota, and that disposition is `ceo`'s (`lane:ceo`, #916) rather than yours. Wait out your
+  own reset.
+- **You may already be spending an account you did not pick, so name it before you read its pool.**
+  `/home/agent/.local/bin/gh` is a ROUTING WRAPPER sitting ahead of `/usr/bin/gh` on an interactive PATH:
+  with `GH_CONFIG_DIR` unset it selects the workers config when `HERDR_WORKSPACE_ID` is listed in
+  `/home/agent/workers/workspaces.txt`, and the person's config otherwise — which is why a systemd unit,
+  having no workspace id, must DECLARE `GH_CONFIG_DIR` rather than inherit one (`host-units.mjs`, and the
+  units that carry the line). Measured 2026-09-23T17:47Z, one shell, one second: `/usr/bin/gh api user`
+  read `DanBeckDev` while `/home/agent/.local/bin/gh api user` read `a11ign-ai-workers`.
+  **Run `gh api user --jq .login` first, then the headers** — the pool you are about to spend is decided
+  by your PATH and your workspace id, not by what you typed.
 
 ## `lane:ceo` protects review, not authorship (ceo's ruling, 2026-09-18)
 
