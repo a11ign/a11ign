@@ -1,8 +1,8 @@
 # Changesets
 
 The release machinery from [ADR 0007](../docs/adr/0007-versioning-and-release.md), re-validated against
-the alternatives on 2026-08-22. **Nothing has been published yet** — the name is undecided (PLAN.md, B5),
-and this exists so that when it is decided, releasing is a config change rather than a scramble.
+the alternatives on 2026-08-22. **`a11ign@0.1.0` and five `@a11ign/*` packages shipped on 2026-09-19**,
+and this machinery is why that was a config change rather than a scramble.
 
 ## Adding one
 
@@ -42,10 +42,13 @@ reached the release gate; the gate refused at that run; the versions are read fr
 
 - **`"linked": []`** — every package versions independently, which is the payoff ADR 0004's boundaries
   were drawn for: a change touching only `nvda-worker` publishes `nvda-worker` and nothing else.
-- **`"access": "restricted"`** — deliberately NOT `public`. Until B5 is settled, an accidental publish
-  should fail rather than put a package under a name we may not keep. On a free npm account a restricted
-  publish errors outright, which is the failure direction we want. **Change this to `public` in the same
-  change that cuts the first release, not before.**
+- **`"access": "public"`** — and it has to stay that way. Every published package here is scoped
+  (`@a11ign/*`) and npm refuses a scoped publish under any other value, so this is load-bearing now
+  rather than protective. `release.yml`'s publish step reads this file back and refuses on anything
+  else, so changing it does not quietly change what a release does — it stops the release.
+  It read `restricted` until 2026-09-14 (#1530), when the name was still open and the useful failure
+  was an accidental publish claiming a name nobody had chosen; the name is settled and `a11ign@0.1.0`
+  shipped on 2026-09-19, so that reason is spent.
 - **`@a11ign/lab` and `@a11ign/nvda-speech` are `private`** and are skipped automatically.
   `lab` ships nothing by design — what ships is its output.
 
