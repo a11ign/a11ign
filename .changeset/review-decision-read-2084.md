@@ -2,12 +2,15 @@
 "@a11ign/agent-org": patch
 ---
 
-**The org now reads `reviewDecision`, the field GitHub merges on and no line of this repository read
-(#2084).** Measured 2026-09-23 at `468a74f1b`: `grep -rl reviewDecision --include='*.mjs'` over the tree
-returned **0**, while `main`'s review requirement — live since #2022 — decides every merge here from it.
-The consequence was a state nothing could see: #2049 sat green, armed and unmergeable for over seven
-hours on a `CHANGES_REQUESTED` posted at a head the author had already fixed, and every org read returned
-green-and-armed.
+**The org's QUEUE READ now reads `reviewDecision`, the field GitHub merges on (#2084).** Measured at
+`468a74f1b`, `git grep -l reviewDecision -- '*.mjs'` returns exactly one file and it is not a queue read:
+`row-claim/own-pr-health-rule.mjs` (#2126) uses it to answer *may this session claim another row*, which
+emits no order, wakes nobody, fires only on `CHANGES_REQUESTED`, and covers only the session holding the
+row. Nothing that reads the QUEUE touched it — not `work-gate.mjs`, not `queue-table.mjs`, not
+`merge-guard.mjs`, not `auto-arm-sweep.mjs` — while `main`'s review requirement, live since #2022, decides
+every merge here from it. The consequence was a state nothing could see: #2049 sat green, armed and
+unmergeable for over seven hours on a `CHANGES_REQUESTED` posted at a head the author had already fixed,
+and every org read returned green-and-armed.
 
 `readPrs` now asks for `reviewDecision` on the `gh pr list` call it already makes — another field, never
 another call, which is why this closes here rather than in `queue-table.mjs`, whose own header records
@@ -31,6 +34,6 @@ independent fields that agree today — and refuses a DISAGREEMENT, keyed on the
 `.claude/rules/agent-practices.md` rather than on a literal. **That ruling declines #2084's done-when 1**:
 dismissal is documented as covering APPROVING reviews only, so it would not have cleared the refusal
 #2049 was stuck on, and *Update branch* is a documented dismissal trigger that `update-branch-sweep.mjs`
-runs after every merge — 15 of the 40 most recent merges had another pull request land inside their
-approval-to-merge window, so turning it on would have stalled each of them for a re-review nothing would
-have asked for. No branch configuration is changed by this pull request.
+runs after every merge — measured twice, 15 of the 40 most recent merges had another pull request land
+inside their approval-to-merge window, so turning it on would have stalled each of them for a re-review
+nothing would have asked for. No branch configuration is changed by this pull request.

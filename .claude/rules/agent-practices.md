@@ -166,12 +166,21 @@ them before quoting them; what does not drift is the membership above.
 what the row needs and costs what the row did not price. Stated here as the row required, with the
 evidence, and with what would reopen it.
 
-- **The field decides every merge here and NOTHING in this repository read it.** Measured 2026-09-23 at
-  `468a74f1b`: `grep -rl reviewDecision --include='*.mjs'` over the tree returned **0**. #2049 sat green,
-  armed and unmergeable for over seven hours on a `CHANGES_REQUESTED` posted at a head the author had
-  already fixed, and every org read returned green-and-armed. **Since #2084 `work-gate.mjs`'s
-  `readPrs` asks for `reviewDecision` on the `pr list` call it already makes — another field, never
-  another call — and `pr-review-blocked` names every green, unheld pull request GitHub is holding.**
+- **The field decides every merge here and NO QUEUE READ TOUCHED IT.** Measured at `468a74f1b`:
+  `git grep -l reviewDecision -- '*.mjs'` returns **exactly one file**, and it is not a queue read —
+  `row-claim/own-pr-health-rule.mjs` (#2126, merged the same day #2084 was filed) reads it to answer *may
+  this session claim another row*. That refusal emits no order, wakes nobody, fires only on
+  `CHANGES_REQUESTED`, and only for the session holding the row. **Nothing that reads the QUEUE touched
+  it**: not `work-gate.mjs`, not `queue-table.mjs`, not `merge-guard.mjs`, not `auto-arm-sweep.mjs` —
+  which is #2084's own list, and that half of its finding is exactly right. So #2049 sat green, armed and
+  unmergeable for over seven hours on a `CHANGES_REQUESTED` posted at a head the author had already fixed,
+  and every org read returned green-and-armed. **Since #2084 `work-gate.mjs`'s `readPrs` asks for
+  `reviewDecision` on the `pr list` call it already makes — another field, never another call — and
+  `pr-review-blocked` names every green, unheld pull request GitHub is holding.**
+  *The record, because it is the lesson rather than a footnote:* #2084's body states that grep returning
+  **0**, and it was true when the row was filed at 08:5xZ. It was RESTATED at `468a74f1b` rather than
+  re-run, and by then #2126 had landed. **A grep count in a row body is a reading at a moment; re-run it
+  at YOUR commit before building on it.** Caught in review of #2203, not by the author.
 - **`dismiss_stale_reviews` WOULD NOT HAVE CLEARED #2049, because it does not touch a refusal.** Every
   official statement of the setting is scoped to APPROVING reviews — *"dismiss stale pull request
   approvals"*, *"the approving review is dismissed as stale"*, and the ruleset parameter's own *"New,
@@ -181,11 +190,15 @@ evidence, and with what would reopen it.
 - **It would have stalled 15 of this repository's last 40 merges.** GitHub documents the *Update branch*
   button as a dismissal trigger **by name**, with no carve-out for base-originated updates, and
   `update-branch-sweep.mjs` runs exactly that on every armed, green pull request after every merge.
-  Measured over the 40 most recently merged pull requests at `468a74f1b`: **all 40 carried an APPROVED
-  review and all 40 were approved AT the head that merged**, so a content push would have cost nothing;
-  median approval-to-merge latency **6.5 minutes**; and **15 of the 40 had another pull request merge to
-  `main` inside that window**, which is one sweep each. Those fifteen would have lost the approval that
-  armed them and stopped — and before `pr-review-blocked` existed, nothing in this org would have said so.
+  Measured TWICE over the 40 most recently merged pull requests, from
+  `gh pr list --state merged --limit 40 --json number,mergedAt,headRefOid,reviews`: **all 40 carried an
+  APPROVED review and all 40 were approved AT the head that merged**, so a content push would have cost
+  nothing; median approval-to-merge latency **6.3–6.5 minutes**; and **15 of the 40 had another pull
+  request merge to `main` inside that window**, which is one sweep each. The second reading, window
+  09:29:02Z–18:03:03Z, names them: #2087, #2112, #2124, #2128, #2135, #2136, #2137, #2144, #2146, #2148,
+  #2156, #2164, #2191, #2194, #2196. **A rolling population, and 15/40 held across both readings** —
+  re-derive it rather than quoting the number. Those fifteen would have lost the approval that armed them
+  and stopped, and before `pr-review-blocked` existed nothing in this org would have said so.
 - **`require_last_push_approval: true` is the candidate that was NOT taken, and what blocks it is a
   MISSING measurement rather than a bad one.** It closes the same direction more narrowly, and the
   reviewer is essentially never the last pusher here — reviews are posted by `a11ign-bot`, which has
