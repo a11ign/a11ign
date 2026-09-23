@@ -24,12 +24,26 @@
  *
  * ## What this does and does not handle
  *
- * DELIBERATELY NOT A TOKENISER. A guard here is a classifier reading one repo's own source, not a
- * general-purpose JS parser, and the failure mode a full parser would prevent (a comment-shaped sequence
- * inside a REGEX LITERAL, e.g. `/\/\/ not a comment/`) has not been observed in any guard this function
- * replaces. Building one to close a gap nobody has hit is the over-engineering this exists to avoid — but
- * the two gaps that WOULD recur without care are handled properly, because both were the reason each
- * hand-rolled version above existed in the first place:
+ * STILL NOT A GENERAL-PURPOSE PARSER, but it now recognises three token kinds rather than two: comments,
+ * string literals, and REGEX LITERALS. The regex kind was refused here until #2131 on the stated ground
+ * that a comment-shaped sequence inside a regex literal "has not been observed in any guard this function
+ * replaces" — a true premise when it was written and a false one now. Measured 2026-09-23 over all 1005
+ * tracked `.ts` and `.mjs` files under `packages/` and `scripts/`: **100 of them** came out of this function
+ * with real `//` comment lines still in them, which can only happen where the scan believed it was inside a
+ * string while passing a comment. Classified by the literal that swallowed the file, all 100 are the same
+ * mechanism — an apostrophe (40 files), a double quote (39) or a BACKTICK (21) written inside a regex
+ * literal, which this scan had no way to tell from a string's opening delimiter. See `endOfRegexLiteral`
+ * for what is recognised, and `slashBeginsRegex` for the one judgement it has to make.
+ *
+ * WHY THAT MATTERS IN BOTH DIRECTIONS, and why the false NEGATIVE is the one to fear. A guard reading a
+ * desynchronised file sees everything after the phantom opener as string content: the false positive
+ * (a guard charging a `~/.cache` written inside a `//` comment) is how this was found, but the false
+ * negative — a real violation written anywhere in the swallowed region and silently not flagged — is a
+ * guard going quiet, and a quiet guard never announces itself. `stripComments` is the shared reader for
+ * roughly twenty of them.
+ *
+ * The two gaps below are handled for the same reason they always were — each was why one of the
+ * hand-rolled versions above existed in the first place:
  *
  *   - `//` and `/* ... *\/` sequences INSIDE a string literal (`'`, `"`, or a template literal) are left
  *     alone. `"https://example.com"` survives whole; a naive `source.replace(/\/\/.*$/gm, "")` would cut
@@ -39,10 +53,15 @@
  *
  * WHAT IS NOT HANDLED, stated rather than left to be discovered by a future mutation: a comment INSIDE an
  * interpolated expression (`` `${/* oops *\/ x}` ``) is not stripped — the interpolation's CONTENT is
- * copied through verbatim, comments included, same as any other string content. And a regex literal is
- * not distinguished from a division operator — telling them apart needs knowing whether the previous
- * token expects a value, which is real parsing — so `/\/\// ` read as a regex literal containing two
- * slashes would be misread as comment syntax.
+ * copied through verbatim, comments included, same as any other string content.
+ *
+ * AND THE REGEX-VERSUS-DIVISION JUDGEMENT IS A HEURISTIC, not a parse: `slashBeginsRegex` reads the
+ * previous significant token, which is what a real lexer does, but it does it without a grammar. Both of
+ * its errors are deliberately UNEQUAL. Failing to see a regex leaves this function exactly where it was
+ * before #2131, so the worst case of the heuristic is the old behaviour; inventing one where a division
+ * was meant would be NEW damage, so that direction is bounded twice over — a `/` is read as division after
+ * anything that can END an operand, and a candidate regex that does not close on its own line is abandoned
+ * and re-read as an ordinary character.
  *
  * WHAT IS NOW HANDLED, having stopped being hypothetical: a NESTED template literal (or a `'`/`"` string)
  * inside an interpolation (`` `${cond ? `a` : `b`}` ``) used to corrupt the OUTER literal's own end — the
@@ -80,6 +99,86 @@ function endOfBlockComment(source: string, i: number): number {
 }
 
 /**
+ * The keywords after which a `/` can only begin a REGEX LITERAL, never a division — because each of them
+ * ends where a VALUE is expected. Without this list, `return /a`b`/.test(x)` reads its `return` as an
+ * identifier (an operand), calls the slash a division, and the backtick inside the regex opens a phantom
+ * template literal that swallows the rest of the file. `in` and `of` are here for `for (const k of /re/…)`
+ * shapes; `case` and `throw` for statement positions that take an expression.
+ */
+const KEYWORDS_EXPECTING_A_VALUE = new Set([
+  "return", "typeof", "instanceof", "in", "of", "new", "delete", "void", "case", "do", "else", "yield",
+  "await", "throw",
+]);
+
+/** A token that can END an operand — an identifier, a number, a closing bracket, or a string's closing quote. */
+const ENDS_AN_OPERAND = /[A-Za-z0-9_$)\]}'"`]$/;
+
+/** What the scan remembers after consuming a completed regex literal: an operand, exactly like a closing
+ *  paren, so the `/` in the unlikely `/a/ / 2` reads as the division it is. */
+const A_COMPLETED_OPERAND = ")";
+
+/**
+ * Whether a `/` following `previousToken` opens a regex literal rather than dividing by something.
+ *
+ * THIS IS THE WHOLE JUDGEMENT, and it is the same one every real JS lexer has to make: `a / b` and
+ * `/ab/` are the same two characters, and only what came BEFORE tells them apart. A division needs a
+ * left-hand operand, so a `/` that follows anything which can end one is division; a `/` that follows an
+ * operator, a `(`, a `,`, a `;` or the start of the file cannot be, because there is nothing to divide.
+ *
+ * IT IS DELIBERATELY BIASED TOWARD "DIVISION", i.e. toward NOT recognising a regex. Saying "division"
+ * where a regex was meant reproduces this file's behaviour before #2131 — a known, bounded cost, already
+ * measured. Saying "regex" where a division was meant would invent a literal that swallows real code,
+ * which is new damage, so the two unavoidable blind spots are both resolved the safe way: a regex written
+ * immediately after `)` (`if (cond) /re/.test(s)`) or after a block's `}` is read as a division and left
+ * alone, because those two brackets far more often close an operand than a condition. `!` is NOT in the
+ * operand set, because `!/re/.test(x)` is common here and `x! / 2` is not.
+ */
+function slashBeginsRegex(previousToken: string): boolean {
+  if (KEYWORDS_EXPECTING_A_VALUE.has(previousToken)) return true;
+  return !ENDS_AN_OPERAND.test(previousToken);
+}
+
+/**
+ * Index just past the regex literal starting at `i` (its opening `/` is `source[i]`), flags included, or
+ * `-1` when what starts there is not a regex literal after all.
+ *
+ * THE `-1` IS THE SECOND HALF OF THE SAFETY ARGUMENT in `slashBeginsRegex`. A regex literal cannot contain
+ * an unescaped newline, so a candidate that reaches the end of its line without closing was never one, and
+ * the caller re-reads the `/` as an ordinary character rather than consuming to some far-away slash. An
+ * empty body is refused for the same reason: `//` is a line comment in every JS position, and the empty
+ * regex is not expressible, so a `/` immediately followed by `/` is never this.
+ *
+ * A `/` inside a CHARACTER CLASS does not close the literal (`/[/]/`), which is why the class depth is
+ * tracked; an escaped character is consumed as a pair so `/\//` closes at its third slash, not its second.
+ */
+function endOfRegexLiteral(source: string, i: number): number {
+  if (source[i + 1] === "/" || source[i + 1] === undefined) return -1;
+  let j = i + 1;
+  let inCharacterClass = false;
+  while (j < source.length) {
+    const ch = source[j];
+    if (ch === "\n") return -1; // a regex literal never spans a line: this was a division after all
+    if (ch === "\\") { j += 2; continue; }
+    if (ch === "[") inCharacterClass = true;
+    else if (ch === "]") inCharacterClass = false;
+    else if (ch === "/" && !inCharacterClass) break;
+    j += 1;
+  }
+  if (j >= source.length) return -1; // unterminated: not a regex literal
+  j += 1; // the closing slash
+  while (j < source.length && /[a-z]/.test(source[j])) j += 1; // the flags
+  return j;
+}
+
+/** The run of identifier characters starting at `i`, which the scan consumes as ONE token so that a
+ * keyword can be recognised whole by `slashBeginsRegex` rather than by its last letter. */
+function identifierAt(source: string, i: number): string {
+  let j = i;
+  while (j < source.length && /[A-Za-z0-9_$]/.test(source[j])) j += 1;
+  return source.slice(i, j);
+}
+
+/**
  * Index just past the matching `}` of a `${` interpolation, given `i` pointing at the `{` itself.
  *
  * WITHOUT THIS, a template literal containing a NESTED template literal in its interpolation —
@@ -111,12 +210,20 @@ function endOfBlockComment(source: string, i: number): number {
 function skipInterpolation(source: string, i: number): number {
   let depth = 1;
   let j = i + 1;
+  let previousToken = "{"; // an interpolation opens where a value is expected, so a leading `/` is a regex
   while (j < source.length && depth > 0) {
     const ch = source[j];
-    if (ch === "{") { depth += 1; j += 1; continue; }
-    if (ch === "}") { depth -= 1; j += 1; continue; }
-    if (ch === "'" || ch === "\"" || ch === "`") { j = copyStringLiteral(source, j).end; continue; }
+    if (ch === "{") { depth += 1; j += 1; previousToken = ch; continue; }
+    if (ch === "}") { depth -= 1; j += 1; previousToken = ch; continue; }
+    if (ch === "'" || ch === "\"" || ch === "`") { j = copyStringLiteral(source, j).end; previousToken = ch; continue; }
+    if (ch === "/" && slashBeginsRegex(previousToken)) {
+      const end = endOfRegexLiteral(source, j);
+      if (end > 0) { j = end; previousToken = A_COMPLETED_OPERAND; continue; }
+    }
+    const word = /[A-Za-z_$]/.test(ch) ? identifierAt(source, j) : "";
+    if (word) { j += word.length; previousToken = word; continue; }
     j += 1;
+    if (!/\s/.test(ch)) previousToken = ch;
   }
   return j;
 }
@@ -159,19 +266,33 @@ function copyStringLiteral(source: string, i: number): { text: string; end: numb
 export function stripComments(source: string): string {
   let out = "";
   let i = 0;
+  let previousToken = ""; // the start of a file is a value position, so a leading `/` would be a regex
   while (i < source.length) {
     const ch = source[i];
     const next = source[i + 1];
+    // The comment forms are tested FIRST and unconditionally, which is also what JavaScript itself does:
+    // `//` is a line comment in every position (the empty regex is not expressible) and `/*` is a block
+    // comment in every position (`*` cannot open a regex body). Neither is ever a regex literal.
     if (ch === "/" && next === "/") { i = endOfLineComment(source, i); continue; }
     if (ch === "/" && next === "*") { i = endOfBlockComment(source, i); continue; }
+    if (ch === "/" && slashBeginsRegex(previousToken)) {
+      const end = endOfRegexLiteral(source, i);
+      // Copied through VERBATIM, exactly like a string literal: a quote, a backtick or a `//` inside a
+      // regex is CONTENT, and reading any of them as a delimiter is what desynchronised 100 files (#2131).
+      if (end > 0) { out += source.slice(i, end); i = end; previousToken = A_COMPLETED_OPERAND; continue; }
+    }
     if (ch === "'" || ch === "\"" || ch === "`") {
       const literal = copyStringLiteral(source, i);
       out += literal.text;
       i = literal.end;
+      previousToken = ch;
       continue;
     }
+    const word = /[A-Za-z_$]/.test(ch) ? identifierAt(source, i) : "";
+    if (word) { out += word; i += word.length; previousToken = word; continue; }
     out += ch;
     i += 1;
+    if (!/\s/.test(ch)) previousToken = ch;
   }
   return out;
 }
