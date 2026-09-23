@@ -53,6 +53,10 @@ scripts/tsconfig-fixtures/*/tsconfig.tsbuildinfo
 packages/*/dist
 packages/*/tsconfig.tsbuildinfo
 
+# Root incremental-build state (npm run typecheck). It was committed by accident on #2217:
+# a 54,945-byte generated file, outside that row's Region, that no build reads from git.
+tsconfig.tsbuildinfo
+
 # OUR tailnet, not the project's. This repo is generic; the Tailscale policy below is one deployment's
 # access rules and one home network's addresses, and neither belongs to anyone else using this tool.
 # `tailscale.yml` is kept because it derives everything from `inventory.yml` and so works for any fleet —
