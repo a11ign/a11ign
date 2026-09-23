@@ -162,6 +162,18 @@ jobs:
   # 39/39 passed and ZERO occurrences of `LIVE PASS` -- or of `NOT RUN` -- anywhere in its output, so a step
   # built on it could not tell the pass from the skip, which is this row's whole subject. With the flag,
   # both lines appear.
+  #
+  # AND THE CONFIG PATH IS NOT SPELLED HERE -- it is READ OUT of the one file that owns it. `entry-points.test.ts`
+  # scans every workflow's text, unstripped, for a whitespace-preceded `scripts/…\.mjs` and reads it as an
+  # invocation; rstest's own config module (under `scripts/rstest`) is MEANT to be imported, so it carries no
+  # entry guard and the scan reports it unguarded. Measured on this very branch: spelling that path after
+  # `--config` turned `ts / run` red at `26f4d80f8` (run 35854391590) on exactly that assertion. The scan does
+  # not strip comments either -- a whitespace-preceded mention in prose is matched on identical terms -- so
+  # this comment names rstest's config DIRECTORY and not the file.
+  # Guarding the config module would be the wrong fix -- `reusable-board.yml` already ruled that, in its own
+  # comment, and chose the same answer this step does: keep the path OUT of the workflow. `RSTEST_CONFIG` is
+  # exported by `assert-glob-not-empty.mjs` for precisely this ("resolved from this file so the caller's cwd
+  # cannot change it"), so reading it here is the intended use and the two cannot drift apart.
   mainRulesetBinds:
     if: github.event.schedule != '37 * * * *'
     runs-on: ubuntu-latest
@@ -173,6 +185,12 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci --ignore-scripts
+      # The guard itself imports nothing built, but the step below reads `RSTEST_CONFIG` out of
+      # `assert-glob-not-empty.mjs`, which imports `@a11ign/worker-fleet/cli-flags` -- a package export
+      # resolving to `dist/`, which `--ignore-scripts` does not produce and which this repo does not track.
+      # Every other nightly job that runs tests (`coverage`, `nightly-only`, `doc-report`) builds for the
+      # same reason.
+      - run: npm run build
       - name: Ask GitHub whether main's `pull_request` rule binds the identity that merges here
         env:
           A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
@@ -183,7 +201,22 @@ jobs:
             exit 1
           fi
           export GH_TOKEN="$A11IGN_BOT_TOKEN"
-          A11Y_CHECK_MAIN_RULESET=1 npx rstest run --config scripts/rstest/rstest.config.mjs \
+          # Read the runner's config path out of its single owner rather than re-typing it here; see the
+          # block above the job for why this workflow must not spell it.
+          #
+          # THE EXIT CODE IS THE SIGNAL, NOT THE EMPTY STRING, and that distinction was measured rather than
+          # assumed: `console.log(m.RSTEST_CONFIG)` on a RENAMED export prints the four characters
+          # `undefined`, which is not empty, so a `-z` test alone let it through and rstest died on
+          # `Cannot find config file: <repo>/undefined` -- red, but on a message that names neither the
+          # cause nor this job. So the reader exits non-zero when the export is missing, and `|| …=""`
+          # converts that into the empty string the refusal below is written for -- without it the runner's
+          # own `bash -e` aborts the step before the refusal can print.
+          RSTEST_CONFIG="$(node -e 'import("./packages/guards/src/assert-glob-not-empty.mjs").then((m) => { if (m.RSTEST_CONFIG) console.log(m.RSTEST_CONFIG); else process.exit(1); })')" || RSTEST_CONFIG=""
+          if [ -z "$RSTEST_CONFIG" ]; then
+            echo '::error::CANNOT_TELL: could not read RSTEST_CONFIG from packages/guards/src/assert-glob-not-empty.mjs, so the runner was never started and NOTHING WAS READ. The export was renamed, or the build did not run. This is not a pass. See #2120.'
+            exit 1
+          fi
+          A11Y_CHECK_MAIN_RULESET=1 npx rstest run --config "$RSTEST_CONFIG" \
             --include packages/lab/src/packaging/branch-protection.test.ts \
             --disableConsoleIntercept 2>&1 | tee ruleset-read.log
           # A GREEN EXIT IS NOT A PASS, and that is the defect this job exists to end one layer up. Every
