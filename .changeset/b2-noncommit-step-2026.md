@@ -16,6 +16,10 @@ least one path the row's own `## Region` declares, which is what makes it a read
 author's claim. It is read off GitHub's own `CROSS_REFERENCED_EVENT` timeline, computed server-side the
 moment a body is written, so no search index lags the edit the refusal just asked for — and the timeline
 is only the candidate set: probed on #2000, three of its four cross-referencing PRs merely mention it.
+Both reads go to the END of their connection — the timeline and the declaring PR's changed-file list are
+paged rather than windowed, because the row that is blocking its author is the row that accumulates
+cross-references, and a truncated read of either would report "nobody declared a delivery" for a
+declaration that is simply older than one page.
 
 The refusal names the line by row number and the condition that makes it count. A failed delivery lookup
 leaves the row IN BUILD rather than reading as inconclusive, so a clause that can only ever clear a row
