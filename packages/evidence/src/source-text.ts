@@ -27,13 +27,18 @@
  * STILL NOT A GENERAL-PURPOSE PARSER, but it now recognises three token kinds rather than two: comments,
  * string literals, and REGEX LITERALS. The regex kind was refused here until #2131 on the stated ground
  * that a comment-shaped sequence inside a regex literal "has not been observed in any guard this function
- * replaces" — a true premise when it was written and a false one now. Measured 2026-09-23 over all 1005
- * tracked `.ts` and `.mjs` files under `packages/` and `scripts/`: **100 of them** came out of this function
- * with real `//` comment lines still in them, which can only happen where the scan believed it was inside a
- * string while passing a comment. Classified by the literal that swallowed the file, all 100 are the same
- * mechanism — an apostrophe (40 files), a double quote (39) or a BACKTICK (21) written inside a regex
- * literal, which this scan had no way to tell from a string's opening delimiter. See `endOfRegexLiteral`
- * for what is recognised, and `slashBeginsRegex` for the one judgement it has to make.
+ * replaces" — a true premise when it was written and a false one now. Measured at `b9867a3ec`
+ * (2026-09-23) over the 1049 tracked `.ts` and `.mjs` files under `packages/` and `scripts/` that
+ * `strip-comments-scan-sync.test.ts` walks: **100 of them** came out of the unfixed function keeping a
+ * comment line the TypeScript parser removes, which can only happen where the scan believed it was inside
+ * a string while passing a comment, and **56** came out having LOST a character the parser keeps. Every
+ * one of the 100 contains a quote character written inside a regex literal — the construct this fix adds;
+ * taking the FIRST such literal in each file, that character is an apostrophe in 29, a double quote in 49
+ * and a BACKTICK in 22. (First-literal attribution is a proxy for which literal actually swallowed the
+ * file rather than a proof of it, and the population is a reading at a commit: an earlier 40/39/21 split
+ * over a 1005-file population came from a census script that was never in the tree and is WITHDRAWN, not
+ * reconciled.) See `endOfRegexLiteral` for what is recognised, and `slashBeginsRegex` for the one
+ * judgement it has to make.
  *
  * WHY THAT MATTERS IN BOTH DIRECTIONS, and why the false NEGATIVE is the one to fear. A guard reading a
  * desynchronised file sees everything after the phantom opener as string content: the false positive

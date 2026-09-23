@@ -170,12 +170,15 @@ test("a regex literal containing `//` is content, not a comment start -- the lim
 // --- #2131: A REGEX LITERAL IS A TOKEN, and the quote characters inside one are CONTENT ---
 //
 // The docstring above declined to recognise regex literals on the ground that a comment-shaped sequence
-// inside one "has not been observed in any guard this function replaces". Measured 2026-09-23 across all
-// 1005 tracked `.ts`/`.mjs` files under `packages/` and `scripts/`: 100 of them came out of this function
-// with real `//` comment lines still in them. Classified by the literal that swallowed each one, all 100
-// were the same mechanism -- an apostrophe (40 files), a double quote (39) or a backtick (21) written
-// inside a regex literal and read as a string's opening delimiter. `strip-comments-scan-sync.test.ts`
-// holds the tree-wide reading; this file holds the mechanism, isolated.
+// inside one "has not been observed in any guard this function replaces". Measured at b9867a3ec
+// (2026-09-23) over the 1049 tracked `.ts`/`.mjs` files under `packages/` and `scripts/` that
+// `strip-comments-scan-sync.test.ts` walks: 100 of them came out of the unfixed function keeping a comment
+// the TypeScript parser removes, and 56 came out having lost a character it keeps. Every one of the 100
+// carries a quote character inside a regex literal; by the first such literal in each file, an apostrophe
+// in 29, a double quote in 49, a backtick in 22 -- a proxy for the swallowing literal rather than a proof
+// of it. The population is a reading at a commit and it moves with the tree (1042 -> 1049 across three
+// merges); `strip-comments-scan-sync.test.ts` holds the tree-wide reading and asserts the only figure that
+// does not move -- 0 -- while this file holds the mechanism, isolated.
 
 test("MUTATION TARGET: a BACKTICK inside a regex literal does not open a phantom template literal -- and "
   + "the identical line WITHOUT backticks is the control that proves the pair is about the backticks", () => {
