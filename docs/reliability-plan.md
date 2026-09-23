@@ -460,15 +460,20 @@ consumed is still in `.changeset/` (#1824; `release-commit-version-bump.mjs` fix
 has exercised it yet).
 
 ```
-$ ls .changeset/*.md | grep -v README | wc -l   ->  85 pending
+$ ls .changeset/*.md | grep -v README | wc -l   ->  87 pending      (a ROLLING count)
+$ ls .changeset/first-publish-*.md | wc -l      ->   6
 $ npx changeset status --verbose                 ->  every package  0.0.0 -> 0.1.0
 $ npm view a11ign versions                       ->  0.1.0, live since 2026-09-19
 ```
 
-Six of those 85 are `first-publish-*.md`, each headed *"The first published version of …"* and describing
-a publish that has already happened. On the next real dispatch `changeset version` writes each package's
-first `CHANGELOG.md` under a single `## 0.1.0` heading carrying all 85 — six announcing a first release,
-the rest describing work that landed after 0.1.0 reached the registry — and `changeset publish` then skips
+**The pending total is a reading at a named moment and moves with every merge — re-derive it before
+quoting it.** The other three do not move on their own, which is why the argument rests on them.
+
+**Six of the pending entries are `first-publish-*.md`**, each headed *"The first published version of …"*
+and describing a publish that has already happened. On the next real dispatch `changeset version` writes
+each package's first `CHANGELOG.md` under a single `## 0.1.0` heading carrying every one of them — six
+announcing a first release, the rest describing work that landed after 0.1.0 reached the registry — and
+`changeset publish` then skips
 the six packages already at 0.1.0, so that changelog would describe a version no consumer ever received.
 Correcting the base first, so the manifests read the versions actually published and the pending set lands
 at 0.2.0, is the other option. **Which of those a first changelog does is a call about what it says, not a
