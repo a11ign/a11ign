@@ -22,10 +22,15 @@ root named in two installed units, `host-units.mjs`'s remedy text and `host-unit
 (GitHub's hosted-runner workspace root, in `doc-cross-reference-report`).
 
 **The absolute branch takes a forward slash and nothing else**, which the older branches' `[/\\]{1,2}`
-does not: reusing that here read `"...HOME=/home/agent\nEnvironment=..."` — a JS newline escape in
-`host-units.test.ts`'s fixture — as the directories `~/n` and `~/nEnvironment`, neither of which anybody
-has. Classifying those would have put nonsense in a list whose whole value is that every row is a
-decision somebody made.
+does not: reusing that here read a JS newline escape in `host-units.test.ts`'s fixture — a `HOME=` line
+joined to the next `Environment=` line by an escape, inside one string — as two directories under a home
+root, neither of which anybody has. Classifying those would have put nonsense in a list whose whole value
+is that every row is a decision somebody made.
+
+(The two names are deliberately not written out here. The first draft of this note did write them, and
+**the guard caught its own changeset** — which is the file's own fourth-instance lesson arriving one more
+time: a guard keyed on a shape finds that shape in the prose describing it, and quoting the literal is
+the one edit that is never needed.)
 
 A new test drives **both spellings of one path** through one extracted `homeRootNamesIn`, asserting an
 unclassified segment surfaces from each and is reported identically (normalised to `~/<segment>`), and
