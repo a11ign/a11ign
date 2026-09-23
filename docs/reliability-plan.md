@@ -457,9 +457,11 @@ written** — a walk of this tree finds no `CHANGELOG.md` at all outside the ins
 records that are not this repository's own files (`node_modules`, `.git`, `runs`, `__pycache__`, `.venv`
 and `coverage`). `dist` is walked, unlike in the sweeps that share this prune list: it is this
 repository's own build output and `npm pack` ships a package's changelog, so a copy there would mean one
-had been written. `release:provenance` still reports
-`CHANGELOG absent (never published)`. `release.yml` ran `release:version` inside the job and nothing
-committed the result back, so **all seven versioned manifests still read `0.0.0`** — the seven public
+had been written. `release:provenance` still reports `CHANGELOG absent, so nothing to examine` — and
+**since #2162 it says nothing beyond that**, because `existsSync` cannot see a registry. The gloss it used
+to carry, `absent (never published)`, was a conclusion the check had no instrument for, and **the next
+sentence of this very paragraph is the counter-example**: `release.yml` ran `release:version` inside the
+job and nothing committed the result back, so **all seven versioned manifests still read `0.0.0`** — the seven public
 ones under `packages/`, which are exactly the set `changeset version` writes while
 `.changeset/config.json` sets `privatePackages.version` to `false` — and every
 changeset that publish consumed is still in `.changeset/` (#1824; `release-commit-version-bump.mjs` fixes
