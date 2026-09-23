@@ -549,6 +549,25 @@ const NOT_A_MEASURED_CLAIM: Record<string, string> = {
     + "reproducible measurement predating the board-recording mechanism) but with no commit to cite: it "
     + "describes the TOOL's behaviour on a fixture page anyone can reload, not a corpus/real-page metric "
     + "`docs/board/reported/` was built to track.",
+  // #1663 (landed in #2049): three NUMERIC_TRANSITION matches in one parenthetical. They are the finding
+  // itself -- reach counts varying across six captures of `w3.org/WAI` -- and the paragraph exists to tell
+  // a reader those figures measure the SWEEP, not the page, which is the opposite of a result to act on.
+  // Each key carries its own figures, so any edit to the numbers stops the entry matching and this guard
+  // asks again; the vacuity test below is what enforces that.
+  "held constant at `link=75` while reach went":
+    "#1663's own apparatus reading, not a corpus outcome: `domCensus` is what a capture records about the "
+    + "PAGE and `reach` is what the sweep managed to visit, and the sentence's whole point is that the "
+    + "second moved while the first did not. No recorded gate prints either -- `docs/board/reported/gates/` "
+    + "has no reach or census metric at all -- because neither is a gate this repository runs; the six "
+    + "captures are named in #1663 and re-derivable from them.",
+  "Only the last step, 80 → 84, is the live page changing":
+    "The one step in that sequence attributed to w3.org rather than to the sweep, and it is stated as an "
+    + "attribution with its evidence beside it (the census moved too), not as a measurement of this tool's "
+    + "findings. Same unsourceable population as the entry above.",
+  "so the 13 → 80 figures rest on the census above":
+    "A back-reference that repeats the range to say what it does NOT rest on -- `compareIdentity` answering "
+    + "`UNCOMPARABLE` on three of the six samples. It introduces no figure of its own, and the range it "
+    + "cites is sourced, or not, by the first entry above.",
 };
 
 /**
