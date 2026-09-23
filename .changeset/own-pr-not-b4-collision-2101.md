@@ -1,0 +1,5 @@
+---
+"@a11ign/agent-org": patch
+---
+
+B4 no longer refuses a row against its OWN pull request. `fileOverlapReason` compared a row's declared Region with every open PR, its own included, so a PR opened before its claim -- the two in the wrong order -- made its own row permanently unclaimable by everybody, the session that would finish that PR included, and neither escape the refusal names existed: "sequence with that PR's author" named a bot account, and "narrow this row's region" is impossible when the Region is one file. Measured 2026-09-23: #2077 opened 32 seconds after #2076 was filed, one file each side and the same file; the row sat 1h41m with two more rows shelved behind that file and three engineers idle, until `product-manager` closed the PR by hand. A pull request whose body declares `Closes #<row>` -- read with `extractClosesDeclaration`, B7's own parser, never a second one -- is now excluded from that row's comparison on both the claim path and `work-gate`'s pre-filter, and `row-claim check` reports the same answer `claim` gives. A PR declaring nothing, declaring another row, or merely mentioning one in prose still collides exactly as before (#2101).
