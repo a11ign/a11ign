@@ -27,8 +27,8 @@
  * STILL NOT A GENERAL-PURPOSE PARSER, but it now recognises three token kinds rather than two: comments,
  * string literals, and REGEX LITERALS. The regex kind was refused here until #2131 on the stated ground
  * that a comment-shaped sequence inside a regex literal "has not been observed in any guard this function
- * replaces" — a true premise when it was written and a false one now. Measured at `b9867a3ec`
- * (2026-09-23) over the 1049 tracked `.ts` and `.mjs` files under `packages/` and `scripts/` that
+ * replaces" — a true premise when it was written and a false one now. Measured at `d269bf9d4`
+ * (2026-09-23) over the 1050 tracked `.ts` and `.mjs` files under `packages/` and `scripts/` that
  * `strip-comments-scan-sync.test.ts` walks: **100 of them** came out of the unfixed function keeping a
  * comment line the TypeScript parser removes, which can only happen where the scan believed it was inside
  * a string while passing a comment, and **56** came out having LOST a character the parser keeps. Every
