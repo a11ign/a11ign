@@ -151,9 +151,18 @@ function main() {
   const min = Number(flagValue(process.argv, "min") ?? "1");
   const offenders = underFloor(patterns, min);
   if (offenders.length) {
+    // #2165: THIS SENTENCE USED TO SAY `tsx --test` REPORTS A ZERO-MATCH AS A CLEAN PASS AND THAT THIS IS THE ONLY
+    // PLACE THE FAILURE CAN BE CAUGHT. True while `tsx --test` was the runner; the repo moved to rstest in
+    // #1317-#1320, and under rstest it is wrong in the half that tells a reader where to look. Measured 2026-09-23 on
+    // @rstest/core@0.11.12: rstest DOES exit non-zero, so a run under an exit-code check -- CI's `ts` and `acceptance`
+    // jobs -- catches it without this floor. What it does NOT do is say so in its report, which prints
+    // `"status": "pass"` with every failure field at zero, above an `error No test files found` line that a `| tail`
+    // never reaches. So the floor is no longer the only catcher; it is the one that refuses BEFORE any runner starts,
+    // which is what a hand-run with no exit-code check has instead of a verdict.
     process.stderr.write("REFUSING: a test glob matched too few files, which is indistinguishable from a "
-      + "typo'd or moved path -- `tsx --test` reports a zero-match glob as a clean, empty PASS, never an "
-      + "error, so this is the only place that failure can be caught:\n");
+      + "typo'd or moved path. This refusal comes BEFORE any runner starts, which is the point: rstest exits "
+      + "non-zero on a zero-match but REPORTS it as `\"status\": \"pass\"` with every failure field at zero "
+      + "(#2165), and `tsx --test` reports one as a clean, empty PASS with no error at all:\n");
     for (const { pattern, matched } of offenders) {
       process.stderr.write(`  ${pattern}  matched ${matched}, need at least ${min}\n`);
     }

@@ -90,6 +90,45 @@ reads exactly like a passing gate.
 `realpathSync(mkdtempSync(...))` fixes it. Recorded because it cost twenty minutes and, next time, a
 silent exit 0 from a copied script will look like the gate working rather than the gate never starting.
 
+### 3b. The other trap tier 2 will spring on you: the report is not the verdict, the exit code is
+
+**An rstest run that executed NOTHING prints `"status": "pass"` with every failure field at zero** — and
+whether it does so depends on the ARGUMENT FORM, not on whether anything ran. Measured 2026-09-23 on
+`@rstest/core@0.11.12` through this repo's own config:
+
+| invocation | `status` | `testFiles` | exit |
+|---|---|---|---|
+| a glob `--include` narrowed past its last match | **`pass`** | 0 | 1 |
+| ONE positional filter holding two paths (zsh does not word-split an unquoted `$ACC`) | **`pass`** | 0 | 1 |
+| a LITERAL path that does not exist | `fail` | 1 | 1 |
+| a pattern that matches (**the control**) | `pass` | 1 | 0 |
+
+The two forms that say `pass` are the two a session types by hand; the one form reported as a failure is the
+one nobody types when naming several files. And a zero-file run is identical to the control on `status`,
+`failedFiles`, `failedTests` and the report's own closing `## Failures` / `No test failures reported.` —
+**the only fields that separate them are counts of work DONE**, and a count is wrong only to a reader who
+already knows what it should have been.
+
+So it reads exactly like a surviving mutant: you broke the code, you ran the test, and nothing failed.
+That is §6's sentence, drawn from a run that never happened.
+
+**Read the exit code, and do not pipe it away.** rstest prints `error No test files found, exiting with
+code 1` **above** the report, where `| tail -20` never reaches it, and a pipe discards the exit code —
+`$?` is the tail's, and zsh needs `${pipestatus[1]}`. CI is not exposed (the exit code is 1, so the `ts`
+and `acceptance` jobs go red); the hand-run that produces your claim is.
+
+**And the report you get depends on WHO IS READING, which is why the exit code is the only reading worth
+trusting.** rstest picks its reporter from `determineAgent()` — `AI_AGENT`, then `CLAUDECODE`/`CLAUDE_CODE`,
+`CURSOR_AGENT` and the rest, switched off by `RSTEST_NO_AGENT=1`. **An agent session, which is every session
+in this org, gets the markdown report above.** A GitHub runner has none of those variables and gets the
+default reporter, which says `Test Files no tests` and no verdict word at all — the same defect in a
+different costume: the empty run names no failure, so a reader greping for one finds nothing either way.
+**The exit codes are 1, 1, 1, 0 under both.** This was found by the test below going red in CI while green
+locally, and it is the reason that test DECLARES the mode rather than inheriting it.
+
+`packages/lab/src/packaging/rstest-report-is-not-the-verdict.test.ts` pins the table above with real runs,
+so the day rstest fixes the report this section is retired deliberately rather than left standing.
+
 ### 4. Assert the MESSAGE, not only the exit code
 
 A refusal that does not name the offending thing sends the reader to search for it, which is the
