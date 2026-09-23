@@ -171,6 +171,36 @@ them before quoting them; what does not drift is the membership above.
   2026-09-22T23:05Z as `a11ign-ai-workers`, protection 404s while `protected` reads `true`, so that 404
   is FORBIDDEN. A verdict that
   cannot read `bypass_pull_request_allowances` is `CANNOT_TELL`, loudly — never a pass.
+- **TWO SURFACES CARRY THE REQUIREMENT, and a reading of one is not a reading of the other (2026-09-23,
+  #2086/#2090).** `ceo` ruled **ADD, NOT SWAP** at 09:04Z and made the edit personally, because creating it
+  needs the very admin the row existed to route around: the `merge-queue-main` ruleset (id `23681721`) now
+  carries a `pull_request` rule with `required_approving_review_count: 1` beside its `merge_queue` rule,
+  and classic `branches/main/protection` STAYS and stays authoritative — it is the only surface whose
+  exemption list can be ENUMERATED rather than merely queried for one identity. **Requirements compose and
+  exemptions do not:** the two surfaces are evaluated together and the most restrictive applies, so an
+  identity must be exempt in BOTH to merge without a review, and the ruleset rule can only close a hole,
+  never open one. Measured 2026-09-23T09:19Z as `DanBeckDev` (`permissions.admin: true`): classic reads
+  `required_approving_review_count: 1` with `bypass_pull_request_allowances` ABSENT, and the ruleset reads
+  `enforcement: "active"` with both rules present; `worker-capture` read the non-admin half the same
+  morning at `permissions.admin: false` and got a `LIVE PASS`.
+- **PICK THE INSTRUMENT BY WHAT YOU HOLD, AND SAY WHICH ONE YOU USED.** With repository admin:
+  `branches/main/protection`, behind `A11Y_CHECK_BRANCH_PROTECTION=1` — the complete instrument, and the
+  only one that can answer *nobody is exempt*. Without admin, which is every session and every CI job
+  here: `rules/branches/main` plus `rulesets/{id}`, behind `A11Y_CHECK_MAIN_RULESET=1`, which answers the
+  exemption question **for the asking identity only**. Both are wired in
+  `packages/lab/src/packaging/branch-protection.test.ts`, under two switches rather than one precisely
+  because the admin-requiring read cannot pass where admin is absent.
+- **`current_user_can_bypass: "never"` answers FOR ME ALONE and does not mean nobody is exempt.** It needs
+  no admin, and that is the whole of what the cheap instrument buys. `bypass_actors` — the field that could
+  say — is withheld from a token without write access to the ruleset, so **its absence means "you may not
+  look", never "the list is empty"**. So `CANNOT_TELL` stands unchanged as the verdict for *is anyone else
+  exempt*; what changes is that a session holding no admin can now truthfully assert **the requirement
+  exists and I cannot walk past it** instead of reporting ignorance about everything. Quoting a green cheap
+  run as evidence that nobody can walk past it is the overclaim #2022 exists to prevent, and **a check that
+  certifies less than it appears to does not become acceptable by being cheap** (`ceo`, #2086). The code
+  keeps the two apart for the same reason: `VERDICT.REQUIRED` ("it bites and NOBODY is exempt", needs
+  admin) and `BINDING.BINDS_ME` ("it applies and I cannot bypass it", needs nothing) are separate
+  vocabularies, and a test pins that no member of one equals `REQUIRED`.
 
 ## A review OUTLIVES the head it was posted on, and the org now READS that (2026-09-23, #2084)
 
