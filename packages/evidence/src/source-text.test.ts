@@ -314,15 +314,25 @@ test("a postfix operator ends an operand, but a BINARY `+` or `-` still expects 
     "a division after a prefix-incremented operand is still a division");
 
   // AND THE SAME JUDGEMENT INSIDE AN INTERPOLATION, where getting it wrong is not bounded to one line.
-  // `skipInterpolation` tracks brace depth, so a phantom regex opened at `a++ /` closes on the NEXT
-  // slash and swallows the interpolation's own closing `}` with it -- the outer template literal then
-  // never finds its end and everything after it is corrupted. That is why the fix is in both scans.
-  const interpolated = "const t = `${a++ / 2} and ${b / 2}`;\n// GONE\nconst x = 1;\n";
-  const strippedInterpolation = stripComments(interpolated);
-  assert.ok(!strippedInterpolation.includes("GONE"),
-    "the interpolation's closing brace must survive the division, or the comment after the template "
-      + "literal is read as string content");
-  assert.ok(strippedInterpolation.includes("const x = 1;"), "and the code after it too");
+  // `skipInterpolation` tracks brace depth, so a phantom regex opened at `a++ /` runs to the NEXT slash
+  // and swallows the interpolation's own closing `}` on the way -- depth never returns to 0, the outer
+  // template literal never finds its end, and the rest of the file is copied through as string content.
+  // That is why the fix is in BOTH scans.
+  //
+  // THE SHAPE HAS TO CARRY A LATER SLASH ON THE SAME LINE, which is what makes this a control rather
+  // than a decoration: without one the phantom candidate reaches the newline, `endOfRegexLiteral` returns
+  // -1, and the scan recovers by itself. The first shape written here had a second interpolation whose
+  // own `}` closed the depth by luck, and it passed with this half of the fix removed.
+  for (const [name, source] of [
+    ["a division later on the line", "const t = `${a++ / 2}`; const q = m / n; // GONE\nconst x = 1;\n"],
+    ["a division in the same expression", "const t = `${a++ / 2}` + x / y; // GONE\nconst x = 1;\n"],
+  ] as const) {
+    const stripped = stripComments(source);
+    assert.ok(!stripped.includes("GONE"),
+      `${name}: the interpolation's closing brace must survive the division, or everything after the `
+        + "template literal is read as string content");
+    assert.ok(stripped.includes("const x = 1;"), `${name}: and the code after it too`);
+  }
 });
 
 test("a candidate regex that does not close on its own line is ABANDONED -- the second half of the "

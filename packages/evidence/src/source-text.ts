@@ -119,6 +119,21 @@ const KEYWORDS_EXPECTING_A_VALUE = new Set([
 const ENDS_AN_OPERAND = /[A-Za-z0-9_$)\]}'"`]$/;
 
 /**
+ * Index just past the comment starting at `i`, or `-1` where no comment starts there.
+ *
+ * THE COMMENT FORMS ARE TESTED FIRST AND UNCONDITIONALLY, which is what JavaScript itself does: `//` is
+ * a line comment in every position (the empty regex is not expressible) and `/*` is a block comment in
+ * every position (`*` cannot open a regex body). Neither is ever a regex literal, so neither needs the
+ * value-position judgement the slash branch below it makes.
+ */
+function endOfCommentAt(source: string, i: number): number {
+  if (source[i] !== "/") return -1;
+  if (source[i + 1] === "/") return endOfLineComment(source, i);
+  if (source[i + 1] === "*") return endOfBlockComment(source, i);
+  return -1;
+}
+
+/**
  * The postfix operators, which END an operand although neither of their characters does — `reviewer`'s
  * blocker at `fbac7004`, reproduced before it was fixed. `a++ / 2 // REAL_COMMENT` left `previousToken`
  * as a bare `+`, which is a BINARY operator and so expects a value next, so the division slash opened a
@@ -325,12 +340,8 @@ export function stripComments(source: string): string {
   let previousToken = ""; // the start of a file is a value position, so a leading `/` would be a regex
   while (i < source.length) {
     const ch = source[i];
-    const next = source[i + 1];
-    // The comment forms are tested FIRST and unconditionally, which is also what JavaScript itself does:
-    // `//` is a line comment in every position (the empty regex is not expressible) and `/*` is a block
-    // comment in every position (`*` cannot open a regex body). Neither is ever a regex literal.
-    if (ch === "/" && next === "/") { i = endOfLineComment(source, i); continue; }
-    if (ch === "/" && next === "*") { i = endOfBlockComment(source, i); continue; }
+    const comment = endOfCommentAt(source, i);
+    if (comment !== -1) { i = comment; continue; }
     if (ch === "/" && slashBeginsRegex(previousToken)) {
       const end = endOfRegexLiteral(source, i);
       // Copied through VERBATIM, exactly like a string literal: a quote, a backtick or a `//` inside a
