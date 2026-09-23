@@ -117,6 +117,15 @@ code 1` **above** the report, where `| tail -20` never reaches it, and a pipe di
 `$?` is the tail's, and zsh needs `${pipestatus[1]}`. CI is not exposed (the exit code is 1, so the `ts`
 and `acceptance` jobs go red); the hand-run that produces your claim is.
 
+**And the report you get depends on WHO IS READING, which is why the exit code is the only reading worth
+trusting.** rstest picks its reporter from `determineAgent()` — `AI_AGENT`, then `CLAUDECODE`/`CLAUDE_CODE`,
+`CURSOR_AGENT` and the rest, switched off by `RSTEST_NO_AGENT=1`. **An agent session, which is every session
+in this org, gets the markdown report above.** A GitHub runner has none of those variables and gets the
+default reporter, which says `Test Files no tests` and no verdict word at all — the same defect in a
+different costume: the empty run names no failure, so a reader greping for one finds nothing either way.
+**The exit codes are 1, 1, 1, 0 under both.** This was found by the test below going red in CI while green
+locally, and it is the reason that test DECLARES the mode rather than inheriting it.
+
 `packages/lab/src/packaging/rstest-report-is-not-the-verdict.test.ts` pins the table above with real runs,
 so the day rstest fixes the report this section is retired deliberately rather than left standing.
 
