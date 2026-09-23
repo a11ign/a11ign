@@ -171,6 +171,42 @@ permissions:
 
 jobs:
   arm:
+    # ## A TOKEN THAT IS SET IS NOT A TOKEN THAT WORKS -- #1969, measured 2026-09-22
+    #
+    # The `A11IGN_BOT_TOKEN` section above, and `auto-arm-token.test.ts` with it, ask ONE question of the
+    # secret: is it SET? On 2026-09-22 that was the wrong question. The secret was set, this step took the
+    # PAT path, and the PAT identity's GRAPHQL pool was exhausted from 18:45:53Z to 19:13:44Z -- 28
+    # minutes. Every `pull_request`- and `push`-triggered run of this workflow failed, both jobs, and what
+    # `arm-pr.mjs` printed was `could not read this PR's labels -- REFUSING to arm. Unreadable is not
+    # unheld`: a sentence that is TRUE, COMPLETE, and INDISTINGUISHABLE from the same refusal on one
+    # unreadable pull request. #1958 and #1949 were approved, convinced, green on every job and
+    # `MERGEABLE` throughout, and nothing in this repository could arm either, because the only two things
+    # that arm -- this job and `sweep` -- read the one refused credential. They were found because a
+    # session was woken about an unrelated red check and read the log.
+    #
+    # `sweep` DOES NOT COVER IT, though its own comment below argues it is the catch-all. That argument
+    # holds for a PR-specific failure; it fails here because `sweep` reads the SAME credential, so the two
+    # failure paths are perfectly correlated. Measured: the sweep failed on all six runs, beside `arm`.
+    #
+    # THE RED CHECK HERE STAYS RED, and #1970's de-redding of `sweep` deliberately does not transfer --
+    # `ceo`'s ruling of 2026-09-22 23:15:12Z. #1970's own reasoning is why: `sweep`'s exit 2 is "a claim
+    # about the API, with no PR in it", while this job's exit 2 HAS a PR in it -- it was handed one PR
+    # number, it read that PR, and the refusal is a true and complete statement about it. Annotating and
+    # exiting 0 here would convert a true statement into silence, which is the defect rather than the cure.
+    #
+    # WHAT CHANGED IS THE SENTENCE, NEVER THE BEHAVIOUR. `arm-pr.mjs` now prints a `SCOPE` line after the
+    # refusal saying whether it is about this pull request or about the credential, and -- when the pool
+    # says so -- the minute the pool returns, read from `X-Ratelimit-Reset` on the 403 itself rather than
+    # inferred. `labels === null` still refuses and still exits 2 either way: `ceo`'s constraint is that NO
+    # ARMING BEHAVIOUR MAY BRANCH ON MATCHED TEXT, and `auto-arm-token.test.ts` drives both messages and
+    # pins the exit code and the absence of any merge call as identical across them.
+    #
+    # AND THE REPORT LIVES WHERE THE CREDENTIAL CANNOT KILL IT. A watcher sharing a credential with the
+    # thing it watches cannot see that credential fail, so the report is NOT here: `work-gate.mjs`'s
+    # `pr-green-unarmed` names every green, unheld, UNARMED pull request, read on the agent host under its
+    # own `gh` identity. `queue-stalled.mjs` names ARMED PRs that cannot merge; that is its mirror, and it
+    # did not exist until #1969.
+    #
     # #1103 clause 7: `github.event_name == 'pull_request'` is stated, not left to `base.ref` being absent on
     # every other event -- GitHub coerces an absent `draft` to 0 == false, so without this the base clause
     # alone was keeping arm off push and workflow_run.
