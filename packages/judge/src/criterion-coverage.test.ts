@@ -7,9 +7,14 @@
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+// #2171: the walk lives in `packages/guards` because FOUR copies of it descended a directory symlink and
+// threw ELOOP -- including this one, whose failure was the first symptom anybody saw. A relative path,
+// which is how every package in this tree reaches `packages/guards`.
+import { filesUnder } from "../../guards/src/files-under.mjs";
 
 import { WCAG_22_AA } from "@a11ign/evidence/wcag";
 
@@ -188,24 +193,19 @@ test("3.2.1 and 3.2.2's notes state that a title diff is broader than WCAG's 'ch
 
 /** Every non-test `.ts`/`.mjs` source file under `dir`, skipping `node_modules`, `dist` and dotfiles. */
 function sourceFilesUnder(dir: string): string[] {
-  const out: string[] = [];
-  let entries: string[];
-  try { entries = readdirSync(dir); } catch { return out; }
-  for (const name of entries) {
-    if (name === "node_modules" || name === "dist" || name.startsWith(".")) continue;
-    const full = resolve(dir, name);
-    if (statSync(full).isDirectory()) { out.push(...sourceFilesUnder(full)); continue; }
-    if (/\.test\.(ts|mjs)$/.test(name)) continue; // any OTHER test may call it too, harmlessly
-    if (/\.(ts|mjs)$/.test(name)) out.push(full);
-  }
-  return out;
+  return filesUnder(resolve(dir), {
+    skipDirectory: (name) => name === "node_modules" || name === "dist" || name.startsWith("."),
+    // `.test.ts`/`.test.mjs` is dropped because any OTHER test may call it too, harmlessly.
+    keepFile: (name) => !name.startsWith(".") && /\.(ts|mjs)$/.test(name) && !/\.test\.(ts|mjs)$/.test(name),
+  });
 }
 
-// Below this, the walk has genuinely found nothing -- `sourceFilesUnder`'s own `readdirSync` swallows a
-// missing/wrong `repoRoot` into `[]`, which is precisely the shape that would move a resolution failure
-// into `offenders` reading clean. The one thing that would break `repoRoot` is moving THIS FILE, which is
-// exactly when the guard is most needed -- the `SIGNAL_TYPES` scrape and the `sweepLog` guard that
-// "passed against the very corpus carrying 604 crashes" are both this same defect.
+// Below this, the walk has genuinely found nothing. `filesUnder` now THROWS on a missing root rather than
+// swallowing it into `[]` (#2171), so a broken `repoRoot` is loud before this floor is consulted -- but
+// the floor stays, because it also catches a root that exists and is the wrong one. The one thing that
+// would break `repoRoot` is moving THIS FILE, which is exactly when the guard is most needed -- the
+// `SIGNAL_TYPES` scrape and the `sweepLog` guard that "passed against the very corpus carrying 604
+// crashes" are both this same defect.
 const MIN_EXPECTED_SOURCE_FILES = 100;
 
 test("criteriaAssessableFrom has no production caller -- dead-by-design, not dead-by-accident", () => {
@@ -223,9 +223,9 @@ test("criteriaAssessableFrom has no production caller -- dead-by-design, not dea
   // ANTI-VACUITY: a resolution failure must fail LOUDLY, before the deepEqual below gets a chance to pass
   // having examined nothing.
   assert.ok(files.length > MIN_EXPECTED_SOURCE_FILES,
-    `walked only ${files.length} file(s) under ${repoRoot} -- this looks like a broken repoRoot resolution `
-    + "(readdirSync swallows a missing directory into []), not a small repo. The offender list below "
-    + "cannot be trusted until this walk finds a realistic population.");
+    `walked only ${files.length} file(s) under ${repoRoot} -- this looks like a repoRoot pointing at the `
+    + "wrong real directory (a MISSING one now throws from `filesUnder`, #2171), not a small repo. The "
+    + "offender list below cannot be trusted until this walk finds a realistic population.");
 
   const offenders = files.filter((f) => readFileSync(f, "utf8").includes("criteriaAssessableFrom("));
 
