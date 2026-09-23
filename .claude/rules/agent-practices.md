@@ -221,6 +221,36 @@ whether they are followed.
   command. The rule that stays: the row is the state — a report to `product-manager` changes nothing until
   the row, the PR and the API say so.
 
+## A guard a human learns to click through is worse than no guard (chairman's direction, 2026-09-23)
+
+- **`rm` through a variable uses the shell's own empty-guard, or a literal path.** Not this:
+
+  ```bash
+  D=/tmp/.../comments && rm -f $D/*.md        # if D were empty: rm -f /*.md
+  ```
+
+  This:
+
+  ```bash
+  rm -f "${D:?}"/*.md                          # `:?` aborts on unset or empty; quotes stop re-splitting
+  ```
+
+- **The safe-looking version is still refused, and that is correct.** `D` above is assigned a literal
+  path on the same line and `&&` gates the `rm` on it, so it cannot be empty — but the classifier cannot
+  see that, and **this is one of the few guards `--dangerously-skip-permissions` deliberately does not
+  disable.** Writing `"${D:?}"` removes the danger rather than overriding the guard, so the prompt stops
+  for the right reason.
+
+- **Why it is a rule and not a preference.** Measured 2026-09-23: the chairman approved this same shape
+  several times in one morning, each time having to read a command to conclude it was fine. **An
+  approval prompt a human learns to click through is worse than no prompt** — the next one will be
+  genuinely dangerous and will get the same reflex. Every avoidable prompt spends a human's attention
+  and makes the unavoidable ones cheaper to ignore.
+
+- **The general form:** when a command is refused for its SHAPE rather than its effect, change the
+  shape. Reaching for an override, or asking a human to approve it again, both leave the next session to
+  rediscover the same refusal — and one of them trains the reviewer out of reviewing.
+
 ## Assertions
 
 - **An emptiness assertion names where its positive control lives.** `assert.deepEqual(offenders, [])`
