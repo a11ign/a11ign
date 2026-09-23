@@ -1,5 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { stripComments } from "./source-text.js";
 
 test("a line comment is removed", () => {
@@ -154,14 +156,221 @@ test("MUTATION TARGET: a regex literal inside an interpolation does not corrupt 
       + "scanner's state was not left corrupted");
 });
 
-test("KNOWN LIMITATION: a regex literal is not distinguished from a division, so `//` inside one can "
-  + "be misread as a comment start", () => {
-  // Written to PIN the limitation, not to endorse it: if a guard this helper serves ever needs a regex
-  // literal containing `//` handled correctly, this test is where that requirement would first be stated,
-  // and it would need to fail before the fix landed.
+// INVERTED, exactly as its own last sentence instructed -- #2131. This test used to assert
+// `notEqual(stripped, source)` and said: "if this assertion ever starts failing, the limitation has been
+// fixed and this test should be inverted." The fix landed, so it is inverted rather than deleted, because
+// the direction is the whole point: the old assertion passed BECAUSE the scan was wrong.
+test("a regex literal containing `//` is content, not a comment start -- the limitation this file used "
+  + "to pin as accepted", () => {
   const source = "const r = /a\\/\\//;"; // a regex literal containing two escaped slashes
+  assert.equal(stripComments(source), source,
+    "the escaped slashes are regex syntax; reading them as a comment start truncated the line");
+});
+
+// --- #2131: A REGEX LITERAL IS A TOKEN, and the quote characters inside one are CONTENT ---
+//
+// The docstring above declined to recognise regex literals on the ground that a comment-shaped sequence
+// inside one "has not been observed in any guard this function replaces". Measured at d269bf9d4
+// (2026-09-23) over the 1050 tracked `.ts`/`.mjs` files under `packages/` and `scripts/` that
+// `strip-comments-scan-sync.test.ts` walks: 100 of them came out of the unfixed function keeping a comment
+// the TypeScript parser removes, and 56 came out having lost a character it keeps. Every one of the 100
+// carries a quote character inside a regex literal; by the first such literal in each file, an apostrophe
+// in 29, a double quote in 49, a backtick in 22 -- a proxy for the swallowing literal rather than a proof
+// of it. The population is a reading at a commit and it moves with the tree (1042 -> 1050 across four
+// merges); `strip-comments-scan-sync.test.ts` holds the tree-wide reading and asserts the only figure that
+// does not move -- 0 -- while this file holds the mechanism, isolated.
+
+test("MUTATION TARGET: a BACKTICK inside a regex literal does not open a phantom template literal -- and "
+  + "the identical line WITHOUT backticks is the control that proves the pair is about the backticks", () => {
+  // The exact opener measured in packages/lab/src/packaging/wake.test.ts:603, which swallowed 54 of that
+  // file's 87 comment lines. Three backticks: the first opens template mode, the second closes it, and the
+  // THIRD opens it again and scans for a partner hundreds of lines away.
+  const isolated = "text.match(/message `([^`]+)`/)?.[1];\n// THIS COMMENT SHOULD VANISH\nconst x = 1;\n";
+  const control = "text.match(/message X/)?.[1];\n// THIS COMMENT SHOULD VANISH\nconst x = 1;\n";
+  // ONE WITHOUT THE OTHER PINS NOTHING: a stripper that gave up and stripped nothing would pass the first
+  // assertion's negation and fail here, and a stripper that stripped everything would fail the third.
+  assert.ok(!stripComments(isolated).includes("THIS COMMENT SHOULD VANISH"),
+    "the comment after a regex literal containing backticks must be stripped");
+  assert.ok(!stripComments(control).includes("THIS COMMENT SHOULD VANISH"),
+    "the control, identical but for the backticks, must still strip its comment");
+  assert.ok(stripComments(isolated).includes("/message `([^`]+)`/"),
+    "and the regex literal itself must survive whole -- its backticks are content, not delimiters");
+});
+
+test("an apostrophe and a double quote inside a regex literal are content too -- the other 79 of the "
+  + "100 files measured", () => {
+  // packages/cli/src/forms/draft.test.ts:126 and packages/lab/src/packaging/board-status-health.test.ts:182,
+  // reduced to their opener. Both are far more common than the backtick case and fail the same way.
+  const apostrophe = "assert.match(y, /not a finding about your page's grammar/);\n// GONE\nconst x = 1;\n";
+  const doubleQuote = "for (const m of src.matchAll(/moveStatus\\(\\s*\"([^\"]+)\"/g)) sent.add(m[1]);\n// GONE\nlet y;\n";
+  for (const [name, source] of [["apostrophe", apostrophe], ["double quote", doubleQuote]] as const) {
+    assert.ok(!stripComments(source).includes("GONE"),
+      `a ${name} inside a regex literal must not open a string: the comment after it is still a comment`);
+  }
+});
+
+test("a regex literal in a KEYWORD value position is recognised -- `return`, not an identifier", () => {
+  // `slashBeginsRegex` reads the previous token, and `return` ends in identifier characters. Without the
+  // keyword set it reads as an operand, the slash reads as a division, and the backtick inside opens a
+  // phantom template literal that runs to the end of the file.
+  const source = "function f(t) {\n  return /message `([^`]+)`/.test(t);\n}\n// GONE\nconst x = 1;\n";
   const stripped = stripComments(source);
-  assert.notEqual(stripped, source,
-    "this documents that the naive slash-scan sees a comment start inside the regex literal -- if this "
-      + "assertion ever starts failing, the limitation has been fixed and this test should be inverted");
+  assert.ok(!stripped.includes("GONE"), "a regex after `return` must be recognised as a regex");
+  assert.ok(stripped.includes("return /message `([^`]+)`/.test(t);"), "and copied through whole");
+});
+
+test("MUTATION TARGET: a regex literal whose body contains a QUOTE, inside an interpolation -- the shape "
+  + "in pre-push-armed-pr.test.ts, where the outer template literal's own end was lost", () => {
+  // `skipInterpolation` honours nested strings but had no notion of a regex, so `/'/g`'s apostrophe closed
+  // nothing and opened everything. This is the interpolation-level twin of the top-level case above.
+  const source = "const script =\n"
+    + "  `node() { echo '${stubOut.replace(/'/g, \"'\\\\''\")}'; exit ${code}; }\\n`\n"
+    + "  + \"run\\n\";\n"
+    + "// GONE\n"
+    + "runTheHook(script);\n";
+  const stripped = stripComments(source);
+  assert.ok(!stripped.includes("GONE"),
+    "a genuine comment AFTER the interpolation must still be stripped -- proving the scanner's state was "
+      + "not left corrupted by the regex inside it");
+  assert.ok(stripped.includes("runTheHook(script);"), "and the real call after it must survive");
+});
+
+// --- THE OTHER DIRECTION: the fix must not INVENT a regex where a division was meant ---
+
+test("division is still division: a `/` after anything that can END an operand is not a regex opener", () => {
+  // Inventing a literal is NEW damage, where failing to see one only reproduces the old behaviour -- so
+  // every shape that can precede a division is pinned here rather than left to the tree-wide census.
+  const cases: [string, string][] = [
+    ["after an identifier", "const mean = total / count; // GONE\nconst x = 1;\n"],
+    ["after a number", "const half = 100 / 2; // GONE\nconst x = 1;\n"],
+    ["after a closing paren", "const r = (a + b) / 2; // GONE\nconst x = 1;\n"],
+    ["after a closing bracket", "const r = xs[0] / 2; // GONE\nconst x = 1;\n"],
+    ["two divisions on one line", "const r = a / b / c; // GONE\nconst x = 1;\n"],
+    // reviewer's blocker at `def6aef9`, as the positive division control it asked for. A word after `.`
+    // is a PROPERTY NAME, and every keyword in KEYWORDS_EXPECTING_A_VALUE is a legal one. Before the fix
+    // `obj.in` left `previousToken === "in"`, the division slash opened a candidate regex,
+    // `endOfRegexLiteral` closed it on the FIRST slash of the `//`, and the comment was copied as code --
+    // NEW damage, since the pre-#2131 stripper removed it.
+    ["after a property named `in`", "const n = obj.in / 2 // GONE\nconst x = 1;\n"],
+    ["after a property named `of`", "const n = obj.of / 2 // GONE\nconst x = 1;\n"],
+    ["after a property named `case`", "const n = obj.case / 2 // GONE\nconst x = 1;\n"],
+    ["after an OPTIONALLY chained property", "const n = obj?.in / 2 // GONE\nconst x = 1;\n"],
+    ["after a property on a newline", "const n = obj\n  .in / 2 // GONE\nconst x = 1;\n"],
+    // reviewer's blocker at `fbac7004`, as the positive division controls for BOTH forms it asked for.
+    // A postfix operator ends an operand although neither of its characters does: `a++` left
+    // `previousToken` as a bare `+`, which expects a value next, so the division slash opened a
+    // candidate regex, `endOfRegexLiteral` closed it on the FIRST slash of the `//`, and the comment
+    // survived -- the `obj.in / 2` shape exactly, one operator over, and NEW damage for the same reason.
+    ["after a postfix ++", "let a = 1; a++ / 2 // GONE\nconst x = 1;\n"],
+    ["after a postfix --", "let a = 1; a-- / 2 // GONE\nconst x = 1;\n"],
+    ["after a postfix ++ with no spacing", "let a = 1; a++/2 // GONE\nconst x = 1;\n"],
+    // `a+++b` is `a++ + b`: the pair is consumed first and the third `+` is left a binary operator, so
+    // this fails if the scan ever matches `++` greedily across a boundary.
+    ["after `a+++b`, which is `a++ + b`", "let a = 1, b = 1; a+++b / 2 // GONE\nconst x = 1;\n"],
+    ["after `a---b`, which is `a-- - b`", "let a = 1, b = 1; a---b / 2 // GONE\nconst x = 1;\n"],
+  ];
+  for (const [name, source] of cases) {
+    const stripped = stripComments(source);
+    assert.ok(!stripped.includes("GONE"), `${name}: the trailing comment must still be stripped`);
+    assert.ok(stripped.includes("const x = 1;"), `${name}: the code after it must survive`);
+  }
+});
+
+test("a keyword is only a keyword in VALUE position -- `of` after `.` is a property, but `of` in a "
+  + "`for...of` header still opens a regex", () => {
+  // The control that keeps the fix above from being "the keyword list is dead". Both halves matter: the
+  // property read must divide, and the genuine value position must still be seen, or the shape the list
+  // was added for (`for (const k of /re/…)`) silently regresses to the pre-#2131 behaviour.
+  const header = "for (const k of /a`b/.test(s) ? xs : ys) {\n  f(k);\n}\n// GONE\nconst x = 1;\n";
+  const stripped = stripComments(header);
+  assert.ok(stripped.includes("/a`b/.test(s)"),
+    "the backtick inside the regex is CONTENT -- read as a template opener it swallows the rest of the file");
+  assert.ok(!stripped.includes("GONE") && stripped.includes("const x = 1;"),
+    "and nothing after the regex is corrupted");
+  // Same word, member position: the slash after it is a division and the trailing comment is a comment.
+  assert.ok(!stripComments("const n = xs.of / 2 // GONE\nconst x = 1;\n").includes("GONE"));
+});
+
+test("a postfix operator ends an operand, but a BINARY `+` or `-` still expects a value -- the control "
+  + "that keeps the fix from being `+ ends an operand`", () => {
+  // The other half of reviewer's `fbac7004` blocker, and the reason the pair is read as ONE token rather
+  // than added to ENDS_AN_OPERAND character by character. Widening the character class would have made
+  // the division cases above pass while silently losing every regex written after an ordinary `+` or `-`
+  // -- a fix whose control is only the cases it was written for is not distinguishable from that.
+  for (const [name, source] of [
+    ["after a binary +", "const m = 1 + /a`b/.test(s); // GONE\nconst x = 1;\n"],
+    ["after a binary -", "const m = 1 - /a`b/.test(s); // GONE\nconst x = 1;\n"],
+  ] as const) {
+    const stripped = stripComments(source);
+    assert.ok(stripped.includes("/a`b/.test(s)"),
+      `${name}: the regex must still be recognised -- its backtick is content, and read as a template `
+        + "opener it swallows the rest of the file");
+    assert.ok(!stripped.includes("GONE") && stripped.includes("const x = 1;"),
+      `${name}: and nothing after it is corrupted`);
+  }
+  // A PREFIX `++` is never the ambiguous case: it is followed by the operand it increments, so the token
+  // the scan remembers at the division is that identifier and the postfix set is never consulted.
+  assert.ok(!stripComments("let b = 1; let a = ++b / 2; // GONE\nconst x = 1;\n").includes("GONE"),
+    "a division after a prefix-incremented operand is still a division");
+
+  // AND THE SAME JUDGEMENT INSIDE AN INTERPOLATION, where getting it wrong is not bounded to one line.
+  // `skipInterpolation` tracks brace depth, so a phantom regex opened at `a++ /` runs to the NEXT slash
+  // and swallows the interpolation's own closing `}` on the way -- depth never returns to 0, the outer
+  // template literal never finds its end, and the rest of the file is copied through as string content.
+  // That is why the fix is in BOTH scans.
+  //
+  // THE SHAPE HAS TO CARRY A LATER SLASH ON THE SAME LINE, which is what makes this a control rather
+  // than a decoration: without one the phantom candidate reaches the newline, `endOfRegexLiteral` returns
+  // -1, and the scan recovers by itself. The first shape written here had a second interpolation whose
+  // own `}` closed the depth by luck, and it passed with this half of the fix removed.
+  for (const [name, source] of [
+    ["a division later on the line", "const t = `${a++ / 2}`; const q = m / n; // GONE\nconst x = 1;\n"],
+    ["a division in the same expression", "const t = `${a++ / 2}` + x / y; // GONE\nconst x = 1;\n"],
+  ] as const) {
+    const stripped = stripComments(source);
+    assert.ok(!stripped.includes("GONE"),
+      `${name}: the interpolation's closing brace must survive the division, or everything after the `
+        + "template literal is read as string content");
+    assert.ok(stripped.includes("const x = 1;"), `${name}: and the code after it too`);
+  }
+});
+
+test("a candidate regex that does not close on its own line is ABANDONED -- the second half of the "
+  + "safety argument, since a regex literal can never span a line", () => {
+  // `= / x` looks like a value position, so the slash is a regex CANDIDATE. There is no closing slash
+  // before the newline, so it was a division after all and the scan must fall back rather than run on.
+  const source = "const r = / 2;\n// GONE\nconst x = 1;\n";
+  const stripped = stripComments(source);
+  assert.ok(!stripped.includes("GONE"),
+    "an unclosed candidate must not swallow the following line's comment");
+  assert.ok(stripped.includes("const x = 1;"), "nor the line after that");
+});
+
+test("`//` and `/*` are comments in EVERY position, including a value position where a regex could "
+  + "otherwise start", () => {
+  // The empty regex is not expressible in JavaScript and `*` cannot open a regex body, so these two
+  // must be tested before the regex branch, not after it.
+  assert.equal(stripComments("const a = 1; // trailing\nconst b = 2;"), "const a = 1; \nconst b = 2;");
+  assert.equal(stripComments("const a = /* inline */ 1;"), "const a =  1;");
+});
+
+// --- THE POSITIVE CONTROL FOR THE WHOLE FIX: an ordinary file must still strip to nothing ---
+
+/** The floor under `wake.mjs`'s comment density, well below the 130 measured, so ordinary edits to that
+ *  file do not move this control -- only its stopping to be densely commented at all would. */
+const A_DENSELY_COMMENTED_FILE = 100;
+
+test("a file that was ALREADY stripped correctly still strips to zero surviving comment lines -- the "
+  + "control a fix that broke ordinary stripping would fail", () => {
+  // `wake.mjs` read 130 leading-`//` lines before and 0 after, at ec27b8ccb and unchanged by this fix. A
+  // FLOOR rather than a pin on 130: the file legitimately gains and loses comments, and what this test is
+  // for is the `0`. Read from the repo root the same way `wire-request-describes-the-wire.test.ts` does.
+  const source = readFileSync(resolve(process.cwd(), "packages/agent-org/src/wake.mjs"), "utf8");
+  const leading = (text: string) => text.split("\n").filter((line) => line.trim().startsWith("//")).length;
+  assert.ok(leading(source) >= A_DENSELY_COMMENTED_FILE,
+    `wake.mjs has only ${leading(source)} leading-// lines, below the 130 measured -- this control has `
+      + "stopped being a control, so pick another densely commented file rather than weakening it");
+  assert.equal(leading(stripComments(source)), 0,
+    "every one of them is a real comment and must be gone -- a fix that breaks ordinary stripping to "
+      + "handle regex literals fails here");
 });

@@ -203,8 +203,24 @@ them before quoting them; what does not drift is the membership above.
   host-run announcements. An engineer's completion or claim report goes to `product-manager`, never to
   `ceo`. Three things come up from `product-manager` to `ceo`: a ruling they cannot make (a rule or ADR
   conflict, a crossing into a `ceo` lane, the publish path); ONE state reading per `ceo` tick — utilisation,
-  queue, drafts awaiting a verdict, anything red — posted on #928 at :05/:25/:45 so the tick at :09/:29/:49
-  reads it; and anything for the chairman.
+  queue, drafts awaiting a verdict, anything red; and anything for the chairman.
+- **That state reading is POSTED and DELIVERED, and those are two different jobs (`ceo`'s ruling,
+  2026-09-23, #2083).** Post it on **#928**: that thread is the RECORD, it is where `org-watch.mjs`,
+  `fleet-watch.mjs` and `lab-watch.mjs` already post, and a reading that lives only in a session's inbox is
+  gone at that session's next clear. Then deliver it with **`npm run prompt:session -- ceo "…"`**, because
+  posting on its own reaches nobody — *nothing in this org reads comments*, which is the same finding the
+  `answer:<session>` rule above is built on. **Both halves, or the reading is either unrecorded or
+  undelivered.**
+  The clause this replaces named three fixed minutes past the hour to post at, so that a tick four minutes
+  later would read it — and **there has been no such tick since the cron removal under *Timers and state*
+  above**; `ceo` is woken by `wake.mjs` when `work-gate.mjs` finds a cause. Following it literally sent the
+  org's only state reading to a thread nobody was scheduled to read: measured 2026-09-23, one decision in
+  that reading had waited **6h52m** with a `convinced` verdict and a met `hold:ceo` condition (#2045).
+  **"One reading per `ceo` tick" survives as a RATE, and that is the part worth keeping** — the wall-clock
+  minutes were addressing a clock that was deleted.
+  The send may come back **`QUEUED` (exit `2`)** because `ceo` is mid-turn. **That is delivery, not
+  failure: do not retry and do not poll** — see *ONE CALL IS ENOUGH* below for why a retry can wipe the
+  work it interrupts. A state reading is precisely the kind of message somebody would wrongly re-send.
 - **`orchestrator` is the first reader for fleet and lab questions** — a capture's history, a worker fact,
   a lab reading. Engineers ask directly; the answer is posted on the row.
 - **The author of a draft prompts its parity reviewer** the moment the PR opens and again after every push

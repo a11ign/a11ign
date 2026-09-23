@@ -125,6 +125,110 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: npm run test:nightly
 
+  # #2120: THE LIVE RULESET READ, RUN UNATTENDED. Until this job existed, BOTH of
+  # `branch-protection.test.ts`'s live reads were opt-in, nothing anywhere set either flag, and the skip
+  # that makes the silence green prints `NOT RUN` and PASSES -- so #2022's behavioural read-back of the
+  # approving-review requirement had never once run except by hand. The guard needs no change for this;
+  # what was missing was a caller.
+  #
+  # WHICH IDENTITY, AND WHY IT IS NOT `github.token` (#2120's "settle this before building").
+  # `BINDS_ME` is identity-scoped by construction -- `current_user_can_bypass` answers FOR THE ASKING
+  # IDENTITY ONLY. So the read is worth exactly as much as the subject it asks about. `${{ github.token }}`
+  # is the `github-actions` app, which authors nothing and merges nothing here: a nightly `BINDS_ME` under
+  # it would be a TRUE STATEMENT ABOUT THE WRONG SUBJECT, and it would read in the log exactly like the
+  # useful one. `A11IGN_BOT_TOKEN` is the identity that actually completes every merge -- `trunk.yml`'s own
+  # header ("since #416 every merge is completed with the A11IGN_BOT_TOKEN PAT"), and measured 2026-09-23 on
+  # the three most recently merged PRs (#2109, #2112, #2115): `merged_by` is `DanBeckDev` on all three,
+  # while the PRs themselves are authored by `a11ign-ai-workers`. `DanBeckDev` is also the identity #2022
+  # singled out as `bypass_pull_request_allowances`'s sole entry, so it is precisely the subject whose
+  # exemption state the requirement turns on.
+  #
+  # SO THERE IS NO FALLBACK, AND THAT IS THE DIFFERENCE FROM EVERY OTHER JOB IN THIS FILE. `ready-audit`
+  # below falls back to `GITHUB_TOKEN` with a warning because a degraded answer about the tracker is still
+  # an answer about the tracker. Here a fallback would silently SWAP THE SUBJECT and certify the wrong one,
+  # which is the exact defect the paragraph above refuses. A missing secret is CANNOT_TELL, and
+  # CANNOT_TELL fails the job.
+  #
+  # THE ADMIN-ONLY HALF IS DELIBERATELY LEFT OUT, AND A LATER READER MUST NOT ADD IT.
+  # `A11Y_CHECK_BRANCH_PROTECTION=1` reads `branches/main/protection`, which needs repository ADMIN.
+  # Measured 2026-09-22T23:05Z as `a11ign-ai-workers`: that endpoint 404s while `branches/main.protected`
+  # reads `true` -- so the 404 is FORBIDDEN, not ABSENT. Scheduling it here would 404 every night against a
+  # branch that IS protected, and the next reader would conclude `main` is unprotected. It stays the
+  # hand-run read it is, and the guard's own `NOT RUN` line names the command that makes it.
+  #
+  # `--disableConsoleIntercept`, AND THE REASON IS MEASURED. The assertion below is on a line the guard
+  # PRINTS, because a green exit is not a pass here (see the step). rstest intercepts `console.log` and its
+  # reporter drops it: measured 2026-09-23 at `a82ddbc1c`, this exact command WITHOUT the flag exits 0 with
+  # 39/39 passed and ZERO occurrences of `LIVE PASS` -- or of `NOT RUN` -- anywhere in its output, so a step
+  # built on it could not tell the pass from the skip, which is this row's whole subject. With the flag,
+  # both lines appear.
+  #
+  # AND THE CONFIG PATH IS NOT SPELLED HERE -- it is READ OUT of the one file that owns it. `entry-points.test.ts`
+  # scans every workflow's text, unstripped, for a whitespace-preceded `scripts/…\.mjs` and reads it as an
+  # invocation; rstest's own config module (under `scripts/rstest`) is MEANT to be imported, so it carries no
+  # entry guard and the scan reports it unguarded. Measured on this very branch: spelling that path after
+  # `--config` turned `ts / run` red at `26f4d80f8` (run 35854391590) on exactly that assertion. The scan does
+  # not strip comments either -- a whitespace-preceded mention in prose is matched on identical terms -- so
+  # this comment names rstest's config DIRECTORY and not the file.
+  # Guarding the config module would be the wrong fix -- `reusable-board.yml` already ruled that, in its own
+  # comment, and chose the same answer this step does: keep the path OUT of the workflow. `RSTEST_CONFIG` is
+  # exported by `assert-glob-not-empty.mjs` for precisely this ("resolved from this file so the caller's cwd
+  # cannot change it"), so reading it here is the intended use and the two cannot drift apart.
+  mainRulesetBinds:
+    if: github.event.schedule != '37 * * * *'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci --ignore-scripts
+      # The guard itself imports nothing built, but the step below reads `RSTEST_CONFIG` out of
+      # `assert-glob-not-empty.mjs`, which imports `@a11ign/worker-fleet/cli-flags` -- a package export
+      # resolving to `dist/`, which `--ignore-scripts` does not produce and which this repo does not track.
+      # Every other nightly job that runs tests (`coverage`, `nightly-only`, `doc-report`) builds for the
+      # same reason.
+      - run: npm run build
+      - name: Ask GitHub whether main's `pull_request` rule binds the identity that merges here
+        env:
+          A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
+        run: |
+          set -o pipefail
+          if [ -z "$A11IGN_BOT_TOKEN" ]; then
+            echo '::error::CANNOT_TELL: A11IGN_BOT_TOKEN is not set, so the ruleset read could not be made AS THE MERGING IDENTITY, and NOTHING WAS READ. Deliberately not falling back to github.token: that reads current_user_can_bypass for the github-actions app, which merges nothing here -- a true statement about the wrong subject. This is not a pass. See #2120.'
+            exit 1
+          fi
+          export GH_TOKEN="$A11IGN_BOT_TOKEN"
+          # Read the runner's config path out of its single owner rather than re-typing it here; see the
+          # block above the job for why this workflow must not spell it.
+          #
+          # THE EXIT CODE IS THE SIGNAL, NOT THE EMPTY STRING, and that distinction was measured rather than
+          # assumed: `console.log(m.RSTEST_CONFIG)` on a RENAMED export prints the four characters
+          # `undefined`, which is not empty, so a `-z` test alone let it through and rstest died on
+          # `Cannot find config file: <repo>/undefined` -- red, but on a message that names neither the
+          # cause nor this job. So the reader exits non-zero when the export is missing, and `|| …=""`
+          # converts that into the empty string the refusal below is written for -- without it the runner's
+          # own `bash -e` aborts the step before the refusal can print.
+          RSTEST_CONFIG="$(node -e 'import("./packages/guards/src/assert-glob-not-empty.mjs").then((m) => { if (m.RSTEST_CONFIG) console.log(m.RSTEST_CONFIG); else process.exit(1); })')" || RSTEST_CONFIG=""
+          if [ -z "$RSTEST_CONFIG" ]; then
+            echo '::error::CANNOT_TELL: could not read RSTEST_CONFIG from packages/guards/src/assert-glob-not-empty.mjs, so the runner was never started and NOTHING WAS READ. The export was renamed, or the build did not run. This is not a pass. See #2120.'
+            exit 1
+          fi
+          A11Y_CHECK_MAIN_RULESET=1 npx rstest run --config "$RSTEST_CONFIG" \
+            --include packages/lab/src/packaging/branch-protection.test.ts \
+            --disableConsoleIntercept 2>&1 | tee ruleset-read.log
+          # A GREEN EXIT IS NOT A PASS, and that is the defect this job exists to end one layer up. Every
+          # "could not ask" arm inside that guard logs its reason and RETURNS, so an unreadable
+          # `rules/branches/main` -- or the flag never reaching the test at all -- exits 0 having
+          # established nothing. The LIVE PASS line is printed only on the far side of the BINDS_ME
+          # assertion, so requiring it is what makes a skip red.
+          grep -q 'LIVE PASS (no admin required)' ruleset-read.log || {
+            echo '::error::CANNOT_TELL: the run exited green but never printed its LIVE PASS line, so the live ruleset read did not happen and nothing was certified. The log above names which read was unavailable -- look for a "could not be read" line naming the endpoint, or a "SKIPPED" line. This is not a pass. See #2120.'
+            exit 1
+          }
+
   ready-audit:
     if: github.event.schedule != '37 * * * *'
     runs-on: ubuntu-latest

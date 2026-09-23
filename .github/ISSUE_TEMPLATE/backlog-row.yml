@@ -49,6 +49,17 @@ body:
         scorer:shortcuts) is NOT yours to report: a checkout's `runs/` is only as fresh as its last sync,
         and one measured here was 89 hours stale and answered cleanly having examined a corpus that no
         longer exists. Name it, say the orchestrator runs it, and never quote it as settled.
+
+        A `gh` command NEEDS A CREDENTIAL THE ACCEPTANCE JOB DOES NOT HAVE — that job alone executes
+        commands taken from an untrusted PR body, so it is given no token at all, and a `gh` line run
+        there dies on the missing credential. If a human is meant to run it, say so with a
+        `Hand-run: <who runs it and why>` line in the body (the `Acceptance:`/`Closes:`/`Not-before:`
+        family). The job then reports `NOT RUN` naming your reason, and the verdict is the output you
+        paste into the PR body — under a `## Hand-run output` heading, which is now REQUIRED: a PR whose
+        Acceptance is entirely declared hand-runs and which pastes nothing is refused, because
+        `Hand-run:` asserts a human DID run something and nothing used to ask for the result (#2118).
+        Undeclared, `row-file` refuses the row at filing rather than letting
+        `pr-open` refuse it after somebody has built the change (#2099).
       render: shell
     validations:
       required: true
