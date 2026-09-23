@@ -172,6 +172,73 @@ them before quoting them; what does not drift is the membership above.
   is FORBIDDEN. A verdict that
   cannot read `bypass_pull_request_allowances` is `CANNOT_TELL`, loudly — never a pass.
 
+## A review OUTLIVES the head it was posted on, and the org now READS that (2026-09-23, #2084)
+
+**THE DIRECTION CHOSEN: `main` KEEPS stale reviews on BOTH surfaces, and the defect is closed by READING
+`reviewDecision` instead of by dismissing reviews.** #2084's own done-when 1 asked for
+`dismiss_stale_reviews: true`; two measurements taken while building the row say that lever does not do
+what the row needs and costs what the row did not price. Stated here as the row required, with the
+evidence, and with what would reopen it.
+
+- **The field decides every merge here and NO QUEUE READ TOUCHED IT.** Measured at `468a74f1b`:
+  `git grep -l reviewDecision -- '*.mjs'` returns **exactly one file**, and it is not a queue read —
+  `row-claim/own-pr-health-rule.mjs` (#2126, merged the same day #2084 was filed) reads it to answer *may
+  this session claim another row*. That refusal emits no order, wakes nobody, fires only on
+  `CHANGES_REQUESTED`, and only for the session holding the row. **Nothing that reads the QUEUE touched
+  it**: not `work-gate.mjs`, not `queue-table.mjs`, not `merge-guard.mjs`, not `auto-arm-sweep.mjs` —
+  which is #2084's own list, and that half of its finding is exactly right. So #2049 sat green, armed and
+  unmergeable for over seven hours on a `CHANGES_REQUESTED` posted at a head the author had already fixed,
+  and every org read returned green-and-armed. **Since #2084 `work-gate.mjs`'s `readPrs` asks for
+  `reviewDecision` on the `pr list` call it already makes — another field, never another call — and
+  `pr-review-blocked` names every green, unheld pull request GitHub is holding.**
+  *The record, because it is the lesson rather than a footnote:* #2084's body states that grep returning
+  **0**, and it was true when the row was filed at 08:5xZ. It was RESTATED at `468a74f1b` rather than
+  re-run, and by then #2126 had landed. **A grep count in a row body is a reading at a moment; re-run it
+  at YOUR commit before building on it.** Caught in review of #2203, not by the author.
+- **`dismiss_stale_reviews` WOULD NOT HAVE CLEARED #2049, because it does not touch a refusal.** Every
+  official statement of the setting is scoped to APPROVING reviews — *"dismiss stale pull request
+  approvals"*, *"the approving review is dismissed as stale"*, and the ruleset parameter's own *"New,
+  reviewable commits pushed will dismiss previous pull request review approvals."* A `CHANGES_REQUESTED`
+  is not an approval. GitHub does not state the negative outright, so this is a consistent scope across
+  every official surface rather than a quoted denial — and #2049's own seven hours agree with it.
+- **It would have stalled 15 of this repository's last 40 merges.** GitHub documents the *Update branch*
+  button as a dismissal trigger **by name**, with no carve-out for base-originated updates, and
+  `update-branch-sweep.mjs` runs exactly that on every armed, green pull request after every merge.
+  Measured TWICE over the 40 most recently merged pull requests, from
+  `gh pr list --state merged --limit 40 --json number,mergedAt,headRefOid,reviews`: **all 40 carried an
+  APPROVED review and all 40 were approved AT the head that merged**, so a content push would have cost
+  nothing; median approval-to-merge latency **6.3–6.5 minutes**; and **15 of the 40 had another pull
+  request merge to `main` inside that window**, which is one sweep each. The second reading, window
+  09:29:02Z–18:03:03Z, names them: #2087, #2112, #2124, #2128, #2135, #2136, #2137, #2144, #2146, #2148,
+  #2156, #2164, #2191, #2194, #2196. **A rolling population, and 15/40 held across both readings** —
+  re-derive it rather than quoting the number. Those fifteen would have lost the approval that armed them
+  and stopped, and before `pr-review-blocked` existed nothing in this org would have said so.
+- **`require_last_push_approval: true` is the candidate that was NOT taken, and what blocks it is a
+  MISSING measurement rather than a bad one.** It closes the same direction more narrowly, and the
+  reviewer is essentially never the last pusher here — reviews are posted by `a11ign-bot`, which has
+  authored one pull request ever. But whether clicking *Update branch* counts as the last reviewable push
+  under it is **not documented anywhere**, so taking it would swap a measured cost for an unmeasured one.
+  It stays on the table; the measurement it needs is one observation of a swept PR under that setting.
+- **WHAT WOULD REOPEN THIS: the 0-of-40 figure moving.** The whole case for leaving approvals alive is
+  that nobody here pushes after approval, so no approval outlives the diff it approved. Re-derive it
+  before quoting it — it is a rolling count, and if pull requests start being pushed after their
+  approval, the direction flips and `dismiss_stale_reviews` becomes the cheap answer it was filed as.
+- **BOTH SURFACES ARE READ, because naming one is not enough.** `dismiss_stale_reviews` (classic
+  protection) and `dismiss_stale_reviews_on_push` (ruleset `merge-queue-main`, id `23681721`) are
+  independent fields that agree today, both `false`; changing one does not move the other, so a guard
+  pointed at either alone goes green on a half-configured branch.
+  `packages/lab/src/packaging/branch-protection.test.ts` reads both and refuses a DISAGREEMENT, keyed on
+  the recorded decision rather than on a literal. The classic surface needs repository admin and is
+  `CANNOT_TELL` on every session and CI job here; the ruleset surface needs none, and is what the live
+  assertion rests on. Measured 2026-09-23 under both credentials: `a11ign-ai-workers` reads the ruleset
+  `KEEPS` with classic `CANNOT_TELL`; `DanBeckDev` reads both `KEEPS`, agreeing.
+- **A PULL REQUEST THAT OPENS READY NEVER ENTERED THE REVIEWER LANE, and that is a second hole the same
+  read closes.** `draft-awaiting-verdict` covers DRAFTS only, and docs-and-tests pull requests open ready
+  by the rule two sections up. Measured 2026-09-23: #2198, opened ready at 17:39:37Z with **zero
+  reviews**, `mergeStateStatus: BLOCKED`, `reviewDecision: REVIEW_REQUIRED`, armed — and the gate emitted
+  **no order of any kind** for it. Dismissing stale reviews cannot reach a pull request that has none, so
+  the row's two halves were never the same fact stated twice.
+
 ## A waiting condition is DATA, not a sentence (chairman's direction, 2026-09-19)
 
 - **If a conclusion changes what should happen next, it goes in a field, not a comment.** The comment
