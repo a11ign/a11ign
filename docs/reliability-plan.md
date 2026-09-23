@@ -413,7 +413,7 @@ the design is wrong), `--pipeline=verify --only=` on one subtype passes before t
 
 ---
 
-## B3 — CLOSED as far as it is WORK. What remains is three decisions
+## B3 — CLOSED as far as it is WORK. All three of its decisions are made; one successor is live
 
 **Status: the mechanism is proven end to end on the recaptured corpus.** `release:gate` passes all twelve
 stages on the lab (FITNESS PASS, recall 92%, **0 false positives**), and the publish dry run passes with
@@ -428,15 +428,52 @@ refused first, with two REGRESSIONs. They were not regressions: `scorer:shortcut
 the head actually saw, so it could never have been taken for free. *A gate that does not exercise what
 ships*, for the fifth time here, and the first where the two halves of ONE gate disagreed.
 
-**Three decisions remain, all yours, and none of them is work:**
+**Three decisions remained when this list was written on 2026-08-31, all of them the user's and none of
+them work. ALL THREE HAVE SINCE BEEN MADE.** The list is kept rather than deleted, because it is the
+record of why the publish waited; each item now carries what decided it and when.
 
 1. **The name** — PLAN.md B5. ADR 0006's AGPL/Apache split is gated on it and is effectively irreversible.
-2. **`access`** — `.changeset/config.json` says `"restricted"`, which is the fourth publish lock. A real
-   run fails at the publish step until it says `public`.
-3. **The changelog's shape** — five promotion changesets are pending and only one describes the shipped
-   weights. The other four record promotions no consumer ever had. Collapsing them or keeping the lineage
+   **DECIDED.** The product is `a11ign`: #66 renamed the tree on 2026-09-07, #63 moved the organisation,
+   and PLAN.md B5 reads **CLOSED 2026-09-19**.
+2. **`access`** — the fourth publish lock. A real run fails at the publish step until
+   `.changeset/config.json` says `public`. **DECIDED.** It says `public`, flipped in a reviewed commit on
+   2026-09-14 (`0cdbc231d`, #1530), and the publish it was gating happened five days later:
+   `a11ign@0.1.0` and five `@a11ign/*` packages went to the public registry on 2026-09-19.
+3. **The changelog's shape** — five promotion changesets were pending and only one described the shipped
+   weights. The other four recorded promotions no consumer ever had. Collapsing them or keeping the lineage
    is a call about what a first release says, not a tidy-up: ADR 0007 makes the weights the API and the
-   changeset is the only record of their provenance.
+   changeset is the only record of their provenance. **DECIDED on 2026-09-01** (`ae5086dc7`), the day
+   after this list was written — collapse to one entry, and fold the lineage INTO it as a table naming
+   every promotion, its record count, its feature schema, and that none was published, because deleting
+   the four outright would have destroyed the only record ADR 0007 leaves of the weights' provenance.
+   `.changeset/` holds **one** promotion changeset today (`promote-candidate-0d498ef6.md`, 2,834 records,
+   feature schema `screenreader-structured-v19`), and `release:provenance` reads *"PASS — all 1 of 1 from
+   the shipped weights"*. `promote:model` replaces the standing promotion changeset each time it promotes,
+   so "one entry, the shipped weights'" is the shape the tool now keeps rather than a call still to make.
+
+**ITEM 3 HAS A LIVE SUCCESSOR, and it is the same question one release on: what does the first CHANGELOG
+say?** Measured 2026-09-23. The first release shipped on 2026-09-19 and **the first CHANGELOG was never
+written** — no `CHANGELOG.md` exists anywhere in this tree, and `release:provenance` still reports
+`CHANGELOG absent (never published)`. `release.yml` ran `release:version` inside the job and nothing
+committed the result back, so every `package.json` still reads `0.0.0` and every changeset that publish
+consumed is still in `.changeset/` (#1824; `release-commit-version-bump.mjs` fixes it and no real dispatch
+has exercised it yet).
+
+```
+$ ls .changeset/*.md | grep -v README | wc -l   ->  85 pending
+$ npx changeset status --verbose                 ->  every package  0.0.0 -> 0.1.0
+$ npm view a11ign versions                       ->  0.1.0, live since 2026-09-19
+```
+
+Six of those 85 are `first-publish-*.md`, each headed *"The first published version of …"* and describing
+a publish that has already happened. On the next real dispatch `changeset version` writes each package's
+first `CHANGELOG.md` under a single `## 0.1.0` heading carrying all 85 — six announcing a first release,
+the rest describing work that landed after 0.1.0 reached the registry — and `changeset publish` then skips
+the six packages already at 0.1.0, so that changelog would describe a version no consumer ever received.
+Correcting the base first, so the manifests read the versions actually published and the pending set lands
+at 0.2.0, is the other option. **Which of those a first changelog does is a call about what it says, not a
+tidy-up** — the same reason the original item 3 was a decision — and only `@a11ign/pdf`, never published,
+is unaffected either way.
 
 **Before a real publish, run the full gate on the lab** — `npm run lab:job -- -e job=release-gate`. The
 workflow can only prove 5 of its 13 stages, and the person typing `publish-for-real` is asserting the
@@ -446,13 +483,15 @@ other eight passed somewhere a corpus and a venv exist.
 
 ## B3 (as originally scoped) — the reasoning, kept
 
-**Status: waiting on a person.** `not-working.md` §8 records the dry run: three attempts, two real
-workflow defects found and fixed, and all five locks exercised on the third. What remains is not
-mechanical — `.changeset/config.json` says `access: "restricted"` and PLAN.md B5 (the name) is unsettled,
-and ADR 0006's licence split is gated on the same decision and is effectively irreversible.
+**Status when this was written (2026-08-31): waiting on a person.** `not-working.md` §8 records the dry
+run: three attempts, two real workflow defects found and fixed, and all five locks exercised on the third.
+What remained was not mechanical — the changeset access setting was still the restricted one and PLAN.md
+B5 (the name) was unsettled, and ADR 0006's licence split is gated on the same decision and is effectively
+irreversible. **Both closed before the first publish**: the setting says `public` (2026-09-14, #1530) and
+B5 reads CLOSED 2026-09-19.
 
 **A DECISION WAITING AT PUBLISH TIME, found while checking the prerequisites.** Five promotion changesets
-are pending and **only one describes the shipped weights**:
+were pending and **only one described the shipped weights**:
 
 ```
 promote-candidate-d7762085.md   records=2525  v17   <- the shipped weights
@@ -462,15 +501,17 @@ promote-candidate-4.md          records=2403  v15
 promote-v15-scorer.md                         v7
 ```
 
-`release:provenance` PASSES, and correctly: it asks whether the shipped weights are accounted for, and
-they are. But nothing has ever been published, so the other four describe promotions no consumer ever
-had — internal history rather than release notes, and a first CHANGELOG carrying all five reads as four
-changes that never happened to anybody.
+`release:provenance` PASSED, and correctly: it asks whether the shipped weights are accounted for, and
+they were. But no package had reached a registry at that point, so the other four described promotions no
+consumer ever had — internal history rather than release notes, and a first CHANGELOG carrying all five
+would have read as four changes that never happened to anybody.
 
-**Not resolved here, deliberately.** Deleting a release note is not a tidy-up: ADR 0007 makes the weights
-the API and the changeset is the only record of their provenance. Whether a first release collapses them
-into one entry or keeps the lineage is a call for whoever decides the name, and it is the same
-conversation. Flagged so it is not discovered mid-publish.
+**Not resolved here, deliberately** — and resolved the next day. Deleting a release note is not a tidy-up:
+ADR 0007 makes the weights the API and the changeset is the only record of their provenance. Whether a
+first release collapses them into one entry or keeps the lineage is a call for whoever decides the name,
+and it is the same conversation. Flagged so it is not discovered mid-publish. **`ae5086dc7` (2026-09-01)
+made it: one entry, with the lineage folded in as a table.** See item 3 of the decision list above for
+what is live now.
 
 **Before a real publish, run the full gate on the lab** — `npm run lab:job -- -e job=release-gate`. The
 workflow can only prove 5 of its 13 stages; the human typing `publish-for-real` is asserting the other
