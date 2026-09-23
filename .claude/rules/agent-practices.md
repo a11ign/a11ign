@@ -115,33 +115,48 @@ whether they are followed.
   behind it is then a real cost of the decision rather than an accident of the path rule. Full ruling and
   the per-row reasoning: `docs/lane-ownership.json`'s `_claimVsAuthorRuling`, and #1320/#1257/#1397/#1452.
 
-## A reviewer verdict also posts as a GitHub review; requiring one is deferred (ceo's ruling, 2026-09-19)
+## `main` REQUIRES an approving review (ceo's ruling, 2026-09-22, #2022)
 
-- **Measured 2026-09-19: 0 of the last 25 merged PRs carried a GitHub review.** Every verdict is prose in
-  a PR comment (`**Review of #<n> at \`<head8>\`, by reviewer: convinced.**`), read by `review-verdict.mjs`
-  (#1245) and the org's own clocks — but never by GitHub itself. `gh pr view --json reviews` returns `[]`
-  on every one of them, so the merge-queue ruleset and branch protection cannot require an approval, and
-  no tool outside this repository's code can see whether a PR was reviewed. #1761 is the full measurement.
-- **Ruling: verdict-as-review is YES, ruleset-requires-review is NOT YET, and `(provisional)` gets no
-  separate GitHub state.**
-  1. `packages/agent-org/docs/roles/reviewer.md` now instructs `reviewer`/`reviewer-2` to post
-     `gh pr review <n> --approve` (on `convinced`, provisional or not) or `--request-changes` (on
-     `not convinced`) alongside the existing comment, body-first-lined with the same verdict. The comment
-     is unchanged and stays the evidence (`Acceptance:`, `Mutation:`, findings); the review is the
-     GitHub-visible signal, not a replacement.
-  2. **The merge-queue ruleset and branch protection require nothing from this review yet.** A bot account
-     that also opens PRs (`a11ign-ai-workers` opens every PR here) may find GitHub refuses its own review
-     as self-approval — untested, because testing it needs the reviewer's own credentials, which `ceo`
-     does not hold. Requiring a review before that is proven would block every merge outright the moment
-     it happened to be true. The next real review posted after this rule lands **is** that proof: watch
-     `gh pr view --json reviews` on it, and only then open a row to add the requirement.
-  3. `(provisional)` stays a word in the comment and the review body. GitHub's approval is binary and this
-     repo's own five-in-a-row rule (`reviewer.md`, "Since the line lifted…") already treats a provisional
-     `convinced` as the actionable verdict, so there is no second state left for a review object to carry.
-- **Why `ceo` ruled rather than referring it:** it changes the merge-queue ruleset's future shape, which is
-  `ceo`'s lane per `docs/lane-ownership.json`, and per the 2026-09-18 ruling above (`lane:ceo` protects
-  review, not authorship) this is a genuine decision between behaviours (whether GitHub's own machinery
-  owns "was this approved") rather than a path needing review only.
+**This replaces the 2026-09-19 deferral rather than sitting beside it; #1761 is closed out here.** That
+ruling withheld the requirement on a premise measured false at `75348436e`: it feared that "a bot account
+that also opens PRs (`a11ign-ai-workers`) may find GitHub refuses its own review as self-approval". But
+reviews are posted by `a11ign-bot`, and PRs are opened by `a11ign-ai-workers` and `DanBeckDev`.
+**`a11ign-bot` is neither**, so the collision cannot arise on the observed population, and its own
+clearing condition — the next real review — was met by #1968.
+
+**The supporting splits are ROLLING counts: each is a reading at a named moment, never a present-tense
+fact.** The opening split was 68/32 of the last 100 at `75348436e`, and 76/24 some 26 hours later.
+Verdict-as-review took as hoped: 28 of the 40 most recent PRs carried a review at `75348436e`, **every
+one** by `a11ign-bot`, and 33 of 40 at 2026-09-22T23:45Z — against #1761's "0 of the last 25". Re-derive
+them before quoting them; what does not drift is the membership above.
+
+- **The failure it permitted happened.** #1971 on 2026-09-22: `added_to_merge_queue` 19:22:54Z, a
+  `not convinced` verdict 19:23:43Z, `hold:product-manager` 19:26:46Z, **merged 19:27:28Z**. A verdict
+  3m45s before the merge and a hold 42s before it, and **neither was visible to GitHub's machinery**, so
+  neither could stop a PR already in the queue. Of the 23 PRs merged from 17:52Z that day, 4 merged with
+  no approving review. A `--request-changes` review under a required-review rule blocks queue entry
+  outright; nothing else here did.
+- **The rule: one approving review, and `bypass_pull_request_allowances` EMPTY.** The allowance goes with
+  it or the requirement is decorative — `DanBeckDev` was its sole entry and queues a large share of
+  merges, so a count of `1` beside it would enforce the rule on the `a11ign-ai-workers` path and exempt
+  the other, reading as universal while absent on roughly half of the merges.
+- **An `a11ign-bot`-authored PR waits.** It has authored one PR ever (#1694, a trunk revert) and **it
+  never merged and never needed to** — closed unmerged after 39 minutes, superseded by a forward fix in
+  #1697. The hatch is a human admin editing the protection: one call, always available, and
+  `enforce_admins: true` makes it a deliberate logged edit rather than a standing hole. The self-approval
+  question never needed testing to decide this — either GitHub refuses the self-approval and such a PR
+  waits, or it accepts it and the requirement is met by an author approving itself, which is not a review
+  at all. Both arms argue for requiring it; **the deferral bought nothing it could have spent.**
+- **Read it back BEHAVIOURALLY, never off the field** (`packages/lab/src/packaging/branch-protection.test.ts`).
+  `required_approving_review_count == 1` proves the setting is set, not that it bites. The observable is
+  **`reviewDecision`**, which GitHub leaves EMPTY when the base requires no approval: measured on #1968,
+  three reviews including an `APPROVED` and an empty decision — the reviews existed and decided nothing.
+  It also needs no admin, which matters because `a11ign-ai-workers` has `permissions.admin: false`.
+- **A 404 from `branches/main/protection` means absent OR forbidden, and must never be read as
+  "unprotected".** `branches/main.protected` is the discriminator and needs no admin: measured
+  2026-09-22T23:05Z as `a11ign-ai-workers`, protection 404s while `protected` reads `true`, so that 404
+  is FORBIDDEN. A verdict that
+  cannot read `bypass_pull_request_allowances` is `CANNOT_TELL`, loudly — never a pass.
 
 ## A waiting condition is DATA, not a sentence (chairman's direction, 2026-09-19)
 
