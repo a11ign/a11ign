@@ -256,9 +256,12 @@ are the stable part; how many links or form fields a run REACHES varies run to r
 2026-09-23 across six measurements: almost all of it is the SWEEP, not the page. The page's own `domCensus`
 held constant at `link=75` while reach went 13 → 17 → 40 → 80, including 13 vs 17 on one unchanged build —
 so those figures measure the sweep improving, and its nondeterminism, rather than anything about w3.org.
-Only the last step, 80 → 84, is the live page changing, and the census moved with it. The run lands on the
-same document every time: `servedPath` is `https://www.w3.org/WAI/` throughout and `compareIdentity` reads
-`SAME_DOCUMENT`.)
+Only the last step, 80 → 84, is the live page changing, and the census moved with it. Landing somewhere
+different is not the cause of that step: across the three samples that record enough to re-derive it —
+reach 80, 84, 84 — `compareIdentity` reads `SAME_DOCUMENT`, on `servedPath` (`https://www.w3.org/WAI/`)
+alone, because each of those captures also names a second w3.org page, which leaves `title` incomparable.
+The other three samples are result fixtures that drop what `documentIdentity` reads and answer
+`UNCOMPARABLE`, so the 13 → 80 figures rest on the census above rather than on identity.)
 
 **`news.ycombinator.com` — a real site, not built for accessibility.** 151 announcements, 3 findings, all
 true positives: the search box is announced as a bare `edit` with no label (3.3.2, 4.1.2) and the logo has
