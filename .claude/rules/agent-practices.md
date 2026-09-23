@@ -236,6 +236,35 @@ them before quoting them; what does not drift is the membership above.
   command. The rule that stays: the row is the state — a report to `product-manager` changes nothing until
   the row, the PR and the API say so.
 
+## An approval prompt a human learns to click through is worse than no prompt (2026-09-23, #2076)
+
+- **Write `rm -f "${D:?}"/*.md`, never `rm -f $D/*.md`.** `:?` makes the shell abort on an unset or empty
+  variable, so the expansion that would become `rm -f /*.md` becomes impossible; the quotes stop a path
+  containing a space re-splitting into two arguments. **The prompt stops firing because the danger is gone,
+  not because the guard was overridden** — which is the only version of "stop asking me" worth having.
+- **Measured 2026-09-23:** `product-manager` posted issue comments through
+  `D=/tmp/.../scratchpad/comments && rm -f $D/*.md`, and the chairman approved that same shape **several
+  times in one morning**, each time having to read a command in order to conclude it was fine. The line is
+  **safe as written** — `D` is assigned a literal path on the same line and `&&` gates the `rm` on that
+  assignment, so it cannot be empty — but the classifier cannot see that, and **this is one of the few
+  guards `--dangerously-skip-permissions` deliberately does not disable**, so it reached a human every time
+  despite bypass being on.
+- **The cost is not the seconds.** Every avoidable prompt spends a human's attention and makes the
+  unavoidable ones cheaper to ignore. The next one will be genuinely dangerous and will get the same reflex.
+- **The general form, and the part worth keeping: when a command is refused for its SHAPE rather than its
+  EFFECT, change the shape.** Reaching for an override, or asking a human to approve it again, both leave
+  the next session to rediscover the same refusal — and one of them trains the reviewer out of reviewing.
+- **Prevention rather than cleanup, and the two halves defend against different things.** Measured at
+  `80bd64e3b`: no tracked file runs `rm` on a glob beneath a variable —
+  `git grep -nE 'rm +(-[rfv]+ +)*"?\$\{?[A-Za-z_][A-Za-z0-9_]*\}?"?[^ ]*\*'` is empty. Eight tracked call
+  sites do pass a bare variable to `rm` (`fetch-windows-iso.sh`, `build-vm.sh`, `serve-bootstrap.sh`,
+  `create-utm-vm.sh`, `codex-backend.test.ts`, `lab-job-lock-two-rows.test.ts`, `pre-commit`, `pre-push`),
+  and **every one is quoted with no glob attached**, which is why none of them prompts and none is cleanup
+  this rule owes. **Quoting alone defuses the catastrophe** — an empty `"$STAGE"` makes `rm -rf ""`, which
+  removes nothing — while `:?` is what also stops the quieter failure, deleting the wrong path because the
+  variable was empty. **Reach for `:?` the moment a glob joins the variable**, and the two together are the
+  whole rule.
+
 ## Assertions
 
 - **An emptiness assertion names where its positive control lives.** `assert.deepEqual(offenders, [])`
