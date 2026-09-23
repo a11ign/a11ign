@@ -474,7 +474,7 @@ reviewer's refusal of #2159 at `ff88e9ea`, and in that form it was false: it swe
 release does not version and has never versioned.
 
 ```
-$ ls .changeset/*.md | grep -v README | wc -l   ->  88 pending      (a ROLLING count)
+$ ls .changeset/*.md | grep -v README | wc -l   ->  90 pending      (a ROLLING count)
 $ ls .changeset/first-publish-*.md | wc -l      ->   6
 $ npx changeset status --verbose                 ->  7 versioned packages, all 0.0.0 -> 0.1.0
 $ npm view a11ign versions                       ->  0.1.0, live since 2026-09-19
