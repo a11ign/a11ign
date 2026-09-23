@@ -455,14 +455,24 @@ record of why the publish waited; each item now carries what decided it and when
 say?** Measured 2026-09-23. The first release shipped on 2026-09-19 and **the first CHANGELOG was never
 written** — a walk of this tree finds no `CHANGELOG.md` at all outside `node_modules`, and
 `release:provenance` still reports `CHANGELOG absent (never published)`. `release.yml` ran
-`release:version` inside the job and nothing committed the result back, so every `package.json` still
-reads `0.0.0` and every changeset that publish consumed is still in `.changeset/` (#1824;
-`release-commit-version-bump.mjs` fixes it and no real dispatch has exercised it yet).
+`release:version` inside the job and nothing committed the result back, so **all seven versioned manifests
+still read `0.0.0`** — the seven public ones under `packages/`, which are exactly the set `changeset
+version` writes while `.changeset/config.json` sets `privatePackages.version` to `false` — and every
+changeset that publish consumed is still in `.changeset/` (#1824; `release-commit-version-bump.mjs` fixes
+it and no real dispatch has exercised it yet).
+
+**TWO MANIFESTS DO READ `0.1.0`, AND THEY ARE NOT PART OF THIS.** `@a11ign/control` and `@a11ign/lab` are
+both `private`, so `changeset version` has never touched either: their `0.1.0` is a hand-set number from
+the commits that extracted them (`ee770dbfe`, `302dbae52`), and when #1396 reset the six then-`0.1.0`
+public manifests to `0.0.0` on 2026-09-13 it correctly left these two alone. The exceptions are named
+rather than merely excluded, because the sentence above stood UNQUALIFIED in this document until
+reviewer's refusal of #2159 at `ff88e9ea`, and in that form it was false: it swept in two manifests the
+release does not version and has never versioned.
 
 ```
 $ ls .changeset/*.md | grep -v README | wc -l   ->  88 pending      (a ROLLING count)
 $ ls .changeset/first-publish-*.md | wc -l      ->   6
-$ npx changeset status --verbose                 ->  every package  0.0.0 -> 0.1.0
+$ npx changeset status --verbose                 ->  7 versioned packages, all 0.0.0 -> 0.1.0
 $ npm view a11ign versions                       ->  0.1.0, live since 2026-09-19
 ```
 
