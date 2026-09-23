@@ -1,13 +1,13 @@
 # Agent practices — every session in this repo (chairman's direction, 2026-09-11)
 
-These load with CLAUDE.md in every session. They are habits, not gates; #912 reads whether they are
-followed.
+These load with CLAUDE.md in every session. They are habits, not gates; the org clock on #912 reads whether
+they are followed.
 
 **EVERY WAKE LOADS THIS FILE, BUDGETED AT 20,000 BYTES WITH `CLAUDE.md` (#2217).** It carries the RULE and
 one clause of why; **the incident behind each is in
 [`docs/operational-lessons.md`](../../docs/operational-lessons.md), under a section named for that rule.**
 **A section added here is a permanent tax charged hundreds of times a day** —
-`packages/lab/src/packaging/prefix-budget.test.ts` prints it. **Evict or move, never truncate.**
+`prefix-budget.test.ts` prints it. **Evict or move, never truncate.**
 
 ## Model routing for subagents
 
@@ -25,7 +25,8 @@ one clause of why; **the incident behind each is in
 ## Web research
 
 - **Run research in a subagent** (`haiku` gathers, `sonnet` digests) so pages stay in its context and
-  only the digest reaches yours — with sources, never a page dump.
+  only the digest reaches yours — with sources, never a page dump. **One fetch that the main session must
+  read itself is the exception, not the habit.**
 
 ## Timers and state
 
@@ -48,7 +49,6 @@ one clause of why; **the incident behind each is in
   names one** (#1394). An engineer with no row in build claims the next Ready row.
 
 ## The API budget — `gh api rate_limit` is a broken gauge (2026-09-22, #1967)
-
 
 - **Never decide anything from `gh api rate_limit`.** It has reported a FULL pool during a total GraphQL
   outage of that same token, and has lied twice three weeks apart (#1275, #1967).
@@ -84,11 +84,10 @@ one clause of why; **the incident behind each is in
 
 ## `main` REQUIRES an approving review (ceo, 2026-09-22, #2022)
 
-
 - **One approving review, and `bypass_pull_request_allowances` EMPTY** — the allowance goes with it or
   the requirement is decorative, reading as universal while absent on half the merges. An
-  `a11ign-bot`-authored PR waits; the hatch is a human admin editing the protection, and
-  `enforce_admins: true` makes that a logged edit rather than a standing hole.
+  `a11ign-bot`-authored PR waits; the hatch is a human admin editing the protection, which
+  `enforce_admins: true` makes a logged edit rather than a standing hole.
 - **Read it back BEHAVIOURALLY, never off the field** (`branch-protection.test.ts`):
   `required_approving_review_count == 1` proves the setting is set, not that it bites. The observable is
   **`reviewDecision`**, EMPTY when the base requires no approval, and needing no admin.
@@ -104,8 +103,8 @@ one clause of why; **the incident behind each is in
   `branches/main/protection`, behind `A11Y_CHECK_BRANCH_PROTECTION=1` — the only one that can answer
   *nobody is exempt*. Without admin, which is every session and every CI job here: `rules/branches/main`
   plus `rulesets/{id}`, behind `A11Y_CHECK_MAIN_RULESET=1`, which answers **for the asking identity only**.
-  Both are wired in `branch-protection.test.ts` under two switches, because the admin read cannot pass
-  where admin is absent.
+  Both are wired in `branch-protection.test.ts` under two switches: the admin read cannot pass where
+  admin is absent.
 - **`current_user_can_bypass: "never"` answers FOR ME ALONE and does not mean nobody is exempt.**
   `bypass_actors` — the field that could say — is withheld from a token without write access to the
   ruleset, so **its absence means "you may not look", never "the list is empty"**. `CANNOT_TELL` stands
@@ -122,8 +121,8 @@ one clause of why; **the incident behind each is in
   cleared the `CHANGES_REQUESTED` that stalled #2049 for seven hours — and *Update branch*, which
   `update-branch-sweep.mjs` runs after every merge, would have stalled 15 of the last 40 merges.
 - `readPrs` asks for `reviewDecision` on the `pr list` call it already makes, and **`pr-review-blocked`**
-  names every green, unheld PR GitHub is holding — including one that opened READY and so never reached
-  the reviewer lane.
+  names every green, unheld PR GitHub is holding — including one that opened READY and never reached the
+  reviewer lane.
 - **A grep count in a row body is a reading at a moment: re-run it at YOUR commit.**
 
 ## A waiting condition is DATA, not a sentence (chairman, 2026-09-19)
@@ -133,13 +132,13 @@ one clause of why; **the incident behind each is in
 - **Waiting on a SESSION → `answer:<session>`. Removing the label IS the act of answering**, so there is
   nothing to remember. A label and not an assignee: eight sessions share four accounts.
 - **Waiting on another row → `gh issue edit <n> --add-blocked-by <m>`**, GitHub's own dependency edge,
-  returned by the `--json blockedBy` call the gate already makes.
+  returned by the `--json blockedBy` call the gate makes.
 - **Waiting on a date → `Not-before: YYYY-MM-DD`; on an HOUR → `Not-before: YYYY-MM-DDTHH:MM:SSZ`**
   (#2113 — seconds and the `Z` are required, anything else fails open). Use the timestamp whenever the
   condition turns true at a named time.
 - **`Fleet-hold-until: YYYY-MM-DDTHH:MM:SSZ` says TWO things and only one is enforced.** It refuses
-  `fleet:deploy`/`fleet:provision` until T (code); it is also *used* to mean "my captures own the workers
-  until T", and **nothing reads it for that**. Declare it for both; the second is a note to humans.
+  `fleet:deploy`/`fleet:provision` until T (code); it also *means* "my captures own the workers until T",
+  and **nothing reads it for that**. Declare both; the second is a note to humans.
 - **All of these CLEAR THEMSELVES, and that is the point.** `blocked` has **no referent** — it never says
   what blocks the row, so only a human can lift it. Use it only for a wait no field can express, and say
   what would clear it.
@@ -168,15 +167,13 @@ one clause of why; **the incident behind each is in
 
 ## An approval prompt a human learns to click through is worse than no prompt (2026-09-23, #2076)
 
-
 - **Write `rm -f "${D:?}"/*.md`, never `rm -f $D/*.md`.** `:?` makes the shell abort on an unset or empty
   variable, so the expansion that would become `rm -f /*.md` is impossible; the quotes stop a path with a
   space re-splitting. **The prompt stops firing because the danger is gone, not because the guard was
   overridden** — the only version of "stop asking me" worth having, and one of the few guards
   `--dangerously-skip-permissions` does not disable, so it reaches a human every time.
-- **The cost is not the seconds.** The chairman approved one such line several times in one morning, each
-  time reading a command to conclude it was fine. Every avoidable prompt **makes the unavoidable ones
-  cheaper to ignore.**
+- **The cost is not the seconds:** one such line reached the chairman **several times in one morning**.
+  Every avoidable prompt **makes the unavoidable ones cheaper to ignore**, and the next is real.
 - **The general form: when a command is refused for its SHAPE rather than its EFFECT, change the shape.**
   Reaching for an override, or asking a human to approve it again, both leave the next session to
   rediscover the same refusal — and one of them trains the reviewer out of reviewing.

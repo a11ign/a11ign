@@ -1482,6 +1482,46 @@ something this row silently decided either way.
      measurement, the transcript and the reasoning that was rejected live here, where they
      cost nothing per wake. Each heading is the anchor the loaded rule links to. -->
 
+## Model routing for subagents — the measurement that produced the rule
+
+*The rule is in [`.claude/rules/agent-practices.md`](../.claude/rules/agent-practices.md); this is the measurement behind it. The heading it carried while every wake loaded it, verbatim:*
+
+```
+## Model routing for subagents
+```
+
+- `model="haiku"` for data gathering: file reads, counting, directory walks, grep, API listings.
+- `model="sonnet"` for analysis and judgment over gathered material.
+- `model="opus"` only for multi-step reasoning that a cheaper tier has measurably got wrong.
+- Measured 2026-09-10 over 30 days: Opus carried 66% of billable tokens and Haiku under 1%, with no
+  routing rule anywhere. Every subagent call names its model.
+
+## Context — the loaded rule, as it stood
+
+*The rule is in [`.claude/rules/agent-practices.md`](../.claude/rules/agent-practices.md). The heading it carried while every wake loaded it, verbatim:*
+
+```
+## Context
+```
+
+- `/compact` at 50–70% context fill, before auto-compact; quality degrades past 70%.
+- `/clear` between unrelated topics; a fresh window beats stale history.
+- Batch related requests into one message; every round-trip re-sends the whole config stack.
+
+## Web research — the 2.9 million tokens that produced the rule
+
+*The rule is in [`.claude/rules/agent-practices.md`](../.claude/rules/agent-practices.md); this is the measurement behind it. The heading it carried while every wake loaded it, verbatim:*
+
+```
+## Web research
+```
+
+- Measured 2026-09-11 over 30 days: 576 web search and fetch calls put about 2.9 million tokens of page
+  content into main-session contexts. Run research in a subagent (`haiku` to gather, `sonnet` to
+  digest) so the pages stay in its context and only the digest reaches yours; ask for a digest with
+  sources, never a page dump. One fetch that the main session must read itself is the exception, not
+  the habit.
+
 ## Timers and state — why no session holds a cron
 
 *The rule is in [`.claude/rules/agent-practices.md`](../.claude/rules/agent-practices.md); this is the incident behind it. The heading it carried while every wake loaded it, verbatim:*
@@ -2046,11 +2086,15 @@ directory it works in. [What moved, and why it was byte-identical →](docs/oper
 
 - **An emptiness assertion names where its positive control lives.** `assert.deepEqual(offenders, [])`
   passes when the population is empty, so somewhere there must be an assertion that it is not — and the
-  writer must be able to point at it. **A control you believe in is not one you can point at.**
-- **Where the population comes from decides whether a machine can help you.** Of 236 such assertions, 64
-  derive from a local collection and `local/uncontrolled-emptiness` refuses those unpinned; **64 derive
-  from a CALL**, untraceable without guessing, so those have only this line.
-- **This is a habit and this repository loses habits**, and it stays one deliberately (#1157).
+  writer has to be able to point at it. A control you believe in is not one you can point at.
+- **Where the population comes from decides whether a machine can help you.** Measured over 236 such
+  assertions, 2026-09-12: 64 derive from a local collection (`const xs = ys.filter(…)`), and
+  `local/uncontrolled-emptiness` refuses those unpinned — **64 derive from a CALL** (`f().filter(…)`),
+  where no rule can trace the source without guessing at what `f()` returns, so those have **only this
+  line**. 73 are accumulators and 17 unclassified, both with their own rows.
+- **This is a habit and this repository loses habits**; the reason it stays one is that the alternative
+  is a rule that infers intent, which is the defect this family is about one level up. A habit that
+  decays beats a guard that guesses, and #1157 records the trade rather than pretending it is not one.
 
 ## Code conventions, as CLAUDE.md carried them
 
