@@ -1,9 +1,20 @@
-# The publish path. IT PUBLISHES NOTHING TODAY, AND CANNOT BE TRIGGERED BY ACCIDENT.
+# The publish path. IT PUBLISHES ONLY ON A TYPED CONFIRMATION, AND CANNOT BE TRIGGERED BY ACCIDENT.
 #
-# The name is undecided (PLAN.md, B5) and nothing has been pushed to any registry. This workflow exists so
-# that when the name is settled, releasing is a reviewed config change rather than someone improvising
+# The name is settled (`a11ign`, PLAN.md B5, #1530) and the first release has shipped: `a11ign@0.1.0` and
+# five `@a11ign/*` packages went to the public registry on 2026-09-19T09:39:12Z, from `b373d1d7`. This
+# workflow exists so that releasing is a reviewed config change rather than someone improvising
 # `npm publish` across six interdependent packages at the moment they are least able to check the result.
-# npm versions cannot be unpublished after 72 hours, only deprecated, so a wrong first release is permanent.
+# npm versions cannot be unpublished after 72 hours, only deprecated, so a wrong release is permanent.
+#
+# #2052 — WHY THE TWO SENTENCES ABOVE NOW NAME A DATE. Until 2026-09-23 this header stated in the present
+# tense that nothing had ever been published, and quoted an access setting the file had not had since
+# 2026-09-14. Both claims were true when written, and nothing about a comment notices when they stop. On
+# 2026-09-23 a session working #1567 read this header first, concluded the publish had not happened, and
+# left five milestone rows standing behind a fleet provision that was already unblocked; a direct registry
+# read is what reversed it. A comment asserting the current state of something OUTSIDE this file — a
+# registry, a sibling config — reads as authoritative precisely because somebody troubled to write it, and
+# has nothing keeping it true. `release-header-currency.test.ts` now reads `.changeset/config.json` itself
+# and checks every place here that quotes it, so gate 4 below cannot drift from the file it quotes again.
 #
 # SEVEN INDEPENDENT THINGS must all be true before a single byte is published. They are independent on
 # purpose: any one of them alone would be a single point of failure, and this repo's own rule is that a
@@ -12,9 +23,10 @@
 #   1. `workflow_dispatch` only. There is no push, tag or schedule trigger, so nothing can start it.
 #   2. `dry-run` defaults to true. The default path builds, versions and PACKS, and stops.
 #   3. `confirm` must be typed exactly. A dropdown or a boolean can be clicked by mistake.
-#   4. `.changeset/config.json` must say `"access": "public"`. It currently says `restricted`, so even a
-#      correctly-confirmed real run fails at the publish step rather than publishing privately under a
-#      name we may not keep.
+#   4. `.changeset/config.json` must say `"access": "public"`, and the publish step reads the file back
+#      rather than assuming it — so a correctly-confirmed real run fails at that step rather than
+#      publishing under a setting nobody checked. It reads `public` today; it was flipped there on
+#      2026-09-14 (#1530), and a scoped `@a11ign/*` package cannot publish under anything else at all.
 #   5. `action-smoke` must SUCCEED, run HERE, against the exact sha this workflow was dispatched at. It
 #      drives the published Action the way a consumer does — `uses: ./`, inputs only, no repo knowledge —
 #      so it is the only check here that exercises the weights through the path a user takes.
@@ -38,7 +50,7 @@
 #   "job did not succeed" the same failure as any other step here — no query, no race between "never ran"
 #   and "running right now", the exact ambiguity the old query step had to fail closed on three ways.
 #
-# Removing any of the seven is a deliberate act. Do not remove them in the same change that first uses this.
+# Removing any of the seven is a deliberate act. Do not remove them in the same change that dispatches this.
 #
 # `dist-tag` (issue #326) IS NOT AN EIGHTH GUARD -- it is a CHANNEL, orthogonal to all seven. All of them
 # still gate the run identically whether `dist-tag` is empty (publishes "latest", today's only behaviour)
@@ -284,9 +296,10 @@ jobs:
           fi
           access=$(node -p "require('./.changeset/config.json').access")
           if [ "$access" != "public" ]; then
-            echo "::error::.changeset/config.json has access=$access. Until the name is settled (PLAN.md B5)"
-            echo "this is deliberately 'restricted' so an accidental release cannot claim a name. Change it"
-            echo "in a reviewed commit, not here."
+            echo "::error::.changeset/config.json has access=$access. It must read 'public': every"
+            echo "published package here is scoped (@a11ign/*) and npm refuses a scoped publish under"
+            echo "anything else, so this run would fail at the registry instead of here. If that value"
+            echo "changed on purpose, change it back in a reviewed commit, not here."
             exit 1
           fi
 
@@ -353,5 +366,6 @@ jobs:
             echo "Published. npm versions cannot be unpublished after 72 hours, only deprecated."
           else
             echo "DRY RUN — versioned and packed, published nothing. This is the default and correct path"
-            echo "until PLAN.md B5 (the name) is settled."
+            echo "for every dispatch that is not a release: a real one needs dry-run false AND the"
+            echo "confirmation typed exactly."
           fi
