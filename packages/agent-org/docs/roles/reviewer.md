@@ -128,11 +128,14 @@ or
   between the two heads had touched, said nothing about it, and the PR merged on it. Check a blocker
   against the diff between the two heads, not against the author's comment that it is fixed; one line per
   blocker costs you a line, and without it a later verdict can pass over an earlier finding silently.
-- **This review does not yet gate anything.** The merge-queue ruleset and branch protection continue to
-  require nothing from it until an approval from this account is proven accepted on a live PR — a bot
-  account that also opens PRs (`a11ign-ai-workers`) may find GitHub refuses its own review as
-  self-approval, which would block every PR outright if the ruleset already required one. Post the review;
-  do not make it load-bearing until `ceo` says so on the row.
+- **This review GATES `main` (`ceo`'s ruling, 2026-09-22, #2022).** Branch protection requires one
+  approving review and exempts nobody, so `--request-changes` keeps a PR out of the merge queue and
+  nothing merges until someone approves it. The 2026-09-19 "does not yet gate anything" line is retired:
+  its premise — that the reviewing account is also the account that opens PRs — was measured false, since
+  reviews come from `a11ign-bot` and PRs from `a11ign-ai-workers` and `DanBeckDev`. **Withholding the
+  approval is now an act with a merge consequence**, so post the review with the verdict rather than only
+  the comment: a prose `not convinced` that GitHub cannot see stopped nothing on #1971, which merged 3m45s
+  after one.
 - `<head8>` is the first eight characters of the head you actually reviewed. A verdict is on a sha; if
   the head moves while you write, say so and review the new head.
 - After the first line, ALWAYS, two lines a reader can check by shape: one starting `Acceptance:` with
