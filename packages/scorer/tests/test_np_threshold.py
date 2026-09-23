@@ -198,15 +198,63 @@ def test_with_no_positives_above_the_floor_the_cut_stays_put():
     assert cut_no_positives == guarantee2["floor"], "an empty positive list must not move the cut"
 
 
-def test_raise_to_same_power_is_the_lowest_positive_at_or_above_the_floor():
-    """Pure, and asserted directly: the boundary is what `score >= threshold` makes it.
+def test_the_raise_stops_one_step_above_the_negatives_it_clears():
+    """Pure, and asserted directly: the cut is a NEGATIVE's score nudged, never a positive's.
 
-    Every cut up to and including the smallest admitted positive keeps the same positives, and one step
-    beyond drops it. Raising to exactly that value is the largest cut that loses nothing.
+    Everything between the highest cleared negative and the lowest admitted positive excludes exactly
+    the same negatives, so the lowest such cut is the one to take. Until #2152 this returned the
+    positive itself -- the top of that interval -- and every point below it was surrendered for nothing.
     """
     trainer = load()
-    assert trainer.raise_to_same_power(0.1, [0.05, 0.4, 0.9]) == 0.4
-    assert trainer.raise_to_same_power(0.4, [0.05, 0.4, 0.9]) == 0.4, "a positive ON the floor is kept"
-    assert trainer.raise_to_same_power(0.5, [0.05, 0.4]) == 0.5, "nothing above the floor: stay put"
-    assert trainer.raise_to_same_power(0.5, None) == 0.5
-    assert trainer.raise_to_same_power(0.5, []) == 0.5
+    cut = trainer.raise_to_same_power(0.1, [0.05, 0.4, 0.9], [0.05, 0.12, 0.2])
+    assert 0.2 < cut < 0.4, f"the cut must clear 0.2 and stop short of the positive at 0.4, got {cut!r}"
+    assert cut == trainer.float32_above(0.2)
+
+    assert trainer.raise_to_same_power(0.4, [0.05, 0.4, 0.9], [0.5, 0.6]) == 0.4, (
+        "a positive ON the floor caps the raise at the floor: there is nothing below it to clear")
+
+
+def test_the_raise_stays_on_the_floor_when_it_would_buy_nothing():
+    """Two different reasons, and neither may move the cut to an arbitrary place.
+
+    No positive above the floor means no ceiling, so a raise could climb without limit. No negative
+    between the floor and the ceiling means the raise excludes nothing it was not already excluding.
+    """
+    trainer = load()
+    assert trainer.raise_to_same_power(0.5, [0.05, 0.4], [0.6, 0.7]) == 0.5, "nothing to cap the raise"
+    assert trainer.raise_to_same_power(0.1, [0.4], [0.05, 0.06]) == 0.1, "nothing to clear"
+    assert trainer.raise_to_same_power(0.5, None, [0.6]) == 0.5
+    assert trainer.raise_to_same_power(0.5, [], [0.6]) == 0.5
+    assert trainer.raise_to_same_power(0.1, [0.4], None) == 0.1, "no negatives given: nothing to clear"
+
+
+def test_the_old_cut_is_strictly_dominated_and_this_is_the_control_that_shows_it():
+    """Same development metrics, a lower cut, and the vacated band is where #2152's misses landed.
+
+    THE POSITIVE CONTROL for the change: a cut at the lowest admitted positive and a cut one step above
+    the highest cleared negative admit the same negatives and the same positives, so no development
+    number can tell them apart -- which is exactly why the old choice survived. The difference is only
+    visible on a score that was not in the development set, and here is one: 0.30, between the two.
+    """
+    trainer = load()
+    floor, negatives, positives = 0.1, [0.05, 0.12, 0.2], [0.05, 0.4, 0.9]
+    old_cut = min(p for p in positives if p >= floor)
+    new_cut = trainer.raise_to_same_power(floor, positives, negatives)
+
+    assert new_cut < old_cut, "the new cut must be strictly lower, or the change bought nothing"
+    for name, scores in (("negatives", negatives), ("positives", positives)):
+        assert ([s for s in scores if s >= new_cut] == [s for s in scores if s >= old_cut]), (
+            f"the two cuts disagree on the development {name}; they must not, or this is a trade")
+
+    held_out_positive = 0.30
+    assert held_out_positive < old_cut, "the control is vacuous unless the old cut refused this score"
+    assert held_out_positive >= new_cut, "the new cut must admit what the old one refused for nothing"
+
+
+def test_raising_through_a_float_gap_narrower_than_a_float32_step_cannot_cost_recall():
+    """The clamp. A nudge is a float32 step and these scores need not be spaced that far apart."""
+    trainer = load()
+    ceiling = 0.4
+    just_below = ceiling - 1e-12
+    cut = trainer.raise_to_same_power(0.1, [just_below, 0.9], [0.2, ceiling - 2e-12])
+    assert cut <= just_below, "the raise stepped past the positive it exists to preserve"
