@@ -270,16 +270,25 @@ them before quoting them; what does not drift is the membership above.
 - **The general form, and the part worth keeping: when a command is refused for its SHAPE rather than its
   EFFECT, change the shape.** Reaching for an override, or asking a human to approve it again, both leave
   the next session to rediscover the same refusal — and one of them trains the reviewer out of reviewing.
-- **Prevention rather than cleanup, and the two halves defend against different things.** Measured at
-  `80bd64e3b`: no tracked file runs `rm` on a glob beneath a variable —
-  `git grep -nE 'rm +(-[rfv]+ +)*"?\$\{?[A-Za-z_][A-Za-z0-9_]*\}?"?[^ ]*\*'` is empty. Eight tracked call
-  sites do pass a bare variable to `rm` (`fetch-windows-iso.sh`, `build-vm.sh`, `serve-bootstrap.sh`,
-  `create-utm-vm.sh`, `codex-backend.test.ts`, `lab-job-lock-two-rows.test.ts`, `pre-commit`, `pre-push`),
-  and **every one is quoted with no glob attached**, which is why none of them prompts and none is cleanup
-  this rule owes. **Quoting alone defuses the catastrophe** — an empty `"$STAGE"` makes `rm -rf ""`, which
-  removes nothing — while `:?` is what also stops the quieter failure, deleting the wrong path because the
-  variable was empty. **Reach for `:?` the moment a glob joins the variable**, and the two together are the
-  whole rule.
+- **Quoting alone defuses the BARE-VARIABLE case, and buys nothing once a glob is attached.** An empty
+  `"$STAGE"` makes `rm -rf ""`, which removes nothing; an empty `"$D"` in `rm -f "$D"/*.md` still expands to
+  `rm -f /*.md`, because the glob sits OUTSIDE the quotes and the shell expands it against `/` (verified in
+  `bash -c 'D=""; echo rm -f "$D"/*.md'`). So quote always, and **reach for `:?` the moment a glob joins the
+  variable** — that pair is the whole rule, and it is why the guard below treats `rm -f "$D"/*.md` as
+  dangerous rather than as already defended.
+- **Prevention rather than cleanup, and the population is counted by a classifier rather than a grep.**
+  Measured at `67f30071f`: **no tracked file a shell executes runs `rm` on a glob beneath an unguarded
+  variable** — the only appearances of that shape anywhere in the tree are this rule and the guard that
+  pins it, quoting it. **Nine tracked files do pass a variable to `rm`, on 13 lines** —
+  `fetch-windows-iso.sh` (3), `pre-push` (2), `ansible/lab-reset.yml` (2), `build-vm.sh`,
+  `create-utm-vm.sh`, `serve-bootstrap.sh`, `pre-commit`, `codex-backend.test.ts`,
+  `lab-job-lock-two-rows.test.ts` — and **every one is quoted with no glob attached**, so none of them
+  prompts and none is cleanup this rule owes. A line-anchored grep
+  (`git grep -nE 'rm +(-[rfv]+ +)*"?\$\{?[A-Za-z_][A-Za-z0-9_]*\}?"?[^ ]*\*'` for the shape,
+  `rm +(-[a-zA-Z]+ +)*"?\$` for the population) reads **8 files and 11 lines**, and it is low for a reason
+  worth knowing: `rm -f -- "$path"` puts a `--` where the regex expects the target, so `lab-reset.yml` is
+  invisible to it. **Count these with `roles-readme.test.ts`'s classifier, which splits the arguments and
+  drops the flags, not with a regex over the whole line.**
 
 ## Assertions
 
