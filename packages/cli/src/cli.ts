@@ -779,8 +779,9 @@ async function runWitness(
  */
 /**
  * What this run can and cannot claim, from a capture. EXPORTED because it is pure over a capture object,
- * and this repo has 2,122 real captures on disk — so it is testable against evidence a real screen reader
- * produced, not against a hand-written shape somebody imagined.
+ * and the lab carries 4,500 real captures on disk (read 2026-09-23T14:26Z) — so it is testable against
+ * evidence a real screen reader produced, not against a hand-written shape somebody imagined. The captures
+ * are on the lab and never in this repo; the figure moves, so read it there rather than from this comment.
  */
 export function conformanceFor(cap: CaptureResponse, axe: AxeFinding[] | null,
   left?: { control: string; notExamined: readonly string[] } | null): ConformanceRequirement[] {
