@@ -199,6 +199,22 @@ them before quoting them; what does not drift is the membership above.
   equivalent. A body field and not a label, because a `not-before:<date>` label mints one label per date
   into a vocabulary that already shows that rot (`branch:agent/…`, `worktree:/private/tmp/…`). It follows
   `Acceptance:`/`Closes:` — this repo's own proven pattern of a declared, parsed, tested body field.
+- **Waiting on an HOUR → the same field, written `Not-before: YYYY-MM-DDTHH:MM:SSZ`** (#2113). Seconds
+  and the `Z` are required; anything else fails open and the row stays visible. **Reach for it whenever
+  the condition turns true at a named time rather than on a named day** — a nightly `workflow_dispatch`,
+  a capture round, a scheduled publish. A date-only value stops meaning "midnight" the moment you can
+  say when: #2002 declared `Not-before: 2026-09-23` for a run the host timer fires at 06:10:00Z, and from
+  00:20:00Z the org read that row as waiting on **nothing** for the ~5h50m in between. **It is the same
+  field and not a fifth one**, so there is no new spelling to learn; `waitingOn` compares parsed time, and
+  a date-only value still means midnight UTC exactly as it always did.
+- **`Fleet-hold-until: YYYY-MM-DDTHH:MM:SSZ` says TWO things, and only one of them is enforced.** It
+  refuses `fleet:deploy`/`fleet:provision` until T — that part is code. It is also *used*, on five live
+  rows as of 2026-09-23, to mean **"my capture sequence owns the workers until T"**, and **nothing reads
+  it for that**: `evidence:check` skips a busy worker rather than queueing behind it, so a dispatch into
+  an occupied fleet compares nothing. Declare it for both, and treat the second as a note to humans.
+  There is deliberately **no `Worker-hold-until:`** beside it: this field already carries a full
+  timestamp, and a second one would state the same fact twice in the vocabulary #2113 exists to stop
+  growing.
 - **Both CLEAR THEMSELVES, and that is the whole point.** `blocked` is a claim with **no referent**: it
   says something blocks this row and never says what, so nothing can check it and only a human re-reading
   the row can lift it — which is why 11 rows carried it that day, several waiting on conditions that had
