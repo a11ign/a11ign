@@ -331,8 +331,10 @@ export interface CaptureResult {
     provisionRevision: string;
     /**
      * #1513: the CSS viewport the page was read at, per capture (`innerWidth`/`innerHeight` in CSS pixels). Absent
-     * when not measured -- an older worker, or a read that failed -- never zero. NOT a cache-key input: the width
-     * joins neither `environmentKey` nor `MUST_MATCH` until the window is pinned.
+     * when not measured -- an older worker, or a read that failed -- never zero. STILL NOT a cache-key input now
+     * that #1561 has pinned the window: what is keyed is `windowSize` below, the width the worker ASKS for, which
+     * a cache lookup can know before the capture exists. These are the OUTCOME of that request -- Edge clamps it
+     * to the display work area -- so they CONFIRM the pin rather than identify the capture.
      */
     innerWidth?: number;
     innerHeight?: number;
@@ -348,6 +350,17 @@ export interface CaptureResult {
      * and this field is deliberately not on it.
      */
     displayMode?: string;
+    /**
+     * #1561: the window the worker ASKS the browser for, as `"<width>x<height>"`, or `"maximized"` by absence.
+     * Optional because a worker before the pin does not send it, and a capture from such a worker WAS maximized.
+     *
+     * The third of the three widths, and the only one that is a cache-key input. `displayMode` is what the screen
+     * holds, `innerWidth` is what the page was laid out at, and this is what was requested: `--window-size` took
+     * over from `--start-maximized`, so the width stopped being a property of whichever box ran the capture.
+     * `environmentKey` hashes it and `MUST_MATCH` compares it, because a rolling deploy puts pinned and
+     * still-maximized guests on the same `captureProtocol` and the protocol cannot separate them.
+     */
+    windowSize?: string;
   };
 }
 
