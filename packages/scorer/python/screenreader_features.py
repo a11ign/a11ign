@@ -403,7 +403,13 @@ def read_records(path: Path) -> list[dict[str, Any]]:
         if overlap:
             raise RuntimeError(
                 f"record {index} lists {', '.join(overlap)} as both a violation and unknown")
-        if not record.get("provenance", {}).get("family"):
+        # `or {}` and not a default: `"provenance": null` is a DIFFERENT shape from an absent key, and a
+        # default covers only the second. This line already meant to refuse such a record and said so by
+        # name; with the plain default it raised `AttributeError: 'NoneType' object has no attribute
+        # 'get'` instead -- the same refusal, in the shape of a crash, from the one load point every
+        # reader shares. Found by `reviewer-2` on #2098, reproducing what a null provenance actually does
+        # to the acceptance evaluator's chain.
+        if not (record.get("provenance") or {}).get("family"):
             raise RuntimeError(f"record {index} has no grouping family")
     return records
 
