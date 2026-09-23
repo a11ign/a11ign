@@ -17,7 +17,10 @@ be re-derived from the apparatus; one that exists only in a rotating journal can
 **What changes.**
 - Each run also writes `evidence-check/runs/<ISO-8601>-<pid>.json`, and `writeRunReport` **refuses** rather
   than replacing an existing run-scoped file — overwriting the previous run's artefact is the defect this
-  path exists to remove.
+  path exists to remove. The run-scoped file is written **first**, and claims its name atomically, so
+  `report.json` is only replaced once the file it will name is on disk: a refused run leaves both naming
+  the run whose artefact is actually there, rather than a fetched report pointing at a run that kept
+  nothing.
 - Both files carry `at`, `runId` and the `commit` the checkout was on, alongside the `workers` and
   per-result `worker` they already carried, so a verdict can be re-derived against the code that produced
   it. A checkout whose git is unreadable records `commitError` instead; it never records neither.
