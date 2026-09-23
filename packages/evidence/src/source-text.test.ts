@@ -243,12 +243,37 @@ test("division is still division: a `/` after anything that can END an operand i
     ["after a closing paren", "const r = (a + b) / 2; // GONE\nconst x = 1;\n"],
     ["after a closing bracket", "const r = xs[0] / 2; // GONE\nconst x = 1;\n"],
     ["two divisions on one line", "const r = a / b / c; // GONE\nconst x = 1;\n"],
+    // reviewer's blocker at `def6aef9`, as the positive division control it asked for. A word after `.`
+    // is a PROPERTY NAME, and every keyword in KEYWORDS_EXPECTING_A_VALUE is a legal one. Before the fix
+    // `obj.in` left `previousToken === "in"`, the division slash opened a candidate regex,
+    // `endOfRegexLiteral` closed it on the FIRST slash of the `//`, and the comment was copied as code --
+    // NEW damage, since the pre-#2131 stripper removed it.
+    ["after a property named `in`", "const n = obj.in / 2 // GONE\nconst x = 1;\n"],
+    ["after a property named `of`", "const n = obj.of / 2 // GONE\nconst x = 1;\n"],
+    ["after a property named `case`", "const n = obj.case / 2 // GONE\nconst x = 1;\n"],
+    ["after an OPTIONALLY chained property", "const n = obj?.in / 2 // GONE\nconst x = 1;\n"],
+    ["after a property on a newline", "const n = obj\n  .in / 2 // GONE\nconst x = 1;\n"],
   ];
   for (const [name, source] of cases) {
     const stripped = stripComments(source);
     assert.ok(!stripped.includes("GONE"), `${name}: the trailing comment must still be stripped`);
     assert.ok(stripped.includes("const x = 1;"), `${name}: the code after it must survive`);
   }
+});
+
+test("a keyword is only a keyword in VALUE position -- `of` after `.` is a property, but `of` in a "
+  + "`for...of` header still opens a regex", () => {
+  // The control that keeps the fix above from being "the keyword list is dead". Both halves matter: the
+  // property read must divide, and the genuine value position must still be seen, or the shape the list
+  // was added for (`for (const k of /re/…)`) silently regresses to the pre-#2131 behaviour.
+  const header = "for (const k of /a`b/.test(s) ? xs : ys) {\n  f(k);\n}\n// GONE\nconst x = 1;\n";
+  const stripped = stripComments(header);
+  assert.ok(stripped.includes("/a`b/.test(s)"),
+    "the backtick inside the regex is CONTENT -- read as a template opener it swallows the rest of the file");
+  assert.ok(!stripped.includes("GONE") && stripped.includes("const x = 1;"),
+    "and nothing after the regex is corrupted");
+  // Same word, member position: the slash after it is a division and the trailing comment is a comment.
+  assert.ok(!stripComments("const n = xs.of / 2 // GONE\nconst x = 1;\n").includes("GONE"));
 });
 
 test("a candidate regex that does not close on its own line is ABANDONED -- the second half of the "

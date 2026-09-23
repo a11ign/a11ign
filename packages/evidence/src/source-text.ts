@@ -113,9 +113,11 @@ const KEYWORDS_EXPECTING_A_VALUE = new Set([
 /** A token that can END an operand — an identifier, a number, a closing bracket, or a string's closing quote. */
 const ENDS_AN_OPERAND = /[A-Za-z0-9_$)\]}'"`]$/;
 
-/** What the scan remembers after consuming a completed regex literal: an operand, exactly like a closing
- *  paren, so the `/` in the unlikely `/a/ / 2` reads as the division it is. */
-const A_COMPLETED_OPERAND = ")";
+/** What the scan remembers where it has just consumed something that IS an operand and has no token of its
+ *  own to remember — a completed regex literal, so the `/` in the unlikely `/a/ / 2` reads as the division
+ *  it is, and a PROPERTY NAME, so `obj.in / 2` divides rather than opening a regex on the word `in`. A
+ *  closing paren, because that is the plainest thing `ENDS_AN_OPERAND` already accepts. */
+const AN_OPERAND = ")";
 
 /**
  * Whether a `/` following `previousToken` opens a regex literal rather than dividing by something.
@@ -124,6 +126,16 @@ const A_COMPLETED_OPERAND = ")";
  * `/ab/` are the same two characters, and only what came BEFORE tells them apart. A division needs a
  * left-hand operand, so a `/` that follows anything which can end one is division; a `/` that follows an
  * operator, a `(`, a `,`, a `;` or the start of the file cannot be, because there is nothing to divide.
+ *
+ * A KEYWORD IS ONLY A KEYWORD IN VALUE POSITION, and after a `.` it is a PROPERTY NAME -- `reviewer`'s
+ * blocker at `def6aef9`, reproduced before it was fixed. `const x = obj.in / 2 // REAL_COMMENT` left
+ * `previousToken === "in"`, so the division slash opened a candidate regex, `endOfRegexLiteral` closed it
+ * on the FIRST slash of the `//`, and the second slash plus the comment text were copied through as code.
+ * The comment SURVIVED -- the old stripper removed it -- which is new damage of exactly the kind the
+ * paragraph below claims to be bounded away from, so it was not bounded at all. The callers therefore
+ * remember a word after `.` as `AN_OPERAND` rather than as itself, and this function never sees it. Every
+ * name in the set below is a legal property name (`obj.new`, `obj.delete`, `obj.case`), so the fix is at
+ * the call site, where the `.` is still visible, rather than in a longer list here.
  *
  * IT IS DELIBERATELY BIASED TOWARD "DIVISION", i.e. toward NOT recognising a regex. Saying "division"
  * where a regex was meant reproduces this file's behaviour before #2131 — a known, bounded cost, already
@@ -168,6 +180,19 @@ function endOfRegexLiteral(source: string, i: number): number {
   j += 1; // the closing slash
   while (j < source.length && /[a-z]/.test(source[j])) j += 1; // the flags
   return j;
+}
+
+/**
+ * What the scan should remember for `word`, given the token before it: `AN_OPERAND` when that token was a
+ * `.`, and the word itself otherwise.
+ *
+ * MEMBER ACCESS IS THE ONE PLACE A KEYWORD IS NOT ONE. `obj.in`, `obj.of`, `obj.new`, `obj.case` are all
+ * legal property reads, and every one of them left `slashBeginsRegex` believing a value was expected next
+ * -- so the `/` of a following division opened a phantom regex. Optional chaining (`obj?.in`) lands here
+ * too, because the token immediately before the word is still the `.`.
+ */
+function propertyNameOrWord(previousToken: string, word: string): string {
+  return previousToken === "." ? AN_OPERAND : word;
 }
 
 /** The run of identifier characters starting at `i`, which the scan consumes as ONE token so that a
@@ -218,10 +243,10 @@ function skipInterpolation(source: string, i: number): number {
     if (ch === "'" || ch === "\"" || ch === "`") { j = copyStringLiteral(source, j).end; previousToken = ch; continue; }
     if (ch === "/" && slashBeginsRegex(previousToken)) {
       const end = endOfRegexLiteral(source, j);
-      if (end > 0) { j = end; previousToken = A_COMPLETED_OPERAND; continue; }
+      if (end > 0) { j = end; previousToken = AN_OPERAND; continue; }
     }
     const word = /[A-Za-z_$]/.test(ch) ? identifierAt(source, j) : "";
-    if (word) { j += word.length; previousToken = word; continue; }
+    if (word) { j += word.length; previousToken = propertyNameOrWord(previousToken, word); continue; }
     j += 1;
     if (!/\s/.test(ch)) previousToken = ch;
   }
@@ -279,7 +304,7 @@ export function stripComments(source: string): string {
       const end = endOfRegexLiteral(source, i);
       // Copied through VERBATIM, exactly like a string literal: a quote, a backtick or a `//` inside a
       // regex is CONTENT, and reading any of them as a delimiter is what desynchronised 100 files (#2131).
-      if (end > 0) { out += source.slice(i, end); i = end; previousToken = A_COMPLETED_OPERAND; continue; }
+      if (end > 0) { out += source.slice(i, end); i = end; previousToken = AN_OPERAND; continue; }
     }
     if (ch === "'" || ch === "\"" || ch === "`") {
       const literal = copyStringLiteral(source, i);
@@ -289,7 +314,7 @@ export function stripComments(source: string): string {
       continue;
     }
     const word = /[A-Za-z_$]/.test(ch) ? identifierAt(source, i) : "";
-    if (word) { out += word; i += word.length; previousToken = word; continue; }
+    if (word) { out += word; i += word.length; previousToken = propertyNameOrWord(previousToken, word); continue; }
     out += ch;
     i += 1;
     if (!/\s/.test(ch)) previousToken = ch;
