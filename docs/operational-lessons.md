@@ -1995,3 +1995,97 @@ rather than suggested.
 
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | the 60-second orientation, and the question that decides everything: **does your change need a Windows worker?** Most of the repo does not |
 
+
+<!-- #2217: moved VERBATIM out of the root CLAUDE.md, which every wake loads. -->
+
+## What this is — the fuller statement
+
+*The rule and the counts table stay in [`CLAUDE.md`](../CLAUDE.md); this is the prose that stood beside them.*
+
+a11y-witness drives a **real screen reader (NVDA)** through real navigation to assess the lived
+assistive-technology experience: the WCAG failures that rule scanners structurally cannot reach. It sits
+**alongside** axe-core (the rule/visual layer), not instead of it. See `README.md`, `PLAN.md`, `docs/adr/`.
+
+ADR 0021 records why that division is right, and moved `4.1.2:state-change-silent` from the model to the
+rules so it could be stated rather than suggested.
+
+**axe-core beside the screen-reader layer (ADR 0021's 2026-09-14 addendum, #1342).** An axe-core
+`violated` outranks the screen-reader layer's `cantTell` only — **asserted BY axe-core and attributed to
+it**; against a screen-reader `passed`/`inapplicable` it is a DISAGREEMENT reported as `cantTell`.
+**A DOM rule may override silence, not a contrary lived reading.** Pinned row by row in `outcomes.test.ts`
+(`besideTheRuleLayer`). [The full precedence table →](docs/operational-lessons.md#axe-core-beside-the-screen-reader-layer)
+
+
+## The pointer tables, as CLAUDE.md carried them
+
+*Moved by #2217; the tables stay in [`CLAUDE.md`](../CLAUDE.md) with shorter descriptions.*
+
+| [`packages/nvda-worker/CLAUDE.md`](packages/nvda-worker/CLAUDE.md) | the worker and NVDA: `doctor`, readiness, the capture cache, housekeeping, environment facts |
+
+| [`packages/lab/CLAUDE.md`](packages/lab/CLAUDE.md) | the corpus: `gate:stability`, and who may report a gate that reads `runs/` |
+
+| [`.github/CLAUDE.md`](.github/CLAUDE.md) | verifying changes, the hooks, and sharing this checkout with other agents |
+
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | the 60-second orientation, and the question that decides everything: **does your change need a Windows worker?** |
+
+| [`SECURITY.md`](SECURITY.md) | what somebody must know before running it — `probeForms` presses buttons, the worker has no authentication, `A11Y_PYTHON` is executable |
+
+| [`docs/backlog.md`](docs/backlog.md) | **The RECORD of what was found and what it cost.** [GitHub Issues](https://github.com/a11ign/a11ign/issues) answers "what is open" — `ready` is pickable, `in-progress` plus a `session:` label is claimed. [Why both exist →](docs/operational-lessons.md#the-record-files-beside-github-issues) |
+
+| [`docs/known-gaps.md`](docs/known-gaps.md) | **what this project does NOT do, or does not yet know.** Read it before claiming a thing is finished: **"all gates pass" and "everything is validated" are different claims** |
+
+**THE POPULATION-SPECIFIC RULES ARE IN NESTED `CLAUDE.md` FILES (#1240)**, so a session pays only for the
+directory it works in. [What moved, and why it was byte-identical →](docs/operational-lessons.md#the-nested-claudemd-split)
+
+
+## Assertions — the population split and why this stays a habit
+
+*Moved by #2217; the rule stays in [`.claude/rules/agent-practices.md`](../.claude/rules/agent-practices.md).*
+
+## Assertions
+
+- **An emptiness assertion names where its positive control lives.** `assert.deepEqual(offenders, [])`
+  passes when the population is empty, so somewhere there must be an assertion that it is not — and the
+  writer must be able to point at it. **A control you believe in is not one you can point at.**
+- **Where the population comes from decides whether a machine can help you.** Of 236 such assertions, 64
+  derive from a local collection and `local/uncontrolled-emptiness` refuses those unpinned; **64 derive
+  from a CALL**, untraceable without guessing, so those have only this line.
+- **This is a habit and this repository loses habits**, and it stays one deliberately (#1157).
+
+## Code conventions, as CLAUDE.md carried them
+
+*Moved by #2217; the conventions stay in [`CLAUDE.md`](../CLAUDE.md), more tersely worded.*
+
+- Small functions that do one thing at a single level of abstraction; the top-level function reads as a top-down narrative (the Stepdown Rule). Gated by `max-lines-per-function` (70), `complexity` (15), `max-depth` (3).
+
+- `no-magic-numbers` is a non-blocking **warning**: name a number when it is not self-explanatory (timeouts, budgets, limits); HTTP status codes and slice lengths are fine inline.
+
+- Comments explain **why** — intent, consequences, non-obvious domain facts (NVDA quirks, the cursor-at-end gotcha, WCAG rationale). **Keep those.** Delete only comments that restate what the code already says.
+
+- **Do NOT import the book's Java-OO machinery** (Abstract Factory to hide switches, class-per-noun). Adding class structure to this functional TS/MJS pipeline is over-engineering. Match the surrounding style. [Why →](docs/operational-lessons.md#code-conventions--the-books-reasoning)
+
+- Does the function *really* do one thing? Extracting a helper whose name merely restates its code is not progress.
+
+
+## CLAUDE.md's index prose, before #2217 shortened it
+
+This file is for working ON the repo: **rules only, each linking to the incident that produced it in
+`docs/`** (#458 split it down from 228k chars). These came first and are not duplicated here:
+
+**THE POPULATION-SPECIFIC RULES ARE IN NESTED `CLAUDE.md` FILES (#1240)**, so a session pays only for the
+directory it works in. [What moved →](docs/operational-lessons.md#the-nested-claudemd-split)
+
+| [`docs/README.md`](docs/README.md) | the index to every guide and runbook, with [`docs/adr/README.md`](docs/adr/README.md) for the decision records |
+
+| [`packages/control/CLAUDE.md`](packages/control/CLAUDE.md) | the fleet: `fleet:deploy`, `fleet:provision`, Ansible, the lab jobs |
+
+a11y-witness drives a **real screen reader (NVDA)** through real navigation, **alongside** axe-core (the
+rule/visual layer) rather than instead of it. See `README.md`, `PLAN.md`, `docs/adr/`.
+
+Measured 2026-09-14 on the calibration set: **0 criteria asserted wrongly, 422 referred** — a reading at
+a moment, so re-derive before quoting. README's claim block carries the current statement.
+
+
+<!-- #2217: CLAUDE.md's subtitle, moved here; its H1 already names the file and the repo. -->
+
+Guidance for Claude Code (and humans) working in this repo.
