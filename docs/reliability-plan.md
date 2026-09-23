@@ -460,7 +460,7 @@ reads `0.0.0` and every changeset that publish consumed is still in `.changeset/
 `release-commit-version-bump.mjs` fixes it and no real dispatch has exercised it yet).
 
 ```
-$ ls .changeset/*.md | grep -v README | wc -l   ->  87 pending      (a ROLLING count)
+$ ls .changeset/*.md | grep -v README | wc -l   ->  88 pending      (a ROLLING count)
 $ ls .changeset/first-publish-*.md | wc -l      ->   6
 $ npx changeset status --verbose                 ->  every package  0.0.0 -> 0.1.0
 $ npm view a11ign versions                       ->  0.1.0, live since 2026-09-19
