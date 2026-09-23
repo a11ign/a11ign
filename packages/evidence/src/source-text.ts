@@ -118,6 +118,29 @@ const KEYWORDS_EXPECTING_A_VALUE = new Set([
 /** A token that can END an operand — an identifier, a number, a closing bracket, or a string's closing quote. */
 const ENDS_AN_OPERAND = /[A-Za-z0-9_$)\]}'"`]$/;
 
+/**
+ * The postfix operators, which END an operand although neither of their characters does — `reviewer`'s
+ * blocker at `fbac7004`, reproduced before it was fixed. `a++ / 2 // REAL_COMMENT` left `previousToken`
+ * as a bare `+`, which is a BINARY operator and so expects a value next, so the division slash opened a
+ * candidate regex, `endOfRegexLiteral` closed it on the first slash of the `//`, and the comment survived
+ * — the same shape as the `obj.in / 2` blocker one review earlier, and the same new damage.
+ *
+ * THEY ARE ONLY AMBIGUOUS IN THE POSTFIX POSITION, WHICH IS WHY THE SET NEEDS NO CONTEXT. A PREFIX `++`
+ * is followed by the thing it increments, never by a `/` — `++/re/` is not expressible — so the operand
+ * it produces is remembered as that identifier and this set is never consulted. A bare `+` must keep
+ * expecting a value, because `1 + /re/.test(s)` is an ordinary expression; that is the whole reason the
+ * pair has to be read as ONE token rather than added to `ENDS_AN_OPERAND` character by character.
+ */
+const POSTFIX_OPERATORS = new Set(["++", "--"]);
+
+/** `"++"` or `"--"` where one starts at `i`, otherwise `""`. The scan consumes the pair as ONE token for
+ *  the reason above: its second character alone is a binary operator, and a scan that remembered only
+ *  that would read the operand as still unfinished. */
+function postfixOperatorAt(source: string, i: number): string {
+  const pair = source.slice(i, i + 2);
+  return POSTFIX_OPERATORS.has(pair) ? pair : "";
+}
+
 /** What the scan remembers where it has just consumed something that IS an operand and has no token of its
  *  own to remember — a completed regex literal, so the `/` in the unlikely `/a/ / 2` reads as the division
  *  it is, and a PROPERTY NAME, so `obj.in / 2` divides rather than opening a regex on the word `in`. A
@@ -152,6 +175,7 @@ const AN_OPERAND = ")";
  */
 function slashBeginsRegex(previousToken: string): boolean {
   if (KEYWORDS_EXPECTING_A_VALUE.has(previousToken)) return true;
+  if (POSTFIX_OPERATORS.has(previousToken)) return false;
   return !ENDS_AN_OPERAND.test(previousToken);
 }
 
@@ -252,6 +276,8 @@ function skipInterpolation(source: string, i: number): number {
     }
     const word = /[A-Za-z_$]/.test(ch) ? identifierAt(source, j) : "";
     if (word) { j += word.length; previousToken = propertyNameOrWord(previousToken, word); continue; }
+    const postfix = postfixOperatorAt(source, j);
+    if (postfix) { j += 2; previousToken = postfix; continue; }
     j += 1;
     if (!/\s/.test(ch)) previousToken = ch;
   }
@@ -320,6 +346,8 @@ export function stripComments(source: string): string {
     }
     const word = /[A-Za-z_$]/.test(ch) ? identifierAt(source, i) : "";
     if (word) { out += word; i += word.length; previousToken = propertyNameOrWord(previousToken, word); continue; }
+    const postfix = postfixOperatorAt(source, i);
+    if (postfix) { out += postfix; i += 2; previousToken = postfix; continue; }
     out += ch;
     i += 1;
     if (!/\s/.test(ch)) previousToken = ch;

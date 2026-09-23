@@ -256,6 +256,18 @@ test("division is still division: a `/` after anything that can END an operand i
     ["after a property named `case`", "const n = obj.case / 2 // GONE\nconst x = 1;\n"],
     ["after an OPTIONALLY chained property", "const n = obj?.in / 2 // GONE\nconst x = 1;\n"],
     ["after a property on a newline", "const n = obj\n  .in / 2 // GONE\nconst x = 1;\n"],
+    // reviewer's blocker at `fbac7004`, as the positive division controls for BOTH forms it asked for.
+    // A postfix operator ends an operand although neither of its characters does: `a++` left
+    // `previousToken` as a bare `+`, which expects a value next, so the division slash opened a
+    // candidate regex, `endOfRegexLiteral` closed it on the FIRST slash of the `//`, and the comment
+    // survived -- the `obj.in / 2` shape exactly, one operator over, and NEW damage for the same reason.
+    ["after a postfix ++", "let a = 1; a++ / 2 // GONE\nconst x = 1;\n"],
+    ["after a postfix --", "let a = 1; a-- / 2 // GONE\nconst x = 1;\n"],
+    ["after a postfix ++ with no spacing", "let a = 1; a++/2 // GONE\nconst x = 1;\n"],
+    // `a+++b` is `a++ + b`: the pair is consumed first and the third `+` is left a binary operator, so
+    // this fails if the scan ever matches `++` greedily across a boundary.
+    ["after `a+++b`, which is `a++ + b`", "let a = 1, b = 1; a+++b / 2 // GONE\nconst x = 1;\n"],
+    ["after `a---b`, which is `a-- - b`", "let a = 1, b = 1; a---b / 2 // GONE\nconst x = 1;\n"],
   ];
   for (const [name, source] of cases) {
     const stripped = stripComments(source);
@@ -277,6 +289,40 @@ test("a keyword is only a keyword in VALUE position -- `of` after `.` is a prope
     "and nothing after the regex is corrupted");
   // Same word, member position: the slash after it is a division and the trailing comment is a comment.
   assert.ok(!stripComments("const n = xs.of / 2 // GONE\nconst x = 1;\n").includes("GONE"));
+});
+
+test("a postfix operator ends an operand, but a BINARY `+` or `-` still expects a value -- the control "
+  + "that keeps the fix from being `+ ends an operand`", () => {
+  // The other half of reviewer's `fbac7004` blocker, and the reason the pair is read as ONE token rather
+  // than added to ENDS_AN_OPERAND character by character. Widening the character class would have made
+  // the division cases above pass while silently losing every regex written after an ordinary `+` or `-`
+  // -- a fix whose control is only the cases it was written for is not distinguishable from that.
+  for (const [name, source] of [
+    ["after a binary +", "const m = 1 + /a`b/.test(s); // GONE\nconst x = 1;\n"],
+    ["after a binary -", "const m = 1 - /a`b/.test(s); // GONE\nconst x = 1;\n"],
+  ] as const) {
+    const stripped = stripComments(source);
+    assert.ok(stripped.includes("/a`b/.test(s)"),
+      `${name}: the regex must still be recognised -- its backtick is content, and read as a template `
+        + "opener it swallows the rest of the file");
+    assert.ok(!stripped.includes("GONE") && stripped.includes("const x = 1;"),
+      `${name}: and nothing after it is corrupted`);
+  }
+  // A PREFIX `++` is never the ambiguous case: it is followed by the operand it increments, so the token
+  // the scan remembers at the division is that identifier and the postfix set is never consulted.
+  assert.ok(!stripComments("let b = 1; let a = ++b / 2; // GONE\nconst x = 1;\n").includes("GONE"),
+    "a division after a prefix-incremented operand is still a division");
+
+  // AND THE SAME JUDGEMENT INSIDE AN INTERPOLATION, where getting it wrong is not bounded to one line.
+  // `skipInterpolation` tracks brace depth, so a phantom regex opened at `a++ /` closes on the NEXT
+  // slash and swallows the interpolation's own closing `}` with it -- the outer template literal then
+  // never finds its end and everything after it is corrupted. That is why the fix is in both scans.
+  const interpolated = "const t = `${a++ / 2} and ${b / 2}`;\n// GONE\nconst x = 1;\n";
+  const strippedInterpolation = stripComments(interpolated);
+  assert.ok(!strippedInterpolation.includes("GONE"),
+    "the interpolation's closing brace must survive the division, or the comment after the template "
+      + "literal is read as string content");
+  assert.ok(strippedInterpolation.includes("const x = 1;"), "and the code after it too");
 });
 
 test("a candidate regex that does not close on its own line is ABANDONED -- the second half of the "
