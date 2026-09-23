@@ -453,11 +453,11 @@ record of why the publish waited; each item now carries what decided it and when
 
 **ITEM 3 HAS A LIVE SUCCESSOR, and it is the same question one release on: what does the first CHANGELOG
 say?** Measured 2026-09-23. The first release shipped on 2026-09-19 and **the first CHANGELOG was never
-written** — no `CHANGELOG.md` exists anywhere in this tree, and `release:provenance` still reports
-`CHANGELOG absent (never published)`. `release.yml` ran `release:version` inside the job and nothing
-committed the result back, so every `package.json` still reads `0.0.0` and every changeset that publish
-consumed is still in `.changeset/` (#1824; `release-commit-version-bump.mjs` fixes it and no real dispatch
-has exercised it yet).
+written** — a walk of this tree finds no `CHANGELOG.md` at all outside `node_modules`, and
+`release:provenance` still reports `CHANGELOG absent (never published)`. `release.yml` ran
+`release:version` inside the job and nothing committed the result back, so every `package.json` still
+reads `0.0.0` and every changeset that publish consumed is still in `.changeset/` (#1824;
+`release-commit-version-bump.mjs` fixes it and no real dispatch has exercised it yet).
 
 ```
 $ ls .changeset/*.md | grep -v README | wc -l   ->  87 pending      (a ROLLING count)
