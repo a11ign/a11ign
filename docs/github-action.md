@@ -252,8 +252,16 @@ Run locally through `action-dry-run.sh`, full setup, both layers, LOCAL judge �
 `4.1.2` violations inside the page's embedded YouTube player (`aria-allowed-attr`, `aria-prohibited-attr`,
 `button-name`). Reproduced on every measurement taken of this page — the V1 rehearsal's original run, its
 re-run, and a fresh capture at commit `a8894c27`, 2026-09-17. (Announcement, heading and landmark counts
-are the stable part; how many links or form fields a run reaches on this page varies run to run for a
-cause not yet pinned (page volatility or landing-document variance — see #1663).)
+are the stable part; how many links or form fields a run REACHES varies run to run, and #1663 pinned why on
+2026-09-23 across six measurements: almost all of it is the SWEEP, not the page. The page's own `domCensus`
+held constant at `link=75` while reach went 13 → 17 → 40 → 80, including 13 vs 17 on one unchanged build —
+so those figures measure the sweep improving, and its nondeterminism, rather than anything about w3.org.
+Only the last step, 80 → 84, is the live page changing, and the census moved with it. Landing somewhere
+different is not the cause of that step: across the three samples that record enough to re-derive it —
+reach 80, 84, 84 — `compareIdentity` reads `SAME_DOCUMENT`, on `servedPath` (`https://www.w3.org/WAI/`)
+alone, because each of those captures also names a second w3.org page, which leaves `title` incomparable.
+The other three samples are result fixtures that drop what `documentIdentity` reads and answer
+`UNCOMPARABLE`, so the 13 → 80 figures rest on the census above rather than on identity.)
 
 **`news.ycombinator.com` — a real site, not built for accessibility.** 151 announcements, 3 findings, all
 true positives: the search box is announced as a bare `edit` with no label (3.3.2, 4.1.2) and the logo has
