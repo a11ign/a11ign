@@ -138,6 +138,39 @@ inputs:
       reader user cannot address either.
     required: false
     default: ""
+  flows:
+    description: >-
+      Path to a flows file (ADR 0038), relative to your repository: named flows in a closed vocabulary of steps
+      (`goto`, `fill`, `choose`, `check`, `press`, `expect`, `capture`), with the site's `origin:` pinned. Give it
+      with `login-flow`, the name of the flow in it that logs in, to test a page BEHIND a login.
+
+      A login takes its values from environment variables and only from them: `fill: { field: "Password", from-env:
+      APP_TEST_PASSWORD }`. Set them under `env:` on the step that calls this action, from GitHub Secrets; the run
+      NAMES them and never sends a value anywhere, and a literal secret in a login flow is refused. There is no
+      `password:` input on purpose (an input is interpolated into the workflow's shell text).
+
+      **Use a dedicated test account without MFA or SSO**, and a username and password of at least 8 characters that are
+      not ordinary words. MFA, SSO and CAPTCHA are out of v1. **Refused on a repository that is not private:** the
+      comment, the job log, the artifact and the job summary would all show text from behind the login to anyone.
+
+      An authenticated run presses ONLY what its files name: `probe-forms` and `probe-navigation` are turned off for it,
+      whatever you set. See docs/github-action.md, "Logging in".
+    required: false
+    default: ""
+  login-flow:
+    description: >-
+      The name of the flow in `flows` that logs in. Give both or neither. It must end in an `expect:` step (the page that
+      proves you are signed in), and it takes `from-env:` values only.
+    required: false
+    default: ""
+  send-authenticated-transcript-to-judge-vendor:
+    description: >-
+      `"true"` to let an authenticated run send its transcript to a non-local judge backend. Off by default and REFUSED
+      otherwise: with `judge-backend: anthropic` or `openai` the transcript of a page behind your login would go to that
+      vendor. Credentials are redacted before it leaves either way; the transcript is the page's text. It cannot be set from
+      the environment, so a variable left on a shared runner cannot turn it on for a job that never named it.
+    required: false
+    default: ""
   probe-focus:
     description: >-
       Tab through the page and report what receives focus, which is how 2.1.2 No Keyboard Trap is
@@ -243,6 +276,36 @@ runs:
         fi
         if [ -z "${{ inputs.url }}" ] && [ -z "$(echo "${{ inputs.urls }}" | tr -d '[:space:]')" ]; then
           echo "::error::Give exactly one of url and urls: no page was given." >&2
+          exit 1
+        fi
+
+    # Refused HERE, before the ~100 s of setup a Windows runner bills for, and repeated in the CLI (which decides the same
+    # things in TypeScript, with tests) for the reason the judge check above repeats its own: this fails before NVDA is
+    # installed. Every input arrives through `env:` and none is interpolated into the shell text below, because these are
+    # inputs of an action that handles secrets (ADR 0038, Constraint 2).
+    - name: Check an authenticated run is allowed here
+      shell: bash
+      env:
+        FLOWS: ${{ inputs.flows }}
+        LOGIN_FLOW: ${{ inputs.login-flow }}
+        SEND_TRANSCRIPT: ${{ inputs.send-authenticated-transcript-to-judge-vendor }}
+        JUDGE_BACKEND: ${{ inputs.judge-backend }}
+        REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
+      run: |
+        [ -z "$FLOWS$LOGIN_FLOW" ] && exit 0
+        if [ -z "$FLOWS" ] || [ -z "$LOGIN_FLOW" ]; then
+          echo "::error::Give both flows and login-flow, or neither: a login flow is a named flow in a flows file." >&2
+          exit 1
+        fi
+        # `private` must be exactly true. False, absent and empty all refuse: "could not tell" is not permission to
+        # publish text from behind a login to a public repository (auth-refused-public-repository, ADR 0038 amendment 3).
+        if [ "$REPOSITORY_PRIVATE" != "true" ]; then
+          echo "::error::auth-refused-public-repository: this run logs in, and this repository is not private, so the pull-request comment, the job log, the uploaded artifact and the job summary would show text from behind the login to anyone. Run it from a private repository, or use the CLI on your own machine. Nothing was captured." >&2
+          exit 1
+        fi
+        backend=$(printf '%s' "$JUDGE_BACKEND" | tr '[:upper:]' '[:lower:]')
+        if [ -n "$backend" ] && [ "$backend" != "local" ] && [ "$SEND_TRANSCRIPT" != "true" ]; then
+          echo "::error::auth-refused-judge-backend: this run logs in, and judge-backend: $backend would send its transcript to that vendor. Set send-authenticated-transcript-to-judge-vendor: \"true\" to do that with your own key, or use judge-backend: local. Nothing was captured." >&2
           exit 1
         fi
 
@@ -487,6 +550,9 @@ runs:
       working-directory: ${{ github.action_path }}
       env:
         A11Y_WORKER: http://127.0.0.1:8765
+        FLOWS: ${{ inputs.flows }}
+        LOGIN_FLOW: ${{ inputs.login-flow }}
+        SEND_TRANSCRIPT: ${{ inputs.send-authenticated-transcript-to-judge-vendor }}
         JUDGE_BACKEND: ${{ inputs.judge-backend }}
         ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
         JUDGE_MODEL: ${{ inputs.judge-model }}
@@ -495,6 +561,15 @@ runs:
         A11Y_PYTHON: python
       run: |
         set -o pipefail
+        # AN AUTHENTICATED RUN (ADR 0038). The flows path is relative to the caller's repository, and this step runs in the
+        # ACTION's checkout, so it is made absolute against the workspace. The masks come FIRST, before the worker starts:
+        # GitHub masks a secret's exact value and nothing derived from it, so the URL-encoded and base64 forms of every
+        # from-env value are added here, and the worker's own log (printed below if it does not start) is covered.
+        flows_path=""
+        if [ -n "$FLOWS" ]; then
+          case "$FLOWS" in /*|[A-Za-z]:*) flows_path="$FLOWS" ;; *) flows_path="$GITHUB_WORKSPACE/$FLOWS" ;; esac
+          npx tsx packages/cli/src/action/auth-masks.ts --flows "$flows_path" --login-flow "$LOGIN_FLOW"
+        fi
         node packages/nvda-worker/src/server.mjs \
           > "$RUNNER_TEMP/worker.log" 2> "$RUNNER_TEMP/worker.err" &
         worker=$!
@@ -541,6 +616,11 @@ runs:
         # Inverted for the same reason (#1392, ceo 5655434240): the CLI defaults navigation ON, so only an
         # explicit false turns it off. Unlike Tab it activates a link, which is why a consumer needs the input.
         [ "${{ inputs.probe-navigation }}" = "false" ] && args+=(--no-probe-navigation)
+        # An authenticated run's two arguments, and the override, which is an argument here as everywhere and never an
+        # environment variable the CLI reads. `probe-forms` and `probe-navigation` may still be "true" above (their defaults
+        # cannot be told from a choice); the CLI turns both off for an authenticated run and says so.
+        [ -n "$flows_path" ] && args+=(--flows "$flows_path" --login-flow "$LOGIN_FLOW")
+        [ "$SEND_TRANSCRIPT" = "true" ] && args+=(--send-authenticated-transcript-to-judge-vendor)
         [ "${{ inputs.axe }}" = "true" ] || args+=(--no-axe)
         # stdout is the JSON result; the CLI's diagnostics go to stderr and stay in the log.
         #
