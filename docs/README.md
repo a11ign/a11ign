@@ -49,6 +49,7 @@ human or agent, *working on* the repo rather than using it.
 | [nvda-worker-runbook.md](./nvda-worker-runbook.md) | a worker misbehaves — has the error-string → real-cause table, because **the messages are misleading**: `"NVDA not installed"` usually means a version mismatch |
 | [ufffc-investigation.md](./ufffc-investigation.md) | before re-investigating a stray character in announcements — includes the seven theories that were wrong |
 | [nvda-correctness-audit.md](./nvda-correctness-audit.md) | you need to know whether what we capture is what NVDA actually says |
+| [**pnpm-rollback.md**](./pnpm-rollback.md) | **the way back from pnpm to npm** (#2302, child 6 of #57) — the trigger (and what is NOT one), the revert of the five migration merges, the per-surface steps (primary, worktree, lab, Windows worker), what is irreversible, and the rehearsal transcript. The rehearsal found that a plain revert also undoes #2272's exit-code fix and that a revert commit trips the 12-file pre-commit limit |
 
 ## What the tool can and cannot claim
 
