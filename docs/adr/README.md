@@ -49,7 +49,7 @@ you which arguments have already been tried.
 | [0035](./0035-the-browser-preset-is-evidence-not-configuration.md) | The browser preset is evidence, not configuration — and never falls back | accepted |
 | [0036](./0036-the-layer-model.md) | The layer model — a source of evidence, and which packages may claim one, before the `a11ign` rename | accepted |
 | [0037](./0037-a-partial-examination-is-reported-with-its-bounds.md) | A partial examination is REPORTED with its bounds, not withheld and not rounded up | accepted |
-| [0038](./0038-authenticated-capture.md) | A run is authenticated by a login the machine that drives the browser performs, and no credential crosses the worker's channel | **proposed** — design only, awaiting `ceo`'s review; ships no capability |
+| [0038](./0038-authenticated-capture.md) | A run is authenticated by a login the machine that drives the browser performs, and no credential crosses the worker's channel | accepted 2026-09-24, with the amendments of #2275 — a design until #2359's seventh pull request makes the flags reachable |
 
 ## If you read only one
 
