@@ -13,6 +13,7 @@ human or agent, *working on* the repo rather than using it.
 | [local-worker-vm.md](./local-worker-vm.md) | you are a single contributor on a Mac with no other hardware and want the scripted UTM worker. **Superseded by a declared fleet for anyone with more than one machine** — `leaseWorker` already prefers `inventory.yml` over a local VM |
 | [control-plane-proxmox.md](./control-plane-proxmox.md) | you have (or are setting up) more than one worker — the bare-metal fleet, and the recommended path over local VMs |
 | [github-action.md](./github-action.md) | you want it in CI against your own app |
+| [capture-cost.md](./capture-cost.md) | you need to know **what a capture costs**: seconds per page on the fleet, minutes per Action run split into once-per-job and per-capture, and the multi-page cap basis (#2271) |
 
 ## What is not done yet
 
