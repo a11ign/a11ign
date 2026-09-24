@@ -21,7 +21,7 @@ linkWorkspacePackages: true
 # THE STORE IS NOT SET HERE, on purpose. pnpm's default is ~/.local/share/pnpm/store/v10, which on the agent
 # host is on the same filesystem as the worktrees under ~/repos (both on /dev/mapper/ubuntu--vg-ubuntu--lv),
 # so packages are HARD-LINKED into each worktree (link count 2, one copy on disk). It must not be /tmp: that
-# is RAM-backed on this host and ran out on 2026-09-23. To move it, set PNPM_STORE_DIR per host, not a path
+# is RAM-backed on this host and ran out on 2026-09-23. To move it, set npm_config_store_dir per host, not a path
 # in this file: a Windows guest, or any checkout on a different volume from the store, gets pnpm's own
 # fallback (a per-volume store, else copying) rather than hard links -- documented pnpm behaviour, not
 # measured here.
