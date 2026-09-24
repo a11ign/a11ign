@@ -1,0 +1,56 @@
+## Timers and state
+
+- **No session holds a standing cron.** After a restart, list them once and **`CronDelete` anything you
+  find.**
+- **THE CLOCK WAS NEVER THE DEFECT — the defect was that the tick WAS a model turn.** `work:tick` runs
+  `work-gate.mjs` (no model) and hands what it finds to `wake.mjs`: **you are woken WITH the answer in
+  your prompt, not to go and look.**
+- **Do not create a cron to check for work.** If you want one, the gate is missing a question — add it to
+  `work-gate.mjs`, where it costs an API call instead of a turn. A cron is right only for a WALL-CLOCK
+  event, never for "has anything changed yet".
+- **The row is the state.** Read the row, the PR and the API before acting on any message, `ceo`'s
+  included.
+- A product PR opens as a DRAFT and is marked ready only on a "convinced"; docs-and-tests PRs open ready.
+  **Nobody merges by hand.**
+- **`Acceptance:` and `Closes` are MERGE-BLOCKING** — a malformed body does not merge. The two defects
+  that cost four red runs: a DUPLICATED `Acceptance:` section, and a MISSING `Closes`. A PR finishing no
+  row declares `Closes: none -- <reason>`, em dash required.
+- **A settled draft with no verdict goes to the external reviewer; an engineer reviews only when `ceo`
+  names one** (#1394). An engineer with no row in build claims the next Ready row.
+
+## `lane:ceo` protects review, not authorship (ceo, 2026-09-18)
+
+- **A `lane:<owner>` label refuses any OTHER session unconditionally** (`laneReason`,
+  `row-claim/runner-rule.mjs`). A `Lane-exception:` line changes nothing at claim time — only the label
+  does.
+- **The test before leaving a row in a lane other than `any`: does the label protect a DECISION only the
+  owner can make (a publish order, a freeze, a ruling), or a PATH that needs the owner's REVIEW but not
+  their hands?** A path re-lanes to `lane:any`; a decision stays, and the wait is then a real cost of it.
+  Full ruling: `docs/lane-ownership.json`'s `_claimVsAuthorRuling`.
+
+## Routing — who reads what (chairman, 2026-09-14)
+
+- **`product-manager` is the first reader, and ruler, for rows, the queue and process:** filing and
+  amendments, Region and done-when wording, holds, lane labels, promotions, claim reports, merge
+  close-outs, host-run announcements. An engineer's report goes there, never to `ceo`.
+- **Three things come up to `ceo`:** a ruling `product-manager` cannot make (a rule or ADR conflict, a
+  crossing into a `ceo` lane, the publish path); ONE state reading per tick; anything for the chairman.
+- **That reading is POSTED and DELIVERED (#2083):** post on **#928** (the RECORD), then deliver it with
+  **`npm run prompt:session -- ceo "…"`**. **Both halves, or it is unrecorded or undelivered.**
+- **`orchestrator` is the first reader for fleet and lab questions**; answers are posted on the row.
+- **The author of a draft prompts its parity reviewer** on open and after every head-changing push:
+  `npm run prompt:session -- reviewer "…"` for odd PR numbers, `reviewer-2` for even. **`prompt:session`
+  CLEARS THE SESSION FIRST and a raw `herdr … agent prompt` does not** — use the raw call only to
+  RE-prompt the same draft. No verdict 30 minutes after it goes to `product-manager`, who re-prompts once,
+  then `ceo`.
+- **ONE CALL IS ENOUGH, AND RETRYING IS THE WRONG THING (#1966).** `prompt:session` **queues** the order
+  (**exit `2` is `QUEUED`, not a failure**) and the next `work:tick` delivers it, cleared. **Do not retry
+  and do not poll:** it clears its target first, so a retry landing as a session goes idle wipes the work
+  it interrupted. A refusal naming a session the org does not know is a typo — NOT queued, and it says so.
+- **A REPORT THAT NEEDS NO DECISION IS A ROW WRITE, NOT AN ORDER (#2167).** The comment plus the label
+  change IS the completion, the claim report, the close-out — no turn, and read when its reader next
+  acts. So `prompt:session` REFUSES a target already holding 10 (55 of 60 queued orders were for one
+  session, oldest 8h), naming the depth, the wait and that remedy. `--needs-decision` — a ruling, a
+  stop-the-line, an answer that moves somebody — still queues.
+- **`ceo` keeps:** the publish order, freeze decisions, reviewer spot-checks, the board edition read,
+  rulings arriving through `product-manager`, and the chairman.
