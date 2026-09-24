@@ -32,15 +32,15 @@ flows:
 `;
 const URL_UNDER_TEST = `${ORIGIN}/orders`;
 
-interface Workspace { dir: string; flows: string; runs: string; event: string }
+interface Workspace { dir: string; flows: string; artifactRoot: string; event: string }
 function workspace(): Workspace {
   const dir = mkdtempSync(join(tmpdir(), "authenticated-run-"));
   const flows = join(dir, "flows.yml");
   const event = join(dir, "event.json");
   writeFileSync(flows, FLOWS);
-  return { dir, flows, runs: join(dir, "runs"), event };
+  return { dir, flows, artifactRoot: join(dir, "artifacts"), event };
 }
-const written = (w: Workspace): string[] => (existsSync(join(w.runs, "witness")) ? readdirSync(join(w.runs, "witness")) : []);
+const written = (w: Workspace): string[] => (existsSync(join(w.artifactRoot, "witness")) ? readdirSync(join(w.artifactRoot, "witness")) : []);
 
 /** A worker on loopback that records what it is sent and answers with `respond`. */
 async function fakeWorker(respond: (body: { url: string }) => { status: number; body: unknown }) {
@@ -66,7 +66,7 @@ function witness(w: Workspace, args: string[], env: Record<string, string | unde
   return new Promise((done) => {
     const child = spawn(process.execPath, ["--import", "tsx", "packages/cli/src/cli.ts", ...args], {
       cwd: ROOT,
-      env: { ...process.env, A11Y_RUNS_ROOT: w.runs, APP_USER: FAKE_USER, APP_PASSWORD: FAKE_SECRET, JUDGE_BACKEND: "local", A11Y_WORKER: undefined,
+      env: { ...process.env, A11Y_RUNS_ROOT: w.artifactRoot, APP_USER: FAKE_USER, APP_PASSWORD: FAKE_SECRET, JUDGE_BACKEND: "local", A11Y_WORKER: undefined,
         GITHUB_ACTIONS: undefined, GITHUB_EVENT_PATH: undefined, ...env } as NodeJS.ProcessEnv,
     });
     let out = ""; let err = "";
@@ -175,7 +175,7 @@ test("CONTAINMENT: a value the page echoed is redacted, the count is disclosed, 
       assert.match(ran.err, /2 announcements contained a value from your login and were redacted\./);
       const files = written(w);
       assert.equal(files.length, 1, "the artifact is written before judging, so a run that later fails still leaves it");
-      const artifact = readFileSync(join(w.runs, "witness", files[0]), "utf8");
+      const artifact = readFileSync(join(w.artifactRoot, "witness", files[0]), "utf8");
       assert.ok(!artifact.includes(FAKE_USER) && !artifact.includes(FAKE_SECRET), "the artifact on disk holds no credential");
       assert.ok(artifact.includes("Username, edit, ‹credential›"));
       assert.ok(!(ran.out + ran.err).includes(FAKE_USER) && !(ran.out + ran.err).includes(FAKE_SECRET), "neither stream holds one");
@@ -204,7 +204,7 @@ test("a run that asks for no authentication is unchanged: no flows, no notices, 
       assert.doesNotMatch(ran.err, /authenticated run:|contained a value from your login/);
       const files = written(w);
       assert.equal(files.length, 1);
-      const artifact = readFileSync(join(w.runs, "witness", files[0]), "utf8");
+      const artifact = readFileSync(join(w.artifactRoot, "witness", files[0]), "utf8");
       assert.ok(artifact.includes(FAKE_USER), "with no login there is nothing to scrub: a page that says a string keeps saying it");
       const sent = worker.requests[0] as Record<string, unknown>;
       assert.ok(!("auth" in sent), "no auth field on an ordinary request");
