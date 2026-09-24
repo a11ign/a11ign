@@ -27,6 +27,12 @@ import { join } from "node:path";
  *   caller's own decision: `node_modules` and `dist` are not source to most walks here, and are to none.
  * @property {(name: string) => boolean} [keepFile] a file to REPORT, by entry name. Defaults to all of
  *   them, so a caller that wants every file says nothing.
+ * @property {boolean} [skipVanishedDirectories] a directory that was LISTED and is gone by the time the
+ *   walk descends into it is skipped rather than thrown. For a caller that walks a tree other processes
+ *   are writing into (#2255): a test that plants a temp directory inside the repository and removes it
+ *   in a `finally` leaves a window between the parent's listing and this walk's read of the child. Only
+ *   `ENOENT`, and only for a directory BELOW the root -- a missing root is still a caller's mistake, and
+ *   any other error (`EACCES`, `ELOOP`) is still a real defect that the walk is positioned to see.
  */
 
 /**
@@ -51,23 +57,44 @@ import { join } from "node:path";
 export function filesUnder(root, choices = {}) {
   /** @type {string[]} */
   const found = [];
-  collectInto(found, root, choices);
+  collectInto(found, root, readdirSync(root, { withFileTypes: true }), choices);
   return found;
 }
 
 /**
  * The recursion, apart from the call so that `filesUnder` states the contract and this states the walk.
- * @param {string[]} found @param {string} dir @param {WalkChoices} choices
+ * It is handed a directory's entries rather than reading them, so the ROOT's read stays strict while a
+ * child's read can be tolerant (`childEntries`).
+ * @param {string[]} found @param {string} dir @param {import("node:fs").Dirent[]} entries
+ * @param {WalkChoices} choices
  */
-function collectInto(found, dir, choices) {
+function collectInto(found, dir, entries, choices) {
   const { skipDirectory = () => false, keepFile = () => true } = choices;
-  const entries = readdirSync(dir, { withFileTypes: true });
   for (const entry of entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
     if (entry.isSymbolicLink()) continue;
     if (entry.isDirectory()) {
-      if (!skipDirectory(entry.name)) collectInto(found, join(dir, entry.name), choices);
+      if (skipDirectory(entry.name)) continue;
+      const child = join(dir, entry.name);
+      const inside = childEntries(child, choices);
+      if (inside) collectInto(found, child, inside, choices);
       continue;
     }
     if (entry.isFile() && keepFile(entry.name)) found.push(join(dir, entry.name));
+  }
+}
+
+/**
+ * A subdirectory's entries, or null when it vanished and the caller said that is tolerable. Anything
+ * else rethrows: swallowing every error here would report an unreadable directory as an empty one.
+ * @param {string} dir @param {WalkChoices} choices
+ * @returns {import("node:fs").Dirent[] | null}
+ */
+function childEntries(dir, { skipVanishedDirectories = false }) {
+  try {
+    return readdirSync(dir, { withFileTypes: true });
+  } catch (cause) {
+    const code = /** @type {NodeJS.ErrnoException} */ (cause).code;
+    if (skipVanishedDirectories && code === "ENOENT") return null;
+    throw cause;
   }
 }
