@@ -128,14 +128,19 @@ or
   between the two heads had touched, said nothing about it, and the PR merged on it. Check a blocker
   against the diff between the two heads, not against the author's comment that it is fixed; one line per
   blocker costs you a line, and without it a later verdict can pass over an earlier finding silently.
-- **This review GATES `main` (`ceo`'s ruling, 2026-09-22, #2022).** Branch protection requires one
-  approving review and exempts nobody, so `--request-changes` keeps a PR out of the merge queue and
-  nothing merges until someone approves it. The 2026-09-19 "does not yet gate anything" line is retired:
-  its premise — that the reviewing account is also the account that opens PRs — was measured false, since
-  reviews come from `a11ign-bot` and PRs from `a11ign-ai-workers` and `DanBeckDev`. **Withholding the
-  approval is now an act with a merge consequence**, so post the review with the verdict rather than only
-  the comment: a prose `not convinced` that GitHub cannot see stopped nothing on #1971, which merged 3m45s
-  after one.
+- **This review GATES `main` only until the pull request ENTERS the merge queue (`ceo`'s rulings,
+  2026-09-22, #2022, and 2026-09-24, #2206).** Branch protection requires one approving review and
+  exempts nobody, so before entry `--request-changes` keeps a PR out of the queue and nothing enters until
+  someone approves it. **After entry a refusal is a record, not a stop:** #2289 was refused 84 s after
+  entry and merged 3m52s later at the refused head, the third measurement after #1971 and #2079, and the
+  ruleset's `pull_request` rule did not change it. So **withholding the approval is your only lever, and it
+  works only BEFORE the approval that arms the PR**; post the refusal first. The 2026-09-19 "does not yet
+  gate anything" line is retired: its premise — that the reviewing account is also the account that opens
+  PRs — was measured false, since reviews come from `a11ign-bot` and PRs from `a11ign-ai-workers` and
+  `DanBeckDev`. Post the review with the verdict rather than only the comment: a prose `not convinced`
+  that GitHub cannot see stopped nothing on #1971, which merged 3m45s after one.
+- **A defect you find AFTER entry:** still post the review and the comment naming it. The consequence is a
+  **follow-up row**, filed by `product-manager`, because the PR will have merged at the refused head.
 - `<head8>` is the first eight characters of the head you actually reviewed. A verdict is on a sha; if
   the head moves while you write, say so and review the new head.
 - After the first line, ALWAYS, two lines a reader can check by shape: one starting `Acceptance:` with
