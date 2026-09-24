@@ -25,6 +25,7 @@ import {
   inBuildReason, isInBuild, lookupOtherHeldIssues, lookupClosingPrHealth, lookupRowShape,
   deliveredRowsDeclaredBy, lookupDeliveringPr, lookupHeldRows,
   unansweredRefusal, disputeAtHead, lookupOpenPrReviewHealth, escalateDisputeToCeo, OPEN_PR_LIMIT,
+  authorCommitsSinceRefusal,
 } from "../../../agent-org/src/row-claim/own-pr-health-rule.mjs";
 
 /** A row owed a commit: held, declaring files, no sub-rows, no PR. Each test changes ONE fact from this. */
@@ -949,7 +950,7 @@ test("#2126: the review-health read is ONE call, over every open pull request", 
   assert.ok(calls[0].includes("--state") && calls[0][calls[0].indexOf("--state") + 1] === "open");
   assert.match(calls[0][calls[0].indexOf("--json") + 1], /reviewDecision/);
   assert.deepEqual(health, [{ number: 2107, head: REFUSED_HEAD,
-    reviewDecision: "CHANGES_REQUESTED", dispute: null }]);
+    reviewDecision: "CHANGES_REQUESTED", dispute: null, authorCommitsSinceReview: 0 }]);
 });
 
 test("#2126: `gh pr list`'s own default of THIRTY is overridden, or the window would be invisible", () => {
@@ -1024,4 +1025,246 @@ test("#2126: the open pull request's NUMBER is carried, and only while it is OPE
   assert.equal(merged?.[0].openPrNumber, undefined,
     "a MERGED pull request is delivered, so its last verdict is nobody's outstanding work");
   assert.equal(inBuildReason(merged ?? []), null);
+});
+
+/**
+ * #2254: "NOBODY HAS ANSWERED" versus "ANSWERED, AWAITING A RE-READ". The RULING is to LIFT the cap when an
+ * AUTHOR (non-merge) commit postdates the latest refusal -- see `unansweredRefusal` for why not a third,
+ * still-capped state. Both fixtures below are MEASURED, and both go through `lookupOpenPrReviewHealth` so the
+ * discriminator is exercised on the payload `gh pr list` really returns rather than on a hand-set count.
+ *
+ * THE TWO MUTATIONS THE ROW NAMES, each caught by a DIFFERENT test:
+ *  - `authorCommitsSinceRefusal` always positive  -> "#2254 (2)" goes red (the #2107 sweep case is waved through);
+ *  - `authorCommitsSinceRefusal` always zero      -> "#2254 (1)" goes red (the #2165 answer is still refused);
+ *  - `isAnswererCommit` always true               -> "#2254 (6)" goes red (a bot's commit lifts B2).
+ */
+const refusedAt = "2026-09-23T21:25:38Z";
+type Health = NonNullable<Parameters<typeof unansweredRefusal>[0]["openPrReview"]>;
+const healthOf = (pr: object) => (lookupOpenPrReviewHealth({ run: () => JSON.stringify([{
+  number: 2240, headRefOid: "bfee37e369", reviewDecision: "CHANGES_REQUESTED", author: { login: "a11ign-ai-workers" },
+  reviews: [{ state: "CHANGES_REQUESTED", submittedAt: refusedAt, commit: { oid: "16840d7f" },
+    body: "**Review of #2240 at `16840d7f`, by reviewer-2: not convinced.**" }], ...pr }]) })?.[0]) as Health;
+// AUTHORS ARE MEASURED, not invented: the sweep's merges are `DanBeckDev` (#2107, #2240); the answer to #2240
+// was `web-flow` + the `claude` co-author, because a session's commit is NOT under the PR author's login.
+const SWEEP = [{ login: "DanBeckDev" }];
+const SESSION = [{ login: "web-flow" }, { login: "claude" }];
+const commit = (messageHeadline: string, committedDate: string, authors: { login: string }[] = SESSION) =>
+  ({ messageHeadline, committedDate, authors });
+const asRow = (review: Health) => ({ ...proposedRow, openPrNumber: 2240, openPrReview: review });
+
+test("#2254 (1): #2165 -- an author commit AFTER the refusal lifts the cap, and no sentence says nobody answered", () => {
+  const answered = healthOf({ commits: [
+    commit("Merge branch 'main' into agent/x-2176", "2026-09-23T21:20:00Z", SWEEP),
+    commit("Rework the assertion the reviewer named", "2026-09-23T21:29:43Z")] });
+  assert.equal(answered.authorCommitsSinceReview, 1, "read from the payload, not supplied by the fixture");
+  assert.equal(unansweredRefusal(asRow(answered)), null);
+  assert.equal(inBuildReason([asRow(answered)]), null,
+    "answered and waiting on a re-read is AWAITING REVIEW, which #989 makes legal beside one new row");
+});
+
+test("#2254 (2): #2107 -- four bot merges and ZERO author commits after the refusal are STILL refused", () => {
+  // The control that keeps this row from reopening what #2126 closed. Every commit is later than the refusal.
+  const swept = healthOf({ commits: ["787aecd4", "5a9981d0", "d45c1b00", "6541b1ee"].map((oid, i) => commit(
+    `Merge branch 'main' into agent/state-reading-delivery-clock-2083 (${oid})`, `2026-09-23T21:${30 + i}:00Z`, SWEEP)) });
+  assert.equal(swept.authorCommitsSinceReview, 0, "the merges moved the head and answered nothing");
+  assert.ok(inBuildReason([asRow(swept)]), "so the refusal stands");
+  const mergedPr = healthOf({ commits: [commit("Merge pull request #2266 from a11ign/x", "2026-09-23T22:00:00Z"),
+    commit("Merge remote-tracking branch 'origin/main'", "2026-09-23T22:01:00Z")] });
+  assert.equal(mergedPr.authorCommitsSinceReview, 0, "every GitHub default merge headline is a merge");
+});
+
+test("#2254 (3): only commits AFTER THE LATEST refusal answer it, and a tie or an unreadable time does not", () => {
+  const at = (headline: string, when: string | undefined) =>
+    ({ messageHeadline: headline, committedDate: when, authors: SESSION });
+  assert.equal(authorCommitsSinceRefusal({ commits: [at("fix", "2026-09-23T21:29:43Z")], reviews: [
+    { state: "CHANGES_REQUESTED", submittedAt: "2026-09-23T21:25:38Z" },
+    { state: "CHANGES_REQUESTED", submittedAt: "2026-09-23T21:40:00Z" }] }), 0,
+  "a commit between two refusals answered the FIRST one; the latest is still standing");
+  assert.equal(authorCommitsSinceRefusal({ commits: [at("fix", refusedAt)], reviews: [
+    { state: "CHANGES_REQUESTED", submittedAt: refusedAt }] }), 0, "same second: not an answer");
+  assert.equal(authorCommitsSinceRefusal({ commits: [at("fix", undefined), at("fix", "not a date")], reviews: [
+    { state: "CHANGES_REQUESTED", submittedAt: refusedAt }] }), 0, "a commit that cannot be placed proves nothing");
+  assert.equal(authorCommitsSinceRefusal({ commits: [at("fix", "2026-09-23T22:00:00Z")], reviews: [
+    { state: "CHANGES_REQUESTED" }, { state: "APPROVED", submittedAt: refusedAt }] }), 0,
+  "no refusal with a timestamp: nothing to be after, so the refusal is unchanged");
+  assert.equal(authorCommitsSinceRefusal({}), 0, "a payload with no commits or reviews at all reads zero");
+});
+
+test("#2254 (4): the refusal that remains says what lifts it, and no longer offers a bare reply", () => {
+  const reason = inBuildReason([proposedRow]) as string;
+  assert.match(reason, /A commit YOU push after the verdict lifts this refusal/);
+  assert.match(reason, /a reply with no commit does not/);
+  assert.match(reason, /BOT MERGE DOES NOT LIFT THIS/, "the #2107 sentence is kept beside it");
+});
+
+test("#2254 (5): a dispute at the head is still the escape, whatever the commits say", () => {
+  assert.equal(unansweredRefusal(asRow({ ...refusedPr, dispute, authorCommitsSinceReview: 0 })), null);
+});
+
+test("#2254 (6): a NON-AUTHOR commit after the refusal answers nothing -- a formatter bot, a maintainer", () => {
+  // The reviewer's probe of 226e6a24: `Automated formatting` after the refusal counted 1 and lifted B2.
+  const later = "2026-09-23T22:00:00Z";
+  const bot = healthOf({ commits: [commit("Automated formatting", later, [{ login: "github-actions[bot]" }])] });
+  assert.equal(bot.authorCommitsSinceReview, 0, "a bot's ordinary commit is not the author answering");
+  assert.ok(inBuildReason([asRow(bot)]), "so the refusal stands");
+  const maintainer = healthOf({ commits: [commit("Tidy the docs", later, [{ login: "DanBeckDev" }])] });
+  assert.equal(maintainer.authorCommitsSinceReview, 0, "nor is somebody else's push");
+  const unattributed = healthOf({ commits: [{ messageHeadline: "fix", committedDate: later }] });
+  assert.equal(unattributed.authorCommitsSinceReview, 0, "a commit with no readable authors proves nothing");
+});
+
+test("#2254 (7): the PR author's OWN login counts -- a human author, or a session committing as itself", () => {
+  const own = healthOf({ commits: [commit("Rework it", "2026-09-23T22:00:00Z", [{ login: "a11ign-ai-workers" }])] });
+  assert.equal(own.authorCommitsSinceReview, 1);
+  assert.equal(unansweredRefusal(asRow(own)), null);
+  const noPrAuthor = healthOf({ author: undefined,
+    commits: [commit("Rework it", "2026-09-23T22:00:00Z", [{ login: "a11ign-ai-workers" }])] });
+  assert.equal(noPrAuthor.authorCommitsSinceReview, 0, "no PR author to match: `undefined` must not equal `undefined`");
+});
+
+// --- #2241: a row the GATE has shelved is not a row its holder can build ------------------------------
+//
+// THE ONE ROW, both deciders reading it: #1926 held `Not-before: 2026-09-24T01:30:00Z` for a fourteen-hour
+// machine run, `waitingOn` said "nothing owed until then" and B2 said "you owe a commit" -- two claims lost,
+// two offline rows left with no engineer. `worker-judge`'s refusal the same evening, on a `CHANGES_REQUESTED`,
+// was RIGHT and stays right: the discriminator is `waitingOn`, and a refusal produces no waiting condition.
+
+/** The Open-check's row, verbatim, and the clock at which it was measured (2026-09-23 21:0xZ). */
+const shelved1926 = { number: 1926, body: "Not-before: 2026-09-24T01:30:00Z", labels: [] as string[],
+  declaresPaths: true, subIssues: 0, closingPr: undefined };
+const EVENING = Date.parse("2026-09-23T21:05:00Z");
+const AFTER_THE_RUN = Date.parse("2026-09-24T09:40:00Z");
+
+test("#2241 (1): the Open-check's own row -- a held row waiting on a future `Not-before:` -- does not refuse", () => {
+  assert.equal(isInBuild(shelved1926), true, "still a row somebody owes a commit for: only the WAIT changed");
+  assert.equal(inBuildReason([shelved1926], EVENING), null);
+});
+
+test("#2241 (1): each of the three waiting conditions `waitingOn` reads lifts the refusal", () => {
+  const dated = { ...shelved1926, body: "Not-before: 2099-01-01" };
+  const blocked = { ...shelved1926, body: "", blockedBy: { nodes: [{ number: 1918, state: "OPEN" }] } };
+  const answer = { ...shelved1926, body: "", labels: [{ name: "answer:ceo" }] };
+  for (const [name, row] of Object.entries({ dated, blocked, answer })) {
+    assert.equal(inBuildReason([row], EVENING), null, `${name}: the gate shelves it, so B2 must not hand it back`);
+  }
+});
+
+test("#2241 (2) POSITIVE CONTROL: a held row with NO waiting condition still refuses -- B2 is not deleted", () => {
+  const reason = inBuildReason([{ ...shelved1926, body: "## Region\n\n```\nscripts/held.mjs\n```\n" }], EVENING);
+  assert.ok(reason, "a fix returning null for every held row has deleted B2");
+  assert.match(reason as string, /#1926 is IN BUILD/);
+});
+
+test("#2241 (2) POSITIVE CONTROL: a `Not-before:` that has PASSED refuses again", () => {
+  assert.ok(inBuildReason([shelved1926], AFTER_THE_RUN), "the run is over: the commit is owed today");
+  const dateOnly = { ...shelved1926, body: "Not-before: 2026-09-23" };
+  assert.ok(inBuildReason([dateOnly], EVENING), "a date-only value is midnight UTC of that date, and 21:05Z is past it");
+  assert.equal(inBuildReason([dateOnly], Date.parse("2026-09-22T21:05:00Z")), null, "and the day before it is a wait");
+});
+
+test("#2241 (2) POSITIVE CONTROL: a CLOSED blocker is a condition that has CLEARED, so it refuses", () => {
+  const cleared = { ...shelved1926, body: "", blockedBy: { nodes: [{ number: 1918, state: "CLOSED" }] } };
+  assert.ok(inBuildReason([cleared], EVENING));
+});
+
+test("#2241 (3): a session's own CHANGES_REQUESTED still refuses while ANOTHER held row is waiting", () => {
+  const reason = inBuildReason([shelved1926, proposedRow], EVENING);
+  assert.ok(reason, "two clauses, and the waiting one must not swallow the other");
+  assert.match(reason as string, /#2107/, "it is the review clause that fired, and it names the pull request");
+  assert.doesNotMatch(reason as string, /is IN BUILD/);
+});
+
+test("#2241 (3): a row's own wait does not excuse its pull request's CHANGES_REQUESTED", () => {
+  // The same row carries a future `Not-before:` AND an open pull request a reviewer refused. The date says
+  // nothing is owed on the DELIVERABLE; the reviewer says something is owed on the pull request today.
+  const both = { ...proposedRow, body: "Not-before: 2099-01-01" };
+  assert.ok(inBuildReason([both], EVENING), "a reviewer has asked for changes: owed work, whatever date the row carries");
+  assert.match(inBuildReason([both], EVENING) as string, /#2107/);
+});
+
+test("#2241: two held rows, one waiting and one not -- the refusal names the one NOT waiting", () => {
+  const owed = { ...shelved1926, number: 2002, body: "" };
+  const reason = inBuildReason([shelved1926, owed], EVENING);
+  assert.match(reason as string, /#2002 is IN BUILD/);
+  assert.doesNotMatch(reason as string, /#1926 is IN BUILD/);
+});
+
+test("#2241 (4): the refusal that still fires says which clause fired and what would clear it", () => {
+  const reason = inBuildReason([{ ...shelved1926, body: "Not-before: 2026-09-24T01:30:00Z" }], AFTER_THE_RUN) as string;
+  assert.match(reason, /#1926 is IN BUILD/, "the clause that fired");
+  assert.match(reason, /WAITING on something no commit of yours can hasten/, "the way out this row adds");
+  for (const condition of [/Not-before: YYYY-MM-DDTHH:MM:SSZ/, /--add-blocked-by <row>/, /answer:<session>/]) {
+    assert.match(reason, condition, "all three conditions `waitingOn` reads are NAMED, not only the one that fits");
+  }
+  assert.match(reason, /reads no such condition on #1926 now/, "and it says what it read, so a wrong reading is visible");
+  // The three remedies that already existed are still there, in the order they always were.
+  assert.match(reason, /Finish it, or `decline` it/);
+  assert.match(reason, /Delivers: #1926/);
+  assert.ok(reason.indexOf("Delivers: #1926") < reason.indexOf("WAITING on something"));
+});
+
+test("#2241 (5) FAIL CLOSED: a row that cannot be parsed for a waiting condition REFUSES", () => {
+  // Each of these is a wait its author MEANT and `waitingOn` could not read. `null` from it means "not
+  // parsed", and here that must not read as "nothing is owed" -- the opposite of #2226's eligibility read
+  // and for the opposite reason: there a lookup that cannot ask must not withhold a row from the queue,
+  // here a parse that cannot answer must not hand out a second row.
+  const unreadable: Record<string, object> = {
+    "a time without seconds": { body: "Not-before: 2099-01-01T01:30Z" },
+    "a time without its Z": { body: "Not-before: 2099-01-01T01:30:00" },
+    "an offset other than UTC": { body: "Not-before: 2099-01-01T01:30:00+01:00" },
+    "a date the calendar does not have": { body: "Not-before: 2099-02-31" },
+    "a wait written in prose": { body: "Not-before the recapture finishes, roughly Thursday" },
+    "no body at all": { body: undefined },
+    "a bare `answer:` naming nobody": { body: "", labels: [{ name: "answer:" }] },
+    "a blockedBy list the lookup did not carry": { body: "", blockedBy: undefined },
+    "a body that is not a string": { body: 42 },
+  };
+  for (const [name, facts] of Object.entries(unreadable)) {
+    assert.ok(inBuildReason([{ ...shelved1926, ...facts } as never], EVENING), `${name}: unreadable, so it refuses`);
+  }
+  assert.ok(inBuildReason([{ number: 1926, declaresPaths: true, subIssues: 0, closingPr: undefined }], EVENING),
+    "a row fact set with NONE of the waiting fields is exactly today's B2, unchanged");
+  // ...and the READABLE spelling of the same wait is the other direction, so the pair is pinned both ways.
+  assert.equal(inBuildReason([{ ...shelved1926, body: "Not-before: 2099-01-01T01:30:00Z" }], EVENING), null);
+});
+
+test("#2241: the lookup carries body, labels and blockedBy on the SAME `issue view` call", () => {
+  const seen: string[][] = [];
+  const view = { body: "## Region\n\n```\nscripts/held.mjs\n```\n\nNot-before: 2099-01-01\n",
+    labels: [{ name: "in-progress" }], blockedBy: { nodes: [], totalCount: 0 } };
+  const run = (args: string[]) => {
+    seen.push(args);
+    if (args[0] === "issue" && args[1] === "list") return JSON.stringify([{ number: 1926 }]);
+    if (args[0] === "api" && args[1] === "graphql") {
+      return JSON.stringify({ data: { repository: { issue: { closedByPullRequestsReferences: { nodes: [] } } } } });
+    }
+    if (args[0] === "issue") return JSON.stringify(view);
+    return "[]";
+  };
+  const rows = lookupHeldRows("worker-tooling", 2241, { run });
+  assert.equal(rows?.[0].body, view.body);
+  assert.deepEqual(rows?.[0].labels, view.labels);
+  assert.deepEqual(rows?.[0].blockedBy, view.blockedBy);
+  const views = seen.filter((args) => args[0] === "issue" && args[1] === "view");
+  assert.equal(views.length, 1, "one round trip per held row: a second `issue view` would undo #989's measurement");
+  assert.equal(views[0][views[0].indexOf("--json") + 1], "body,labels,blockedBy");
+  assert.equal(inBuildReason(rows ?? []), null, "end to end: a real lookup of a shelved row does not refuse");
+});
+
+test("#2241: a lookup that carried a Region but NO wait fields leaves the row in build -- fail closed, end to end", () => {
+  const withView = (view: object) => (args: string[]) => {
+    if (args[0] === "issue" && args[1] === "list") return JSON.stringify([{ number: 1926 }]);
+    if (args[0] === "api" && args[1] === "graphql") {
+      return JSON.stringify({ data: { repository: { issue: { closedByPullRequestsReferences: { nodes: [] } } } } });
+    }
+    if (args[0] === "issue") return JSON.stringify(view);
+    return "[]";
+  };
+  const region = "## Region\n\n```\nscripts/held.mjs\n```\n";
+  // The wait lives in `blockedBy`, which this lookup answer does not carry: nothing to read it from.
+  const uncarried = lookupHeldRows("worker-tooling", 2241, { run: withView({ body: region }) });
+  assert.ok(inBuildReason(uncarried ?? []), "a wait that could not be read is not a wait");
+  const carried = lookupHeldRows("worker-tooling", 2241, { run: withView({ body: region, labels: [],
+    blockedBy: { nodes: [{ number: 1918, state: "OPEN" }] } }) });
+  assert.equal(inBuildReason(carried ?? []), null, "and the same row with the blocker CARRIED is the other direction");
 });

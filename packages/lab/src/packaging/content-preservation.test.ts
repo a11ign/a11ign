@@ -72,6 +72,7 @@ import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sandboxGitEnv } from "../../../guards/src/git-env.mjs";
+import { RULES_DIR, RULES_FILES } from "./rules-files.ts";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
 
@@ -212,10 +213,13 @@ const NESTED_CLAUDE_MD = [
   ".github/CLAUDE.md",
 ];
 
-/** The new CLAUDE.md, every nested `CLAUDE.md`, and every `docs/*.md`, whitespace-normalised. */
+/** The new CLAUDE.md, every nested `CLAUDE.md`, every rules file, and every `docs/*.md`, normalised.
+ *
+ *  #2092: the rules files are named in `rules-files.ts` and are destinations for the same reason the
+ *  nested `CLAUDE.md` files are -- they load in every session, so text moved there is MOVED, not lost. */
 export function haystack(): string {
   const claudeMd = norm(readFileSync(join(REPO_ROOT, "CLAUDE.md"), "utf8"));
-  const nested = NESTED_CLAUDE_MD
+  const nested = [...NESTED_CLAUDE_MD, ...RULES_FILES]
     .map((rel) => join(REPO_ROOT, rel))
     .filter((abs) => existsSync(abs))
     .map((abs) => norm(readFileSync(abs, "utf8")));
@@ -398,41 +402,66 @@ test("MIN_SURVIVING_RUN separates #907's real removals from invented prose", () 
 });
 
 /**
- * #907's OWN DIFF, driven end to end -- the row's first acceptance bullet, and the only test here that
- * touches real history rather than a hand-made haystack.
+ * #907's DIFF AS A FIXTURE, so the calibration runs in EVERY job (#2252).
  *
- * The commits are pinned. `8fa9a2ea` -> `67ad999b` is PR #1080, which deleted the previous guard and
- * reworded the paragraphs it had been refusing. **The old guard flagged 8 of these 9 lines. This flags 1**,
- * and the 1 is the line whose only surviving words are `"Do not go looking for"` -- generic English
- * matching `docs/not-working.md` by coincidence, not preserved content.
+ * The end-to-end control below pins `8fa9a2ea` -> `67ad999b`, and `67ad999b` is PR #1080's HEAD: #1080 was
+ * squashed, so that commit is reachable from no branch ref and survives on GitHub only under
+ * `refs/pull/1080/head`. `actions/checkout` fetches branch refs and the ref of the pull request being built,
+ * never another pull request's head, so NO `fetch-depth` reaches it -- `fetch-depth: 0` included -- and that
+ * control skipped in every CI job it was ever in. It ran only on a host whose stale local branches happened
+ * to hold the head. This fixture is the same measurement without the objects.
  *
- * SKIPS HONESTLY where the objects are absent: a shallow CI checkout has neither commit, and a test that
- * silently passed there would report a calibration it never ran. The skip names the reason.
+ * WHAT IS IN IT, AND WHY IT GIVES THE SAME ANSWER: the 9 substantive lines #907 removed (verbatim from the
+ * diff), and the 7 paragraphs of `CLAUDE.md` / `docs/` at `67ad999b` that hold each line's longest
+ * surviving run. The haystack is a SUBSET of the real one that contains, for every line, the paragraph its
+ * best run came from -- and a longest run over a subset that includes the argmax is the same longest run.
+ * So the nine counts match the full 140-file haystack exactly, and the host cross-check below re-reads them
+ * from real history wherever those commits exist, so this fixture cannot drift from what it copies.
+ *
+ * WHAT IT GIVES UP: it calibrates against a frozen copy, not against history. A shorter haystack cannot
+ * produce a coincidence the full one would not, but it also cannot show a NEW coincidence appearing in a
+ * later `docs/` -- that is what `every substantive line removed from CLAUDE.md still exists` above is for.
  */
-test("#907's diff: the old guard flagged 8 of 9, this flags the 1 whose text really went", (t) => {
-  const BASE = "8fa9a2ea";
-  const HEAD = "67ad999b";
-  const git = (...args: string[]) => execFileSync("git", args,
-    { cwd: REPO_ROOT, env: sandboxGitEnv(), encoding: "utf8", maxBuffer: 1024 * 1024 * 64 });
-  try {
-    git("cat-file", "-e", `${BASE}^{commit}`);
-    git("cat-file", "-e", `${HEAD}^{commit}`);
-  } catch {
-    // DEFENCE ONLY, and say so rather than implying it fires: every job running this suite uses
-    // `fetch-depth: 0`, so a shallow checkout cannot happen in CI today. `worker-judge` exercised this
-    // path against a fixture repo at the same depth -- `origin/main` resolving, neither commit present --
-    // and it reported `skipped 1` with `pass 7 fail 0`, so the branch is tested rather than assumed.
-    t.skip(`#907's commits (${BASE}, ${HEAD}) are not in this checkout -- shallow clone. `
-      + "Not run, and not counted as a pass.");
-    return;
-  }
-  const removed = removedSubstantiveLines(git("diff", BASE, HEAD, "--", "CLAUDE.md"));
+const DIFF_907_REMOVED = [
+  "| [`docs/README.md`](docs/README.md) | the index to every guide and runbook, grouped by task, with [`docs/adr/README.md`](docs/adr/README.md) for the 37 decision records |",
+  "> **THE LOCAL UTM WORKER VMs ARE DEPRECATED. Capture on the bare-metal fleet.** TEN boxes",
+  "> (`a11y-worker-2` … `-11`, in `inventory.yml`; `-1` is retired and its number is never reused.",
+  "> [`-10` rejoined 2026-09-09 →](docs/operational-lessons.md#a11y-worker-10-withdrawn-2026-09-07-rejoined-2026-09-09)) serve",
+  "A new bare-metal box needs no console visit — PXE + `autounattend.xml` plants the account and key. Deploy pushes every hashed file (27 now, defined once in `packages/nvda-worker/src/worker-files.mjs`) and reboots each guest, since `utmctl exec` cannot be trusted to restart the worker. Roll back by checking out the ref and redeploying — git is the source of truth. `worker:deploy` refuses a `CAPTURE_PROTOCOL_VERSION` change without `--allow-protocol-change` (it invalidates the whole cache). [Full detail →](docs/operational-lessons.md#a-new-box-needs-no-console-visit-and-the-protocol-version-trap)",
+  "> **Stopped worker VMs are the correct resting state.** A run starts what it needs and releases",
+  "> it afterwards. `all stopped` is a READY state, not a fault. Do not go looking for another",
+  "> worker, and do not open the UTM GUI — just run the capture.",
+  "commit containing files nobody has touched in 30 minutes, or more than 12 files at once, and",
+];
+
+const DIFF_907_SURVIVORS = [
+  // CLAUDE.md
+  "| | | |---|---| | [`CONTRIBUTING.md`](CONTRIBUTING.md) | the 60-second orientation, and the question that decides everything: **does your change need a Windows worker?** Most of the repo does not. | | [`SECURITY.md`](SECURITY.md) | what this tool does that somebody must know before running it — `probeForms` presses buttons, the worker has no authentication, `A11Y_PYTHON` is executable | | [`docs/README.md`](docs/README.md) | the index to every guide and runbook, grouped by task, with [`docs/adr/README.md`](docs/adr/README.md) for the decision records | | [`docs/backlog.md`](docs/backlog.md) | **The RECORD of what was found and what it cost.** [GitHub Issues](https://github.com/DanBeckDev/a11y-witness/issues) answers \"what is open\" — `ready` is pickable, `in-progress` plus a `session:` label is claimed. This file, `known-gaps.md` and `not-working.md` hold the measurement, the wrong turn and the command that settles it: the half an issue is bad at | | [`docs/known-gaps.md`](docs/known-gaps.md) | **what this project does NOT do, or does not yet know** — each with what it would cost and what would tell you it is fixed. Read it before claiming a thing is finished; \"all gates pass\" and \"everything is validated\" are different claims |",
+  // CLAUDE.md
+  "> **THE LOCAL UTM WORKER VMs ARE DEPRECATED. Capture on the bare-metal fleet.** Every box > `inventory.yml` lists (`a11y-worker-2` upward; `-1` is retired and its number is never reused. > [`-10` rejoined 2026-09-09 →](docs/operational-lessons.md#a11y-worker-10-withdrawn-2026-09-07-rejoined-2026-09-09)) serves > `/health` without a laptop in the path, and `npm run fleet:status` is the one command that says > so. Deploy with **`npm run fleet:deploy`**, never `worker:deploy` — that one is `utmctl file push` to a > VM UUID and cannot reach a physical box. > > [Why this note exists, and what \"kept\" means below →](docs/operational-lessons.md#why-the-deprecation-note-exists-and-what-kept-means)",
+  // docs/operational-lessons.md
+  "> **THE LOCAL UTM WORKER VMs ARE DEPRECATED. Capture on the bare-metal fleet.** NINE boxes",
+  // CLAUDE.md
+  "A new bare-metal box needs no console visit — PXE + `autounattend.xml` plants the account and key. Deploy pushes every hashed file (defined once in `packages/nvda-worker/src/worker-files.mjs`) and reboots each guest, since `utmctl exec` cannot be trusted to restart the worker. Roll back by checking out the ref and redeploying — git is the source of truth. `worker:deploy` refuses a `CAPTURE_PROTOCOL_VERSION` change without `--allow-protocol-change` (it invalidates the whole cache). [Full detail →](docs/operational-lessons.md#a-new-box-needs-no-console-visit-and-the-protocol-version-trap)",
+  // CLAUDE.md
+  "> **A stopped worker VM is the correct resting state, not a fault.** A run starts what it needs and > releases it when it is done, so `all stopped` means ready rather than broken. Do not hunt for > another worker and do not open the UTM GUI — just run the capture.",
+  // docs/not-working.md
+  "- **`landmark` is the outlier at 15.2%**, and that is the independent confirmation of why `landmark_present` was deleted — measured on 6,467 captures rather than on the 16 that prompted it. Every other sweep is under 2%. **Do not go looking for a general sweep defect; there is not one.** - **`tableCells` is never observable when empty** — 6,094 of 6,095, because `probeTables` is opt-in. The four `table_*` features survive this only because each falls back to the transcript (`table_evidence`, `screenreader_features.py:691`). The channel is unusable; the features are not.",
+  // CLAUDE.md
+  "- **Commit explicit paths.** `git add -A` cannot tell your edits from someone else's. - A **pre-commit hook** (`scripts/git-hooks/pre-commit`, wired via `core.hooksPath`) refuses a commit containing files nobody has touched recently, or too many at once, and names the offenders with their ages. In a shared tree, an 8-hour-old staged file is someone else's work. - If the block is a false positive — long debugging session, files genuinely yours — check `git diff --cached` first, then `A11Y_COMMIT_ALL=1 git commit ...`. - To commit **part** of a file another agent is also editing, stage just your hunk: `git apply --cached your.patch`, then `git commit` with **no path arguments** (a path argument makes git commit the working tree, not your staged hunk). - `git status` before you start. Files already modified are not yours to commit.",
+];
+
+/** The longest surviving run of each removed line, in the order of `DIFF_907_REMOVED`. */
+const DIFF_907_RUNS = [17, 13, 9, 6, 49, 7, 5, 12, 6];
+
+const diff907 = () => removedSubstantiveLines(DIFF_907_REMOVED.map((l) => `-${l}`).join("\n"));
+
+test("#907's diff, as a fixture: the old guard flagged 8 of 9, this flags the 1 whose text really went", () => {
+  const removed = diff907();
   assert.equal(removed.length, 9, "the population is pinned: #907 removed 9 substantive lines");
-  const docs = git("ls-tree", "-r", "--name-only", HEAD, "docs/").split("\n").filter((f) => f.endsWith(".md"));
-  // ONE git process for all 140 blobs, not one per file. This spawned `git show` once per `docs/*.md`
-  // -- 139 of them at this commit -- and then threw the per-file boundaries away, because the haystack is
-  // a CONCATENATION. The spawns bought nothing the join did not immediately discard.
-  const hay = blobsAt([`${HEAD}:CLAUDE.md`, ...docs.map((f) => `${HEAD}:${f}`)]).map(norm).join(" ");
+  const hay = DIFF_907_SURVIVORS.map(norm).join(" ");
+  assert.deepEqual(removed.map((l) => longestSurvivingRun(l, hay).words), DIFF_907_RUNS,
+    "every line's longest surviving run is the one measured at 67ad999b");
   const missing = unpreservedLines(removed, hay);
   assert.equal(missing.length, 1,
     `expected exactly the one true positive; got ${missing.length}: `
@@ -441,6 +470,65 @@ test("#907's diff: the old guard flagged 8 of 9, this flags the 1 whose text rea
   assert.equal(missing[0].words, 5, "and it survives 5 words -- one below the floor, which is the margin");
   assert.equal(missing[0].matched, "Do not go looking for",
     "the matched run is generic English, which is why 5 words is not preservation");
+});
+
+test("CONTROL: the #907 fixture fails when the preserved text goes, and when the lost text returns", () => {
+  const removed = diff907();
+  const whole = DIFF_907_SURVIVORS.map(norm);
+  // Restoring the text the fixture says was lost must clear the one flag: had the fixture flagged that line
+  // for any other reason, this would still report it.
+  const restored = [...whole, removed[6] + " " + removed[7]].join(" ");
+  assert.deepEqual(unpreservedLines(removed, restored), [],
+    "the true positive's own words are back, so nothing may be reported");
+  // Dropping a paragraph that carried a real removal's run must ADD a flag, so the fixture can fail in the
+  // direction that matters -- a haystack that lost preserved content.
+  const withoutDeploy = whole.filter((p) => !p.includes("Deploy pushes every hashed file")).join(" ");
+  assert.equal(unpreservedLines(removed, withoutDeploy).length, 2,
+    "the 49-word run vanishes with its paragraph, so the deploy line joins the one already flagged");
+});
+
+/**
+ * #907's OWN DIFF, driven end to end against real history -- the host cross-check for the fixture above.
+ *
+ * The commits are pinned. `8fa9a2ea` -> `67ad999b` is PR #1080, which deleted the previous guard and
+ * reworded the paragraphs it had been refusing. **The old guard flagged 8 of these 9 lines. This flags 1.**
+ *
+ * **THIS SKIPS IN EVERY CI JOB, AND THAT IS THE NORMAL PATH, NOT A DEFENCE.** `67ad999b` is PR #1080's head;
+ * #1080 was squashed, so the commit is on no branch ref and only `refs/pull/1080/head` holds it. No
+ * `fetch-depth` reaches that, so `fetch-depth: 0` skips exactly as a depth-1 checkout does (#2252). It runs
+ * only where a clone happens to hold the object -- a developer host with stale local branches. What CI
+ * confirms is the fixture above; this confirms that the fixture still matches history.
+ *
+ * SKIPS HONESTLY where the objects are absent: a test that silently passed there would report a
+ * calibration it never ran. The skip names the reason.
+ */
+test("#907's diff, from history: the fixture's nine runs are the ones real history gives", (t) => {
+  const BASE = "8fa9a2ea";
+  const HEAD = "67ad999b";
+  const git = (...args: string[]) => execFileSync("git", args,
+    { cwd: REPO_ROOT, env: sandboxGitEnv(), encoding: "utf8", maxBuffer: 1024 * 1024 * 64 });
+  try {
+    git("cat-file", "-e", `${BASE}^{commit}`);
+    git("cat-file", "-e", `${HEAD}^{commit}`);
+  } catch {
+    // REACHABILITY, not depth: `${HEAD}` is PR #1080's head, on no branch ref, so this branch is the one CI
+    // takes in every job. `worker-judge` exercised it against a fixture repo -- `origin/main` resolving,
+    // neither commit present -- and it reported `skipped 1` with the rest passing.
+    t.skip(`#907's commits (${BASE}, ${HEAD}) are not in this checkout -- ${HEAD} is a squashed PR's head, `
+      + "reachable from no branch ref, so CI never has it. The fixture test above is what CI runs. "
+      + "Not run, and not counted as a pass.");
+    return;
+  }
+  const removed = removedSubstantiveLines(git("diff", BASE, HEAD, "--", "CLAUDE.md"));
+  assert.deepEqual(removed, diff907(), "the fixture's removed lines are the diff's, verbatim");
+  const docs = git("ls-tree", "-r", "--name-only", HEAD, "docs/").split("\n").filter((f) => f.endsWith(".md"));
+  // ONE git process for all 140 blobs, not one per file. This spawned `git show` once per `docs/*.md`
+  // -- 139 of them at this commit -- and then threw the per-file boundaries away, because the haystack is
+  // a CONCATENATION. The spawns bought nothing the join did not immediately discard.
+  const hay = blobsAt([`${HEAD}:CLAUDE.md`, ...docs.map((f) => `${HEAD}:${f}`)]).map(norm).join(" ");
+  assert.deepEqual(removed.map((l) => longestSurvivingRun(l, hay).words), DIFF_907_RUNS,
+    "the fixture's pinned runs are what full history gives");
+  assert.equal(unpreservedLines(removed, hay).length, 1, "and full history flags the same one line");
 });
 
 /**
@@ -522,6 +610,9 @@ test("a branch merely BEHIND main is accused of nothing -- the two-dot trap", (t
  * guarded population: the population stays the whole directory, because a second rules file loads in
  * every session exactly the same way. If `agent-practices.md` is ever split the way `CLAUDE.md` was
  * (#1240), this fails loudly and the anchor is re-pointed at whichever file the delivery clause went to.
+ * **#2092 did split it, and kept the anchor and the clause in ONE file on purpose:** `Timers and state`
+ * (the anchor) and `Routing` (the clause) both live in `org-routing-and-timers.md`, so the "contradicts
+ * its own document" argument still holds and the anchor did not have to be copied to a second file.
  * The loud failure IS the notice; deleting the assertion instead is how a guard quietly outlives its
  * premise, which is the shape this whole file exists to refuse one directory over.
  *
@@ -553,7 +644,7 @@ test("a branch merely BEHIND main is accused of nothing -- the two-dot trap", (t
  * these files today, the direction of that error is a loud red on a docs edit rather than a silent miss,
  * and the failure message says which spellings are not flagged.
  */
-const ALWAYS_LOADED_RULES = ".claude/rules";
+const ALWAYS_LOADED_RULES = RULES_DIR;
 
 /** The general statement in that file which a delivery clock contradicts. Asserted, never assumed. */
 const NO_STANDING_CRON = "No session holds a standing cron";
@@ -561,7 +652,7 @@ const NO_STANDING_CRON = "No session holds a standing cron";
 /** The always-loaded file carrying the delivery clause #2083 struck, and therefore the one that must
  *  state the anchor ITSELF. Named because "some file states it" is a different, weaker claim -- see the
  *  mutation in the header. This is the anchor's home, not the guarded population. */
-const CLAUSE_FILE = `${ALWAYS_LOADED_RULES}/agent-practices.md`;
+const CLAUSE_FILE = `${ALWAYS_LOADED_RULES}/org-routing-and-timers.md`;
 
 /**
  * Every wall-clock minute marker in `text`: a bare `:MM`, or an `H:MM`/`HH:MM`, in either case with no
@@ -674,4 +765,119 @@ test("no rule loaded by every session times a session's action to a wall-clock m
     + "RATE and the mechanism instead: one reading per `ceo` tick, posted on #928 as the record and "
     + "delivered with `npm run prompt:session`. A timestamp (`19:22:54Z`) is not this and is not "
     + `flagged:\n${flagged.map((f) => `-> ${f.file}  ${f.marker}  [${f.why}]\n   ${f.context}`).join("\n")}`);
+});
+
+/**
+ * #2092: THE RULES FILE WAS SPLIT BY TOPIC, AND THE SPLIT IS PROVED AGAINST THE COMMIT THAT MADE IT.
+ *
+ * `.claude/rules/agent-practices.md` was one file and B4 admits one open pull request per file, so every
+ * row amending any org practice waited on every other (#2025: refused three times in 15 hours, by three
+ * pull requests about unrelated topics). It is one file per topic now, and moving text between files is
+ * the operation `CLAUDE.md`'s guard above exists to make safe -- so the same standard applies: the move is
+ * BYTE-IDENTICAL, and the destinations are NAMED rather than globbed.
+ *
+ * ## WHY THIS COMPARES TWO FIXED COMMITS AND NOT "MAIN VERSUS NOW"
+ *
+ * The `CLAUDE.md` guard diffs against the merge-base, so it judges every future edit. Doing that here would
+ * refuse the ordinary act of striking a stale rule (#2083 deleted a delivery clock; #2025 rewrote a false
+ * sentence) -- a policy change nobody ruled on, made inside a split. The question this asks is narrower
+ * and has one answer forever: **did the split lose or alter a section?** Its inputs are the commit that
+ * ADDED the second rules file and that commit's parent, both immutable, so a later edit to any rules file
+ * cannot turn it red and cannot hide a loss the split itself made.
+ *
+ * ## THE UNIT IS THE SECTION, EXACTLY
+ *
+ * Every `## ` section of the parent's `agent-practices.md` must appear, byte for byte, in EXACTLY one
+ * destination that commit created -- and no destination may carry a section the parent did not have. That
+ * is three refusals with three names: DROPPED, DUPLICATED, ALTERED (which reads as one dropped and one
+ * added, both printed). The title and preamble are outside the claim: they were edited on purpose in the
+ * same commit, to say the file is no longer the only one.
+ *
+ * ## WHAT IT CANNOT SEE
+ *
+ * It says the sections moved intact; it does not say they moved to the RIGHT file. Which topic lives where
+ * is a judgement, and the directory listing test below only says the set is the one named.
+ *
+ * Skips, naming the reason, where the history is absent (the `acceptance` job's clone has no parent for
+ * the commit) -- the `ts` job runs it with `fetch-depth: 0`, as the guards above do.
+ */
+export function rulesSections(text: string): string[] {
+  return text.split(/^(?=## )/m).filter((p) => p.startsWith("## ")).map((p) => p.replace(/\s+$/, ""));
+}
+
+const headingOf = (section: string) => section.split("\n")[0];
+
+/** What the split of `agent-practices.md` produced and consumed -- read off the two commits, pinned as literals
+ *  because they are immutable (and `reported-counts.test.ts` refuses a floor standing in for a count). */
+const SPLIT_DESTINATIONS = 6;
+const SPLIT_SECTIONS = 12;
+
+/** What a split did to the sections of the file it split. Empty arrays are the passing answer. */
+export function splitVerdict(baseText: string, destinations: { rel: string; text: string }[]) {
+  const base = rulesSections(baseText);
+  const held = destinations.flatMap((d) => rulesSections(d.text).map((section) => ({ rel: d.rel, section })));
+  return {
+    examined: base.length,
+    dropped: base.filter((s) => !held.some((h) => h.section === s)).map(headingOf),
+    duplicated: base.filter((s) => held.filter((h) => h.section === s).length > 1).map(headingOf),
+    added: held.filter((h) => !base.includes(h.section)).map((h) => `${h.rel}: ${headingOf(h.section)}`),
+  };
+}
+
+test("CONTROL: a split that drops, duplicates or rewords a section is refused, and an intact one is not", () => {
+  const a = "## Alpha\n\nfirst rule\n";
+  const b = "## Beta\n\n- second rule\n  wrapped\n";
+  const base = `# Title\n\npreamble\n\n${a}\n${b}`;
+  const clean = splitVerdict(base, [{ rel: "one.md", text: `# Title\n\nedited preamble\n\n${a}` }, { rel: "two.md", text: b }]);
+  assert.deepEqual(clean, { examined: 2, dropped: [], duplicated: [], added: [] },
+    "an intact split, with an EDITED preamble, must pass -- the preamble is outside the claim");
+  assert.deepEqual(splitVerdict(base, [{ rel: "one.md", text: a }]).dropped, ["## Beta"], "a dropped section");
+  assert.deepEqual(splitVerdict(base, [{ rel: "one.md", text: a }, { rel: "two.md", text: `${a}\n${b}` }]).duplicated,
+    ["## Alpha"], "a section in two destinations");
+  const reworded = splitVerdict(base, [{ rel: "one.md", text: a }, { rel: "two.md", text: b.replace("second", "2nd") }]);
+  assert.deepEqual([reworded.dropped, reworded.added], [["## Beta"], ["two.md: ## Beta"]],
+    "a reword is a drop AND an addition, so nothing rewritten in the move can pass as moved");
+  assert.equal(splitVerdict("no sections here", []).examined, 0,
+    "a base with no sections examines nothing -- the real test below asserts a positive count");
+});
+
+test("the directory holds exactly the rules files `rules-files.ts` names -- named, never globbed", () => {
+  const onDisk = readdirSync(join(REPO_ROOT, RULES_DIR)).filter((n) => n.endsWith(".md")).map((n) => `${RULES_DIR}/${n}`);
+  assert.ok(RULES_FILES.length > 1, "the split produced more than one file, so a list of one is a regression");
+  assert.deepEqual([...onDisk].sort(), [...RULES_FILES].sort(),
+    `${RULES_DIR}/ and rules-files.ts disagree. A file on disk that is not named loads in every session with `
+    + "nobody having chosen it; a name with no file is a destination that was silently dropped. Adding or "
+    + "removing a rules file is a deliberate edit to rules-files.ts.");
+});
+
+test("the #2092 split moved every section of agent-practices.md, byte for byte, into exactly one destination", (t) => {
+  if (!originMainResolves()) { t.skip(NO_ORIGIN_MAIN); return; }
+  const git = (...args: string[]) => execFileSync("git", args,
+    { cwd: REPO_ROOT, env: sandboxGitEnv(), encoding: "utf8", maxBuffer: 1024 * 1024 * 64 });
+  // The commit that ADDED the second rules file IS the split. `--reverse` so a file later deleted and
+  // re-added still answers with the first.
+  const splitCommit = git("log", "--diff-filter=A", "--reverse", "--format=%H", "--", RULES_FILES[1]).trim().split("\n")[0];
+  if (!splitCommit) { t.skip(`no commit adding ${RULES_FILES[1]} in this history. Not run, and not a pass.`); return; }
+  let parent: string;
+  try {
+    parent = git("rev-parse", `${splitCommit}^`).trim();
+  } catch {
+    t.skip(`${splitCommit.slice(0, 8)} is in this clone but its parent is not -- shallow. Not run, and not counted as a pass.`);
+    return;
+  }
+  // The destinations are what the split commit CREATED under the rules directory -- read from that immutable
+  // tree, so renaming a rules file later leaves this proof intact. Whether the CURRENT set is the named one
+  // is the previous test's question.
+  const created = git("ls-tree", "--name-only", splitCommit, `${RULES_DIR}/`).split("\n").filter((f) => f.endsWith(".md"));
+  const texts = blobsAt([`${parent}:${RULES_DIR}/agent-practices.md`, ...created.map((f) => `${splitCommit}:${f}`)]);
+  const verdict = splitVerdict(texts[0], created.map((rel, i) => ({ rel, text: texts[i + 1] })));
+  // The population, asserted by EQUALITY against literals: both inputs are immutable commits, so the counts
+  // cannot drift, and a floor (`> 1`) would be satisfied by a split that lost half its sections.
+  assert.equal(created.length, SPLIT_DESTINATIONS, `the split commit created ${created.length} rules files`);
+  assert.equal(verdict.examined, SPLIT_SECTIONS, "the parent's agent-practices.md had a different section count");
+  assert.deepEqual({ dropped: verdict.dropped, duplicated: verdict.duplicated, added: verdict.added },
+    { dropped: [], duplicated: [], added: [] },
+    `the split at ${splitCommit.slice(0, 8)} did not move ${verdict.examined} sections intact. DROPPED = in the `
+    + "parent, in no destination; DUPLICATED = in two; ADDED = in a destination and not the parent (which is also "
+    + "what a reworded section looks like). The move is byte-identical or it is a different change.");
 });

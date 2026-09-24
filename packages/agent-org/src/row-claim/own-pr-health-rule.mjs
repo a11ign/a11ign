@@ -154,7 +154,7 @@ import { declaredRegionFiles, regionCovers } from "../region-paths.mjs";
 import { headMatches, reviewVerdict } from "../review-verdict.mjs";
 // #2126: `answer:<session>` is the org's own spelling for "somebody owes this row an answer", and
 // removing the label IS the act of answering -- so the escalation needs nothing else to remember it.
-import { ANSWER_PREFIX } from "../waiting-condition.mjs";
+import { ANSWER_PREFIX, todayIso, waitingOn } from "../waiting-condition.mjs";
 
 // NO `git` SPAWN HERE, deliberately -- every lookup in this file goes through `gh` (issue/PR/GraphQL
 // reads), which needs no `sandboxGitEnv()` scrub: that helper exists for `execFileSync("git", ...)`
@@ -189,15 +189,20 @@ import { ANSWER_PREFIX } from "../waiting-condition.mjs";
 /**
  * #2126: ONE OPEN PULL REQUEST'S REVIEW HEALTH. `reviewDecision` is GitHub's own field, which outlives the
  * head it was posted on; `dispute` is `null` unless two DIFFERENT named reviewers disagree at that head.
+ * #2254: `authorCommitsSinceReview` counts the NON-MERGE commits AUTHORED BY THE ANSWERER (the pull
+ * request's author, or a session's `claude` co-author) committed after the latest refusal, which is what
+ * tells "nobody has answered" from "answered, waiting on a re-read". Absent reads as zero.
  * @typedef {{ number: number, head: string, reviewDecision: string | null,
- *             dispute: ReviewDispute | null }} PrReviewHealth
+ *             dispute: ReviewDispute | null, authorCommitsSinceReview?: number }} PrReviewHealth
  */
 
 /**
  * @typedef {{ number: number, declaresPaths: boolean, subIssues: number,
  *             closingPr: { state: "OPEN" | "MERGED" | "CLOSED" } | undefined,
  *             deliveringPr?: DeliveringPr, openPrNumber?: number,
- *             openPrReview?: PrReviewHealth }} RowFacts
+ *             openPrReview?: PrReviewHealth,
+ *             body?: string, labels?: ({ name?: string } | string)[],
+ *             blockedBy?: { nodes?: { number?: number, state?: string }[] } }} RowFacts
  */
 
 /**
@@ -227,6 +232,32 @@ function proposedByDeclaredDelivery(delivering) {
 }
 
 /**
+ * #2241: A ROW THE GATE HAS SHELVED IS NOT ONE ITS HOLDER CAN BUILD, and B2 must not read it as one. The
+ * gate (`waitingOn`) and this rule read the SAME row and disagreed: `Not-before: 2026-09-24T01:30:00Z` on
+ * #1926 said "nothing is owed here until 01:30Z" while B2 said "you owe a commit for it", and the claim
+ * won -- a fourteen-hour machine run cost two claims and left two offline rows with no engineer.
+ *
+ * THE DISCRIMINATOR IS `waitingOn`, CALLED, NOT RESTATED, and it is what keeps B2's other teeth: a
+ * `CHANGES_REQUESTED` produces NO waiting condition, so the clause below still sees it. A future
+ * `Not-before:`, an open `blockedBy` and an owed `answer:<session>` each produce one.
+ *
+ * IT FAILS CLOSED, which is the opposite of #2226's eligibility read and for the opposite reason: there, a
+ * lookup that cannot ask must not withhold a row from the queue; here, a parse that cannot answer must not
+ * hand out a SECOND row. `waitingOn` reads `null` for a body it could not parse (a malformed timestamp
+ * fails open on purpose -- the row stays visible), for a `blockedBy` or `labels` list the lookup did not
+ * carry, and for a `Not-before:` that has PASSED; every one leaves the row in build.
+ *
+ * WHAT THIS CANNOT SEE: an `answer:<session>` naming the CLAIMING session itself is work that session can
+ * do today, exactly as a `CHANGES_REQUESTED` is, and this reads it as a wait like any other because
+ * `waitingOn` does. The row names `answer:` among its three conditions, so that is the ruling taken; a
+ * refinement that keys it on the claimant is a separate row.
+ * @param {RowFacts} row @param {number} nowMs @returns {boolean}
+ */
+function inBuildAndNotWaiting(row, nowMs) {
+  return isInBuild(row) && waitingOn(row, todayIso(new Date(nowMs)), nowMs) === null;
+}
+
+/**
  * THE VERDICT, PURE. `null` when nothing blocks -- including when the lookup could not ask, which its own
  * caller reports separately; this function only ever sees rows it was given.
  *
@@ -237,10 +268,12 @@ function proposedByDeclaredDelivery(delivering) {
  * `row-claim-own-pr-health-rule.test.ts` pins that as a known limitation rather than describing it.
  *
  * @param {readonly RowFacts[]} rows every OTHER row this session holds
+ * @param {number} [nowMs] the caller's clock, injected the way `waitingOn` injects one -- a test moves time
+ *   without a global stub, and a `Not-before:` timestamp is only in the future relative to SOME clock
  * @returns {string | null}
  */
-export function inBuildReason(rows) {
-  const inBuild = rows.find(isInBuild);
+export function inBuildReason(rows, nowMs = Date.now()) {
+  const inBuild = rows.find((row) => inBuildAndNotWaiting(row, nowMs));
   // #2126: the SECOND thing B2 caps, and it is checked SECOND on purpose -- a population that has always
   // been refused must keep the refusal it has always been given, word for word, so nothing about the new
   // clause can move an existing verdict or an existing message.
@@ -261,7 +294,8 @@ export function inBuildReason(rows) {
     // Found by worker-capture following it, which is the only way it could have been found: the message is
     // correct, the diagnosis is correct, and THE ONE PART THAT IS EXECUTABLE IS THE PART NOBODY EXECUTED.
     + `gh api repos/${REPO}/issues/${inBuild.number}/sub_issues -F sub_issue_id=<id>\` and this refusal lifts.`
-    + deliversRemedy(inBuild.number);
+    + deliversRemedy(inBuild.number)
+    + waitingRemedy(inBuild.number);
 }
 
 /**
@@ -285,6 +319,22 @@ function deliversRemedy(issueNumber) {
     + "delivery rather than claiming one.";
 }
 
+/**
+ * #2241: THE FOURTH WAY OUT, AND IT NAMES THE CLAUSE THAT FIRED. The refusal above fires because the row
+ * reads as owing a commit AND as waiting on nothing -- the second half is new, so it is said, or a reader
+ * whose row IS waiting on a machine run cannot tell which fact the guard got wrong. It names all three
+ * conditions `waitingOn` reads, and that a PASSED `Not-before:` is no longer one, because a remedy whose
+ * fine print is a secret is the #1161 shape again.
+ * @param {number} issueNumber @returns {string}
+ */
+function waitingRemedy(issueNumber) {
+  return `\n  If #${issueNumber} is genuinely WAITING on something no commit of yours can hasten -- a machine run, `
+    + "a date, another row, an answer -- declare it and this refusal lifts: a `Not-before: YYYY-MM-DDTHH:MM:SSZ` "
+    + "line still in the future, `gh issue edit " + issueNumber + " --add-blocked-by <row>` on an OPEN row, or an "
+    + "`answer:<session>` label. It reads no such condition on #" + issueNumber + " now (a `Not-before:` that "
+    + "has passed, or one that is malformed, is not one), so the row counts as work you can do today.";
+}
+
 /** GitHub's two DECIDING review states. `COMMENTED`, `DISMISSED` and `PENDING` decide nothing, and the
  * split below drops them by naming these two rather than by excluding those three -- an allowlist, so a
  * review state GitHub adds tomorrow is not read as a side of a disagreement.
@@ -303,6 +353,19 @@ const CHANGES_REQUESTED = "CHANGES_REQUESTED";
  * read `CHANGES_REQUESTED` (GitHub's own field, not a comment scan, and the one thing a bot merge cannot
  * clear); and the reviewers must NOT be in dispute at the current head, which is the escape `ceo`'s ruling
  * made non-optional rather than a hole to be closed later.
+ *
+ * #2254 -- THE FOURTH CONDITION, AND THE RULING IS TO LIFT THE CAP: an AUTHOR commit (not a merge) after the
+ * latest refusal means the author has done the one thing the refusal asks, so the pull request is now
+ * AWAITING REVIEW, which #989 says one new row may sit beside. `reviewDecision` cannot see it -- it keeps
+ * reading `CHANGES_REQUESTED` until a new review lands -- so the guard was telling an author who HAD answered
+ * that nobody had (#2165: #2240 answered at `c0c0e6df`, ready row #2176 unclaimed for the turn).
+ *
+ * WHY LIFT RATHER THAN ADD A THIRD, STILL-CAPPED STATE: a capped "answered" state would bind the session
+ * until a reviewer acted, which is the stall this row measured, only with a truer sentence. And the
+ * objection -- a trivial commit clears the cap without answering anything -- is real but cheap: this guard
+ * meters WHICH ROW A SESSION MAY CLAIM, while `main` still requires an approving review, so a trivial commit
+ * buys a second row in flight and no merge. It also corrects itself: a reviewer who re-refuses posts a
+ * verdict AFTER that commit, and the count is taken from the latest refusal, so the cap returns.
  * @param {RowFacts} row @returns {PrReviewHealth | null}
  */
 export function unansweredRefusal(row) {
@@ -310,7 +373,68 @@ export function unansweredRefusal(row) {
   if (!review) return null;
   if (review.reviewDecision !== CHANGES_REQUESTED) return null;
   if (review.dispute) return null;
+  if ((review.authorCommitsSinceReview ?? 0) > 0) return null;
   return review;
+}
+
+/** A commit the sweep or a `git pull` writes rather than an author: GitHub's own default merge headlines. */
+const MERGE_HEADLINE = /^Merge (?:branch|pull request|remote-tracking branch)\b/;
+
+/**
+ * The co-author a SESSION's commit carries: the org's attribution rule ends every commit message with a
+ * `Co-Authored-By: Claude ... <noreply@anthropic.com>` trailer, which GitHub resolves to the login `claude`.
+ * It is a second identity because an agent's commit is NOT attributed to the pull request's author login:
+ * measured on #2240 (answer `c0c0e6df` authored by `web-flow` + `claude`, PR author `a11ign-ai-workers`) and
+ * on #2288 itself (`github-actions[bot]` + `claude`). Matching the PR author's login alone would refuse the
+ * very #2165 answer this row exists to recognise.
+ */
+const SESSION_CO_AUTHOR_LOGIN = "claude";
+
+/** @typedef {{ messageHeadline?: string, committedDate?: string, authors?: { login?: string }[] }} PrCommit */
+
+/**
+ * #2254: WHETHER A COMMIT IS THE ANSWERER'S. A bot's or a maintainer's ordinary commit (`Automated
+ * formatting` by `github-actions[bot]`, a human's push) is not the author answering the refusal, so it
+ * carries neither the pull request's author login nor the session co-author and does not count. A commit
+ * with no readable `authors` proves nothing, which is the safe direction: it reads as not an answer.
+ * @param {PrCommit} commit @param {string | undefined} prAuthor @returns {boolean}
+ */
+function isAnswererCommit(commit, prAuthor) {
+  return (commit.authors ?? []).some((author) => author.login !== undefined
+    && (author.login === SESSION_CO_AUTHOR_LOGIN || author.login === prAuthor));
+}
+
+/**
+ * #2254: HOW MANY COMMITS THE AUTHOR HAS PUSHED SINCE THE LATEST REFUSAL, merges and other identities not
+ * counted.
+ *
+ * THE MERGE EXCLUSION IS THE #2107 CONTROL: the freshness sweep moves the head with `Merge branch 'main'`
+ * commits and ZERO author work, so counting them would reopen exactly what #2126 closed. `gh pr list`
+ * gives no parent list, so a merge is recognised by its headline -- a conflict-resolving merge the AUTHOR
+ * wrote is excluded too, which errs toward refusing, the safe direction.
+ *
+ * THE IDENTITY TEST IS THE SECOND CONTROL (`isAnswererCommit`): a non-merge commit from somebody else --
+ * a formatter bot, a maintainer -- is not the author answering, and must not lift the cap.
+ *
+ * EVERY UNREADABLE INPUT COUNTS ZERO: no refusal with a `submittedAt`, or a commit with no `committedDate`
+ * or no `authors`, cannot be placed on the timeline or attributed and so proves no answer. Ties are not
+ * answers either (`>`, not `>=`). `gh` returns at most the first hundred commits, so a longer pull request
+ * can under-count -- also toward refusing.
+ * @param {{ author?: { login?: string },
+ *           reviews?: { state?: string, submittedAt?: string }[],
+ *           commits?: PrCommit[] }} pr
+ * @returns {number}
+ */
+export function authorCommitsSinceRefusal(pr) {
+  const refusedAt = (pr.reviews ?? [])
+    .filter((review) => review.state === CHANGES_REQUESTED)
+    .map((review) => Date.parse(review.submittedAt ?? ""))
+    .filter((time) => !Number.isNaN(time))
+    .reduce((latest, time) => Math.max(latest, time), Number.NEGATIVE_INFINITY);
+  if (refusedAt === Number.NEGATIVE_INFINITY) return 0;
+  return (pr.commits ?? []).filter((commit) => !MERGE_HEADLINE.test(commit.messageHeadline ?? "")
+    && Date.parse(commit.committedDate ?? "") > refusedAt
+    && isAnswererCommit(commit, pr.author?.login)).length;
 }
 
 /**
@@ -331,8 +455,10 @@ function unansweredRefusalReason(rows) {
     + `\`reviewDecision\` reads ${CHANGES_REQUESTED}, so a reviewer has asked for changes and nobody has `
     + "answered. That is work needing YOUR action rather than a row waiting on a reviewer, and B2 caps work "
     + "needing action -- not open pull requests (#2126). #989 is unchanged: one pull request AWAITING "
-    + `REVIEW plus one new row is still legal.\n  Answer #${review.number} -- push the fix, or reply and `
-    + "have the verdict re-read -- before claiming another row.\n"
+    + `REVIEW plus one new row is still legal.\n  Answer #${review.number} -- push a commit of your own, and `
+    + "have the verdict re-read -- before claiming another row. A commit YOU push after the verdict lifts "
+    + "this refusal at once (#2254: answered and waiting on a re-read is awaiting review, which is legal); "
+    + "a reply with no commit does not.\n"
     + "  A BOT MERGE DOES NOT LIFT THIS, and a guard keyed on the head would have been decorative: "
     + "`dismiss_stale_reviews` is false, so `reviewDecision` outlives every automatic `Merge branch "
     + "'main'` the freshness sweep makes. Measured on #2107, whose 10:37:46Z refusal at `dfe72936` survived "
@@ -453,13 +579,15 @@ const HEAD_DISPLAY_CHARS = 8;
 export function lookupOpenPrReviewHealth({ run = gh } = {}) {
   return lookup(() => {
     const raw = run(["pr", "list", "--repo", REPO, "--state", "open", "--limit", String(OPEN_PR_LIMIT),
-      "--json", "number,headRefOid,reviewDecision,reviews"]);
+      "--json", "number,headRefOid,reviewDecision,reviews,commits,author"]);
     /** @type {{ number: number, headRefOid?: string, reviewDecision?: string | null,
      *           reviews?: { state?: string, body?: string, submittedAt?: string,
-     *                       commit?: { oid?: string } }[] }[]} */
+     *                       commit?: { oid?: string } }[],
+     *           author?: { login?: string }, commits?: PrCommit[] }[]} */
     const parsed = JSON.parse(raw);
     return parsed.map((pr) => ({ number: pr.number, head: pr.headRefOid ?? "",
-      reviewDecision: pr.reviewDecision ?? null, dispute: disputeAtHead(pr) }));
+      reviewDecision: pr.reviewDecision ?? null, dispute: disputeAtHead(pr),
+      authorCommitsSinceReview: authorCommitsSinceRefusal(pr) }));
   });
 }
 
@@ -705,11 +833,16 @@ function everyNodeOf(page) {
  *
  * @param {number} issueNumber
  * @param {{ run?: (args: string[]) => string }} [deps]
- * @returns {{ declaresPaths: boolean, declaredPaths: string[], subIssues: number } | null}
+ * @returns {{ declaresPaths: boolean, declaredPaths: string[], subIssues: number, body: string,
+ *   labels?: RowFacts["labels"], blockedBy?: RowFacts["blockedBy"] } | null}
  */
 export function lookupRowShape(issueNumber, { run = gh } = {}) {
   return lookup(() => {
-    const body = JSON.parse(run(["issue", "view", String(issueNumber), "--repo", REPO, "--json", "body"])).body;
+    // #2241: `labels` and `blockedBy` ride the SAME call, because `waitingOn` reads all three of the row's
+    // waiting conditions off one object and a second `issue view` would be a second round trip per held row.
+    const view = JSON.parse(run(["issue", "view", String(issueNumber), "--repo", REPO,
+      "--json", "body,labels,blockedBy"]));
+    const body = view.body;
     // `declaredRegionFiles` is the tree's own parser, not a second reading of the Region: #941 taught it
     // directory items, #975 root-level files, #999 fenced extensionless paths. A row whose Region it reads
     // as empty is a row naming no file -- which is what "the deliverable is not a commit" looks like.
@@ -718,7 +851,8 @@ export function lookupRowShape(issueNumber, { run = gh } = {}) {
     // label can: filing the sub-row is what creates it.
     const subs = JSON.parse(run(["api", `repos/${REPO}/issues/${issueNumber}/sub_issues`]));
     return { declaresPaths: declared.length > 0, declaredPaths: declared,
-      subIssues: Array.isArray(subs) ? subs.length : 0 };
+      subIssues: Array.isArray(subs) ? subs.length : 0,
+      body: body ?? "", labels: view.labels, blockedBy: view.blockedBy };
   });
 }
 
@@ -869,6 +1003,9 @@ function rowFactsFor(issueNumber, deps = {}) {
   if (shape === null) return null;
   /** @type {RowFacts} */
   const facts = { number: issueNumber, declaresPaths: shape.declaresPaths, subIssues: shape.subIssues,
+    // #2241: what `waitingOn` reads. An ABSENT `labels`/`blockedBy` reads as no wait, so a lookup that did
+    // not carry them leaves the row in build -- fail closed, deliberately.
+    body: shape.body, labels: shape.labels, blockedBy: shape.blockedBy,
     closingPr: closing === undefined ? undefined : { state: closing.state },
     // #2126: the NUMBER of the open pull request, kept at row level rather than inside `closingPr`, so the
     // two shapes `row-claim-own-pr-health-rule.test.ts` compares whole (`deliveringPr`) keep their exact
