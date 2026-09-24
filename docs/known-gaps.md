@@ -36,6 +36,7 @@ entry names what is missing, what it would cost, and what would tell you it is f
 - [§46](#46-a-document-identity-drops-the-query-string-so-a-site-whose-documents-differ-only-by-query-reads-as-one-document) A DOCUMENT IDENTITY DROPS THE QUERY STRING, so a site whose documents differ only by query reads as ONE document
 - [§47](#47-the-walk-alone-is-177-seconds-on-a-926-trip-page-so-no-probe-budget-can-rescue-it-and-the-report-has-to-say-what-it-did-not-walk) THE WALK ALONE IS 177 SECONDS ON A 926-TRIP PAGE, so no probe budget can rescue it and the report has to say what it did not walk
 - [§48](#48-a-reviewer-can-act-as-a11ign-bot-through-any-shell-wrapper-and-no-path-shim-can-change-that-accepted-by-ceo-2026-09-24-2402) A REVIEWER CAN ACT AS a11ign-bot THROUGH ANY SHELL WRAPPER, AND NO PATH SHIM CAN CHANGE THAT — ACCEPTED by ceo, 2026-09-24 (#2402)
+- [§49](#49-reviewer-auth-failure-is-detected-from-text-nobody-has-seen-render-and-the-refresh-race-is-unmeasured-open-by-design-2401) REVIEWER AUTH FAILURE IS DETECTED FROM TEXT NOBODY HAS SEEN RENDER, and the refresh race is UNMEASURED — OPEN, by design (#2401)
 <!-- known-gaps-index:end -->
 
 ## The order these should be done in
@@ -3221,3 +3222,35 @@ that measurement, not by taste.
 (it can post a review but not close, merge or edit, so the exposure shrinks to what that token can do), or the
 reviewer running under its own uid (so `hosts.yml` is no longer readable by every session's user). Either makes a
 wall possible, and neither is an engineering step, so no row is filed for it and nothing else reopens this. `reviewer-setup.test.ts` pins that this entry and `reviewer.md` keep saying so.
+
+## 49. REVIEWER AUTH FAILURE IS DETECTED FROM TEXT NOBODY HAS SEEN RENDER, and the refresh race is UNMEASURED — OPEN, by design (#2401)
+
+Per-PR reviewers (#2401) put N codex instances on ONE credential (`~/.codex/auth.json`), and `ceo`'s ruling was that
+the refresh reading does NOT gate the build: the access token is valid to 2026-10-03T18:47Z, and forcing a refresh
+could log out live reviewers. So the row ships a DETECTOR (`work-gate.mjs`, cause `reviewer-auth-failed`, to `ceo`)
+and treats **the first real refresh as the measurement**. What is and is not known, as of 2026-09-24:
+
+- **Signal (a), codex's own text, was OBTAINED without forcing a refresh and is NOT VERIFIED TO RENDER.** The four
+  phrases in `CODEX_AUTH_FAILURE_TEXT` are verbatim strings of the installed `codex-cli 0.156.1` binary (the
+  detector's test re-reads them from it). No live failure was available, so nothing shows that a failed login
+  puts any of them **in a pane** rather than only in a log, and a newer codex may reword them. A pane that fails
+  silently is caught by signal (b) alone, after `REVIEWER_SILENCE_MS` (30 min, **a chosen number, not a measurement**).
+- **Signal (b) can only fire for an instance that STILL OWES a verdict.** A refresh that logs out an instance which
+  had already answered is invisible until that instance is next prompted, and then it looks like signal (b) for a
+  reason a reader must not confuse with a fresh failure.
+- **"Live instances" in the refresh ledger is the REGISTRY's count** (instances this path started and has not
+  ended), not a herdr reading: one closed by hand stays counted until its pull request closes.
+- **The ledger records a failure at DETECTION, not at the refresh**, up to 30 minutes later, as its own line naming
+  the refresh it followed. "Whether any then failed" is therefore answerable only for refreshes older than that bound.
+- **The review checkout is a linked worktree under `~/reviews`, chosen on a measurement of `codex sandbox` and NOT
+  seen in a live instance.** Under the reviewer's own policy `git checkout` and `git fetch` were refused with `Read-only
+  file system` in both a shallow clone and a linked worktree (codex protects `.git`), so the tick prepares and
+  re-points the tree and the order says so. Not measured live: that an instance reviews correctly from it, and that
+  a teardown removes it on the host. A teardown that fails leaves the tree on DISK (not `/tmp`, #2163), so a leaked
+  tree costs disk until someone removes it; the failure is reported, not retried.
+- **The per-instance clean-verdict count** the role document keeps for the standing `reviewer` (`ceo` samples every
+  fifth `convinced` per instance) **has no defined meaning for an instance that sees one pull request.** Instances
+  start OFF the line until `ceo` rules how the count is kept.
+
+**What closes it:** the first natural refresh (due after 2026-10-03T18:47Z) with N instances live, read from
+`reviewer-refreshes`, beside the wake ledger. Record it here, and then choose the bound and the count from it.
