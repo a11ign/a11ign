@@ -38,11 +38,11 @@
 - **That reading is POSTED and DELIVERED (#2083):** post on **#928** (the RECORD), then deliver it with
   **`npm run prompt:session -- ceo "…"`**. **Both halves, or it is unrecorded or undelivered.**
 - **`orchestrator` is the first reader for fleet and lab questions**; answers are posted on the row.
-- **The author of a draft prompts its parity reviewer** on open and after every head-changing push:
-  `npm run prompt:session -- reviewer "…"` for odd PR numbers, `reviewer-2` for even. **`prompt:session`
-  CLEARS THE SESSION FIRST and a raw `herdr … agent prompt` does not** — use the raw call only to
-  RE-prompt the same draft. No verdict 30 minutes after it goes to `product-manager`, who re-prompts once,
-  then `ceo`.
+- **PR n's reviewer is `reviewer-<n>`, a herdr name, no roster entry (#2401):** the gate starts it.
+  The author re-prompts a live one after a push: `npm run prompt:session -- reviewer-<n> "…"`.
+  **`prompt:session` CLEARS THE SESSION FIRST and a raw `herdr … agent prompt` does not** — use the raw
+  call only to RE-prompt the same draft. No verdict in 30 min goes to `product-manager`,
+  who re-prompts once, then `ceo`.
 - **ONE CALL IS ENOUGH, AND RETRYING IS THE WRONG THING (#1966).** `prompt:session` **queues** the order
   (**exit `2` is `QUEUED`, not a failure**) and the next `work:tick` delivers it, cleared. **Do not retry
   and do not poll:** it clears its target first, so a retry landing as a session goes idle wipes the work
