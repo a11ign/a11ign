@@ -1,0 +1,5 @@
+---
+"@a11ign/agent-org": patch
+---
+
+**The board report prints the queue's flow, so a ceiling on open rows is ruled on evidence and not on a feeling (#2282).** The org argued from a filed-per-day figure with no closed-per-day beside it (107 filed on 2026-09-22 reads as a crisis until 81 closed sits next to it). `npm run board:report` gains a **Queue flow** section with three readings and NO threshold: filed and closed per UTC day for 14 days, each stating the listing's cap and printed as FLOORS when the listing is at it; ready-to-claim latency (the time from a row's latest `ready` label to the `session:` label that claimed it, median and worst over claims that began in the window, from the repository's whole label-event log with pull requests cut out, a claim with no `ready` event counted as untimeable and never as zero, and "No claims in the window" when there are none); and the age of open rows in under-2, 2-to-7 and over-7-day buckets, split ready, backlog and other so they sum to the Queue section's Open count. The section says in its own words that it sets no threshold.
