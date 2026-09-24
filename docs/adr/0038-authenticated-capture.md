@@ -204,6 +204,14 @@ build row runs it.
    NVDA's default, and that default is not recorded in the repo. The build reads it from
    `/diagnostics.screenReaderDefaults` as its first act, and the design does not depend on the answer,
    because of the second defence.
+
+   **Measured by the build (PR 4), 2026-09-24 ~13:50Z, `a11y-worker-3`, worker code `ce5ba647396883b4`:** NVDA's
+   `keyboard.speakTypedCharacters` DEFAULT is `1` (ON) and `speakTypedWords` is `0`, read from the `configSpec` the
+   worker extracts from NVDA's own `library.zip` (`found: true`). So a credential typed by KEYSTROKE would be spoken one
+   character at a time: the premise of the per-character detector is real and not hypothetical. The design's first
+   defence therefore rests entirely on the protocol's text insertion producing no key events for that echo to hear.
+   **That is still unmeasured**; it is what the Windows acceptance of PR 4 and the leak check of PR 6 measure, and what
+   the disclosed redaction count will show on real runs.
 2. **Containment, at the one place bytes leave.** Everything the CLI writes or prints passes through one
    function that replaces every occurrence of every `from-env` value, in its raw, JSON-escaped, URL-encoded
    and base64 forms, with `‹credential›`, counts the replacements, and **discloses the count** ("2

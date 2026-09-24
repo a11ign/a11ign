@@ -32,6 +32,25 @@ export interface CaptureFormState {
   fields: { field: string; within?: string; nth?: number; value?: string; choose?: string; check?: boolean }[];
 }
 
+/**
+ * A login to perform before the capture (ADR 0038). The steps are the flows file's, resolved: `goto`, `fill`, `choose`,
+ * `check`, `press`, `expect` and `capture` and nothing else (the closed vocabulary), and a `fill`'s secret is an
+ * environment-variable NAME (`fromEnv`), **never a value** — the worker reads the variable from its own environment.
+ * Typed loosely here on purpose: the worker validates the shape again on arrival, because the request reaches it over
+ * plain HTTP from anywhere, and a second copy of the schema in a type would be a second thing to keep equal to it.
+ *
+ * A worker that predates this field IGNORES it and captures the login page, so a host must require the answer's
+ * `authApplied: true` and treat its absence as a failure, never as a clean page.
+ */
+export interface CaptureAuth {
+  /** The login flow: `fromEnv` fills only, no `capture`, and it ends in an `expect`. */
+  login: ReadonlyArray<Readonly<Record<string, unknown>>>;
+  /** Steps to replay after the login, up to a capture point. Absent: the login alone. */
+  flow?: ReadonlyArray<Readonly<Record<string, unknown>>>;
+  /** How many of `flow`'s steps to replay. Absent: all of them. */
+  upTo?: number;
+}
+
 export interface CaptureRequest {
   url: string;
   /** The task the user was attempting, in their own words. */
@@ -80,6 +99,12 @@ export interface CaptureRequest {
    * means the order that has always run, so no cached capture is affected by adding this field.
    */
   probeOrder?: "focus-first";
+
+  /**
+   * Log in first (ADR 0038). Refused with `403 auth-refused-remote-worker` unless the request comes from the worker's own
+   * machine, and `reuseBrowser` is forced off for it whatever the request says: the session must not outlive the capture.
+   */
+  auth?: CaptureAuth;
 
   /** Edge stays alive between captures unless overridden per request (see `A11Y_REUSE_BROWSER`). */
   reuseBrowser?: boolean;

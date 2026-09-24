@@ -20,6 +20,8 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node packages/agent-org/src/close-rows-sweep.mjs` — close the rows every PR merged in the window declared, riding trunk.yml's push and nightly's hourly cron
 - `node packages/agent-org/src/closes-mismatch-check.mjs` — refuse when a PR's declared Closes line disagrees with what GitHub will actually close
 - `node packages/agent-org/src/control-plane-hygiene.mjs` — print every control-plane hygiene number fresh, measured by command, never typed once
+- `node packages/agent-org/src/fleet-gated-nightly.mjs` — fleet-gated-nightly -- gather the fleet-gated rows on the milestone (no model), post the
+- `node packages/agent-org/src/host-units.mjs` — compare the systemd units this repo SHIPS against the ones the agent host actually runs
 - `node packages/agent-org/src/mark-primary-checkout.mjs` — mark or query whether this checkout is the fleet-driving primary, which the hooks read
 - `node packages/agent-org/src/merge-guard.mjs` — ask whether a PR's checks actually ran and passed, never trusting mergeStateStatus alone
 - `node packages/agent-org/src/merge-queue.mjs` — refuse any route onto main other than the open-PR merge queue
@@ -29,6 +31,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node packages/agent-org/src/pr-hold.mjs` — take or release a hold on a pull request, the record merge-guard reads before treating it as free
 - `node packages/agent-org/src/pr-open.mjs` — check a PR body's Acceptance/Closes with the tree's own parser before gh pr create/edit sends it
 - `node packages/agent-org/src/prompt-session.mjs` — npm run prompt:session -- <label> "<text>"   (text may also come on stdin)
+- `node packages/agent-org/src/prune-tmp.mjs` — classify every /tmp entry this host leaks, and remove only the ones an authority calls dead
 - `node packages/agent-org/src/prune-worktrees.mjs` — remove fully-merged, clean linked worktrees, and name every other one as dirty
 - `node packages/agent-org/src/queue-stalled.mjs` — name the armed, green PRs that can never merge because they are behind and conflicting
 - `node packages/agent-org/src/queue-table.mjs` — print the pipeline's sections -- trunk, open PRs, stalled work, red checks on merged PRs,
@@ -38,6 +41,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node packages/agent-org/src/row-claim.mjs` — check, claim, or decline a tracker row by reading its labels, the record, never git history
 - `node packages/agent-org/src/row-file.mjs` — refuse to file a backlog row via `gh issue create` when its body is missing a required
 - `node packages/agent-org/src/row-reachability.mjs` — compute whether a row is actually startable from the tree, never from a label alone
+- `node packages/agent-org/src/settle-closed-rows.mjs` — settle every CLOSED row the board still shows at a live Status -- keyed on the board, never on a PR
 - `node packages/agent-org/src/stash-whose.mjs` — list every git stash entry with the branch it was made on, since git alone will not say
 - `node packages/agent-org/src/stranded-branches.mjs` — find pushed branches with no open PR, which are otherwise invisible to CI and review
 - `node packages/agent-org/src/token-audit.mjs` — token-audit -- what the org actually spent, read from the transcripts it already writes.
@@ -60,6 +64,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node packages/guards/src/mutation-check.mjs` — prove a guard actually bites: mutate a file, confirm its test fails, restore, confirm it passes
 - `node packages/guards/src/piped-exit-status-guard.mjs` — detect a piped command whose exit status was read from the wrong side of the pipe
 - `node packages/guards/src/tree-wide-guards.mjs` — every tracked *.test.ts file that DECLARES ITSELF a TREE-WIDE GUARD by importing and calling
+- `node scripts/auth-leak-check.mjs` — prove a login's credential never reaches what a run writes (ADR 0038) -- drives a real capture on THIS machine's worker with a fake credential, then searches for it. Exit 0 clean, 1 a leak, 2 could not examine.
 - `node scripts/build-packages.mjs` — run tsc --build across every package under packages/ in dependency order
 - `node scripts/changeset-untracked-check.mjs` — refuse with the RIGHT message when the tree carries an untracked changeset
 - `node scripts/check-retired-heads.mjs` — refuse a candidate whose scorer head set shrank without declaring what it retired
