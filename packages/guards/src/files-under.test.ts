@@ -107,3 +107,47 @@ test("an unreadable root THROWS rather than reporting an empty tree", () => {
   assert.throws(() => filesUnder(join(tmpdir(), "files-under-no-such-directory-2171")),
     /ENOENT/, "a missing root must fail loudly, not walk to []");
 });
+
+// A DIRECTORY THAT VANISHES BETWEEN ITS PARENT'S LISTING AND THE WALK'S DESCENT -- #2255. `skipDirectory`
+// is asked after the parent is listed and before the child is read, so removing the child from inside it
+// reproduces the race on a real filesystem with nothing mocked: the same window a concurrent test's
+// `rmSync` lands in, at the moment `f844104d3` went red.
+const vanishesWhenAsked = (root: string) => (name: string): boolean => {
+  if (name === "gone") rmSync(join(root, "gone"), { recursive: true, force: true });
+  return false;
+};
+
+function plantVanishingDirectory(root: string): void {
+  mkdirSync(join(root, "gone"));
+  mkdirSync(join(root, "kept"));
+  writeFileSync(join(root, "gone", "temp.mjs"), "");
+  writeFileSync(join(root, "kept", "a.mjs"), "");
+}
+
+test("a directory that vanishes mid-walk is skipped when the caller asks, and the rest is still found", () => {
+  withTempTree((root) => {
+    plantVanishingDirectory(root);
+
+    assert.deepEqual(
+      filesUnder(root, { skipVanishedDirectories: true, skipDirectory: vanishesWhenAsked(root) }),
+      [join(root, "kept", "a.mjs")],
+      "the vanished directory is dropped and its sibling is still walked",
+    );
+  });
+});
+
+test("the same vanishing directory still THROWS by default -- tolerance is opt-in", () => {
+  // The positive control for the test above: without it, a walk that tolerated ENOENT everywhere would
+  // pass, and `an unreadable root THROWS` would be the only thing left standing between a moved directory
+  // and a green guard.
+  withTempTree((root) => {
+    plantVanishingDirectory(root);
+
+    assert.throws(() => filesUnder(root, { skipDirectory: vanishesWhenAsked(root) }), /ENOENT/);
+  });
+});
+
+test("skipVanishedDirectories tolerates ONLY a missing directory, and never a missing root", () => {
+  assert.throws(() => filesUnder(join(tmpdir(), "files-under-no-such-directory-2255"),
+    { skipVanishedDirectories: true }), /ENOENT/, "a missing root is a caller's mistake, not a race");
+});
