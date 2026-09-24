@@ -1,0 +1,5 @@
+---
+"a11ign": patch
+---
+
+**The rule layer can log in for itself, and no flag can ask it to yet (#2359, PR 5 of 7).** axe-core loads the page in the CLI's own browser, so a login performed only in the worker's Edge would leave it scanning the sign-in page and reporting on that as the product. Given a login, the rule layer now signs in in its own browser from the same environment variables, over the same accessible-name-bound steps the worker runs, and scans the page it lands on; it never receives a session from the worker. A login that fails there ends the run with `auth-login-failed` instead of being reported as "the scan failed, continuing without it", and a rule layer that fails for any other reason on an authenticated run stays "unchecked", never clean. An authenticated run whose rule layer did not run reports no page title rather than the login page's, so the capture is not judged as reading the wrong page and re-captured. No run changes behaviour until PR 7 makes the flags reachable.

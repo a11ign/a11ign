@@ -10,19 +10,20 @@
 import { judgeBackend } from "@a11ign/judge";
 
 import { AuthError } from "./auth-faults.js";
+import type { FlowStep } from "./flows.js";
 
 /**
  * What a run sends when it needs to log in (ADR 0038, "On the wire and per capture"): the login flow's resolved
  * steps, then the flow to replay after it and how far. **The NAMES of environment variables, never a value**
  * (clause 3) — a step's `from-env` is a variable name, and the machine that drives the browser reads it. The
- * worker replays `login`, then `flow` up to `upTo`, and then the requested capture starts. Typed loosely here;
- * the worker validates it again on arrival (it is untrusted input there) and the CLI's own interpreter (PR 5)
- * narrows it to `FlowStep` from `flows.ts`.
+ * worker replays `login`, then `flow` up to `upTo`, and then the requested capture starts. The steps are `flows.ts`'s
+ * own `FlowStep`s, so the CLI's interpreter (PR 5) and the wire share one type; the worker, which cannot import it,
+ * validates the same shape again on arrival because the request is untrusted input there.
  */
 export interface AuthRequest {
-  readonly login: ReadonlyArray<Readonly<Record<string, unknown>>>;
+  readonly login: readonly FlowStep[];
   /** Steps to replay after the login, e.g. a complete process to a capture point. Absent: the login alone. */
-  readonly flow?: ReadonlyArray<Readonly<Record<string, unknown>>>;
+  readonly flow?: readonly FlowStep[];
   /** How many of `flow`'s steps to replay: the index of the `capture:` point, or the flow's length. */
   readonly upTo?: number;
 }
