@@ -2036,9 +2036,14 @@ the fall from 422 to 395 and from 41 pages to 40 carry no asserted cause (#2212,
 `sweep-compare-protocol-18-vs-21-2212.json`. The −27 in referrals is attributable by page (membership −15, pages that
 stayed −12) and not by cause.
 
-**OPEN reading, not in README (#2412 looks at it):** GLA fell 0.8037 → 0.6241 (−0.18) and Southwark 0.7665 → 0.5069
-(−0.26), further than ten days of drift explains, and nobody has opened either capture. It is a reason to look; the
-claim does not say why. The `rules:real-pages` reading of the moved Ofgem capture was made by the orchestrator
+**OPEN reading, not in README (#2412 read it, 2026-09-24):** GLA fell 0.8037 → 0.6241 (−0.18) and Southwark 0.7665 →
+0.5069 (−0.26), further than ten days of drift explains. The orchestrator opened both stored captures (#2412,
+2026-09-24T22:46Z). **Southwark's fall is a capture artefact, not a page result:** NVDA read a `cmd.exe` window, the
+transcript is `["blank","blank"]`, and the page's own DOM census matches protocol 18, so 0.5069 with 0 referred is what
+the scorer says about two blank lines. That capture was scored as one of the 49 calibration pages (#2433 is the row to
+refuse such a capture). **GLA is not attributable** between "the page changed" and "the capture's state": the whole
+difference is a ten-line consent-dialog prologue, and whether it moves the score is untested (#2434). The claim still
+does not say why the set fell. The `rules:real-pages` reading of the moved Ofgem capture was made by the orchestrator
 (#2212, 2026-09-24T13:05Z) and is NOT a recorded gate: the new url reads `["2.4.3"]` against the baseline's `["2.4.3"]`,
 unchanged by the re-key.
 
