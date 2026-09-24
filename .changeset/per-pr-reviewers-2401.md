@@ -24,4 +24,4 @@ the two standing panes are left running; closing them is `ceo`'s, after the firs
 instance's pane shows codex's own auth-failure text (read from the installed codex binary, not invented) or the
 credential's `last_refresh` moved after the instance started while it still owes a verdict past 30 minutes. Every
 `last_refresh` change is appended to `reviewer-refreshes` (beside the wake ledger) with the live-instance count, so the first
-real refresh is a recorded reading. What could not be measured without forcing a refresh is in `docs/known-gaps.md` §48.
+real refresh is a recorded reading. What could not be measured without forcing a refresh is in `docs/known-gaps.md` §49.
