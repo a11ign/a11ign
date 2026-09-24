@@ -129,7 +129,7 @@
     "corpus:container-exits": ".venv/bin/python packages/scorer/python/audit_container_exits.py",
     "changeset": "changeset",
     "changeset:status": "changeset status --since=origin/main",
-    "release:version": "changeset version && npm install --package-lock-only",
+    "release:version": "changeset version && pnpm install --lockfile-only",
     "release:gate:ci": "npm run scorer:verify && npm run release:provenance && npm run release:rehearsal-check && npm run scorer:migration && npm run gate:isolation",
     "release:gate": "npm run scorer:verify && npm run release:provenance && npm run release:rehearsal-check && npm run scorer:migration && npm run scorer:shortcuts && npm run gate:isolation && npm run corpus:distribution && npm run training:check-signals:complete && npm run rules:gate && npm run rules:coverage && npm run rules:real-pages && npm run training:evaluate-acceptance:shipped && npm run eval:gate",
     "capture:check": "tsx packages/lab/src/harnesses/capture-check.mjs",

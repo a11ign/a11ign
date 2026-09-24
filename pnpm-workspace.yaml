@@ -1,11 +1,12 @@
-# pnpm workspace beside npm's (#2297, child 1 of #57). package-lock.json STAYS: npm still installs while the
-# sibling rows move CI, the hooks and the publish path.
+# pnpm workspace (#2297, child 1 of #57). It sat beside npm's package-lock.json while the sibling rows moved CI, the
+# hooks and the publish path; #2301 moved the last of them and deleted that file, so pnpm-lock.yaml is the only lockfile.
 
 packages:
   - "packages/*"
 
 # WHY THIS IS ON: internal dependencies are pinned "0.0.0", not `workspace:*`, because npm cannot read the
-# `workspace:` protocol and `npm ci` must keep working. pnpm resolves a bare version from the REGISTRY unless
+# `workspace:` protocol and `npm ci` had to keep working while both lockfiles existed. It still is the spelling: `changeset version` writes
+# concrete ranges over it and `gate:isolation` reads them back out of the tarballs. pnpm resolves a bare version from the REGISTRY unless
 # told to link workspace packages, so with this off an install can succeed while every @a11ign/* import reads
 # a downloaded copy. Measured 2026-09-24: off, `pnpm import` stopped on a 404 for the unpublished
 # @a11ign/pdf -- a published package would have installed silently. `pnpm-workspace.test.ts` pins that every
@@ -36,10 +37,11 @@ autoInstallPeers: false
 # TWO PACKAGES ARE IMPORTED BUT DECLARED BY NO MANIFEST, and npm's hoisting has hidden it: packages/control's
 # tests import `yaml`, and packages/lab/scripts/axe-calibration.mjs imports `axe-core`. pnpm gives a package only
 # what it declares, so under pnpm both failed to resolve (found by running the whole suite under both).
-# Declaring them is the right fix and changes package-lock.json, which this row promises to leave alone (#2297
-# Done-when 5; `control` may declare nothing besides, ADR 0012). Until the row that retires the npm lockfile
-# can declare them, hoist exactly these two to the root `node_modules`, where npm already puts them: the
-# versions are the ones npm resolves, and nothing else is hoisted.
+# Declaring them is the right fix. It was refused to #2297 because it would have changed package-lock.json, which
+# that row promised to leave alone; the file is gone (#2301), so nothing but a row's scope stands between
+# this hoist and two ordinary declarations (`control` may declare nothing besides, ADR 0012, so that one
+# needs the ADR read first). Until then hoist exactly these two to the root `node_modules`, where npm put
+# them: the versions are the ones npm resolved, and nothing else is hoisted.
 publicHoistPattern:
   - yaml
   - axe-core
