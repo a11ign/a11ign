@@ -180,7 +180,7 @@ function repoPath(target, base) {
   if (GIT_DIRECTORIES.some((dir) => isInside(absolute, dir))) return unbounded("read inside the git directory");
   if (!isInside(absolute, REPO_ROOT)) return null;
   const rel = relative(REPO_ROOT, absolute);
-  // What third-party `node_modules` holds is decided by `package-lock.json`, and a change to that is a BROAD
+  // What third-party `node_modules` holds is decided by `pnpm-lock.yaml`, and a change to that is a BROAD
   // diff (`ROOT_TS_FILES`), which runs every guard before any narrowing -- so no narrowed run can differ in it.
   // `declared-walk-scope.test.ts` pins that fact rather than trusting it. A workspace link is not excluded
   // here: `realOf` above has already turned `node_modules/@a11ign/judge` into `packages/judge`.
