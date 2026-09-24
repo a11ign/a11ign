@@ -64,8 +64,8 @@ come after them, under "The design calls beyond the seven".
 ## Constraint 1: credentials never cross the worker's HTTP channel
 
 > **Credentials never cross the worker's HTTP channel, and a session is a credential.** Cookies and storage
-> state count. **Remote-worker mode REFUSES an auth request with a named error until that channel is
-> authenticated and encrypted** — it does not silently drop the login and report a page as clean.
+> state count. Remote-worker mode REFUSES an auth request with a NAMED error until that channel is authenticated
+> and encrypted. It never silently drops the login and reports a page as clean.
 
 **What crosses.** A login flow (selectors-free steps, see the primitive below) whose secrets are
 `from-env: NAME` references; for saved state, a **path** on the worker's own machine. Never a value, never a
@@ -119,9 +119,11 @@ fleet worker is Clause 2's custodianship**, so the ADR that opens the channel mu
 
 ## Constraint 2: we do not become a credential custodian
 
-> **We do not become a credential custodian.** The vendor-hosted vault is ruled OUT. It contradicts
-> SECURITY.md's "nothing leaves the machine by default", and it is the one mechanism that ships secrets to a
-> third party.
+> **We do not become a credential custodian.** A vendor-hosted vault is ruled OUT: it contradicts SECURITY.md's
+> "nothing leaves the machine by default".
+
+*Outside the quote:* the vault is also the one mechanism that would ship secrets to a third party, which is why the
+contradiction is with SECURITY.md's sentence and not only with the ruling.
 
 **What the design does with it.** The tool has no place to store a secret and no command that would write
 one. There is no `--password`, `--token`, `--cookie` or `--header` flag and no `password:` input on the
@@ -136,10 +138,13 @@ state is the user's file, on the user's machine; the tool reads it and never cop
 
 ## Constraint 3: the chosen direction, and the input surface for it
 
-> **Chosen direction: a scripted login run on the machine that drives the browser, secrets read from that
-> machine's environment** (GitHub Secrets on the throwaway runner). Form login over token injection
-> (Lighthouse's own recommendation). Saved storage state second. Attaching to a person-signed-in browser is
-> the third, for interactive use, and it is the only one that handles MFA/SSO.
+> **Chosen direction:** a scripted login run on the machine that drives the browser, secrets read from that
+> machine's environment (GitHub Secrets on the throwaway runner). Form login over token injection. Saved storage
+> state second. Attaching to a person-signed-in browser third, for interactive use, and the only one that handles
+> MFA or SSO.
+
+*Outside the quote:* the preference for form login over token injection is also Lighthouse's own recommendation;
+the source is under "Cookie or header injection" in Alternatives rejected.
 
 **The input surface, in `ceo`'s order.** At most one mechanism per run; two given is `auth-ambiguous`.
 Nothing is discovered implicitly: every path is named, as ADR 0024 decided for `--forms`.
@@ -167,9 +172,12 @@ Three notes, each a decision.
 
 ## Constraint 4: the transcript and the evidence JSON are PROVEN not to contain the credential
 
-> **A screen reader announces what is typed.** The capture transcript and the evidence JSON must be proven
-> **not to contain the credential** — a username can be echoed. That is an acceptance the design row must
-> state as a command, with a positive control.
+> **A screen reader announces what is typed.** The capture transcript and the evidence JSON must be PROVEN not to
+> contain the credential, since a username can be echoed. The ADR states this as a COMMAND, with a positive
+> control.
+
+*Outside the quote:* the row asks for an acceptance stated as a command. Read as a requirement on the design, it
+means this ADR states the command (below) and the build row runs it.
 
 **Two defences, and the proof of the second is the command.**
 
@@ -231,7 +239,7 @@ runs, and which needs no Windows machine.
 
 ## Constraint 5: authentication plus a non-local judge backend refuses by default
 
-> **Auth + a non-local judge backend refuses by default**, because SECURITY.md already says a transcript
+> **Auth combined with a non-local judge backend refuses by default**, because SECURITY.md already says a transcript
 > from behind authentication reaches the vendor under `JUDGE_BACKEND=codex|anthropic|openai`.
 
 **There is an override, and it is narrow.** A person who authenticates and chooses `anthropic` has made that
@@ -257,8 +265,11 @@ for the same reason it already exists, which is to fail before NVDA is installed
 
 ## Constraint 6: MFA, SSO and CAPTCHA are out of v1
 
-> **MFA, SSO and CAPTCHA are OUT of v1, recorded as a known gap** (`docs/known-gaps.md`), with "use a
-> dedicated test account without MFA" as the stated route (the advice BrowserStack and LambdaTest give).
+> **MFA, SSO and CAPTCHA are OUT of v1**, recorded as a known gap, with "use a dedicated test account without MFA"
+> as the stated route. (The known-gaps entry is its own row, filed after this one.)
+
+*Outside the quote:* the known gap is recorded in `docs/known-gaps.md`, and "use a dedicated test account
+without MFA" is the advice BrowserStack and LambdaTest give.
 
 **What the design does with it.** Nothing to build, and three things to make true.
 
@@ -276,10 +287,13 @@ CAPTCHA and OAuth-only flows, and none is documented as handling them unattended
 
 ## Constraint 7: `probe-forms` presses buttons, and a login makes the buttons real
 
-> **`probe-forms` presses buttons, and a login makes the buttons real.** The design row must say what an
-> authenticated run presses and how a user is told. **The SECURITY.md change lands in the SAME PR as the
-> capability.** SECURITY.md already says the tool "is aimed at pages behind an organisation's authentication"
-> while nothing in the product can log in; that sentence is a claim ahead of the product.
+> **`probe-forms` presses buttons, and a login makes the buttons real.** The ADR says what an authenticated run
+> presses and how a user is told. **The SECURITY.md change lands in the SAME PR as the capability**, and the ADR
+> states that as a requirement on the build row.
+
+*Outside the quote:* SECURITY.md already says the tool "is aimed at pages behind an organisation's authentication"
+while nothing in the product can log in; that sentence is a claim ahead of the product, and it is the sentence
+the capability's PR must change.
 
 **What an authenticated run presses.** The inventory is wider than `probeForms`, because a logged-in first
 link is as real as a logged-in button. Read from `capture-probes.mjs` and SECURITY.md's operated-controls
@@ -545,8 +559,11 @@ entry (its own filing), or the second outsider run.
 **Seven pull requests, three needing NVDA. The central figure is three working days, and the range is two to
 five.** Confidence is low, and the reasoning is stated so it can be attacked:
 
-- **Measured:** the last 40 merged pull requests opened and merged with a median of 26 minutes and a 90th
-  percentile of 76, `gh pr list --state merged --limit 40` at 2026-09-24. That is review-and-merge latency
+- **Measured:** the 40 pull requests merged from 2026-09-23T18:27:25Z to 2026-09-24T10:25:07Z (#2203 to #2311,
+  the window `gh pr list --state merged --limit 40` returned when #2311 was the newest) took a median of 24.9
+  minutes and a 90th percentile of 71.0 from `createdAt` to `mergedAt`, by linear interpolation between order
+  statistics. An earlier reading of the same command, before the newest merges, gave 26 and 76: **a number in
+  a body is a reading at a moment**, so re-derive it over a stated window. That is review-and-merge latency
   after a pull request opens, and it says nothing about authoring time.
 - **Not measured, and the largest uncertainty:** the authoring time of PR 4 and PR 6, which need NVDA's real
   behaviour under a login (the first unmeasured fact above) and a fleet worker, and the fleet's contention
