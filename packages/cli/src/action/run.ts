@@ -11,7 +11,10 @@ import { readFileSync, writeFileSync, appendFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { logLines, renderSummary, shouldFail, type FailOn, type RunResult } from "./summary.js";
+import {
+  isMultiPage, logLines, multiPageExitCode, multiPageLogLines, renderMultiSummary, renderSummary, shouldFail,
+  type FailOn, type MultiPageResult, type RunResult,
+} from "./summary.js";
 import { taskVerdictLabel } from "@a11ign/judge";
 import { announcedStateChanges } from "@a11ign/judge/rules";
 import { flagValue } from "@a11ign/worker-fleet/cli-flags";
@@ -42,6 +45,38 @@ function observedStateChanges(result: RunResult) {
   return announcedStateChanges(result.interaction?.stateChanges ?? []);
 }
 
+/** $GITHUB_STEP_SUMMARY is append-only and shared with other steps, so append rather than overwrite. */
+function writeSummary(markdown: string, summaryOut: string | undefined): void {
+  const stepSummary = process.env.GITHUB_STEP_SUMMARY;
+  if (stepSummary) appendFileSync(stepSummary, `${markdown}\n`);
+  if (summaryOut) writeFileSync(resolve(summaryOut), `${markdown}\n`, "utf8");
+  if (!stepSummary && !summaryOut) process.stdout.write(`${markdown}\n`);
+}
+
+/**
+ * A list of pages (#2272): the roll-up and every page's own report, then the exit code. The same exit contract as
+ * one page (1 = a page tripped fail-on, 2 = a page was not measured), with the trip taking precedence.
+ */
+function reportPages(multi: MultiPageResult, options: { failOn: FailOn; marker: string; summaryOut?: string }): void {
+  const { failOn, marker, summaryOut } = options;
+  try {
+    shouldFail([], failOn);
+  } catch (error) {
+    process.stderr.write(`a11ign: ${(error as Error).message}. Use never|any|blocker|serious|moderate|minor.\n`);
+    process.exit(2);
+  }
+  const label = taskVerdictLabel();
+  // The summary is written FIRST, as for one page, so the reader still gets the explanation when a page failed.
+  writeSummary(renderMultiSummary(multi, {
+    failOn, marker, taskQuestion: label.question, isTaskClaim: label.isTaskClaim,
+  }), summaryOut);
+  for (const line of multiPageLogLines(multi, failOn)) process.stderr.write(`${line}\n`);
+  const code = multiPageExitCode(multi, failOn);
+  if (code === 1) process.stderr.write(`a11ign: failing the check — a page's asserted findings met the ${failOn} threshold.\n`);
+  if (code === 2) process.stderr.write("a11ign: at least one page was not measured; that is a failed measurement, not a clean page.\n");
+  if (code !== 0) process.exit(code);
+}
+
 function main(): void {
   const arg = (name: string, fallback?: string): string | undefined => flagValue(process.argv, name) ?? fallback;
 
@@ -54,9 +89,9 @@ function main(): void {
   const failOn = (arg("fail-on", "never") as FailOn);
   const marker = arg("marker", "a11ign");
 
-  let result: RunResult;
+  let parsed: unknown;
   try {
-    result = JSON.parse(readFileSync(resolve(resultPath), "utf8")) as RunResult;
+    parsed = JSON.parse(readFileSync(resolve(resultPath), "utf8"));
   } catch (error) {
     // A capture that never produced JSON is an infrastructure failure, not a clean page. Failing loudly
     // here is the difference between "your page is fine" and "we did not manage to look at it" — the
@@ -64,6 +99,13 @@ function main(): void {
     process.stderr.write(`a11ign: could not read the run result at ${resultPath}: ${(error as Error).message}\n`);
     process.exit(2);
   }
+
+  const summaryOut = arg("summary-out");
+  if (isMultiPage(parsed)) {
+    reportPages(parsed, { failOn, marker: marker ?? "a11ign", summaryOut });
+    return;
+  }
+  const result = parsed as RunResult;
 
   if (!result?.verdict || !Array.isArray(result.verdict.findings)) {
     process.stderr.write("a11ign: the run result has no verdict — the judge did not complete, so nothing was assessed.\n");
@@ -84,13 +126,7 @@ function main(): void {
   // finding about the browser's own Zoom In / Rotate buttons.
   const unverified = result.captureVerified === false;
 
-  // $GITHUB_STEP_SUMMARY is append-only and shared with other steps, so append rather than overwrite.
-  const stepSummary = process.env.GITHUB_STEP_SUMMARY;
-  if (stepSummary) appendFileSync(stepSummary, `${markdown}\n`);
-
-  const summaryOut = arg("summary-out");
-  if (summaryOut) writeFileSync(resolve(summaryOut), `${markdown}\n`, "utf8");
-  if (!stepSummary && !summaryOut) process.stdout.write(`${markdown}\n`);
+  writeSummary(markdown, summaryOut);
 
   // The summary has already been written above, so this only decides the exit code. Writing it again here
   // appended it TWICE to $GITHUB_STEP_SUMMARY, which is append-only.
