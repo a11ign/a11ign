@@ -15,7 +15,7 @@ the machinery that merges everything else.
 | **1c** | sweep the PRs unit 1 structurally cannot see — the ones already open when it shipped | `packages/agent-org/src/auto-arm-sweep.mjs`, same workflow |
 | **1d** | close the rows a merged PR declared, because GitHub does not do it for a bot merge | `trunk.yml`'s `closeRows` job (#909; `close-rows.yml` until 2026-09-12), `packages/agent-org/src/close-rows-sweep.mjs`, `packages/agent-org/src/close-rows-for-merged-pr.mjs` |
 | **2** | run the `Acceptance:`/`Mutation:` commands out of a PR body (#353) | not built |
-| **3** | revert a push that fails `gate` on `main` | `trunk.yml`, `decideRevert` |
+| **3** | wake a fixer when a push fails `gate` on `main` -- the org fixes forward and never reverts (#2356) | `trunk.yml`'s `trunkRecheck`, `packages/agent-org/src/trunk-red.mjs`, the `trunk-red` cause in `work-gate.mjs` |
 | **4** | continuous delivery to npm `next`, and fleet self-deploy | not built |
 
 **Arming is safe by construction, and the reason is worth keeping.** `gh pr merge --auto` only ARMS; GitHub
@@ -596,8 +596,8 @@ run's existence. That is what `queue-table.mjs` does and it is why the table sai
 that PR while two hand-rolled waiters said otherwise, in opposite directions, within the same minute.
 
 **Fifth and sixth sites of this shape, and the first two that are reading tools rather than decisions.**
-`update-branch-sweep.mjs` (twice — #498/#500, then #517 for the in-flight case), `trunk-revert.mjs`
-(#582) and `queue-table.mjs` all take the newest per name now. `gh pr checks` cannot be fixed, so the
+`update-branch-sweep.mjs` (twice — #498/#500, then #517 for the in-flight case), the retired revert
+script (#582) and `queue-table.mjs` all take the newest per name now. `gh pr checks` cannot be fixed, so the
 rule is about consumption:
 
 - For a **verdict** — did this land, may it merge, is it safe to act — resolve the newest check-run per
@@ -677,7 +677,7 @@ standing in for the hold.
 
 Twice on 2026-09-09 a change reached `main` without the correction that makes it correct.
 
-- #575 gave `decideRevert` a working credential; #582 fixed it reading only `trunkGate` while its trigger
+- #575 gave the retired revert job a working credential; #582 fixed it reading only `trunkGate` while its trigger
   fires on `trunkBuildTest` too. In the wrong order, the credential arms a wrong verdict — the revert PR
   opens against an innocent merge, auto-armed and gate-green, and it merges. Caught by ordering them.
 - #593 merged the lane check; the two commits adding its generated-file exception were pushed to the
