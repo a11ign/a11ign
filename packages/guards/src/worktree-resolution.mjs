@@ -178,3 +178,34 @@ export function resolutionLine(worktree, { kind, entries, checkouts }) {
     + "That is how 7,253 passed at a head CI was failing (#2181). Replace node_modules/@a11ign with links to "
     + "this tree's packages/, keeping the third-party entries symlinked, then `npm run build`.";
 }
+
+/** The one named way past `suiteStartVerdict`'s refusal, so a deliberate run against another checkout is possible and LOUD. */
+export const OVERRIDE_ENV = "A11Y_ALLOW_FOREIGN_RESOLUTION";
+
+/** The kinds a suite must not start under: both READ a source that is not this branch's. */
+/** @type {string[]} */
+const REFUSED_KINDS = [RESOLUTION.OTHER_CHECKOUT, RESOLUTION.STALE_COPY];
+
+/**
+ * #2218: WHAT A SUITE ABOUT TO START IN `worktree` SHOULD DO. #2181 made the answer available and only to a
+ * session that asked `worktree:whose`; nobody asks it before `npm run test:all`, which is exactly when a wrong
+ * answer costs: 7,253 passed / 0 failed at a head CI was failing. The refusal belongs where the measurement
+ * starts, because a green run in the wrong tree is the direction that ships.
+ *
+ * THREE ACTIONS. `refuse` for a tree that reads another checkout or a frozen copy; `warn` when the same tree
+ * carries `OVERRIDE_ENV=1` (the run proceeds and the line still prints, so an override is never silent);
+ * `proceed` for a tree reading its own packages -- and for one with nothing linked, which is not this guard's
+ * to judge: no `node_modules` means the runner cannot start and says so itself, and refusing on top would
+ * bury that message under a wrong diagnosis.
+ *
+ * @param {string} worktree
+ * @param {{ env?: Record<string, string | undefined>, exists?: typeof existsSync, list?: typeof readdirSync, realpath?: typeof realpathSync }} [options]
+ * @returns {{ action: "refuse" | "warn" | "proceed", line: string | null }}
+ */
+export function suiteStartVerdict(worktree, { env = process.env, ...deps } = {}) {
+  const result = worktreeResolution(worktree, deps);
+  if (!REFUSED_KINDS.includes(result.kind)) return { action: "proceed", line: null };
+  const line = resolutionLine(worktree, result);
+  if (env[OVERRIDE_ENV] === "1") return { action: "warn", line: `${line} (${OVERRIDE_ENV}=1: running anyway)` };
+  return { action: "refuse", line: `${line} Set ${OVERRIDE_ENV}=1 to run here anyway, knowing what it measures.` };
+}
