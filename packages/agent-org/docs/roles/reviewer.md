@@ -23,8 +23,19 @@ So:
   ```bash
   git -C <dir> fetch origin
   git -C <dir> worktree add --detach /private/tmp/rv-<PR> origin/<head-branch>
-  ln -sfn <dir>/node_modules /private/tmp/rv-<PR>/node_modules
   ln -sfn <dir>/.venv /private/tmp/rv-<PR>/.venv
+  # A HYBRID node_modules, never a whole-tree symlink of it (#2378): that makes every
+  # `@a11ign/*` resolve to the PRIMARY's source, and `assert-glob-not-empty --run` REFUSES that tree
+  # (#2218), so the PR's Acceptance dies before its first test. Third-party entries link to the primary;
+  # `@a11ign/*` link to THIS tree's `packages/`.
+  mkdir -p /private/tmp/rv-<PR>/node_modules/@a11ign
+  for e in <dir>/node_modules/* <dir>/node_modules/.bin; do
+    [ "$(basename "$e")" = "@a11ign" ] || ln -sfn "$e" "/private/tmp/rv-<PR>/node_modules/$(basename "$e")"
+  done
+  for p in /private/tmp/rv-<PR>/packages/*/; do
+    ln -sfn "${p%/}" "/private/tmp/rv-<PR>/node_modules/@a11ign/$(basename "$p")"
+  done
+  npm --prefix /private/tmp/rv-<PR> run build
   # ... review, running every command with `-C /private/tmp/rv-<PR>` or from inside it ...
   git -C <dir> worktree remove --force /private/tmp/rv-<PR>
   ```
