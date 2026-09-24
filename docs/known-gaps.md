@@ -35,6 +35,7 @@ entry names what is missing, what it would cost, and what would tell you it is f
 - [§45](#45-focusevents-is-not-deterministic-and-nothing-compared-it-until-the-day-before-this-was-found) focusEvents IS NOT DETERMINISTIC, and nothing compared it until the day before this was found
 - [§46](#46-a-document-identity-drops-the-query-string-so-a-site-whose-documents-differ-only-by-query-reads-as-one-document) A DOCUMENT IDENTITY DROPS THE QUERY STRING, so a site whose documents differ only by query reads as ONE document
 - [§47](#47-the-walk-alone-is-177-seconds-on-a-926-trip-page-so-no-probe-budget-can-rescue-it-and-the-report-has-to-say-what-it-did-not-walk) THE WALK ALONE IS 177 SECONDS ON A 926-TRIP PAGE, so no probe budget can rescue it and the report has to say what it did not walk
+- [§48](#48-a-reviewer-can-act-as-a11ign-bot-through-any-shell-wrapper-and-no-path-shim-can-change-that-accepted-by-ceo-2026-09-24-2402) A REVIEWER CAN ACT AS a11ign-bot THROUGH ANY SHELL WRAPPER, AND NO PATH SHIM CAN CHANGE THAT — ACCEPTED by ceo, 2026-09-24 (#2402)
 <!-- known-gaps-index:end -->
 
 ## The order these should be done in
@@ -3169,3 +3170,54 @@ the board.
 **Three definitions remain three definitions** — `domCensus.formField` counts DOM elements, `structureCensus.formControl` counts AX nodes in `FORM_CONTROL_ROLES` (excluding `link`, `menuitem`, `option`, `tab`), and `sweep.found` counts distinct announcements — but the role set cannot be settled before the moment is. A wider bucket measured at load, compared against a sweep that ran five minutes later on content it partly revealed itself, is a corrected number about the wrong instant.
 
 **The lean this section carried is retracted, by the session that wrote it.** It read: *"At 926/265 the sweep is doing 3.5 trips per control, which is what every sweep type runs at — so it leans toward the page being real and the deadline being too small for it."* Trips per found control cannot decide that question, for two reasons that were each verified in the code before the lean was withdrawn. **It measures the other failure mode:** `collectPhrase` dedupes on `dedupeKey(phrase)` (`capture-probes.mjs:1155-1158`), so `found` is distinct announcements — one control announced under two distinct keys grows trips and `found` together and leaves the ratio flat, while an element revisited with an identical announcement moves it. The ratio sees walk efficiency and is blind to over-counting. **And the uniformity it rested on is the instrument:** `sweepInDirection` does `trips.count += 2` per step (`capture-probes.mjs:1260`), so `trips/found ≥ 2 × steps/found` by construction and every type inherits that floor; on this very capture the four sweeps that ran spread 1.9× — heading 2.25, landmark 4.33, formField 3.49, graphic 2.94 — with `formField` mid-range. *"What every sweep type runs at"* was a uniform answer read across a varied set, which is this repo's own recorded shape for a broken checker.
+
+## 48. A REVIEWER CAN ACT AS `a11ign-bot` THROUGH ANY SHELL WRAPPER, AND NO PATH SHIM CAN CHANGE THAT — ACCEPTED by `ceo`, 2026-09-24 (#2402)
+
+**The reviewer's `gh api` rule is advice, not a wall, and the hole is wider than #2325 first measured.** Re-read
+2026-09-24 at `a7a91408a` on the agent host, `codex-cli 0.156.1`, against `~/.codex/rules/default.rules`
+(`prefix_rule(pattern=["gh","api"], decision="forbidden")`, which matches the program name only):
+
+```
+$ codex execpolicy check --rules ~/.codex/rules/default.rules -- gh api user
+{"matchedRules":[{"prefixRuleMatch":{"matchedPrefix":["gh","api"],"decision":"forbidden", ...}}],"decision":"forbidden"}
+$ ... -- zsh -lc 'x=$(gh api user --jq .login); echo $x'     -> {"matchedRules":[]}   (the row's probe)
+$ ... -- zsh -lc 'gh api user'                              -> {"matchedRules":[]}   (no substitution needed)
+$ ... -- /usr/bin/gh api user                               -> {"matchedRules":[]}
+$ ... -- env gh api user                                    -> {"matchedRules":[]}
+$ ... -- curl -s https://api.github.com/user                -> {"matchedRules":[]}
+```
+
+**And it runs, in the reviewer's own sandbox settings** (`codex sandbox` with `workspace-write` and
+`network_access=true`, the two lines `~/.codex/config.toml` carries; the reviewer's `GH_CONFIG_DIR` is
+`/home/agent/reviewer/gh`, and the process is uid `agent`, the same user as every other session here):
+
+```
+$ zsh -lc 'GH_CONFIG_DIR=/home/agent/reviewer/gh /usr/bin/gh api user --jq .login'
+a11ign-bot
+$ zsh -lc 'tok=$(awk "/oauth_token/{print \$2; exit}" /home/agent/reviewer/gh/hosts.yml); curl -s -H "Authorization: token $tok" https://api.github.com/user | grep "\"login\""'
+  "login": "a11ign-bot",
+```
+
+**Why the row's first option (a `gh` wrapper earlier on PATH, the shape of `packages/agent-org/host/gh`) was
+not built: it is refused by the second probe above, not by argument.** A shim is one program on the path the
+reviewer's shell happens to search. The token sits in `hosts.yml`, readable by the reviewer's own uid, so
+`/usr/bin/gh` by absolute path and `curl` with the token both go around any shim and any execpolicy prefix
+rule. **A wall here needs the credential or the uid to differ, not the PATH.** Neither is a repository change:
+a fine-grained token scoped to pull-request reviews is issued by the account's owner (the chairman), and
+running the reviewer as another OS user changes what the host installs. **Removing `/usr/bin/gh` is not it
+either:** `pr-review-verdict` calls `gh api` itself (`pr-review-verdict.sh`), and `curl` is still there.
+
+**What is accepted, and what it does not add.** A reviewer can do whatever the `a11ign-bot` account can do
+(comment, close, edit labels, and the approval that `main` requires), through any shell form. That was already
+true of each reviewer before #2325: **N per-PR instances add processes, not power.** The rules still stop the
+accidental use, which is the case they were written for, and the plain form stays forbidden.
+
+**Who accepted it: `ceo`, on the chairman's word (the ruling on #2401), 2026-09-24.** `ceo` read this section at the
+PR head on #2402 and confirmed the transcripts hold: the compound form, `/usr/bin/gh`, `env gh` and `curl` each match
+no rule, and the reviewer's own sandbox settings print `a11ign-bot`. Removing `gh` and a PATH shim were refused by
+that measurement, not by taste.
+
+**The check that would change the decision:** the chairman issuing the reviewer a token scoped to review-posting
+(it can post a review but not close, merge or edit, so the exposure shrinks to what that token can do), or the
+reviewer running under its own uid (so `hosts.yml` is no longer readable by every session's user). Either makes a
+wall possible, and neither is an engineering step, so no row is filed for it and nothing else reopens this. `reviewer-setup.test.ts` pins that this entry and `reviewer.md` keep saying so.

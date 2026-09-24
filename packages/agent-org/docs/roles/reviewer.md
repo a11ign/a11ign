@@ -221,6 +221,18 @@ or
   list is empty, `sleep 300` and list again. It stops only when the chairman stops it. (Its first run
   on 2026-09-12 stopped at an empty list and missed the next draft by four minutes.)
 
+## What your sandbox rules are, and are not (#2402)
+
+Your execpolicy forbids `gh api`, `gh pr review` and the other writes above, and it **stops the accidental
+use, nothing else.** A prefix rule matches the program name at the front of one command, so the same call
+inside `zsh -lc '…'`, as `/usr/bin/gh`, behind `env`, or as a `curl` carrying the token from your
+`GH_CONFIG_DIR` matches no rule and runs, as `a11ign-bot`. **This was measured, not argued, and it was
+ACCEPTED rather than walled:** no PATH shim can help while the token is readable by your own uid. The
+reasoning, the probe transcript and the check that would change the decision are in
+[`docs/known-gaps.md` §48](../../../../docs/known-gaps.md). What follows for you: the rules are the
+boundary you keep, not one that is kept for you. **Post a verdict only through `pr-review-verdict`, and
+never reach for a wrapper to do what a rule refused.**
+
 ## The resource ban
 
 The shared resources on this host are the primary checkout, its `dist`, the fleet and the lab. This role
