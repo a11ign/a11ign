@@ -86,9 +86,10 @@ the direction where being wrong costs more.
 
 **Five spare engineer roles, `worker-4` to `worker-8` (#2279, #2323), are in `sessions.json`'s `live` and NOT in the
 table above, on purpose.** A table row is a role with a brief file this check reads for its name, reporter and
-lane, and a spare has none (`brief: null`, as `worker-tooling`'s is): it is an ADDRESS for an instance the spawn
-pilot (`wake.mjs`, #1952) starts when an order is undeliverable and every other engineer role holds a process,
-so it has no standing session and nothing to brief; the tick ENDS the instance when the row it claimed closes
+lane, and a spare has none of its own: its `brief` is the ONE engineer brief, [`engineer.md`](./engineer.md), as
+`worker-tooling`'s is (#2406; `addressed()` in `wake.mjs` tells every engineer role to read it, and no other). A spare is an
+ADDRESS for an instance the spawn pilot (`wake.mjs`, #1952) starts when an order is undeliverable and every other
+engineer role holds a process, so it has no standing session and no lane of its own; the tick ENDS the instance when the row it claimed closes
 (#2323, `sessions.json`'s `spare` mark). It answers to the engineer rules and to `product-manager`
 like the standing three. The count is `ceo`'s ceiling on the pilot, not a claim about capacity.
 
