@@ -104,3 +104,35 @@ navigating to a fieldless confirmation (the only thing that would make asked-and
 `postSubmitFields`, and also the 4.1.3 success-message case the corpus lacked); and retiring
 `provision.yml` from fleet use in favour of the Ansible `provision-role.yml`, since every measured
 divergence between them favoured the role.
+
+## v19 -> v20 (opened 2026-09-24, #2188)
+
+**`generic_heading_present` now asks WCAG 2.4.6's question.** It tested a heading's STRING against a
+hand-written word list; the criterion tests a heading against the content it introduces, and on the
+held-out set the two gave opposite answers. `acceptance-b3-icon-help` (whose only heading is "Help", above a
+button named "Open help") scored `2.4.6:regex` 0.980 and 0.870 — four false positives — while
+`b3-heading-recycling` and `b3-heading-taxi`, whose vague headings "Info" and "General" were not on the list,
+scored 0.086 and 0.048 against a cut of 0.605, and both declared pairs ranked the conformant page ABOVE the
+vague one. No threshold classifies all three, so the feature changed rather than the cut.
+
+The ruling (`product-manager`, 2026-09-23, read from WCAG 2.4.6, its Understanding page and ACT rule b49b2e):
+declaring a co-occurring 2.4.6 failure on `icon-help` is refused because "a word, or even a single
+character, may suffice" and "Help" above help content is descriptive; de-scoping the pair is refused because
+it is an unintended NEGATIVE CONTROL that the model fails, and removing it would improve the number without
+improving the model. What is left is a feature that relates the heading to what it introduces.
+
+It now fires for a ONE-WORD heading at level 2 or deeper whose section never uses that word; the word list
+survives only as a veto on that relation (a repeated "section" still says nothing), and "help" came off it.
+Each restriction was measured: an h1 names the page and what follows it is chrome (3 conformant pages read
+one-word "Archive" as vague), a phrase carries its own topic, and a heading with nothing under it has
+nothing to be unrelated to.
+
+**No recapture.** No case definition changed and features are computed Python-side at train and score time,
+so the close is a retrain over the exports already on the lab and a `job=acceptance` reading over the same
+stored captures.
+
+Measured before opening, as the FEATURE's reading rather than a head score: acceptance 16 of 16 positives and
+0 of 420 negatives (was 14, with 2 false positives); training export 211 of 221 positives with 4 false
+positives (was 211, with 0). The four are one conformant family (`headings-none-guide`, the one-word h2
+"Afterwards"), a cost the criterion leaves to a person and the reason 2.4.6 is `cantTell` and never asserted.
+The ten misses on both readings are the `label-vague-*` cases: labels, not headings, which nothing reads.

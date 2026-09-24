@@ -117,7 +117,10 @@ def test_the_schema_version_moved_with_the_meaning():
     # v15: `vague_link_present` is no longer a model input at all. It answers 2.4.9 (text alone, AAA, not
     # reported here) and the 2.4.4 head used it because it was the cheapest separator -- firing on 22 of the
     # 44 conformant pages that carry "Details" inside a peer index.
-    assert F.FEATURE_SCHEMA_VERSION == "screenreader-structured-v19"
+    # v20 (#2188): `generic_heading_present` asks whether a one-word section heading RELATES to its section,
+    # which is WCAG 2.4.6's question, instead of whether the heading is on a word list. The values change on
+    # existing records, so it is a meaning change; see `unrelated_section_heading_present`.
+    assert F.FEATURE_SCHEMA_VERSION == "screenreader-structured-v20"
 
 
 def test_no_landmark_feature_survives_in_the_vector():

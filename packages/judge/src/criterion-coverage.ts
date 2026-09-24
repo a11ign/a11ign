@@ -345,6 +345,29 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
     // labels" to exist at all — W3C is explicit, and points at 3.3.2 for whether a label is present.
     // A rule detecting ABSENCE would fire on conformant pages, which is the shape 2.4.1 was nearly
     // shipped with.
+    //
+    // THE FEATURE'S QUESTION IS NOT THE CRITERION'S (#2188, `product-manager`'s ruling, read from the
+    // sources on 2026-09-23). `generic_heading_present` used to test a heading's STRING against a
+    // hand-written word list; 2.4.6 tests the heading against THE CONTENT IT LABELS, and on the held-out
+    // set the two gave opposite answers -- "Help" above help content fired (four false positives),
+    // "Info" and "General" above unrelated content did not (raw 0.086 and 0.048 against a cut of 0.605),
+    // so no threshold could rank the pairs right. It now asks the criterion's own question: is a one-word
+    // section heading one its section never uses (`unrelated_section_heading_present`)? The word list
+    // survives only as a veto on that relation.
+    //   - The SC is one sentence with no exception clause: "Headings and labels describe topic or
+    //     purpose." https://www.w3.org/TR/WCAG22/
+    //   - Understanding: "A word, or even a single character, may suffice if it provides an appropriate
+    //     cue to finding and navigating content." So brevity is never the failure, and "Help" above help
+    //     content conforms. https://www.w3.org/WAI/WCAG22/Understanding/headings-and-labels.html
+    //   - ACT b49b2e "Heading is descriptive": each target "describes the topic or purpose of the first
+    //     perceivable content after the test target". `Weather` fails and `Opening hours` passes above the
+    //     SAME content; its Inapplicable example is "There is no heading". "Descriptive" has no normative
+    //     definition anywhere in WCAG 2.2, so it is a judgement criterion and this stays on the TRIAGE
+    //     side of ADR 0021: `2.4.6:regex` is not an asserting subtype, every finding is `cantTell`, and
+    //     nothing here may fire on a page with no heading. https://www.w3.org/WAI/standards-guidelines/act/rules/b49b2e/proposed/
+    // WHAT IT STILL GETS WRONG, measured: a conformant one-word h2 over a paragraph that never repeats it
+    // ("Afterwards", 4 records of one training family) reads as vague. That is the judgement the criterion
+    // leaves to a person.
     status: "assessed", channels: ["headings", "transcript"],
     note: "Vague headings, learned. Deliberately contextual — whether 'Welcome' is vague depends on the "
       + "page, so this head is document-pooled. ONE of the criterion's two halves: it reads 'Headings and "
