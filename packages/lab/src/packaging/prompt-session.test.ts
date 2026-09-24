@@ -1,3 +1,4 @@
+// no-token: clearContext -- every herdr call is an injected fake `run`; nothing here reaches gh
 // THE CLEAR THAT THE DOCUMENTED PATH SKIPPED.
 //
 // `wake.mjs` clears a session before every order the gate delivers -- 690k -> 37k input tokens on a real
