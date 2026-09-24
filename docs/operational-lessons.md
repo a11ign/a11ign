@@ -2319,7 +2319,7 @@ which is a hole in the review requirement (`main-review-requirement.md`); a red 
 that touch the break because the queue tests each merge result; and `trunkGate` keeps refusing a merge that
 silently undoes work. **The fix goes first by its ORDER**, not by the queue. **Jumping the fix PR past the merge
 queue is not built:** `EnqueuePullRequestInput.jump` exists (schema read 2026-09-24), but arming with it is a
-write only a live queue can verify, and a misfire costs more than the wait it saves. It is its own row.
+write only a live queue can verify, and a misfire costs more than the wait it saves. It is its own row, #2391.
 
 **Nothing opens a `revert/` branch:** `trunk-revert.test.ts` walks every workflow and fails on `git revert`, a
 `revert/` branch, a revert pull request, or a name of the deleted script -- with a positive control that the
