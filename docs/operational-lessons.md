@@ -2163,3 +2163,56 @@ a moment, so re-derive before quoting. README's claim block carries the current 
 <!-- #2217: CLAUDE.md's subtitle, moved here; its H1 already names the file and the repo. -->
 
 Guidance for Claude Code (and humans) working in this repo.
+
+
+## One topic per file: the rules directory was one B4 unit (#2092)
+
+`.claude/rules/agent-practices.md` was the whole Region of every org-practice row, and B4 admits one open
+pull request to a path at a time. Re-derived 2026-09-24 at `c7ec09dbf`, before the split:
+
+- **`#2025` was refused THREE times in 10h36m** by three pull requests about nothing it touched: `#2009`
+  (22:43Z, the `prompt:session` queue), `#2045` (23:38Z, the approving review on `main`) and `#2077`
+  (09:19Z, `rm` through a variable). `#1967` took the same `#2009` refusal at 22:43Z, and `#2076` the `#2077`
+  one at 10:04Z. Five refusals in 12 hours, every one a row that never shared a *sentence* with its blocker.
+- **25 pull requests merged to it between 2026-09-11 and 2026-09-24, twelve of them on the last three calendar days** (`git log
+  --first-parent origin/main --since=2026-09-09 -- .claude/rules/agent-practices.md`). The queue behind it had
+  emptied by the time this was measured (`#2025`, `#2076`, `#2083` closed) and **three more rows named the
+  file in their Region** (`#2201`, `#2206`, `#2209`) -- so the emptiness was a lull, not a cure.
+- **Shrinking it did not end it.** `#2217` took it from 21,158 B to 14,700 B and two more pull requests
+  (`#2253`, `#2257`) still merged to it the next morning: contention is per PATH, and a smaller file is
+  still one path.
+
+**The remedy is the one `#1240` proved on `CLAUDE.md`: split by topic, byte-identical, destinations NAMED.**
+Context cost is unchanged -- the directory loads -- and `prefix-budget.test.ts` still budgets the whole set
+at `ceo`'s 20,000 B. What changed is that a row about the API budget and a row about `rm` no longer share a
+path. **The unit is the section, and the topic is the unit of co-change** (which sections a recent row
+edited together decided the grouping, not their length):
+
+| file | sections |
+|---|---|
+| `agent-practices.md` | the entry point: Model routing, Context, Web research |
+| `org-routing-and-timers.md` | Timers and state, `lane:ceo`, Routing |
+| `waiting-conditions.md` | A waiting condition is DATA |
+| `gh-api-budget.md` | The API budget |
+| `main-review-requirement.md` | `main` REQUIRES an approving review; A review OUTLIVES the head |
+| `guards-and-assertions.md` | An approval prompt a human learns to click through; Assertions |
+
+**`Timers and state` and `Routing` share a file on purpose.** `content-preservation.test.ts` refuses a
+wall-clock minute in the rules because the file itself says *no session holds a standing cron* -- a
+contradiction WITHIN one document. Split those two apart and the anchor would have to be copied into the
+clause's file, or the guard would become an outside opinion about scheduling.
+
+**The costs, as they landed.** (1) Line references go stale: none are committed under `docs/`, `packages/`
+or `.github/` as `agent-practices.md:NN`, but open rows carry some (`#2230` cites `:306`, a line that no
+longer exists in a 196-line file), and every comment in `work-gate.mjs` saying "`agent-practices.md` says"
+now names the entry point rather than the file that says it. Neither was rewritten: they are prose about
+where a rule lives, not a reader of it. (2) Every test that read the file now reads
+`readLoadedRules()` from `rules-files.ts`, which is the one place the set is named. (3) A row whose Region
+still names `agent-practices.md` for a moved section will find its paragraph gone: **look the section up in
+the table above, and re-declare the Region.**
+
+**What proves the move.** `content-preservation.test.ts` compares the commit that ADDED
+`org-routing-and-timers.md` with its parent: every `## ` section of the old file is byte-identical in exactly
+one destination, none is duplicated, none is added -- and a reworded section reads as one dropped and one
+added. It compares two immutable commits, not "main versus now", so striking a stale rule later is not
+refused by it. A separate test holds the directory to the list `rules-files.ts` names, in both directions.
