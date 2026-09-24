@@ -129,9 +129,9 @@ test("what counts as remote is decided from the address, and only loopback is lo
     "http://127.1:8765", "http://2130706433:8765", "http://[::1]:8765", "http://[::ffff:127.0.0.1]:8765",
   ]) assert.equal(isRemoteWorker(local), false, local);
   for (const remote of [
-    "http://192.0.2.10:8765", "http://10.0.0.5:8765", "http://worker.example.test:8765",
+    "http://192.0.2.10:8765", "http://198.51.100.7:8765", "http://worker.example.test:8765",
     "http://localhost.evil.test:8765", "http://127.0.0.1.evil.test:8765", "http://0.0.0.0:8765", "http://[::]:8765",
-    "http://[::ffff:10.0.0.5]:8765", "not a url", "", null, undefined,
+    "http://[::ffff:198.51.100.7]:8765", "not a url", "", null, undefined,
   ]) assert.equal(isRemoteWorker(remote), true, String(remote));
 });
 
