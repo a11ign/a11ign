@@ -2,6 +2,7 @@
   "_owner": "ceo",
   "_why": "ceo's ruling on #1453 (2026-09-13): the one file that says which sessions are live. packages/agent-org/src/arm-pr.mjs reads it and types no session list; a label is refused when its session is absent from `live`, and `retired` only chooses the sentence the refusal uses. The repository's session:* labels are not the source: four of them are retired.",
   "_rolesNotProcesses": "#1951: a `live` entry is a ROLE, and `session:<name>` is a ROUTING ADDRESS -- never a process handle. Every entry used to carry `workspace: { herdr: \"w6\", primary: \"...\" }`, a tmux pane id; six of six did, NOTHING in the tree ever read one, and the roster therefore lied the moment a pane moved. The runtime registry already exists and is herdr itself: `wake.mjs`'s `readAgents` asks `herdr --session org workspace list` and `route` matches a workspace by its LABEL, which is the name below. So the pane binding was dropped rather than moved -- there was no second reader to move it for. Add no per-instance field here: `.claude/rules/agent-practices.md` already ruled the direction for the sibling label, `answer:<session>` is \"one label per session, never one per instance\". `started` stays because it is a ROLE fact (when this role joined the roster -- worker-tooling's 19:13Z is the hour the third engineer existed), not a process one.",
+  "_spareEngineers": "#2279 (ceo, 2026-09-24): `worker-4` and `worker-5` are SPARE engineer roles -- addresses with NO standing process, so `wake.mjs`'s spawn pilot (#1952) has an absent role to start into. It could not fire before: all three engineer roles are permanently occupied and only an ABSENT role is spawnable. They are separate addresses rather than two processes under `worker-capture` because B2 caps one row in build per name. THE BOUND IS THE ORDER, NOT THIS LIST: a spawn needs a `ready-row-unclaimed` order `route` could not place, one per tick. Two is a ceiling ceo chose for the pilot's blast radius, not a claim about capacity; raising it is a one-line edit here that is ceo's. `started` on a spare is when the ROLE joined the roster, never when a process first ran -- the retirement clock in #1950 starts at the first spawn.",
   "live": [
     {
       "name": "ceo",
@@ -38,6 +39,18 @@
       "role": "engineer",
       "brief": null,
       "started": "2026-09-13T19:13:15Z"
+    },
+    {
+      "name": "worker-4",
+      "role": "engineer",
+      "brief": null,
+      "started": "2026-09-24T09:42:00Z"
+    },
+    {
+      "name": "worker-5",
+      "role": "engineer",
+      "brief": null,
+      "started": "2026-09-24T09:42:00Z"
     }
   ],
   "retired": [

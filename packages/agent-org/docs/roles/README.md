@@ -84,6 +84,13 @@ the direction where being wrong costs more.
 | Worker (retired #913; own file not yet swept) | `worker-contracts` | [`worker-contracts.md`](./worker-contracts.md) | — |
 | Worker | `worker-judge` | [`worker-judge.md`](./worker-judge.md) | `product-manager` |
 
+**Two spare engineer roles, `worker-4` and `worker-5` (#2279), are in `sessions.json`'s `live` and NOT in the
+table above, on purpose.** A table row is a role with a brief file this check reads for its name, reporter and
+lane, and a spare has none (`brief: null`, as `worker-tooling`'s is): it is an ADDRESS for an instance the spawn
+pilot (`wake.mjs`, #1952) starts when an order is undeliverable and every other engineer role holds a process,
+so it has no standing session and nothing to brief. It answers to the engineer rules and to `product-manager`
+like the standing three. The count is `ceo`'s ceiling on the pilot, not a claim about capacity.
+
 **The pipeline-owner role retired by #913 kept its file named `worker-loop-orchestrator.md`, never
 `<agent-name>.md`** — the file predates this page and describes the ROLE (worker-loop orchestration)
 rather than the agent that once filled it, and it stays at that path deliberately: renaming it would
