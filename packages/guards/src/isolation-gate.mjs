@@ -21,9 +21,26 @@
 // runs the package's own smoke test there. Continuous Delivery's smoke-test-the-deployed-artefact
 // discipline, applied to a tarball.
 //
+// ## Two package managers, on purpose (#2301)
+//
+// THE PACK HALF IS pnpm's AND THE CONSUMER HALF IS npm's. The release publishes with `pnpm publish`
+// (changesets picks the tool from the workspace), so what a consumer receives is what `pnpm pack` makes:
+// packing with anything else would check a tarball nobody publishes. But the person who runs
+// `npm install a11ign` is not a pnpm user by assumption, so the tarballs are installed with NPM, into a
+// directory that is not a workspace. A gate that installed with pnpm would prove the wrong thing: pnpm's
+// stricter resolution is the point of packing with it, and the reason the install must not use it.
+//
+// **A THIRD CHECK LIVES BETWEEN THE TWO, and it exists because npm cannot be trusted to notice.** Every
+// internal dependency in a packed `package.json` must carry a real range that the sibling being packed
+// alongside actually SATISFIES, read out of the tarball and not out of the source. A `workspace:*` left in
+// a tarball installs for nobody, and npm does say so. A range the sibling does NOT satisfy is worse: npm
+// resolves it from the REGISTRY, silently, and a consumer of the real release would run a different copy
+// of `@a11ign/evidence` than the one this gate just tested (`packedRangeProblems`).
+//
 // ## One trap, learned the hard way
 //
-// **`npm pack` includes untracked files.** A tarball built on a machine that happens to hold a missing file
+// **A pack includes untracked files** (`npm pack` always did; `pnpm pack` is checked for it in
+// `isolation-gate-refuses.test.ts`). A tarball built on a machine that happens to hold a missing file
 // contains it, which is exactly how `scripts/score-screenreader-model.py` — the default judge backend —
 // went missing from the repo for the project's whole life while every local run succeeded.
 // `packedButUntracked` below now catches that class: a packed file git neither tracks nor ignores exists
@@ -43,13 +60,13 @@ import { sandboxGitEnv } from "./git-env.mjs";
 import { existsSync, mkdtempSync, copyFileSync, readFileSync, rmSync, readdirSync, realpathSync }
   from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve, basename } from "node:path";
+import { join, resolve, basename, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 // RELATIVE, for `ci-changed.mjs`'s documented reason: this file is in that script's import graph, and
 // `ci.yml`'s `changed` job runs no `npm ci` — it decides whether anything else installs at all. A package
 // specifier here dies before the workflow starts.
 import { refuseUnknownFlags } from "../../worker-fleet/src/cli-flags.mjs";
-import { npmCliInvocation } from "../../../scripts/npm-cli-executable.mjs";
+import { npmCliInvocation, pnpmCliInvocation } from "../../../scripts/npm-cli-executable.mjs";
 
 export const SMOKE = "isolation-smoke.mjs";
 
@@ -76,6 +93,133 @@ function run(command, args, cwd, env) {
 function runNpm(args, cwd, env) {
   const npm = npmCliInvocation("npm", args);
   return run(npm.command, npm.args, cwd, env);
+}
+
+/**
+ * `pnpm <args>`, the same way and for the same reason -- and the ONE place this gate packs from (#2301).
+ * @param {string[]} args
+ * @param {string} cwd
+ * @param {Record<string, string | undefined>} [env]
+ */
+function runPnpm(args, cwd, env) {
+  const pnpm = pnpmCliInvocation(args);
+  return run(pnpm.command, pnpm.args, cwd, env);
+}
+
+/**
+ * The JSON object `pnpm pack --json` prints, out of an output that begins with the package's own lifecycle
+ * banner: a `prepack` script (every package here has one, `tsc --build`) writes `> name@version prepack`
+ * to STDOUT ahead of the JSON, so the output is not itself parseable. The object starts at the first line
+ * that is exactly `{`, and the nested `{`s of its `files` list are indented, so that line is unambiguous.
+ * @param {string} output
+ * @returns {{ name: string, version: string, filename: string, files?: { path: string }[] }}
+ */
+function packJson(output) {
+  const start = output.startsWith("{") ? 0 : output.indexOf("\n{\n") + 1;
+  if (start === 0 && !output.startsWith("{")) throw new Error(`pnpm pack printed no JSON object: ${output.slice(0, OUTPUT_PREVIEW)}`);
+  return JSON.parse(output.slice(start));
+}
+
+/**
+ * @typedef {{ name: string, version: string, dependencies?: Record<string, string>,
+ *   peerDependencies?: Record<string, string>, optionalDependencies?: Record<string, string> }} PackedManifest
+ */
+
+/**
+ * `[major, minor, patch]` of a plain `x.y.z` version, or `null` for anything else (a prerelease, a range).
+ * @param {string} text
+ * @returns {[number, number, number] | null}
+ */
+function parseVersion(text) {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(text);
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : null;
+}
+
+/** `~1.2.3` holds major and minor fixed. */
+const TILDE_FIXES = 2;
+
+/** How much of a packer's unparseable output an error carries: enough to recognise it, not all of it. */
+const OUTPUT_PREVIEW = 200;
+
+/** @param {number[]} a @param {number[]} b */
+const compareVersions = (a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+
+/**
+ * DOES `version` SATISFY `range`? -- for the four spellings this repository's manifests use, and `null` for
+ * every other, so an unfamiliar range is reported as UNVERIFIABLE rather than assumed satisfied. `semver` is
+ * not a dependency of this package (an undeclared import is exactly what this gate exists to catch), and
+ * `changeset version` writes only these: an exact `x.y.z`, or `^`/`~`/`>=` in front of one.
+ *
+ * `^` keeps the left-most non-zero part fixed (`^0.1.2` is `>=0.1.2 <0.2.0`, `^0.0.3` is exactly `0.0.3`),
+ * which is what makes a `0.x` package's caret narrower than a `1.x` one's and is the easy thing to get wrong.
+ * @param {string} version
+ * @param {string} range
+ * @returns {boolean | null}
+ */
+export function satisfies(version, range) {
+  const have = parseVersion(version);
+  const operator = /^(\^|~|>=)?/.exec(range)?.[1] ?? "";
+  const bound = parseVersion(range.slice(operator.length));
+  if (have === null || bound === null) return null;
+  const atLeast = compareVersions(have, bound) >= 0;
+  if (operator === ">=") return atLeast;
+  if (operator === "") return compareVersions(have, bound) === 0;
+  const fixed = operator === "~" ? TILDE_FIXES : bound.findIndex((part) => part !== 0) + 1 || bound.length;
+  return atLeast && have.slice(0, fixed).every((part, i) => part === bound[i]);
+}
+
+/**
+ * What is wrong with the internal (`@a11ign/*`) ranges in these packed manifests -- READ OUT OF THE TARBALLS
+ * (`tar -xOf <tarball> package/package.json`), never out of the source, because the source is not what a
+ * consumer receives: `workspace:*` is legal in a source manifest and is rewritten (or, when a packer forgets,
+ * NOT rewritten) on the way into the tarball.
+ *
+ * Three ways to be wrong, each reported with the package that carries it:
+ * - the `workspace:` protocol, which installs for nobody;
+ * - a range that is not one of the forms `satisfies` can read, which nobody can check;
+ * - a range the sibling packed BESIDE it does not satisfy, which npm answers from the registry without a word.
+ * @param {PackedManifest[]} manifests
+ * @returns {string[]}
+ */
+export function packedRangeProblems(manifests) {
+  const versions = new Map(manifests.map((manifest) => [manifest.name, manifest.version]));
+  /** @type {string[]} */
+  const problems = [];
+  for (const manifest of manifests) {
+    const declared = { ...manifest.dependencies, ...manifest.peerDependencies, ...manifest.optionalDependencies };
+    for (const [dependency, range] of Object.entries(declared)) {
+      if (!dependency.startsWith("@a11ign/")) continue;
+      const where = `${manifest.name} -> ${dependency}@${range}`;
+      const sibling = versions.get(dependency);
+      if (range.startsWith("workspace:")) problems.push(`${where}: the workspace: protocol reached the tarball`);
+      else if (sibling !== undefined && satisfies(sibling, range) === null) problems.push(`${where}: not a range this gate can check`);
+      else if (sibling !== undefined && satisfies(sibling, range) === false) {
+        problems.push(`${where}: packed beside it is ${sibling}, which that range excludes -- npm would fetch the registry's copy`);
+      }
+    }
+  }
+  return problems;
+}
+
+/**
+ * The internal ranges one tarball declares, as `@a11ign/x@range`, for the PASS line: "the ranges are fine" is
+ * a claim, and the line that carries it should carry what was read, so a reader can see it was not vacuous.
+ * @param {PackedManifest} manifest
+ * @returns {string}
+ */
+function internalRangesNote(manifest) {
+  const declared = { ...manifest.dependencies, ...manifest.peerDependencies, ...manifest.optionalDependencies };
+  const internal = Object.entries(declared).filter(([dependency]) => dependency.startsWith("@a11ign/"))
+    .map(([dependency, range]) => `${dependency}@${range}`);
+  return internal.length ? `; tarball ranges: ${internal.join(", ")}` : "; no internal dependencies";
+}
+
+/**
+ * @param {string} tarball
+ * @returns {PackedManifest}
+ */
+function tarballManifest(tarball) {
+  return JSON.parse(run("tar", ["-xOf", tarball, "package/package.json"], dirname(tarball)));
 }
 
 /**
@@ -159,7 +303,7 @@ export function missingBinShims(consumer, manifest) {
 }
 
 /**
- * What `npm pack --dry-run` actually ships for one package, as a `Set` of paths relative to the package
+ * What `pnpm pack --dry-run` actually ships for one package, as a `Set` of paths relative to the package
  * root. This is this repo's one real answer to "can a consumer install this" / "does this reach a
  * consumer", and `scripts/ci-changed.mjs`'s changeset gate imports it directly rather than carrying a
  * second copy — two derivations of what ships, guarding the same promise, is exactly the fact-stated-
@@ -170,11 +314,16 @@ export function missingBinShims(consumer, manifest) {
  */
 export function packedFiles(dir) {
   // `--json` gives the file list without unpacking; `--dry-run` so nothing is written. `sandboxGitEnv()`
-  // even though this spawns `npm`, not `git` — `npm pack` walks the package looking for a `.git` to
+  // even though this spawns `pnpm`, not `git` — a pack walks the package looking for a `.git` to
   // decide what "untracked" means for its own purposes, so an inherited `GIT_DIR` is the identical
   // redirection risk `git-env.mjs`'s own header names, one process removed.
-  const listing = JSON.parse(runNpm(["pack", "--dry-run", "--json"], dir, sandboxGitEnv()));
-  return new Set((listing?.[0]?.files ?? []).map((/** @type {{path: string}} */ f) => f.path));
+  //
+  // PACKED BY pnpm SINCE #2301, because the release publishes with `pnpm publish`, which packs with the same
+  // code: a file list derived by a DIFFERENT tool would answer "what would npm ship" about a tarball
+  // nobody publishes. (Every other place that asks what ships -- `ci-changed.mjs`'s changeset gate -- asks
+  // this function, so the move reaches all of them at once.)
+  const listing = packJson(runPnpm(["pack", "--dry-run", "--json"], dir, sandboxGitEnv()));
+  return new Set((listing.files ?? []).map((f) => f.path));
 }
 
 /**
@@ -273,6 +422,57 @@ function binNote(manifest) {
 }
 
 /**
+ * The pack half and the install half, in that order, up to and including the bin check: `refused` is `null`
+ * when the package is installed in `consumer` and every declared bin reached its PATH, otherwise the verdict
+ * that says which stage refused; `note` says what the tarball's own internal ranges were. Its own function because it is the part of `checkIsolation` with two package
+ * managers in it, and because the lint ceiling said so.
+ *
+ * @param {string} dir the package directory
+ * @param {string} consumer the throwaway install directory
+ * @param {{ name?: string, bin?: string | Record<string, string> }} manifest
+ */
+function packAndInstall(dir, consumer, manifest) {
+  // Every sibling this package needs, packed too.
+  //
+  // Nothing is published, so npm cannot fetch `@a11ign/evidence` from the registry — it would fail
+  // the install with E404 and the gate would report a broken package that is fine. npm 7+ also
+  // auto-installs PEER dependencies, so a peer on an unpublished sibling fails the same way; that is why
+  // peers are collected here as well.
+  //
+  // This is not a workaround, it is the composition the gate should have been testing all along: a
+  // consumer installs `judge` AND the `scorer` it peers on, and the two have to work together outside the
+  // workspace. `evidence` and `scorer` are leaves, so the omission was invisible until `judge` arrived.
+  const tarballs = [dir, ...internalDependencies(dir)].map((source) =>
+    join(consumer, basename(packJson(runPnpm(["pack", "--pack-destination", consumer, "--json"], source)).filename)));
+  // BETWEEN THE TWO HALVES: what pnpm packed is read back before npm is asked to install any of it.
+  const packed = tarballs.map(tarballManifest);
+  const note = internalRangesNote(/** @type {PackedManifest} */ (packed[0]));
+  const rangeProblems = packedRangeProblems(packed);
+  if (rangeProblems.length) {
+    return { note, refused: { ok: false, stage: "ranges", name: manifest.name,
+      detail: `packs, but ${rangeProblems.length} internal range(s) in the tarballs are wrong: ${rangeProblems.join("; ")}` } };
+  }
+  runNpm(["init", "-y"], consumer);
+  // `--no-workspaces` and absolute tarball paths: without them npm can walk UP from the temp directory
+  // and re-attach to a workspace root, which would reintroduce exactly the symlink resolution the gate
+  // exists to avoid.
+  // `--omit=optional` because an OPTIONAL dependency is by definition not required to install and use the
+  // package. The CLI declares `playwright` and `@axe-core/playwright` optional — the visual layer is opt-in
+  // and loaded with a dynamic `import()` behind an availability check — so installing them here fetched
+  // 25 MB of browser engine from the registry to run a renderer assertion that never opens a browser.
+  // Measured: 7.1 s for the CLI against 2.2 s for a leaf package, and the gate could not run offline at all,
+  // which is a Fast/Repeatable failure for no coverage in return. A package that genuinely NEEDS a dependency
+  // must declare it as a dependency, and this gate exists to catch exactly that mistake.
+  runNpm(["install", "--silent", "--no-workspaces", "--omit=optional", ...tarballs], consumer);
+  // BEFORE the smoke test, because a bin a consumer cannot reach is a packaging defect whether or not
+  // the library half works — and because most smoke tests import the package rather than spawning it,
+  // so a green smoke run says nothing about `bin` at all. Measured on this repo the day the check was
+  // written: pointing all five of `@a11ign/worker-fleet`'s bins at a file that does not exist left the
+  // gate reporting `ok: true`.
+  return { note, refused: unreachableBinVerdict(consumer, manifest, manifest.name ?? "") };
+}
+
+/**
  * Pack, install outside the repo, run the smoke test. Returns a verdict rather than throwing, because the
  * caller needs to report every package rather than stop at the first bad one.
  * @param {string} packageDir
@@ -288,37 +488,8 @@ export function checkIsolation(packageDir) {
   const name = manifest.name;
   const consumer = consumerDir();
   try {
-    // Every sibling this package needs, packed too.
-    //
-    // Nothing is published, so npm cannot fetch `@a11ign/evidence` from the registry — it would fail
-    // the install with E404 and the gate would report a broken package that is fine. npm 7+ also
-    // auto-installs PEER dependencies, so a peer on an unpublished sibling fails the same way; that is why
-    // peers are collected here as well.
-    //
-    // This is not a workaround, it is the composition the gate should have been testing all along: a
-    // consumer installs `judge` AND the `scorer` it peers on, and the two have to work together outside the
-    // workspace. `evidence` and `scorer` are leaves, so the omission was invisible until `judge` arrived.
-    const tarballs = [dir, ...internalDependencies(dir)].map((source) =>
-      join(consumer, basename(runNpm(["pack", "--silent", "--pack-destination", consumer], source).trim().split("\n").pop() ?? "")));
-    runNpm(["init", "-y"], consumer);
-    // `--no-workspaces` and absolute tarball paths: without them npm can walk UP from the temp directory
-    // and re-attach to a workspace root, which would reintroduce exactly the symlink resolution the gate
-    // exists to avoid.
-    // `--omit=optional` because an OPTIONAL dependency is by definition not required to install and use the
-    // package. The CLI declares `playwright` and `@axe-core/playwright` optional — the visual layer is opt-in
-    // and loaded with a dynamic `import()` behind an availability check — so installing them here fetched
-    // 25 MB of browser engine from the registry to run a renderer assertion that never opens a browser.
-    // Measured: 7.1 s for the CLI against 2.2 s for a leaf package, and the gate could not run offline at all,
-    // which is a Fast/Repeatable failure for no coverage in return. A package that genuinely NEEDS a dependency
-    // must declare it as a dependency, and this gate exists to catch exactly that mistake.
-    runNpm(["install", "--silent", "--no-workspaces", "--omit=optional", ...tarballs], consumer);
-    // BEFORE the smoke test, because a bin a consumer cannot reach is a packaging defect whether or not
-    // the library half works — and because most smoke tests import the package rather than spawning it,
-    // so a green smoke run says nothing about `bin` at all. Measured on this repo the day the check was
-    // written: pointing all five of `@a11ign/worker-fleet`'s bins at a file that does not exist left the
-    // gate reporting `ok: true`.
-    const binProblem = unreachableBinVerdict(consumer, manifest, name);
-    if (binProblem) return binProblem;
+    const { refused, note } = packAndInstall(dir, consumer, manifest);
+    if (refused) return refused;
     copyFileSync(smoke, join(consumer, SMOKE));
     // `A11Y_ISOLATION_CONSUMER_DIR` carries the RAW `consumer` path — never realpath'd — because both
     // `execFileSync`'s `cwd` option and `require.resolve()` resolve symlinks, so a smoke test cannot
@@ -341,7 +512,7 @@ export function checkIsolation(packageDir) {
           + (untracked.length > 5 ? ` (+${untracked.length - 5} more)` : "") };
     }
     return { ok: true, stage: "smoke", name,
-      detail: (output.trim().split("\n").slice(-1)[0] ?? "") + binNote(manifest) };
+      detail: (output.trim().split("\n").slice(-1)[0] ?? "") + binNote(manifest) + note };
   } catch (error) {
     const e = /** @type {{ stderr?: string, stdout?: string, message?: string, status?: number }} */ (error);
     const stderr = String(e.stderr ?? e.stdout ?? e.message);
@@ -417,6 +588,10 @@ if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.arg
     process.stdout.write("the gate itself is verified by packages/lab/src/packaging/isolation-gate.test.ts\n");
     process.exit(0);
   }
+  // WHICH TOOL DID WHICH HALF, said in the run's own output (#2301): a dry run's log is what a reviewer reads
+  // at the merging head, and "packed by pnpm, installed by npm" is the claim this gate exists to make true.
+  process.stdout.write(`packing with pnpm ${runPnpm(["--version"], process.cwd()).trim()}; `
+    + `installing as a consumer with npm ${runNpm(["--version"], process.cwd()).trim()}\n`);
   let failed = 0;
   let declined = 0;
   for (const target of targets) {

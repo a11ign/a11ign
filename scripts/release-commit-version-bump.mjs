@@ -2,17 +2,17 @@
 // @ts-check
 // command: commit changeset version's manifest bump and consumed changesets back to main after a real publish
 /**
- * #1824: `release:version` (`changeset version && npm install --package-lock-only`) runs INSIDE the release
+ * #1824: `release:version` (`changeset version && pnpm install --lockfile-only`) runs INSIDE the release
  * job and nothing commits the result -- so every package's `package.json` stayed at `0.0.0` through the
  * first real publish (run 35544379475, 2026-09-19), and every later dispatch recomputes the same
  * already-published target version from that same stale base. npm refuses to republish an identical
  * version, so `changeset publish` silently no-ops every already-shipped package.
  *
- * Runs AFTER `npx changeset publish` succeeds -- `release.yml` gives this step the identical `if:` the
+ * Runs AFTER `changeset publish` succeeds -- `release.yml` gives this step the identical `if:` the
  * Publish step itself carries. `release:version` already ran earlier in the same job (the "Apply the
  * pending changesets" step) and left its result sitting uncommitted in this checkout's working tree: each
- * package's bumped `package.json`, a regenerated `CHANGELOG.md` per touched package, `package-lock.json`
- * (the workspaces reinstall `release:version` itself runs), and the consumed changeset markdown files
+ * package's bumped `package.json`, a regenerated `CHANGELOG.md` per touched package, `pnpm-lock.yaml`
+ * (the lockfile-only install `release:version` itself runs), and the consumed changeset markdown files
  * already deleted from `.changeset`. This step's only job is to commit exactly that diff back to `main`.
  *
  * IDEMPOTENT, which is #1824's own done-when: a run with nothing pending (every changeset already
@@ -48,7 +48,7 @@ export function versionBumpPaths(repoRoot) {
   // `.changeset` itself, not a glob inside it -- deleting every consumed changeset markdown file must be
   // staged too, and the directory always exists (it holds `config.json`/`README.md` even with nothing
   // pending).
-  return [...perPackage, "package.json", "package-lock.json", ".changeset"]
+  return [...perPackage, "package.json", "pnpm-lock.yaml", ".changeset"]
     .filter((path) => existsSync(join(repoRoot, path)));
 }
 
