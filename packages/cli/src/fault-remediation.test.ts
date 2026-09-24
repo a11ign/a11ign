@@ -26,6 +26,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { FAULT } from "../../nvda-worker/src/capture-faults.mjs";
+import { AUTH_FAULTS } from "./auth/auth-faults.js";
 import {
   FAULT_REMEDIATION, remediationFor, formatFaultMessage, formatDoubtMessage, formatEarlyContainmentNotice,
   type FaultRemediation,
@@ -48,7 +49,9 @@ function captureDoubtCodes(): string[] {
   return match ? [...match[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]) : [];
 }
 
-const KNOWN_FAULTS: string[] = [...Object.values(FAULT), ...judgeLayerFaultCodes(), ...captureDoubtCodes()];
+// PLUS ADR 0038's ten named errors: client-side like the doubts, listed by `auth/auth-faults.ts` as a runtime array
+// (so no scrape is needed), and read from there rather than re-typed, so a code added there without an entry fails.
+const KNOWN_FAULTS: string[] = [...Object.values(FAULT), ...judgeLayerFaultCodes(), ...captureDoubtCodes(), ...AUTH_FAULTS];
 
 test("the discovery finds a non-trivial population -- vacuity guard for the walk itself", () => {
   assert.ok(KNOWN_FAULTS.length >= 5,
