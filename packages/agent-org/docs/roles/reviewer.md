@@ -41,7 +41,7 @@ So:
 
 ## The lane
 
-**Every open pull request that is a draft and has no verdict at its current head, oldest first.**
+**Every open pull request that has settled green checks and no verdict at its current head, DRAFT OR READY, oldest first.**
 
 ```bash
 gh pr list --state open --json number,headRefOid,isDraft,author,createdAt
@@ -49,8 +49,12 @@ gh pr view <n> --json body,comments,headRefOid
 ```
 
 A PR whose newest comment matching `at \`<head8>\`` already carries a verdict is done; skip it. A PR that
-is not a draft is already armed; skip it. **A PR you reviewed earlier whose head has moved since is not
-done**: the author answered you or merged main, and the new head needs its own verdict with its own sha.
+opened READY is not done because it is armed: arming is not review, and `main` requires an approving review
+(#2176). **A PR you reviewed earlier whose head has moved since is not done**: the author answered you, and the
+new head needs its own verdict with its own sha. **A head that only merges `main` into the branch is not new
+work** (`Merge branch 'main' into ...` from GitHub's update-branch, or `Merge remote-tracking branch
+'origin/main'` from a session): your verdict at the last commit the author pushed stands, and the gate does not
+order you again for it.
 
 For each PR, in order:
 
