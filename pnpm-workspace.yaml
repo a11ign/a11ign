@@ -25,3 +25,10 @@ linkWorkspacePackages: true
 # in this file: a Windows guest, or any checkout on a different volume from the store, gets pnpm's own
 # fallback (a per-volume store, else copying) rather than hard links -- documented pnpm behaviour, not
 # measured here.
+# OFF, because npm does not install an OPTIONAL peer and pnpm does. packages/judge declares
+# @huggingface/transformers as an optional peer; pnpm's default put it in judge's node_modules (and 566
+# lockfile lines of its tree), so `verify-gate.test.ts` -- which asserts the absence-of-transformers path --
+# failed under pnpm and passed under npm (measured 2026-09-24, full `test:all` on both). The peers judge
+# actually needs (@a11ign/scorer, @anthropic-ai/sdk) are declared by the root manifest, which every package
+# resolves through.
+autoInstallPeers: false
