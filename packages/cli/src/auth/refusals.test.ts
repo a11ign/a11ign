@@ -21,7 +21,7 @@ import {
 import { captureAndScan, captureViaWorker, type CaptureRequest } from "../cli.js";
 import { FAULT_REMEDIATION, formatAuthFaultMessage } from "../fault-remediation.js";
 
-const AUTH: AuthRequest = { flow: [{ goto: "/login" }, { expect: { kind: "heading", name: "Dashboard" } }], upTo: 2 };
+const AUTH: AuthRequest = { login: [{ goto: "/login" }, { expect: { kind: "heading", name: "Dashboard", timeoutSeconds: 10 } }] };
 const REQUEST: Omit<CaptureRequest, "worker"> = {
   task: "read the page", probeForms: false, probeFocus: false, probeNavigation: false,
   probeFocusContext: false, probeFocusReveal: false,
