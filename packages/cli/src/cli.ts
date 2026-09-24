@@ -584,7 +584,7 @@ async function capturePageStates(
  */
 async function withAuthentication(args: Args): Promise<Args> {
   const resolved = await resolveAuthentication({
-    args, urls: args.urls, axe: args.axe, env: process.env, isPdf: looksLikePdfUrl,
+    args, urls: args.urls, task: args.task, axe: args.axe, env: process.env, isPdf: looksLikePdfUrl,
     readText: (path) => readFile(path, "utf8"),
   });
   if (resolved === null) return args;

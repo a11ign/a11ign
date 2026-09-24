@@ -40,6 +40,7 @@ type Over = Omit<Partial<ResolveRequest>, "args"> & { args?: Partial<ResolveRequ
 const request = (over: Over = {}): ResolveRequest => ({
   args: { flows: "flows.yml", loginFlow: "login", sendAuthenticatedTranscriptToJudgeVendor: false, ...over.args },
   urls: [`${ORIGIN}/orders`],
+  task: "Read and understand this page",
   axe: true,
   env: ENV,
   readText: async (path) => { if (path === "flows.yml") return FLOWS; throw new Error(`no such file ${path}`); },
@@ -97,6 +98,24 @@ test("a login flow that is missing, has a literal, or a URL off the pinned origi
   await refusedAs(resolveAuthentication(request({ urls: ["https://production.example.test/orders"] })), (e) => e instanceof FlowsError && e.rule === "origin-pinned", "the wrong origin");
   await refusedAs(resolveAuthentication(request({ urls: [`${ORIGIN}/orders`, "https://evil.test/x"] })), (e) => e instanceof FlowsError && e.rule === "origin-pinned", "the SECOND url");
   await refusedAs(resolveAuthentication(request({ urls: [`${ORIGIN}/report.pdf`] })), (e) => e instanceof FlowsError && /PDF.*no login/.test(e.message), "a PDF");
+});
+
+test("a URL or a task that carries a login value is refused before anything is captured — naming the variable and the argument, never the value", async () => {
+  const onlyOrigin = `${ORIGIN}/orders`;
+  for (const [label, over] of [
+    ["a same-origin query token", { urls: [`${onlyOrigin}?token=${FAKE_SECRET}`] }],
+    ["the value URL-encoded in the path", { urls: [`${onlyOrigin}/${encodeURIComponent(FAKE_USER)}`] }],
+    ["the SECOND url", { urls: [onlyOrigin, `${onlyOrigin}?u=${FAKE_USER}`] }],
+    ["the task", { task: `Sign in as ${FAKE_USER} and read the orders` }],
+  ] as const) {
+    await assert.rejects(resolveAuthentication(request(over)), (e: Error & { fault?: string }) => {
+      assert.equal(e.fault, "auth-credential-in-artifact", label);
+      assert.ok(!e.message.includes(FAKE_USER) && !e.message.includes(FAKE_SECRET), `${label}: the message must not print the value`);
+      return true;
+    });
+  }
+  // The control: the same run with the value taken out resolves, so the refusal is not on every run.
+  assert.notEqual(await resolveAuthentication(request({ urls: [`${onlyOrigin}?page=2`], task: "Read the orders" })), null);
 });
 
 test("a variable that is missing is auth-credential-missing, and one below the floor is auth-credential-too-short — naming the variable, never the value", async () => {

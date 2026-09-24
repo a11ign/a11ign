@@ -10,7 +10,8 @@
  *    not permission to publish text from behind a login.
  * 2. **The flows file is parsed and held to the login rules**, and every URL must be on its pinned origin.
  * 3. **Every variable the login reads must be set, and no value may be below the floor** (amendment 2) — before anything
- *    is captured, so the run is refused rather than half-done.
+ *    is captured, so the run is refused rather than half-done. **No URL and no task may carry one of the values**: they are
+ *    the run's own arguments, echoed by every output, and are not what `keepCredentialsOut` scrubs.
  * 4. **A non-local judge backend refuses** unless the run named `--send-authenticated-transcript-to-judge-vendor`, an
  *    argument and never an environment variable; given, the vendor is named on stderr before the judge runs.
  * 5. **Automatic pressing and link-following are turned OFF** (Constraint 7): an authenticated run presses only what its
@@ -22,7 +23,7 @@
 import { FlowsError, parseFlowsFile, refuseIfWrongOrigin, resolveLoginFlow } from "./flows.js";
 import { assertCredentialsPresent, type AuthPlan } from "./interpreter.js";
 import { judgeBackendDecision, refuseAuthOnPublicRepository, type AuthRequest } from "./refusals.js";
-import { buildScrubSet, type ScrubSet } from "./scrub.js";
+import { buildScrubSet, refuseIfAnArgumentCarriesAValue, type ScrubSet } from "./scrub.js";
 
 export interface AuthArguments {
   flows: string | null;
@@ -33,6 +34,7 @@ export interface AuthArguments {
 export interface ResolveRequest {
   args: AuthArguments;
   urls: readonly string[];
+  task: string;
   /** Is the rule layer going to run (each page then logs in a second time)? */
   axe: boolean;
   env: Readonly<Record<string, string | undefined>>;
@@ -144,6 +146,7 @@ export async function resolveAuthentication(request: ResolveRequest): Promise<Re
   assertCredentialsPresent(plan, env);
   const names = [...new Set(login.steps.flatMap((step) => ("fill" in step && step.fill.fromEnv !== undefined ? [step.fill.fromEnv] : [])))];
   const scrubSet = buildScrubSet(names.map((name) => ({ name, value: env[name] as string })));
+  refuseIfAnArgumentCarriesAValue({ urls, task: request.task }, scrubSet);
   const judgeNotice = judgeBackendDecision({ auth: plan, sendTranscriptToJudgeVendor: args.sendAuthenticatedTranscriptToJudgeVendor });
   return {
     auth: plan,
