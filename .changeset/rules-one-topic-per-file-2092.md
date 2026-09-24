@@ -1,0 +1,5 @@
+---
+"@a11ign/lab": patch
+---
+
+`.claude/rules/agent-practices.md` was one 14.7 KB file and B4 admits one open pull request per path, so every row amending any org practice waited on every other: `#2025` was refused three times in 10h36m by three pull requests about the API budget, the approving review and `rm`. It is now six files, one per topic and split at `## ` section boundaries with the section text byte-identical (`agent-practices.md` the entry point, `org-routing-and-timers.md`, `waiting-conditions.md`, `gh-api-budget.md`, `main-review-requirement.md`, `guards-and-assertions.md`), the same remedy `#1240` proved on `CLAUDE.md`. The loaded cost is unchanged and `prefix-budget.test.ts` still budgets the whole set at 20,000 B; `rules-files.ts` names the set and every test that read the file reads it through `readLoadedRules()`. `content-preservation.test.ts` proves the move against the commit that made it (every section of the old file in exactly one destination, none duplicated, none added, a reword reading as a drop plus an addition) and holds the directory to the named list in both directions (#2092).

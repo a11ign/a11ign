@@ -276,10 +276,25 @@ jobs:
     # emits an `::error::` naming the outage and the path taken, and only THEN exits 0. A bare `|| true`
     # fails `auto-arm-sweep.test.ts`, which runs this step's own text against a stubbed script.
     #
-    # EXIT 1 IS UNTOUCHED AND STAYS RED. It names PRs, somebody must act on it, and red is how this repo
-    # makes an unarmed PR loud. Exit 1 carries a misattribution of its own -- a PR that `COULD_NOT_ARM` is
-    # generally not the PR whose event triggered the sweep either -- and #1970 deliberately did not widen
-    # into it: that is a different trade and wants its own measurement first.
+    # ## EXIT 1 IS A FINDING, AND THE JOB IS SHIELDED FROM CHARGING IT TO A PR -- #2204
+    #
+    # #1970 left exit 1 red and said it wanted its own measurement first. Measured 2026-09-23: of 41 exit-1
+    # `sweep` runs in a per-PR check context, 13 named a set that did not include the PR whose event
+    # triggered them (and most of the 28 that did named others in the same breath). A check colour is one
+    # bit and cannot be partially about PR #N, so a set-membership test would fix 13 and keep mis-stating
+    # 28. `ceo` ruled (2026-09-23T18:26Z): `continue-on-error: true` on the JOB, the category `update-branch`
+    # below already names -- a job that acts on OTHER open PRs and can never gate anything.
+    #
+    # THE STEP STILL EXITS 1, and that is the point of shielding the JOB rather than the step: the
+    # finding stays a non-zero exit with the `SWEEP: could not arm` line in the log, `auto-arm-sweep.test.ts`
+    # keeps asserting both, and nothing here is a `|| true`. What moves is who is CHARGED. The loud
+    # channel is `pr-green-unarmed` in `work-gate.mjs`, which runs under the agent host's own identity,
+    # names every green unheld unarmed PR and wakes a session -- and `arm` above, whose red stays red
+    # because it was handed ONE PR and its refusal is a complete statement about it.
+    #
+    # A `push` to `main` has no triggering PR at all, so the same shield covers it with no special case.
+    # Exit 2's `::error::`-then-`exit 0` below stays: redundant for the colour now, but it names the
+    # outage and the path taken, and the script's exit 2 contract serves every other caller.
     #
     # THE TWO ARE TOLD APART BY THE EXIT CODE, NEVER BY THE LOG TEXT. The script states the rule for the
     # mirror case itself, in `mergedMeanwhile`: "THE STATE IS READ, NEVER THE EXIT CODE ... the message
@@ -289,6 +304,7 @@ jobs:
     # outage. That case is annotated and non-red here too, on the same argument -- it is not a claim about
     # the triggering PR either -- and it stays exit 2 from the script, so every other caller still sees it.
     if: github.event_name != 'workflow_run'
+    continue-on-error: true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
