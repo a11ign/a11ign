@@ -41,42 +41,42 @@
       "name": "worker-tooling",
       "role": "engineer",
       "drain": true,
-      "brief": null,
+      "brief": "docs/roles/engineer.md",
       "started": "2026-09-13T19:13:15Z"
     },
     {
       "name": "worker-4",
       "role": "engineer",
       "spare": true,
-      "brief": null,
+      "brief": "docs/roles/engineer.md",
       "started": "2026-09-24T09:42:00Z"
     },
     {
       "name": "worker-5",
       "role": "engineer",
       "spare": true,
-      "brief": null,
+      "brief": "docs/roles/engineer.md",
       "started": "2026-09-24T09:42:00Z"
     },
     {
       "name": "worker-6",
       "role": "engineer",
       "spare": true,
-      "brief": null,
+      "brief": "docs/roles/engineer.md",
       "started": "2026-09-24T16:30:00Z"
     },
     {
       "name": "worker-7",
       "role": "engineer",
       "spare": true,
-      "brief": null,
+      "brief": "docs/roles/engineer.md",
       "started": "2026-09-24T16:30:00Z"
     },
     {
       "name": "worker-8",
       "role": "engineer",
       "spare": true,
-      "brief": null,
+      "brief": "docs/roles/engineer.md",
       "started": "2026-09-24T16:30:00Z"
     }
   ],
