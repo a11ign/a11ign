@@ -261,14 +261,22 @@ export async function axeAvailable(
   }
 }
 
-export async function scanWithAxe(url: string): Promise<AxeResult> {
+/**
+ * `signIn` (ADR 0038, PR 5) runs INSTEAD of `page.goto(url)`: it is handed the page, signs in on it and arrives at `url`,
+ * so axe scans the page the person sees after logging in and not the login wall. The browser is closed in the
+ * `finally` below either way, and it is this call's own in-memory context, so a session dies with it.
+ */
+export async function scanWithAxe(
+  url: string, { signIn }: { signIn?: (page: import("playwright").Page) => Promise<void> } = {},
+): Promise<AxeResult> {
   const { chromium, AxeBuilder } = await loadAxe();
   const { browser, channel } = await launchBrowser(chromium);
   try {
     // @axe-core/playwright requires a page from an explicit context.
     const context = await (browser as { newContext(): ReturnType<import("playwright").Browser["newContext"]> }).newContext();
     const page = await context.newPage();
-    await page.goto(url, { waitUntil: "load" });
+    if (signIn) await signIn(page);
+    else await page.goto(url, { waitUntil: "load" });
     const title = await page.title();
     const results = await new AxeBuilder({ page }).withTags(WCAG_AA_TAGS).analyze();
     return { findings: toFindings(results.violations), title, coverage: coverageFrom(results), browserChannel: channel };

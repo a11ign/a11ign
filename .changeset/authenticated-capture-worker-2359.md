@@ -1,0 +1,5 @@
+---
+"@a11ign/nvda-worker": patch
+---
+
+**The worker can log in to the page it captures, and no request can ask it to yet (#2359, PR 4 of 7).** A capture request may now carry `auth`: a login flow and an optional flow to replay to a capture point, whose secrets are environment-variable NAMES the worker reads from its own environment. The worker checks the request again on arrival (closed vocabulary, origin pinned, a login takes `fromEnv` only and ends in an `expect`), refuses an auth request from a peer that is not on the machine with `403 auth-refused-remote-worker`, finds a missing variable before it launches a browser, signs in over the browser protocol's text insertion before the transcript begins, answers `authApplied: true` only after the sign-in ran to its end, and destroys the session after the capture (cookies, cache and storage for the origin, then the browser). An authenticated request never reuses the browser, and its stored response is held for one delivery, and for at most five minutes if nobody collects it. A request with no `auth` behaves exactly as before.
