@@ -180,7 +180,7 @@ test("#2218: a tree with NOTHING linked proceeds -- the runner cannot start ther
 });
 
 test("#2218 THE CALLER: `assert-glob-not-empty --run` refuses in a mis-wired tree BEFORE any runner starts", () => {
-  // A copy of the floor inside a constructed tree whose `@a11ign/worker-fleet` reads the REAL repo: the floor
+  // A copy of the floor inside a constructed tree whose `@a11ign/worker-fleet` reads ANOTHER constructed checkout: the floor
   // asks about the tree it lives in, so this is the broken shape by construction. The refusal precedes the
   // spawn, so no runner is reached and nothing is measured.
   withScratch((base) => {
@@ -192,13 +192,22 @@ test("#2218 THE CALLER: `assert-glob-not-empty --run` refuses in a mis-wired tre
     }
     mkdirSync(join(tree, "packages", "x"), { recursive: true });
     writeFileSync(join(tree, "packages", "x", "a.test.ts"), "");
+    // The floor imports `@a11ign/worker-fleet/cli-flags`, which the real package serves from `dist/` -- a
+    // build product a clean checkout does not have. So the OTHER checkout is constructed too, with the one
+    // entry the import needs copied from source: the fixture depends on nothing `npm run build` makes.
+    const other = join(base, "other-checkout", "packages", "worker-fleet");
+    mkdirSync(join(other, "dist"), { recursive: true });
+    writeFileSync(join(other, "package.json"), JSON.stringify({
+      name: "@a11ign/worker-fleet", type: "module", exports: { "./cli-flags": "./dist/cli-flags.mjs" },
+    }));
+    copyFileSync(join(REPO, "packages/worker-fleet/src/cli-flags.mjs"), join(other, "dist", "cli-flags.mjs"));
     mkdirSync(join(tree, "node_modules", "@a11ign"), { recursive: true });
-    symlinkSync(join(REPO, "packages", "worker-fleet"), join(tree, "node_modules", "@a11ign", "worker-fleet"));
+    symlinkSync(other, join(tree, "node_modules", "@a11ign", "worker-fleet"));
     const ran = spawnSync(process.execPath, [join(tree, "packages/guards/src/assert-glob-not-empty.mjs"),
       "packages/x/a.test.ts", "--run", "--runner=rstest"], { cwd: tree, encoding: "utf8", env: { ...process.env, [OVERRIDE_ENV]: "" } });
     assert.equal(ran.status, 1, ran.stdout + ran.stderr);
     assert.match(ran.stderr, /REFUSING: this tree does not measure itself/);
     assert.match(ran.stderr, /resolve OUTSIDE this worktree/);
-    assert.ok(ran.stderr.includes(realpathSync(REPO).replace(/\/$/, "")), "the refusal names the checkout being read");
+    assert.ok(ran.stderr.includes(join(base, "other-checkout")), "the refusal names the checkout being read");
   });
 });
