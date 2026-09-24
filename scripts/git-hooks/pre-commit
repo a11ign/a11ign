@@ -23,9 +23,10 @@ set -euo pipefail
 #
 # It matters mechanically, not territorially. `assertFleetRunsThisCheckout` hashes the WORKING TREE, so a
 # stray branch or a half-resolved merge here makes a capture run stamp itself against code that never
-# existed -- best case a refused run, worst case one that passes and should not have. And a worktree's
-# `node_modules` may symlink to the primary's `dist`, so a branch parked here silently changes what every
-# OTHER agent compiles and tests against.
+# existed -- best case a refused run, worst case one that passes and should not have. And a worktree whose
+# `node_modules` is still a SYMLINK to this checkout's (the pre-pnpm layout, #57) reads this checkout's
+# `dist`, so a branch parked here silently changes what every such tree compiles and tests against. A tree
+# with its own `pnpm install` is not exposed to that.
 #
 # IDENTIFIED BY AN EXPLICIT LOCAL MARK, never by branch name, an absolute path, or the shape of `.git`.
 #
