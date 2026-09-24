@@ -12,8 +12,11 @@ stamped before `PER_PR_REVIEWERS_FROM` reads as history (`PARITY.retired`), neve
 
 `wake.mjs` starts a codex instance in a workspace labelled `reviewer-<n>` (`A11Y_REVIEWER_SESSION=reviewer-<n>`,
 the reviewer's own `GH_CONFIG_DIR`) when an order for a reviewer cause finds none, reuses it, cleared, for the next
-head, and `work-tick` ends it when the pull request merges or closes. **At most 4 are live** (`MAX_REVIEWER_INSTANCES`,
-`ceo`'s to raise): an order past the ceiling is REFUSED with a line naming the count. The engineer spawn path --
+head, and `work-tick` ends it when the pull request merges or closes. **There is NO limit on the count** (the chairman's ruling
+of 2026-09-24: the pool follows the pull requests waiting); a start refuses only for a named cause. `reviewer-<n>`
+receives PR n's orders and no other's. Its pane opens IN a per-PR checkout (`~/reviews/reviewer-<n>`, a linked
+worktree) at PR n's head that the tick prepares before the order is typed, re-points on every head-changing push, and
+removes when the instance ends. The engineer spawn path --
 `spawnableRole`, `SPAWN_CAUSES`, `registerSpawn`, `endFinishedSpares` and the `spare-cycles` ledger -- is unchanged, and
 the two standing panes are left running; closing them is `ceo`'s, after the first per-PR verdict is on a merged PR.
 

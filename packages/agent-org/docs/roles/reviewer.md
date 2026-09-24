@@ -19,7 +19,9 @@ that pull request, at every head it reaches, and no other. Sign the verdict line
 pull request's instance is a violation `parityViolationsOnCommit` reports. The odd/even split is gone: PR
 `n` belongs to `reviewer-<n>` for every `n`, and history that names `reviewer` or `reviewer-2` stays valid.
 Your context is cleared before each order, so the row, the PR and the API are the state; the tick ends you
-when the pull request merges or closes, and at most four instances are live. The two standing panes keep
+when the pull request merges or closes, and there is no limit on how many instances are live. The order names your
+checkout of the pull request's head, prepared for you and re-pointed on every push: review from that path, and do not
+make another (your sandbox cannot write `.git`). The two standing panes keep
 running until `ceo` closes them (cutover is `ceo`'s, after the first per-PR verdict is on a merged PR).
 **If codex says your access token could not be refreshed, say nothing further and stop:** the gate has
 already sent `ceo` the incident, and the re-login is the chairman's.

@@ -3190,6 +3190,12 @@ and treats **the first real refresh as the measurement**. What is and is not kno
   ended), not a herdr reading: one closed by hand stays counted until its pull request closes.
 - **The ledger records a failure at DETECTION, not at the refresh**, up to 30 minutes later, as its own line naming
   the refresh it followed. "Whether any then failed" is therefore answerable only for refreshes older than that bound.
+- **The review checkout is a linked worktree under `~/reviews`, chosen on a measurement of `codex sandbox` and NOT
+  seen in a live instance.** Under the reviewer's own policy `git checkout` and `git fetch` were refused with `Read-only
+  file system` in both a shallow clone and a linked worktree (codex protects `.git`), so the tick prepares and
+  re-points the tree and the order says so. Not measured live: that an instance reviews correctly from it, and that
+  a teardown removes it on the host. A teardown that fails leaves the tree on DISK (not `/tmp`, #2163), so a leaked
+  tree costs disk until someone removes it; the failure is reported, not retried.
 - **The per-instance clean-verdict count** the role document keeps for the standing `reviewer` (`ceo` samples every
   fifth `convinced` per instance) **has no defined meaning for an instance that sees one pull request.** Instances
   start OFF the line until `ceo` rules how the count is kept.
