@@ -28,11 +28,31 @@
  *   runs eight sessions and two reviewers, and a whole-suite run at one worker per core is a write to a shared resource.
  *   Measured 2026-09-13 22:49Z: a mutation handed rstest an empty include, it ran the whole suite with 92 worker
  *   processes, and the load average reached 64.65. A GitHub runner is not shared, so CI keeps rstest's own default.
+ * - **A RUN RECORD ON DISK, ONE FILE PER RUN (#2199).** A whole-suite run printed the failing test's file and name only
+ *   into the terminal that ran it, and a first `test:org` reporting `failedTests: 1` followed by four green runs could
+ *   not be identified nine hours later. rstest's `json` reporter writes them (`JsonReporterOptions.outputPath`,
+ *   `@rstest/core@0.11.12`), and this config adds it to EVERY run, green ones too, because a record written only on
+ *   failure cannot tell "green" from "never ran" (#2165's finding, one field over). THE PATH IS DISTINCT PER RUN and that
+ *   is the answer to the shared-resource question, not a preference: last-run-wins would have overwritten the very red
+ *   run the four green ones followed, which is the incident. The name is `<worktree>-<UTC stamp>-<pid>.json` under
+ *   `node_modules/.cache/rstest-run-records`, already ignored (a symlinked `node_modules` is covered too, #1983), so a run
+ *   leaves `git status` unchanged and no untracked file reaches `versionBumpPaths` (#2057). The newest
+ *   `RUN_RECORDS_KEPT` of THIS worktree's records are kept, so a busy host does not fill its disk; a file is a few MB on
+ *   a whole-suite run. `A11Y_RSTEST_RECORD_DIR` moves the directory, for a test that must not write into the shared one.
+ *   A run started inside a worker (`RSTEST_WORKER_ID`) records only when that variable names a directory: see `reportersFor`.
+ * - **Setting `reporters` SWITCHES OFF rstest's agent default, so this file re-makes that choice (#2199).** rstest sets
+ *   `reporters: ["md"]` for an agent session only when the config has none (`initCli`, `9710~0.js`), and `determineAgent`
+ *   is not exported. `agentReporterFor` mirrors its variable table, so an agent session keeps the markdown report whose
+ *   Summary `rstest-report-is-not-the-verdict.test.ts` pins. THREE of rstest's twelve agents are matched by a regex on
+ *   `PATH`, `EDITOR` or `TERM_PROGRAM` (pi, devin, kiro) and are NOT mirrored: a session of those gets the default
+ *   reporter, which is a change in what is printed and never in a verdict or the record.
  * - **No coverage block here.** Coverage is step 4 of the adoption, not this one.
  */
 import { defineConfig } from "@rstest/core";
 import { fileURLToPath } from "node:url";
 import { availableParallelism } from "node:os";
+import { existsSync, readdirSync, rmSync } from "node:fs";
+import { basename, join } from "node:path";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const registerHook = fileURLToPath(new URL("./register-node-test-alias.mjs", import.meta.url));
@@ -57,6 +77,57 @@ function isCi(env) {
 function buildCacheFor(env) {
   if (!isCi(env)) return false;
   return env.A11Y_RSTEST_CACHE_DIR ? { cacheDirectory: env.A11Y_RSTEST_CACHE_DIR } : true;
+}
+
+/** #2199: how many of one worktree's run records survive the next run. */
+const RUN_RECORDS_KEPT = 50;
+
+/**
+ * #2199: the variables rstest's `determineAgent` reads, less the three it matches by regex. `AI_AGENT` is handled
+ * separately because rstest takes its VALUE as the agent's name.
+ */
+const AGENT_VARIABLES = ["CLAUDECODE", "CLAUDE_CODE", "REPL_ID", "GEMINI_CLI", "CODEX_SANDBOX", "CODEX_THREAD_ID",
+  "OPENCODE", "AUGMENT_AGENT", "GOOSE_PROVIDER", "JUNIE_DATA", "JUNIE_SHIM_PATH", "CURSOR_AGENT"];
+
+/**
+ * #2199: the console reporter rstest would have picked had this file named none. `RSTEST_NO_AGENT=1` switches the agent
+ * report off before anything else is read, exactly as `determineAgent` does.
+ * @param {Record<string, string | undefined>} env
+ * @returns {"md" | "default"}
+ */
+function agentReporterFor(env) {
+  if (env.RSTEST_NO_AGENT === "1") return "default";
+  return env.AI_AGENT || AGENT_VARIABLES.some((name) => env[name]) ? "md" : "default";
+}
+
+/**
+ * #2199: this run's record file, a name no other run shares, and the pruning that keeps the directory bounded. The
+ * stamp sorts as time, so the oldest of a worktree's records are the first names in sort order.
+ * @param {{ root: string, env: Record<string, string | undefined>, now: Date, pid: number }} run
+ * @returns {string}
+ */
+function runRecordPathFor({ root, env, now, pid }) {
+  const dir = env.A11Y_RSTEST_RECORD_DIR || join(root, "node_modules", ".cache", "rstest-run-records");
+  const worktree = basename(root);
+  if (existsSync(dir)) {
+    const mine = readdirSync(dir).filter((name) => name.startsWith(`${worktree}-`) && name.endsWith(".json")).sort();
+    for (const stale of mine.slice(0, Math.max(0, mine.length - (RUN_RECORDS_KEPT - 1)))) rmSync(join(dir, stale));
+  }
+  return join(dir, `${worktree}-${now.toISOString().replaceAll(/[:.]/g, "-")}-${pid}.json`);
+}
+
+/**
+ * #2199: the reporters of this run. A run started INSIDE an rstest worker -- a test that spawns rstest to measure it, of
+ * which the suite has dozens -- writes no record unless it was told where, because it is not a session's run and each
+ * one would push a real record out of the bounded directory: one whole-suite run would evict the previous fifty, red one
+ * included, which is the incident. rstest sets `RSTEST_WORKER_ID` in every worker it forks.
+ * @param {{ root: string, env: Record<string, string | undefined>, now: Date, pid: number }} run
+ * @returns {Array<"md" | "default" | ["json", { outputPath: string }]>}
+ */
+function reportersFor(run) {
+  const console = agentReporterFor(run.env);
+  if (run.env.RSTEST_WORKER_ID && !run.env.A11Y_RSTEST_RECORD_DIR) return [console];
+  return [console, ["json", { outputPath: runRecordPathFor(run) }]];
 }
 
 /** #1319: half the host's cores, at least one -- the most a local run may take of a host other sessions share. */
@@ -84,4 +155,5 @@ export default defineConfig({
   testTimeout: 0,
   hookTimeout: 0,
   performance: { buildCache: buildCacheFor(process.env) },
+  reporters: reportersFor({ root, env: process.env, now: new Date(), pid: process.pid }),
 });
