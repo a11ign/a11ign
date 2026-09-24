@@ -140,6 +140,36 @@ def test_a_section_runs_to_the_next_heading_and_no_further():
                      prose("Parking is free."))
 
 
+def heading_and(name: str, level: int, *rest: dict, trailing: tuple[str, ...] = ()) -> dict:
+    """ONE announcement carrying a heading and what follows it ("heading, level 2, Archive, link, Timetable")."""
+    unit = heading(name, level)
+    unit["objects"].extend(obj for other in rest for obj in other["objects"])
+    unit["trailing"].extend(trailing)
+    return unit
+
+
+def test_content_announced_in_the_headings_own_unit_is_that_headings_section():
+    """The reviewed defect (#2398): a heading-plus-link unit read as an EMPTY section, so `Hours` above an
+    unrelated link fell to the has-content guard and was silent -- a false negative on a supported shape."""
+    assert fires(heading("Page", 1), heading_and("Hours", 2, link("Parking details")), heading("Next", 2))
+    assert fires(heading("Page", 1), heading_and("Hours", 2, trailing=("Parking is free.",)), heading("Next", 2))
+
+
+def test_same_unit_content_still_relates_when_it_repeats_the_word():
+    """Negative control for the test above: the content read from the heading's unit must be able to CLEAR it."""
+    assert not fires(heading_and("Hours", 2, link("Opening hours")), heading("Next", 2))
+    assert not fires(heading_and("Hours", 2, trailing=("Opening hours are nine until five.",)), heading("Next", 2))
+
+
+def test_an_object_announced_before_a_heading_in_its_unit_stays_in_the_earlier_section():
+    """Order inside a unit matters. The link precedes `Parking`, so it is `Hours`' content and NOT Parking's:
+    read as Parking's, `Hours` would be empty (silent) and `Parking` would be related to it (silent)."""
+    link_then_heading = {"objects": [{"role": "link", "name": "Parking details", "states": []},
+                                     {"role": "heading", "name": "Parking", "states": ["level 2"]}],
+                         "containers": [], "leaving": [], "trailing": []}
+    assert fires(heading("Hours", 2), link_then_heading)
+
+
 def test_the_feature_carries_the_relation_and_not_the_list():
     """The assignment in `structured_feature_values` must call the relation, or the list is the decider again."""
     on = record(heading("Page", 1), heading("Info", 2), prose("The section explains the next step."))

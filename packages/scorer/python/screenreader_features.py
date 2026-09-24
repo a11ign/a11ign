@@ -830,15 +830,20 @@ def heading_sections(record: dict[str, Any]) -> list[tuple[str, int, str]]:
     A section runs to the next heading. Only NAMES and free text are collected, never the role words NVDA
     adds ("list", "link", "button", "same page"), which would let a heading called "Links" be related to any
     page that has one.
+
+    One announcement can carry several objects ("heading, level 2, Archive, link, Timetable"), so a unit is
+    read object by object rather than as either "a heading" or "content": what follows a heading INSIDE its
+    own unit, and that unit's trailing text, is that heading's section. Objects before the heading stay in
+    the section already open.
     """
     sections: list[list[Any]] = []
     for unit in parsed_units(record, "transcript"):
-        objects = unit.get("objects") or []
-        heading = next((obj for obj in objects if obj.get("role") == "heading"), None)
-        if heading is not None:
-            sections.append([str(heading.get("name") or ""), heading_level(heading.get("states") or []), []])
-        elif sections:
-            sections[-1][2].extend(str(obj.get("name") or "") for obj in objects)
+        for obj in unit.get("objects") or []:
+            if obj.get("role") == "heading":
+                sections.append([str(obj.get("name") or ""), heading_level(obj.get("states") or []), []])
+            elif sections:
+                sections[-1][2].append(str(obj.get("name") or ""))
+        if sections:
             sections[-1][2].extend(str(text) for text in unit.get("trailing") or [])
     return [(name, level, " ".join(words)) for name, level, words in sections]
 
