@@ -22,7 +22,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { revertVerdict, revertPrBody, revertTriggerJobs, newestRunFor, conclusionOf,
-  prCreateArgs, pushedNoPrMessage, failingTestsFromJobLog, EXIT }
+  prCreateArgs, pushedNoPrMessage, failingTestsFromJobLog, fixForwardPr, settleVerdict, authorWakeComment,
+  armArgs, SETTLE, FIX_FORWARD_WINDOW_MINUTES, EXIT }
   from "../../../agent-org/src/trunk-revert.mjs";
 import { testIdentity } from "../../../agent-org/src/parent-recheck-summary.mjs";
 
@@ -297,15 +298,102 @@ test("#578: the message is built from a plain Error OR a non-Error throw -- gh's
   assert.match(message, /raw string/);
 });
 
-test("#616 MUTATION TARGET: nothing in the revert path arms the PR", () => {
-  // The old code armed it directly, because a PR created with GITHUB_TOKEN fires no `pull_request` event
-  // and `auto-arm.yml` would therefore never see it. That fact is unchanged and is now load-bearing in
-  // the other direction: un-drafting alone does not arm it either, so whoever confirms the attribution
-  // must arm it by hand. That is the right amount of friction for an action that deletes merged work.
+test("#616 MUTATION TARGET: nothing in the OPENING path arms the PR -- only settle, behind a verdict", () => {
+  // The opening path (`performRevert`) must leave the draft unarmed: a PR created with GITHUB_TOKEN fires no
+  // `pull_request` event, and un-drafting alone does not arm it. Since #2349 the ONE place that arms is
+  // `settle`, and only on `SETTLE.ARM`.
   const source = readFileSync(path.join(REPO_ROOT, "packages/agent-org/src/trunk-revert.mjs"), "utf8");
-  const armCall = /gh\(\[\s*"pr",\s*"merge"[\s\S]{0,120}?"--auto"/.exec(source);
-  assert.equal(armCall, null,
-    "trunk-revert.mjs must not arm its own revert PR: a draft that arms itself is not a hold");
+  const opening = source.slice(source.indexOf("function performRevert"), source.indexOf("function main"));
+  assert.ok(opening.length > 500, "positive control: the slice really is the opening path");
+  assert.doesNotMatch(opening, /armArgs|"--auto"|"ready"/,
+    "performRevert must not arm its own revert PR: a draft that arms itself is not a hold");
+  const armCalls = source.match(/gh\(armArgs\(/g) ?? [];
+  assert.equal(armCalls.length, 1, "exactly one arm site");
+  assert.match(source, /verdict\.outcome === SETTLE\.ARM\) \{\s*gh\(\["pr", "ready"[\s\S]{0,80}gh\(armArgs\(/,
+    "the arm site sits behind the ARM verdict");
+  assert.ok(armArgs("7").includes("--auto"));
+});
+
+// ---------------------------------------------------------------------------------------------------
+// #2349: THE REVERT IS THE FALLBACK, NOT THE DEFAULT -- wake the author, give them the window, then settle.
+// ---------------------------------------------------------------------------------------------------
+
+const RUN = "34275102543";
+const pr = (over: Record<string, unknown>) => ({ number: 900, body: "", state: "OPEN", mergedAt: null,
+  headRefName: "agent/fix-900", ...over });
+
+test("#2349 the window is a NAMED constant of 60 minutes", () => {
+  assert.equal(FIX_FORWARD_WINDOW_MINUTES, 60);
+});
+
+test("#2349 OUTCOME 1: a fix-forward PR naming the run is present -- the revert is CLOSED, naming it", () => {
+  const fixForward = fixForwardPr({ prs: [pr({ number: 2346, body: `Fixes the map miss.\nhttps://github.com/a11ign/a11ign/actions/runs/${RUN}` })],
+    runId: RUN, pushSha: PUSH, revertNumber: 2341 });
+  assert.equal(fixForward, 2346);
+  const v = settleVerdict({ revertState: "OPEN", fixForward, authorResolved: true, minutesOpen: 20 });
+  assert.equal(v.outcome, SETTLE.CLOSE);
+  assert.match(v.reason, /#2346/);
+});
+
+test("#2349 OUTCOME 2: no fix-forward past the window -- the revert is ARMED", () => {
+  const v = settleVerdict({ revertState: "OPEN", fixForward: null, authorResolved: true,
+    minutesOpen: FIX_FORWARD_WINDOW_MINUTES });
+  assert.equal(v.outcome, SETTLE.ARM);
+  assert.match(v.reason, /nobody claimed/);
+});
+
+test("#2349 the window is a WAIT, not an arm: no fix-forward yet and time remains", () => {
+  const v = settleVerdict({ revertState: "OPEN", fixForward: null, authorResolved: true,
+    minutesOpen: FIX_FORWARD_WINDOW_MINUTES - 1 });
+  assert.equal(v.outcome, SETTLE.WAIT);
+});
+
+test("#2349 OUTCOME 3: no author resolvable -- ARMED at once, and the reason says why", () => {
+  const v = settleVerdict({ revertState: "OPEN", fixForward: null, authorResolved: false, minutesOpen: 0 });
+  assert.equal(v.outcome, SETTLE.ARM);
+  assert.match(v.reason, /no author could be resolved/);
+});
+
+test("#2349 a fix-forward beats an unresolved author, and an unreadable or settled revert is left alone", () => {
+  assert.equal(settleVerdict({ revertState: "OPEN", fixForward: 5, authorResolved: false, minutesOpen: 0 }).outcome,
+    SETTLE.CLOSE);
+  assert.equal(settleVerdict({ revertState: null, fixForward: null, authorResolved: false, minutesOpen: 999 }).outcome,
+    SETTLE.LEAVE);
+  for (const state of ["MERGED", "CLOSED"]) {
+    assert.equal(settleVerdict({ revertState: state, fixForward: null, authorResolved: true, minutesOpen: 999 }).outcome,
+      SETTLE.LEAVE);
+  }
+});
+
+test("#2349 fixForwardPr: naming is the only evidence, and the revert cannot cancel itself", () => {
+  const base = { runId: RUN, pushSha: PUSH, revertNumber: 2341 };
+  const url = `https://github.com/a11ign/a11ign/actions/runs/${RUN}`;
+  // negative controls: an unrelated PR, a longer run id sharing the prefix, the revert itself (by number and by branch)
+  assert.equal(fixForwardPr({ ...base, prs: [pr({ body: "unrelated" })] }), null);
+  assert.equal(fixForwardPr({ ...base, prs: [pr({ body: `${url}9` })] }), null);
+  assert.equal(fixForwardPr({ ...base, prs: [pr({ number: 2341, body: url })] }), null);
+  assert.equal(fixForwardPr({ ...base, prs: [pr({ headRefName: "revert/a1b2c3d4e5-316", body: url })] }), null);
+  assert.equal(fixForwardPr({ ...base, prs: [pr({ state: "CLOSED", body: url })] }), null, "closed unmerged fixed nothing");
+  // positive controls: a Fixes-trunk line by run id, by sha, and an already-merged fix
+  assert.equal(fixForwardPr({ ...base, prs: [pr({ number: 1, body: `Fixes-trunk: ${RUN}` })] }), 1);
+  assert.equal(fixForwardPr({ ...base, prs: [pr({ number: 2, body: `x\nFixes-trunk: ${PUSH.slice(0, 10)}` })] }), 2);
+  assert.equal(fixForwardPr({ ...base, prs: [pr({ number: 3, state: "MERGED", mergedAt: "2026-09-24T12:00:00Z", body: url })] }), 3);
+});
+
+test("#2349 the author wake names the failing test, the run and the window", () => {
+  const c = authorWakeComment({ created: "https://github.com/a11ign/a11ign/pull/2341", author: "worker-4",
+    failingTests: ["the map names every doc"], runUrl: `https://github.com/a11ign/a11ign/actions/runs/${RUN}` });
+  assert.match(c, /@worker-4/);
+  assert.match(c, /the map names every doc/);
+  assert.match(c, new RegExp(`runs/${RUN}`));
+  assert.match(c, new RegExp(`${FIX_FORWARD_WINDOW_MINUTES} minutes`));
+  assert.match(authorWakeComment({ created: "x", author: "a", failingTests: null, runUrl: "u" }), /could not be named/);
+});
+
+test("#2349 trunk.yml runs the settle step only when a revert PR was opened", () => {
+  assert.match(WORKFLOW, /id: revert\b/);
+  assert.match(WORKFLOW, /if: steps\.revert\.outputs\.revert-pr != ''[\s\S]{0,200}timeout-minutes: 90/);
+  assert.match(WORKFLOW, /trunk-revert\.mjs --settle/);
 });
 
 // ---------------------------------------------------------------------------------------------------

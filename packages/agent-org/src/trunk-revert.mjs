@@ -40,7 +40,7 @@
 // same pipeline that gates every other PR gates this one too.
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
-import { readFileSync, realpathSync } from "node:fs";
+import { appendFileSync, readFileSync, realpathSync } from "node:fs";
 import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
 import { sandboxGitEnv } from "../../guards/src/git-env.mjs";
 import { REPO } from "../../../scripts/repo-identity.mjs";
@@ -448,11 +448,162 @@ export function revertPrBody({ pushSha, originPr, runUrl }) {
     + `and the commit immediately before it was verified green -- so this failure is this merge's own, not `
     + "inherited. See the failing run for the actual cause:\n"
     + `${runUrl}\n\n`
-    + "This PR was opened automatically (pipeline unit 3, #316) and will auto-arm like any other PR -- it "
-    + "still has to pass `gate` itself before it can merge. If this revert is wrong (the failure was a "
-    + "false positive, or the fix has already landed elsewhere), close it and say why on the original PR; "
+    + "This PR was opened automatically (pipeline unit 3, #316) as a DRAFT and is NOT armed: the revert is "
+    + `the FALLBACK, not the default (#2349). The merged PR's author has been woken with the failing run; `
+    + `if a PR naming that run (or carrying a \`Fixes-trunk:\` line) is open within ${FIX_FORWARD_WINDOW_MINUTES} `
+    + "minutes, this revert is closed with a comment naming it, and if not it is armed and merges like any "
+    + "other PR -- it still has to pass `gate` itself. If this revert is wrong (the failure was a false "
+    + "positive, or the fix has already landed elsewhere), close it and say why on the original PR; "
     + `\`git revert -m 1 ${pushSha}\` is itself revertible.\n\n`
     + `Reverts commit ${pushSha}.`;
+}
+
+/**
+ * THE FIX-FORWARD WINDOW, IN MINUTES -- ceo's ruling on #2349 (2026-09-24): the auto-revert is the FALLBACK,
+ * not the default. #2341 reverted a correct doc for a two-entry map miss whose real fix (#2346) was small
+ * and would have needed re-landing on top of the revert. So the author of the merged PR gets this long to
+ * open a PR that names the failing run (or carries a `Fixes-trunk:` line); a red that NO author claims in
+ * this time is reverted exactly as it was before the ruling.
+ */
+export const FIX_FORWARD_WINDOW_MINUTES = 60;
+
+/** What the settle step does with an open, unarmed revert draft. */
+export const SETTLE = { CLOSE: "close", ARM: "arm", WAIT: "wait", LEAVE: "leave" };
+
+/**
+ * PURE: which PR, if any, is a FIX-FORWARD for this red -- one that NAMES the failing run, either as its
+ * URL anywhere in the body or as a `Fixes-trunk:` line carrying the run id or the pushed sha.
+ *
+ * NAMING IS THE ONLY EVIDENCE, deliberately. "Some PR is open" is not a fix for this failure, and reading
+ * intent from a title would let an unrelated PR cancel a revert of real breakage. The revert PR itself
+ * carries the run URL, so it is excluded by number AND by its `revert/` branch -- a match on itself would
+ * cancel every revert. A PR counts when it is open, or already MERGED (the author was fast); a closed
+ * unmerged one fixed nothing.
+ *
+ * @param {{ prs: {number: number, body: string | null, state: string, mergedAt: string | null,
+ *   headRefName: string}[], runId: string, pushSha: string, revertNumber: number }} facts
+ * @returns {number | null}
+ */
+export function fixForwardPr({ prs, runId, pushSha, revertNumber }) {
+  const namesRun = new RegExp(`/actions/runs/${runId}(?!\\d)`);
+  const namesInLine = (/** @type {string} */ body) => [...body.matchAll(/^Fixes-trunk:\s*(.+)$/gim)]
+    .some((m) => new RegExp(`(?<![\\w/])${runId}(?!\\d)`).test(m[1]) || m[1].includes(pushSha.slice(0, 10)));
+  const found = prs.find((pr) => pr.number !== revertNumber && !pr.headRefName.startsWith("revert/")
+    && (pr.state === "OPEN" || pr.mergedAt !== null)
+    && pr.body !== null && (namesRun.test(pr.body) || namesInLine(pr.body)));
+  return found ? found.number : null;
+}
+
+/**
+ * THE SETTLE DECISION, PURE -- what happens to the unarmed revert draft once the author has had the window.
+ * Order matters: a fix-forward wins over everything; with no author to wake there is no hour to give, so
+ * the fallback arms at once and SAYS WHY; only then does the clock decide.
+ *
+ * `revertState` is `null` when the PR could not be read, and that is LEAVE, never an action: closing or
+ * arming a PR this step could not see is a guess about somebody's merged work.
+ *
+ * @param {{ revertState: string | null, fixForward: number | null, authorResolved: boolean,
+ *   minutesOpen: number }} facts
+ * @returns {{outcome: string, reason: string}}
+ */
+export function settleVerdict({ revertState, fixForward, authorResolved, minutesOpen }) {
+  if (revertState === null) {
+    return { outcome: SETTLE.LEAVE, reason: "the revert PR could not be read, so it is left as it is." };
+  }
+  if (revertState !== "OPEN") {
+    return { outcome: SETTLE.LEAVE, reason: `the revert PR is already ${revertState}; someone settled it.` };
+  }
+  if (fixForward !== null) {
+    return { outcome: SETTLE.CLOSE, reason: `#${fixForward} names the failing run, so the fix is on its way `
+      + "and the revert is not needed." };
+  }
+  if (!authorResolved) {
+    return { outcome: SETTLE.ARM, reason: "no author could be resolved for the merged PR, so there was "
+      + "nobody to wake and no window to give -- the revert is armed as it was before #2349." };
+  }
+  if (minutesOpen >= FIX_FORWARD_WINDOW_MINUTES) {
+    return { outcome: SETTLE.ARM, reason: `no PR names the failing run after ${FIX_FORWARD_WINDOW_MINUTES} `
+      + "minutes, so nobody claimed this red -- reverted exactly as before #2349." };
+  }
+  return { outcome: SETTLE.WAIT, reason: `${FIX_FORWARD_WINDOW_MINUTES - minutesOpen} minute(s) of the `
+    + "fix-forward window remain." };
+}
+
+/**
+ * The comment that WAKES the author: the failing test's name and the run, in the same step that opens the
+ * revert (#2349). It is a comment rather than `prompt:session` because this runs on a GitHub runner, which
+ * cannot reach the host's herdr; the comment is what an author's session reads next.
+ * @param {{ created: string, author: string, failingTests: string[] | null, runUrl: string }} args
+ */
+export function authorWakeComment({ created, author, failingTests, runUrl }) {
+  const named = failingTests && failingTests.length > 0
+    ? `Failing: ${failingTests.map((t) => `\`${t}\``).join("; ")}.` : "The failing test could not be named from the log.";
+  return `@${author} -- this merge's own trunk-guard run failed on \`main\`'s tip and the commit before it was `
+    + `green. ${named} Run: ${runUrl}\n\n`
+    + `A revert is opened in ${created} as a DRAFT and NOT armed. **You have ${FIX_FORWARD_WINDOW_MINUTES} `
+    + "minutes:** open a PR whose body names that run (or carries a `Fixes-trunk: <run id>` line) and the "
+    + "revert is closed with a comment naming it; otherwise it is armed and merges. If the failure is the "
+    + "world's rather than this merge's, close the draft and say why.";
+}
+
+/** @param {string} number @returns {string[]} */
+export const armArgs = (number) => ["pr", "merge", number, "--repo", REPO, "--auto", "--merge"];
+
+/**
+ * The settle step: wait out the rest of the window, then read the world once and act. ONE read after the
+ * wait, never a poll -- the author has the hour, and a loop here would only spend the runner.
+ *
+ * NO STILL-THE-TIP CHECK HERE, AND THAT IS A CHOICE. `revertVerdict` refuses when main has moved, which
+ * was right for an instant decision; an hour later main has almost always moved (the queue merges all
+ * day), so repeating it would leave the fallback unreachable. What guards an arm now is the PR itself:
+ * `gate` runs on the revert, it must merge cleanly, and a fix-forward is looked for by name.
+ *
+ * @param {{ revertPr: number, runId: string, pushSha: string }} args
+ */
+async function settle({ revertPr, runId, pushSha }) {
+  const read = lookup(() => JSON.parse(gh(["pr", "view", String(revertPr), "--repo", REPO,
+    "--json", "state,createdAt"])));
+  const openedAt = read ? Date.parse(read.createdAt) : NaN;
+  const waitMs = FIX_FORWARD_WINDOW_MINUTES * MS_PER_MINUTE - (Date.now() - openedAt);
+  const authorResolved = lookupOriginPr(pushSha) !== null;
+  if (authorResolved && waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
+  const prs = lookup(() => JSON.parse(gh(["pr", "list", "--repo", REPO, "--state", "all", "--limit", "100",
+    "--json", "number,body,state,mergedAt,headRefName"])));
+  const fresh = lookup(() => JSON.parse(gh(["pr", "view", String(revertPr), "--repo", REPO, "--json", "state"])));
+  const verdict = settleVerdict({
+    revertState: fresh ? fresh.state : null,
+    fixForward: prs ? fixForwardPr({ prs, runId, pushSha, revertNumber: revertPr }) : null,
+    authorResolved,
+    minutesOpen: Number.isNaN(openedAt) ? FIX_FORWARD_WINDOW_MINUTES
+      : Math.floor((Date.now() - openedAt) / MS_PER_MINUTE),
+  });
+  console.log(`SETTLE #${revertPr}: ${verdict.outcome} -- ${verdict.reason}`);
+  if (verdict.outcome === SETTLE.CLOSE) {
+    gh(["pr", "close", String(revertPr), "--repo", REPO, "--delete-branch", "--comment",
+      `Closing: ${verdict.reason}`]);
+  } else if (verdict.outcome === SETTLE.ARM) {
+    gh(["pr", "ready", String(revertPr), "--repo", REPO]);
+    gh(armArgs(String(revertPr)));
+    gh(["pr", "comment", String(revertPr), "--repo", REPO, "--body", `Armed: ${verdict.reason}`]);
+  }
+}
+
+const MS_PER_MINUTE = 60_000;
+
+/** The run id at the end of a `.../actions/runs/<id>` URL, or `""`. @param {string} runUrl */
+const runIdOf = (runUrl) => /\/runs\/(\d+)/.exec(runUrl)?.[1] ?? "";
+
+/**
+ * Hand the revert PR's number to the workflow's next step (`settle`) and say WHICH ACCOUNT opened it.
+ * #2341 was authored by the chairman's own account, i.e. the pipeline acted as a person; the login is
+ * printed so the next real revert shows whose token `A11IGN_BOT_TOKEN` is (#2349).
+ * @param {string} created the URL `gh pr create` printed
+ */
+function reportRevertPr(created) {
+  const number = /\/pull\/(\d+)/.exec(created)?.[1];
+  const login = lookup(() => gh(["pr", "view", created, "--json", "author", "--jq", ".author.login"]).trim());
+  console.log(`REVERT PR AUTHOR ACCOUNT: ${login ?? "unreadable"}`);
+  if (number && process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `revert-pr=${number}\n`);
 }
 
 /**
@@ -533,24 +684,39 @@ function performRevert({ pushSha, runUrl }) {
   // "the revert did not happen" when it did. Reported, never thrown: the PR is real and open regardless.
   if (originPr) {
     try {
-      gh(["pr", "comment", String(originPr.number), "--repo", REPO, "--body",
-        `This merge's own trunk-guard run failed on \`main\`'s tip and the commit before it was green, so `
-        + `a revert is PROPOSED in ${created} -- opened as a DRAFT and NOT armed. Nothing is reverted yet. `
-        + `If this failure is the world's rather than this merge's (a wall-clock assertion, an outage, a `
-        + `dependency moving underneath), close that draft and say why; #616 is the row for teaching the `
-        + `decision to tell those apart by itself.`]);
+      gh(["pr", "comment", String(originPr.number), "--repo", REPO, "--body", authorWakeComment({
+        created, author: originPr.author, runUrl, failingTests: lookupPushFailingTests(runIdOf(runUrl)) })]);
     } catch (cause) {
       console.error(`Opened ${created}, but could not comment on the origin PR #${originPr.number} -- `
         + `${cause instanceof Error ? cause.message : cause}. The revert PR itself is real; only this `
         + "notification failed.");
     }
   }
+  reportRevertPr(created);
   process.exit(EXIT.READY);
+}
+
+/**
+ * The `--settle` mode's argument check and launch, split from `main` so each stays one thing.
+ * @param {(name: string) => string | null} flag
+ */
+function runSettle(flag) {
+  const pushSha = flag("push-sha");
+  const runId = flag("run-id");
+  const revertPr = Number(flag("revert-pr"));
+  if (!pushSha || !runId || !Number.isInteger(revertPr)) {
+    console.error("Usage: --settle --revert-pr=<n> --run-id=<id> --push-sha=<sha>");
+    process.exit(EXIT.CANNOT_ASK);
+  }
+  settle({ revertPr, runId, pushSha }).catch((cause) => {
+    console.error(`SETTLE FAILED: ${cause instanceof Error ? cause.message : cause}`);
+    process.exit(EXIT.CANNOT_ASK);
+  });
 }
 
 function main() {
   refuseUnknownFlags(["--push-sha", "--before-sha", "--run-url", "--parent-recheck", "--run-id",
-    "--parent-log"],
+    "--parent-log", "--settle", "--revert-pr"],
     { entry: import.meta.url, command: "node packages/agent-org/src/trunk-revert.mjs" });
   const flag = (/** @type {string} */ name) => {
     const arg = process.argv.find((a) => a.startsWith(`--${name}=`));
@@ -558,6 +724,7 @@ function main() {
   };
   const pushSha = flag("push-sha");
   const beforeSha = flag("before-sha");
+  if (process.argv.includes("--settle")) return runSettle(flag);
   const runUrl = flag("run-url") ?? "";
   if (!pushSha || !beforeSha) {
     console.error("Usage: node packages/agent-org/src/trunk-revert.mjs --push-sha=<sha> --before-sha=<sha> [--run-url=<url>]\n"

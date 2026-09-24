@@ -309,6 +309,7 @@ jobs:
           fi
 
       - name: Revert this push, unless the failure is inherited or main has already moved on
+        id: revert
         env:
           A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
           FALLBACK_TOKEN: ${{ github.token }}
@@ -338,3 +339,26 @@ jobs:
             --run-id=${{ github.run_id }} \
             --parent-log=/tmp/parent-test.log \
             --run-url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+      # #2349: THE REVERT IS THE FALLBACK, NOT THE DEFAULT. The step above opened the revert as an unarmed
+      # DRAFT and commented on the merged PR to wake its author; this one gives that author
+      # `FIX_FORWARD_WINDOW_MINUTES` (trunk-revert.mjs), then reads the world ONCE: a PR naming this run
+      # (or a `Fixes-trunk:` line) closes the revert, and nothing armed by then arms it. It sleeps inside
+      # the job rather than on a cron because `trunk.yml` must never carry a schedule (see the header:
+      # GitHub's 60-day inactivity disable), and a red trunk is rare enough that one idle runner-hour is
+      # cheaper than a second workflow. `timeout-minutes` bounds it; `revert-pr` is only set when a PR
+      # was actually opened, so a refused decision skips this step entirely.
+      - name: Give the author the window, then close the revert or arm it (#2349)
+        if: steps.revert.outputs.revert-pr != ''
+        timeout-minutes: 90
+        env:
+          GH_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::the bot token secret is absent -- the revert PR is left as an unarmed draft."
+            exit 0
+          fi
+          node packages/agent-org/src/trunk-revert.mjs --settle \
+            --revert-pr=${{ steps.revert.outputs.revert-pr }} \
+            --run-id=${{ github.run_id }} \
+            --push-sha=${{ github.sha }}
