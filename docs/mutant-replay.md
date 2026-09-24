@@ -65,7 +65,26 @@ Found: 2 of 3, and **read the two caveats before quoting that** (the second repl
 
 ## What the operators missed on #2368, and why
 
-<!-- TARGETED-PROBE -->
+**The operators can express it; the budget does not reach it.** To separate the two, a side run (NOT the shipped configuration,
+and chosen with the answer in hand) restricted the mutants to the lines of the three helpers the reviewer named in
+`packages/nvda-worker/src/auth-flow.mjs` -- `requiredEnvNames` (:232-236), `controlsNamed` (:344-356), `expectationMet`
+(:358-366) -- and ran them against the same two test files with no time limit. **47 mutants, 47 run, 22 killed, 25 survived, 0 refused,
+about 33 minutes** (load average 82 falling to 2 while it ran). Survivors in each of the three: `requiredEnvNames` (:233 both spreads
+emptied, :234 a condition forced false and both flips, :235 `return null` and the `new Set` argument emptied), `controlsNamed` (:349 the
+walk-up loop's condition and its `byId.get` argument, :350 the name comparison flipped, :352 `return false` -> `null`), and
+`expectationMet` (:361 and :362 forced false and flipped, :363 all three role lists emptied, :364 and :366 the return and the
+arguments). That is the reviewer's finding, read off by a machine: **no test the row names reads what the worker's helpers return.**
+
+So the miss on this PR is a miss of REACH, and there are three reasons, none of them an operator:
+
+1. **695 mutants against a budget for about ten.** `auth-flow.mjs` was added whole, so all 405 of its lines are "changed", and the
+   round-robin across ten files takes each file's first mutant before any file's second. The three helpers sit at :232-366 of a
+   file whose priority-ordered list reaches them long after the budget ends.
+2. **Three test runs a mutant.** `mutation-check.mjs` runs the test clean, mutated and restored, so a 12-second test costs 36
+   seconds a mutant, of which 24 are the clean run and the post-restore run. A one-run-per-mutant mode is the
+   obvious lever and lives in `mutation-check.mjs`, outside this row's Region, so it is a follow-up and not in this diff.
+3. **No notion of which changed line a test could reach.** A mutant on a line no named test executes cannot be killed by it, and
+   that is not the same finding as a line it executes and never asserts on; this generator does not tell them apart.
 
 ## Threats to this reading
 
@@ -74,6 +93,16 @@ Found: 2 of 3, and **read the two caveats before quoting that** (the second repl
 - **A big PR is exactly where the budget bites.** #2368 changed 28 files and added `auth-flow.mjs` whole; the budget covers under 2% of its mutants. "DID NOT FINISH", and how many never ran, is printed on the PR body for that reason.
 - **Noise.** #2384: 12 survivors of 24. Equivalent mutants are in there (a comparator's tie-breaker, an unread argument); the cap (10) and the count cut are stated on the body, and nobody is refused on the list.
 - **A syntax-error mutant reads as killed.** The suite goes red for the wrong reason; that can hide a survivor and cannot invent one.
+
+## The generator run on its own diff
+
+`survivorsOfThisTree` was run on this branch before the PR opened (`A11Y_SURVIVORS_BUDGET=150`): **16 of 247 mutants ran, 4 survived**, and
+"DID NOT FINISH" was printed. All four were real gaps in the first draft of this row's own tests, and the fix is what the four
+lines say: `matchAll(CALLEE)` -> `matchAll([])` and `slice(0, m.index)` -> `slice(0, [])` in the generator (no test pinned the
+callee, or a signature whose `{` sits on the next line), `earlier.slice(0, from)` -> `slice(0, [])` in `pr-open.mjs` (replacing an
+existing section kept nothing before it) and `survivors(body)` -> `survivors([])` (the fake ignored its argument). Each was
+re-run through `npm run mutate` after the tests were strengthened and now reads `THE GUARD BITES.` One PR is not a rate: it is the
+tool finding something on the first diff it saw that its author had not.
 
 ## What ships
 
