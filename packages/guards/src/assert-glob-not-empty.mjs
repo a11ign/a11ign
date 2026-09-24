@@ -39,6 +39,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { refuseUnknownFlags, flagValue } from "@a11ign/worker-fleet/cli-flags";
 import { npmCliInvocation } from "../../../scripts/npm-cli-executable.mjs";
+import { suiteStartVerdict } from "./worktree-resolution.mjs";
 
 /**
  * Pure: which of the given globs resolved to fewer than `min` files, and how many each actually matched.
@@ -130,6 +131,20 @@ export function runnerInvocation({ runner, patterns, concurrency }) {
     + `(${RUNNERS.join(", ")}) -- refusing to guess which one to run.`);
 }
 
+/**
+ * #2218: THE POINT A SUITE STARTS, and so the point a tree that reads another checkout is refused -- before a
+ * runner spends minutes measuring the wrong branch and reports it green. The tree asked about is the one THIS
+ * FILE lives in, resolved the way `RSTEST_CONFIG` is, so the caller's cwd cannot change the answer.
+ * @returns {boolean} false after refusing
+ */
+function checkResolutionBeforeRun() {
+  const verdict = suiteStartVerdict(fileURLToPath(new URL("../../../", import.meta.url)));
+  if (verdict.action === "proceed") return true;
+  process.stderr.write(`${verdict.action === "refuse" ? "REFUSING: this tree does not measure itself. " : "WARNING: "}${verdict.line}\n`);
+  if (verdict.action === "refuse") process.exitCode = 1;
+  return verdict.action === "warn";
+}
+
 function main() {
   refuseUnknownFlags(["--min", "--drop-empty", "--run", "--runner", "--test-concurrency"],
     { entry: import.meta.url, command: "node packages/guards/src/assert-glob-not-empty.mjs" });
@@ -170,6 +185,7 @@ function main() {
     return;
   }
   if (!process.argv.includes("--run")) return;
+  if (!checkResolutionBeforeRun()) return;
   // The SAME `patterns` array just proven non-vacuous -- not a second copy re-typed by the caller.
   const concurrency = flagValue(process.argv, "test-concurrency");
   const args = runnerInvocation({ runner, patterns, concurrency });
