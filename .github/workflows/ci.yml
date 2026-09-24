@@ -326,9 +326,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci --ignore-scripts
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: npm run build
       # `GH_TOKEN` because the packaging guards in the population shell out to `gh`, as `ts`'s own test step does.
       - name: Every tree-wide guard, on this tree
