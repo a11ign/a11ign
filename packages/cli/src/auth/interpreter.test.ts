@@ -1,13 +1,21 @@
 // THE CLI'S INTERPRETER, AND ITS PARITY WITH THE WORKER'S (ADR 0038, "The rule layer logs in for itself").
 //
 // There are two interpreters because there cannot be one (the worker is plain `.mjs`, and neither package imports
-// the other in production). So this file is the lock: every scenario below runs through BOTH over ONE fake browser,
-// and the two must reach the SAME outcome — the same typed values, the same clicks, the same marks, the same fault
-// and reason. A scenario that only one of them handles is a defect in the other, and this is where it shows.
+// the other in production). So this file is the lock, in two parts. Every scenario through `signIn` runs through BOTH over
+// ONE fake browser, and the two must reach the SAME outcome: the same typed values, the same clicks, the same marks, the
+// same fault and reason. And the three pure helpers the interpreters share (`controlsNamed`, `expectationMet`,
+// `requiredEnvNames`) are called on BOTH sides over one table of node sets and plans, and must agree on every row. A
+// behaviour only one of them has is a defect in the other, and this is where it shows.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { signIn as workerSignIn, validateAuthRequest } from "../../../nvda-worker/src/auth-flow.mjs";
+import {
+  controlsNamed as workerControlsNamed,
+  expectationMet as workerExpectationMet,
+  requiredEnvNames as workerRequiredEnvNames,
+  signIn as workerSignIn,
+  validateAuthRequest,
+} from "../../../nvda-worker/src/auth-flow.mjs";
 import { signIn as cliSignIn, controlsNamed, expectationMet, requiredEnvNames, type AuthDriver, type AuthPlan, type AxNode } from "./interpreter.js";
 import type { FlowStep } from "./flows.js";
 
@@ -210,18 +218,82 @@ test("a missing credential is auth-credential-missing in both, naming the variab
   assert.match(String((outcome as { message: string }).message), /APP_PASSWORD/);
 });
 
-test("the matching functions and the environment scan, as the worker's", () => {
-  const nodes: AxNode[] = [
-    { id: "1", role: "group", name: "Billing", ignored: false },
-    { id: "2", role: "textbox", name: "  Address\n line ", parentId: "1", backendId: 2, ignored: false },
-    { id: "3", role: "textbox", name: "Address line", backendId: 3, ignored: false },
-    { id: "4", role: "textbox", name: "Address line", backendId: 4, ignored: true },
-    { id: "5", role: "heading", name: "Dashboard", ignored: false },
+const NODES: AxNode[] = [
+  { id: "1", role: "group", name: "Billing", ignored: false },
+  { id: "2", role: "textbox", name: "  Address\n line ", parentId: "1", backendId: 2, ignored: false },
+  { id: "3", role: "textbox", name: "Address line", backendId: 3, ignored: false },
+  { id: "4", role: "textbox", name: "Address line", backendId: 4, ignored: true },
+  { id: "5", role: "heading", name: "Dashboard", ignored: false },
+  { id: "6", role: "group", name: "Shipping", parentId: "1", ignored: false },
+  { id: "7", role: "button", name: "Sign in", parentId: "6", backendId: 7, ignored: false },
+  { id: "8", role: "combobox", name: "Country", backendId: 8, ignored: false },
+  { id: "9", role: "link", name: "Sign out", backendId: 9, ignored: false },
+  { id: "10", role: "StaticText", name: "Welcome back, Ada", ignored: false },
+];
+
+/** Every query the interpreters ask of `controlsNamed`, plus ones built to make two copies disagree: whitespace, an ignored twin, a nested group, a role outside the set. */
+const QUERIES: Array<{ roles: string[]; name: string; within?: string }> = [
+  { roles: ["textbox"], name: "Address line" },
+  { roles: ["textbox"], name: "  address\tline " },
+  { roles: ["textbox"], name: "Address line", within: "Billing" },
+  { roles: ["textbox"], name: "Address line", within: "Shipping" },
+  { roles: ["button"], name: "Sign in", within: "Billing" },
+  { roles: ["button"], name: "Sign in", within: "Shipping" },
+  { roles: ["button", "link"], name: "Sign out" },
+  { roles: ["combobox", "listbox"], name: "Country" },
+  { roles: ["textbox"], name: "Country" },
+  { roles: ["textbox"], name: "Address line", within: "Nowhere" },
+];
+
+const EXPECTATIONS: Array<{ kind: "heading" | "control" | "text"; name: string }> = [
+  { kind: "heading", name: "Dashboard" },
+  { kind: "heading", name: "Address line" },
+  { kind: "control", name: "Sign in" },
+  { kind: "control", name: "Dashboard" },
+  { kind: "control", name: "Address line" },
+  { kind: "text", name: "Dash" },
+  { kind: "text", name: "Welcome back" },
+  { kind: "text", name: "nothing of the kind" },
+];
+
+test("THE HELPERS, through both: controlsNamed returns the same controls for every query, worker and CLI", () => {
+  for (const query of QUERIES) {
+    const cli = controlsNamed(NODES, query).map((node) => node.id);
+    const worker = workerControlsNamed(NODES, query).map((node: AxNode) => node.id);
+    assert.deepEqual(worker, cli, `controlsNamed disagrees for ${JSON.stringify(query)}`);
+  }
+  // The table is not vacuous: it contains queries that match one control, several, and none.
+  const sizes = new Set(QUERIES.map((query) => controlsNamed(NODES, query).length));
+  assert.ok(sizes.has(0) && sizes.has(1) && sizes.has(2), `the table must cover no match, one and two: ${[...sizes]}`);
+  assert.deepEqual(controlsNamed(NODES, { roles: ["textbox"], name: "Address line", within: "Billing" }).map((n) => n.id), ["2"]);
+});
+
+test("THE HELPERS, through both: expectationMet agrees on every expectation, worker and CLI", () => {
+  for (const expected of EXPECTATIONS) {
+    assert.equal(workerExpectationMet(NODES, expected), expectationMet(NODES, expected), `expectationMet disagrees for ${JSON.stringify(expected)}`);
+  }
+  const answers = new Set(EXPECTATIONS.map((expected) => expectationMet(NODES, expected)));
+  assert.deepEqual([...answers].sort(), [false, true], "the table must contain expectations that are met and ones that are not");
+  assert.ok(expectationMet(NODES, { kind: "heading", name: "Dashboard" }));
+  assert.ok(!expectationMet(NODES, { kind: "heading", name: "Address line" }), "a textbox is not a heading");
+  // An ignored node satisfies nothing, in either copy.
+  const onlyIgnored: AxNode[] = [{ id: "1", role: "heading", name: "Dashboard", ignored: true }];
+  assert.equal(expectationMet(onlyIgnored, { kind: "heading", name: "Dashboard" }), false);
+  assert.equal(workerExpectationMet(onlyIgnored, { kind: "heading", name: "Dashboard" }), false);
+});
+
+test("THE HELPERS, through both: requiredEnvNames finds the same variables, and stops at the capture point in both", () => {
+  const plans: Array<{ login: FlowStep[]; flow?: FlowStep[]; upTo?: number }> = [
+    { login: LOGIN },
+    { login: LOGIN, flow: [{ fill: { field: "PIN", fromEnv: "APP_PIN" } }], upTo: 0 },
+    { login: LOGIN, flow: [{ fill: { field: "PIN", fromEnv: "APP_PIN" } }], upTo: 1 },
+    { login: LOGIN, flow: [{ fill: { field: "PIN", fromEnv: "APP_PIN" } }, { fill: { field: "Note", value: "literal" } }, { fill: { field: "Two", fromEnv: "APP_PIN" } }] },
+    { login: [...LOGIN.slice(0, -1), { fill: { field: "Again", fromEnv: "APP_USER" } }, LOGIN[LOGIN.length - 1]] },
   ];
-  assert.equal(controlsNamed(nodes, { roles: ["textbox"], name: "Address line" }).length, 2);
-  assert.deepEqual(controlsNamed(nodes, { roles: ["textbox"], name: "Address line", within: "Billing" }).map((n) => n.id), ["2"]);
-  assert.ok(expectationMet(nodes, { kind: "heading", name: "Dashboard" }));
-  assert.ok(!expectationMet(nodes, { kind: "heading", name: "Address line" }));
-  assert.ok(expectationMet(nodes, { kind: "text", name: "Dash" }));
+  for (const plan of plans) {
+    const workerPlan = validateAuthRequest(plan, URL_UNDER_TEST);
+    assert.deepEqual([...workerRequiredEnvNames(workerPlan)].sort(), [...requiredEnvNames(plan)].sort(), `requiredEnvNames disagrees for ${JSON.stringify(plan)}`);
+  }
   assert.deepEqual(requiredEnvNames({ login: LOGIN, flow: [{ fill: { field: "PIN", fromEnv: "APP_PIN" } }], upTo: 0 }).sort(), ["APP_PASSWORD", "APP_USER"]);
+  assert.deepEqual(requiredEnvNames({ login: LOGIN, flow: [{ fill: { field: "PIN", fromEnv: "APP_PIN" } }], upTo: 1 }).sort(), ["APP_PASSWORD", "APP_PIN", "APP_USER"]);
 });
