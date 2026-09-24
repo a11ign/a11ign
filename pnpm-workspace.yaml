@@ -1,0 +1,45 @@
+# pnpm workspace beside npm's (#2297, child 1 of #57). package-lock.json STAYS: npm still installs while the
+# sibling rows move CI, the hooks and the publish path.
+
+packages:
+  - "packages/*"
+
+# WHY THIS IS ON: internal dependencies are pinned "0.0.0", not `workspace:*`, because npm cannot read the
+# `workspace:` protocol and `npm ci` must keep working. pnpm resolves a bare version from the REGISTRY unless
+# told to link workspace packages, so with this off an install can succeed while every @a11ign/* import reads
+# a downloaded copy. Measured 2026-09-24: off, `pnpm import` stopped on a 404 for the unpublished
+# @a11ign/pdf -- a published package would have installed silently. `pnpm-workspace.test.ts` pins that every
+# internal edge in pnpm-lock.yaml is a `link:`.
+#
+# What it does to release: `changeset version` still rewrites each dependent's "0.0.0" range to the new
+# concrete version, so a packed tarball carries concrete ranges, exactly as today, and never a `workspace:`.
+# (Measured: a patch changeset on evidence turns every dependent's "0.0.0" into "0.1.0".) That commit must
+# therefore refresh pnpm-lock.yaml as well -- the specifiers change -- and a range the workspace package does
+# not satisfy would fall through to the registry, which is why the lockfile is read, not trusted.
+linkWorkspacePackages: true
+
+# THE STORE IS NOT SET HERE, on purpose. pnpm's default is ~/.local/share/pnpm/store/v10, which on the agent
+# host is on the same filesystem as the worktrees under ~/repos (both on /dev/mapper/ubuntu--vg-ubuntu--lv),
+# so packages are HARD-LINKED into each worktree (link count 2, one copy on disk). It must not be /tmp: that
+# is RAM-backed on this host and ran out on 2026-09-23. To move it, set npm_config_store_dir per host, not a path
+# in this file: a Windows guest, or any checkout on a different volume from the store, gets pnpm's own
+# fallback (a per-volume store, else copying) rather than hard links -- documented pnpm behaviour, not
+# measured here.
+# OFF, because npm does not install an OPTIONAL peer and pnpm does. packages/judge declares
+# @huggingface/transformers as an optional peer; pnpm's default put it in judge's node_modules (and 566
+# lockfile lines of its tree), so `verify-gate.test.ts` -- which asserts the absence-of-transformers path --
+# failed under pnpm and passed under npm (measured 2026-09-24, full `test:all` on both). The peers judge
+# actually needs (@a11ign/scorer, @anthropic-ai/sdk) are declared by the root manifest, which every package
+# resolves through.
+autoInstallPeers: false
+
+# TWO PACKAGES ARE IMPORTED BUT DECLARED BY NO MANIFEST, and npm's hoisting has hidden it: packages/control's
+# tests import `yaml`, and packages/lab/scripts/axe-calibration.mjs imports `axe-core`. pnpm gives a package only
+# what it declares, so under pnpm both failed to resolve (found by running the whole suite under both).
+# Declaring them is the right fix and changes package-lock.json, which this row promises to leave alone (#2297
+# Done-when 5; `control` may declare nothing besides, ADR 0012). Until the row that retires the npm lockfile
+# can declare them, hoist exactly these two to the root `node_modules`, where npm already puts them: the
+# versions are the ones npm resolves, and nothing else is hoisted.
+publicHoistPattern:
+  - yaml
+  - axe-core
