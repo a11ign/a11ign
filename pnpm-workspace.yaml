@@ -32,3 +32,14 @@ linkWorkspacePackages: true
 # actually needs (@a11ign/scorer, @anthropic-ai/sdk) are declared by the root manifest, which every package
 # resolves through.
 autoInstallPeers: false
+
+# TWO PACKAGES ARE IMPORTED BUT DECLARED BY NO MANIFEST, and npm's hoisting has hidden it: packages/control's
+# tests import `yaml`, and packages/lab/scripts/axe-calibration.mjs imports `axe-core`. pnpm gives a package only
+# what it declares, so under pnpm both failed to resolve (found by running the whole suite under both).
+# Declaring them is the right fix and changes package-lock.json, which this row promises to leave alone (#2297
+# Done-when 5; `control` may declare nothing besides, ADR 0012). Until the row that retires the npm lockfile
+# can declare them, hoist exactly these two to the root `node_modules`, where npm already puts them: the
+# versions are the ones npm resolves, and nothing else is hoisted.
+publicHoistPattern:
+  - yaml
+  - axe-core

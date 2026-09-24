@@ -204,8 +204,7 @@
     "globals": "^17.7.0",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.62.0",
-    "yaml": "^2.9.0"
+    "typescript-eslint": "^8.62.0"
   },
   "optionalDependencies": {
     "@axe-core/playwright": "^4.12.1",
