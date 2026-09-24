@@ -2667,6 +2667,9 @@ honest statement is that nobody knows how many real pages autofocus a control th
 
 ## 43. 1.4.13's PROBE FINDS THE PANEL ONLY FROM ONE STARTING POSITION, and the corpus path happens to start there
 
+**Status 2026-09-24: the corpus half is [VERIFIED](#verified-2026-09-24--the-corpus-half-the-probe-finds-the-panel-from-three-trigger-depths-0-1-and-5-and-only-those) at three trigger depths; the real-page half is still open.** The text below is the
+original finding, kept as written.
+
 **Found 2026-09-06 by a fixture doing its job — by FAILING.** `rules:coverage` refused a promotion because
 1.4.13 had fired 15x on the corpus and 0x on a real page, saying in its own words that "the corpus is built
 from the same assumptions as the rule, so it cannot falsify them". A fixture pair was added to give it real
@@ -2796,6 +2799,54 @@ mutation-checked. Not provable now: whether `stops[0]` actually changes on a rea
 **Finding #2 from the same audit — `crossCheckAgainstElementsList` running after `probeRouteChange`,
 comparing against pre-navigation counts — is queued, not built here.** Same file, so it waits for this to
 land rather than colliding with it.
+
+### VERIFIED 2026-09-24 — the corpus half: the probe finds the panel from three trigger depths (0, 1 and 5), and only those
+
+**Read this before the section above reads as open.** The question this section was filed on — does the probe
+find the panel only from the position the corpus happens to start at? — now has a fleet reading for the
+**corpus** path. **Not for the real-page path**; the last three paragraphs say which of the conditions under
+*"What would tell you it is closed"* that leaves standing.
+
+**The three depth readings, quoted, not re-taken.** All read off the #1926 uniform recapture (`1743 captured,
+0 failed`, export mtime 2026-09-24 00:55Z), on the lab through its own alias, by `orchestrator` — **this
+section's author did not re-read `runs/`** (a gate reading `runs/` is `orchestrator`'s to report,
+`packages/lab/CLAUDE.md`). Each is off the raw capture's `diagnostics[]` mark, and each has `revealed: true`
+on every `bad` variant:
+
+| trigger depth | case | `tabs` / `revealedAt` | source |
+|---|---|---|---|
+| 0 (`+first-tab-stop`) | four cases × `good`/`bad`, 8 captures | `1` / `0` on every one; `bad`: `revealed: true, dismissed: false`, `good`: `revealed: true, dismissed: true` | [#1865, 2026-09-24T07:46Z](https://github.com/a11ign/a11ign/issues/1865) |
+| 1 (the stop-1 siblings) | `focus-panel-undismissable-help.bad.json` | `2` / `1` | #1865, same comment |
+| 5 (`+sixth-tab-stop`) | `.bad.json` and `.good.json`, `startedFrom: "Account settings, document, focused, read only"` | `6` / `5` | [#2238, comment 5809993203](https://github.com/a11ign/a11ign/issues/2238#issuecomment-5809993203) |
+
+`training:check-signals` over the same corpus: `1743 discriminating, 0 blind, 0 contaminated, 0 uncaptured,
+0 stale` → `PASS`, with both the `+first-tab-stop` and `+sixth-tab-stop` cases printing `OK`. A probe that
+only worked from one position would have read `revealed: null`/`false` at depths 0 and 5; it did not. The
+code half is #1205 (`probeFocusReveal` resets focus to document start), the corpus-depth guard is #2054
+(`tab-probe-start-position.test.ts`, extended by #2142 to require three depths, one of them five stops in) —
+run at this commit, **10 tests pass**, not the 5 the row's Acceptance text said (it predates #2142).
+
+**The corpus exercises depths 0, 1 and 5 and no others.** Three positions is not "any position": a trigger
+at depth 3, or eight stops in, was never captured, and the deepest position read (five stops in, with headroom
+inside the walk's bound per #2142's guard) says nothing about where the walk gives up. The original measurement table above is kept because it is the reason this section exists: the
+same page read `tabs 2, revealedAt 1` from one path and `tabs 8, revealedAt −1` from the other.
+
+**What these readings answer, against the section's three conditions for closed:**
+
+- **Answered — "the corpus capture's `revealedAt` is unchanged".** The stop-1 sibling still reads
+  `tabs 2, revealedAt 1`, the corpus row of the table above, so the fix did not move the evidence the 15
+  corpus positives were labelled from. The "what would tell you it got WORSE" condition
+  (`revealed: false` on the corpus path) did not occur: every `bad` at every depth read `revealed: true`.
+- **NOT answered — the fixture pair through the REAL-PAGE path** (`revealed: true` on the bad half,
+  `revealed: false` on the good half, where the original capture read `tabs 8, revealedAt −1`). Every reading
+  above is a corpus case; nobody has re-captured `Daytime telephone` → panel, so that path still rests on
+  the reset being offline-proven only, as §43's "BOTH HALVES BUILT" paragraph says.
+- **NOT answered — `rules:coverage` reporting `1.4.13 … 1 real` rather than `0`.** It was read as
+  `15 corpus / 1 real` on 2026-09-10, before the reset fix landed, and nothing here re-reads it after; a
+  reading from before the fix cannot say the fix reached the product path.
+
+So this section stays open for the real-page half, and no longer for the question of whether the probe is
+position-dependent on the corpus.
 
 ## 44. THE "TITLE" THREE CRITERIA COMPARE IS THE LAST THING NVDA SAID, WHICH ON a LIVE-REGION PAGE IS NOT THE TITLE
 
