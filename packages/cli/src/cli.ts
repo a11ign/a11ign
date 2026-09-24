@@ -55,9 +55,26 @@ import { relative, resolve as resolvePath } from "node:path";
 import { parseFormsConfig, refuseIfWrongOrigin, FormsConfigError } from "./forms/config.js";
 import { submissionPlan, formCoverage } from "./forms/coverage.js";
 import { draftFormsConfig } from "./forms/draft.js";
+import { PageListError, multiPageJson, refuseMalformedUrls, resolveMaxPages, resolvePageList, rollUpLines,
+  runPageList, surfaceFromEnv } from "./multi-page.js";
 
 interface Args {
+  /**
+   * The page of a SINGLE-page run, and empty for a list: a reader that wants "the URL" and gets a list must
+   * fail loudly, not capture the first of several and say nothing (the defect #2272 closes). A list is `urls`.
+   */
   url: string;
+  /** Every page this run was asked to capture, in the order given: one entry for a single URL. */
+  urls: string[];
+  /** URLs as typed on the command line, before `parseArgs` resolves them (or `--urls`) into `urls`. */
+  positionalUrls: string[];
+  /** The `--urls` value as given, or null. The Action passes its multi-line `urls` input here. */
+  listText: string | null;
+  /**
+   * The `--max-pages` override as typed, or null. A flag and nothing else: no environment variable or config
+   * file reads into it (#2272), so raising the cap is always a thing written on the command that was run.
+   */
+  maxPages: string | null;
   task: string;
   /** null when the user named no worker, which is what enables local-VM management. */
   worker: string | null;
@@ -112,7 +129,8 @@ function parsedAfterRun(): AfterRun {
 }
 
 const USAGE =
-  'Usage: npm run witness -- <url> --task "..." [--worker http://host:port] ' +
+  'Usage: npm run witness -- <url> [<url> ...] | --urls "<url> <url> ..." --task "..." [--max-pages N] '
+  + "[--worker http://host:port] " +
   "[--after restore|stop|pause|leave] [--json] [--debug] [--probe-forms] [--no-probe-focus] "
   + "[--no-probe-navigation] [--no-probe-focus-context] "
   + "[--forms <file>] [--emit-form-config] [--plan] "
@@ -121,6 +139,10 @@ const USAGE =
 function defaultArgs(): Args {
   return {
     url: "",
+    urls: [],
+    positionalUrls: [],
+    listText: null,
+    maxPages: null,
     task: "Read and understand this page",
     worker: process.env.A11Y_WORKER ?? null,
     after: parsedAfterRun(),
@@ -196,10 +218,21 @@ const BOOLEAN_FLAGS: Readonly<Record<string, (args: Args) => void>> = Object.fre
   "--no-keep": (a) => { a.keep = false; },
 });
 
+/**
+ * The value-taking flags of the page list (#2272), in a table for the reason the boolean ones are: the switch
+ * below is at the complexity gate, and a flag that swallows its value still moves `i` in `applyArg`.
+ */
+const LIST_FLAGS: Readonly<Record<string, (args: Args, value: string | undefined) => void>> = Object.freeze({
+  "--urls": (a, value) => { a.listText = value ?? a.listText; },
+  "--max-pages": (a, value) => { a.maxPages = value ?? a.maxPages; },
+});
+
 export function applyArg(args: Args, argv: string[], i: number): number {
   const v = argv[i];
   const setBoolean = BOOLEAN_FLAGS[v];
   if (setBoolean) { setBoolean(args); return i; }
+  const setListFlag = LIST_FLAGS[v];
+  if (setListFlag) { setListFlag(args, argv[++i]); return i; }
   switch (v) {
     case "--task": args.task = argv[++i] ?? args.task; return i;
     case "--worker": args.worker = argv[++i] ?? args.worker; return i;
@@ -207,7 +240,9 @@ export function applyArg(args: Args, argv: string[], i: number): number {
     case "--axe-results": args.axeResults = argv[++i] ?? args.axeResults; return i;
     case "--forms": args.formsConfig = argv[++i] ?? args.formsConfig; return i;
     default:
-      if (!v.startsWith("--")) args.url = v;
+      // PUSHED, never assigned: `args.url = v` kept the LAST positional and dropped the rest, so
+      // `witness <a> <b>` captured only <b> and said nothing (#2272).
+      if (!v.startsWith("--")) args.positionalUrls.push(v);
       return i;
   }
 }
@@ -216,10 +251,13 @@ export function applyArg(args: Args, argv: string[], i: number): number {
 export function parseArgs(argv: string[] = process.argv.slice(2)): Args {
   const args = defaultArgs();
   for (let i = 0; i < argv.length; i++) i = applyArg(args, argv, i);
-  if (!args.url) {
-    console.error(USAGE);
-    process.exit(1);
+  try {
+    args.urls = resolvePageList({ positional: args.positionalUrls, listText: args.listText });
+  } catch (error) {
+    if (error instanceof PageListError) error.message += `\n${USAGE}`;
+    throw error;
   }
+  args.url = args.urls.length === 1 ? args.urls[0] : "";
   return args;
 }
 
@@ -290,7 +328,7 @@ async function planOnly(args: Args): Promise<boolean> {
   const config = parseFormsConfig(await readFile(args.formsConfig, "utf8"), args.formsConfig);
   // The origin guard runs HERE too, not only on the real path. A plan against the wrong site would print
   // a reassuring page of intentions that describe a run which would have been refused.
-  refuseIfWrongOrigin(config, args.url);
+  for (const url of args.urls) refuseIfWrongOrigin(config, url);
   console.log(submissionPlan(config.forms, config.origin).join("\n"));
   return true;
 }
@@ -302,13 +340,13 @@ async function planOnly(args: Args): Promise<boolean> {
  * fleet at all"). A fetch/parse failure is reported as `pdf: null` ("not run"), never thrown -- one
  * layer's evidence failing to arrive should not crash the whole run.
  */
-export async function runPdfLayer(args: Args): Promise<void> {
+export async function runPdfLayer(args: Args, sink: JsonSink = printAsJson): Promise<void> {
   process.stderr.write(`Scanning ${args.url} (PDF accessibility tag tree; no fleet, no browser, no NVDA) ...\n`);
   const result = await scanPdfTagTree(args.url);
   if (!result.ok) process.stderr.write(`WARNING: ${result.error}\n`);
   const findings = result.ok ? result.findings : null;
   if (args.json) {
-    console.log(JSON.stringify({ url: args.url, task: args.task, pdf: findings }, null, 2));
+    sink({ url: args.url, task: args.task, pdf: findings });
     return;
   }
   printReport({
@@ -329,7 +367,8 @@ export async function runPdfLayer(args: Args): Promise<void> {
 async function configuredStates(args: Args): Promise<FormStateRequest[]> {
   if (!args.formsConfig) return [];
   const config = parseFormsConfig(await readFile(args.formsConfig, "utf8"), args.formsConfig);
-  refuseIfWrongOrigin(config, args.url);
+  // EVERY page, up front (#2272): a list crossing origins is refused whole, not after page one was captured.
+  for (const url of args.urls) refuseIfWrongOrigin(config, url);
   return config.forms.flatMap((form) => {
     for (const line of coverageLines(formCoverage(form))) process.stderr.write(`${line}\n`);
     return [...form.states]
@@ -430,9 +469,81 @@ async function refuseIfNothingListening(worker: string): Promise<void> {
   }
 }
 
+/** Where a page's machine-readable result goes: stdout for a lone page, a list's collector for one of several. */
+type JsonSink = (json: object) => void;
+const printAsJson: JsonSink = (json) => console.log(JSON.stringify(json, null, 2));
+
+/**
+ * What a list cannot do, refused before the first capture. Each names the rule, because "ignored" would put
+ * the answer for page one on every other page without saying so.
+ */
+function refuseUnsupportedForLists(args: Args): void {
+  if (args.emitFormConfig) {
+    throw new PageListError("--emit-form-config drafts ONE form config from ONE page, so it cannot take a list of "
+      + `${args.urls.length} pages. Run it once per page.`);
+  }
+  if (args.axeResults) {
+    throw new PageListError(`--axe-results is one page's axe file, so it cannot stand in for ${args.urls.length} pages. `
+      + "Leave it out and axe runs on each page.");
+  }
+}
+
+/** A worker-less stand-in for a list of PDFs only, which leases nothing -- exactly as a single PDF does. */
+const NO_WORKER = { worker: null, release: async () => undefined };
+
+/**
+ * A LIST OF PAGES (#2272), through the ordinary single-page pipeline once per page. Every check a single URL
+ * passes runs on every URL BEFORE the first capture: the forms-config origin guard, the URL's shape, the cap.
+ */
+async function runPages(args: Args): Promise<void> {
+  refuseUnsupportedForLists(args);
+  refuseMalformedUrls(args.urls);
+  const maxPages = resolveMaxPages(args.maxPages);
+  const states = await configuredStates(args);
+  const pages = await runPageList({
+    urls: args.urls,
+    captures: args.urls.length * Math.max(1, states.length),
+    maxPages,
+    surface: surfaceFromEnv(process.env),
+    say: (line) => process.stderr.write(`${line}\n`),
+    lease: async () => {
+      if (args.urls.every(looksLikePdfUrl)) return NO_WORKER;
+      const lease = await leaseWorker(args);
+      process.stderr.write(`Using ${lease.worker} (${describeSource(lease.source)})\n`);
+      if (lease.source === "default") await refuseIfNothingListening(lease.worker);
+      return lease;
+    },
+    capturePage: (url, lease) => capturePageStates({ args, url, worker: lease.worker, states }),
+  });
+  if (args.json) printAsJson(multiPageJson(pages));
+  else for (const line of rollUpLines(pages)) console.log(line);
+  // A page that could not be captured is a failed run even though the other pages were reported.
+  if (pages.some((page) => page.status === "failed")) process.exitCode = 1;
+}
+
+/** One page of a list: a PDF's layer, or one capture per configured form state (else one), collecting `--json` results. */
+async function capturePageStates(
+  { args, url, worker, states }: { args: Args; url: string; worker: string | null; states: FormStateRequest[] },
+): Promise<unknown[]> {
+  const results: unknown[] = [];
+  const sink: JsonSink = (json) => { results.push(json); };
+  if (looksLikePdfUrl(url)) {
+    await runPdfLayer({ ...args, url }, sink);
+    return results;
+  }
+  const pageRun = { ...args, url, worker: worker ?? "", sink };
+  if (states.length === 0) await runWitness(pageRun);
+  for (const [index, formState] of states.entries()) {
+    process.stderr.write(`--- form state ${index + 1}/${states.length}: "${formState.state}" via "${formState.submit}" ---\n`);
+    await runWitness({ ...pageRun, formState });
+  }
+  return results;
+}
+
 async function main(): Promise<void> {
   const args = parseArgs();
   if (await planOnly(args)) return;
+  if (args.urls.length > 1) { await runPages(args); return; }
   if (looksLikePdfUrl(args.url)) { await runPdfLayer(args); return; }
   const lease = await leaseWorker(args);
   process.stderr.write(`Using ${lease.worker} (${describeSource(lease.source)})\n`);
@@ -460,7 +571,7 @@ async function main(): Promise<void> {
   }
 }
 
-type RunOptions = Omit<Args, "worker"> & { worker: string; formState?: FormStateRequest };
+type RunOptions = Omit<Args, "worker"> & { worker: string; formState?: FormStateRequest; sink?: JsonSink };
 
 interface ShadowReport {
   mode?: string;
@@ -676,7 +787,7 @@ export function reportWitnessArtifact(path: string | null): void {
 
 async function runWitness(
   { url, task, worker, json, debug, probeForms, probeFocus, probeNavigation, probeFocusContext,
-    probeFocusReveal, emitFormConfig, formState, axe: wantAxe, axeResults, keep }: RunOptions,
+    probeFocusReveal, emitFormConfig, formState, axe: wantAxe, axeResults, keep, sink }: RunOptions,
 ): Promise<void> {
   const { cap, axe } = await captureAndScan(
     { url, task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, probeFocusReveal,
@@ -752,7 +863,7 @@ async function runWitness(
       url, task, cap: examined, verdict, ruleFindings, captureVerified, unverifiedReason, conformance, outcomes,
       leftSite: left,
       artifactPath: artifactPath ? relative(process.cwd(), artifactPath) : null,
-    });
+    }, sink);
   } else {
     printReport({
       url, task, screenReader: cap.screenReader, announcements: cap.transcript.length,
@@ -888,9 +999,10 @@ export function printJson(
     conformance: ConformanceRequirement[]; outcomes: CriterionOutcome[]; leftSite: LeftSite | null;
     artifactPath: string | null;
   },
+  sink: JsonSink = printAsJson,
 ): void {
   const layered = { ...verdict, findings: verdict.findings.map((f) => ({ ...f, layer: layerOf(f.wcag) })) };
-  console.log(JSON.stringify({
+  sink({
     url, task, screenReader: cap.screenReader, transcript: cap.transcript,
     // #1363: where the examination ENDED, as its own field -- `null` when every activation stayed on the page.
     // `structure` and `interaction` below are then only what was observed before it.
@@ -934,7 +1046,7 @@ export function printJson(
       toolVersion: process.env.npm_package_version ?? "0.1.0",
       outcomes,
     }),
-  }, null, 2));
+  });
 }
 
 type RuleLayer = "none" | "run" | "import";
@@ -1235,5 +1347,5 @@ if (isProgram) main().catch((err: unknown) => {
   // exit 2 says the input is wrong and retrying it will not help. A named FAULT (currently only
   // artifact-schema-mismatch) is a third thing again: not the caller's mistake and not an ordinary tool
   // bug, so exit 3 says "wait for a release" rather than inviting a retry loop the way exit 1 would.
-  process.exit(err instanceof FormsConfigError ? 2 : fault ? 3 : 1);
+  process.exit(err instanceof FormsConfigError || err instanceof PageListError ? 2 : fault ? 3 : 1);
 });
