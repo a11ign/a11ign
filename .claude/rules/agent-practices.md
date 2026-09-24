@@ -19,6 +19,8 @@ one clause of why; **the incident behind each is in
 ## Context
 
 - `/compact` at 50–70% fill, before auto-compact; quality degrades past 70%.
+- **A model change needs evidence (ceo, #1950):** two `ceo` rulings in a week reversed as WRONG, not stale,
+  justify raising that cause's effort or model via #1952. **Never pin a session to Opus.**
 - `/clear` between unrelated topics; a fresh window beats stale history.
 - Batch related requests into one message; every round-trip re-sends the whole config stack.
 
@@ -30,8 +32,8 @@ one clause of why; **the incident behind each is in
 
 ## Timers and state
 
-- **No session holds a standing cron.** After a restart, **`CronDelete` on anything you find is the first
-  command**, not `CronList`.
+- **No session holds a standing cron.** After a restart, list them once and **`CronDelete` anything you
+  find.**
 - **THE CLOCK WAS NEVER THE DEFECT — the defect was that the tick WAS a model turn.** `work:tick` runs
   `work-gate.mjs` (no model) and hands what it finds to `wake.mjs`: **you are woken WITH the answer in
   your prompt, not to go and look.**
@@ -56,8 +58,8 @@ one clause of why; **the incident behind each is in
   query='{viewer{login}}' -i`, or `gh api <rest-path> -i` — and let `X-Ratelimit-Resource` confirm which
   pool answered. **The headers come back on the 403 too**, so an exhausted pool is readable.
 - **Pools are per TOKEN and per RESOURCE, and the endpoint can be right about one while lying about the
-  other: a sanity check on core is not a sanity check.** Reproduced 2026-09-22, same token, same second:
-  accurate on `core`, wrong by 1,360 on `graphql`. `gh pr view`/`pr list`/`issue list` spend GRAPHQL;
+  other: a sanity check on core is not a sanity check.** Same token, same second: `graphql` off by
+  1,360. `gh pr view`/`pr list`/`issue list` spend GRAPHQL;
   `gh api` spends CORE.
 - **Per TOKEN means per ACCOUNT, and there are two here.** The default `~/.config/gh` authenticates as a
   person (`DanBeckDev`), and `GH_CONFIG_DIR=/home/agent/workers/gh` as `a11ign-ai-workers` — which is what
@@ -76,7 +78,7 @@ one clause of why; **the incident behind each is in
 
 - **A `lane:<owner>` label refuses any OTHER session unconditionally** (`laneReason`,
   `row-claim/runner-rule.mjs`). A `Lane-exception:` line changes nothing at claim time — only the label
-  does. If the owner is the only session that can claim a row, its turn budget is the throughput.
+  does.
 - **The test before leaving a row in a lane other than `any`: does the label protect a DECISION only the
   owner can make (a publish order, a freeze, a ruling), or a PATH that needs the owner's REVIEW but not
   their hands?** A path re-lanes to `lane:any`; a decision stays, and the wait is then a real cost of it.
@@ -125,7 +127,7 @@ one clause of why; **the incident behind each is in
 - **If a conclusion changes what should happen next, it goes in a FIELD, not a comment.** The comment is
   the reasoning; the field moves the org. **Nothing in this org reads comments.**
 - **Waiting on a SESSION → `answer:<session>`. Removing the label IS the act of answering**, so there is
-  nothing to remember. A label and not an assignee: eight sessions share four accounts.
+  nothing to remember.
 - **Waiting on another row → `gh issue edit <n> --add-blocked-by <m>`**, GitHub's own dependency edge,
   returned by the `--json blockedBy` call the gate makes.
 - **Waiting on a date → `Not-before: YYYY-MM-DD`; on an HOUR → `Not-before: YYYY-MM-DDTHH:MM:SSZ`**

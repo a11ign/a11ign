@@ -1504,6 +1504,7 @@ something this row silently decided either way.
 ## Context
 ```
 
+- **A model change needs evidence (`ceo`, 2026-09-24, #1950).** Every session ran Opus for two days because `agentArgs` applies `--model`/`--effort` only at `herdr agent start` and a `--resume` drops them; `settings.json` supplied `opus[1m]`. Fixed by the chairman (default `sonnet`, all six restarted `--model sonnet --effort high`). `ceo` and `product-manager` were NOT pinned to Opus: the table already uses EFFORT as the quality lever for decision causes, `product-manager` is mostly queue mechanics, one model per session means an Opus pin buys Opus for routine wakes too, and a second change would confound the measurement. **The trigger for revisiting, as an observable:** a Sonnet-era `ceo` ruling that a later reader must reverse or materially amend because it was WRONG (not because the facts changed); two in a week justify raising that cause's effort or model through #1952. Ruling: https://github.com/a11ign/a11ign/issues/1950#issuecomment-5809480109
 - `/compact` at 50–70% context fill, before auto-compact; quality degrades past 70%.
 - `/clear` between unrelated topics; a fresh window beats stale history.
 - Batch related requests into one message; every round-trip re-sends the whole config stack.
@@ -1530,6 +1531,7 @@ something this row silently decided either way.
 ## Timers and state
 ```
 
+- **The rule was compressed into an impossible instruction, 2026-09-24.** The loaded text read "`CronDelete` on anything you find is the first command, not `CronList`" — and nothing can be found without listing, so a session following it exactly did nothing (which is what `ceo` did, and was right to say so). The original said `CronList` was *no longer the first command*: do not START with a survey. The compression turned that into *never survey*. Restored to **"list them once and `CronDelete` anything you find"**. **A shortened pin must still be executable by someone holding only that text** — the check the #2248 ladder needs and does not yet make.
 - **No session holds a standing cron. This reverses the rule that stood here until 2026-09-17, and the
   reversal is the point.** Every session used to hold one (engineers every 10 min, the fleet operator
   every 10 min, the product-manager every 30 min), and each firing was a MODEL TURN that woke to ask a
@@ -1579,6 +1581,7 @@ something this row silently decided either way.
 ## The API budget — `gh api rate_limit` is a broken gauge (measured 2026-09-22, #1967)
 ```
 
+- **The reproduction behind "a sanity check on core is not a sanity check" (the `core` half moved from the loaded rule, which keeps the `graphql` half — a test pins "same token, same second").** 2026-09-22: `rate_limit` was accurate on `core` and wrong by 1,360 on `graphql`.
 - **Never decide anything from `gh api rate_limit`.** It has been measured reporting a FULL pool during a
   total GraphQL outage of that same token, pointing three quarters of an hour past the real reset. Two
   sessions burned a cycle on it on 2026-09-22: one read the headers and reported the pool exhausted, a peer
@@ -1626,6 +1629,7 @@ something this row silently decided either way.
 ## `lane:ceo` protects review, not authorship (ceo's ruling, 2026-09-18)
 ```
 
+- **Moved from the loaded rule:** if the owner is the only session that can claim a row, its turn budget is the throughput.
 - **A `lane:<owner>` label refuses any OTHER session unconditionally** (`laneReason`,
   `packages/agent-org/src/row-claim/runner-rule.mjs`) — a `Lane-exception:` line in a PR body, or even a
   comment saying "assigned to X", changes nothing at claim time. Only the label does. If the owner is the
@@ -1799,6 +1803,7 @@ evidence, and with what would reopen it.
 ## A waiting condition is DATA, not a sentence (chairman's direction, 2026-09-19)
 ```
 
+- **Moved from the loaded rule:** `answer:<session>` is a label and not an assignee because eight sessions share four accounts.
 - **If a conclusion changes what should happen next, it goes in a field, not a comment.** The comment
   stays as the reasoning; the field is what moves the org. Every session in this org reads structured
   state and writes prose, and that open loop is the reason the chairman keeps having to intervene:
