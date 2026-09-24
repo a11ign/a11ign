@@ -1,3 +1,5 @@
+import type { AuthFault } from "./auth/auth-faults.js";
+
 /**
  * A stranger meeting `nvda.start failed: NVDA is not supported` learns nothing from the bare message —
  * that knowledge lives in `docs/nvda-worker-runbook.md` and in the heads of whoever has debugged this
@@ -36,7 +38,93 @@ export interface FaultRemediation {
   readonly whereToLook: string;
 }
 
+const ADR = "docs/adr/0038-authenticated-capture.md";
+
+/**
+ * ADR 0038's named errors (`auth/auth-faults.ts`): the ways an authenticated run is refused or fails. They are
+ * CLIENT-SIDE like the two doubts, raised by this CLI before or after a worker answers, and each carries the
+ * what / try / see shape the worker's codes do (ADR 0028). Kept in their own const so the ten are visibly one
+ * population; `fault-remediation.test.ts` reads the code list from `auth-faults.ts` and asserts both ways.
+ */
+const AUTH_REMEDIATION: Record<AuthFault, FaultRemediation> = {
+  "auth-refused-remote-worker": {
+    what: "the run asked for authentication and its worker is not on this machine.",
+    tryThis: "run the capture on the same machine as the browser (the GitHub Action does this), or point "
+      + "--worker at http://127.0.0.1:8765.",
+    whereToLook: `${ADR}, Constraint 1.`,
+  },
+  "auth-not-applied": {
+    what: "the run asked to log in, and the worker's answer did not confirm that it did. A worker that predates "
+      + "authenticated capture ignores the request and captures the login page.",
+    tryThis: "update the worker to a build that supports authenticated capture, then run again. Do not use the "
+      + "capture that came back: it may describe the sign-in wall and not your product.",
+    whereToLook: `${ADR}, Constraint 1, "The worker refuses too".`,
+  },
+  "auth-login-failed": {
+    what: "the login could not be completed, so nothing behind it was examined. The reason is one of "
+      + "expect-not-met (the page after the login was not the one the flow expects), unbindable-field (a control "
+      + "the flow names could not be found by its accessible name) or left-origin (the login went to another "
+      + "site, such as an identity provider).",
+    tryThis: "check the credentials belong to a working test account, and that the flow's last expect: names "
+      + "something only the signed-in page shows. An unbindable-field is a real 4.1.2 finding about the login "
+      + "form. left-origin means SSO or an outside identity provider: use a dedicated test account without MFA "
+      + "or SSO.",
+    whereToLook: `${ADR}, Constraint 1 ("A failed login is an error") and Constraint 6.`,
+  },
+  "auth-credential-missing": {
+    what: "a value the login flow reads from the environment (from-env:) is not set, or is empty, on the machine "
+      + "that drives the browser.",
+    tryThis: "export the variable named in the message on that machine (in the Action, under env: on the step "
+      + "that calls it, from a secret). On a worker reached through an SSH tunnel it is the WORKER's environment "
+      + "that is read, and it should not hold your variables.",
+    whereToLook: `${ADR}, Constraint 2.`,
+  },
+  "auth-ambiguous": {
+    what: "the run named more than one way to authenticate, and a run uses at most one.",
+    tryThis: "keep one of --login-flow, --auth-state and --auth-attach and remove the others.",
+    whereToLook: `${ADR}, Constraint 3, "The input surface".`,
+  },
+  "auth-refused-judge-backend": {
+    what: "the run logs in and JUDGE_BACKEND names a vendor, which would send the transcript of a page behind a "
+      + "login to that vendor.",
+    tryThis: "unset JUDGE_BACKEND to keep the transcript on this machine, or pass "
+      + "--send-authenticated-transcript-to-judge-vendor on the command if you mean to send it with your own key "
+      + "(it cannot be set from the environment).",
+    whereToLook: `${ADR}, Constraint 5, and SECURITY.md, "What it sends where".`,
+  },
+  "auth-credential-in-artifact": {
+    what: "after redaction, a value from your login was still in what the run was about to write or print, so "
+      + "nothing was written and nothing was printed. A run of one-character announcements spelling part of the "
+      + "credential counts: the login reached the transcript.",
+    tryThis: "do not use this run's output. Report it with the variable names in the message and NO values; if "
+      + "the credential is a short or ordinary word, use a dedicated test account with a distinctive login.",
+    whereToLook: `${ADR}, Constraint 4 and amendment 1.`,
+  },
+  "auth-literal-secret": {
+    what: "a flow types a literal value into a password field. A password is never written in a flows file.",
+    tryThis: "replace value: with from-env: NAME in that fill step, and set NAME in the environment of the "
+      + "machine that drives the browser.",
+    whereToLook: `${ADR}, "The primitive".`,
+  },
+  "auth-credential-too-short": {
+    what: "a value the login reads from the environment is shorter than the floor for a value the run can hide. "
+      + "Hiding a short value such as admin or test would rewrite the page's own words, and its absence from the "
+      + "output could not be proven.",
+    tryThis: "use a dedicated test account whose login and password are each at least 8 characters, and not an "
+      + "ordinary word, such as a11y-audit-7f3c.",
+    whereToLook: `${ADR}, Constraint 4, amendment 2.`,
+  },
+  "auth-refused-public-repository": {
+    what: "the run logs in, and this repository is not private: the pull-request comment, the job log, the "
+      + "uploaded artifact and the job summary would all show text from behind the login to anyone.",
+    tryThis: "run the authenticated capture from a private repository, or with the CLI on a machine of your own, "
+      + "where nothing is published unless you publish it.",
+    whereToLook: `${ADR}, "The Action's pull-request comment", amendment 3.`,
+  },
+};
+
 export const FAULT_REMEDIATION: Record<string, FaultRemediation> = {
+  ...AUTH_REMEDIATION,
   "screen-reader-mute": {
     what: "NVDA on the worker is running and answering keystrokes, but has stopped speaking.",
     tryThis: "The worker already retries this once on a fresh NVDA before reporting it, so a second "
@@ -157,6 +245,17 @@ export function formatFaultMessage(fault: string, message: string | undefined,
         ? ` (${progress.markCount} progress mark(s) recorded before stopping)` : "")
     : "";
   return `${base}${progressLine}${remediationTail(fault)}`;
+}
+
+/**
+ * The full message for an authenticated run's named error (`auth/auth-faults.ts`, ADR 0038): the raiser's
+ * sentence, the code, and the what / try / see block, exactly the shape the ADR prints. Its own function
+ * because "The worker's capture failed" would misdescribe a refusal that happens BEFORE any worker is asked.
+ * The code is stated once: a message that already carries its own `(fault: <code>)` is not given a second.
+ */
+export function formatAuthFaultMessage(code: string, message: string): string {
+  const stated = message.includes(`(fault: ${code})`) ? "" : ` (fault: ${code})`;
+  return `${message}${stated}${remediationTail(code)}`;
 }
 
 /**
