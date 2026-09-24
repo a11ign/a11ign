@@ -46,7 +46,12 @@ capture-only — reads only; REQUIRES only. Budget 3600s.
 Runs /usr/bin/npm run training:capture -- --only={{ only }}
 ```
 
-The published per-job names are `only`, `out`, `role`, `shard`, `model`, `worker` and `sample`. Two apply
+The published per-job names are `only`, `out`, `role`, `shard`, `model`, `worker` and `sample`.
+`train` also takes `exclude` (#2304): `-e exclude=status-heads -e out=scratch` leaves a NAMED GROUP of heads out
+of one run, for an isolating retrain. The groups are a fixed list in `lab-job.yml` (`lab_train_exclusions`),
+`out` is required and may not be `candidate`, and the model it writes is stamped `releaseEligible: false` with
+`excludedSubtypes` in its `training-report.json`, so it cannot be promoted or mistaken for a full one.
+It does not change who decides a subtype: that is still `rule-ownership.json`. Two apply
 to **every** job and so sit outside that check: `-e ref=` and `-e describe=1`. Two refusals follow from the
 derivation, and both replace a silence:
 
