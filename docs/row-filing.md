@@ -99,6 +99,23 @@ git ls-remote --heads origin '<the branch the reading used>'   # no output: the 
 behaviour is not machine-decidable, which is exactly why `missingTemplateFields` asks only that the
 section has content under it. These are written rules because the thing they are about is a judgement.
 
+**A COUNT QUOTED IN AN ACCEPTANCE IS A READING AT A NAMED COMMIT, NEVER A REQUIREMENT — and naming the ref
+does not make it one.** This is the shelf-life rule above applied to a number, and the named ref is
+necessary and not sufficient: the builder necessarily reads at a *different* commit. #2003 and #2005 both
+declared `140/0` for `work-gate.test.ts`, true when filed; the builder read 142 at their own branch point
+and spent a reconciliation paragraph saying so, and the file has since gone 140 → 142 → 146 → 156. So
+the row says, in its own words, that **the builder re-measures at their own branch point, and that what
+must rise is THEIR pre-change reading** — which lets a count that does not match read as *the file grew*
+rather than *my branch is wrong*, the two states a bare number cannot tell apart:
+
+> **THE NUMBER IS A READING AT A NAMED COMMIT, NOT A REQUIREMENT — RE-MEASURE AT YOUR OWN BRANCH POINT
+> BEFORE YOU CHANGE ANYTHING.** What must rise is your pre-change reading, not the figure quoted here.
+
+`row-file` **warns** (`quotedTestCountWarning`, #2035) when the `## Acceptance` section quotes a count beside
+a result word — `132 tests, 0 failed`, `187 tests, \`status: pass\``, `9 passed / 0 failed`, `140/0`,
+`tests: 46`, `the 24 tests in …, as measured` — and the body nowhere says re-measure. It quotes the count it
+found and the sentence above. It never refuses: a count is sometimes honest context.
+
 ## Writing a section that has no content: say so, never leave it blank
 
 Two rules from the 2026-09-09 backfill, in the guidance rather than in the heads of whoever did it.
@@ -203,6 +220,35 @@ acceptance names and the change never touched. **Both are wrong and they cancel 
 **Neither rule is a request to teach the parser more grammar.** Teaching `declaredRegionFiles` to read
 negation would make it guess at intent, and the exclusion belongs under its own heading for the human
 reader anyway.
+
+## What `row-file` warns about after the checks pass (#2035)
+
+Every check above refuses. These print and file anyway, because each is a fact about the body the filer can
+still act on **and** each has a legitimate exception a refusal would block. All are pure functions in
+`packages/agent-org/src/row-file.mjs`, gathered by `filingWarnings` and pinned in `row-file.test.ts` in both
+directions — a warning that fires on every filing is noise, and the no-warning direction is its only control.
+Measured 2026-09-24 over 70 open and 80 recently closed rows, at `edf5ec07a`: closure 47 of 150 (29 charged,
+19 unread — one row can be both), count 12 of 150, malformed 5 of 150.
+
+- **`regionClosureWarning` — the Region names a source file the acceptance job cannot run tests over.**
+  `pr-open` refuses a test command whose import closure needs `corpus` (#2018 found out a round late). The
+  walk is `unmetClosureRequirements`, the call `pr-open` makes, printed in `pr-open`'s wording. **It walks
+  the files the Region NAMES, never the Acceptance command**, because at filing time the command names a
+  test that is not written yet and the walk on a path that does not exist returns `[]` — indistinguishable
+  from "needs nothing". **A Region file absent from your checkout is reported as UNREAD**, not skipped, so
+  silence keeps one meaning. Only a test Acceptance is charged. **`token` is left out on purpose:** a test
+  declares `// no-token: <fn>` in its own header, which a walk of the entry script cannot see, and charging
+  it made the warning speak on 79 of 150 rows (every filing of `work-gate.mjs` or `wake.mjs`). `corpus` and
+  `history` have no such exit. *It cannot see a test that will import something the Region does not name.*
+- **`quotedTestCountWarning`** — the count rule above.
+- **`malformedAcceptanceCommandWarning` — a "command" that is prose.** `extractAcceptanceSection` returns
+  whatever follows the closing fence with no blank line as part of the block (#2094, #1865), and a section
+  with no fence at all returns its paragraph (#1889): a row declaring an acceptance nobody can run. It asks
+  `classifyCommand`, the decider CI asks, and names **one blank line after the closing fence** when that is
+  the cause. A first token that is a *path* is never called prose (`.venv/bin/pytest` is absent from your
+  checkout and present in the job — #2304, #2234). *It cannot see prose that names a lab or fleet word,
+  which classifies `refused` before it can classify `prose` (#1865's `lab:pipeline`), nor a plausible command
+  that reaches nothing (`lab:failed-units`).*
 
 ## `out-of-release` answers one question, and importance is not it
 
