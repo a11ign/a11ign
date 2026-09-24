@@ -65,6 +65,23 @@ here on YOUR machine and WARNS (never refuses) when it reports the guard did not
     exactly as a missing `Closes:` does. It checks that the line EXISTS, not that a mutant ran -- the cheap half.
   - NOTHING TO BREAK (a rename, a fixture-only edit)? Write `Mutation: none -- <reason>`. The reason is REQUIRED.
 
+A NUMBER IN THIS BODY SITS UNDER A `## Measured` HEADING (#2308) -- a count or population claim ("25 merged
+pull requests", "every package.json is 0.0.0"), with the COMMAND and the OUTPUT it printed, at the head you are
+opening. 7 of 46 first-review refusals were such a figure that was not true at the reviewed head.
+
+  - One fenced block: the command on one line, what it printed on the next (`$ ` prompt optional).
+        ## Measured
+
+        ```
+        $ git ls-files 'packages/*/package.json' | wc -l
+        11
+        ```
+  - Claims no measurement? Leave the section out. Its ABSENCE is not a refusal; it tells the reviewer the
+    body cites no figure. A `## Measured` with no command-and-output beneath it reports `MEASURED: MALFORMED`
+    and fails. It cannot tell a pasted run from an invented one -- that half is the reviewer's.
+  - The heading is deliberately NOT in the template below: an empty one would fail every PR. Write it when
+    you have a figure to show.
+
 `Closes #N` still belongs on a PR that finishes a row. GitHub does not apply the reference when the bot
 performs the merge, so `trunk.yml`'s `closeRows` job does it explicitly (#298, #909) -- but the keyword is what it reads.
 
@@ -115,4 +132,4 @@ Mutation:
 
 ## Anything a reviewer should be sceptical of
 
-<!-- A number without a measurement behind it, an assumption you could not check, a path you could not test. -->
+<!-- A number without a measurement behind it (put it under `## Measured`, with its command and output), an assumption you could not check, a path you could not test. -->
