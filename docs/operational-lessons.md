@@ -1631,6 +1631,29 @@ something this row silently decided either way.
   **Run `gh api user --jq .login` first, then the headers** — the pool you are about to spend is decided
   by your PATH and your workspace id, not by what you typed.
 
+  **INVERTED 2026-09-24 (chairman's identity ruling, #1950; shipped by #2332).** Everything above about
+  `workspaces.txt` and "the person's config otherwise" is the rule as it stood on 2026-09-23 and is now the
+  OPPOSITE of the wrapper: an allow-list for the workers account lets every workspace it forgot fall through
+  to the chairman's own login, which has ADMIN. worker-4 and worker-5 acted as the chairman for hours because
+  their ids were not on it, and `git push` was a second, unwrapped door (the global gitconfig's credential helper was
+  the real `/usr/bin/gh`, so every push by every agent authenticated as `DanBeckDev` whenever `GH_CONFIG_DIR`
+  was unset). The rule now: an explicit `GH_CONFIG_DIR` wins; an agent workspace (`HERDR_WORKSPACE_ID` set)
+  gets `a11ign-ai-workers` UNLESS its id is in `human-account-workspaces.txt` — a NAMED, TEMPORARY exception
+  holding `w6 w2 w5` (ceo, product-manager, orchestrator); an agent workspace whose workers config is missing
+  REFUSES; a shell with no id is a person and is left alone.
+
+  **WHY THE WRAPPER IS IN THE REPOSITORY.** The identity policy existed only on the host, so no review had ever
+  seen it and nothing noticed when it was wrong. `ceo` ruled the shape: **a COPY with a drift check, not a
+  symlink** — `gh` is on every agent's PATH, so a link into a working tree that may be mid-rebase would break
+  `gh` for the whole org. `npm run host:install` copies `packages/agent-org/host/gh` (atomically: a rename, never
+  a half-written file), the exception list, and `~/workers/README.md`; `npm run host:check` reports DIVERGED
+  when the installed bytes differ, and when the global gitconfig's github.com helper is not the wrapper (which
+  `host:install` does NOT fix — it is a person's dotfile). The global `user.name`/`user.email` are reported as a
+  NOTE and never a failure: this repository's `.git/config` overrides them, so commits here are not the
+  chairman's, but any repository without the override would be. Pinned by `host-units.test.ts`, which RUNS the
+  wrapper against a stub `gh-real` (`A11Y_GH_REAL`, `A11Y_WORKERS_DIR` override the two host paths; no new hole,
+  since an explicit `GH_CONFIG_DIR` already wins).
+
 ## `lane:ceo` protects review, not authorship
 
 *The rule is in [`.claude/rules/agent-practices.md`](../.claude/rules/agent-practices.md); this is the incident behind it. The heading it carried while every wake loaded it, verbatim:*

@@ -16,8 +16,8 @@
   subsequent write is attributed to, and that disposition is `ceo`'s (`lane:ceo`, #916) rather than yours.
   Wait out your own reset.
 - **You may already be spending an account you did not pick, so name it before you read its pool.**
-  `/home/agent/.local/bin/gh` is a ROUTING WRAPPER sitting ahead of `/usr/bin/gh`: with `GH_CONFIG_DIR`
-  unset it selects the workers config when `HERDR_WORKSPACE_ID` is listed in
-  `/home/agent/workers/workspaces.txt`, and the person's otherwise — which is why a systemd unit, having no
-  workspace id, must DECLARE `GH_CONFIG_DIR`. **Run `gh api user --jq .login` first, then the headers** —
-  the pool you are about to spend is decided by your PATH and your workspace id, not by what you typed.
+  `/home/agent/.local/bin/gh` (shipped: `packages/agent-org/host/gh`) is a ROUTING WRAPPER ahead of
+  `/usr/bin/gh`, and `git push` goes through it: with `GH_CONFIG_DIR` unset an agent workspace gets the
+  workers config UNLESS it is in `human-account-workspaces.txt` (w6 w2 w5, temporary), and no workspace id
+  means a person, so a systemd unit must DECLARE `GH_CONFIG_DIR`. **Run `gh api user
+  --jq .login` first, then the headers** — PATH and workspace id decide the pool.
