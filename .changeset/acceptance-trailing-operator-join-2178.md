@@ -1,0 +1,5 @@
+---
+"@a11ign/agent-org": patch
+---
+
+**A fenced Acceptance line ending in `&&`, `||`, `|` or `|&` is joined to the next line, and a block-opening keyword is refused for what it is (#2178).** #2068 joined a command that ends inside a quote or in a trailing backslash; the operator spelling was left over, so `npm run build &&` and `npm test` on two lines reached bash as two commands — a syntax error, and a second command run alone that could pass with the condition the author wrote gone. `joinContinuations` now asks `endsInOperator` after the quote and backslash checks, so #2068's two shapes are untouched, and a lone trailing `&` (background, a complete command) and an escaped `\|` still end the command. Second half: `for … ; do` was refused as `is not a command (no executable "for")`, which sends the filer looking for a missing binary; the reason now says `for` is a shell keyword opening a block and the line is incomplete on its own. The verdict is the same `prose`, and joining a compound block is still not attempted.
