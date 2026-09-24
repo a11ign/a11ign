@@ -212,6 +212,10 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: npm run build
+      # The re-check runs the red job's own battery, which includes pytest (#2389 review).
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip }
+      - run: pip install -r requirements-ci.txt
       # #616: WAS THE PARENT GREEN BECAUSE IT WAS CORRECT, OR BECAUSE IT WAS MEASURED EARLIER?
       #
       # Every other input to "is this red this merge's own" is a RECORDED conclusion, true as of the moment it
@@ -250,15 +254,30 @@ jobs:
           git -C /tmp/parent update-ref refs/remotes/origin/main "$BEFORE"
           git -C /tmp/parent checkout --quiet --detach "$BEFORE"
           cd /tmp/parent
-          # `|| true` on each: a re-check that CANNOT RUN must report unknown rather than fail, and a
-          # non-zero from the install is not the same answer as a non-zero from the suite.
+          # A re-check that CANNOT RUN reports unknown, never pass: `pass` is the only answer that blames the
+          # merge. A non-zero from the install or the build is not the same answer as a non-zero from the suite.
           if ! pnpm install --frozen-lockfile --ignore-scripts > /tmp/parent-install.log 2>&1; then
             echo "::warning::could not install at the parent; the re-check is UNKNOWN, not a pass."
             echo "result=unknown" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          npm run build > /tmp/parent-build.log 2>&1 || true
-          if npm test > /tmp/parent-test.log 2>&1; then
+          # #2389 review: `|| true` HERE WAS A FALSE PASS. A parent whose build broke has no `dist`, its suite
+          # then fails for that reason or (worse) skips what needs it, and the answer read as the parent's own.
+          if ! npm run build > /tmp/parent-build.log 2>&1; then
+            echo "::warning::the parent does not build; the re-check is UNKNOWN, not a pass."
+            echo "result=unknown" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # #2389 review: THE SAME BATTERY AS `trunkBuildTest`, in the same order (reusable-build-test.yml with
+          # `run-lint-typecheck`, `ts-test-scope: unscoped`, `run-python-tests`). This step ran `npm test`,
+          # whose `test:ts` glob EXCLUDES packages/agent-org and packages/lab, so a red there re-checked
+          # green at the parent and an inherited failure was recorded as this merge's own. `trunk-revert.test.ts`
+          # pins that each command below is one the red job runs. A failure that is not a `not ok` line (lint,
+          # typecheck, pytest) summarises as `unknown`, which is honest: nobody can name a test.
+          if npm run lint > /tmp/parent-test.log 2>&1 \
+            && npm run typecheck >> /tmp/parent-test.log 2>&1 \
+            && npm run test:all >> /tmp/parent-test.log 2>&1 \
+            && PYTHONDONTWRITEBYTECODE=1 pytest -p no:cacheprovider packages/*/tests -q >> /tmp/parent-test.log 2>&1; then
             echo "the parent PASSES the suite now -- its recorded green is still the answer."
             echo "result=pass" >> "$GITHUB_OUTPUT"
           else
