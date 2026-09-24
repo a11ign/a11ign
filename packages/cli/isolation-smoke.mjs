@@ -44,7 +44,11 @@ const invocation = spawnSync(invokedBin, [], { encoding: "utf8" });
 assert.equal(invocation.error, undefined,
   `the bin could not be executed at all: ${invocation.error}. On a POSIX host this is what a missing or ` +
   "wrong shebang line looks like.");
-assert.equal(invocation.status, 1, `running the bin with no args should print usage and exit 1, got status `
+// EXIT 2, NOT 1, SINCE #2272: no page is an INPUT error (`PageListError`), and `cli.ts` exits 2 for those --
+// "the input is wrong and retrying it will not help" -- keeping 1 for a run that went wrong. This asserted 1
+// until the release gate was first read at a head after that change (#2301), and `gate:isolation` had been
+// red on `a11ign` since, unseen because no CI job runs it: only `release.yml`'s dry run does.
+assert.equal(invocation.status, 2, `running the bin with no args should print usage and exit 2, got status `
   + `${invocation.status} (stdout: ${JSON.stringify(invocation.stdout)}, stderr: ${JSON.stringify(invocation.stderr)})`);
 assert.match(invocation.stderr, /usage/i, "running the bin with no args must explain how to use it");
 
@@ -85,5 +89,5 @@ assert.ok(manifest.optionalDependencies?.playwright, "playwright must stay optio
 assert.ok(!manifest.dependencies?.["@a11ign/nvda-worker"],
   "the CLI speaks HTTP to a worker; it must not depend on the Windows package");
 
-console.log(`a11ign works when installed: bin RUNS (exit 1, usage printed), ${lines.length} report `
+console.log(`a11ign works when installed: bin RUNS (exit 2, usage printed), ${lines.length} report `
   + "lines, layers ordered");

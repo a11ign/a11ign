@@ -150,7 +150,7 @@ export function dependentsOf(changed, dependencyGraph) {
 // EXPORTED for select-changed-tests.mjs (A1c): "root configuration" is one fact, not two hand-typed
 // lists that could silently disagree about what counts.
 export const ROOT_TS_FILES = new Set([
-  "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json",
+  "package.json", "pnpm-lock.yaml", "tsconfig.json", "tsconfig.base.json",
   ".eslintrc.json", ".eslintrc.cjs", "eslint.config.js", "eslint.config.mjs",
 ]);
 
