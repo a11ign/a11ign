@@ -103,6 +103,7 @@
     "fleet:provision": "node packages/control/src/fleet-playbook.mjs --playbook=provision-role.yml",
     "lab:fetch": "ANSIBLE_CONFIG=packages/control/ansible/ansible.cfg ansible-playbook packages/control/ansible/lab-fetch.yml",
     "lab:stop": "ANSIBLE_CONFIG=packages/control/ansible/ansible.cfg ansible-playbook packages/control/ansible/lab-stop.yml",
+    "lab:clear-failed": "ANSIBLE_CONFIG=packages/control/ansible/ansible.cfg ansible-playbook packages/control/ansible/lab-clear-failed.yml",
     "lab:reset": "ANSIBLE_CONFIG=packages/control/ansible/ansible.cfg ansible-playbook packages/control/ansible/lab-reset.yml",
     "lab:corpus-schedule": "ANSIBLE_CONFIG=packages/control/ansible/ansible.cfg ansible-playbook packages/control/ansible/corpus-schedule.yml",
     "corpus:snapshot": "node packages/lab/scripts/corpus-snapshot.mjs",
