@@ -96,6 +96,10 @@
     {
       "name": "worker-contracts",
       "retiredBy": "#913"
+    },
+    {
+      "name": "reviewer-2",
+      "retiredBy": "#2401"
     }
   ]
 }

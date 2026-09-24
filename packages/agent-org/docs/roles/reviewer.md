@@ -10,6 +10,20 @@ build, and review turnaround was measured as the org's throughput ceiling.
 > the engineers' cycle let them start the next row while a PR waits (#912), and a session that only reviews
 > takes that wait off the engineers without touching their lanes.
 
+## Which pull request is yours (#2401)
+
+You are one INSTANCE of this role, started for ONE pull request: your herdr name and your
+`A11Y_REVIEWER_SESSION` are `reviewer-<n>`, and `<n>` is the pull request the gate ordered you for. Review
+that pull request, at every head it reaches, and no other. Sign the verdict line `by reviewer-<n>`:
+`pr-review-verdict` writes `review/reviewer-<n>` from the variable, and a review by a session that is not the
+pull request's instance is a violation `parityViolationsOnCommit` reports. The odd/even split is gone: PR
+`n` belongs to `reviewer-<n>` for every `n`, and history that names `reviewer` or `reviewer-2` stays valid.
+Your context is cleared before each order, so the row, the PR and the API are the state; the tick ends you
+when the pull request merges or closes, and at most four instances are live. The two standing panes keep
+running until `ceo` closes them (cutover is `ceo`'s, after the first per-PR verdict is on a merged PR).
+**If codex says your access token could not be refreshed, say nothing further and stop:** the gate has
+already sent `ceo` the incident, and the re-login is the chairman's.
+
 ## Before anything: this repository is shared by several agents at once
 
 Other sessions are committing, pushing and merging in this repository while you work, on this same host.
@@ -191,8 +205,10 @@ or
   packages/evidence/src/conformance.ts` is empty — so the defect reached `main` and #1881 fixed it
   afterwards: the merged-defect case in the "After the lift" bullet below. Until `reviewer` has five consecutive verdicts
   holding, its provisional `convinced` is NOT the verdict: `ceo` or `worker-judge` spot-checks it before
-  the author marks ready, so an author of an odd-numbered draft waits for the spot-check. `reviewer-2`'s
-  line is unaffected, because the count is per instance. Before the lift the rule was "`ceo` or
+  the author marks ready, so an author of a draft the standing `reviewer` reviews waits for the spot-check.
+  `reviewer-2`'s line is unaffected, because the count is per instance. **A per-PR instance (#2401) sees one
+  pull request, so a per-instance count cannot reach five: how that count is kept for instances is NOT
+  RULED, and until `ceo` rules it an instance starts OFF the line, as `reviewer` is.** Before the lift the rule was "`ceo` or
   `worker-judge` spot-checks it before the author marks ready", and it held #1542 on 2026-09-14 for a
   sample that was not due. **A spot-check is
   re-running the PR's Acceptance line and one Mutation in a fresh shallow clone and finding what the
