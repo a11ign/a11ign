@@ -1,0 +1,5 @@
+---
+"@a11ign/agent-org": patch
+---
+
+**The three standing engineers are drained, and a spawn is only made for a row that would pass the claim (#2324, #1950 rulings b and d).** `sessions.json` marks `worker-capture`, `worker-judge` and `worker-tooling` `"drain": true`: `route` no longer offers them a `ready-row-unclaimed` order, `row-claim claim` refuses a hand claim by one with a reason that names the drain, and the spawn will not start into a drained role's address. Orders about a row a drained role already holds still reach it. The drain lifts itself: it is in force only while the newest `spare-cycles` line is clean (or the ledger is empty), so a failed cycle hands the standing three their claims back. Before a spawn opens a pane the tick asks the claim's own `blockedBy` (#1886) and B4 file-overlap checks about the order's row and starts nothing for a row either refuses, naming the check in the tick log. `npm run spawn:cycles` prints the current clean run, the ledger's last line and the drain's state, and exits non-zero on an empty ledger instead of printing `0`.
