@@ -307,7 +307,7 @@ Two companions, ruled the same morning:
 - **A count or a verdict is never read from a truncated pipe, and a step that summarises a log prints
   the failures it found or says it found none.** Four in one day, every command exit 0: `| tail -8` on
   a 53-line prune report read as "seven"; `| head -5` hiding five typecheck errors under a printed
-  "tsc ok"; `2>&1 >/dev/null` swallowing a squash refusal; and decideRevert's parent re-check printing
+  "tsc ok"; `2>&1 >/dev/null` swallowing a squash refusal; and the parent re-check in `trunk.yml` printing
   `tail -40` of a test log, twenty-eight trailing `ok` lines, under a verdict of `fail` (#744), which
   turned "revert this push" into "leave main red, reason recorded as considered" for forty minutes. A
   truncation that succeeds produces a plausible number, and a plausible number is indistinguishable

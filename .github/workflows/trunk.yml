@@ -4,7 +4,7 @@ name: trunk
 # because since #416 every merge is completed with the A11IGN_BOT_TOKEN PAT and DOES fire push -- the 2026-09-08
 # measurement that killed the first such job was made under GITHUB_TOKEN merges, which fire nothing. #417's
 # scheduled backstop (the gate sweep and the close-rows sweep) moved to `nightly.yml`'s hourly `:37` cron, NOT
-# here: a schedule on this file would expose the watchdogs and the revert to GitHub's 60-day schedule-disable,
+# here: a schedule on this file would expose the watchdogs and the recheck to GitHub's 60-day schedule-disable,
 # which the header below explains is the one thing they must never be exposed to. `auto-arm.yml` was NOT
 # collapsed: drafts cannot be armed, so arming on ready_for_review stays an event this push cannot see, and it
 # hosts the update-branch train's three non-push triggers (#1094, #1100, #1103).
@@ -14,11 +14,10 @@ name: trunk
 # tests a PR's own HEAD, never the merge commit GitHub actually produces when it lands, and with
 # `strict=false` nothing requires that merge commit to match a tree anyone tested before the merge
 # completes. This workflow is the one place that gap is closed -- it runs the full suite against `main`'s
-# real, new tip on every push, and when it fails, and ONLY when the failure is genuinely this push's own,
-# opens an automatic revert. See `packages/agent-org/src/trunk-revert.mjs`'s own header for the two ways a bare
-# "revert on red" would be worse than nothing, both measured live the morning this was built: reverting an
-# INHERITED failure (13 of 19 PRs read red on one bad commit and none was at fault), and reverting a
-# commit main has already moved past (a follow-up fix would be reverted instead of the fault).
+# real, new tip on every push. WHEN IT FAILS NOTHING IS REVERTED (#2356, the chairman's ruling of 2026-09-24:
+# THE ORG ALWAYS FIXES FORWARD): the `trunkRecheck` job records whether the red is this merge's own, and
+# `work-gate.mjs`'s `trunk-red` cause wakes a fixer with that answer in its prompt. Until #2356 this file
+# opened an automatic revert; see `packages/agent-org/src/trunk-red.mjs`'s header for why that went.
 #
 # THIS IS DELIBERATELY NOT `ci.yml`'s `gate`, and not merely a copy of it moved to `push`. `ci.yml`'s own
 # header rules a push trigger out THERE for a real reason -- "a check that runs after the merge cannot
@@ -27,9 +26,9 @@ name: trunk
 # try to. It is the reactive half: verify, and where it is safe to, fix forward. See
 # `push-trigger-allowlist.test.ts`'s `TRUNK_GATE_ALLOWLIST` for why this is its own closed category,
 # structurally distinct from the lightweight, continue-on-error watchdogs that were the only push-to-main
-# precedent before this row -- the `trunkGate`/`trunkBuildTest`/`decideRevert` chain DOES build, DOES run
-# the full suite, and is NOT continue-on-error, because a red run there is exactly the signal that drives
-# the revert, not something to observe and move past.
+# precedent before this row -- the `trunkGate`/`trunkBuildTest`/`trunkRecheck` chain DOES build, DOES run
+# the full suite, and is NOT continue-on-error, because a red run there is exactly the signal that wakes
+# the fixer, not something to observe and move past.
 #
 # THE WATCHDOGS LIVE HERE TOO, SINCE #901 (The CI Reset, step 1), AS THE SEPARATE `watchdogs` JOB BELOW.
 # Until 2026-09-10 they were three workflows of their own, each firing on every push to main -- 777 runs
@@ -42,8 +41,8 @@ name: trunk
 # it guards, while a push cannot be disabled by inactivity because a push IS the activity. This workflow
 # already runs on every push, so the three steps here cost no workflow runs of their own. They are
 # `continue-on-error`, deliberately: each finding is about the pipeline or a secret, never about the commit
-# that happened to trigger it, and failing the push would blame an unrelated author. `decideRevert` does
-# not depend on this job, so a red watchdog can never drive a revert. `board-liveness.test.ts`,
+# that happened to trigger it, and failing the push would blame an unrelated author. `trunkRecheck` does
+# not depend on this job, so a red watchdog can never be read as a red `main`. `board-liveness.test.ts`,
 # `npm-token-liveness.test.ts` and `workflow-run-liveness.test.ts` pin all of that against this file.
 #
 # UNSCOPED, DELIBERATELY, unlike `ci.yml`'s per-package `ts` job. A push to `main` is a merge, which by
@@ -52,7 +51,7 @@ name: trunk
 #
 # KNOWN GAP, STATED RATHER THAN HIDDEN: this does not (yet) run `ci.yml`'s `ansible` syntax-check or
 # `rulesFitness` (`npm run rules-check`) jobs. Both are cheap to add later; left out of the first version
-# to keep this row's scope to the revert MECHANISM, which is what #316's acceptance actually exercises.
+# to keep this row's scope to the red-trunk MECHANISM, which is what #316's acceptance actually exercises.
 on:
   push:
     branches: [main]
@@ -73,7 +72,7 @@ jobs:
   # as `already`, never re-closed), so this needs no PR number from the push event and also covers a merge
   # whose own push run was missed. A dispatch with `pr` closes that one PR's rows directly. Permissions are the
   # ones `close-rows.yml` carried and no more: a job triggered by a merge must never be able to push, and
-  # `close-rows-on-merge.test.ts` goes red if `contents` is raised HERE, whatever `decideRevert` below holds.
+  # `close-rows-on-merge.test.ts` goes red if `contents` is raised HERE, whatever `trunkRecheck` below holds.
   closeRows:
     runs-on: ubuntu-latest
     permissions:
@@ -113,7 +112,7 @@ jobs:
   # every `pull_request`/`push` trigger in this repository, not just this one).
 
   # THE WATCHDOGS (#901): three continue-on-error steps, one per liveness script. See the header for why
-  # they are here rather than in `nightly.yml`, and why `decideRevert` must never depend on this job.
+  # they are here rather than in `nightly.yml`, and why `trunkRecheck` must never depend on this job.
   watchdogs:
     runs-on: ubuntu-latest
     permissions:
@@ -143,7 +142,7 @@ jobs:
         run: node scripts/npm-token-liveness.mjs --post --issue=73
 
   # THE ONLY QUESTION THIS JOB ANSWERS: did this push silently revert work already on main. `trunkBuildTest`
-  # below answers the OTHER half (is main's new tip actually green); `decideRevert` decides whether either
+  # below answers the OTHER half (is main's new tip actually green); `trunkRecheck` records whether either
   # failure is this push's own, or something else.
   trunkGate:
     runs-on: ubuntu-latest
@@ -179,27 +178,32 @@ jobs:
       ts-test-scope: unscoped
       run-python-tests: true
 
+  # #2356, THE CHAIRMAN'S RULING OF 2026-09-24: THE ORG ALWAYS FIXES FORWARD, and this job used to be
+  # its predecessor. It opened a `revert/` branch and a pull request when `main` went red on a merge's own
+  # failure; that is DELETED, and nothing in this file, and no session, opens one. What replaced it is not
+  # a smaller revert but a record: the parent re-check below is KEPT, because it is what says whether a red
+  # is THIS merge's own or inherited, and its answer is now written where `work-gate.mjs`'s `trunk-red`
+  # cause can read it (an annotation on this job's check-run) instead of being fed to a revert. The gate
+  # wakes a fixer with that answer in its prompt; `packages/agent-org/src/trunk-red.mjs` has the rest.
+  #
   # RUNS WHEN EITHER `trunkGate` OR `trunkBuildTest` ACTUALLY FAILED -- and `always() &&` IS REQUIRED, not
-  # decorative. This section used to say the opposite ("never `always()`"), and that claim was WRONG in a
-  # way that meant this job had never fired once: an `if:` with no status-check function carries an
-  # IMPLICIT `success()` (per GitHub's own expression documentation -- reasoned from the docs, not measured
-  # live), so the effective condition was `success() && needs.trunkGate.result == 'failure'`, and
-  # `success()` is false exactly when a needed job failed. Self-contradictory, and dispatcher measured it
-  # directly: 5 of the newest 40 trunk-guard runs had `trunkGate=failure`, and `decideRevert` read `skipped`
-  # in all five. `always()` LIFTS the implicit success -- it does not make the job unconditional, because
-  # the explicit `result == 'failure'` checks still do the discriminating. `cancelled` (someone manually
-  # cancelled the run) is still correctly excluded: `always()` does not turn a cancellation into a failure,
-  # it only stops a real failure from being silently treated as one. `trunkBuildTest` reads `skipped` (not
-  # `failure`) when `trunkGate` itself failed -- its own `needs:` default already stopped it from running --
-  # so checking both results here does not double-count the revert-guard's own failure as if the suite had
-  # also failed.
-  decideRevert:
+  # decorative. An `if:` with no status-check function carries an IMPLICIT `success()` (per GitHub's own
+  # expression documentation), so the effective condition would be `success() && needs.trunkGate.result ==
+  # 'failure'`, and `success()` is false exactly when a needed job failed: self-contradictory, and it meant
+  # this job's predecessor never fired once until `always()` lifted it (5 of the newest 40 trunk-guard runs
+  # had `trunkGate=failure` and the job read `skipped` in all five). `always()` does not make the job
+  # unconditional, because the explicit `result == 'failure'` checks still do the discriminating.
+  # `cancelled` stays excluded: a cancellation is not a failure. `trunkBuildTest` reads `skipped` (not
+  # `failure`) when `trunkGate` itself failed, so the two results are never double-counted.
+  #
+  # NO `contents: write`, NO `pull-requests: write`, AND NO PAT: this job READS. It pushes nothing and opens
+  # nothing, and `trunk-fix-forward.test.ts` pins that it holds neither grant.
+  trunkRecheck:
     needs: [trunkGate, trunkBuildTest]
     if: always() && (needs.trunkGate.result == 'failure' || needs.trunkBuildTest.result == 'failure')
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
@@ -208,57 +212,27 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: npm run build
-      # THE PAT, NOT `github.token`, AND FOR TWO INDEPENDENT REASONS -- either one alone is sufficient,
-      # which is why fixing only the more visible of them produces a WORSE failure than the one it fixes.
-      #
-      # 1. `GITHUB_TOKEN` CANNOT OPEN A PR HERE AT ALL. Measured on run 34275102543, the first run in which
-      #    this job ever reached its READY path: it decided correctly, cut `revert/4e87c87565-316`, pushed
-      #    it, and then died on `gh pr create` with `GraphQL: GitHub Actions is not permitted to create or
-      #    approve pull requests (createPullRequest)`. That is a REPOSITORY setting, confirmed from the API
-      #    rather than inferred -- `gh api repos/<owner>/<repo>/actions/permissions/workflow` answers
-      #    `{"default_workflow_permissions":"read","can_approve_pull_request_reviews":false}` -- and it
-      #    blocks `GITHUB_TOKEN` REGARDLESS of the `permissions:` block above, which already grants
-      #    `pull-requests: write` and already did on that run. So the obvious remedy (add the scope) adds a
-      #    scope that is present, fails identically, and reads as "the fix did not take".
-      # 2. A PR OPENED WITH `GITHUB_TOKEN` FIRES NO `pull_request` EVENT (#416, the same fact `auto-arm`
-      #    warns about below). `gate` would never run on the revert PR, `auto-arm` would never arm it, and
-      #    the revert would sit unmergeable with no checks -- which LOOKS like success from every angle
-      #    except the one that matters. So flipping the repository setting would not be sufficient either.
-      #
-      # The fallback is deliberate and mirrors `auto-arm.yml`'s three sites exactly: with no secret the job
-      # still runs the DECISION and still pushes the branch, and warns about what it cannot then do. A
-      # refusal here would throw away a correct verdict over a missing credential; a silent fallback would
-      # produce the unmergeable PR of (2) with nothing saying so.
-      #
-      # Note the `git push` is NOT affected by any of this: it goes through the checkout's persisted
-      # credentials under `contents: write`, which is why the push succeeded on the run above while the
-      # `gh` call did not. Two different credentials in one step, and only one of them moved.
+      # The re-check runs the red job's own battery, which includes pytest (#2389 review).
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip }
+      - run: pip install -r requirements-ci.txt
       # #616: WAS THE PARENT GREEN BECAUSE IT WAS CORRECT, OR BECAUSE IT WAS MEASURED EARLIER?
       #
-      # Every other input to the decision below is a RECORDED conclusion, true as of the moment it was
-      # taken. On 2026-09-09 `main` went red on a wall-clock assertion; the parent was green, verifiably,
-      # in its own run sixty-one minutes earlier; the decision reached READY and opened a revert PR
-      # against a merge that had broken nothing. The input silently encoded the time it was read, so the
-      # revert's own freshness check inherited the staleness it was measuring.
+      # Every other input to "is this red this merge's own" is a RECORDED conclusion, true as of the moment it
+      # was taken. On 2026-09-09 `main` went red on a wall-clock assertion; the parent was green, verifiably,
+      # in its own run sixty-one minutes earlier -- and the answer silently encoded the time it was read.
       #
-      # NO THRESHOLD FIXES THIS. "Only trust a parent measured in the last N minutes" needs N to exceed
-      # the slowest honest gap between two trunk runs, and the case that matters fits inside it -- the
-      # same shape as #590, where a staleness threshold could not see a nineteen-hour silence because the
-      # workflow's own worst legitimate gap was twenty-two hours. The only way to turn a stale boolean
-      # into a current one is to ask again, now.
+      # NO THRESHOLD FIXES THIS. "Only trust a parent measured in the last N minutes" needs N to exceed the
+      # slowest honest gap between two trunk runs, and the case that matters fits inside it. The only way to
+      # turn a stale boolean into a current one is to ask again, now.
       #
-      # WHY THE WHOLE SUITE RATHER THAN THE FAILING FILE. Re-running only the failing test file would be
-      # far cheaper and is the intended optimisation -- but the failing FILE is not reliably recoverable:
-      # `node:test`'s TAP output names the failing test (`not ok 1413 - the summary states WHEN ...`) and
-      # not the file it came from. Narrowing on a parse of that would be a guess, and a guess here decides
-      # whether somebody's merged work is deleted. One extra run on a path that fires rarely is the right
-      # trade until the runner reports the file.
+      # WHY THE WHOLE SUITE RATHER THAN THE FAILING FILE. `node:test`'s TAP output names the failing test
+      # (`not ok 1413 - the summary states WHEN ...`) and not the file it came from, so narrowing on a parse
+      # of that would be a guess. One extra run on a path that fires rarely is the right trade.
       #
-      # ONLY WHEN `trunkBuildTest` FAILED. `trunkGate` asks whether THIS PUSH silently reverted work
-      # already on main -- a question about this merge's own two parents, which has no meaning evaluated
-      # at the parent. So a trunkGate-only failure passes `pass` with that reason stated here rather than
-      # inferred: it is not "we checked and it was fine", it is "this class of failure cannot be
-      # inherited or caused by the world".
+      # ONLY WHEN `trunkBuildTest` FAILED. `trunkGate` asks whether THIS PUSH silently reverted work already
+      # on main -- a question about this merge's own two parents, which has no meaning evaluated at the
+      # parent. So a trunkGate-only failure records `pass` with that reason stated here rather than inferred.
       - name: Does the parent fail the same check NOW? (#616)
         id: recheck
         run: |
@@ -273,70 +247,68 @@ jobs:
           # #775: A CLONE, NEVER A LINKED WORKTREE. `git worktree add` pins the WORKING TREE at `$BEFORE`
           # but shares the underlying repository -- objects AND refs -- with this checkout, so
           # `refs/remotes/origin/main` inside the pinned worktree was never `$BEFORE`'s own `origin/main`,
-          # it was whatever `origin/main` is in the SHARED repository right now. #744 (PR #774) proved this
-          # with a real reproduction: any test the parent's own suite runs that reads `origin/main`
-          # directly (this repo has several) sees main AS IT IS NOW, not as it was when the parent was
-          # last green -- which is exactly how a correct revert was declined as unattributable on #718. A
-          # fresh clone has its own independent `.git`, so its `refs/remotes/origin/main` can be set to
-          # `$BEFORE` without touching this checkout's real one.
+          # it was whatever `origin/main` is in the SHARED repository right now. A fresh clone has its own
+          # independent `.git`, so its `refs/remotes/origin/main` can be set to `$BEFORE` without touching
+          # this checkout's real one.
           git clone --quiet . /tmp/parent
           git -C /tmp/parent update-ref refs/remotes/origin/main "$BEFORE"
           git -C /tmp/parent checkout --quiet --detach "$BEFORE"
           cd /tmp/parent
-          # `|| true` on each: a re-check that CANNOT RUN must report unknown rather than fail, and a
-          # non-zero from the install is not the same answer as a non-zero from the suite.
+          # A re-check that CANNOT RUN reports unknown, never pass: `pass` is the only answer that blames the
+          # merge. A non-zero from the install or the build is not the same answer as a non-zero from the suite.
           if ! pnpm install --frozen-lockfile --ignore-scripts > /tmp/parent-install.log 2>&1; then
             echo "::warning::could not install at the parent; the re-check is UNKNOWN, not a pass."
             echo "result=unknown" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          npm run build > /tmp/parent-build.log 2>&1 || true
-          if npm test > /tmp/parent-test.log 2>&1; then
+          # #2389 review: `|| true` HERE WAS A FALSE PASS. A parent whose build broke has no `dist`, its suite
+          # then fails for that reason or (worse) skips what needs it, and the answer read as the parent's own.
+          if ! npm run build > /tmp/parent-build.log 2>&1; then
+            echo "::warning::the parent does not build; the re-check is UNKNOWN, not a pass."
+            echo "result=unknown" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # #2389 review: THE SAME BATTERY AS `trunkBuildTest`, in the same order (reusable-build-test.yml with
+          # `run-lint-typecheck`, `ts-test-scope: unscoped`, `run-python-tests`). This step ran `npm test`,
+          # whose `test:ts` glob EXCLUDES packages/agent-org and packages/lab, so a red there re-checked
+          # green at the parent and an inherited failure was recorded as this merge's own. `trunk-revert.test.ts`
+          # pins that each command below is one the red job runs. A failure that is not a `not ok` line (lint,
+          # typecheck, pytest) summarises as `unknown`, which is honest: nobody can name a test.
+          if npm run lint > /tmp/parent-test.log 2>&1 \
+            && npm run typecheck >> /tmp/parent-test.log 2>&1 \
+            && npm run test:all >> /tmp/parent-test.log 2>&1 \
+            && PYTHONDONTWRITEBYTECODE=1 pytest -p no:cacheprovider packages/*/tests -q >> /tmp/parent-test.log 2>&1; then
             echo "the parent PASSES the suite now -- its recorded green is still the answer."
             echo "result=pass" >> "$GITHUB_OUTPUT"
           else
             echo "the parent FAILS the suite now, on a tree this push did not touch."
             # #744: NEVER `tail -40` -- the last forty lines of a node:test run are the trailing PASSING
-            # subtests, not the failure. Measured live on #718: a genuine failure produced a step output of
-            # nothing but `ok 4180`/`ok 4181`/`ok 4182`, and `decideRevert` correctly declined to act on a
-            # verdict naming no cause -- so a real revert was refused and main stayed red for ninety
-            # minutes. `parent-recheck-summary.mjs` prints the actual `not ok` lines and the `# fail N`
-            # summary, wherever they sit in the log, and reports `unknown` rather than `fail` when it
-            # cannot name a real failing subtest -- `decideRevert` already treats `unknown` as CANNOT_ASK,
-            # never as grounds to refuse a genuine revert.
+            # subtests, not the failure. `parent-recheck-summary.mjs` prints the actual `not ok` lines and
+            # the `# fail N` summary, wherever they sit in the log, and reports `unknown` rather than `fail`
+            # when it cannot name a real failing subtest.
             cd - >/dev/null
             node packages/agent-org/src/parent-recheck-summary.mjs /tmp/parent-test.log | tee /tmp/parent-summary.log
             RECHECK_RESULT="$(grep -oE 'RECHECK_RESULT=(fail|unknown)' /tmp/parent-summary.log | tail -1 | cut -d= -f2)"
             echo "result=${RECHECK_RESULT:-unknown}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Revert this push, unless the failure is inherited or main has already moved on
+      # THE HAND-OFF TO THE GATE (#2356). `work-gate.mjs` cannot read a step output -- the API does not expose
+      # them -- and a job's own conclusion is `success` whichever way the re-check went, so the answer is
+      # written as an ANNOTATION on this job's check-run, which the gate reads by the title below
+      # (`RECHECK_ANNOTATION_TITLE` in `trunk-red.mjs`; `trunk-fix-forward.test.ts` pins that the two agree).
+      # `if: always()` so an earlier step failing still leaves an answer, and it is `unknown` then, never a pass:
+      # `pass` is the only answer that blames the merge. The failing parent tests ride in the message so the
+      # gate can tell a SHARED failure (inherited) from a DISJOINT one (#1359) without re-running anything.
+      - name: Record the answer where the gate can read it (#2356)
+        if: always()
         env:
-          A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
-          FALLBACK_TOKEN: ${{ github.token }}
+          RECHECK_RESULT: ${{ steps.recheck.outputs.result }}
         run: |
-          if [ -n "$A11IGN_BOT_TOKEN" ]; then
-            export GH_TOKEN="$A11IGN_BOT_TOKEN"
-          else
-            echo "::warning::A11IGN_BOT_TOKEN is not set -- the revert decision and branch push still run, but this repository forbids GitHub Actions from creating pull requests, so the pr-create call will refuse; and a PR it did create would fire no workflow events, so the gate check would never run on it. See #575."
-            export GH_TOKEN="$FALLBACK_TOKEN"
-          fi
-          # `github.event.before` only exists on a real `push` event. #417's sweep triggers this workflow
-          # via `workflow_dispatch` (no such field), so fall back to the checked-out commit's own parent
-          # -- `fetch-depth: 0` above already makes that a real, resolvable commit, and it is the same
-          # value a `push` event would have carried for an ordinary single-commit push.
-          BEFORE="${{ github.event.before }}"
-          if [ -z "$BEFORE" ]; then BEFORE="$(git rev-parse HEAD^1)"; fi
-          # #1359: `--run-id`/`--parent-log` let `revertVerdict` compare WHICH tests failed on each side,
-          # rather than refusing on the bare fact that the parent re-check failed at all. `--run-id` reads
-          # THIS push's own failing tests from `trunkBuildTest`'s already-completed job in this same run
-          # (never a second suite run against a push already known to have failed); `--parent-log` points
-          # at the recheck step's own raw TAP log above, so both sides are parsed by the same function.
-          # Both are only consulted when `--parent-recheck` is `fail` -- see `revertVerdict`'s own header.
-          node packages/agent-org/src/trunk-revert.mjs \
-            --push-sha=${{ github.sha }} \
-            --before-sha="$BEFORE" \
-            --parent-recheck="${{ steps.recheck.outputs.result }}" \
-            --run-id=${{ github.run_id }} \
-            --parent-log=/tmp/parent-test.log \
-            --run-url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          case "$RECHECK_RESULT" in pass|fail|unknown) ;; *) RECHECK_RESULT=unknown ;; esac
+          {
+            echo "RECHECK_RESULT=$RECHECK_RESULT"
+            if [ -f /tmp/parent-summary.log ]; then grep -E '^not ok [0-9]+' /tmp/parent-summary.log | head -30 || true; fi
+          } > /tmp/recheck-annotation.txt
+          # A workflow command is one line: `%`, CR and LF are escaped the way GitHub documents.
+          MESSAGE="$(sed -e 's/%/%25/g' -e 's/\r/%0D/g' /tmp/recheck-annotation.txt | awk 'NR>1{printf "%%0A"} {printf "%s",$0}')"
+          echo "::notice title=trunk-recheck::$MESSAGE"
