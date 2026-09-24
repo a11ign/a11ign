@@ -114,3 +114,69 @@ export function resolveNpmCliScript(name) {
 export function npmCliInvocation(name, args) {
   return { command: process.execPath, args: [resolveNpmCliScript(name), ...args] };
 }
+
+/**
+ * #2301: `pnpm <args>` WITHOUT SPAWNING A `.cmd`, for the same reason `npmCliInvocation` exists, and with the
+ * added problem that pnpm is not always ON `PATH` at all: this host and the Windows workers run it as
+ * `corepack pnpm` (`packageManager` in the root manifest pins the version), while a CI runner has the
+ * shim `pnpm/action-setup` puts there. Three ways to reach it, tried in this order, each ending in an argv
+ * that `execFileSync` can run with no shell:
+ *
+ *   1. `npm_execpath`, when this process was itself started BY pnpm (`pnpm run ...`, `pnpm exec ...`): pnpm
+ *      says which script it is, so nothing is searched for and no other pnpm can be picked up by mistake.
+ *   2. a `pnpm` on `PATH`: the executable itself on POSIX; on Windows the shim is `pnpm.cmd`, so the
+ *      `pnpm.cjs` beside it is run through `process.execPath` instead.
+ *   3. `corepack` on `PATH`, the same way: `corepack pnpm` on POSIX, `corepack.js` beside `node.exe`
+ *      through `process.execPath` on Windows.
+ *
+ * Throws NAMING WHAT WAS TRIED, for the reason `resolveNpmCliScript` does.
+ * @param {string[]} args
+ * @returns {{ command: string, args: string[] }}
+ */
+export function pnpmCliInvocation(args) {
+  const fromParent = process.env.npm_execpath ?? "";
+  if (/pnpm\.c?js$/.test(fromParent) && existsSync(fromParent)) {
+    return { command: process.execPath, args: [fromParent, ...args] };
+  }
+  const shim = onPath("pnpm");
+  if (shim !== null) return shimInvocation(shim, join("node_modules", "pnpm", "bin", "pnpm.cjs"), args);
+  const corepack = onPath("corepack");
+  if (corepack !== null) {
+    return shimInvocation(corepack, join("node_modules", "corepack", "dist", "corepack.js"), ["pnpm", ...args]);
+  }
+  throw new Error("could not find pnpm: `npm_execpath` is not a pnpm script, and neither `pnpm` nor `corepack` "
+    + "is on PATH. `packageManager` in the root package.json names the version -- `corepack enable` or "
+    + "`pnpm/action-setup` provides it.");
+}
+
+/**
+ * The first executable called `name` on PATH, or `null`. On Windows the executable is `name.cmd`, which
+ * `existsSync` finds only when the extension is tried, so both spellings are.
+ * @param {string} name
+ * @returns {string | null}
+ */
+function onPath(name) {
+  for (const dir of (process.env.PATH ?? "").split(delimiter)) {
+    if (dir === "") continue;
+    for (const candidate of [join(dir, name), join(dir, `${name}.cmd`)]) {
+      if (existsSync(candidate)) return candidate;
+    }
+  }
+  return null;
+}
+
+/**
+ * A POSIX shim is spawned as it is; a `.cmd` shim is never spawned (CVE-2024-27980, see the header), so the
+ * package script it wraps is run through `process.execPath`, found beside the shim (the layout `pnpm add -g`
+ * and `pnpm/action-setup` share) or beside `node` (corepack's).
+ * @param {string} shim
+ * @param {string} script the wrapped script, relative to the shim's directory or to `node`'s
+ * @param {string[]} args
+ * @returns {{ command: string, args: string[] }}
+ */
+function shimInvocation(shim, script, args) {
+  if (!shim.endsWith(".cmd")) return { command: shim, args };
+  const found = [join(dirname(shim), script), join(dirname(process.execPath), script)].find((path) => existsSync(path));
+  if (found === undefined) throw new Error(`${shim} is a .cmd shim and its script ${script} is not beside it or beside node`);
+  return { command: process.execPath, args: [found, ...args] };
+}

@@ -73,8 +73,10 @@ existed it was a human remembering to type it.
 Weights and changeset are left **uncommitted**. Review both and commit them together; publishing is
 `release.yml`'s business and is guarded separately.
 
-## The npm-workspaces trap
+## The lockfile trap
 
-`changeset version` does **not** update `package-lock.json`. Run `npm install` immediately afterwards, in
-the same job, or the lockfile ships describing the previous versions — invisible until somebody's clean
-install resolves the wrong tree. `release.yml` does this; if you version by hand, you must too.
+`changeset version` does **not** update the lockfile. Run `pnpm install --lockfile-only` immediately
+afterwards, in the same job, or the lockfile ships describing the previous versions — and the next
+`pnpm install --frozen-lockfile`, which is the first step of every workflow, refuses the release commit.
+`npm run release:version` does both and `release.yml` runs it; if you version by hand, you must too. The
+lockfile is `pnpm-lock.yaml`: `package-lock.json` was deleted when the publish path moved to pnpm (#2301).
