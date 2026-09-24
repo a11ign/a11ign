@@ -2270,3 +2270,17 @@ the table above, and re-declare the Region.**
 one destination, none is duplicated, none is added -- and a reworded section reads as one dropped and one
 added. It compares two immutable commits, not "main versus now", so striking a stale rule later is not
 refused by it. A separate test holds the directory to the list `rules-files.ts` names, in both directions.
+
+## The `priority` label orders the gate's offers; hand assignment is the fallback (#2296)
+
+`ceo` created the `priority` label 2026-09-24 as "offer this row before others" and nothing read it: the
+chairman measured that no code consulted it, and #2279 reached worker-judge by hand assignment, not because
+the gate offered it first. `ceo` ruled to honour it rather than delete it. `rowOrders` now sorts rows
+carrying the label AHEAD of the rest, oldest-first within each group, and does so BEFORE the
+`MAX_ROW_ORDERS_PER_TICK` slice -- after it, a high-numbered priority row would be cut by the cap it exists
+to beat.
+
+**The label reorders offers; it does not grant a claim.** A `priority` row that `partitionUnclaimed` shelves
+(B4 overlap with an open PR, a claim label) never reaches `rowOrders`, so it stays shelved. **Hand
+assignment is still the fallback** for a row the gate cannot offer (shelved, or waiting on a lane), and for a
+decision the label cannot express.
