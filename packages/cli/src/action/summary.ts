@@ -448,6 +448,135 @@ function leftSiteLead(left: NonNullable<RunResult["leftSite"]>): string[] {
   ];
 }
 
+/**
+ * A run over several pages (#2272), as `cli.ts --json` emits it for a list of two or more URLs. One entry per
+ * URL in the order supplied; `results` holds that page's own single-page results (one per configured form
+ * state, else one). A list of ONE never takes this shape: it is the single-page result, unchanged.
+ */
+export interface PageReport {
+  url: string;
+  status: "captured" | "failed";
+  results: RunResult[];
+  error?: string;
+}
+
+export interface MultiPageResult {
+  multiPage: true;
+  pages: PageReport[];
+}
+
+export function isMultiPage(value: unknown): value is MultiPageResult {
+  const candidate = value as { multiPage?: unknown; pages?: unknown } | null;
+  return candidate?.multiPage === true && Array.isArray(candidate.pages);
+}
+
+/**
+ * What became of ONE page. `failed` and `unreadable` are both "we did not measure it", and neither is ever a
+ * clean page: the first threw before a result existed (or left one with no verdict), the second produced a
+ * capture that could not be confirmed to have read the page, so its findings are withheld.
+ */
+export type PageOutcome = "checked" | "unreadable" | "failed";
+
+export function pageOutcome(page: PageReport): PageOutcome {
+  const hasVerdict = (result: RunResult) => Array.isArray(result?.verdict?.findings);
+  if (page.status === "failed" || page.results.length === 0 || !page.results.every(hasVerdict)) return "failed";
+  return page.results.some((result) => result.captureVerified === false) ? "unreadable" : "checked";
+}
+
+function pageFindings(page: PageReport): RunFinding[] {
+  return page.results.flatMap((result) => result.verdict.findings);
+}
+
+/** Did THIS page's asserted findings meet the threshold? A page nobody measured cannot trip it; the roll-up says so apart. */
+export function pageTripsFailOn(page: PageReport, failOn: FailOn): boolean {
+  return pageOutcome(page) === "checked" && shouldFail(pageFindings(page), failOn);
+}
+
+/**
+ * The exit code for a list: a page that tripped `fail-on` is 1 (there is a finding to act on), else any page
+ * nobody measured is 2 (we could not look), else 0. Trip first, because a real finding must not be
+ * re-labelled as a tooling failure by an unrelated page's bad capture; both are red, and the log names both.
+ */
+export function multiPageExitCode(multi: MultiPageResult, failOn: FailOn): 0 | 1 | 2 {
+  if (multi.pages.some((page) => pageTripsFailOn(page, failOn))) return 1;
+  return multi.pages.every((page) => pageOutcome(page) === "checked") ? 0 : 2;
+}
+
+const OUTCOME_TEXT: Record<PageOutcome, string> = {
+  checked: "checked",
+  unreadable: "**could not read this page**",
+  failed: "**capture FAILED**",
+};
+
+function rollUpRow(page: PageReport, index: number, failOn: FailOn): string {
+  const checked = pageOutcome(page) === "checked";
+  const findings = checked ? findingBreakdown(pageFindings(page)) : "—";
+  const trips = failOn === "never" ? "—" : checked ? (pageTripsFailOn(page, failOn) ? "**yes**" : "no") : "not measured";
+  return `| ${index + 1} | ${cell(page.url)} | ${OUTCOME_TEXT[pageOutcome(page)]} | ${cell(findings)} | ${trips} |`;
+}
+
+/** The sentence beneath the roll-up table: which pages tripped `fail-on`, and which were not measured at all. */
+function rollUpVerdict(multi: MultiPageResult, failOn: FailOn): string[] {
+  const numbered = (pick: (page: PageReport) => boolean) =>
+    multi.pages.flatMap((page, index) => (pick(page) ? [String(index + 1)] : [])).join(", ");
+  const unmeasured = numbered((page) => pageOutcome(page) !== "checked");
+  const tripped = numbered((page) => pageTripsFailOn(page, failOn));
+  return [
+    failOn === "never"
+      ? "**fail-on is `never`, so no page can fail the check.**"
+      : `**Pages that tripped fail-on=${failOn}:** ${tripped || "none"}. ${FAIL_ON_RULE}.`,
+    ...(unmeasured ? ["", `**Page(s) ${unmeasured} were NOT measured.** A page that could not be captured or read is `
+      + "not a clean page: nothing was assessed on it."] : []),
+  ];
+}
+
+/** A page whose capture failed, in the summary: said plainly, never rendered as an empty findings table. */
+function failedPageSection(page: PageReport): string[] {
+  const reason = (page.error ?? "the capture produced no result").split("\n").map((line) => `> ${line}`);
+  return ["## a11ign — **could not capture this page**", "", `**Page:** ${page.url}`, "",
+    "The capture failed, so nothing was assessed: **this is not a clean page.**", "", ...reason];
+}
+
+/** Rows per table for each page of a list: PR comments are capped at 65,536 characters, and there may be many pages. */
+const MULTI_PAGE_LIMIT = 10;
+
+/**
+ * The summary for a list of pages: a roll-up first (per page, in the order supplied, with which tripped
+ * `fail-on`), then each page's own report separately. `options.marker` is written once, at the top.
+ */
+export function renderMultiSummary(multi: MultiPageResult, options: SummaryOptions & { failOn: FailOn }): string {
+  const { failOn, marker, ...pageOptions } = options;
+  const perPage = { limit: MULTI_PAGE_LIMIT, ...pageOptions };
+  const lines = [
+    ...(marker ? [`<!-- ${marker} -->`] : []),
+    `## a11ign — ${multi.pages.length} pages`, "",
+    "| # | Page | Outcome | Findings | Tripped fail-on |", "|---|---|---|---|---|",
+    ...multi.pages.map((page, index) => rollUpRow(page, index, failOn)), "",
+    ...rollUpVerdict(multi, failOn),
+  ];
+  for (const page of multi.pages) {
+    const sections = pageOutcome(page) === "failed" ? [failedPageSection(page).join("\n")]
+      : page.results.map((result) => renderSummary(result, perPage));
+    lines.push("", "---", "", sections.join("\n\n"));
+  }
+  return lines.join("\n");
+}
+
+/** The Action's log for a list: one block per page, then the pages that tripped `fail-on` and the ones not measured. */
+export function multiPageLogLines(multi: MultiPageResult, failOn: FailOn): string[] {
+  const lines = multi.pages.flatMap((page, index) => {
+    const tag = `page ${index + 1}/${multi.pages.length} (${page.url})`;
+    const outcome = pageOutcome(page);
+    if (outcome !== "checked") {
+      return [`a11ign: ${tag}: ${outcome === "failed" ? "capture FAILED" : "could not be read"} -- NOT MEASURED, not a clean page`];
+    }
+    return page.results.flatMap((result) => logLines(result, failOn).map((line) => line.replace(/^a11ign: /, `a11ign: ${tag}: `)));
+  });
+  const tripped = multi.pages.flatMap((page, index) => (pageTripsFailOn(page, failOn) ? [index + 1] : []));
+  if (failOn !== "never") lines.push(`a11ign: pages that tripped fail-on=${failOn}: ${tripped.join(", ") || "none"}`);
+  return lines;
+}
+
 export function renderSummary(result: RunResult, options: SummaryOptions = {}): string {
   const taskQuestion = options.taskQuestion ?? DEFAULT_TASK_QUESTION;
   const isTaskClaim = options.isTaskClaim ?? false;
