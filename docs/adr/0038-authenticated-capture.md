@@ -177,8 +177,14 @@ Three notes, each a decision.
   the worker owns the browser it launches (`--app` window, a debugging port it opens, and it kills stray
   browsers), so attaching the worker to somebody else's Edge conflicts with that ownership. It is therefore
   **a spike row first, before any build**, and the estimate below does not cover it.
-- **`env:` reaching a composite action's steps is believed, not verified.** If the build's first run shows it
-  does not, the fallback is an input mapped into the step's `env:` and **never** into `run:` text.
+- **`env:` reaching a composite action's steps: VERIFIED on a real runner, 2026-09-24** (`windows-2022`, run 36021132344 of a
+  throwaway workflow on a scratch branch, since deleted): `env: APP_TEST_USER: …` on the step that calls a composite action
+  reached that action's own `bash` step (`ENV-INHERITED: yes`), and a `::add-mask::` added from inside the composite action for
+  a value derived from it printed as `***` in the log. The same run showed the real Action refuse an authenticated run on this
+  (public) repository at its own check step, `auth-refused-public-repository`, with every later step skipped, so before
+  anything was installed. **What that run is not:** a full authenticated capture on a runner, which needs a PRIVATE
+  repository (the Action refuses this one by design) and NVDA; that run is still owed. If a runner ever stops passing the
+  step's `env:` through, the fallback is an input mapped into the step's `env:` and **never** into `run:` text.
   Interpolating `${{ inputs.x }}` into the shell is what the Action does today for `url` and `task`, and a
   secret must not go that way.
 - **The Action masks more than GitHub does.** GitHub masks a secret's exact value in logs and nothing derived
@@ -607,7 +613,7 @@ runners whose addresses change, and the change would be to the user's network an
   outsider hits it, the amendment to weigh is a selector escape hatch for the *login flow only*.
 - **Login per capture locks an account or trips bot detection.** Then the held-session design becomes the
   price of using the tool on that product, and Constraint 1 has to be re-read against it.
-- **The composite action does not pass step `env:` through.** Then the fallback in Constraint 3 applies.
+- **The composite action does not pass step `env:` through.** Then the fallback in Constraint 3 applies. (Verified that it does, 2026-09-24; see Constraint 3.)
 - **A worker that the refusal did not stop.** Any run in remote-worker mode that produces a report has
   falsified Constraint 1's enforcement, and the test that shows it is the first one the build row writes.
 
