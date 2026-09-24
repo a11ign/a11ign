@@ -57,10 +57,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { ref: main }
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
+        with: { node-version: 22, cache: pnpm }
       - id: ci
-        run: npm ci --ignore-scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
       - id: build
         run: npm run build
       # GH_TOKEN: `board-style.test.ts` and `row-claim.test.ts`'s live `fetchLabels` shell out to real `gh`
@@ -116,9 +117,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { ref: main, fetch-depth: 0 }
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci --ignore-scripts
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: npm run build
       - name: Run every test in the nightly-only population, refusing an empty one
         env:
@@ -182,9 +184,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { ref: main }
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci --ignore-scripts
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile --ignore-scripts
       # The guard itself imports nothing built, but the step below reads `RSTEST_CONFIG` out of
       # `assert-glob-not-empty.mjs`, which imports `@a11ign/worker-fleet/cli-flags` -- a package export
       # resolving to `dist/`, which `--ignore-scripts` does not produce and which this repo does not track.
@@ -239,9 +242,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { ref: main, fetch-depth: 0 }
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci --ignore-scripts
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Audit the tracker's labels once a day
         env:
           A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
@@ -273,9 +277,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { ref: main }
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci --ignore-scripts
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: npm run build
       - name: Write the doc cross-reference report and post it as one comment
         env:
@@ -337,9 +342,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { ref: main }
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci --ignore-scripts
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Read the org and post only if something needs attention
         env:
           GH_TOKEN: ${{ github.token }}
