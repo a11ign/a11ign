@@ -1693,6 +1693,27 @@ them before quoting them; what does not drift is the membership above.
   is FORBIDDEN. A verdict that
   cannot read `bypass_pull_request_allowances` is `CANNOT_TELL`, loudly — never a pass.
 
+### The second surface, and what a non-admin reading can and cannot certify (2026-09-23, #2086/#2090)
+
+*`ceo` ruled ADD, NOT SWAP. The rule is loaded; these are the particulars, moved here under #2167 so the
+rules file could carry that row's routing rule without growing.*
+
+- **`merge-queue-main`'s `pull_request` rule carries `required_approving_review_count: 1`**, and the
+  ruleset id stays in the loaded rules file because `rulesets/{id}` is the call a reader has to make and
+  the id is derivable from nothing else on the page (`roles-readme.test.ts` pins it there). **The most
+  restrictive requirement applies and exemptions do not compose:** an identity must be exempt in BOTH to
+  walk past the requirement, so the ruleset rule can only ever close a hole, never open one.
+- **The two instruments are wired in `branch-protection.test.ts` under two switches, and the admin read
+  cannot pass where admin is absent** — `A11Y_CHECK_BRANCH_PROTECTION=1` for `branches/main/protection`
+  (repository admin; the only one that can answer *nobody is exempt*), `A11Y_CHECK_MAIN_RULESET=1` for
+  `rules/branches/main` plus `rulesets/{id}` (every session and every CI job here, answering for the
+  asking identity only).
+- **Quoting a green cheap run as evidence that nobody can bypass is the overclaim #2022 exists to
+  prevent.** `bypass_actors` is withheld from a token without write access to the ruleset, so its absence
+  means *you may not look*, never *the list is empty*. The code therefore keeps `VERDICT.REQUIRED` (needs
+  admin) and `BINDING.BINDS_ME` (needs nothing) as **separate vocabularies**, so a run cannot report one
+  as the other.
+
 ## A review OUTLIVES the head it was posted on
 
 *The rule is in [`.claude/rules/agent-practices.md`](../.claude/rules/agent-practices.md); this is the incident behind it. The heading it carried while every wake loaded it, verbatim:*
@@ -1717,7 +1738,11 @@ evidence, and with what would reopen it.
   unmergeable for over seven hours on a `CHANGES_REQUESTED` posted at a head the author had already fixed,
   and every org read returned green-and-armed. **Since #2084 `work-gate.mjs`'s `readPrs` asks for
   `reviewDecision` on the `pr list` call it already makes — another field, never another call — and
-  `pr-review-blocked` names every green, unheld pull request GitHub is holding.**
+  `pr-review-blocked` names every green, unheld pull request GitHub is holding.** That population is not
+  only the stalled-review shape it was built for: on the first sweep it also named a pull request that
+  had **opened READY and never reached the reviewer lane at all**, which no reviewDecision-free read
+  could have surfaced. *(Clause moved here from the loaded rules file under #2167, to pay for the
+  routing rule that row added — the rule stays loaded, the incident lives here.)*
   *The record, because it is the lesson rather than a footnote:* #2084's body states that grep returning
   **0**, and it was true when the row was filed at 08:5xZ. It was RESTATED at `468a74f1b` rather than
   re-run, and by then #2126 had landed. **A grep count in a row body is a reading at a moment; re-run it
