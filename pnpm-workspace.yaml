@@ -13,8 +13,9 @@ packages:
 #
 # What it does to release: `changeset version` still rewrites each dependent's "0.0.0" range to the new
 # concrete version, so a packed tarball carries concrete ranges, exactly as today, and never a `workspace:`.
-# A range the workspace package does not satisfy would fall through to the registry, which is why the
-# lockfile is read, not trusted.
+# (Measured: a patch changeset on evidence turns every dependent's "0.0.0" into "0.1.0".) That commit must
+# therefore refresh pnpm-lock.yaml as well -- the specifiers change -- and a range the workspace package does
+# not satisfy would fall through to the registry, which is why the lockfile is read, not trusted.
 linkWorkspacePackages: true
 
 # THE STORE IS NOT SET HERE, on purpose. pnpm's default is ~/.local/share/pnpm/store/v10, which on the agent
