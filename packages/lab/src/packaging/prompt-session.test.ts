@@ -13,9 +13,9 @@ import { mkdtempSync, rmSync, existsSync, writeFileSync, readFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promptable, clearThenPrompt, queueable, queueOrLose, queueDepthNote, queueDepth,
-  deepQueueRefusal, DEEP_QUEUE, NEEDS_DECISION_FLAG, EXIT }
+  deepQueueRefusal, DEEP_QUEUE, NEEDS_DECISION_FLAG, EXIT, senderFrom, signed, UNKNOWN_SENDER }
   from "../../../agent-org/src/prompt-session.mjs";
-import { readHandoffs } from "../../../agent-org/src/wake.mjs";
+import { readHandoffs, deliverHandoffs, addressed } from "../../../agent-org/src/wake.mjs";
 import { readLoadedRules } from "./rules-files.ts";
 
 const agents = [{ label: "reviewer", status: "idle" }, { label: "reviewer-2", status: "working" },
@@ -80,7 +80,8 @@ test("THE CLEAR COMES FIRST, and the order of the two calls is the whole point",
     null);
   const verbs = calls.map((a) => a.slice(2).join(" "));
   assert.equal(verbs[0], "agent prompt reviewer /clear", "the clear must be the FIRST thing sent");
-  assert.equal(verbs.at(-1), "agent prompt reviewer Draft #1 …", "and the order the last");
+  assert.match(verbs.at(-1)!, /^agent prompt reviewer You are `reviewer`.*Draft #1 …/s,
+    "and the order the last, addressed to the session it went to");
   assert.ok(verbs.some((v) => v.startsWith("agent wait")), "with the settle between them");
 });
 
@@ -91,7 +92,7 @@ test("a refused CLEAR still delivers the prompt, and says so", () => {
   let sent = false;
   const run = (a: string[]) => {
     if (a.includes("/clear")) throw new Error("no socket");
-    if (a.includes("Draft #2")) sent = true;
+    if (a.some((x) => x.includes("Draft #2"))) sent = true;
     return "";
   };
   assert.match(String(clearThenPrompt(run, "reviewer", "Draft #2")), /clear refused/);
@@ -140,8 +141,8 @@ test("A REFUSED PROMPT IS WRITTEN TO THE QUEUE, and the file is the one wake rea
     const queued = readHandoffs(path);
     assert.equal(queued.length, 1, "the order the author wrote is in the queue");
     assert.equal(queued[0].session, "reviewer");
-    assert.equal(queued[0].prompt, "Draft #1963 (odd) is ready for review.",
-      "byte-for-byte what the author typed -- the reviewer is going to read this");
+    assert.equal(queued[0].prompt, signed("Draft #1963 (odd) is ready for review.", UNKNOWN_SENDER),
+      "what the author typed, byte-for-byte, under the sender line -- the reviewer is going to read this");
     assert.ok(Number.isFinite(queued[0].queuedAt), "with the time it started waiting");
     assert.match(err, /QUEUED handoff\/reviewer\//, "and the author is told which order was kept");
     assert.match(err, /DO NOT RETRY/,
@@ -340,7 +341,7 @@ test("THE SECOND DIRECTION: an order DECLARING a decision still queues at the sa
     assert.equal(value, EXIT.QUEUED, "declared a decision -- it is held, not refused");
     const queued = readHandoffs(path);
     assert.equal(queued.length, DEEP_QUEUE + 1, "and it is ON DISK, which is the assertion that matters");
-    assert.equal(queued.at(-1)?.prompt, "STOP THE LINE: main is red at 60e8784ce.");
+    assert.equal(queued.at(-1)?.prompt, signed("STOP THE LINE: main is red at 60e8784ce.", UNKNOWN_SENDER));
     assert.match(err, /QUEUE DEPTH: this is order 11/,
       "still told what it joined -- the declaration buys a place in the queue, not silence about it");
   });
@@ -415,4 +416,83 @@ test("the flag the rules file tells an author to type is the flag this command a
   assert.ok(rules.includes(NEEDS_DECISION_FLAG),
     "and the loaded rules name it, so the refusal quotes a rule that exists");
   assert.ok(rules.includes("ROW WRITE"), "with the routing change itself stated, not just its flag");
+});
+
+// ---------------------------------------------------------------------------------------------------
+// A CLEARED SESSION NEVER RECEIVES AN ORDER THAT DOES NOT NAME IT AND ITS SENDER (#2342).
+//
+// Measured 2026-09-24 12:22:50Z: `ceo` was `/clear`ed and its next message was `orchestrator`'s readings
+// with no name on it. It could not say who it was and ended the turn on a question -- both symptoms
+// `addressed()` exists to prevent, on the one path that never called it.
+
+const ROSTER = ["worker-capture", "worker-judge", "worker-tooling"];
+
+/** The text of the ONE `agent prompt` that is not the `/clear`, from a run that recorded its calls. */
+function promptedText(calls: string[][]): string {
+  const orders = calls.filter((a) => a[2] === "agent" && a[3] === "prompt" && a[5] !== "/clear");
+  assert.equal(orders.length, 1, "exactly one order reached the session");
+  return orders[0][5];
+}
+
+function assertNamedAndSigned(text: string, target: string, sender: string, body: string): void {
+  assert.ok(text.startsWith(`You are \`${target}\``), `starts by naming the target, got: ${text.slice(0, 60)}`);
+  assert.ok(text.includes(`From: ${sender}`), `names the sender ${sender}`);
+  assert.ok(text.includes(body), "and still carries the order");
+  assert.ok(text.includes("ENDING YOUR TURN WITH A QUESTION IS THE SAME AS STOPPING"), "and the autonomy footer");
+}
+
+test("THE IMMEDIATE PATH names the target and the sender, and carries the autonomy footer", () => {
+  const calls: string[][] = [];
+  clearThenPrompt((a: string[]) => { calls.push(a); return ""; }, "ceo", "Readings for #928.", "orchestrator");
+  assertNamedAndSigned(promptedText(calls), "ceo", "orchestrator", "Readings for #928.");
+});
+
+test("THE QUEUED PATH arrives named and signed exactly as an immediate one does", () => {
+  inTempDir((dir) => {
+    const path = join(dir, "q");
+    withStderr(() => queueOrLose({
+      label: "reviewer", text: "Draft #2342 (even) is ready.", why: '"reviewer" is working', agents, path,
+      sender: "worker-4",
+    }));
+    const calls: string[][] = [];
+    const out = deliverHandoffs(readHandoffs(path),
+      [{ label: "reviewer", status: "idle" }], ROSTER,
+      { run: (a: string[]) => { calls.push(a); return ""; }, queuePath: path });
+
+    assert.equal(out.sent.length, 1, "the tick delivered the queued order -- the positive control");
+    const text = promptedText(calls);
+    assertNamedAndSigned(text, "reviewer", "worker-4", "Draft #2342 (even) is ready.");
+    assert.equal(text.split("ENDING YOUR TURN WITH A QUESTION").length, 2,
+      "the clause appears ONCE: queue time signs, delivery time wraps, and neither does the other's job");
+  });
+});
+
+test("an order from a caller nobody can name says `From: unknown` -- it is not refused and not unsigned", () => {
+  const calls: string[][] = [];
+  assert.equal(clearThenPrompt((a: string[]) => { calls.push(a); return ""; }, "ceo", "Hello."), null);
+  assertNamedAndSigned(promptedText(calls), "ceo", UNKNOWN_SENDER, "Hello.");
+});
+
+test("THE CONTROL: the pre-fix path, raw text, fails the same assertion", () => {
+  // Without this, `assertNamedAndSigned` could be satisfied by anything. It is the code as it was.
+  assert.throws(() => assertNamedAndSigned("Readings for #928.", "ceo", "orchestrator", "Readings for #928."),
+    /starts by naming the target/);
+  assert.notEqual(addressed({ session: "ceo", prompt: "x" }, "ceo"), "x", "and addressed() is what changes it");
+});
+
+const workspaceList = JSON.stringify({ result: { workspaces: [
+  { label: "orchestrator", workspace_id: "w5", agent_status: "working" },
+  { label: "worker-4", workspace_id: "wD", agent_status: "idle" }] } });
+
+test("the sender is resolved from the caller's workspace id against the roster herdr answered", () => {
+  assert.equal(senderFrom("wD", workspaceList), "worker-4");
+  assert.equal(senderFrom("w5", workspaceList), "orchestrator");
+});
+
+test("a caller that cannot be resolved is `unknown`, never a guess and never a throw", () => {
+  assert.equal(senderFrom(undefined, workspaceList), UNKNOWN_SENDER, "no workspace id: a person or a unit");
+  assert.equal(senderFrom("w99", workspaceList), UNKNOWN_SENDER, "an id herdr does not list");
+  assert.equal(senderFrom("wD", null), UNKNOWN_SENDER, "herdr was not asked");
+  const { value } = withStderr(() => senderFrom("wD", "not json"));
+  assert.equal(value, UNKNOWN_SENDER, "an unreadable roster");
 });

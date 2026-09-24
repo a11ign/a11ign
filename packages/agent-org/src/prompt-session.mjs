@@ -31,7 +31,7 @@ import { realpathSync, readFileSync } from "node:fs";
 
 import { refuseUnknownFlags } from "../../worker-fleet/src/cli-flags.mjs";
 import { clearContext, readAgents, WAKEABLE, queueHandoff, handoffQueuePath, ledgerPathFrom,
-  handoffBacklog, readHandoffs, waitedFor } from "./wake.mjs";
+  handoffBacklog, readHandoffs, waitedFor, addressed } from "./wake.mjs";
 
 /**
  * `1` the order is LOST -- nothing holds it and nothing will retry it; `2` it was not delivered now and
@@ -89,6 +89,48 @@ export function queueable(label, agents) {
   return agents.some((a) => a.label === label);
 }
 
+/** What the order says when the caller cannot be resolved: a person at a terminal, a unit, a cron. */
+export const UNKNOWN_SENDER = "unknown";
+
+/**
+ * PURE. Who is asking, from the caller's own workspace id against the roster herdr answered -- or
+ * {@link UNKNOWN_SENDER}, which is an answer and not a refusal (#2342).
+ *
+ * `HERDR_WORKSPACE_ID` IS THE ONLY THING THAT NAMES THE CALLER. It is set for a session's own shell and
+ * absent for a person's terminal or a systemd unit, and an id herdr does not list is the same case: an
+ * order from somebody the org cannot name still has to arrive, so it says so instead of arriving unsigned.
+ *
+ * @param {string | undefined} workspaceId
+ * @param {string | null} rosterJson `workspace list`'s raw answer, or `null` when herdr was not asked
+ * @returns {string}
+ */
+export function senderFrom(workspaceId, rosterJson) {
+  if (!workspaceId || !rosterJson) return UNKNOWN_SENDER;
+  try {
+    const workspaces = JSON.parse(rosterJson)?.result?.workspaces;
+    const mine = Array.isArray(workspaces) ? workspaces.find((w) => w.workspace_id === workspaceId) : null;
+    return mine?.label ? String(mine.label) : UNKNOWN_SENDER;
+  } catch (/** @type {any} */ err) {
+    process.stderr.write(`(could not read who is sending: ${String(err?.message ?? err).split("\n")[0]}`
+      + `; signing this order "${UNKNOWN_SENDER}".)\n`);
+    return UNKNOWN_SENDER;
+  }
+}
+
+/**
+ * PURE. The order's text with its sender on it -- the part of an order only THIS process knows.
+ *
+ * THE NAME LINE AND THE AUTONOMY CLAUSE ARE NOT ADDED HERE, and that is deliberate: they are
+ * `addressed()`'s, and `deliver` calls it on every queued order when the gate hands it over. Wrapping at
+ * queue time as well would print the clause twice on the queued path. So this is what BOTH paths share --
+ * the signed text is what is queued, and what {@link clearThenPrompt} wraps immediately.
+ *
+ * @param {string} text @param {string} sender @returns {string}
+ */
+export function signed(text, sender) {
+  return `From: ${sender}\n\n${text}`;
+}
+
 /** Prefix on {@link clearThenPrompt}'s return value when the PROMPT ITSELF failed -- the order never
  * reached the session, unlike a refused clear (text still went, just on a bloated context). A caller that
  * needs to tell "delivered anyway" apart from "never delivered" matches this rather than re-deriving it. */
@@ -96,12 +138,20 @@ export const PROMPT_REFUSED_PREFIX = "prompt refused: ";
 
 /**
  * Clear, then prompt. Returns what to report, or `null` when the prompt landed.
+ *
+ * THE SESSION IS CLEARED, SO WHAT IT IS SENT IS ALL IT HAS (#2342): the text goes through `addressed()`,
+ * the gate's own wrapper, so a cleared session wakes knowing its name, its sender and that nobody is
+ * there to answer a question. Measured 2026-09-24: `ceo` was cleared and woke to raw text, could not say
+ * who it was, and ended its turn on a question.
+ *
  * @param {(args: string[]) => string} run @param {string} label @param {string} text
+ * @param {string} [sender]
  */
-export function clearThenPrompt(run, label, text) {
+export function clearThenPrompt(run, label, text, sender = UNKNOWN_SENDER) {
   const clearRefusal = clearContext(run, label);
   try {
-    run(["--session", "org", "agent", "prompt", label, text]);
+    run(["--session", "org", "agent", "prompt", label,
+      addressed({ session: label, prompt: signed(text, sender) }, label)]);
   } catch (/** @type {any} */ err) {
     return `${PROMPT_REFUSED_PREFIX}${String(err?.message ?? err).split("\n")[0].slice(0, 120)}`;
   }
@@ -131,11 +181,16 @@ export function clearThenPrompt(run, label, text) {
  * decision, an FYI, or nothing, and the queue entry records the first as `decision: true`. The author is
  * told what was recorded ({@link stanceNote}), including when it was the default.
  *
+ * THE ENTRY IS SIGNED, NOT WRAPPED (#2342): the tick that delivers it calls `addressed()` on it, which
+ * supplies the name line and the autonomy clause, so all this adds is the sender -- the one thing the
+ * gate cannot know by then. A refusal below still echoes the author's own `text`, unsigned.
+ *
  * @param {{label: string, text: string, why: string, agents: {label: string, status: string}[] | null,
- *          path: string, stance?: Stance}} refusal
+ *          path: string, stance?: Stance, sender?: string}} refusal
  * @returns {number}
  */
-export function queueOrLose({ label, text, why, agents, path, stance = STANCE.UNDECLARED }) {
+export function queueOrLose({ label, text, why, agents, path, stance = STANCE.UNDECLARED,
+  sender = UNKNOWN_SENDER }) {
   const decision = stance === STANCE.DECISION;
   if (!queueable(label, agents)) {
     process.stderr.write(`${NOT_QUEUED_PREFIX}${why}. Nothing will retry this -- a name the org `
@@ -151,7 +206,7 @@ export function queueOrLose({ label, text, why, agents, path, stance = STANCE.UN
   }
   let entry;
   try {
-    entry = queueHandoff(path, { session: label, prompt: text, decision });
+    entry = queueHandoff(path, { session: label, prompt: signed(text, sender), decision });
   } catch (err) {
     // THE ONE CASE WHERE AN ORDER REALLY IS LOST, so it is the loudest line this file can print.
     process.stderr.write(`NOT PROMPTED, AND NOT QUEUED: ${why}; and the queue at ${path} could not be `
@@ -381,15 +436,20 @@ function main() {
     process.exit(EXIT.REFUSED);
   }
   const queue = handoffQueuePath(ledgerPathFrom(process.argv));
-  const agents = readAgents(defaultRun);
+  // ONE ROSTER READ SERVES BOTH QUESTIONS: who may be prompted, and who is asking. `readAgents` reduces the
+  // answer to `{label, status}`, so the raw text is kept on the way past rather than asking herdr twice.
+  /** @type {string | null} */
+  let rosterJson = null;
+  const agents = readAgents((args) => (rosterJson = defaultRun(args)));
+  const sender = senderFrom(process.env.HERDR_WORKSPACE_ID, rosterJson);
   const why = promptable(label, agents);
-  if (why) process.exit(queueOrLose({ label, text, why, agents, path: queue, stance }));
+  if (why) process.exit(queueOrLose({ label, text, why, agents, path: queue, stance, sender }));
 
   // NO DEPTH GATE ON THIS PATH, AND THE ASYMMETRY IS THE POINT. `promptable` said the target is between
   // tasks, so this order is DELIVERED rather than queued: it joins nothing, and a session that is idle is
   // a session whose queue the next tick will drain. The refusal is about JOINING A PILE, not about the
   // pile existing.
-  const report = clearThenPrompt(defaultRun, label, text);
+  const report = clearThenPrompt(defaultRun, label, text, sender);
   // A PROMPT REFUSED AT THE LAST MOMENT IS THE SAME LOSS ONE STEP LATER. `promptable` said idle and herdr
   // said no, which means the session went to work in between -- the race the queue exists for. A refused
   // CLEAR is not this: the text went, on a bloated context, and re-queueing it would deliver it twice.

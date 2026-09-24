@@ -172,8 +172,9 @@ test("END TO END: the real command records --decision on the queue and strips it
     assert.equal(fyi.status, EXIT.QUEUED, fyi.stderr);
     const queued = readHandoffs(join(dir, "prompt-session-handoffs"));
     assert.deepEqual(queued.map((h) => [h.prompt, h.decision]),
-      [["Ratify 64 KiB?", true], ["Completion report on #1", false]],
-      "the flag reached the entry, and the text is what the author typed without it");
+      [["From: unknown\n\nRatify 64 KiB?", true], ["From: unknown\n\nCompletion report on #1", false]],
+      "the flag reached the entry, and the text is what the author typed without it -- under the sender "
+      + "line (#2342: herdr is absent here, so the caller cannot be named, and `unknown` is the answer)");
     assert.equal(run("ceo", "x", DECISION_FLAG, FYI_FLAG).status, EXIT.REFUSED);
   });
 });
