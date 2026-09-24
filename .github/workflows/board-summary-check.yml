@@ -69,9 +69,13 @@ jobs:
         with:
           node-version: 22
 
+      - name: Set up pnpm
+        if: steps.hour.outputs.mode != 'none'
+        uses: pnpm/action-setup@v4
+
       - name: Install
         if: steps.hour.outputs.mode != 'none'
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       # 07:15 -- REPORTS AND EXITS 0. At 07:15 the summary is not late, it is not written yet, and a red
       # mark every morning for a normal working state is how a signal gets ignored.

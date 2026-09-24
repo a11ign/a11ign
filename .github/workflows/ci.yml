@@ -49,8 +49,9 @@ name: ci
 # and everything downstream of it; an unrelated package's PR does not pay for packages it cannot affect.
 #
 # #212 MEASURED THE 60S BUDGET ON A GENUINE LEAF CASE (`packages/lab`, zero dependents post-#206) AND FOUND
-# ~90S, NOT 60S -- two independent CI runs, step-by-step: checkout+setup-node+cache+npm-ci 7s (npm ci fully
-# SKIPPED on the cache hit -- caching already works), build 5s, lint+typecheck 15s (whole-repo, not scoped
+# ~90S, NOT 60S -- two independent CI runs, step-by-step: checkout+setup-node+cache+install 7s (the install fully
+# SKIPPED on the cache hit -- caching already works; measured under npm, before #2298 moved CI to pnpm), build 5s,
+# lint+typecheck 15s (whole-repo, not scoped
 # to `testPackages` -- real, but small), and "Unit tests of the touched package(s) and their workspace
 # dependents" 56s -- ~66% of the step total, on BOTH runs. That is `lab`'s own suite (199 test files, ~1,305
 # `test()` calls, this repo's largest package by test count), not unscoped CI -- `testPackages` resolved to
@@ -200,13 +201,12 @@ jobs:
       ts-test-scope: scoped
       base-ref: ${{ needs.changed.outputs.base }}
       test-packages: ${{ needs.changed.outputs.testPackages }}
-      use-node-modules-cache: true
 
   # A1 (#452): CALLS `reusable-build-test.yml` for the one thing this job ever needed from it -- a real
   # `dist/`, since `@a11ign/worker-fleet/cli-flags` resolves through `package.json`'s `exports` map and a
   # handful of Python tests (`test_grants_map_is_current.py`, `test_unclosable_map_is_current.py`) shell
-  # out to a `node` script that imports it. No lint, no typecheck, no TS tests, no docs:coverage, no
-  # dedicated node_modules cache -- this job never ran any of those, and the reusable file's defaults are
+  # out to a `node` script that imports it. No lint, no typecheck, no TS tests, no docs:coverage --
+  # this job never ran any of those, and the reusable file's defaults are
   # deliberately "off" for exactly this reason: opting IN to extra work, never opting OUT of it.
   python:
     needs: changed
@@ -264,15 +264,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci --ignore-scripts
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: npm run build
       - run: npm run rules-check
 
   changeset:
     needs: changed
-    # `needs.changed.outputs.changeset` here is a cheap OVER-APPROXIMATION -- `changed` has no `npm ci`
+    # `needs.changed.outputs.changeset` here is a cheap OVER-APPROXIMATION -- `changed` has no install
     # and so cannot safely call `npm pack`, so its `classify()` run answers "does this PR touch a
     # published package's directory at all", the same blunt shape `changeset-check.yml`'s old regex used
     # before #132. A false positive here costs one job run that then finds nothing to enforce (below); a
@@ -282,10 +283,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      # PRECISE, now that `npm ci` has made `npm pack` safe to call. `orchestrator` reproduced the crash
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      # PRECISE, now that the install has made `npm pack` safe to call. `orchestrator` reproduced the crash
       # this avoids: `classify()` calling the real `packedFiles` inside `changed` (no install at all) fails
       # on every PR touching a published package. This re-derives the real answer -- does npm actually
       # SHIP this file -- and it is what decides whether the enforcement step below runs anything at all.
@@ -324,9 +326,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci --ignore-scripts
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: npm run build
       # `GH_TOKEN` because the packaging guards in the population shell out to `gh`, as `ts`'s own test step does.
       - name: Every tree-wide guard, on this tree
@@ -409,15 +412,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - uses: actions/cache@v4
-        id: node-modules-cache
-        with:
-          path: node_modules
-          key: node-modules-${{ hashFiles('package-lock.json') }}
-      - if: steps.node-modules-cache.outputs.cache-hit != 'true'
-        run: npm ci --ignore-scripts
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: npm run build
       - name: This head matches what GitHub recorded (#294)
         env:
@@ -516,7 +514,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      # No `npm ci`: this script imports `cli-flags` RELATIVELY for exactly that reason, and
+      # No install: this script imports `cli-flags` RELATIVELY for exactly that reason, and
       # `pre-install-import-graph.test.ts` derives this job's entry into its population automatically.
       - name: Which paths did this PR change, and does its body sign them off?
         env:
