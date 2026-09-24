@@ -2285,6 +2285,46 @@ to beat.
 assignment is still the fallback** for a row the gate cannot offer (shelved, or waiting on a lane), and for a
 decision the label cannot express.
 
+## The org fixes forward and nothing reverts a merge automatically (#2356)
+
+**The chairman's ruling, 2026-09-24:** *"this needs to be a process change that we shouldn't revert, we
+should always fix forward. My worry is that that reverting logic is built into the CI."* It superseded
+`ceo`'s own #2349 (auto-revert as a fallback after 60 minutes) -- **there is no fallback either.** The
+incident was #2341: the auto-revert of #2329 would have removed a correct doc for a two-entry map miss in
+`control-plane-checkout-is-one-fact.test.ts`, and the fix (#2346/#2347) was smaller than the re-land.
+
+**What was deleted:** `trunk.yml`'s `decideRevert` job and its step *"Revert this push, unless the failure is
+inherited or main has already moved on"*, `packages/agent-org/src/trunk-revert.mjs` and its two test files,
+the `A11IGN_BOT_TOKEN` grant the job carried, and `contents: write` / `pull-requests: write`. **What was kept:**
+`trunkGate` and `trunk-revert-guard.mjs` -- despite the name it reverts nothing, it checks that a push did not
+silently UNDO work already on `main` (#411), which fix-forward needs more, not less -- and
+`parent-recheck-summary.mjs` with the parent re-check itself.
+
+**What replaced it, because deleting alone leaves `main` red until somebody happens to look:** the
+`trunkRecheck` job (the old job minus every write) records its answer as an annotation on its own check-run,
+and `work-gate.mjs`'s `trunk-red` cause reads the newest verdict run of `trunk.yml` on `main` -- one REST call
+when healthy, four more only when red -- and emits ONE order, first in `decide()`, named for the failing
+test, the run and the merge, saying *fix forward, do not revert*. **Three attributions, none of them silent:**
+`own` (the parent passes, or fails only tests this merge did not -- #1359) goes to the merged PR's session;
+`inherited` (the parent fails the SAME test now -- #316's 13-of-19, #616's wall-clock) goes to `engineers`,
+because waking a PR's author for a failure they did not cause is the misattribution the old revert made;
+`unknown` (the re-check could not run or could not name the tests) goes to the merged PR's session and says so.
+**The order is never withheld for being inherited.** `wake.mjs` reads `fallback: "engineers"`, so a merged
+session that is gone -- a spare instance ends with its row (#2323) -- or busy hands the order to any idle
+engineer instead of waiting a tick.
+
+**The policy the row asked to be decided, and it is pinned (`RED_TRUNK_POLICY`):** *other pull requests keep
+merging while a fix is in flight.* A freeze needs an admin edit of the ruleset or the classic protection,
+which is a hole in the review requirement (`main-review-requirement.md`); a red `main` already stops the merges
+that touch the break because the queue tests each merge result; and `trunkGate` keeps refusing a merge that
+silently undoes work. **The fix goes first by its ORDER**, not by the queue. **Jumping the fix PR past the merge
+queue is not built:** `EnqueuePullRequestInput.jump` exists (schema read 2026-09-24), but arming with it is a
+write only a live queue can verify, and a misfire costs more than the wait it saves. It is its own row, #2391.
+
+**Nothing opens a `revert/` branch:** `trunk-revert.test.ts` walks every workflow and fails on `git revert`, a
+`revert/` branch, a revert pull request, or a name of the deleted script -- with a positive control that the
+walk found the workflows, since an emptiness assertion over a walk that found nothing passes.
+
 ## The standing three are DRAINED, not retired, and the drain lifts itself (#2324)
 
 `ceo`'s #1950 ruling (b, 2026-09-24): once #2323's teardown exists, the three standing engineers finish the rows
