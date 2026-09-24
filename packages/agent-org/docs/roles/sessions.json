@@ -1,8 +1,8 @@
 {
   "_owner": "ceo",
   "_why": "ceo's ruling on #1453 (2026-09-13): the one file that says which sessions are live. packages/agent-org/src/arm-pr.mjs reads it and types no session list; a label is refused when its session is absent from `live`, and `retired` only chooses the sentence the refusal uses. The repository's session:* labels are not the source: four of them are retired.",
-  "_rolesNotProcesses": "#1951: a `live` entry is a ROLE, and `session:<name>` is a ROUTING ADDRESS -- never a process handle. Every entry used to carry `workspace: { herdr: \"w6\", primary: \"...\" }`, a tmux pane id; six of six did, NOTHING in the tree ever read one, and the roster therefore lied the moment a pane moved. The runtime registry already exists and is herdr itself: `wake.mjs`'s `readAgents` asks `herdr --session org workspace list` and `route` matches a workspace by its LABEL, which is the name below. So the pane binding was dropped rather than moved -- there was no second reader to move it for. Add no per-instance field here: `.claude/rules/agent-practices.md` already ruled the direction for the sibling label, `answer:<session>` is \"one label per session, never one per instance\". `started` stays because it is a ROLE fact (when this role joined the roster -- worker-tooling's 19:13Z is the hour the third engineer existed), not a process one. `spare` (#2323) is the same kind of fact: a ROLE is or is not disposable, which is what lets `wake.mjs` end an instance of it when its row closes, and it names no pane, pid or workspace. `drain` (#2324) is the same kind of fact: a ROLE is or is not held back from NEW rows (see `_drain`), and it too names no pane, pid or workspace.",
-  "_spareEngineers": "#2279 + #2323 (ceo, 2026-09-24): `worker-4` to `worker-8` are SPARE engineer roles -- addresses with NO standing process, marked `\"spare\": true`, so `wake.mjs`'s spawn pilot (#1952) has an absent role to start into and its teardown (#2323) has a mark to read. They are separate addresses rather than processes under `worker-capture` because B2 caps one row in build per name. A SPARE IS ENDED WHEN THE ROW IT CLAIMED CLOSES: `wake.mjs`'s `endFinishedSpares` closes the workspace once the instance has held a row, holds none now and is idle -- never mid-turn, never before its first claim, and only a role carrying `spare: true` here; the three standing engineers and every decision-holder are untouched. Every ending is one line in `spare-cycles` (`{role,row,at,clean,why}`) and `consecutiveClean` reads #1950's 20 from it. THE BOUND IS THE ORDER, NOT THIS LIST: a spawn needs a `ready-row-unclaimed` order `route` could not place, one per tick. Five is a ceiling ceo chose so that draining the standing three does not cut throughput, not a claim about capacity; RAISE IT WHEN, AND ONLY WHEN, the tick log shows `no spawn: all N engineer roles hold a process` while claimable rows exist -- a one-line edit that is ceo's. `started` on a spare is when the ROLE joined the roster, never when a process first ran -- the retirement clock in #1950 starts at the first spawn.",
+  "_rolesNotProcesses": "#1951: a `live` entry is a ROLE, and `session:<name>` is a ROUTING ADDRESS -- never a process handle. Every entry used to carry `workspace: { herdr: \"w6\", primary: \"...\" }`, a tmux pane id; six of six did, NOTHING in the tree ever read one, and the roster therefore lied the moment a pane moved. The runtime registry already exists and is herdr itself: `wake.mjs`'s `readAgents` asks `herdr --session org workspace list` and `route` matches a workspace by its LABEL, which is the name below. So the pane binding was dropped rather than moved -- there was no second reader to move it for. Add no per-instance field here: `.claude/rules/agent-practices.md` already ruled the direction for the sibling label, `answer:<session>` is \"one label per session, never one per instance\". `started` stays because it is a ROLE fact (when this role joined the roster -- worker-tooling's 19:13Z is the hour the third engineer existed), not a process one. `spare` (#2323) is the same kind of fact: a ROLE is or is not disposable, which is what lets `wake.mjs` end an instance of it when its row closes, and it names no pane, pid or workspace. `drain` (#2324) is the same kind of fact: a ROLE is or is not held back from NEW rows (see `_drain`), and it too names no pane, pid or workspace. `family` (#2403) is the same kind of fact: `{prefix, from}` says that every `<prefix><n>` for n from `from` is an instance of this ROLE (see `_spareEngineers`), so the roster need not carry one entry per address; it names no pane, pid or workspace, and `worker-<n>` in `name` is the family's label rather than an address anyone holds.",
+  "_spareEngineers": "#2279 + #2323 + #2403 (ceo, 2026-09-24; chairman's ruling on #2401/#2403): the SPARE engineers are ONE FAMILY, the single `live` entry named `worker-<n>` carrying `\"family\": {\"prefix\": \"worker-\", \"from\": 4}` -- every `worker-<n>` for n from 4 is a spare engineer role, marked `\"spare\": true`: an address with NO standing process, so `wake.mjs`'s spawn pilot (#1952) has an absent role to start into and its teardown (#2323) has a mark to read. They are separate addresses rather than processes under `worker-capture` because B2 caps one row in build per name. THERE IS NO LIST TO RAISE. The entry replaced `worker-4` to `worker-8` (a ceiling `ceo` chose, lifted by a one-line edit once somebody read `no spawn: all N engineer roles hold a process` in the tick log); the chairman ruled on 2026-09-24 that the pool has no ceiling, so when every engineer address holds a process and a claimable row is waiting, `spawnableRole` allocates the LOWEST `worker-<n>` (n from 4) with no process and not drained, and finished spares' workspaces close, so the numbers stay as small as the concurrency needs. Every reader of a `session:<name>` label matches the family through `arm-pr.mjs`'s `isLiveSession` (the arm-pr live check, the unknown-label check, `laneReason`, `pr-open`'s owner label; `runnerReason` compares the label to the asking session and reads no roster). THE BOUND IS THE ORDER, NOT A NUMBER: a spawn needs a `ready-row-unclaimed` order `route` could not place for a row that passes `spawnClaimability`, one per tick (`MAX_SPAWNS_PER_TICK`); no count appears in the code. `row-claim`'s `ensureLabelsExist` creates `session:worker-<n>` the first time an address claims, idempotently. A SPARE IS ENDED WHEN THE ROW IT CLAIMED CLOSES: `wake.mjs`'s `endFinishedSpares` closes the workspace once the instance has held a row, holds none now and is idle -- never mid-turn, never before its first claim, and only an address this file marks `spare` (a family member counts); the three standing engineers and every decision-holder are untouched. Every ending is one line in `spare-cycles` (`{role,row,at,clean,why}`), the same for `worker-11` as for `worker-4`, and `consecutiveClean` reads #1950's 20 from it -- the counter CONTINUES across #2403 (`ceo`). `started` on the family is when the ROLE joined the roster, never when a process first ran -- the retirement clock in #1950 starts at the first spawn.",
   "_drain": "#1950 ruling b + #2324 (ceo, 2026-09-24): `\"drain\": true` on a role means DRAIN, DON'T RETIRE -- the standing engineer finishes the rows it holds and claims no NEW ones, so every new row goes through spawn and #1950's 20 clean cycles build at full throughput. Nothing is retired: the pane, the role and every order about a row it already holds (rework, review answers) stay. `wake.mjs`'s `route` skips a drained role for a `ready-row-unclaimed` order, and `row-claim` refuses a hand claim by one, because an engineer that finishes a row and claims the next itself keeps the history the design exists to drop. THE DRAIN LIFTS ITSELF ON A FAILED CYCLE: it is active only while the newest line of `spare-cycles` (#2323) is clean, so a failure resets the count and the standing three resume claiming. It is active on an EMPTY ledger, since nothing has failed and the first spawn is what starts the count. Re-arming after a lift is `ceo`'s and is an edit to this file; removing the field ends the drain outright. A role fact like `spare`, never a process one. `npm run spawn:cycles` prints the run and the ledger's last line.",
   "live": [
     {
@@ -45,39 +45,12 @@
       "started": "2026-09-13T19:13:15Z"
     },
     {
-      "name": "worker-4",
+      "name": "worker-<n>",
       "role": "engineer",
       "spare": true,
+      "family": { "prefix": "worker-", "from": 4 },
       "brief": null,
       "started": "2026-09-24T09:42:00Z"
-    },
-    {
-      "name": "worker-5",
-      "role": "engineer",
-      "spare": true,
-      "brief": null,
-      "started": "2026-09-24T09:42:00Z"
-    },
-    {
-      "name": "worker-6",
-      "role": "engineer",
-      "spare": true,
-      "brief": null,
-      "started": "2026-09-24T16:30:00Z"
-    },
-    {
-      "name": "worker-7",
-      "role": "engineer",
-      "spare": true,
-      "brief": null,
-      "started": "2026-09-24T16:30:00Z"
-    },
-    {
-      "name": "worker-8",
-      "role": "engineer",
-      "spare": true,
-      "brief": null,
-      "started": "2026-09-24T16:30:00Z"
     }
   ],
   "retired": [
