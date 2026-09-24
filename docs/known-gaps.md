@@ -35,7 +35,7 @@ entry names what is missing, what it would cost, and what would tell you it is f
 - [§45](#45-focusevents-is-not-deterministic-and-nothing-compared-it-until-the-day-before-this-was-found) focusEvents IS NOT DETERMINISTIC, and nothing compared it until the day before this was found
 - [§46](#46-a-document-identity-drops-the-query-string-so-a-site-whose-documents-differ-only-by-query-reads-as-one-document) A DOCUMENT IDENTITY DROPS THE QUERY STRING, so a site whose documents differ only by query reads as ONE document
 - [§47](#47-the-walk-alone-is-177-seconds-on-a-926-trip-page-so-no-probe-budget-can-rescue-it-and-the-report-has-to-say-what-it-did-not-walk) THE WALK ALONE IS 177 SECONDS ON A 926-TRIP PAGE, so no probe budget can rescue it and the report has to say what it did not walk
-- [§48](#48-a-reviewer-can-act-as-a11ign-bot-through-any-shell-wrapper-and-no-path-shim-can-change-that-accepted-pending-ceos-confirmation-2402) A REVIEWER CAN ACT AS a11ign-bot THROUGH ANY SHELL WRAPPER, AND NO PATH SHIM CAN CHANGE THAT — ACCEPTED, pending ceo's confirmation (#2402)
+- [§48](#48-a-reviewer-can-act-as-a11ign-bot-through-any-shell-wrapper-and-no-path-shim-can-change-that-accepted-by-ceo-2026-09-24-2402) A REVIEWER CAN ACT AS a11ign-bot THROUGH ANY SHELL WRAPPER, AND NO PATH SHIM CAN CHANGE THAT — ACCEPTED by ceo, 2026-09-24 (#2402)
 <!-- known-gaps-index:end -->
 
 ## The order these should be done in
@@ -3171,7 +3171,7 @@ the board.
 
 **The lean this section carried is retracted, by the session that wrote it.** It read: *"At 926/265 the sweep is doing 3.5 trips per control, which is what every sweep type runs at — so it leans toward the page being real and the deadline being too small for it."* Trips per found control cannot decide that question, for two reasons that were each verified in the code before the lean was withdrawn. **It measures the other failure mode:** `collectPhrase` dedupes on `dedupeKey(phrase)` (`capture-probes.mjs:1155-1158`), so `found` is distinct announcements — one control announced under two distinct keys grows trips and `found` together and leaves the ratio flat, while an element revisited with an identical announcement moves it. The ratio sees walk efficiency and is blind to over-counting. **And the uniformity it rested on is the instrument:** `sweepInDirection` does `trips.count += 2` per step (`capture-probes.mjs:1260`), so `trips/found ≥ 2 × steps/found` by construction and every type inherits that floor; on this very capture the four sweeps that ran spread 1.9× — heading 2.25, landmark 4.33, formField 3.49, graphic 2.94 — with `formField` mid-range. *"What every sweep type runs at"* was a uniform answer read across a varied set, which is this repo's own recorded shape for a broken checker.
 
-## 48. A REVIEWER CAN ACT AS `a11ign-bot` THROUGH ANY SHELL WRAPPER, AND NO PATH SHIM CAN CHANGE THAT — ACCEPTED, pending `ceo`'s confirmation (#2402)
+## 48. A REVIEWER CAN ACT AS `a11ign-bot` THROUGH ANY SHELL WRAPPER, AND NO PATH SHIM CAN CHANGE THAT — ACCEPTED by `ceo`, 2026-09-24 (#2402)
 
 **The reviewer's `gh api` rule is advice, not a wall, and the hole is wider than #2325 first measured.** Re-read
 2026-09-24 at `a7a91408a` on the agent host, `codex-cli 0.156.1`, against `~/.codex/rules/default.rules`
@@ -3212,11 +3212,12 @@ either:** `pr-review-verdict` calls `gh api` itself (`pr-review-verdict.sh`), an
 true of each reviewer before #2325: **N per-PR instances add processes, not power.** The rules still stop the
 accidental use, which is the case they were written for, and the plain form stays forbidden.
 
-**Who accepted it: not yet on the record.** `ceo`'s 2026-09-24 ruling on #2401 was to file this as its own row
-and not block the per-PR build on it; that is not an acceptance of the exposure. This entry is the engineer's
-recommendation, and `ceo` confirms it (or rules for a scoped credential) on #2402.
+**Who accepted it: `ceo`, on the chairman's word (the ruling on #2401), 2026-09-24.** `ceo` read this section at the
+PR head on #2402 and confirmed the transcripts hold: the compound form, `/usr/bin/gh`, `env gh` and `curl` each match
+no rule, and the reviewer's own sandbox settings print `a11ign-bot`. Removing `gh` and a PATH shim were refused by
+that measurement, not by taste.
 
-**The check that would change the decision:** the chairman issuing the reviewer a credential that can post a
-review but not close, merge or edit (then the exposure shrinks to what that token can do, and the execpolicy
-rule stops being the only thing between a reviewer and the account), or a reviewer being observed using a
-write other than its verdict. `reviewer-setup.test.ts` pins that this entry and `reviewer.md` keep saying so.
+**The check that would change the decision:** the chairman issuing the reviewer a token scoped to review-posting
+(it can post a review but not close, merge or edit, so the exposure shrinks to what that token can do), or the
+reviewer running under its own uid (so `hosts.yml` is no longer readable by every session's user). Either makes a
+wall possible, and neither is an engineering step, so no row is filed for it and nothing else reopens this. `reviewer-setup.test.ts` pins that this entry and `reviewer.md` keep saying so.
