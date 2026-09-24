@@ -48,6 +48,9 @@
     "./walk-scope-declaration": {
       "default": "./src/walk-scope-declaration.mjs"
     },
+    "./worktree-resolution": {
+      "default": "./src/worktree-resolution.mjs"
+    },
     "./tooling-roots": {
       "default": "./src/tooling-roots.mjs"
     }
