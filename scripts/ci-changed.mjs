@@ -348,6 +348,53 @@ function foldTestNamedPackages(tsPackages, { files, board, getTestDependencyMap,
 }
 
 /**
+ * A quoted string LITERAL that names the docs tree or a root doc, or a directory walk, or a tracked-tree
+ * enumeration: the three ways a test in this repo READS docs (#2357). Built from `DOC_ROOT_FILES` rather
+ * than a second hand-typed list of root docs, because "which files are docs" is `classify`'s own question.
+ *
+ * DELIBERATELY EAGER, NEVER TOO QUIET, like `everythingIsPacked` above: this decides only whether the `ts`
+ * job is worth running for a docs diff, and `select-changed-tests.mjs` (`alwaysRunTests`) then decides
+ * WHICH tests run. A false positive costs a scoped `ts` run that finds nothing; a false negative is #2329
+ * (`ts=SKIPPED`, main red). It reads SOURCE TEXT and cannot tell a comment from code, so a comment quoting
+ * `"docs/..."` also counts -- the safe direction. It cannot import `discoversFromTree` from
+ * `select-changed-tests.mjs`: that file needs `npm ci`, and this one runs in the `changed` job before it.
+ * `ci-changed.test.ts` pins that every guard `discoversFromTree` finds is in this set, so the two cannot drift.
+ */
+const READS_DOCS = new RegExp([
+  "[\"'`](?:[^\"'`\\n]*/)?docs(?:/[^\"'`\\n]*)?[\"'`]",
+  `["'\`](?:[^"'\`\\n]*/)?(?:${[...DOC_ROOT_FILES].map((f) => f.replace(".", "\\.")).join("|")})["'\`]`,
+  "\\b(?:readdirSync|globSync)\\s*\\(",
+  // `select-changed-tests.mjs`'s ENUMERATES_TRACKED, verbatim: any git subcommand that lists the repo's own files.
+  "\\b[A-Za-z_$][\\w$]*\\(\\s*[\"']git[\"'],\\s*\\[\\s*[\"'](?:ls-files|grep|for-each-ref|branch|tag|log)[\"']",
+].join("|"));
+
+/**
+ * Every `packages/*\/src/**\/*.test.ts` that reads docs -- the population a docs-only diff can break.
+ * DERIVED from the tracked test files, so a test added tomorrow joins without an edit here; that is the
+ * whole reason this is not a list of names (the shape #2329 slipped past).
+ *
+ * @param {string} repoRoot
+ * @returns {string[]} repo-relative, sorted
+ */
+export function docsReadingTests(repoRoot) {
+  return execFileSync("git", ["ls-files", "packages"], { cwd: repoRoot, env: sandboxGitEnv(), encoding: "utf8" })
+    .split("\n")
+    .filter((f) => /\/src\/.*\.test\.ts$/.test(f))
+    .filter((f) => READS_DOCS.test(readFileSync(`${repoRoot}/${f}`, "utf8")))
+    .sort();
+}
+
+/**
+ * Must `ts` run for this diff because it changes docs some test reads? Only a NON-board docs diff asks:
+ * `board` has its own narrower route (#283 fold above). Its own function so `classify` pays one call for it.
+ *
+ * @param {{ docs: boolean, getDocsReadingTests: (repoRoot: string) => string[], repoRoot: string }} ctx
+ */
+function docsReadersMustRun({ docs, getDocsReadingTests, repoRoot }) {
+  return docs && getDocsReadingTests(repoRoot).length > 0;
+}
+
+/**
  * Which `ci.yml` jobs must run for this file list — a thin wrapper around `classify` itself, so this
  * answer and `classify`'s can never disagree about the same diff (the fact-stated-twice shape this file's
  * own header opens with, applied to itself). Exists so the #283 acceptance check can ask the CLASS
@@ -373,16 +420,18 @@ export function jobsFor(files, repoRoot = process.cwd()) {
  *   empty, so `testPackages` degrades to exactly `packages` when no graph is supplied (every existing
  *   call site that predates `testPackages` keeps working unchanged)
  * @param {{ repoRoot?: string, getPackedFiles?: (repoRoot: string, pkgName: string) => Set<string>,
- *   getTestDependencyMap?: (repoRoot: string) => Map<string, Set<string>> }} [deps]
+ *   getTestDependencyMap?: (repoRoot: string) => Map<string, Set<string>>,
+ *   getDocsReadingTests?: (repoRoot: string) => string[] }} [deps]
  *   `repoRoot` defaults to `process.cwd()`, `getPackedFiles` to the real `packedFiles` above,
- *   `getTestDependencyMap` to the real `testDependencyMap` above — all three injectable so `classify`
- *   itself stays testable without touching disk or git per call.
+ *   `getTestDependencyMap` to the real `testDependencyMap` above, `getDocsReadingTests` to the real
+ *   `docsReadingTests` — all injectable so `classify` itself stays testable without touching disk or git.
  * @typedef {{ ts: boolean, python: boolean, ansible: boolean, docs: boolean, board: boolean,
  *   changeset: boolean, rulesFitness: boolean, packages: string[], testPackages: string[] }} ClassifyResult
  * @returns {ClassifyResult}
  */
 export function classify(files, allPackages, dependencyGraph = {},
-  { repoRoot = process.cwd(), getPackedFiles = packedFiles, getTestDependencyMap = testDependencyMap } = {}) {
+  { repoRoot = process.cwd(), getPackedFiles = packedFiles, getTestDependencyMap = testDependencyMap,
+    getDocsReadingTests = docsReadingTests } = {}) {
   const rootTsChanged = files.some((f) => ROOT_TS_FILES.has(f));
   // BLUNT ON PURPOSE, matching `changedPackages`'s own stated philosophy: any file under `packages/<name>/`
   // — not only `.ts`/`.mjs`/`.json` under `src`/`bin` — marks that package touched. A second, narrower
@@ -453,7 +502,9 @@ export function classify(files, allPackages, dependencyGraph = {},
     // `packages` (any file under a package dir) OR `scripts/*.mjs` OR a root config file -- the last two
     // touch nothing `changedPackages` can name, but still need `npm run lint`/`typecheck`, which are
     // whole-repo regardless of which package(s) end up in the scoped test run below.
-    ts: rootTsChanged || rootScriptsChanged || tsPackages.size > 0,
+    ts: rootTsChanged || rootScriptsChanged || tsPackages.size > 0
+      // #2357: #2329 was docs-only, ts=SKIPPED, main red. NO package is implicated, so only tree readers run.
+      || docsReadersMustRun({ docs, getDocsReadingTests, repoRoot }),
     python,
     ansible,
     docs,
