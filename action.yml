@@ -543,8 +543,19 @@ runs:
         [ "${{ inputs.probe-navigation }}" = "false" ] && args+=(--no-probe-navigation)
         [ "${{ inputs.axe }}" = "true" ] || args+=(--no-axe)
         # stdout is the JSON result; the CLI's diagnostics go to stderr and stay in the log.
-        npx tsx packages/cli/src/cli.ts "${args[@]}" > "$out"
+        #
+        # `|| status=$?`, for the reason the Report step gives: this step runs under `-eo pipefail`, and a list
+        # in which ONE page failed makes the CLI exit 1 AFTER it wrote the result for every page (#2272). A bare
+        # command stopped the step there, so `result-json` was never set and the Report step -- the only thing
+        # that renders the failed page and keeps the other pages' findings -- never ran. The status is handed
+        # on as an output and the Report step re-raises it once the report exists.
+        status=0
+        npx tsx packages/cli/src/cli.ts "${args[@]}" > "$out" || status=$?
+        # No result on disk means the CLI never got as far as reporting (a refusal, a bad flag, a crash):
+        # there is nothing for the Report step to read, so fail here exactly as before.
+        if [ "$status" -ne 0 ] && [ ! -s "$out" ]; then exit "$status"; fi
         echo "result-json=$out" >> "$GITHUB_OUTPUT"
+        echo "capture-status=$status" >> "$GITHUB_OUTPUT"
 
     - name: Report
       id: report
@@ -567,17 +578,24 @@ runs:
         # A list of pages writes `{ multiPage, pages }`: the findings are summed over the pages that were
         # captured, and task-completable is true only when EVERY page was captured and completable -- a page
         # that failed must not read as a page that passed.
+        #
+        # A result may carry NO verdict: a PDF page emits `{ url, task, pdf }` (a tag-tree scan, no screen reader),
+        # and the summary reports such a page as not measured. So the reducer counts a verdict-less result as no
+        # findings and never as completable, rather than throwing before the outputs are written.
         node -e '
           const r = require(process.argv[1]);
           const fs = require("fs");
           const runs = r.multiPage ? r.pages.flatMap((p) => p.results) : [r];
           const everyPageCaptured = !r.multiPage || r.pages.every((p) => p.status === "captured" && p.results.length > 0);
-          const findings = runs.reduce((sum, run) => sum + run.verdict.findings.length, 0);
-          const completable = everyPageCaptured && runs.every((run) => run.verdict.taskCompletable);
+          const findings = runs.reduce((sum, run) => sum + (run.verdict?.findings?.length ?? 0), 0);
+          const completable = everyPageCaptured && runs.every((run) => run.verdict?.taskCompletable === true);
           fs.appendFileSync(process.env.GITHUB_OUTPUT, `findings=${findings}\n`);
           fs.appendFileSync(process.env.GITHUB_OUTPUT, `task-completable=${completable}\n`);
         ' "${{ steps.capture.outputs.result-json }}"
-        exit $status
+        # The capture's own status, raised AFTER the report so a failed page fails the job with its report written.
+        # The report's status wins when it is non-zero: it says WHICH kind of failure (1 tripped fail-on, 2 unmeasured).
+        if [ "$status" -eq 0 ]; then status="${{ steps.capture.outputs.capture-status || 0 }}"; fi
+        exit "$status"
 
     # Last, and `always()`, so the report still lands when the check is failing -- which is exactly when
     # someone wants to read it. `--edit-last --create-if-none` updates the previous comment instead of
