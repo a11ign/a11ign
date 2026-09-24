@@ -87,34 +87,30 @@ one clause of why; **the incident behind each is in
 ## `main` REQUIRES an approving review (ceo, 2026-09-22, #2022)
 
 - **One approving review, and `bypass_pull_request_allowances` EMPTY** — the allowance goes with it or
-  the requirement is decorative, reading as universal while absent on half the merges. An
-  `a11ign-bot`-authored PR waits; the hatch is a human admin editing the protection, which
-  `enforce_admins: true` makes a logged edit rather than a standing hole.
+  the requirement is decorative. An `a11ign-bot`-authored PR waits; the hatch is a human admin editing
+  the protection, which `enforce_admins: true` makes a logged edit rather than a standing hole.
 - **Read it back BEHAVIOURALLY, never off the field** (`branch-protection.test.ts`):
   `required_approving_review_count == 1` proves the setting is set, not that it bites. The observable is
   **`reviewDecision`**, EMPTY when the base requires no approval, and needing no admin.
 - **A 404 from `branches/main/protection` means absent OR forbidden, never "unprotected".**
   `branches/main.protected` is the discriminator and needs no admin.
-- **TWO SURFACES CARRY THE REQUIREMENT, and a reading of one is not a reading of the other (2026-09-23,
-  #2086/#2090).** `ceo` ruled ADD, NOT SWAP: the `merge-queue-main` ruleset (id `23681721`) carries a
-  `pull_request` rule with `required_approving_review_count: 1`, and classic `branches/main/protection`
-  STAYS and stays authoritative — it is the only surface whose exemption list can be ENUMERATED rather
-  than merely queried for one identity. **Requirements compose and exemptions do not:** the most
-  restrictive applies, so an identity must be exempt in BOTH, and the ruleset rule can only close a hole.
+- **TWO SURFACES CARRY THE REQUIREMENT, and a reading of one is not a reading of the other (#2086/#2090).**
+  `ceo` ruled ADD, NOT SWAP: the `merge-queue-main` ruleset (id `23681721`) carries a `pull_request` rule
+  requiring 1, and classic `branches/main/protection` STAYS and stays authoritative — the only surface
+  whose exemption list can be ENUMERATED rather than merely queried for one identity. **Requirements
+  compose and exemptions do not:** an identity must be exempt in BOTH, so the ruleset rule can only close
+  a hole.
 - **PICK THE INSTRUMENT BY WHAT YOU HOLD, AND SAY WHICH ONE YOU USED.** With repository admin:
   `branches/main/protection`, behind `A11Y_CHECK_BRANCH_PROTECTION=1` — the only one that can answer
   *nobody is exempt*. Without admin, which is every session and every CI job here: `rules/branches/main`
-  plus `rulesets/{id}`, behind `A11Y_CHECK_MAIN_RULESET=1`, which answers **for the asking identity only**.
-  Both are wired in `branch-protection.test.ts` under two switches: the admin read cannot pass where
-  admin is absent.
+  plus `rulesets/{id}`, behind `A11Y_CHECK_MAIN_RULESET=1`, answering **for the asking identity only**.
+  Both are wired in `branch-protection.test.ts`; the admin read cannot pass where admin is absent.
 - **`current_user_can_bypass: "never"` answers FOR ME ALONE and does not mean nobody is exempt.**
-  `bypass_actors` — the field that could say — is withheld from a token without write access to the
-  ruleset, so **its absence means "you may not look", never "the list is empty"**. `CANNOT_TELL` stands
-  unchanged as the verdict for *is anyone else exempt*; what a non-admin session gains is the right to
-  assert **the requirement exists and I cannot walk past it**. Quoting a green cheap run as evidence that
-  nobody can is the overclaim #2022 exists to prevent, and **a check that certifies less than it appears
-  to does not become acceptable by being cheap** (`ceo`, #2086). The code keeps `VERDICT.REQUIRED` (needs
-  admin) and `BINDING.BINDS_ME` (needs nothing) as separate vocabularies.
+  `bypass_actors` is withheld from a token without write access to the ruleset, so **its absence means
+  "you may not look", never "the list is empty"**. `CANNOT_TELL` stands unchanged as the verdict for *is anyone else
+  exempt*; a non-admin session gains the right to assert **the requirement exists and I cannot walk past
+  it**, and no more — **a check that certifies less than it appears to does not become acceptable by being
+  cheap** (`ceo`, #2086).
 
 ## A review OUTLIVES the head it was posted on (2026-09-23, #2084)
 
@@ -123,8 +119,7 @@ one clause of why; **the incident behind each is in
   cleared the `CHANGES_REQUESTED` that stalled #2049 for seven hours — and *Update branch*, which
   `update-branch-sweep.mjs` runs after every merge, would have stalled 15 of the last 40 merges.
 - `readPrs` asks for `reviewDecision` on the `pr list` call it already makes, and **`pr-review-blocked`**
-  names every green, unheld PR GitHub is holding — including one that opened READY and never reached the
-  reviewer lane.
+  names every green, unheld PR GitHub is holding.
 - **A grep count in a row body is a reading at a moment: re-run it at YOUR commit.**
 
 ## A waiting condition is DATA, not a sentence (chairman, 2026-09-19)
@@ -164,6 +159,11 @@ one clause of why; **the incident behind each is in
   (**exit `2` is `QUEUED`, not a failure**) and the next `work:tick` delivers it, cleared. **Do not retry
   and do not poll:** it clears its target first, so a retry landing as a session goes idle wipes the work
   it interrupted. A refusal naming a session the org does not know is a typo — NOT queued, and it says so.
+- **A REPORT THAT NEEDS NO DECISION IS A ROW WRITE, NOT AN ORDER (#2167).** The comment plus the label
+  change IS the completion, the claim report, the close-out — no turn, and read when its reader next
+  acts. So `prompt:session` REFUSES a target already holding 10 (55 of 60 queued orders were for one
+  session, oldest 8h), naming the depth, the wait and that remedy. `--needs-decision` — a ruling, a
+  stop-the-line, an answer that moves somebody — still queues.
 - **`ceo` keeps:** the publish order, freeze decisions, reviewer spot-checks, the board edition read,
   rulings arriving through `product-manager`, and the chairman.
 
