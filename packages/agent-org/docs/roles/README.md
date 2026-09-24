@@ -86,12 +86,14 @@ the direction where being wrong costs more.
 
 **The spare engineer FAMILY, `worker-<n>` for n from 4 (#2279, #2323, #2403), is one entry in `sessions.json`'s `live`
 and NOT in the table above, on purpose.** A table row is a role with a brief file this check reads for its name,
-reporter and lane, and a spare has none (`brief: null`, as `worker-tooling`'s is): it is an ADDRESS for an instance
-the spawn pilot (`wake.mjs`, #1952) starts when an order is undeliverable and every other engineer address holds a
-process, so it has no standing session and nothing to brief; the tick ENDS the instance when the row it claimed
-closes (#2323, `sessions.json`'s `spare` mark). It answers to the engineer rules and to `product-manager` like the
-standing three. There is no count: the pilot allocates the lowest free `worker-<n>`, and the bound is the orders
-`route` could not place, one per tick, for rows that are claimable (#2403).
+reporter and lane, and a spare has none of its own: its `brief` is the ONE engineer brief,
+[`engineer.md`](./engineer.md), as `worker-tooling`'s is (#2406; `addressed()` in `wake.mjs` tells every engineer role
+to read it, and no other). A spare is an ADDRESS for an instance the spawn pilot (`wake.mjs`, #1952) starts when an
+order is undeliverable and every other engineer address holds a process, so it has no standing session and no lane of
+its own; the tick ENDS the instance when the row it claimed closes (#2323, `sessions.json`'s `spare` mark). It answers
+to the engineer rules and to `product-manager` like the standing three. There is no count: the pilot allocates the
+lowest free `worker-<n>`, and the bound is the orders `route` could not place, one per tick, for rows that are
+claimable (#2403).
 
 **The pipeline-owner role retired by #913 kept its file named `worker-loop-orchestrator.md`, never
 `<agent-name>.md`** — the file predates this page and describes the ROLE (worker-loop orchestration)

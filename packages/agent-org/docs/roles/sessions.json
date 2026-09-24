@@ -41,7 +41,7 @@
       "name": "worker-tooling",
       "role": "engineer",
       "drain": true,
-      "brief": null,
+      "brief": "docs/roles/engineer.md",
       "started": "2026-09-13T19:13:15Z"
     },
     {
@@ -49,7 +49,7 @@
       "role": "engineer",
       "spare": true,
       "family": { "prefix": "worker-", "from": 4 },
-      "brief": null,
+      "brief": "docs/roles/engineer.md",
       "started": "2026-09-24T09:42:00Z"
     }
   ],
