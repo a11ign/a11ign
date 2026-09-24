@@ -8,6 +8,7 @@
 //
 // It REFUSES rather than replaces: `rm node_modules` on a symlink removes the link and touches nothing
 // behind it, and the person running that decides whether the primary's copy is still wanted.
+/* global __dirname -- CommonJS; eslint.config.js has no `.cjs` globals block */
 const fs = require("node:fs");
 const path = require("node:path");
 

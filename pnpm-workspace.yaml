@@ -1,3 +1,26 @@
+# pnpm workspace beside npm's (#2297, child 1 of #57). package-lock.json STAYS: npm still installs while the
+# sibling rows move CI, the hooks and the publish path.
+
 packages:
   - "packages/*"
+
+# WHY THIS IS ON: internal dependencies are pinned "0.0.0", not `workspace:*`, because npm cannot read the
+# `workspace:` protocol and `npm ci` must keep working. pnpm resolves a bare version from the REGISTRY unless
+# told to link workspace packages, so with this off an install can succeed while every @a11ign/* import reads
+# a downloaded copy. Measured 2026-09-24: off, `pnpm import` stopped on a 404 for the unpublished
+# @a11ign/pdf -- a published package would have installed silently. `pnpm-workspace.test.ts` pins that every
+# internal edge in pnpm-lock.yaml is a `link:`.
+#
+# What it does to release: `changeset version` still rewrites each dependent's "0.0.0" range to the new
+# concrete version, so a packed tarball carries concrete ranges, exactly as today, and never a `workspace:`.
+# A range the workspace package does not satisfy would fall through to the registry, which is why the
+# lockfile is read, not trusted.
 linkWorkspacePackages: true
+
+# THE STORE IS NOT SET HERE, on purpose. pnpm's default is ~/.local/share/pnpm/store/v10, which on the agent
+# host is on the same filesystem as the worktrees under ~/repos (both on /dev/mapper/ubuntu--vg-ubuntu--lv),
+# so packages are HARD-LINKED into each worktree (link count 2, one copy on disk). It must not be /tmp: that
+# is RAM-backed on this host and ran out on 2026-09-23. To move it, set PNPM_STORE_DIR per host, not a path
+# in this file: a Windows guest, or any checkout on a different volume from the store, gets pnpm's own
+# fallback (a per-volume store, else copying) rather than hard links -- documented pnpm behaviour, not
+# measured here.
