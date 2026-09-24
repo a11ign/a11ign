@@ -12,7 +12,9 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSy
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
+import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const ROOT = resolve(import.meta.dirname ?? new URL(".", import.meta.url).pathname, "../../../..");
 const FAKE_USER = "canaryuser6d3f2a";
@@ -33,12 +35,17 @@ flows:
 const URL_UNDER_TEST = `${ORIGIN}/orders`;
 
 interface Workspace { dir: string; flows: string; artifactRoot: string; event: string }
+
+// The CLI is run with the workspace as its CWD, so the artifact it writes lands under the workspace (`<cwd>/runs/witness`) and
+// no environment variable has to move it. The loader and the entry point are therefore ABSOLUTE: neither can be found from there.
+const TSX = pathToFileURL(createRequire(import.meta.url).resolve("tsx/esm")).href;
+const CLI = resolve(ROOT, "packages/cli/src/cli.ts");
 function workspace(): Workspace {
   const dir = mkdtempSync(join(tmpdir(), "authenticated-run-"));
   const flows = join(dir, "flows.yml");
   const event = join(dir, "event.json");
   writeFileSync(flows, FLOWS);
-  return { dir, flows, artifactRoot: join(dir, "artifacts"), event };
+  return { dir, flows, artifactRoot: join(dir, "runs"), event };
 }
 const written = (w: Workspace): string[] => (existsSync(join(w.artifactRoot, "witness")) ? readdirSync(join(w.artifactRoot, "witness")) : []);
 
@@ -64,9 +71,9 @@ async function fakeWorker(respond: (body: { url: string }) => { status: number; 
 interface Ran { code: number | null; out: string; err: string }
 function witness(w: Workspace, args: string[], env: Record<string, string | undefined> = {}): Promise<Ran> {
   return new Promise((done) => {
-    const child = spawn(process.execPath, ["--import", "tsx", "packages/cli/src/cli.ts", ...args], {
-      cwd: ROOT,
-      env: { ...process.env, A11Y_RUNS_ROOT: w.artifactRoot, APP_USER: FAKE_USER, APP_PASSWORD: FAKE_SECRET, JUDGE_BACKEND: "local", A11Y_WORKER: undefined,
+    const child = spawn(process.execPath, ["--import", TSX, CLI, ...args], {
+      cwd: w.dir,
+      env: { ...process.env, APP_USER: FAKE_USER, APP_PASSWORD: FAKE_SECRET, JUDGE_BACKEND: "local", A11Y_WORKER: undefined,
         GITHUB_ACTIONS: undefined, GITHUB_EVENT_PATH: undefined, ...env } as NodeJS.ProcessEnv,
     });
     let out = ""; let err = "";
