@@ -87,6 +87,10 @@ test("--flows without --login-flow, or the reverse, is refused; the override alo
     (e) => e instanceof FlowsError && /only means something on an authenticated run/.test(e.message), "override alone");
 });
 
+test("a flows file that cannot be read is a usage error naming the file, not a crash", async () => {
+  await refusedAs(resolveAuthentication(request({ args: { flows: "missing.yml" } })), (e) => e instanceof FlowsError && e.rule === "file-shape" && /missing\.yml could not be read/.test(e.message), "unreadable");
+});
+
 test("a login flow that is missing, has a literal, or a URL off the pinned origin is refused, before anything else runs", async () => {
   await refusedAs(resolveAuthentication(request({ args: { loginFlow: "signin" } })), (e) => e instanceof FlowsError && e.rule === "login-flow-missing", "no such flow");
   await refusedAs(resolveAuthentication(request({ args: { loginFlow: "literal" } })), (e) => e instanceof FlowsError && e.rule === "login-literal", "a literal in the login");

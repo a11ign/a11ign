@@ -94,6 +94,15 @@ export async function repositoryPrivacy(
   }
 }
 
+/** The flows file's text, or a refusal that says which file: a path that does not exist is a usage error (exit 2), not a crash. */
+async function readFlows(readText: ResolveRequest["readText"], path: string): Promise<string> {
+  try {
+    return await readText(path);
+  } catch (error) {
+    throw new FlowsError("file-shape", `the flows file ${path} could not be read (${error instanceof Error ? error.message : String(error)})`);
+  }
+}
+
 /** Was any authentication asked for at all? Both flags, or neither — one alone is a mistake named as such. */
 function asked({ flows, loginFlow, sendAuthenticatedTranscriptToJudgeVendor }: AuthArguments): boolean {
   if (flows === null && loginFlow === null) {
@@ -125,7 +134,7 @@ export async function resolveAuthentication(request: ResolveRequest): Promise<Re
   const privacy = await repositoryPrivacy(env, readText);
   const auth = planFrom([]);
   if (privacy.onGithubActions) refuseAuthOnPublicRepository({ auth, repositoryPrivate: privacy.isPrivate, requestedExits: [] });
-  const file = parseFlowsFile(await readText(flowsPath), flowsPath);
+  const file = parseFlowsFile(await readFlows(readText, flowsPath), flowsPath);
   const login = resolveLoginFlow(file, loginFlow);
   for (const url of urls) {
     if (request.isPdf(url)) throw new FlowsError("origin-pinned", `${url} is a PDF, which has no login to perform; an authenticated run is for pages`);
