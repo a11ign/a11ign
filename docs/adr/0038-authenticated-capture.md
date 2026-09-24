@@ -2,11 +2,23 @@
 
 ## Status
 
-**Proposed, 2026-09-24.** Not accepted until `ceo` has reviewed it, and the security clauses in particular.
-Row #2269, the design half of `ceo`'s ruling on #2262 ("c. Auth", comment 5810424410).
+**Accepted, 2026-09-24, with the amendments of #2275.** `ceo` reviewed it whole against the ruling on #2262
+("c. Auth", comment 5810424410) and accepted it with six amendments that are requirements on the build row
+(#2275, comment "ADR 0038: ACCEPTED, WITH SIX AMENDMENTS THAT ARE REQUIREMENTS ON THE BUILD ROW"). Row #2269
+wrote the design; **row #2359 builds it, in seven pull requests**, and this text is the first of them.
 
-**It is a design. It ships no capability.** The build is its own row, and the SECURITY.md edit and the
-known-gaps entry are each part of that build and not of this row.
+**It is still a design until PR 7 merges.** No flag reaches the flows code before then, and the SECURITY.md
+edit and the known-gaps entry land with that last pull request and not before.
+
+**The amendments are written into the text where they apply, and each one is marked** ("Amendment 1" to
+"Amendment 6", the numbers `ceo` gave them), so a reader of the clause finds the change beside the sentence
+it changes, and can find all six by searching for the word. Amendment 6 is this Status line and the paragraphs
+beside it.
+
+**Where a quotation below and the ruling differ, the ruling's words govern** (`ceo`, amendment 6: "Constraint
+1-7 quotes are the #2269 row's clauses, which paraphrase my ruling in places"). PR 1 restored the seven
+quotations to the ruling's own words, so they no longer differ; the ADR's own gloss stays outside the quote,
+marked as such.
 
 **Seven clauses are FIXED INPUTS.** They are quoted below in the ruling's own words, under one heading each,
 and this ADR does not re-argue them. What it decides is everything the ruling handed it by name: the
@@ -63,9 +75,9 @@ come after them, under "The design calls beyond the seven".
 
 ## Constraint 1: credentials never cross the worker's HTTP channel
 
-> **Credentials never cross the worker's HTTP channel, and a session is a credential.** Cookies and storage
-> state count. Remote-worker mode REFUSES an auth request with a NAMED error until that channel is authenticated
-> and encrypted. It never silently drops the login and reports a page as clean.
+> **Credentials never cross the worker's HTTP channel, and a session is a credential.** Cookies and storage state
+> count. **Remote-worker mode REFUSES an auth request with a named error until that channel is authenticated and
+> encrypted** — it does not silently drop the login and report a page as clean.
 
 **What crosses.** A login flow (selectors-free steps, see the primitive below) whose secrets are
 `from-env: NAME` references; for saved state, a **path** on the worker's own machine. Never a value, never a
@@ -77,9 +89,15 @@ logs in for itself ("The design calls beyond the seven").
 local; every other address is remote. This is decided from the address the CLI was given, before a socket
 opens. **An SSH tunnel to a shared worker presents as loopback and is not distinguished**, and the design
 tolerates that because of the first sentence above: such a run carries no value, the tunnelled worker's
-environment holds no such secret, and the run ends in `auth-credential-missing`, not in a session. (A fleet
-worker that an operator has provisioned with a customer's secret would be a credential custodian, which is
-clause 2.)
+environment holds no such secret, and the run ends in `auth-credential-missing`, not in a session.
+
+**Amendment 5: what that tolerance does NOT cover.** The reasoning holds only while the tunnelled worker's
+environment holds no such secret. **The same tunnel to a worker whose environment DOES hold the variable yields
+a real session on a shared machine**: the run finds the value, performs the login, and a browser holding that
+session sits on a machine other people can reach. **A worker that holds a customer's variable is a credential
+custodian (clause 2), and those variables are not to be exported into a shared fleet worker's environment.**
+SECURITY.md says so in the pull request that makes the flags reachable (PR 7), in those words, and states what
+the tolerance covers (a tunnelled worker that holds nothing) and what it does not (one that holds the variable).
 
 **The refusal, verbatim, and where it is raised.**
 
@@ -119,11 +137,8 @@ fleet worker is Clause 2's custodianship**, so the ADR that opens the channel mu
 
 ## Constraint 2: we do not become a credential custodian
 
-> **We do not become a credential custodian.** A vendor-hosted vault is ruled OUT: it contradicts SECURITY.md's
-> "nothing leaves the machine by default".
-
-*Outside the quote:* the vault is also the one mechanism that would ship secrets to a third party, which is why the
-contradiction is with SECURITY.md's sentence and not only with the ruling.
+> **We do not become a credential custodian.** The vendor-hosted vault is ruled OUT. It contradicts SECURITY.md's
+> "nothing leaves the machine by default", and it is the one mechanism that ships secrets to a third party.
 
 **What the design does with it.** The tool has no place to store a secret and no command that would write
 one. There is no `--password`, `--token`, `--cookie` or `--header` flag and no `password:` input on the
@@ -138,13 +153,13 @@ state is the user's file, on the user's machine; the tool reads it and never cop
 
 ## Constraint 3: the chosen direction, and the input surface for it
 
-> **Chosen direction:** a scripted login run on the machine that drives the browser, secrets read from that
-> machine's environment (GitHub Secrets on the throwaway runner). Form login over token injection. Saved storage
-> state second. Attaching to a person-signed-in browser third, for interactive use, and the only one that handles
-> MFA or SSO.
+> **Chosen direction: a scripted login run on the machine that drives the browser, secrets read from that machine's
+> environment** (GitHub Secrets on the throwaway runner). Form login over token injection (Lighthouse's own
+> recommendation). Saved storage state second. Attaching to a person-signed-in browser is the third, for interactive
+> use, and it is the only one that handles MFA/SSO.
 
-*Outside the quote:* the preference for form login over token injection is also Lighthouse's own recommendation;
-the source is under "Cookie or header injection" in Alternatives rejected.
+*Outside the quote:* the source for Lighthouse's recommendation is under "Cookie or header injection" in
+Alternatives rejected.
 
 **The input surface, in `ceo`'s order.** At most one mechanism per run; two given is `auth-ambiguous`.
 Nothing is discovered implicitly: every path is named, as ADR 0024 decided for `--forms`.
@@ -172,12 +187,12 @@ Three notes, each a decision.
 
 ## Constraint 4: the transcript and the evidence JSON are PROVEN not to contain the credential
 
-> **A screen reader announces what is typed.** The capture transcript and the evidence JSON must be PROVEN not to
-> contain the credential, since a username can be echoed. The ADR states this as a COMMAND, with a positive
-> control.
+> **A screen reader announces what is typed.** The capture transcript and the evidence JSON must be proven **not to
+> contain the credential** — a username can be echoed. That is an acceptance the design row must state as a command,
+> with a positive control.
 
-*Outside the quote:* the row asks for an acceptance stated as a command. Read as a requirement on the design, it
-means this ADR states the command (below) and the build row runs it.
+*Outside the quote:* read as a requirement on the design, it means this ADR states the command (below) and the
+build row runs it.
 
 **Two defences, and the proof of the second is the command.**
 
@@ -189,6 +204,14 @@ means this ADR states the command (below) and the build row runs it.
    NVDA's default, and that default is not recorded in the repo. The build reads it from
    `/diagnostics.screenReaderDefaults` as its first act, and the design does not depend on the answer,
    because of the second defence.
+
+   **Measured by the build (PR 4), 2026-09-24 ~13:50Z, `a11y-worker-3`, worker code `ce5ba647396883b4`:** NVDA's
+   `keyboard.speakTypedCharacters` DEFAULT is `1` (ON) and `speakTypedWords` is `0`, read from the `configSpec` the
+   worker extracts from NVDA's own `library.zip` (`found: true`). So a credential typed by KEYSTROKE would be spoken one
+   character at a time: the premise of the per-character detector is real and not hypothetical. The design's first
+   defence therefore rests entirely on the protocol's text insertion producing no key events for that echo to hear.
+   **That is still unmeasured**; it is what the Windows acceptance of PR 4 and the leak check of PR 6 measure, and what
+   the disclosed redaction count will show on real runs.
 2. **Containment, at the one place bytes leave.** Everything the CLI writes or prints passes through one
    function that replaces every occurrence of every `from-env` value, in its raw, JSON-escaped, URL-encoded
    and base64 forms, with `‹credential›`, counts the replacements, and **discloses the count** ("2
@@ -197,6 +220,40 @@ means this ADR states the command (below) and the build row runs it.
    that legitimately says "Signed in as ada" therefore does not fail the run and does not publish the name.
    The username is scrubbed like the secret, because the ruling puts it in the credential: it is often an
    email address.
+
+   **Amendment 1: the scrub and the leak check are ONE detector, per-character branch included.** As first
+   written, the containment replaced the contiguous forms of each value and only the `auth:leak-check`
+   command had the "four or more consecutive one-character announcements" branch, so a username that NVDA
+   speaks letter by letter would pass the scrub and be caught only in CI, after the run had written it. Now
+   `packages/cli/src/auth/leak-detector.ts` is the one module that says what "the transcript contains the
+   credential" means, and BOTH the runtime rescan after replacement and the leak check call it. **The runtime
+   rescan therefore runs the per-character branch, and a hit is `auth-credential-in-artifact`: nothing is
+   written and nothing is printed.** The test that pins this feeds a spelled-out transcript to the RUNTIME
+   path, and not only to the detector.
+
+   **Amendment 2: a value below a floor is refused, and the run refuses with a named error.** A username of
+   `ada`, `admin` or `test`, replaced everywhere, turns the page's own text into `‹credential›` — and
+   the scorer reads that text, so the alteration is not cosmetic. The floor is **8 characters** (Unicode code
+   points, counted on the value as the environment holds it), applied to every `from-env` value, username
+   and secret alike; a value below it ends the run in `auth-credential-too-short` before any browser opens,
+   naming the variable and never the value. **The behaviour chosen is to REFUSE, not to scrub whole-word
+   only,** and the reasons are these:
+   - **Whole-word scrubbing does not stop the alteration.** `admin` as a whole word is still "Admin" in an
+     "Admin panel" heading and `test` is still the word in "Run a test"; the scorer would still read a page
+     that says `‹credential›` panel. It narrows the damage and leaves the defect.
+   - **The proof cannot be made below the floor.** Constraint 4's own demand is that the artifacts are
+     PROVEN not to contain the credential. A three-character value is not even long enough for the
+     per-character branch's run of four to be a substring of it, and a five-character one is a word that any
+     page may say, so a hit cannot be told from a coincidence. A check that cannot tell an echo from the
+     page's own text does not prove anything by staying quiet.
+   - **The cost is stated:** the most common test-account names (`admin`, `test`, `demo`) are refused,
+     and the refusal says to use a dedicated test account whose username is at least 8 characters and is not
+     an ordinary word (`a11y-audit-7f3c`), which is the advice Constraint 6 already gives for MFA. That is a
+     one-time setup cost on the account the docs already tell a person to create.
+   - **What it does not decide:** a value at or above the floor is still replaced everywhere it occurs. A
+     nine-character username that is also a word on the page alters that page, and the count is disclosed.
+   The floor is a constant (`MIN_SCRUBBED_LENGTH`) with the test that pins it, so this paragraph and the
+   number cannot drift apart.
 
 **Scope of the proof.** Everything that leaves the machine, and not only the two named files: the `--json`
 output, `runs/witness/*.json`, the rendered summary (which is posted as a PR comment), and the worker's
@@ -222,7 +279,9 @@ npm run auth:leak-check -- --fixture login-echo --stage raw --user-env FAKE_USER
 npm run auth:leak-check -- --fixture login-echo --stage written --user-env FAKE_USER --secret-env FAKE_SECRET
 ```
 
-**The exit code is a contract.** `0` clean, `1` a leak was found, `2` the command could not examine anything.
+**The exit code is a contract, and the redaction count is disclosed on every path** (the leak check's
+`--stage written` prints it, and so does a normal run). `0` clean, `1` a leak was found, `2` the command could
+not examine anything.
 Every run prints how many files and announcements it examined, **and examining zero is exit `2`**, so a
 capture that produced nothing, or a scan pointed at an empty directory, cannot read as clean. The first
 command's exit `0` is an emptiness claim, and it is vacuous unless a **positive control** shows the detector
@@ -239,8 +298,8 @@ runs, and which needs no Windows machine.
 
 ## Constraint 5: authentication plus a non-local judge backend refuses by default
 
-> **Auth combined with a non-local judge backend refuses by default**, because SECURITY.md already says a transcript
-> from behind authentication reaches the vendor under `JUDGE_BACKEND=codex|anthropic|openai`.
+> **Auth + a non-local judge backend refuses by default**, because SECURITY.md already says a transcript from behind
+> authentication reaches the vendor under `JUDGE_BACKEND=codex|anthropic|openai`.
 
 **There is an override, and it is narrow.** A person who authenticates and chooses `anthropic` has made that
 choice with their own key and their own data, and refusing forever would only send them to a workaround. So:
@@ -265,11 +324,10 @@ for the same reason it already exists, which is to fail before NVDA is installed
 
 ## Constraint 6: MFA, SSO and CAPTCHA are out of v1
 
-> **MFA, SSO and CAPTCHA are OUT of v1**, recorded as a known gap, with "use a dedicated test account without MFA"
-> as the stated route. (The known-gaps entry is its own row, filed after this one.)
+> **MFA, SSO and CAPTCHA are OUT of v1, recorded as a known gap** (`docs/known-gaps.md`), with "use a dedicated test
+> account without MFA" as the stated route (the advice BrowserStack and LambdaTest give).
 
-*Outside the quote:* the known gap is recorded in `docs/known-gaps.md`, and "use a dedicated test account
-without MFA" is the advice BrowserStack and LambdaTest give.
+*Outside the quote:* the known-gaps entry is its own row (#2275), filed with the build and not before.
 
 **What the design does with it.** Nothing to build, and three things to make true.
 
@@ -287,13 +345,12 @@ CAPTCHA and OAuth-only flows, and none is documented as handling them unattended
 
 ## Constraint 7: `probe-forms` presses buttons, and a login makes the buttons real
 
-> **`probe-forms` presses buttons, and a login makes the buttons real.** The ADR says what an authenticated run
-> presses and how a user is told. **The SECURITY.md change lands in the SAME PR as the capability**, and the ADR
-> states that as a requirement on the build row.
+> **`probe-forms` presses buttons, and a login makes the buttons real.** The design row must say what an authenticated
+> run presses and how a user is told. **The SECURITY.md change lands in the SAME PR as the capability.** SECURITY.md
+> already says the tool "is aimed at pages behind an organisation's authentication" while nothing in the product can
+> log in; that sentence is a claim ahead of the product.
 
-*Outside the quote:* SECURITY.md already says the tool "is aimed at pages behind an organisation's authentication"
-while nothing in the product can log in; that sentence is a claim ahead of the product, and it is the sentence
-the capability's PR must change.
+*Outside the quote:* the ADR states the SECURITY.md change as a requirement on the build row (below).
 
 **What an authenticated run presses.** The inventory is wider than `probeForms`, because a logged-in first
 link is as real as a logged-in button. Read from `capture-probes.mjs` and SECURITY.md's operated-controls
@@ -422,16 +479,49 @@ authenticated run in v1**, reporting the rule layer as *unchecked* and never as 
 takes one PR out of the estimate.
 
 **A session does not outlive its capture.** After every authenticated capture the worker clears cookies and
-storage for the origin, closes that browser, and evicts the capture's stored response. An authenticated
+storage for the origin, **closes that browser**, and evicts the capture's stored response.
+
+**Amendment 4: the debugging port of a browser holding a session is asserted, not believed.** A browser
+launched with `--remote-debugging-port` is reachable, by anything that can reach the port, with the session
+inside it. Chrome and Edge bind the port to loopback by default, and the design does not trust the default: **a
+test asserts that the arguments the worker launches the browser with carry no non-loopback
+`--remote-debugging-address`**, so a change that opened the port to the segment fails the suite instead of
+shipping. Closing the browser after each authenticated capture is the other half: a port nobody closed would
+outlive the capture it served. An authenticated
 request is never served from a reused browser (`reuseBrowser` is forced off for it), and the worker's
 in-memory result history (`RESULT_HISTORY`, the last eight responses, replayable by id) never holds an
 authenticated transcript after it has been delivered once.
 
-**The Action's pull-request comment.** The summary quotes announcements, and `comment-on-pr` defaults to
-`true`. **On a public repository that would publish text from behind a login.** An authenticated run on a
-repository whose `event.repository.private` is not `true` refuses `comment-on-pr: "true"` with
-`auth-refused-public-comment`, and the input's description says so. **This is not one of the seven and is
-`ceo`'s to confirm** on the PR.
+**The Action's pull-request comment, and every other place a public repository shows a run's output.** The
+summary quotes announcements, and `comment-on-pr` defaults to `true`. **On a public repository that would
+publish text from behind a login.** `ceo` confirmed the refusal (#2275, the four calls the ADR left to it).
+
+**Amendment 3: the comment is not the only exit, and the row chose to refuse the RUN.** The same run prints
+`--json` to the job log and tells the user to upload `result-json` as an artifact, and on a public repository
+both are readable by anyone. Reading the Action turns up a fourth: the summary is appended to
+`$GITHUB_STEP_SUMMARY`, which is the job page and is public too. `ceo`'s amendment allowed either closing
+each exit or refusing the run, and left the choice to the build row. **The choice is: an authenticated run on
+a repository whose `event.repository.private` is not `true` is REFUSED, before NVDA is installed, with
+`auth-refused-public-repository`.** The reasons:
+- **The exits are not a closed list.** The comment, the log, the artifact advice and the step summary are the
+  four found by reading the Action today; a fifth output added later would be public on day one unless
+  somebody remembered this paragraph. A refusal keyed on the repository's visibility has no list to fall out
+  of date.
+- **Closing every exit leaves a run with nowhere to put its report.** Take away the comment, the log, the
+  artifact and the job summary and the report has no reader on a public repository, so the refusal that
+  spends nothing is better than the one that spends a runner and shows nobody.
+- **One gate, one error family.** The refusal is decided once, from one input, in one place, and the three
+  exits the amendment names are closed by it at once: the test drives a public repository with the comment on,
+  with the log print on and with the artifact advice on, and asserts each is refused; and drives a private one
+  and asserts none is.
+- **The code changes from the ADR's earlier text.** `auth-refused-public-comment` named the comment alone;
+  the same code refusing a whole run would mislead the person who reads it, so the run-level refusal is
+  `auth-refused-public-repository`, and its remedy says to run the capture on a private repository, or from
+  a machine of the person's own with the CLI. **This supersedes the earlier code, and the row records the
+  rename for `ceo`.**
+- **What it costs:** an open-source project that tests its own logged-in product on a public repository
+  cannot use the Action for that. It can use the CLI on the same machine as the browser, where nothing is
+  published unless the person publishes it. That is a real limit and it belongs in SECURITY.md (PR 7).
 
 ## Consequences
 
@@ -550,11 +640,11 @@ entry (its own filing), or the second outsider run.
 |---|---|---|
 | 1 | flows schema, parser and validator; `origin:`; closed vocabulary; literal refusal | no |
 | 2 | scrub, leak detector and `auth-leak-detector.test.ts` with both positive controls | no |
-| 3 | named errors and `FAULT_REMEDIATION` entries; the remote-worker refusal; `authApplied`; the judge-backend refusal and override | no |
+| 3 | named errors and `FAULT_REMEDIATION` entries (the eight of the row, and `auth-credential-too-short`, which amendment 2 adds); the remote-worker refusal; `authApplied`; the judge-backend refusal and override; the public-repository refusal's decision | no |
 | 4 | the worker's interpreter over the browser protocol, session purge, `reuseBrowser` off, result eviction | **yes** |
 | 5 | the Playwright driver for the rule layer | no |
 | 6 | fixtures `login-quiet` and `login-echo`; `auth:leak-check`; its three commands run on the fleet | **yes** |
-| 7 | the Action's inputs, masks, notice and public-repo comment refusal; the flags become reachable; **SECURITY.md** | **yes**, one Action rehearsal |
+| 7 | the Action's inputs, masks, notice and public-repository refusal; the flags become reachable; **SECURITY.md**, including amendment 5's paragraph | **yes**, one Action rehearsal |
 
 **Seven pull requests, three needing NVDA. The central figure is three working days, and the range is two to
 five.** Confidence is low, and the reasoning is stated so it can be attacked:

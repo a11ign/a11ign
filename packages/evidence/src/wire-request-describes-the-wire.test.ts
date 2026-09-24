@@ -61,9 +61,10 @@ function captureOptionsLiteralFields(): string[] {
 }
 
 /** `captureId` and `async` are read at the ROUTE, not inside `captureOptions()` — same for `url`, read as
- *  `parsed.url` a few lines below. Hand-named because they are genuinely outside the function this file
+ *  `parsed.url` a few lines below, and for `auth` (ADR 0038), which the route's peer gate reads as `parsed.auth` and
+ *  `captureOptions()` hands whole to `authOptionsFor` rather than assigning as a `name:` pair. Hand-named because they are genuinely outside the function this file
  *  extracts from, not because deriving them is impractical; each is cited by line in the audit table. */
-const ROUTE_LEVEL_FIELDS = ["url", "captureId", "async"];
+const ROUTE_LEVEL_FIELDS = ["url", "captureId", "async", "auth"];
 
 test("the extraction finds every hop, or this test checks nothing", () => {
   const probeFlags = probeFlagsFromSource();
@@ -83,7 +84,7 @@ test("CaptureRequest declares every field server.mjs's POST /capture actually ac
     probeElementsList: false, probeArrows: false, probeTyping: false, probeFocusContext: false,
     probeDialog: false, probeFocusReveal: false,
     formState, probeOrder: "focus-first", reuseBrowser: false, browser: "", reuseScreenReader: false,
-    captureId: "", async: false,
+    captureId: "", async: false, auth: { login: [] },
   };
   const declaredFields = new Set(Object.keys(declared));
 

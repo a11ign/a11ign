@@ -1631,6 +1631,50 @@ something this row silently decided either way.
   **Run `gh api user --jq .login` first, then the headers** — the pool you are about to spend is decided
   by your PATH and your workspace id, not by what you typed.
 
+  **INVERTED 2026-09-24 (chairman's identity ruling, #1950; shipped by #2332).** Everything above about
+  `workspaces.txt` and "the person's config otherwise" is the rule as it stood on 2026-09-23 and is now the
+  OPPOSITE of the wrapper: an allow-list for the workers account lets every workspace it forgot fall through
+  to the chairman's own login, which has ADMIN. worker-4 and worker-5 acted as the chairman for hours because
+  their ids were not on it, and `git push` was a second, unwrapped door (the global gitconfig's credential helper was
+  the real `/usr/bin/gh`, so every push by every agent authenticated as `DanBeckDev` whenever `GH_CONFIG_DIR`
+  was unset). The rule now: an explicit `GH_CONFIG_DIR` wins; an agent workspace (`HERDR_WORKSPACE_ID` set)
+  gets `a11ign-ai-workers`, or `a11ign-ai-leads` when its id is in `~/leads/workspaces.txt` (`w6 w2 w5`: ceo,
+  product-manager, orchestrator); an agent workspace whose config is missing REFUSES; a shell with no id is a
+  person and is left alone.
+
+  **THE EXCEPTION LIVED FOR HOURS, AND IS GONE (#2333).** #1950's first shipped form named `w6 w2 w5` as a
+  TEMPORARY human-account exception, because a shared workers pool would have run at ~4,600 of 5,000
+  GraphQL/hour with eight engineers. The chairman then created `a11ign-ai-leads` (write, NOT admin; its own
+  pool), and the wrapper on the host moved before the repository did: `human-account-workspaces.txt` was
+  deleted and the three routed to `/home/agent/leads/gh`. **PR #2336 was armed to merge in that window, and
+  its `host:install` would have put the human-routing wrapper and the human list back** — `ceo` disabled
+  auto-merge and re-scoped it. The lesson is the one #2332 exists for, one level up: a host fact that the
+  repository does not carry is reverted by the next install of the repository, so the shipped copy must be
+  updated BEFORE anything runs `host:install`, and a reviewed PR that lands the old policy is a regression
+  however green it is.
+
+  **THE LAST UNIT THAT ACTED AS THE PERSON MOVED WITH IT.** `a11ign-corpus-release-nightly.service` declared
+  the person's config because `a11ign-ai-workers` cannot push to `a11ign/corpus-backups`. `a11ign-ai-leads` can
+  (`permissions`: `push: true, admin: false` there and on `a11ign/a11ign`, read 2026-09-24), so it declares
+  `/home/agent/leads/gh` and its comment no longer argues that the person's account is "the right answer".
+  `host:check` now refuses a unit that declares the person's config (`HUMAN_ACCOUNT_ALLOWED` in
+  `host-units.mjs`, empty; an entry needs `ceo`'s ruling), and, since `identityDrift` is now wired into it and
+  no longer only a test, a unit that reaches `gh` and declares nothing. A shipped unit that CHANGES the
+  account is no longer reported as "installed identity the repository lacks": that warning is for a repository
+  that declares none.
+
+  **WHY THE WRAPPER IS IN THE REPOSITORY.** The identity policy existed only on the host, so no review had ever
+  seen it and nothing noticed when it was wrong. `ceo` ruled the shape: **a COPY with a drift check, not a
+  symlink** — `gh` is on every agent's PATH, so a link into a working tree that may be mid-rebase would break
+  `gh` for the whole org. `npm run host:install` copies `packages/agent-org/host/gh` (atomically: a rename, never
+  a half-written file), the leads list (`~/leads/workspaces.txt`), and `~/workers/README.md`; `npm run host:check` reports DIVERGED
+  when the installed bytes differ, and when the global gitconfig's github.com helper is not the wrapper (which
+  `host:install` does NOT fix — it is a person's dotfile). The global `user.name`/`user.email` are reported as a
+  NOTE and never a failure: this repository's `.git/config` overrides them, so commits here are not the
+  chairman's, but any repository without the override would be. Pinned by `host-units.test.ts`, which RUNS the
+  wrapper against a stub `gh-real` (`A11Y_GH_REAL`, `A11Y_WORKERS_DIR`, `A11Y_LEADS_DIR` override the three host paths; no new hole,
+  since an explicit `GH_CONFIG_DIR` already wins).
+
 ## `lane:ceo` protects review, not authorship
 
 *The rule is in [`.claude/rules/agent-practices.md`](../.claude/rules/agent-practices.md); this is the incident behind it. The heading it carried while every wake loaded it, verbatim:*

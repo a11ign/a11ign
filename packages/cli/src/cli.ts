@@ -27,7 +27,12 @@ import { fetchPageTitle } from "./scan/page-title.js";
 import { loadAxeResults, warnOnUrlMismatch } from "./scan/axe-results.js";
 import { layerOf } from "@a11ign/judge/layers";
 import { reportLines, type Report } from "./report.js";
-import { formatFaultMessage, formatDoubtMessage, formatEarlyContainmentNotice } from "./fault-remediation.js";
+import {
+  formatFaultMessage, formatAuthFaultMessage, formatDoubtMessage, formatEarlyContainmentNotice,
+} from "./fault-remediation.js";
+import { isAuthFault } from "./auth/auth-faults.js";
+import { refuseAuthOnRemoteWorker, requireAuthApplied, type AuthRequest } from "./auth/refusals.js";
+import { ruleLayerSignIn } from "./auth/rule-layer.js";
 import { leaseWorker, isAfterRun, type AfterRun, type WorkerLease } from "@a11ign/worker-fleet";
 import { CAPTURE_CLIENT_TIMEOUT_MS, requestJson } from "@a11ign/worker-fleet/worker-http";
 import { captureTolerantly } from "@a11ign/worker-fleet/capture-client";
@@ -285,6 +290,11 @@ export interface CaptureResponse {
     & Partial<Pick<CaptureInteraction, "formChanges" | "postSubmitFields">>;
   environment?: Record<string, string>;
   diagnostics?: unknown[];
+  /**
+   * The worker's positive acknowledgement that it performed the login it was asked for (ADR 0038, clause 1).
+   * Only `true` counts; an older worker never sets it, which is exactly how its silence is caught.
+   */
+  authApplied?: boolean;
 }
 
 const MAX_CAPTURE_ATTEMPTS = 3;
@@ -656,7 +666,7 @@ async function recaptureUntilItReadsThePage(
   title: string,
   options: { url: string; task: string; worker: string; probeForms: boolean; probeFocus: boolean;
     probeNavigation: boolean; probeFocusContext: boolean; probeFocusReveal: boolean;
-    formState?: FormStateRequest },
+    formState?: FormStateRequest; auth?: AuthRequest },
 ): Promise<CaptureResponse> {
   let cap = first;
   const { url, ...captureOptions } = options;
@@ -674,14 +684,17 @@ async function recaptureUntilItReadsThePage(
  * ACQUISITION, and everything after it is interpretation. The two run on different clocks (this half is
  * network- and worker-bound; the other is pure) and fail for unrelated reasons, which is the seam.
  */
-async function captureAndScan(
+export async function captureAndScan(
   { url, task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, probeFocusReveal,
-    wantAxe, axeResults, formState }: {
+    wantAxe, axeResults, formState, auth }: {
     url: string; task: string; worker: string; probeForms: boolean; probeFocus: boolean;
     probeNavigation: boolean; probeFocusContext: boolean; probeFocusReveal: boolean; wantAxe: boolean;
-    axeResults: string | null; formState?: FormStateRequest;
+    axeResults: string | null; formState?: FormStateRequest; auth?: AuthRequest;
   },
 ): Promise<{ cap: CaptureResponse; axe: Awaited<ReturnType<typeof pageContext>> }> {
+  // FIRST, before the rule layer's browser can launch: the two layers start together below, so a refusal raised
+  // only inside `captureViaWorker` would come after axe had already begun loading the page.
+  refuseAuthOnRemoteWorker({ worker, auth });
   const ruleLayer = await chooseRuleLayer({ wantAxe, axeResults });
   process.stderr.write(`Scanning ${url} (${ruleLayer === "none" ? "" : "rule-based axe-core + "}real screen reader) ...\n`);
   // Layer 1 (rule-based, local) and capture (lived-experience, remote worker)
@@ -689,8 +702,8 @@ async function captureAndScan(
   // non-fatal: we still report the lived-experience layer.
   const [firstCap, axe] = await Promise.all([
     captureViaWorker(url,
-      { task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, probeFocusReveal, formState }),
-    pageContext(url, ruleLayer, axeResults),
+      { task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, probeFocusReveal, formState, auth }),
+    pageContext(url, ruleLayer, axeResults, { auth }),
   ]);
   // `null` when the rule layer did not run, so "unchecked" can never be mistaken for "clean". Both
   // output paths must use THIS, not `axe.findings`: the human report already did
@@ -704,7 +717,8 @@ async function captureAndScan(
   // Verify-and-retry (the Root-1 fix, brought to the product). Browser focus on
   // the worker can be racy, so NVDA sometimes reads chrome instead of the page.
   const cap = await recaptureUntilItReadsThePage(firstCap, axe.title,
-    { url, task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, probeFocusReveal, formState });
+    { url, task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, probeFocusReveal, formState,
+      auth });
   return { cap, axe };
 }
 
@@ -1086,20 +1100,32 @@ export async function chooseRuleLayer({ wantAxe, axeResults }: { wantAxe: boolea
  *
  * Decided here now, by the function that knows. There is no second place to get it wrong.
  */
-async function pageContext(url: string, layer: RuleLayer, axeResults: string | null):
-Promise<{ findings: AxeFinding[] | null; title: string; coverage: RuleLayerCoverage;
+/**
+ * The page's title where the rule layer could not supply it. A plain unauthenticated fetch of an address that needs a
+ * login returns the LOGIN WALL's title, and the capture (signed in) would then be judged as "not about this page" and
+ * re-captured three times. So an authenticated run supplies no title, which `captureMentionsTitle` reads as "nothing to
+ * check" (lenient by design) instead of as a mismatch.
+ */
+const titleWithoutTheRuleLayer = (url: string, auth: AuthRequest | undefined): Promise<string> =>
+  auth ? Promise.resolve("") : fetchPageTitle(url);
+
+export async function pageContext(
+  url: string, layer: RuleLayer, axeResults: string | null,
+  { auth, scan = scanWithAxe }: { auth?: AuthRequest; scan?: typeof scanWithAxe } = {},
+): Promise<{ findings: AxeFinding[] | null; title: string; coverage: RuleLayerCoverage;
   browserChannel: AxeBrowserChannel | null }> {
   if (layer === "import" && axeResults) {
     const imported = await loadAxeResults(axeResults);
     warnOnUrlMismatch(imported.scannedUrl, url);
     process.stderr.write(`Using ${imported.findings.length} imported axe violation(s) from ${axeResults}\n`);
-    return { findings: imported.findings, title: await fetchPageTitle(url), coverage: imported.coverage,
+    return { findings: imported.findings, title: await titleWithoutTheRuleLayer(url, auth), coverage: imported.coverage,
       browserChannel: null };
   }
   if (layer === "none") {
-    return { findings: null, title: await fetchPageTitle(url), coverage: {}, browserChannel: null };
+    return { findings: null, title: await titleWithoutTheRuleLayer(url, auth), coverage: {}, browserChannel: null };
   }
-  return scanWithAxe(url).then((result) => {
+  // An authenticated run signs in FOR ITSELF in this layer's own browser (ADR 0038): it never receives the worker's session.
+  return scan(url, auth ? { signIn: ruleLayerSignIn({ plan: auth, url }) } : {}).then((result) => {
     // WHICH BROWSER ANSWERED, reported rather than assumed — see `launchBrowser`. The Action skips the
     // bundled download deliberately, so seeing "msedge" there is the fallback working as designed, not a
     // warning; seeing it locally on a machine with no Edge would be the warning.
@@ -1107,11 +1133,14 @@ Promise<{ findings: AxeFinding[] | null; title: string; coverage: RuleLayerCover
       ? "the bundled Chromium" : "the system Edge (channel: msedge)"}\n`);
     return result;
   }).catch(async (e: Error) => {
+    // A login that failed is an ERROR and not a rule layer that "failed to run": swallowing it would report the run as
+    // examined with nothing behind the login examined (ADR 0038, clause 1). Anything else stays what it always was.
+    if (isAuthFault((e as { fault?: unknown }).fault)) throw e;
     process.stderr.write(`axe-core scan failed (continuing without it): ${e.message}\n`);
     // NULL, not []. The visual criteria are unchecked, and saying "0 violations" here would be the one
     // thing this tool must never do. `coverage: {}` is the same statement per criterion: a scan that
     // THREW examined nothing, so nothing may be reported as examined-and-clean.
-    return { findings: null, title: await fetchPageTitle(url), coverage: {}, browserChannel: null };
+    return { findings: null, title: await titleWithoutTheRuleLayer(url, auth), coverage: {}, browserChannel: null };
   });
 }
 
@@ -1138,6 +1167,12 @@ export type CaptureRequest =
      * The host issues a capture per state for that reason, rather than the worker looping.
      */
     formState?: FormStateRequest;
+    /**
+     * Log in first (ADR 0038): the flow's resolved steps, whose secrets are environment-variable NAMES and never
+     * values. Absent for every run that asks for no authentication, which is every run until PR 7 makes the
+     * flags reachable. Refused for a remote worker before anything is sent (`refuseAuthOnRemoteWorker`).
+     */
+    auth?: AuthRequest;
   };
 
 /**
@@ -1243,8 +1278,10 @@ export function earlyContainmentWatcher(): (progress: object) => void {
 export async function captureViaWorker(
   url: string,
   { task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, probeFocusReveal,
-    formState }: CaptureRequest,
+    formState, auth }: CaptureRequest,
 ): Promise<CaptureResponse> {
+  // BEFORE the body is built, so a remote worker is never sent anything that carries a login.
+  refuseAuthOnRemoteWorker({ worker, auth });
   let res: { status: number; ok: boolean; text: string; json: unknown };
   try {
     res = await captureTolerantly({
@@ -1252,7 +1289,8 @@ export async function captureViaWorker(
       body: { url, task, probeForms, probeFocus, probeNavigation, probeFocusContext, probeFocusReveal,
         // Omitted rather than sent as null when absent: an older worker reads known fields only, so an
         // absent key is the same "no configured form" it has always understood. Additive, like `fault`.
-        ...(formState ? { formState } : {}) },
+        ...(formState ? { formState } : {}),
+        ...(auth ? { auth } : {}) },
       timeoutMs: CAPTURE_CLIENT_TIMEOUT_MS,
       onProgress: earlyContainmentWatcher(),
     });
@@ -1269,6 +1307,8 @@ export async function captureViaWorker(
   if (!res.ok) {
     throw new Error(describeWorkerError(res.status, res.json));
   }
+  // An older worker ignores `auth` and captures the login page: only its own acknowledgement rules that out.
+  requireAuthApplied({ response: res.json, auth });
   return res.json as CaptureResponse;
 }
 
@@ -1335,9 +1375,11 @@ if (isProgram) main().catch((err: unknown) => {
   const fault = err instanceof Error ? (err as Error & { fault?: string }).fault : undefined;
   // `console.error(err)` printed a Node stack trace as the entire user-facing output on the first real
   // website this was pointed at. A stack is for whoever is fixing the tool; a user needs the reason.
-  const message = fault
-    ? formatFaultMessage(fault, err instanceof Error ? err.message : undefined)
-    : err instanceof Error ? err.message : String(err);
+  const message = isAuthFault(fault) && err instanceof Error
+    ? formatAuthFaultMessage(fault, err.message)
+    : fault
+      ? formatFaultMessage(fault, err instanceof Error ? err.message : undefined)
+      : err instanceof Error ? err.message : String(err);
   process.stderr.write(`\n${message}\n`);
   if (process.argv.includes("--debug") && err instanceof Error && err.stack) {
     process.stderr.write(`\n${err.stack}\n`);
@@ -1347,5 +1389,6 @@ if (isProgram) main().catch((err: unknown) => {
   // exit 2 says the input is wrong and retrying it will not help. A named FAULT (currently only
   // artifact-schema-mismatch) is a third thing again: not the caller's mistake and not an ordinary tool
   // bug, so exit 3 says "wait for a release" rather than inviting a retry loop the way exit 1 would.
-  process.exit(err instanceof FormsConfigError || err instanceof PageListError ? 2 : fault ? 3 : 1);
+  // An authenticated run's refusal is the caller's to fix, like a config error, and not "wait for a release".
+  process.exit(err instanceof FormsConfigError || err instanceof PageListError || isAuthFault(fault) ? 2 : fault ? 3 : 1);
 });

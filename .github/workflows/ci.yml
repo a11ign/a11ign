@@ -306,6 +306,36 @@ jobs:
             exit 1
           fi
 
+  # #2348: THE TREE-WIDE GUARDS RUN ON EVERY PULL REQUEST, DOCS-ONLY INCLUDED -- ceo's ruling, not selected by
+  # the paths each guard reads. #2329 was docs only, `ts` was SKIPPED (`needs.changed.outputs.ts` is false for
+  # a diff with no code in it), and `control-plane-checkout-is-one-fact.test.ts` -- which scans every file
+  # under `docs/` -- first ran in trunk-guard's unscoped suite and turned `main` red at `5521677a0`. The
+  # change scoping assumes prose cannot break a test; a guard whose POPULATION is the tree is the
+  # counter-example, and it is #704's point again: a green run scoped to one diff does not predict it.
+  #
+  # UNCONDITIONAL, so this job's `if:` is deliberately NOT `needs.changed.outputs.*`: a path-to-guard table
+  # is a second list that drifts, where the population (`tree-wide-guards.mjs`) is derived from the tree.
+  # `needs: changed` alone means a closed PR (which skips `changed`) skips this too, and an empty diff is
+  # already refused by `changed`. `select-changed-tests.test.ts` pins that this stays unconditional.
+  guardSweep:
+    needs: changed
+    runs-on: ubuntu-latest
+    steps:
+      # Full history for the same reason as every job that reads git: several guards spawn git against the
+      # checkout, and a shallow one answers differently from trunk-guard's full-history run.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      # `GH_TOKEN` because the packaging guards in the population shell out to `gh`, as `ts`'s own test step does.
+      - name: Every tree-wide guard, on this tree
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: npm run guards:sweep
+
   # #298 (pipeline unit 1): WITH `strict=false` (#277), branch protection no longer requires this head to
   # contain `main`'s current tip before merging -- it merges the instant `gate` is green for the RECORDED
   # head. `strict` bought head-vs-tip agreement for free; without it, nothing does, and #195 (GitHub's
@@ -534,7 +564,7 @@ jobs:
   # watched the body) from a queue stall into an edit -- the condition that made blocking unsafe then
   # does not hold now.
   gate:
-    needs: [changed, ts, python, ansible, changeset, rulesFitness, deliberateRefusals, acceptance, ownedPaths]
+    needs: [changed, ts, python, ansible, changeset, rulesFitness, guardSweep, deliberateRefusals, acceptance, ownedPaths]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     steps:
@@ -547,6 +577,7 @@ jobs:
             "${{ needs.ansible.result }}" \
             "${{ needs.changeset.result }}" \
             "${{ needs.rulesFitness.result }}" \
+            "${{ needs.guardSweep.result }}" \
             "${{ needs.deliberateRefusals.result }}" \
             "${{ needs.acceptance.result }}" \
             "${{ needs.ownedPaths.result }}"

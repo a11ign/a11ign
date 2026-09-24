@@ -61,7 +61,7 @@
 // to the code that makes it safe: this module runs the AUTHOR'S OWN commands from a PR body, so it must
 // only ever run under the fork's read-only token and the fork's own checked-out code. Nothing in this
 // file grants itself write access; it doesn't need to.
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import {
   declaredRegionFiles, extractLabeledSection, regionCovers, trackedTopLevelDirs,
 } from "./region-paths.mjs";
@@ -70,6 +70,8 @@ import { existsSync, globSync, readFileSync, realpathSync, statSync } from "node
 import { createRequire } from "node:module";
 import { basename, delimiter, join } from "node:path";
 import { refuseUnknownFlags } from "../../worker-fleet/src/cli-flags.mjs";
+import { sandboxGitEnv } from "../../guards/src/git-env.mjs";
+import { changedFiles } from "../../guards/src/changed-files.mjs";
 import { localImports, importedNamesFor, stripComments } from "../../guards/src/local-import-closure.mjs";
 
 /** @typedef {{ verdict: "runnable" } | { verdict: "refused", reason: string } | { verdict: "prose", reason: string }} Classification */
@@ -336,6 +338,13 @@ const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=\S*$/;
 // shape `FLEET_LAB_PATTERNS`/`CORPUS_PATTERNS` already use, for the identical reason: a check that can
 // answer "is this refusable" cannot also answer "is this claim supportable", so it needs its own list.
 const UNVERIFIABLE_BUILTINS = new Set(["echo", "true", ":", "test", "time", "["]);
+
+// #2178: THE SHELL KEYWORDS THAT OPEN OR CLOSE A BLOCK. `for` IS a command -- to bash -- so telling the filer
+// it has "no executable" sends them to look for a missing binary. It has none because it is grammar, not a
+// program. `[[` is left out on purpose: `[[ -f x ]]` is a complete one-line command, not a block edge.
+// Only the REASON differs from the no-executable refusal; the verdict is the same `prose` it always was.
+const SHELL_BLOCK_KEYWORDS = new Set(["for", "while", "until", "if", "case", "select", "function",
+  "do", "then", "else", "elif", "fi", "done", "esac", "{", "}"]);
 
 /**
  * The first token of a command that could plausibly BE the command -- skipping any leading `VAR=value`
@@ -1908,6 +1917,32 @@ function anyCommandUsesHistory(commands) {
 }
 
 /**
+ * #446/#2178: WHY A LINE'S FIRST TOKEN CANNOT BE A CHECK, or null when it can -- split out of
+ * `classifyCommand`, which had reached the complexity ceiling with the shell-keyword reason added.
+ * @param {string} token
+ * @param {(token: string) => boolean} exists
+ * @returns {Classification | null}
+ */
+function proseFirstToken(token, exists) {
+  const bareToken = token.replace(/^['"]|['"]$/g, "");
+  if (UNVERIFIABLE_BUILTINS.has(bareToken)) {
+    return { verdict: "prose",
+      reason: `cannot verify anything -- \`${bareToken}\`'s exit code says nothing about whether the `
+        + "claim in this line is true" };
+  }
+  if (SHELL_BLOCK_KEYWORDS.has(bareToken)) {
+    return { verdict: "prose",
+      reason: `starts a shell block: \`${bareToken}\` is a shell keyword, not an executable, so this line is an `
+        + "incomplete command on its own -- an Acceptance line is read one command at a time, and a block "
+        + "spanning lines is not joined. Put it in a script, or in one `bash -c '...'` line" };
+  }
+  if (!exists(token)) {
+    return { verdict: "prose", reason: `is not a command (no executable "${token}")` };
+  }
+  return null;
+}
+
+/**
  * Pure. Never executes anything -- just decides whether this command is this job's to run.
  *
  * #446: A THIRD VERDICT, "prose", for a line that was never a command at all -- either its first token
@@ -1980,16 +2015,7 @@ export function classifyCommand(command,
   if (!token) {
     return { verdict: "prose", reason: "is not a command (the line is empty)" };
   }
-  const bareToken = token.replace(/^['"]|['"]$/g, "");
-  if (UNVERIFIABLE_BUILTINS.has(bareToken)) {
-    return { verdict: "prose",
-      reason: `cannot verify anything -- \`${bareToken}\`'s exit code says nothing about whether the `
-        + "claim in this line is true" };
-  }
-  if (!exists(token)) {
-    return { verdict: "prose", reason: `is not a command (no executable "${token}")` };
-  }
-  return { verdict: "runnable" };
+  return proseFirstToken(token, exists) ?? { verdict: "runnable" };
 }
 
 /**
@@ -2362,6 +2388,25 @@ export function endsInsideQuote(text) {
 }
 
 /**
+ * #2178: DOES THIS TEXT END IN A SHELL OPERATOR THAT NEEDS A RIGHT-HAND SIDE? -- the third spelling of "this
+ * command is not finished yet", and the least ambiguous: a line ending in `&&`, `||`, `|` or `|&` is never a
+ * complete command, so the next line is its other half. Not joining it sent `npm run build &&` to bash as a
+ * syntax error and ran `npm test` on its own, where it could pass -- with the condition the author wrote
+ * gone.
+ *
+ * A single trailing `&` is NOT here: it backgrounds the command, which is complete. An operator preceded by
+ * a backslash is a literal character. Quote state is asked BEFORE this by `joinContinuations`, so an
+ * operator inside an open string never reaches it. A trailing `# comment` after the operator is not looked
+ * through: bash would still continue, but reading that line as complete is the pre-#2178 behaviour, not a
+ * new one, and the author can move the comment.
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function endsInOperator(text) {
+  return /(?<!\\)(?:&&|\|\|?|\|&)\s*$/.test(text);
+}
+
+/**
  * #419: A `\` LINE CONTINUATION IS ONE COMMAND, NOT TWO. Read line by line, a shell continuation split the
  * command in half: the first half ended in a dangling backslash and the second half became its OWN
  * "command" -- a bare filename or flag that fails the moment it is run on its own. Joins forward from
@@ -2400,6 +2445,8 @@ function joinContinuations(lines, startIndex, firstLine, limit) {
     // continuation, so asking about the quote before the backslash is what keeps that one intact.
     if (endsInsideQuote(command)) command = `${command}\n${next.replace(/\s+$/, "")}`;
     else if (/\\\s*$/.test(command)) command = `${command.replace(/\\\s*$/, "").trimEnd()} ${next.trim()}`;
+    // #2178: the operator stays -- it is part of the command -- and the two lines are joined by a space.
+    else if (endsInOperator(command)) command = `${command.trimEnd()} ${next.trim()}`;
     else break;
     consumed += 1;
   }
@@ -2922,6 +2969,92 @@ export function closesDeclarationReport(body) {
   return { ok: true, line: `CLOSES: #${declaration.numbers.join(", #")}` };
 }
 
+// #2305: A PR THAT ADDS OR CHANGES A TEST MUST CARRY A `Mutation:` RECORD, or `Mutation: none -- <reason>`.
+// `ceo`'s ruling, 2026-09-24: 11 of 46 first-review refusals over the 80 most recent merged PRs were "the
+// test passes without testing its claim", each found by a reviewer running a mutant the author never ran.
+// The template already had the line and NOTHING READ IT.
+//
+// SHAPE, NOT EXECUTION. This job still never runs a `Mutation:` command (see the SCOPED TO `Acceptance:`
+// ONLY note above; `pr:open` runs it on the author's machine and only WARNS, #2307). What it certifies is
+// that the line EXISTS -- the cheap half. It cannot say a mutant ran, and must not be read as saying so.
+//
+// `Mutation: none -- <reason>` is the escape hatch and the reason is REQUIRED, the same rule as
+// `Closes: none` and `Acceptance: none`: "nobody wrote one" and "deliberately none" stay different states.
+// `extractSection` already reads a reasonless `none` as MISSING, so this needs no dialect of its own.
+//
+// THE DIFF IS READ FROM GIT, NOT FROM THE BODY. A body is the author's own claim about what changed.
+const MUTATION_FILES_NAMED = 3;
+const MERGE_PARENTS = 2;
+const TEST_FILE_PATTERN = /(?:\.test\.(?:ts|tsx|mjs|cjs|js)|(?:^|\/)test_[^/]+\.py|_test\.py)$/;
+
+/**
+ * Pure. Which of these repo-relative paths are test files -- the ones a `Mutation:` record is owed for.
+ * @param {string[]} paths
+ * @returns {string[]}
+ */
+export function testFilesAmong(paths) {
+  return paths.filter((path) => TEST_FILE_PATTERN.test(path));
+}
+
+/** @typedef {{ ok: true, files: string[] } | { ok: false, why: string }} DiffReading */
+
+/**
+ * THE VERDICT for `Mutation:`. Three outcomes and a fourth that is deliberately not a pass or a failure:
+ * no test in the diff (nothing owed), a record present, a record MISSING/duplicated (fails), and a diff this
+ * job COULD NOT READ -- UNCHECKED, loud, and not a failure, because a job that goes red on a git hiccup
+ * blocks the queue for a reason no author can fix and trains them to reach for the escape hatch.
+ * @param {{ body: string | null | undefined, diff: DiffReading }} input
+ * @returns {{ ok: boolean, line: string }}
+ */
+export function mutationRecordReport({ body, diff }) {
+  if (!diff.ok) {
+    return { ok: true, line: `MUTATION: UNCHECKED -- could not read the diff (${diff.why}); `
+      + "a PR that changes a test still owes a `Mutation:` record" };
+  }
+  const tests = testFilesAmong(diff.files);
+  if (tests.length === 0) return { ok: true, line: "MUTATION: NOT REQUIRED -- no test file in the diff" };
+  const section = extractMutationSection(body);
+  if (section.kind === "none") return { ok: true, line: `MUTATION: NONE -> ${section.reason}` };
+  // An inline `Mutation: <!-- what you broke -->` is the template's own placeholder, not a record.
+  if (section.kind === "commands" && section.commands.some((line) => line.replace(/<!--.*?-->/g, "").trim())) {
+    return { ok: true, line: `MUTATION: RECORDED (${tests.length} test file(s) in the diff)` };
+  }
+  if (section.kind === "duplicate") {
+    return { ok: false, line: "MUTATION: DUPLICATE -- more than one `Mutation:` header; keep one" };
+  }
+  const named = tests.slice(0, MUTATION_FILES_NAMED);
+  return { ok: false, line: `MUTATION: MISSING -- the diff changes ${tests.length} test file(s) (`
+    + `${named.join(", ")}${tests.length > named.length ? ", ..." : ""}) and the body carries no `
+    + "`Mutation:` record. Write what you broke and that the test went red (`npm run mutate` makes it "
+    + "cheap), or `Mutation: none -- <reason>` (a reason is required)" };
+}
+
+/**
+ * The files THIS pull request adds or changes, read from the merge commit `actions/checkout` builds for a
+ * `pull_request` event: its first parent is the base, so `HEAD^1..HEAD` is the PR's own diff and not
+ * whatever the base did since. The checkout is depth 1, so the parent is fetched when it is missing. A HEAD that is not
+ * a merge commit would show only its LAST commit and under-read the PR, so it is UNREADABLE, not guessed at.
+ * Deleted files are excluded: there is no test left to owe a mutant.
+ * @param {string} [cwd]
+ * @returns {DiffReading}
+ */
+export function changedFilesOfThisPullRequest(cwd = process.cwd()) {
+  const git = (/** @type {string[]} */ ...args) =>
+    execFileSync("git", args, { cwd, encoding: "utf8", env: sandboxGitEnv() });
+  try {
+    const parentCount = () => git("rev-list", "--parents", "-n", "1", "HEAD").trim().split(/\s+/).length - 1;
+    // A depth-1 checkout has cut HEAD's parents off; ask for one more level only when they are missing, so
+    // a complete clone (`History: full`, a local run) never spends a fetch it does not need.
+    if (parentCount() < MERGE_PARENTS) git("fetch", "--deepen=1", "origin");
+    if (parentCount() < MERGE_PARENTS) return { ok: false, why: "HEAD is not a merge commit" };
+    // Through the one reader of "which paths changed" (#939): with renames detected a moved test file
+    // lists only where it WENT. `--no-renames` reads a move as delete + add, and the add is what ACMR keeps.
+    return { ok: true, files: changedFiles(["--diff-filter=ACMR", "HEAD^1", "HEAD"], { repoRoot: cwd }) };
+  } catch (error) {
+    return { ok: false, why: `git said: ${/** @type {Error} */ (error).message.split("\n")[0]}` };
+  }
+}
+
 /**
  * Does this command re-run a suite that `ci.yml`'s `ts` job is already running?
  *
@@ -2980,7 +3113,9 @@ function main() {
   }
   const closes = closesDeclarationReport(body);
   console.log(closes.line);
-  process.exit(report.ok && closes.ok ? 0 : 1);
+  const mutation = mutationRecordReport({ body, diff: changedFilesOfThisPullRequest() });
+  console.log(mutation.line);
+  process.exit(report.ok && closes.ok && mutation.ok ? 0 : 1);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) main();
