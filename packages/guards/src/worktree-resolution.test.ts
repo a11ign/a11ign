@@ -2,8 +2,9 @@
  * #2181: a worktree whose `@a11ign/*` resolve somewhere else measures THAT checkout, and one command says so.
  *
  * Measured 2026-09-23: 42 of 56 worktrees on the agent host read the PRIMARY's `packages/`, so
- * `npm run test:all` gave 7,253 passed at a head CI was failing. **The symlink is deliberate; what was
- * missing was any line saying the tree under test is not the tree under test.**
+ * `npm run test:all` gave 7,253 passed at a head CI was failing. **The symlink was a cost-saving choice and
+ * is being retired by pnpm (#57, #2300); what was missing was any line saying the tree under test is not the
+ * tree under test, and the trees not yet converted still need it.**
  *
  * CONSTRUCTED TREES, real symlinks: the classifier's whole content is what `realpath` returns, so a
  * fake filesystem would test the string handling and leave the resolution untouched.
@@ -48,6 +49,42 @@ test("#2181 OWN PACKAGES: a tree linked to its own packages/ reads SAFE, and say
     const result = worktreeResolution(tree);
     assert.equal(result.kind, RESOLUTION.OWN_PACKAGES);
     assert.match(resolutionLine(tree, result), /measures this branch/);
+  });
+});
+
+test("#2300 PNPM: an own-install tree links @a11ign/* by RELATIVE path into its own packages/ and reads SAFE", () => {
+  // The layout `pnpm install --frozen-lockfile` writes (read off a real install: `evidence -> ../../packages/evidence`),
+  // not the absolute link the other tests build. Paired with the same relative shape aimed OUTSIDE, because a
+  // classifier that called every relative link safe would pass the first half and be the defect this file exists for.
+  withScratch((base) => {
+    const primary = checkout(base, "primary");
+    const own = checkout(base, "wt-pnpm");
+    mkdirSync(join(own, "node_modules", "@a11ign"), { recursive: true });
+    symlinkSync(`../../packages/${PACKAGE}`, join(own, "node_modules", "@a11ign", PACKAGE));
+    assert.equal(worktreeResolution(own).kind, RESOLUTION.OWN_PACKAGES);
+    assert.deepEqual(suiteStartVerdict(own, { env: {} }), { action: "proceed", line: null });
+
+    const symlinked = checkout(base, "wt-symlinked");
+    mkdirSync(join(symlinked, "node_modules", "@a11ign"), { recursive: true });
+    symlinkSync(`../../../primary/packages/${PACKAGE}`, join(symlinked, "node_modules", "@a11ign", PACKAGE));
+    const control = worktreeResolution(symlinked);
+    assert.equal(control.kind, RESOLUTION.OTHER_CHECKOUT, "control: a link into another checkout is still reported");
+    assert.deepEqual(control.checkouts, [primary]);
+    assert.equal(suiteStartVerdict(symlinked, { env: {} }).action, "refuse");
+  });
+});
+
+test("#2300: the remedy a refused tree is handed is the pnpm install, not a symlink or an npm install", () => {
+  withScratch((base) => {
+    const primary = checkout(base, "primary");
+    const tree = checkout(base, "wt-remedy");
+    linkScope(tree, join(primary, "packages", PACKAGE));
+    const said = resolutionLine(tree, worktreeResolution(tree));
+    assert.match(said, /pnpm install --frozen-lockfile/);
+    assert.doesNotMatch(said, /(^|[^p])npm install|ln -s/, // "pnpm install" contains "npm install"
+       "the advice must not lead into the refusal `.pnpmfile.cjs` gives a symlink");
+    const bare = checkout(base, "wt-bare");
+    assert.match(resolutionLine(bare, worktreeResolution(bare)), /pnpm install --frozen-lockfile/);
   });
 });
 

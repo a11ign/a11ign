@@ -9,12 +9,17 @@
 // head CI was failing, and deleting `windowSize` from a fixture left the mutant ALIVE (14 pass / 0 fail);
 // with a hybrid `node_modules` plus `npm run build`, the same deletion gave 9 pass / 5 fail, matching CI.
 //
-// THE SYMLINK IS DELIBERATE AND IS NOT THE DEFECT. It is what keeps 42 trees from each carrying a real
-// `node_modules` (#57 measures the third-party share at 2.9G, and removes the symlink only after the
-// first publish). The defect is that NOTHING SAYS the tree you are testing in is not the tree you are
-// testing. This file says it, and says nothing else: it REPORTS, it does not refuse. A refusal firing on
-// 42 of 56 trees on the day it landed would stop the org -- report first, the same order #2012/#2146
-// followed for `worktrees:prune`.
+// THE SYMLINK WAS A COST-SAVING CHOICE, AND IT IS NOT THE DEFECT EITHER WAY. It kept 42 trees from each
+// carrying a real `node_modules` (#57 measured the third-party share at 2.9G). #57's pnpm migration makes
+// it obsolete rather than deliberate: the first publish ran on 2026-09-19, and a `pnpm install` gives a tree
+// its OWN `node_modules/@a11ign/*` as links to its own `packages/` (`../../packages/x`, which this file
+// classifies `OWN_PACKAGES`) from a shared store, in seconds. Trees that predate it still carry the
+// symlink, so the classifier stays: it is how a tree says which population it belongs to. The defect is that
+// NOTHING SAYS the tree you are testing in is not the tree you are testing. This file says it, and since
+// #2218 `suiteStartVerdict` REFUSES a suite start in a tree that reads another checkout or a frozen copy
+// (callers: `assert-glob-not-empty.mjs`, `worktree-owner.mjs`), with `OVERRIDE_ENV` as the one loud way past.
+// It is not retired by the pnpm migration: retiring the symlink removes the cause, and the refusal is what
+// catches the trees not yet converted, which is a separate decision from converting them.
 //
 // THREE ANSWERS, AND THE THIRD IS THE ONE THAT MATTERS. A classifier that asks only "inside or outside
 // this worktree" gets the first two right and calls the third SAFE. `wt-1315` on this host resolves
@@ -160,8 +165,9 @@ export function resolutionLine(worktree, { kind, entries, checkouts }) {
   const total = entries.length;
   if (kind === RESOLUTION.NOTHING_LINKED) {
     return `${worktree}: no @a11ign/* resolve here -- node_modules is absent or empty of them. Not "safe": `
-      + "nothing has been measured. `ln -s <primary>/node_modules node_modules` shares the primary's and "
-      + "makes this tree read the PRIMARY's packages; a hybrid link plus `npm run build` makes it read this branch.";
+      + "nothing has been measured. `pnpm install --frozen-lockfile` gives this tree its own (`corepack pnpm "
+      + "install --frozen-lockfile` if pnpm is not on PATH); a symlink to the primary's node_modules would make "
+      + "it read the PRIMARY's packages instead, and pnpm refuses to install through one.";
   }
   if (kind === RESOLUTION.OWN_PACKAGES) {
     return `${worktree}: all ${total} @a11ign/* resolve to this worktree's own packages/ -- a suite run here `
@@ -170,13 +176,14 @@ export function resolutionLine(worktree, { kind, entries, checkouts }) {
   if (kind === RESOLUTION.STALE_COPY) {
     return `${worktree}: ${countOf(entries, RESOLUTION.STALE_COPY)} of ${total} @a11ign/* resolve to a COPY under `
       + "this tree's own node_modules/, not to its packages/. Inside the worktree and still not its source: a "
-      + "run here measures whenever that copy was installed. Replace node_modules/@a11ign with links to this "
-      + "tree's packages/, then `npm run build`.";
+      + "run here measures whenever that copy was installed. Remove node_modules and run "
+      + "`pnpm install --frozen-lockfile`, which links @a11ign/* to this tree's packages/.";
   }
   return `${worktree}: ${countOf(entries, RESOLUTION.OTHER_CHECKOUT)} of ${total} @a11ign/* resolve OUTSIDE this `
     + `worktree, to ${checkouts.join(", ")} -- a suite run here measures that checkout and not this branch. `
-    + "That is how 7,253 passed at a head CI was failing (#2181). Replace node_modules/@a11ign with links to "
-    + "this tree's packages/, keeping the third-party entries symlinked, then `npm run build`.";
+    + "That is how 7,253 passed at a head CI was failing (#2181). If node_modules is itself a symlink, "
+    + "`rm node_modules` (the link: no trailing slash, no -r) and run `pnpm install --frozen-lockfile`, which "
+    + "links @a11ign/* to this tree's packages/.";
 }
 
 /** The one named way past `suiteStartVerdict`'s refusal, so a deliberate run against another checkout is possible and LOUD. */

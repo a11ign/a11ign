@@ -470,7 +470,14 @@ if [ ! -x node_modules/.bin/eslint ]; then
   echo "pre-push: REFUSING — no toolchain here (node_modules/.bin/eslint is missing)."
   echo "  This checkout cannot run lint, typecheck or the tests, so a push from it would be UNVERIFIED."
   echo "  It is not your change: nothing has been examined."
-  echo "  Run \`npm install\` here, or push from a checkout that has one."
+  echo "  Run \`pnpm install --frozen-lockfile\` here (\`corepack pnpm install --frozen-lockfile\` if pnpm is not"
+  echo "  on PATH), or push from a checkout that has one."
+  if [ -L node_modules ]; then
+    # pnpm follows a symlink and rewrites what it points at, so \`.pnpmfile.cjs\` refuses to install through one
+    # (#2297). Say so here, or the reader runs the command above and meets that refusal second.
+    echo "  node_modules here is a SYMLINK (to $(readlink node_modules)): \`rm node_modules\` first -- the link,"
+    echo "  no trailing slash, no -r -- and nothing behind it is touched."
+  fi
   exit 1
 fi
 
