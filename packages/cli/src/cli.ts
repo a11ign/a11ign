@@ -30,8 +30,9 @@ import { reportLines, type Report } from "./report.js";
 import {
   formatFaultMessage, formatAuthFaultMessage, formatDoubtMessage, formatEarlyContainmentNotice,
 } from "./fault-remediation.js";
-import { AuthError, isAuthFault } from "./auth/auth-faults.js";
+import { isAuthFault } from "./auth/auth-faults.js";
 import { refuseAuthOnRemoteWorker, requireAuthApplied, type AuthRequest } from "./auth/refusals.js";
+import { ruleLayerSignIn } from "./auth/rule-layer.js";
 import { leaseWorker, isAfterRun, type AfterRun, type WorkerLease } from "@a11ign/worker-fleet";
 import { CAPTURE_CLIENT_TIMEOUT_MS, requestJson } from "@a11ign/worker-fleet/worker-http";
 import { captureTolerantly } from "@a11ign/worker-fleet/capture-client";
@@ -702,7 +703,7 @@ export async function captureAndScan(
   const [firstCap, axe] = await Promise.all([
     captureViaWorker(url,
       { task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, probeFocusReveal, formState, auth }),
-    pageContext(url, ruleLayer, axeResults),
+    pageContext(url, ruleLayer, axeResults, { auth }),
   ]);
   // `null` when the rule layer did not run, so "unchecked" can never be mistaken for "clean". Both
   // output paths must use THIS, not `axe.findings`: the human report already did
@@ -1099,20 +1100,32 @@ export async function chooseRuleLayer({ wantAxe, axeResults }: { wantAxe: boolea
  *
  * Decided here now, by the function that knows. There is no second place to get it wrong.
  */
-async function pageContext(url: string, layer: RuleLayer, axeResults: string | null):
-Promise<{ findings: AxeFinding[] | null; title: string; coverage: RuleLayerCoverage;
+/**
+ * The page's title where the rule layer could not supply it. A plain unauthenticated fetch of an address that needs a
+ * login returns the LOGIN WALL's title, and the capture (signed in) would then be judged as "not about this page" and
+ * re-captured three times. So an authenticated run supplies no title, which `captureMentionsTitle` reads as "nothing to
+ * check" (lenient by design) instead of as a mismatch.
+ */
+const titleWithoutTheRuleLayer = (url: string, auth: AuthRequest | undefined): Promise<string> =>
+  auth ? Promise.resolve("") : fetchPageTitle(url);
+
+export async function pageContext(
+  url: string, layer: RuleLayer, axeResults: string | null,
+  { auth, scan = scanWithAxe }: { auth?: AuthRequest; scan?: typeof scanWithAxe } = {},
+): Promise<{ findings: AxeFinding[] | null; title: string; coverage: RuleLayerCoverage;
   browserChannel: AxeBrowserChannel | null }> {
   if (layer === "import" && axeResults) {
     const imported = await loadAxeResults(axeResults);
     warnOnUrlMismatch(imported.scannedUrl, url);
     process.stderr.write(`Using ${imported.findings.length} imported axe violation(s) from ${axeResults}\n`);
-    return { findings: imported.findings, title: await fetchPageTitle(url), coverage: imported.coverage,
+    return { findings: imported.findings, title: await titleWithoutTheRuleLayer(url, auth), coverage: imported.coverage,
       browserChannel: null };
   }
   if (layer === "none") {
-    return { findings: null, title: await fetchPageTitle(url), coverage: {}, browserChannel: null };
+    return { findings: null, title: await titleWithoutTheRuleLayer(url, auth), coverage: {}, browserChannel: null };
   }
-  return scanWithAxe(url).then((result) => {
+  // An authenticated run signs in FOR ITSELF in this layer's own browser (ADR 0038): it never receives the worker's session.
+  return scan(url, auth ? { signIn: ruleLayerSignIn({ plan: auth, url }) } : {}).then((result) => {
     // WHICH BROWSER ANSWERED, reported rather than assumed — see `launchBrowser`. The Action skips the
     // bundled download deliberately, so seeing "msedge" there is the fallback working as designed, not a
     // warning; seeing it locally on a machine with no Edge would be the warning.
@@ -1120,11 +1133,14 @@ Promise<{ findings: AxeFinding[] | null; title: string; coverage: RuleLayerCover
       ? "the bundled Chromium" : "the system Edge (channel: msedge)"}\n`);
     return result;
   }).catch(async (e: Error) => {
+    // A login that failed is an ERROR and not a rule layer that "failed to run": swallowing it would report the run as
+    // examined with nothing behind the login examined (ADR 0038, clause 1). Anything else stays what it always was.
+    if (isAuthFault((e as { fault?: unknown }).fault)) throw e;
     process.stderr.write(`axe-core scan failed (continuing without it): ${e.message}\n`);
     // NULL, not []. The visual criteria are unchecked, and saying "0 violations" here would be the one
     // thing this tool must never do. `coverage: {}` is the same statement per criterion: a scan that
     // THREW examined nothing, so nothing may be reported as examined-and-clean.
-    return { findings: null, title: await fetchPageTitle(url), coverage: {}, browserChannel: null };
+    return { findings: null, title: await titleWithoutTheRuleLayer(url, auth), coverage: {}, browserChannel: null };
   });
 }
 
@@ -1374,5 +1390,5 @@ if (isProgram) main().catch((err: unknown) => {
   // artifact-schema-mismatch) is a third thing again: not the caller's mistake and not an ordinary tool
   // bug, so exit 3 says "wait for a release" rather than inviting a retry loop the way exit 1 would.
   // An authenticated run's refusal is the caller's to fix, like a config error, and not "wait for a release".
-  process.exit(err instanceof FormsConfigError || err instanceof PageListError || err instanceof AuthError ? 2 : fault ? 3 : 1);
+  process.exit(err instanceof FormsConfigError || err instanceof PageListError || isAuthFault(fault) ? 2 : fault ? 3 : 1);
 });
