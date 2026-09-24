@@ -776,7 +776,13 @@ export function selectionFor(files, { repoRoot, allPackages, testPackages }) {
   // 'packages/*/src/**/*.test.ts' | wc -l` gives today's count. #1358: the same population is where a
   // document's by-path readers are searched for.
   const everyTestFile = discoverTestFiles(repoRoot, allPackages);
-  const result = selectTests(files, { closureOf, testFiles, repoRoot, testPackages, referenceCandidates: everyTestFile });
+  const selected = selectTests(files, { closureOf, testFiles, repoRoot, testPackages, referenceCandidates: everyTestFile });
+  // #2277: `changedFiles` keeps BOTH sides of a rename (`--no-renames`), so a test moved to another package
+  // arrives here as its OLD path, and `classifyOneFile` selects a changed test file as itself. That path is not on
+  // disk, so `assert-glob-not-empty` refused the run as "matched 0" and the `ts` job went red on a PR that moved a
+  // test and nothing else wrong. The NEW path is in `files` too and selects the moved test; the old one names
+  // nothing to run. Filtered here, where `repoRoot` is known, rather than in the pure `selectTests`.
+  const result = { ...selected, selectedTests: selected.selectedTests.filter((t) => existsSync(join(repoRoot, t))) };
   return { result, closureOf, everyTestFile };
 }
 
