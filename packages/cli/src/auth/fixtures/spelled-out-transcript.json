@@ -1,0 +1,30 @@
+{
+  "_about": "A transcript in which the FAKE credential canaryuser6d3f2a (letters and digits only, ADR 0038 Constraint 4) is spelled out one character at a time, as NVDA speaks typed characters. It is the positive control for the detector's per-character branch: a contiguous search reads it as clean, and the detector must report it. The credential is fake and belongs to no account.",
+  "capture": {
+    "url": "https://app.example.test/login",
+    "screenReader": "nvda",
+    "transcript": [
+      "Sign in page",
+      "Sign in, heading level 1",
+      "Email address, edit, blank",
+      "c",
+      "a",
+      "n",
+      "a",
+      "r",
+      "y",
+      "u",
+      "s",
+      "e",
+      "r",
+      "6",
+      "d",
+      "3",
+      "f",
+      "2",
+      "a",
+      "Password, edit, protected, blank",
+      "Sign in, button"
+    ]
+  }
+}
