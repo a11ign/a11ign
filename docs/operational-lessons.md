@@ -2023,11 +2023,30 @@ evidence, and with what would reopen it.
 *The rule is in [`CLAUDE.md`](../CLAUDE.md); these are its numbers, and each is a reading at a moment.*
 
 This paragraph used to say the trained scorer "assesses the judgment-based WCAG failures" — it does not
-assess them in the sense of concluding anything. Measured 2026-09-14 on the 41 conformant real pages of the calibration
-set at the shipped floor (run 2f9c51aa): **0 criteria asserted wrongly, 422 referred.** One count first read as wrong
-was a publisher-declared exception the corpus lacked (#1610). The product-path figure before it, the last one published,
-2026-08-24 on 18 conformant real pages, is superseded: re-derived at today's code on the 17 of those pages still in
-the corpus, 0 asserted wrongly, 180 referred (#1612).
+assess them in the sense of concluding anything. Measured 2026-09-24 on the 40 conformant real pages of the calibration
+set at the shipped floor 0.6557, captures taken that day at capture protocol 21 (sweep `a11y-job-sweep` at
+`592785c3b8bf`, recorded in `docs/board/reported/gates/sweep-protocol-21-2212.json`): **0 criteria asserted wrongly,
+395 referred.** The headline did not move. The claim says "re-measured at protocol 21" and no more: the two readings
+differ in the capture protocol, ten days of page drift and one moved Ofgem url, and the row cannot separate them, so
+the fall from 422 to 395 and from 41 pages to 40 carry no asserted cause (#2212, #2340).
+
+**The 40 is not the 41 minus one page.** Three pages left the conformant-at-floor set (`gla.ac.uk/undergraduate/degrees/`,
+`data.southwark.gov.uk/data-catalog-explorer/`, and Ofgem's price-cap page at its moved url) and two joined it
+(`gov.uk/vehicle-tax`, `gov.scot/about/`), net −1; the per-page lists are in
+`sweep-compare-protocol-18-vs-21-2212.json`. The −27 in referrals is attributable by page (membership −15, pages that
+stayed −12) and not by cause.
+
+**OPEN reading, not in README (#2412 looks at it):** GLA fell 0.8037 → 0.6241 (−0.18) and Southwark 0.7665 → 0.5069
+(−0.26), further than ten days of drift explains, and nobody has opened either capture. It is a reason to look; the
+claim does not say why. The `rules:real-pages` reading of the moved Ofgem capture was made by the orchestrator
+(#2212, 2026-09-24T13:05Z) and is NOT a recorded gate: the new url reads `["2.4.3"]` against the baseline's `["2.4.3"]`,
+unchanged by the re-key.
+
+**Superseded readings.** 2026-09-14, captures at protocol 18, run `2f9c51aa`, 41 conformant real pages: 0 asserted
+wrongly, 422 referred — superseded by the 2026-09-24 reading above. The product-path figure before that, the last one
+published, 2026-08-24 on 18 conformant real pages, is superseded: re-derived at today's code on the 17 of those pages
+still in the corpus, 0 asserted wrongly, 180 referred (#1612). One count first read as wrong was a publisher-declared
+exception the corpus lacked (#1610).
 README's claim block carries the current statement.
 
 ## axe-core beside the screen-reader layer
@@ -2210,7 +2229,8 @@ directory it works in. [What moved →](docs/operational-lessons.md#the-nested-c
 a11y-witness drives a **real screen reader (NVDA)** through real navigation, **alongside** axe-core (the
 rule/visual layer) rather than instead of it. See `README.md`, `PLAN.md`, `docs/adr/`.
 
-Measured 2026-09-14 on the calibration set: **0 criteria asserted wrongly, 422 referred** — a reading at
+Measured 2026-09-14 on the calibration set: **0 criteria asserted wrongly, 422 referred** (superseded 2026-09-24: 395
+referred at protocol 21, see the section above) — a reading at
 a moment, so re-derive before quoting. README's claim block carries the current statement.
 
 
