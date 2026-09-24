@@ -11,15 +11,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  RESOLUTION, worktreeResolution, resolutionLine, classifyResolvedPath,
-} from "../../../agent-org/src/worktree-resolution.mjs";
+  RESOLUTION, OVERRIDE_ENV, worktreeResolution, resolutionLine, classifyResolvedPath, suiteStartVerdict,
+} from "./worktree-resolution.mjs";
 
-const REPO = fileURLToPath(new URL("../../../../", import.meta.url));
+const REPO = fileURLToPath(new URL("../../../", import.meta.url));
 const PACKAGE = "agent-org";
 
 /** A scratch directory holding the trees a test builds, removed afterwards. */
@@ -127,5 +127,87 @@ test("#2181 THE CALLER: `worktree:whose` prints the resolution line for the tree
     assert.match(ran.stdout, /UNSTAMPED/, "control: the ownership answer is still there");
     assert.ok(ran.stdout.includes(primary), "the resolution line must name the checkout being read");
     assert.match(ran.stdout, /resolve OUTSIDE this worktree/);
+  });
+});
+
+// --- #2218: the refusal, at the point a suite starts ---
+
+test("#2218 THE GREEN DIRECTION: a tree wired to another checkout REFUSES, and a correctly wired one is SILENT", () => {
+  // The pair is the control: `refuse` on the broken tree is only worth believing beside a `proceed` on the
+  // right one, and a host where all 44 trees are mis-wired would otherwise be indistinguishable from a
+  // check that fires on everything.
+  withScratch((base) => {
+    const primary = checkout(base, "primary");
+    const broken = checkout(base, "wt-broken");
+    linkScope(broken, join(primary, "packages", PACKAGE));
+    const right = checkout(base, "wt-right");
+    linkScope(right, join(right, "packages", PACKAGE));
+
+    const refused = suiteStartVerdict(broken, { env: {} });
+    assert.equal(refused.action, "refuse");
+    assert.ok(refused.line?.includes(primary), "the refusal names the checkout being read");
+    assert.ok(refused.line?.includes(OVERRIDE_ENV), "and names the one way past it");
+    assert.deepEqual(suiteStartVerdict(right, { env: {} }), { action: "proceed", line: null });
+  });
+});
+
+test("#2218: a stale COPY refuses too -- inside the tree is not the tree's source", () => {
+  withScratch((base) => {
+    const tree = checkout(base, "wt-copy");
+    mkdirSync(join(tree, "node_modules", "@a11ign", PACKAGE), { recursive: true });
+    assert.equal(suiteStartVerdict(tree, { env: {} }).action, "refuse");
+  });
+});
+
+test("#2218: an override still PRINTS -- it is `warn`, never silence -- and only the exact value 1 counts", () => {
+  withScratch((base) => {
+    const primary = checkout(base, "primary");
+    const tree = checkout(base, "wt-override");
+    linkScope(tree, join(primary, "packages", PACKAGE));
+    const warned = suiteStartVerdict(tree, { env: { [OVERRIDE_ENV]: "1" } });
+    assert.equal(warned.action, "warn");
+    assert.ok(warned.line?.includes(primary), "the override does not stop the line naming what is being read");
+    for (const value of ["", "0", "true", "yes"]) {
+      assert.equal(suiteStartVerdict(tree, { env: { [OVERRIDE_ENV]: value } }).action, "refuse", `"${value}"`);
+    }
+  });
+});
+
+test("#2218: a tree with NOTHING linked proceeds -- the runner cannot start there and says so itself", () => {
+  withScratch((base) => {
+    assert.equal(suiteStartVerdict(checkout(base, "wt-fresh"), { env: {} }).action, "proceed");
+  });
+});
+
+test("#2218 THE CALLER: `assert-glob-not-empty --run` refuses in a mis-wired tree BEFORE any runner starts", () => {
+  // A copy of the floor inside a constructed tree whose `@a11ign/worker-fleet` reads ANOTHER constructed checkout: the floor
+  // asks about the tree it lives in, so this is the broken shape by construction. The refusal precedes the
+  // spawn, so no runner is reached and nothing is measured.
+  withScratch((base) => {
+    const tree = checkout(base, "wt-caller");
+    for (const rel of ["packages/guards/src/assert-glob-not-empty.mjs", "packages/guards/src/worktree-resolution.mjs",
+      "scripts/npm-cli-executable.mjs"]) {
+      mkdirSync(join(tree, rel, ".."), { recursive: true });
+      copyFileSync(join(REPO, rel), join(tree, rel));
+    }
+    mkdirSync(join(tree, "packages", "x"), { recursive: true });
+    writeFileSync(join(tree, "packages", "x", "a.test.ts"), "");
+    // The floor imports `@a11ign/worker-fleet/cli-flags`, which the real package serves from `dist/` -- a
+    // build product a clean checkout does not have. So the OTHER checkout is constructed too, with the one
+    // entry the import needs copied from source: the fixture depends on nothing `npm run build` makes.
+    const other = join(base, "other-checkout", "packages", "worker-fleet");
+    mkdirSync(join(other, "dist"), { recursive: true });
+    writeFileSync(join(other, "package.json"), JSON.stringify({
+      name: "@a11ign/worker-fleet", type: "module", exports: { "./cli-flags": "./dist/cli-flags.mjs" },
+    }));
+    copyFileSync(join(REPO, "packages/worker-fleet/src/cli-flags.mjs"), join(other, "dist", "cli-flags.mjs"));
+    mkdirSync(join(tree, "node_modules", "@a11ign"), { recursive: true });
+    symlinkSync(other, join(tree, "node_modules", "@a11ign", "worker-fleet"));
+    const ran = spawnSync(process.execPath, [join(tree, "packages/guards/src/assert-glob-not-empty.mjs"),
+      "packages/x/a.test.ts", "--run", "--runner=rstest"], { cwd: tree, encoding: "utf8", env: { ...process.env, [OVERRIDE_ENV]: "" } });
+    assert.equal(ran.status, 1, ran.stdout + ran.stderr);
+    assert.match(ran.stderr, /REFUSING: this tree does not measure itself/);
+    assert.match(ran.stderr, /resolve OUTSIDE this worktree/);
+    assert.ok(ran.stderr.includes(join(base, "other-checkout")), "the refusal names the checkout being read");
   });
 });
