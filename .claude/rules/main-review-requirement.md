@@ -32,6 +32,5 @@
   dismissing reviews.** `dismiss_stale_reviews` covers APPROVING reviews only, so it could not have
   cleared the `CHANGES_REQUESTED` that stalled #2049 for seven hours — and *Update branch*, which
   `update-branch-sweep.mjs` runs after every merge, would have stalled 15 of the last 40 merges.
-- `readPrs` asks for `reviewDecision` on the `pr list` call it already makes, and **`pr-review-blocked`**
-  names every green, unheld PR GitHub is holding.
+- **A refusal posted AFTER queue entry does NOT stop the merge (#2206):** post it BEFORE the arming approval.
 - **A grep count in a row body is a reading at a moment: re-run it at YOUR commit.**
