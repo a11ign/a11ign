@@ -3,9 +3,9 @@
  *
  * `cli.ts` had no tests, and the reason was structural rather than principled: it exported nothing, so
  * nothing could import it. "Capture needs NVDA on Windows" is true of the code that DRIVES NVDA and not of
- * the code that reads what NVDA said — and this repo has 2,122 real captures on disk. Mocking from
- * recorded output is not a compromise here; it is better evidence than an invented fixture, because the
- * shapes are ones the pipeline actually produces.
+ * the code that reads what NVDA said — and the corpus (`runs/`, not in this repository) holds thousands
+ * of real captures. Mocking from recorded output is not a compromise here; it is better evidence than an
+ * invented fixture, because the shapes are ones the pipeline actually produces.
  *
  * Skips honestly when the corpus is absent, as `verify.corpus.test.ts` does — CI cannot see `runs/`.
  *
