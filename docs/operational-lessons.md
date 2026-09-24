@@ -2324,3 +2324,33 @@ write only a live queue can verify, and a misfire costs more than the wait it sa
 **Nothing opens a `revert/` branch:** `trunk-revert.test.ts` walks every workflow and fails on `git revert`, a
 `revert/` branch, a revert pull request, or a name of the deleted script -- with a positive control that the
 walk found the workflows, since an emptiness assertion over a walk that found nothing passes.
+
+## The standing three are DRAINED, not retired, and the drain lifts itself (#2324)
+
+`ceo`'s #1950 ruling (b, 2026-09-24): once #2323's teardown exists, the three standing engineers finish the rows
+they hold and claim no NEW ones, so every new row goes through spawn and #1950's 20 clean cycles build at full
+throughput. **Nothing is retired** -- a drained role keeps its pane, its role and every order about a row it
+already holds (rework, review answers, which are addressed to it by name and never reach the pool's
+`ineligibleReason`). The fact is `"drain": true` in `sessions.json`, read by `drainedRoles`, and **it is reversible
+by removing one field**.
+
+**Both halves are needed.** `route` skipping a drained role stops the tick OFFERING it a row; `row-claim` refusing
+its hand claim is what stops an engineer that finishes a row from claiming the next itself and keeping the history
+the design exists to drop (the chairman's own reading of `worker-4`). Both read one function, `activeDrain`, so the
+offer and the refusal cannot disagree. The spawn also refuses to start INTO a drained role's address: an instance
+there would be refused at the claim and sit holding it.
+
+**It lifts itself on a failed cycle** -- the chairman's safety condition for having no fixed cap. `drainInForce` is
+true while the NEWEST `spare-cycles` line is clean, and **true on an empty ledger** (nothing has failed, and
+nothing else would ever start the count). One failed line, or a line that cannot be parsed, and the standing three
+claim again until `ceo` re-arms it by editing the file. `npm run spawn:cycles` prints the current run, the last
+line and the drain's state; on an EMPTY ledger it exits non-zero rather than print `0`, because "no cycle has run"
+and "the run broke at zero" are different statements.
+
+**Spawn only for a row that would pass the claim (ruling d).** Before the tick opens a pane it runs the claim's own
+#1886 `blockedBy` check and B4's file-overlap check on the order's row (`spawnClaimability`, calling
+`blockedByEdgeReason` and `fileOverlapReason` rather than restating them) and starts nothing for a row either
+refuses; the tick log names the check and the row stays offered. B2 is not asked -- a fresh instance holds no rows.
+Both fail open on a lookup that cannot ask, as the claim's do, and say so. **The bound on the pool is the dependency
+graph, and it is only as good as the edges in it:** a row that needs the worker fleet and carries no edge to it gets
+an instance that cannot finish, so a missing edge is a defect in the row (`product-manager`'s to fix).
