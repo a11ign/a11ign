@@ -60,6 +60,11 @@ RULES WORTH KNOWING BEFORE YOU WRITE ONE
 what you broke, and that the guard bit. `npm run mutate` makes it cheap, and `pr:open` RUNS a `npm run mutate` line
 here on YOUR machine and WARNS (never refuses) when it reports the guard did not bite (#2307). Other lines are not run.
 
+  - **REQUIRED WHEN THE DIFF ADDS OR CHANGES A TEST FILE (#2305).** CI reads the diff, and a PR that touches a
+    `*.test.ts`/`*.test.mjs` (or a `test_*.py`) with an empty `Mutation:` reports `MUTATION: MISSING` and fails,
+    exactly as a missing `Closes:` does. It checks that the line EXISTS, not that a mutant ran -- the cheap half.
+  - NOTHING TO BREAK (a rename, a fixture-only edit)? Write `Mutation: none -- <reason>`. The reason is REQUIRED.
+
 `Closes #N` still belongs on a PR that finishes a row. GitHub does not apply the reference when the bot
 performs the merge, so `trunk.yml`'s `closeRows` job does it explicitly (#298, #909) -- but the keyword is what it reads.
 
