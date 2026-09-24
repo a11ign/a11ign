@@ -56,8 +56,9 @@ RULES WORTH KNOWING BEFORE YOU WRITE ONE
   - Genuinely nothing to run? `Acceptance: none — <reason>`. The em dash matters: `none -- reason` parses the reason as "- reason". The reason is REQUIRED, because "nobody wrote
     one" and "this one deliberately has none" must stay different states.
 
-`Mutation:` is NOT executed -- a mutation edits a real file and a shared runner must not. It is the RECORD:
-what you broke, and that the guard bit. `npm run mutate` makes it cheap.
+`Mutation:` is NOT executed by CI -- a mutation edits a real file and a shared runner must not. It is the RECORD:
+what you broke, and that the guard bit. `npm run mutate` makes it cheap, and `pr:open` RUNS a `npm run mutate` line
+here on YOUR machine and WARNS (never refuses) when it reports the guard did not bite (#2307). Other lines are not run.
 
 `Closes #N` still belongs on a PR that finishes a row. GitHub does not apply the reference when the bot
 performs the merge, so `trunk.yml`'s `closeRows` job does it explicitly (#298, #909) -- but the keyword is what it reads.
