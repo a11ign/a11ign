@@ -154,6 +154,35 @@ export function withSandbox({ prefix, base = tmpdir() }, body) {
 }
 
 /**
+ * A sandbox that OUTLIVES this call: `mkdtemp`, `populate` run inside it, and the directory handed back for
+ * the caller to remove -- the shape of a fixture built once at module load and removed in `after()`, which
+ * `withSandbox` (body-then-remove) cannot express. #2154: `trunk-revert-guard.test.ts` clones the whole
+ * repository into `/tmp` once per file, and that `git clone` is the line a full tmpfs killed.
+ *
+ * The same classification as `withSandbox`, for the same reason. A `populate` that throws removes the
+ * half-built directory first -- a failed clone must not leave the bytes that filled the disk behind -- and
+ * then throws the exhaustion line for `ENOSPC`/`EDQUOT`/`EACCES` (an `execFileSync` child that died of a
+ * full disk carries the phrase in its message and `stderr`, which `exhaustionCause` reads) or the original
+ * error untouched for anything else.
+ *
+ * @param {{ prefix: string, base?: string }} options the `mkdtemp` prefix, and where to put it
+ * @param {(root: string) => void} populate
+ * @returns {string} the real path of the populated sandbox; the caller removes it
+ */
+export function buildSandbox({ prefix, base = tmpdir() }, populate) {
+  const intended = join(base, prefix);
+  let root = "";
+  try {
+    root = realpathSync(mkdtempSync(intended));
+    populate(root);
+    return root;
+  } catch (error) {
+    if (root !== "") rmSync(root, { recursive: true, force: true });
+    throw sandboxExhaustionError(error, root === "" ? intended : root) ?? error;
+  }
+}
+
+/**
  * How much room the sandbox root's filesystem had at the moment of failure, named against the deepest path
  * that actually EXISTS -- when `mkdtemp` is what failed there is no root to stat, and its parent is the
  * filesystem the caller needs to hear about.
