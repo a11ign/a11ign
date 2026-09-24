@@ -40,20 +40,15 @@ jobs:
       # default shallow clone (depth 1) is correct and unchanged from the original job. Recorded because
       # the asymmetry is easy to "fix" by copy-pasting `ts`'s checkout without noticing why it differs.
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - uses: actions/cache@v4
-        id: node-modules-cache
-        with:
-          path: node_modules
-          key: node-modules-${{ hashFiles('package-lock.json') }}
-      - if: steps.node-modules-cache.outputs.cache-hit != 'true'
-        run: npm ci --ignore-scripts
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: npm run build
       # #497: DEEPEN THE CHECKOUT ONLY WHEN THE PR BODY ASKS FOR IT, via the SAME function
       # `acceptance-commands.mjs` uses to decide what to refuse -- `hasFullHistoryDeclaration`, imported
       # from the already-built module rather than re-typing the `History: full` regex a second time in
-      # shell. Placed AFTER checkout+build, deliberately: it needs `npm ci`/`npm run build` to have already
+      # shell. Placed AFTER checkout+build, deliberately: it needs the install and `npm run build` to have already
       # produced a working tree, and it must run BEFORE the final step so a test declaring `requires:
       # history` sees real history rather than this job's default depth-1 clone (#510). `git fetch` needs
       # no more than this job's own `contents: read` -- it never writes anything.

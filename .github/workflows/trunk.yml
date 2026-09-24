@@ -122,14 +122,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { ref: main }
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
+        with: { node-version: 22, cache: pnpm }
       - name: Was the pull request that produced this commit actually tested? (#118)
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: node packages/agent-org/src/workflow-run-liveness.mjs --sha=${{ github.sha }}
-      - run: npm ci --ignore-scripts
+      - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Are the board editions still arriving? (#272, #590)
         continue-on-error: true
         env:
@@ -202,9 +203,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci --ignore-scripts
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: npm run build
       # THE PAT, NOT `github.token`, AND FOR TWO INDEPENDENT REASONS -- either one alone is sufficient,
       # which is why fixing only the more visible of them produces a WORSE failure than the one it fixes.
@@ -282,8 +284,8 @@ jobs:
           git -C /tmp/parent checkout --quiet --detach "$BEFORE"
           cd /tmp/parent
           # `|| true` on each: a re-check that CANNOT RUN must report unknown rather than fail, and a
-          # non-zero from `npm ci` is not the same answer as a non-zero from the suite.
-          if ! npm ci --ignore-scripts > /tmp/parent-install.log 2>&1; then
+          # non-zero from the install is not the same answer as a non-zero from the suite.
+          if ! pnpm install --frozen-lockfile --ignore-scripts > /tmp/parent-install.log 2>&1; then
             echo "::warning::could not install at the parent; the re-check is UNKNOWN, not a pass."
             echo "result=unknown" >> "$GITHUB_OUTPUT"
             exit 0
