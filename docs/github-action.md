@@ -386,11 +386,57 @@ Nothing is submitted that the config does not name. `probe-forms` and `forms` ca
 config applies it REPLACES the opportunistic probe for that capture rather than running beside it, because
 pressing submit part-way through filling would attribute the evidence to a state that never existed.
 
+## Several pages — the `urls` input
+
+Give `urls` instead of `url` to test more than one page in one run. **Exactly one of the two:** both, or neither, is
+refused before any setup is billed.
+
+```yaml
+      - uses: a11ign/a11ign@v0.1.0
+        with:
+          urls: |
+            https://example.com/
+            https://example.com/contact
+            https://example.com/checkout
+          task: Send an enquiry
+          fail-on: serious
+```
+
+- **It is a list you write, not a crawl.** Nothing follows a link or reads a sitemap: the number of captures is the number
+  of URLs, and a page you did not name is not examined. A list of one behaves exactly as `url` does.
+- **The count comes first.** Before any capture the log says `3 captures, about 21 minutes (up to 27 if every page is as slow
+  as the slowest measured; set the job's timeout-minutes to at least 27).` followed by the file the estimate comes from. It is an
+  UPPER bound: a page whose probes navigate away finishes in a third of the time.
+- **Above 5 captures it refuses, and you raise the cap on purpose.** Set `max-pages: 8` (a whole number, 1 to 25) on the
+  step to allow eight. 25 is a ceiling the override cannot pass. Nothing else raises it: no environment variable and no
+  config file. On this Action **you** pay for the runner minutes, so the refusal names them: eight captures is about 68
+  runner-minutes billed to your account, $0.68 on a private repository at GitHub's $0.010 a Windows minute (a public
+  repository on a standard runner is free). A page with N configured `forms` states counts as N captures.
+- **Where the figures come from:** [`capture-cost.md`](./capture-cost.md) records each one, whether it was measured or chosen,
+  and the run behind it. They are a reading at a moment, not a promise.
+- **`timeout-minutes: 20` fits two captures and no more.** Raise it to the number the count line prints. A run that
+  times out leaves no log and no artifact.
+- **The refusal comes after setup only when the list is too long.** The both-or-neither check runs before setup; the cap
+  check runs in the CLI, so a list over the cap still bills the setup (about a minute and a half) before it is refused.
+- **Every page is reported on its own, in the order you gave them.** The summary opens with a roll-up (one row per page:
+  outcome, findings, and whether it tripped `fail-on`), then each page's own report. **A page whose capture fails is shown
+  as failed, the pages after it still run, and it is never reported as a clean page.** The exit code is 1 if any page
+  tripped `fail-on`, otherwise 2 if any page could not be measured, otherwise 0.
+- **With a `forms` config, every URL must be on the config's origin.** A list that crosses origins is refused whole, before
+  the first page is captured.
+- **`--emit-form-config` and `axe-results` take one page**, so they are refused with a list.
+
+`result-json` for a list is one document, `{ "multiPage": true, "pages": [...] }`, with an entry per URL in the order
+given: `url`, `status` (`captured` or `failed`), `results` (that page's own result, in the shape below; one per configured
+form state) and, for a failed page, `error`. The `findings` output is the sum over the captured pages, and
+`task-completable` is `true` only when every page was captured and judged completable. The CLI takes the same list:
+`npm run witness -- <url> <url> ...` or `--urls "<url> <url>"`, with `--max-pages N` as the override.
+
 ## Outputs
 
 | Output | Use |
 |---|---|
-| `findings` | Count of lived-experience findings. |
+| `findings` | Count of lived-experience findings (summed over the captured pages, for `urls`). |
 | `task-completable` | Whether the judge thinks a screen-reader user could finish the stated task. On the default `local` backend this only means nothing scored as a blocker, a coarse proxy. |
 | `result-json` | Path to the full result, including the transcript. Worth uploading as an artifact — the transcript is the evidence behind every finding. |
 | `summary-md` | Path to the rendered report — the same markdown written to the job summary. Worth uploading alongside `result-json`: it is the route a CI-only consumer, with no access to the job summary, has to the human-readable report. |

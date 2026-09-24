@@ -14,8 +14,32 @@ branding:
 
 inputs:
   url:
-    description: The page to test.
-    required: true
+    description: >-
+      The page to test. Give EXACTLY ONE of `url` and `urls`: both, or neither, is refused before anything
+      is set up. No `default:` on purpose -- an unset input is the empty string, which is how "not given" reads.
+    required: false
+  urls:
+    description: >-
+      Several pages to test, one URL per line (or separated by spaces). Each is captured in turn, in the
+      order given, and reported separately: the summary shows every page and says which ones tripped
+      `fail-on`. A page whose capture fails is reported as failed and does NOT stop the pages after it.
+
+      This is a list you write, NOT a crawl: nothing follows links or reads a sitemap, so the number of
+      captures is the number of URLs. The run prints "N captures, about X minutes" before it captures
+      anything, and REFUSES a list above 5 unless you raise the cap on purpose with `max-pages`. On this
+      Action YOU pay for the runner minutes, so read the estimate: see docs/capture-cost.md.
+
+      A list of one behaves exactly as `url` does. Give EXACTLY ONE of `url` and `urls`.
+    required: false
+    default: ""
+  max-pages:
+    description: >-
+      The explicit override for the cap on captures in one run. Unset, a run is refused above 5 captures.
+      Set a whole number from 1 to 25 to allow that many; 25 is a ceiling the override cannot pass (about
+      210 runner-minutes at the slowest page measured). Nothing else raises it: no environment variable or
+      config file does. A page with N configured form states counts as N captures.
+    required: false
+    default: ""
   task:
     description: >-
       What a user is trying to DO on this page, in plain words ("Complete the checkout").
@@ -206,6 +230,21 @@ runs:
             echo "::error::judge-backend must be local, anthropic or openai (got '${{ inputs.judge-backend }}')." >&2
             exit 1 ;;
         esac
+
+    # Refused HERE, before the ~100 s of setup a Windows runner bills for, and not only in the CLI: `url` and
+    # `urls` are two forms of ONE input, and a workflow that gives both (or neither) has not said which pages
+    # to test. Merging them, or picking one, would silently change what was captured (#2272).
+    - name: Check exactly one of url and urls is given
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.url }}" ] && [ -n "${{ inputs.urls }}" ]; then
+          echo "::error::Give exactly one of url and urls, not both: url is one page, urls is a list of pages." >&2
+          exit 1
+        fi
+        if [ -z "${{ inputs.url }}" ] && [ -z "$(echo "${{ inputs.urls }}" | tr -d '[:space:]')" ]; then
+          echo "::error::Give exactly one of url and urls: no page was given." >&2
+          exit 1
+        fi
 
     - uses: actions/setup-node@v4
       with:
@@ -479,7 +518,13 @@ runs:
         echo "worker ready"
 
         out="$RUNNER_TEMP/a11ign-result.json"
-        args=("${{ inputs.url }}" --task "${{ inputs.task }}" --json)
+        args=(--task "${{ inputs.task }}" --json)
+        # ONE OF THESE TWO, decided by the step above. The CLI takes a positional URL or `--urls <list>` and
+        # refuses both. `max-pages` is the cap override: the flag, and only the flag -- nothing in the
+        # environment reaches it, so raising the cap is always written in the workflow file (#2272).
+        [ -n "${{ inputs.url }}" ] && args+=("${{ inputs.url }}")
+        [ -n "${{ inputs.urls }}" ] && args+=(--urls "${{ inputs.urls }}")
+        [ -n "${{ inputs.max-pages }}" ] && args+=(--max-pages "${{ inputs.max-pages }}")
         [ "${{ inputs.probe-forms }}" = "true" ] && args+=(--probe-forms)
         # A DECLARED config, and it is separate from `probe-forms` rather than replacing it. The
         # configured pass fills every field the config names and then presses the control it names, and
@@ -498,8 +543,19 @@ runs:
         [ "${{ inputs.probe-navigation }}" = "false" ] && args+=(--no-probe-navigation)
         [ "${{ inputs.axe }}" = "true" ] || args+=(--no-axe)
         # stdout is the JSON result; the CLI's diagnostics go to stderr and stay in the log.
-        npx tsx packages/cli/src/cli.ts "${args[@]}" > "$out"
+        #
+        # `|| status=$?`, for the reason the Report step gives: this step runs under `-eo pipefail`, and a list
+        # in which ONE page failed makes the CLI exit 1 AFTER it wrote the result for every page (#2272). A bare
+        # command stopped the step there, so `result-json` was never set and the Report step -- the only thing
+        # that renders the failed page and keeps the other pages' findings -- never ran. The status is handed
+        # on as an output and the Report step re-raises it once the report exists.
+        status=0
+        npx tsx packages/cli/src/cli.ts "${args[@]}" > "$out" || status=$?
+        # No result on disk means the CLI never got as far as reporting (a refusal, a bad flag, a crash):
+        # there is nothing for the Report step to read, so fail here exactly as before.
+        if [ "$status" -ne 0 ] && [ ! -s "$out" ]; then exit "$status"; fi
         echo "result-json=$out" >> "$GITHUB_OUTPUT"
+        echo "capture-status=$status" >> "$GITHUB_OUTPUT"
 
     - name: Report
       id: report
@@ -519,13 +575,27 @@ runs:
         # Outputs are set BEFORE propagating the failure, so a failing check still exposes its numbers to
         # later steps. Reading them from the result rather than re-deriving keeps one source of truth.
         echo "summary-md=$RUNNER_TEMP/a11ign-summary.md" >> "$GITHUB_OUTPUT"
+        # A list of pages writes `{ multiPage, pages }`: the findings are summed over the pages that were
+        # captured, and task-completable is true only when EVERY page was captured and completable -- a page
+        # that failed must not read as a page that passed.
+        #
+        # A result may carry NO verdict: a PDF page emits `{ url, task, pdf }` (a tag-tree scan, no screen reader),
+        # and the summary reports such a page as not measured. So the reducer counts a verdict-less result as no
+        # findings and never as completable, rather than throwing before the outputs are written.
         node -e '
           const r = require(process.argv[1]);
           const fs = require("fs");
-          fs.appendFileSync(process.env.GITHUB_OUTPUT, `findings=${r.verdict.findings.length}\n`);
-          fs.appendFileSync(process.env.GITHUB_OUTPUT, `task-completable=${r.verdict.taskCompletable}\n`);
+          const runs = r.multiPage ? r.pages.flatMap((p) => p.results) : [r];
+          const everyPageCaptured = !r.multiPage || r.pages.every((p) => p.status === "captured" && p.results.length > 0);
+          const findings = runs.reduce((sum, run) => sum + (run.verdict?.findings?.length ?? 0), 0);
+          const completable = everyPageCaptured && runs.every((run) => run.verdict?.taskCompletable === true);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `findings=${findings}\n`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `task-completable=${completable}\n`);
         ' "${{ steps.capture.outputs.result-json }}"
-        exit $status
+        # The capture's own status, raised AFTER the report so a failed page fails the job with its report written.
+        # The report's status wins when it is non-zero: it says WHICH kind of failure (1 tripped fail-on, 2 unmeasured).
+        if [ "$status" -eq 0 ]; then status="${{ steps.capture.outputs.capture-status || 0 }}"; fi
+        exit "$status"
 
     # Last, and `always()`, so the report still lands when the check is failing -- which is exactly when
     # someone wants to read it. `--edit-last --create-if-none` updates the previous comment instead of
