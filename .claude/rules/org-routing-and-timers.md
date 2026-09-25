@@ -40,13 +40,13 @@
 - **`orchestrator` is the first reader for fleet and lab questions**; answers are posted on the row.
 - **PR n's reviewer is `reviewer-<n>`, a herdr name, no roster entry (#2401):** the gate starts it.
   The author re-prompts a live one after a push: `npm run prompt:session -- reviewer-<n> "…"`.
-  **`prompt:session` CLEARS THE SESSION FIRST and a raw `herdr … agent prompt` does not** — use the raw
-  call only to RE-prompt the same draft. No verdict in 30 min goes to `product-manager`,
+  **`prompt:session` CLEARS A STANDING SEAT, never a `reviewer-<n>` or spawned `worker-<n>` (#2483)**, so
+  it re-prompts a reviewer; no raw `herdr … agent prompt`. No verdict in 30 min goes to `product-manager`,
   who re-prompts once, then `ceo`.
 - **ONE CALL IS ENOUGH, AND RETRYING IS THE WRONG THING (#1966).** `prompt:session` **queues** the order
-  (**exit `2` is `QUEUED`, not a failure**) and the next `work:tick` delivers it, cleared. **Do not retry
-  and do not poll:** it clears its target first, so a retry landing as a session goes idle wipes the work
-  it interrupted. A refusal naming a session the org does not know is a typo — NOT queued, and it says so.
+  (**exit `2` is `QUEUED`, not a failure**) and the next `work:tick` delivers it. **Do not retry
+  and do not poll:** a retry is a second copy, and wipes a standing seat's work. A refusal naming a
+  session the org does not know is a typo — NOT queued, and it says so.
 - **A REPORT THAT NEEDS NO DECISION IS A ROW WRITE, NOT AN ORDER (#2167).** The comment plus the label
   change IS the completion, the claim report, the close-out — no turn, and read when its reader next
   acts. So `prompt:session` REFUSES a target already holding 10 (55 of 60 queued orders were for one
