@@ -1,0 +1,5 @@
+---
+"@a11ign/agent-org": patch
+---
+
+**A prompt sent to a session that is out of usage allowance is no longer a delivery, and no longer escalates to the chairman (#2256).** Overnight 2026-09-23/24 every `claude` session answered every prompt with `You've hit your weekly limit · resets 8am (Europe/London)`; the ledger counted each send, eleven causes reached the cap of six, and #2253 and #1926 were labelled `needs:chairman` for an outage. `deliver` now asks whether the target can answer (`sessionAllowance`: the session's own transcript, whose last reply is that sentence and whose timestamp fixes the reset instant) and refuses with the reason, sending nothing, `/clear`ing nothing and writing no ledger line. A pool order skips a limited engineer for the next one, an authored order stays queued, and `escalateStuck` logs `NOT ESCALATED` instead of labelling a row whose session cannot answer. Once the reset passes the session is offered work again, with no clock of ours: anything said after the message also ends it. A herdr, transcript or id that cannot be read is `unknown` and delivers as before.
