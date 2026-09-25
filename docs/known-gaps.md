@@ -2669,7 +2669,7 @@ honest statement is that nobody knows how many real pages autofocus a control th
 
 ## 43. 1.4.13's PROBE FINDS THE PANEL ONLY FROM ONE STARTING POSITION, and the corpus path happens to start there
 
-**Status 2026-09-24: the corpus half is [VERIFIED](#verified-2026-09-24--the-corpus-half-the-probe-finds-the-panel-from-three-trigger-depths-0-1-and-5-and-only-those) at three trigger depths; the real-page half is still open.** The text below is the
+**Status 2026-09-24: the corpus half is [VERIFIED](#verified-2026-09-24--the-corpus-half-the-probe-finds-the-panel-from-three-trigger-depths-0-1-and-5-and-only-those) at three trigger depths; the real-page half is [VERIFIED](#verified-2026-09-25--the-real-page-half-the-fixture-pair-reads-revealed-true-on-both-halves-and-dismissed-splits-them) on the fixture pair, on ONE of two captures.** The text below is the
 original finding, kept as written.
 
 **Found 2026-09-06 by a fixture doing its job — by FAILING.** `rules:coverage` refused a promotion because
@@ -2861,6 +2861,48 @@ same page read `tabs 2, revealedAt 1` from one path and `tabs 8, revealedAt −1
 
 So this section stays open for the real-page half, and no longer for the question of whether the probe is
 position-dependent on the corpus.
+
+### VERIFIED 2026-09-25 — the real-page half: the fixture pair reads `revealed: true` on both halves and `dismissed` splits them
+
+**Two corrections to the wording above, then the reading.** (1) The section's own "what would tell you it is
+closed" says `revealed: false` on the good half. `good.html` is *"the same panel, revealed on focus and
+dismissed by Escape"* (`real-page-corpus.mjs`), and every corpus depth reads `good: revealed: true,
+dismissed: true`. A good half reading `revealed: false` would mean the probe **missed the panel**, which is
+the failure this section exists to rule out. **The discriminator is `dismissed`** — bad `false`, good `true` —
+with `revealed: true` on both. (2) A real-page capture of the pair from 2026-09-14 (protocol 18) already read `tabs 2,
+revealedAt 1` from `Account settings`, so `tabs 8, revealedAt −1` is a reading the walk can still fall back
+to, not the only one the real-page path produces.
+
+**The reading, off `lab:job -e job=capture-real-pages -e role=fixture`** (10 of 10 captured, 0 failed, twice),
+fetched with `lab:fetch` by `orchestrator`, workers 10/10 at `e19f726ecd7d245e`, protocol 21. The bad-half
+walk is from `Account settings, document, focused, read only`, NOT from `Daytime telephone`:
+
+| capture | half | worker | `revealed` | `dismissed` | `tabs` / `revealedAt` | `startedFrom` |
+|---|---|---|---|---|---|---|
+| 2026-09-25T11:42:39Z | bad | a11y-worker-8 | **true** | **false** | 2 / 1 | `Account settings, document, focused, read only` |
+| 2026-09-25T11:42:25Z | good | a11y-worker-4 | **true** | **true** | 2 / 1 | `Account settings, document, focused, read only` |
+| 2026-09-25T11:39:02Z | bad | a11y-worker-3 | `null` | not read | 8 / −1 | `Daytime telephone, edit, focused, blank` |
+| 2026-09-25T11:38:37Z | good | a11y-worker-10 | **true** | **true** | 2 / 1 | `Account settings, document, focused, read only` |
+
+All four carry `focusBefore: Security question, edit, focused, blank` where the walk got as far as the
+reveal, and `focusReset.applied: true`. **The condition is met on the second capture and on the good half of
+both. It is NOT met on the first capture's bad half, and this section does not round that to a pass.**
+
+**The first bad half is a DEGRADED capture, and what it read is the honest refusal.** Its `diagnostics[]`
+show the page was not the walk's starting point: the `focusContext` mark has `startedFrom: "terminal,
+focused, blank"`, both sweeps before it stopped `silent` (~5 s each) where the clean capture stopped
+`exhausted` (~0.3 s), and NVDA logged `browseBufferFresh` ("a new window was launched"). From that position
+the walk did read `tabs 8, revealedAt −1` from `Daytime telephone`, the very shape §43 was filed on — and
+`probeFocusReveal` answered **`revealed: null`, "a control held focus from an earlier probe, so the baseline
+was not the untouched document"**, rather than `revealed: false, "nothing appeared on focus"`. That is the
+distinction the section asked for: a `false` that could be told apart from `false FROM HERE`. The probe no
+longer asserts the absence it cannot see.
+
+**What this leaves open, precisely.** The probe's answer on a real-page path is right when the window is the
+walk's start and refuses when it is not; **why one capture in two began from a terminal on a11y-worker-3 is
+not established** (two captures, one worker each, no repeat on that worker). It is a worker-side start
+condition, not a `probeFocusReveal` defect, and it is recorded on #2478 for `product-manager` to rule on
+rather than filed here.
 
 ## 44. THE "TITLE" THREE CRITERIA COMPARE IS THE LAST THING NVDA SAID, WHICH ON a LIVE-REGION PAGE IS NOT THE TITLE
 
