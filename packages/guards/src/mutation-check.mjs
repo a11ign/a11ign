@@ -54,6 +54,13 @@
 // wiring: the expected result was the test being SKIPPED with `skipped: a capture is writing runs/`, and
 // only reading the output distinguished that from a compile error wearing the same exit code.
 //
+// A GUARD IS "CAUGHT" BY A RUN, AND THE RUN'S SIZE MATTERS (#2541). An agent session's rstest report ends in a
+// `VERDICT` line naming the tests it ran (`scripts/rstest/verdict-reporter.mjs`), and this tool reads it: the CLEAN
+// run must have run at least one test (a clean run of zero tests exits 0 and reads as a pass, which would make every
+// mutant "survive" a test that never ran), and the report names the count the clean run ran and the tests that
+// failed under the mutant, in place of the first six lines of the report, which were its front matter. A test command
+// that prints no such line is unchanged.
+//
 // Exit codes are the contract:
 //   0  the guard BITES -- passed clean, failed mutated, passed restored. See the limit above: this means
 //      the suite went red, NOT that it went red for the reason you mutated
@@ -101,6 +108,27 @@ function run(command) {
     return { ok: false, out: `${e.stdout ?? ""}${e.stderr ?? ""}` };
   }
 }
+
+/**
+ * #2541: the `VERDICT` line rstest's agent report ends in, if `out` carries one.
+ * @param {string} out
+ * @returns {string | undefined}
+ */
+function verdictOf(out) {
+  return out.split("\n").reverse().find((line) => line.startsWith("VERDICT "))?.replace(/ -- full report:.*$/, "");
+}
+
+/**
+ * #2541: the tests that failed, as the agent report names them (`### [F01] <file> :: <test>`), at most `FAILED_NAMED`.
+ * @param {string} out
+ * @returns {string[]}
+ */
+function failedTestsOf(out) {
+  return [...out.matchAll(/^### \[F\d+\] (.+)$/gm)].map((match) => match[1]).slice(0, FAILED_NAMED);
+}
+
+/** How many failing tests the mutated line names: enough to show the guard was consulted, few enough to stay small. */
+const FAILED_NAMED = 5;
 
 /** @param {string} message @returns {never} */
 function refuse(message) {
@@ -173,16 +201,24 @@ function proveRestored(file, test) {
 
 /**
  * 1. THE TEST MUST PASS FIRST. In per-mutant mode the caller has said it already did, and that is taken
- * on its word: this tool cannot see a run that happened in another process.
+ * on its word: this tool cannot see a run that happened in another process. #2541: A CLEAN RUN THAT RAN NOTHING
+ * PASSES TOO, so a report that says it ran zero tests is refused, and the verdict line is returned for the report.
  * @param {string} test @param {boolean} baselinePassed
+ * @returns {string | undefined} the clean run's verdict line, when it printed one
  */
 function requireCleanBaseline(test, baselinePassed) {
-  if (baselinePassed) return;
+  if (baselinePassed) return undefined;
   const before = run(test);
   if (!before.ok) {
     refuse(`the test is ALREADY FAILING before anything was mutated, so this check would prove nothing.\n`
       + `Fix or identify that first. Nothing was touched.\n\n${before.out.trim().slice(-2000)}`);
   }
+  const verdict = verdictOf(before.out);
+  if (verdict?.startsWith("VERDICT REFUSED")) {
+    refuse(`the clean run RAN NOTHING (${verdict}), so every mutant would 'survive' a test that never ran, and a `
+      + "'caught' one would be caught by nothing. Nothing was touched.");
+  }
+  return verdict;
 }
 
 /**
@@ -205,9 +241,23 @@ function judgeMutation({ file, test, applied, changed }) {
       + "`some()` satisfied by a neighbour, is it reading a built copy rather than the source?");
     return EXIT.DID_NOT_BITE;
   }
-  console.log("mutated:  test FAILS, as it must. First lines of why:\n"
-    + during.out.trim().split("\n").slice(0, 6).map((l) => `  ${l}`).join("\n"));
+  console.log(`mutated:  test FAILS, as it must. ${whyItFailed(during.out)}`);
   return EXIT.BITES;
+}
+
+/**
+ * #2541: WHAT FAILED, in the report's own words when it has them (the verdict line and the failing tests' names), and
+ * otherwise the first six lines of the output, which is all a test command that prints no verdict can give.
+ * @param {string} out
+ * @returns {string}
+ */
+function whyItFailed(out) {
+  const verdict = verdictOf(out);
+  const failed = failedTestsOf(out);
+  if (verdict === undefined && failed.length === 0) {
+    return "First lines of why:\n" + out.trim().split("\n").slice(0, 6).map((l) => `  ${l}`).join("\n");
+  }
+  return [verdict ?? "", ...failed.map((name) => `  failed: ${name}`)].filter(Boolean).join("\n");
 }
 
 /**
@@ -262,7 +312,7 @@ function main() {
   refuseBadBatchFlags(args);
   if (!existsSync(file)) refuse(`${file} does not exist.`);
 
-  requireCleanBaseline(test, baselinePassed);
+  const cleanVerdict = requireCleanBaseline(test, baselinePassed);
 
   // 2. COPY ASIDE, never `git checkout --`.
   const stash = path.join(mkdtempSync(path.join(tmpdir(), "mutate-")), path.basename(file));
@@ -270,7 +320,7 @@ function main() {
   const original = digest(file);
   console.log(baselinePassed
     ? `clean:    test assumed to PASS (--baseline-passed). ${file} copied to ${stash}`
-    : `clean:    test PASSES. ${file} copied to ${stash}`);
+    : `clean:    test PASSES${cleanVerdict ? ` (${cleanVerdict})` : ""}. ${file} copied to ${stash}`);
 
   const applied = run(mutate);
   let verdict;
