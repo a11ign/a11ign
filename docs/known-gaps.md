@@ -38,6 +38,7 @@ entry names what is missing, what it would cost, and what would tell you it is f
 - [§48](#48-a-reviewer-can-act-as-a11ign-bot-through-any-shell-wrapper-and-no-path-shim-can-change-that-accepted-by-ceo-2026-09-24-2402) A REVIEWER CAN ACT AS a11ign-bot THROUGH ANY SHELL WRAPPER, AND NO PATH SHIM CAN CHANGE THAT — ACCEPTED by ceo, 2026-09-24 (#2402)
 - [§49](#49-reviewer-auth-failure-is-detected-from-text-nobody-has-seen-render-and-the-refresh-race-is-unmeasured-open-by-design-2401) REVIEWER AUTH FAILURE IS DETECTED FROM TEXT NOBODY HAS SEEN RENDER, and the refresh race is UNMEASURED — OPEN, by design (#2401)
 - [§51](#51-a-run-cannot-get-past-mfa-sso-or-a-captcha-and-nothing-in-the-tool-detects-the-third-out-of-v1-by-ruling-2275-2262) A RUN CANNOT GET PAST MFA, SSO OR A CAPTCHA, AND NOTHING IN THE TOOL DETECTS THE THIRD — OUT OF v1, by ruling (#2275, #2262)
+- [§52](#52-a-claim-that-does-not-move-is-read-from-one-fast-week-and-the-interrupted-pane-needle-was-never-seen-render-open-by-design-2470) A CLAIM THAT DOES NOT MOVE IS READ FROM ONE FAST WEEK, AND THE INTERRUPTED-PANE NEEDLE WAS NEVER SEEN RENDER — OPEN, by design (#2470)
 <!-- known-gaps-index:end -->
 
 ## The order these should be done in
@@ -3382,3 +3383,39 @@ cypress-axe have no primary source either (ADR 0038's own unverified list).
 real `expect:`. The one authenticated capture on record (#2399, `a11y-worker-3`) was a fixture page. **What closes it:**
 one login against a site that redirects to an identity provider and one against a code prompt, on a test account, each
 read for the fault it ends in. Nobody is doing that; the first outsider run whose sign-in is SSO is the natural one.
+
+## 52. A CLAIM THAT DOES NOT MOVE IS READ FROM ONE FAST WEEK, AND THE INTERRUPTED-PANE NEEDLE WAS NEVER SEEN RENDER — OPEN, by design (#2470)
+
+The gate now nudges a claim nothing has moved on for **N = 120 minutes** and releases it N minutes after the nudge, keeps the work
+(`row-claim decline --keep-worktree`, the respawn's `--adopt`), releases a blocked claim and a merged one, and re-sends a delivery a
+`herdr.service` restart killed. What is and is not known, as of 2026-09-25:
+
+- **N is measured from ONE WEEK OF A FAST REGIME, and only from rows that LANDED.** 297 rows claimed 2026-09-18..2026-09-25 (the largest
+  ordinary gap 51 minutes, then nothing until 264, p95.6). A row that stalled and was released never appears in that population, and a slower
+  week would move the number. The gap is read from four signals (claim record, commit, PR, a row comment by the claim record's account); a
+  worktree file's mtime is not retained after a merge, so it is in the LIVE reading and not in the measurement: it can only shorten a gap.
+- **"A row comment by that session" is a row comment by that ACCOUNT.** Two sessions on one account (the workers', the leads') are one author,
+  so a comment by `product-manager` on a row a leads-account seat holds counts as a move. That reads more movement than there is, and fires later.
+- **The interrupted-pane needle (`INTERRUPTED_TEXT`) is the row's own quotation and was NOT SEEN RENDER by the author.** No pane was interrupted
+  while it was written; `herdr agent read <name> --source recent` was read for ordinary idle panes only, and the layout the parser assumes (a rule,
+  `❯`, a rule, a footer under the output) is copied from those. If Claude Code words the line differently the resume silently never fires, and the
+  chairman is the fallback he was before. **What closes it:** the next real interruption, read once by hand and pinned here. **And the same
+  sentence is what Claude Code prints when a PERSON presses Esc**, which text cannot tell from a kill: a pane is resumed only after its session has been
+  silent for `INTERRUPTED_SETTLE_MS` (ten minutes, CHOSEN, not measured), and the resume prompt tells a deliberately stopped session to say so and stop.
+  A person who leaves a session stopped for longer than that is resumed once per twenty minutes.
+- **The second reading is fair only to a holder that was TOLD, and one that cannot be told is released anyway.** A nudge is offered every tick until the
+  wake ledger records it delivered, and the grace runs from THAT delivery. A holder that is never wakeable for `2N` (working for hours, out of allowance,
+  gone) is released at `2N` from the nudge without having been told; the work is kept either way, and the row's next instance starts in it.
+- **A release that keeps failing has no breaker beyond the tick's ATTENTION exit and a repeating `NOT RELEASED` line**, and an adoption the claim keeps
+  refusing (the kept tree re-stamped, its branch moved) is refused on every tick with nothing retiring `kept-claims.json`. Both are visible, neither escalates.
+- **The restart window (60 minutes) is measured from CAUSE deliveries only.** The handoff queue records when an order was delivered and never when
+  it was answered, so the authored half has no latency here. `systemctl` answers only for the LATEST start: an earlier restart is not read, and a
+  restart older than `RESTART_ACT_HORIZON_MS` (24 hours, a chosen number) is history.
+- **"Made no move" is read from the session's TRANSCRIPT** (an assistant entry between the delivery and the moment of asking), a superset of a commit,
+  push, PR, row comment or label change. It errs toward NOT re-sending, and a transcript that cannot be read counts as a move.
+- **A released row whose branch is already on `origin` is NOT respawned by this.** #2031's `row-branch-unshipped` shelves a row with a pushed branch
+  and no pull request and asks `product-manager` to read it (open the PR, delete the branch, or rename it), which is right: that work may already be
+  finished. The kept worktree waits beside it, and the respawn adopts it once the row is offered again. A row released with only local work (the #2407
+  shape: uncommitted, unpushed) is offered at once and the respawn starts in the tree.
+- **A claim with no claim record (a dispatch, or a claim that named neither branch nor worktree) is not evaluated**, and the merged-PR release sees
+  the newest 100 merged pull requests only.

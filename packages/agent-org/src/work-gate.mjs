@@ -75,6 +75,9 @@ import { REPO } from "../../../scripts/repo-identity.mjs";
 import { readTrunkRed, trunkRedOrders } from "./trunk-red.mjs";
 // #2163: FREE BYTES AND FREE INODES. Imports only `node:*`, so the gate keeps the property its own header states.
 import { diskHeadroom, MIN_FREE_FRACTION } from "./disk-headroom.mjs";
+// #2470: A CLAIM THAT DOES NOT MOVE. A leaf, like every import above, so the gate keeps the property its own header states.
+import { STALL_STATE_FILE, claimFactsFrom, readClaim, claimStalledOrders, nextStallState, readStallState,
+  writeStallState, readHerdrRestart, gitRun, pathExists, statMtime, nudgeKey, nudgeDeliveredAt } from "./claim-stall.mjs";
 
 /**
  * FOUR STATES, AND THE POLARITY IS DELIBERATE.
@@ -98,7 +101,7 @@ export const CAUSES = ["draft-awaiting-verdict", "ready-row-unclaimed", "draft-c
   "blocked-unexaminable", "fleet-batch-due", "blocker-cleared", "pr-green-unarmed",
   "claimed-row-amended", "row-branch-unshipped", "host-units-stale", "pr-review-blocked",
   "unclaimed-blocker-cleared", "pr-merge-conflict", "trunk-red", "verdict-comment-unreviewed",
-  "reviewer-auth-failed", "awaiting-evidence-stale", "disk-headroom-low"];
+  "reviewer-auth-failed", "awaiting-evidence-stale", "disk-headroom-low", "claim-stalled"];
 
 /**
  * Causes whose answer is a JUDGMENT about the current state, not an action on a named thing.
@@ -202,6 +205,12 @@ export const JUDGMENT_CAUSES = Object.freeze(["ready-queue-empty", "lane-backlog
  * precisely so the org can find out what is still in flight before that happens. Withholding this cause
  * during one would hide, from the only person who can act on it, the exact population the window is for.
  * It also starts no work: its subject is work that ALREADY EXISTS on origin.
+ *
+ * `claim-stalled` is deliberately NOT here either (#2470), and it is an ACTION cause, not a judgment: the answer is a
+ * nudge or a release, never a question, so it is in neither `JUDGMENT_CAUSES` nor this list. Its subject is a row a
+ * session ALREADY HOLDS, which is the plainest case of work in flight there is; and the window where a stalled claim
+ * costs most is a drain, which exists to LAND what is in flight. A release also returns the row to the pool and starts
+ * nothing itself -- taking it on again is `ready-row-unclaimed`'s, and THAT is withheld by a drain.
  */
 export const START_CAUSES = Object.freeze(["ready-row-unclaimed", "ready-queue-empty",
   "lane-backlog-unpromoted", "org-stalled", "epic-unfiled", "epic-finished",
@@ -256,6 +265,10 @@ export function readPrs(run = defaultRun) {
       // closing HERE rather than in `queue-table.mjs`, whose own header records dropping
       // `mergeStateStatus` precisely because a GraphQL-only field meant a second, refusable call.
       + "reviewDecision,"
+      // #2470: `headRefName` -- WHICH BRANCH a pull request is on, so a claimed row can be asked "does it have an open
+      // one". One more name on the call already made, like the two above; it is what keeps a row whose author is in
+      // review out of `claim-stalled`, whose subject is the build and not the wait for a verdict.
+      + "headRefName,"
       // #2209: `mergeStateStatus` AND `mergeable`, BOTH ON THE SAME CALL, because nothing here read whether
       // a pull request CONFLICTS with `main`. #2203 went DIRTY when #2205 merged, was green and approved,
       // and was reported as a credential outage while six Ready rows sat behind it. `gh pr list --json`
@@ -347,6 +360,12 @@ export const GH_READS = Object.freeze({
   // that would carry every comment on every open row through a 32MB buffer on every tick.
   conditionalOnClaimedRows: "issue list --label in-progress --json number,comments"
     + " (readClaimedRowComments -- claimed-row-amended)",
+  // #2470: ONE MORE READ, PAID BY THE SAME CONDITION (some row is claimed) and for the same reason it is one call and not
+  // one per row: the newest merged pull requests, of which the claimed branches' are found by name. It bounds what a
+  // release for a MERGED row can see to the newest 100 -- at this org's rate about a day -- and a merge older than that,
+  // seen only after the gate was down for longer, is missed, not guessed.
+  conditionalOnClaimedBranches: "pr list --state merged --limit 100 --json number,headRefName,mergedAt"
+    + " (readMergedPrs -- claim-stalled's merged release)",
   // #2286: ONE CALL FOR EVERY BLOCKER, paid only when some unclaimed row has a cleared blocker to ask
   // about. `gh`'s `blockedBy` nodes carry no closing time, and a per-blocker read would make the tick's
   // cost a function of how many rows are waiting.
@@ -374,6 +393,11 @@ export const GH_READS = Object.freeze({
  */
 export const GIT_READS = Object.freeze({
   unconditional: ["git ls-remote --heads origin (readRowBranches -- row-branch-unshipped)"],
+  // #2470: LOCAL, AND SPENDS NO POOL. Per claimed row: `git rev-parse` and `git log` for the newest commit on its branch and
+  // on `origin/<branch>`; `git status`, `git rev-list` only for a row that is quiet or blocked or merged. Plus one
+  // `systemctl --user show herdr.service` for the restart the no-progress clock may not start before.
+  conditionalOnClaimedRows: "git rev-parse/log per claimed branch; git status/rev-list per QUIET claimed worktree;"
+    + " systemctl --user show herdr.service (claim-stalled)",
 });
 
 /**
@@ -2109,6 +2133,178 @@ export function readClaimedRowComments(run = defaultRun) {
     return null;
   }
 }
+
+// --- #2470: A CLAIM THAT DOES NOT MOVE ---------------------------------------------------------------------------------
+
+/**
+ * The newest merged pull requests, in ONE call, for the claimed branches whose work landed while the row stayed open.
+ * `null` FOR A REFUSAL, NEVER `[]` (#1286): an unread list is not "nothing merged", and the merged release is simply not
+ * evaluated this tick.
+ * @param {(args: string[]) => string} [run]
+ * @returns {{ number: number, headRefName: string, mergedAt: string }[] | null}
+ */
+export function readMergedPrs(run = defaultRun) {
+  try {
+    const parsed = JSON.parse(run(["pr", "list", "--state", "merged", "--limit", "100", "--json",
+      "number,headRefName,mergedAt"]));
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * What a row DECLARES it is waiting on, as a phrase, or `null`. Only the waits that are DATA the org already reads -- a
+ * future `Not-before:`, an `answer:<session>` label, a `Fleet-hold-until:` and the chairman's label -- and NOT an open
+ * `blockedBy` edge, which `claimReading` treats separately (a holder with nothing built is released from one).
+ *
+ * `answer:<the holder>` IS NOT A WAIT OF THE HOLDER'S. It says a session owes an answer, and when that session is the one holding the row it
+ * is the row waiting on the HOLDER -- the opposite of a holder with a legitimate reason to be quiet. `ceo`'s ruling on the 2026-09-25 stalled
+ * sweep (a comment on #2470, section B) has `product-manager` set `answer:<holder>` on each stalled claim to wake it; reading those as
+ * declared waits would exempt exactly the rows this cause exists for. An `answer:` owed by ANOTHER session (`answer:product-manager` on a
+ * row an orchestrator holds) is the holder waiting on a ruling, and is respected.
+ * @param {any} row @param {string} holder @returns {string | null}
+ */
+function declaredWait(row, holder) {
+  if (labelsOf(row).includes(CHAIRMAN_LABEL)) return `waiting on the chairman (${CHAIRMAN_LABEL})`;
+  const waiting = waitingOn({ ...row, blockedBy: { nodes: [] } }) ?? fleetWaitingOn(row);
+  if (waiting === null || (waiting.kind === "answer" && waiting.session === holder)) return null;
+  return describeWaiting(waiting);
+}
+
+/**
+ * THE WHOLE OF `claim-stalled` FOR ONE TICK: read every claimed row, decide, keep the nudge memory, and return the orders
+ * (a nudge to a holder; a RELEASE that `wake.mjs` performs).
+ *
+ * A READ THAT WAS REFUSED EVALUATES NOTHING. `claimedComments === null` means the row comments -- one of the four signals --
+ * were not read, and a row read without them looks stalled when it may have been commented on a minute ago. `mergedPrs`
+ * null is milder: only the merged release loses its evidence. A row this cannot READ is skipped by name on stderr, because
+ * a silence about a claim would look like a claim that was fine.
+ *
+ * THE CLOCK NEVER STARTS BEFORE THE LAST `herdr.service` START (`restartAt`, 11f), and the tick reads it only when some row
+ * is claimed at all. NEVER THROWS: a broken detector must not stop the orders behind it, and it says so.
+ *
+ * THE SECOND READING IS FAIR ONLY TO A HOLDER THAT WAS TOLD: for a row with a remembered nudge the tick reads the WAKE LEDGER for that nudge's
+ * key, and the grace runs from the delivery it finds (`claimReading`). `ledger` is the seam for that read; an unreadable ledger reads as "not
+ * delivered", which only DELAYS a release.
+ *
+ * @param {{ rows: any[], claimedComments: any[] | null, openPrs: any[], mergedPrs: any[] | null,
+ *   io?: import("./claim-stall.mjs").HostReads, repo?: string, now?: number, restartAt?: number | null,
+ *   stateDir?: string, log?: (line: string) => void, ledger?: () => string,
+ *   read?: typeof readStallState, write?: typeof writeStallState }} args
+ * @returns {import("./claim-stall.mjs").StallOrder[]}
+ */
+export function claimStallTick({ io = { git: gitRun, exists: pathExists, mtime: statMtime }, repo = REPO_CHECKOUT, now = Date.now(),
+  stateDir = REVIEWER_STATE_DIR, log = (line) => process.stderr.write(line), read = readStallState, write = writeStallState, ...inputs }) {
+  try {
+    return evaluateClaims({ ...inputs, io, repo, now, stateDir, log, read, write });
+  } catch (/** @type {any} */ err) {
+    log(`claim-stall: could not run (${String(err?.message ?? err).split("\n")[0]}) -- no claim-stalled order this tick.\n`);
+    return [];
+  }
+}
+
+/**
+ * `claimStallTick`'s body, with every default resolved by its caller. NEVER CALLED WITHOUT THE CATCH ABOVE: a throw here is the tick's to report.
+ * @param {{ rows: any[], claimedComments: any[] | null, openPrs: any[], mergedPrs: any[] | null, restartAt?: number | null,
+ *   ledger?: () => string, io: import("./claim-stall.mjs").HostReads, repo: string, now: number, stateDir: string,
+ *   log: (line: string) => void, read: typeof readStallState, write: typeof writeStallState }} args
+ */
+function evaluateClaims({ rows, claimedComments, openPrs, mergedPrs, restartAt, ledger, io, repo, now, stateDir, log, read, write }) {
+  const held = rows.filter((r) => labelsOf(r).includes(CLAIM_LABEL));
+  if (held.length > 0 && claimedComments === null) {
+    log("claim-stall: the comments on the claimed rows could not be read -- NO claim was evaluated this tick.\n");
+    return [];
+  }
+  const statePath = `${stateDir}/${STALL_STATE_FILE}`;
+  const before = read(statePath);
+  const byRow = new Map((claimedComments ?? []).map((r) => [Number(r?.number), r?.comments ?? []]));
+  const readings = readClaims({ held, byRow, openPrs, mergedPrs, io, repo, now, before, log,
+    ledger: ledger ?? (() => ledgerText(`${stateDir}/wake-ledger`)), restart: restartFor(held, restartAt) });
+  const after = nextStallState(before, readings, now);
+  if (after !== before) write(statePath, after);
+  return claimStalledOrders(readings, now);
+}
+
+/**
+ * The restart the no-progress clock may not precede: the caller's reading when it has one, else `systemctl`'s -- and only when
+ * some row is claimed, so a quiet org spawns nothing.
+ * @param {any[]} held @param {number | null | undefined} given @returns {number | null}
+ */
+function restartFor(held, given) {
+  if (given !== undefined) return given;
+  return held.length > 0 ? readHerdrRestart(systemctlRun) : null;
+}
+
+/**
+ * @param {{ held: any[], byRow: Map<number, any[]>, openPrs: any[], mergedPrs: any[] | null,
+ *   io: import("./claim-stall.mjs").HostReads, repo: string, now: number, restart: number | null,
+ *   before: import("./claim-stall.mjs").StallState, log: (line: string) => void, ledger: () => string }} ctx
+ */
+function readClaims({ held, byRow, openPrs, mergedPrs, io, repo, now, restart, before, log, ledger }) {
+  /** @type {{ facts: import("./claim-stall.mjs").ClaimFacts, reading: import("./claim-stall.mjs").Reading }[]} */
+  const readings = [];
+  for (const row of held) {
+    const sessions = labelsOf(row).filter((/** @type {string} */ n) => n.startsWith("session:"));
+    if (sessions.length !== 1) {
+      log(`claim-stall: #${row.number} carries ${sessions.length} session labels -- not evaluated.\n`);
+      continue;
+    }
+    const session = sessions[0].slice("session:".length);
+    const facts = claimFactsFrom({ row: row.number, title: row.title, session, waiting: declaredWait(row, session),
+      blockedBy: openBlockers(row), comments: byRow.get(Number(row.number)) ?? [], openPrs, mergedPrs, repo }, io);
+    if ("skip" in facts) {
+      log(`claim-stall: ${facts.skip} -- not evaluated.\n`);
+      continue;
+    }
+    const remembered = before[facts.row];
+    const nudge = remembered?.session === session ? { nudgedAt: remembered.nudgedAt,
+      deliveredAt: nudgeDeliveredAt(ledger(), nudgeKey(session, facts.row, remembered.nudgedAt)) } : null;
+    const reading = readClaim(facts, { now, restartAt: restart, nudge });
+    // A HOLDER THAT HAS WORK AND A BLOCKER is the EXPECTED hold and is not said every tick; only a read that could not be made is.
+    if (reading.kind === "holding" && reading.expected !== true) {
+      log(`claim-stall: #${facts.row} (${session}) is HELD, not released: ${reading.why}.\n`);
+    }
+    readings.push({ facts, reading });
+  }
+  return readings;
+}
+
+/** @param {import("./claim-stall.mjs").StallOrder[] | undefined} orders */
+const stallOrdersOrNone = (orders) => orders ?? [];
+
+/** The wake ledger's text, `""` when it cannot be read. @param {string} path */
+function ledgerText(path) {
+  try {
+    return readFileSync(path, "utf8");
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * `claimStallTick` with its API-facing inputs read HERE, so `main` stays a list of reads: the merged-PR list is paid only when some row is
+ * claimed (`GH_READS.conditionalOnClaimedBranches`). THE OPEN ROWS AND THE OPEN PULL REQUESTS ARE PASSED RAW, `null` for a refusal: with either
+ * missing nothing is evaluated and nothing is written. A refused pull-request read coalesced to "none open" would read a holder whose PR is in
+ * review as one with no PR at all (nudged, or, with a `blockedBy` edge, released), and a refused row read would empty the nudge memory.
+ * @param {any[] | null} rows @param {any[] | null} claimedComments @param {any[] | null} prs
+ * @param {{ tick?: typeof claimStallTick, merged?: typeof readMergedPrs, log?: (line: string) => void }} [deps]
+ */
+export function claimStallsNow(rows, claimedComments, prs, { tick = claimStallTick, merged = readMergedPrs,
+  log = (line) => process.stderr.write(line) } = {}) {
+  if (rows === null || prs === null) {
+    log(`claim-stall: the ${rows === null ? "open rows" : "open pull requests"} could not be read -- NO claim was evaluated this tick.\n`);
+    return [];
+  }
+  const anyClaimed = rows.some((r) => labelsOf(r).includes(CLAIM_LABEL));
+  return tick({ rows, claimedComments, openPrs: prs, mergedPrs: anyClaimed ? merged() : null });
+}
+
+/** @param {string[]} args */
+const systemctlRun = (args) => execFileSync("systemctl", args, { encoding: "utf8", timeout: 10_000 });
+
+/** The checkout this file runs from: where `../wt-<row>` claim records are resolved against. */
+const REPO_CHECKOUT = fileURLToPath(new URL("../../..", import.meta.url));
 
 /**
  * AN EPIC WITH NO CHILDREN IS NOT A CONTAINER -- IT IS WORK NOBODY HAS FILED.
@@ -4256,7 +4452,10 @@ export function performActions(orders, run = defaultRun, log = (line) => process
  *           rowBranches?: {branch: string, head: string, row: number}[] | null,
  *           hostDrift?: {unit: string, problem: string, detail: string}[] | null,
  *           closings?: Map<number, number> | null, trunkRed?: ReturnType<typeof readTrunkRed>,
- *           baseTip?: {sha: string, date: string} | null }} state
+ *           baseTip?: {sha: string, date: string} | null,
+ *           claimStalls?: import("./claim-stall.mjs").StallOrder[] }} state
+ *        `claimStalls` is `claimStallTick`'s orders (#2470): a nudge to a holder whose claim has not moved, or a release
+ *        `wake.mjs` performs. OMITTED MEANS NONE.
  *        `required` is the checks that can block a merge (`requiredCheckNames`), or `null` for
  *        "could not be read", which counts EVERY check as before this existed.
  *        `epics` are the open `epic` rows with their `subIssuesSummary` (`readEpics`); `[]` when
@@ -4299,7 +4498,7 @@ export function performActions(orders, run = defaultRun, log = (line) => process
  */
 export function decide({ prs, readyRows, promotableRows = [], chairmanBlocked = [], prFiles = [],
   drain = false, required = null, epics = [], answerOwed = [], openRows = [], unarmed = null,
-  claimedComments = [], rowBranches, hostDrift, closings, trunkRed, baseTip }) {
+  claimedComments = [], rowBranches, hostDrift, closings, trunkRed, baseTip, claimStalls }) {
   // FIRST, BEFORE EVERY OTHER CAUSE (#2356): a red `main` outranks even `answer-owed` -- see `trunkRedOrders`.
   // `answer-owed` says another session is ALREADY STOPPED waiting on them, which outranks any standing question.
   const orders = [...trunkRedOrders(trunkRed), ...answerOrders(answerOwed)];
@@ -4315,6 +4514,8 @@ export function decide({ prs, readyRows, promotableRows = [], chairmanBlocked = 
   // is queued behind that row stopped with it. Ahead of every cause that offers NEW work: a row already
   // claimed and now runnable beats a row nobody has picked up.
   orders.push(...blockerClearedOrders(openRows, todayIso(), Date.now(), prs));
+  // #2470: A CLAIM THAT DOES NOT MOVE -- it addresses the session that holds a row, so it outranks every cause offering NEW work.
+  orders.push(...stallOrdersOrNone(claimStalls));
 
   orders.push(...perPullRequestOrders(prs, required, baseTip));
   // #2031: AHEAD OF THE OFFER, AND IT IS THE SAME READING THAT WITHHELD IT. `partitionUnclaimed` shelves
@@ -4907,6 +5108,7 @@ function main() {
   // Both names exist so neither reader has to infer which of the two it was given (#1938).
   const openRowsRead = readOpenRows();
   const allOpen = openRowsRead ?? [];
+  const claimedComments = claimedRowCommentsWhenHeld(allOpen);
   // #2031: A LOCAL git CALL, NOT AN API ONE -- it adds nothing to `GH_READS` and cannot be refused by an
   // exhausted pool, which is the whole reason the detection can exist. `GIT_READS` counts it.
   const rowBranches = readRowBranches();
@@ -4923,7 +5125,9 @@ function main() {
     // #2110: CONDITIONAL, and the condition is answered for free from the list already in hand --
     // `readOpenRows` fetched the labels, so "is anything claimed at all" costs no call. A quiet org with
     // nothing in progress pays nothing; a busy one pays exactly one, whatever the size of the queue.
-    claimedComments: claimedRowCommentsWhenHeld(allOpen) ?? [],
+    claimedComments: claimedComments ?? [],
+    // #2470: the SAME comments, read once, and the raw `null` kept for the reader that must tell "refused" from "none".
+    claimStalls: claimStallsNow(openRowsRead, claimedComments, prs),
     // #1969: CONDITIONAL, and the condition is answered for free from the list already in hand.
     // `shouldBeMerging` reads `openPrs`; only if it finds a green, unheld, non-draft PR is the
     // merge-queue call made at all.

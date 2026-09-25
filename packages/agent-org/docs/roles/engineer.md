@@ -34,6 +34,12 @@ assumed standing seats. The org has ruled since, so what follows replaces it.
   A spawned engineer is ended when its row closes and does not start another (#2323); a standing seat under
   the drain claims no NEW row and `row-claim` refuses a hand claim by one (#2324). **So "pull before you
   report" no longer applies to either**, and a completion that names no next row is the normal one.
+- **A claim that stops moving is nudged, then released, and your work is kept (#2470).** Nothing on your row moving for
+  two hours (no commit on its branch, no push, no row comment from your account, no changed file in its worktree) sends
+  you ONE nudge; another two hours after it reaches you, the claim is released and, if you are a spawned engineer,
+  your instance is ended. **Your worktree and everything unpushed in it are kept**, and the next instance starts in
+  them. A commit, a push or a row comment resets the clock. A spawned engineer whose pull request MERGES with nothing
+  else held is ended too (and the row asks `product-manager` what is left), whether or not the row closed.
 - **Check, then claim, from a linked worktree, never the primary checkout:**
   `node packages/agent-org/src/row-claim.mjs check <n>`, then
   `node packages/agent-org/src/row-claim.mjs claim <n> --session=<you> --branch=agent/<slug>-<n> --worktree=../wt-<n>`.
