@@ -79,10 +79,8 @@ the direction where being wrong costs more.
 | Tracker audit | `tracker-auditor` | [`tracker-auditor.md`](./tracker-auditor.md) | `product-manager` |
 | Reviewer (revived 2026-09-12; external tool, GitHub is its inbox) | `reviewer` | [`reviewer.md`](./reviewer.md) | `ceo` |
 | Worker (retired #913; own file not yet swept) | `worker-audit` | [`worker-audit.md`](./worker-audit.md) | — |
-| Worker | `worker-capture` | [`worker-capture.md`](./worker-capture.md) | `product-manager` |
 | Worker (retired #913; own file not yet swept) | `worker-config` | [`worker-config.md`](./worker-config.md) | — |
 | Worker (retired #913; own file not yet swept) | `worker-contracts` | [`worker-contracts.md`](./worker-contracts.md) | — |
-| Worker | `worker-judge` | [`worker-judge.md`](./worker-judge.md) | `product-manager` |
 
 **The spare engineer FAMILY, `worker-<n>` for n from 4 (#2279, #2323, #2403), is one entry in `sessions.json`'s `live`
 and NOT in the table above, on purpose.** A table row is a role with a brief file this check reads for its name,
