@@ -26,6 +26,19 @@
 // Usage:
 //   npm run mutate -- --file=<path> --mutate='<shell that edits the file>' --test='<shell>'
 //
+// A CALLER TRYING MANY MUTANTS OF ONE FILE AGAINST ONE TEST (#2448) pays for the clean run and the restored
+// run once per mutant, and both are the same fact N times. So it may say it has done the first and do the
+// second once, at the end:
+//   npm run mutate -- --file=<path> --mutate='<shell>' --test='<shell>' --per-mutant --baseline-passed
+//       runs the test ONCE (mutated), still copies the file aside and still checks its bytes after EVERY
+//       mutant, and keeps the exit codes and sentences below. `--per-mutant` alone is refused: the clean run
+//       is what refuses an already-red test, so the caller must state (`--baseline-passed`) that it ran it.
+//   npm run mutate -- --file=<path> --test='<shell>' --prove-restored
+//       run ONCE after the last mutant: the test, on the file as the batch left it. Exit 0 if it passes,
+//       3 if it fails -- "byte-identical but the test now fails" is a build output or cache a mutation
+//       command touched, which the per-mutant byte check cannot see. Its exit 0 does NOT mean a guard bit.
+// Without those flags nothing changes: three runs, as before.
+//
 // THE LIMIT OF EXIT 0, AND IT IS THE ONE THING THIS TOOL CANNOT CHECK FOR YOU.
 //
 // This script observes that the test command exited NONZERO while the file was mutated. It cannot observe
@@ -90,85 +103,165 @@ function refuse(message) {
   process.exit(EXIT.REFUSED);
 }
 
-function main() {
-  refuseUnknownFlags(["--file", "--mutate", "--test", "--keep"],
-    { entry: import.meta.url, command: "npm run mutate" });
+const KNOWN_FLAGS = ["--file", "--mutate", "--test", "--keep", "--per-mutant", "--baseline-passed",
+  "--prove-restored"];
+
+/** @returns {{ file?: string, mutate?: string, test?: string, perMutant: boolean, baselinePassed: boolean, proveRestored: boolean }} */
+function readArgs() {
   const argv = process.argv.slice(2);
   /** @type {(name: string) => string | undefined} */
   const flag = (name) => argv.find((a) => a.startsWith(`${name}=`))?.split("=").slice(1).join("=");
+  return { file: flag("--file"), mutate: flag("--mutate"), test: flag("--test"),
+    perMutant: argv.includes("--per-mutant"), baselinePassed: argv.includes("--baseline-passed"),
+    proveRestored: argv.includes("--prove-restored") };
+}
 
-  const file = flag("--file");
-  const mutate = flag("--mutate");
-  const test = flag("--test");
-  if (!file || !mutate || !test) {
-    refuse("this needs --file=<path> --mutate='<shell that edits it>' --test='<shell>'.\n"
-      + "  Example:\n"
-      + "    npm run mutate -- --file=src/rules.ts \\\n"
-      // perl -pi -e, not sed -i '' -- BSD sed (macOS) needs the empty backup-suffix argument GNU sed
-      // (Linux/CI) does not, and GNU sed then reads that empty string as the SCRIPT and the real script
-      // as a FILENAME to edit -- "sed: can't read s/.../.../: No such file or directory". perl's -i has
-      // no such split between platforms.
-      + "      --mutate=\"perl -pi -e 's/>= 3/>= 99/' src/rules.ts\" \\\n"
-      + "      --test='npx tsx --test src/rules.test.ts'");
+const USAGE = "this needs --file=<path> --mutate='<shell that edits it>' --test='<shell>'.\n"
+  + "  Example:\n"
+  + "    npm run mutate -- --file=src/rules.ts \\\n"
+  // perl -pi -e, not sed -i '' -- BSD sed (macOS) needs the empty backup-suffix argument GNU sed
+  // (Linux/CI) does not, and GNU sed then reads that empty string as the SCRIPT and the real script
+  // as a FILENAME to edit -- "sed: can't read s/.../.../: No such file or directory". perl's -i has
+  // no such split between platforms.
+  + "      --mutate=\"perl -pi -e 's/>= 3/>= 99/' src/rules.ts\" \\\n"
+  + "      --test='npx tsx --test src/rules.test.ts'";
+
+/**
+ * The two batch flags are a pair, and either alone is refused rather than ignored: `--per-mutant` without
+ * the statement would let a caller skip the "already failing" check by typing less, and the statement
+ * without the mode would read as having asked for something it did not get (#2448).
+ * @param {ReturnType<typeof readArgs>} args
+ */
+function refuseBadBatchFlags({ perMutant, baselinePassed, proveRestored, mutate }) {
+  if (proveRestored && (perMutant || baselinePassed || mutate)) {
+    refuse("--prove-restored runs the test once, on a file nobody is mutating: it takes --file and --test "
+      + "only, not --mutate, --per-mutant or --baseline-passed.");
   }
-  if (!existsSync(file)) refuse(`${file} does not exist.`);
+  if (perMutant && !baselinePassed) {
+    refuse("--per-mutant skips the clean run that refuses 'the test is ALREADY FAILING', so it needs "
+      + "--baseline-passed: your statement that you ran the test clean and it passed. A mutation check "
+      + "against an already-red test proves nothing, and this tool can no longer see that for itself.");
+  }
+  if (baselinePassed && !perMutant) {
+    refuse("--baseline-passed only means something with --per-mutant; without it the clean run happens "
+      + "anyway, and a flag that changes nothing reads as if it did.");
+  }
+}
 
-  // 1. THE TEST MUST PASS FIRST.
+/**
+ * The batch's closing proof, run once after the last mutant: the per-mutant path checks the file's bytes
+ * every time but no longer runs the test on the restored file, so "byte-identical yet the test now fails"
+ * (a build output or a cache the mutation command touched) is reachable only here.
+ * @param {string} file @param {string} test
+ */
+function proveRestored(file, test) {
+  const after = run(test);
+  if (!after.ok) {
+    console.error(`\nTHE TEST FAILS ON ${file} AFTER THE BATCH. Every mutant restored the file byte for byte, `
+      + "so something a mutation command touched is outside --file: a build output, a second source file, "
+      + `a cache.\n\n${after.out.trim().slice(-2000)}`);
+    process.exit(EXIT.RESTORE_FAILED);
+  }
+  console.log(`restored: the test PASSES on ${file} after the batch.`);
+  process.exit(EXIT.BITES);
+}
+
+/**
+ * 1. THE TEST MUST PASS FIRST. In per-mutant mode the caller has said it already did, and that is taken
+ * on its word: this tool cannot see a run that happened in another process.
+ * @param {string} test @param {boolean} baselinePassed
+ */
+function requireCleanBaseline(test, baselinePassed) {
+  if (baselinePassed) return;
   const before = run(test);
   if (!before.ok) {
     refuse(`the test is ALREADY FAILING before anything was mutated, so this check would prove nothing.\n`
       + `Fix or identify that first. Nothing was touched.\n\n${before.out.trim().slice(-2000)}`);
   }
+}
+
+/**
+ * 3 and 4: the mutation must have landed, and then the test must fail.
+ * @param {{ file: string, test: string, applied: { ok: boolean, out: string }, changed: boolean }} mutation
+ */
+function judgeMutation({ file, test, applied, changed }) {
+  if (!changed) {
+    console.error(`\nREFUSING: the mutation command changed nothing -- ${file} is byte-identical.\n`
+      + "A no-op edit makes the test pass for the wrong reason, and that passing test reads as "
+      + "'the guard does not bite'.\n"
+      + "Check the quoting; a shell-mangled replacement is the usual cause.\n"
+      + (applied.ok ? "" : `\nThe mutation command itself failed:\n${applied.out.trim().slice(-1000)}`));
+    return EXIT.REFUSED;
+  }
+  const during = run(test);
+  if (during.ok) {
+    console.error("\nTHE GUARD DID NOT BITE. The code is broken and the test still passes.\n"
+      + "SUSPECT THE GUARD BEFORE THE CODE: is it asserting on the half you changed, is its "
+      + "`some()` satisfied by a neighbour, is it reading a built copy rather than the source?");
+    return EXIT.DID_NOT_BITE;
+  }
+  console.log("mutated:  test FAILS, as it must. First lines of why:\n"
+    + during.out.trim().split("\n").slice(0, 6).map((l) => `  ${l}`).join("\n"));
+  return EXIT.BITES;
+}
+
+/**
+ * 5. RESTORE, AND PROVE IT -- by bytes always, and by running the test again unless per-mutant mode moved
+ * that proof to the end of the batch (`--prove-restored`).
+ * @param {{ file: string, stash: string, original: string, test: string, perMutant: boolean }} restore
+ */
+function restoreAndProve({ file, stash, original, test, perMutant }) {
+  copyFileSync(stash, file);
+  if (digest(file) !== original) {
+    console.error(`\nTHE RESTORE FAILED. ${file} is not what it was. The copy is at ${stash} and has `
+      + "NOT been deleted. Restore it by hand before doing anything else.");
+    process.exit(EXIT.RESTORE_FAILED);
+  }
+  if (perMutant) {
+    console.log(`restored: ${file} is byte-identical. The test was NOT re-run (--per-mutant): run `
+      + "--prove-restored once after the last mutant.");
+    return;
+  }
+  const after = run(test);
+  if (!after.ok) {
+    console.error(`\nTHE FILE IS RESTORED BYTE FOR BYTE AND THE TEST NOW FAILS ANYWAY. Something the `
+      + "mutation command touched is outside --file: a build output, a second source file, a cache.\n"
+      + `The copy is at ${stash}.\n\n${after.out.trim().slice(-2000)}`);
+    process.exit(EXIT.RESTORE_FAILED);
+  }
+  console.log(`restored: ${file} is byte-identical and the test PASSES again.`);
+}
+
+function main() {
+  refuseUnknownFlags(KNOWN_FLAGS, { entry: import.meta.url, command: "npm run mutate" });
+  const args = readArgs();
+  const { file, mutate, test, perMutant, baselinePassed } = args;
+  if (args.proveRestored) {
+    if (!file || !test) refuse("--prove-restored needs --file=<path> --test='<shell>'.");
+    refuseBadBatchFlags(args);
+    if (!existsSync(file)) refuse(`${file} does not exist.`);
+    return proveRestored(file, test);
+  }
+  if (!file || !mutate || !test) refuse(USAGE);
+  refuseBadBatchFlags(args);
+  if (!existsSync(file)) refuse(`${file} does not exist.`);
+
+  requireCleanBaseline(test, baselinePassed);
 
   // 2. COPY ASIDE, never `git checkout --`.
   const stash = path.join(mkdtempSync(path.join(tmpdir(), "mutate-")), path.basename(file));
   copyFileSync(file, stash);
   const original = digest(file);
-  console.log(`clean:    test PASSES. ${file} copied to ${stash}`);
+  console.log(baselinePassed
+    ? `clean:    test assumed to PASS (--baseline-passed). ${file} copied to ${stash}`
+    : `clean:    test PASSES. ${file} copied to ${stash}`);
 
   const applied = run(mutate);
-  const mutated = digest(file);
   let verdict;
-
   try {
-    // 3. THE MUTATION MUST HAVE LANDED.
-    if (mutated === original) {
-      console.error(`\nREFUSING: the mutation command changed nothing -- ${file} is byte-identical.\n`
-        + "A no-op edit makes the test pass for the wrong reason, and that passing test reads as "
-        + "'the guard does not bite'.\n"
-        + "Check the quoting; a shell-mangled replacement is the usual cause.\n"
-        + (applied.ok ? "" : `\nThe mutation command itself failed:\n${applied.out.trim().slice(-1000)}`));
-      verdict = EXIT.REFUSED;
-    } else {
-      // 4. THE TEST MUST NOW FAIL.
-      const during = run(test);
-      if (during.ok) {
-        console.error("\nTHE GUARD DID NOT BITE. The code is broken and the test still passes.\n"
-          + "SUSPECT THE GUARD BEFORE THE CODE: is it asserting on the half you changed, is its "
-          + "`some()` satisfied by a neighbour, is it reading a built copy rather than the source?");
-        verdict = EXIT.DID_NOT_BITE;
-      } else {
-        console.log("mutated:  test FAILS, as it must. First lines of why:\n"
-          + during.out.trim().split("\n").slice(0, 6).map((l) => `  ${l}`).join("\n"));
-        verdict = EXIT.BITES;
-      }
-    }
+    verdict = judgeMutation({ file, test, applied, changed: digest(file) !== original });
   } finally {
-    // 5. RESTORE, AND PROVE IT -- both by bytes and by running the test again.
-    copyFileSync(stash, file);
-    if (digest(file) !== original) {
-      console.error(`\nTHE RESTORE FAILED. ${file} is not what it was. The copy is at ${stash} and has `
-        + "NOT been deleted. Restore it by hand before doing anything else.");
-      process.exit(EXIT.RESTORE_FAILED);
-    }
-    const after = run(test);
-    if (!after.ok) {
-      console.error(`\nTHE FILE IS RESTORED BYTE FOR BYTE AND THE TEST NOW FAILS ANYWAY. Something the `
-        + "mutation command touched is outside --file: a build output, a second source file, a cache.\n"
-        + `The copy is at ${stash}.\n\n${after.out.trim().slice(-2000)}`);
-      process.exit(EXIT.RESTORE_FAILED);
-    }
-    console.log(`restored: ${file} is byte-identical and the test PASSES again.`);
+    restoreAndProve({ file, stash, original, test, perMutant });
   }
 
   if (verdict === EXIT.BITES) console.log("\nTHE GUARD BITES.");
