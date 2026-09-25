@@ -18,5 +18,7 @@ replacing it, so `A11Y_REVIEWER_SESSION` cannot be dropped by omission. The orde
 `reviewer.md` carries the rule for a verdict whose Acceptance did not execute: never "not runnable" for an environmental reason, and a
 `convinced` that did not execute names its CI run, or it is `not convinced (environment)`.
 
-**Spawn path, read from the code:** `wake.mjs` has one `workspace create` and one `agent start` and no path that resumes a process (its
-`resume` is a plain prompt, #2470), so `reviewer-2485`'s `codex resume` was made outside it. The pin is in `wake-reviewer-instance.test.ts`.
+**Spawn path:** `wake.mjs` has one `workspace create` and one `agent start` and no path that resumes a process (its `resume` is a plain
+prompt, #2470). `herdr.service` restarted at 2026-09-25T12:01:57Z and `reviewer-2485`'s `codex resume`, and four `claude --resume`, started
+at 12:01:58Z-12:01:59Z, so the resume was herdr's restore of every live agent (inferred from the timestamps) and a pane made that way holds
+none of the `--env` the tick gave it. The name therefore also travels in the order's text. The pin is in `wake-reviewer-instance.test.ts`.
