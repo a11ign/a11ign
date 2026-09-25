@@ -46,6 +46,13 @@
  *   Summary `rstest-report-is-not-the-verdict.test.ts` pins. THREE of rstest's twelve agents are matched by a regex on
  *   `PATH`, `EDITOR` or `TERM_PROGRAM` (pi, devin, kiro) and are NOT mirrored: a session of those gets the default
  *   reporter, which is a change in what is printed and never in a verdict or the record.
+ * - **AN AGENT SESSION'S REPORT ENDS IN A VERDICT LINE AND CARRIES ONLY WHAT FAILED (#2541).** The markdown report says
+ *   `"status": "pass"` over a run that matched nothing, and the direct form of the command never passes through
+ *   `assert-glob-not-empty.mjs`, so `verdict-reporter.mjs` is the LAST reporter and prints `VERDICT pass: 154 tests in 11
+ *   files`, or `VERDICT REFUSED: 0 tests run`. The failure blocks use the `compact` preset and no candidate files (no
+ *   code frames, no stack, no list of files the trace touched), which is the trim a session's context pays for; `A11Y_RSTEST_FULL_REPORT=1` gives the whole
+ *   report back, and the verdict line names that flag. **CI is not trimmed** (`isCi`): an Acceptance and a PR body quote
+ *   the CI log as evidence. The `json` record is written either way. A pass is already 44 lines, so it is not touched.
  * - **No coverage block here.** Coverage is step 4 of the adoption, not this one.
  */
 import { defineConfig } from "@rstest/core";
@@ -53,6 +60,7 @@ import { fileURLToPath } from "node:url";
 import { availableParallelism } from "node:os";
 import { existsSync, readdirSync, rmSync } from "node:fs";
 import { basename, join } from "node:path";
+import { FULL_REPORT_FLAG, createVerdictReporter } from "./verdict-reporter.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const registerHook = fileURLToPath(new URL("./register-node-test-alias.mjs", import.meta.url));
@@ -117,17 +125,33 @@ function runRecordPathFor({ root, env, now, pid }) {
 }
 
 /**
- * #2199: the reporters of this run. A run started INSIDE an rstest worker -- a test that spawns rstest to measure it, of
- * which the suite has dozens -- writes no record unless it was told where, because it is not a session's run and each
- * one would push a real record out of the bounded directory: one whole-suite run would evict the previous fifty, red one
- * included, which is the incident. rstest sets `RSTEST_WORKER_ID` in every worker it forks.
+ * #2541: whether this run's console report is the TRIMMED one -- an agent session, outside CI, that did not ask for the
+ * whole report. CI keeps rstest's own markdown preset because what it prints is quoted as evidence.
+ * @param {Record<string, string | undefined>} env
+ * @returns {boolean}
+ */
+function trimsReport(env) {
+  return agentReporterFor(env) === "md" && !isCi(env) && !env[FULL_REPORT_FLAG];
+}
+
+/**
+ * #2199: the reporters of this run, in the order rstest runs them: the console report, then the record, then #2541's
+ * verdict line, which has to come last to be the last line. A run started INSIDE an rstest worker -- a test that spawns
+ * rstest to measure it, of which the suite has dozens -- writes no record unless it was told where, because it is not a
+ * session's run and each one would push a real record out of the bounded directory: one whole-suite run would evict the
+ * previous fifty, red one included, which is the incident. rstest sets `RSTEST_WORKER_ID` in every worker it forks.
  * @param {{ root: string, env: Record<string, string | undefined>, now: Date, pid: number }} run
- * @returns {Array<"md" | "default" | ["json", { outputPath: string }]>}
+ * @returns {NonNullable<import("@rstest/core").RstestConfig["reporters"]> & unknown[]}
  */
 function reportersFor(run) {
-  const console = agentReporterFor(run.env);
-  if (run.env.RSTEST_WORKER_ID && !run.env.A11Y_RSTEST_RECORD_DIR) return [console];
-  return [console, ["json", { outputPath: runRecordPathFor(run) }]];
+  const agent = agentReporterFor(run.env) === "md";
+  const trimmed = trimsReport(run.env);
+  /** @type {unknown[]} */
+  const console = agent ? [["md", trimmed ? { preset: "compact", candidateFiles: false } : { preset: "normal" }]] : ["default"];
+  /** @type {unknown[]} */
+  const record = run.env.RSTEST_WORKER_ID && !run.env.A11Y_RSTEST_RECORD_DIR ? [] : [["json", { outputPath: runRecordPathFor(run) }]];
+  const verdict = agent ? [createVerdictReporter({ hint: trimmed ? `full report: ${FULL_REPORT_FLAG}=1` : undefined })] : [];
+  return /** @type {NonNullable<import("@rstest/core").RstestConfig["reporters"]> & unknown[]} */ ([...console, ...record, ...verdict]);
 }
 
 /** #1319: half the host's cores, at least one -- the most a local run may take of a host other sessions share. */
