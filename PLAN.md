@@ -288,7 +288,8 @@ screen-reader-witnessed findings they can act on — each carrying either an ass
 or a referral worth a person's time, with a stated error bound that holds on pages nobody trained on.
 
 Four phases. They are ordered by dependency, not by preference, and each exits on a **measurement** rather
-than on work being finished. The blocker list below (B1, B5, B7, B8) distributes across them.
+than on work being finished. Every blocker in the list below (B1, B5, B7, B8) is closed (see the
+blocker table), so nothing here waits on one.
 
 ### Phase 1 — The tool stops making claims it has never tested
 
@@ -431,7 +432,7 @@ behind auth". **Two things B1's own wording asks for were NOT STATED, and are re
 inferred:** a plain statement of whether the output was worth their time, and whether the app was theirs (`ceo`'s
 reading of it on 2026-09-24 was a public page). B1 is closed because the chairman owns B1 ("Whose call: Yours"),
 not because those two are met, and a later outsider's plain statement, if it comes, is welcome and would be added
-here. What the feedback started, each as its own row: `task:` honesty #2268 (open), a list of URLs #2272
+here. What the feedback started, each as its own row: `task:` honesty #2268 (closed), a list of URLs #2272
 (closed), authenticated capture #2359 (in progress; ADR 0038). Full record: #2262.
 
 | | blocker | whose | state |
@@ -441,7 +442,7 @@ here. What the feedback started, each as its own row: `task:` honesty #2268 (ope
 | **B7** | ~~the release machinery decided in ADR 0007 does not exist~~ | ours | **CLOSED 2026-08-31** — see `not-working.md` §8 |
 | **B8** | ~~the scorer's 225 free vetoes~~ | ours | **CLOSED 2026-09-05** — see `not-working.md` §2 |
 
-### B7. Nothing can be installed, and the mechanism to change that was decided and never built
+### B7. ~~Nothing can be installed, and the mechanism to change that was decided and never built~~ — CLOSED 2026-08-31
 
 **Why it blocks.** ADR 0007 chose Changesets, independent per-package semver, and a rule that "a PR that
 changes any `packages/*` source **must** include a changeset. CI fails" otherwise. Measured 2026-08-22,
@@ -482,7 +483,7 @@ went unnoticed. Nothing was hard enough to become a visible task.
 > `access: "restricted"` stays set because B5 (the name) is unresolved and is the user's call — that is a
 > B5 gate, not a B7 one, and B7 itself is done.
 
-### B8. The trained scorer penalises features it was never shown, and 225 of them
+### B8. ~~The trained scorer penalises features it was never shown, and 225 of them~~ — CLOSED 2026-09-05
 
 **Why it blocks.** Not because the product is wrong today — the layer split contains most of it, and the
 deterministic rules are exact where they own a subtype. It blocks because **the defect class is invisible
@@ -647,7 +648,7 @@ having — asking "what error rate do we accept?" of this one is the wrong quest
 ≈ 12.5% and nothing finer, so this is not a conformal calibration; it is the measurement a conformal
 calibration would need. The script says so in its own output.
 
-### B5. The name, and publishing
+### B5. ~~The name, and publishing~~ — CLOSED 2026-09-19
 
 **Why it blocks.** Parked deliberately — the packages are unpublished because the name is undecided. A
 general release needs a name, a registry presence, and the licence/attribution story checked once under
