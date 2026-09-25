@@ -2843,9 +2843,21 @@ same page read `tabs 2, revealedAt 1` from one path and `tabs 8, revealedAt −1
   `revealed: false` on the good half, where the original capture read `tabs 8, revealedAt −1`). Every reading
   above is a corpus case; nobody has re-captured `Daytime telephone` → panel, so that path still rests on
   the reset being offline-proven only, as §43's "BOTH HALVES BUILT" paragraph says.
-- **NOT answered — `rules:coverage` reporting `1.4.13 … 1 real` rather than `0`.** It was read as
-  `15 corpus / 1 real` on 2026-09-10, before the reset fix landed, and nothing here re-reads it after; a
-  reading from before the fix cannot say the fix reached the product path.
+- **Answered — `rules:coverage` reporting `1.4.13 … 1 real` rather than `0`.** It was read as
+  `15 corpus / 1 real` on 2026-09-10, before the reset fix landed, and #31's merge (#2263) recorded it as not
+  re-read. `orchestrator` then read it after the fix, on the lab (`npm run lab:job -- -e job=rules-coverage`,
+  exit 0, at `c7ec09dbfaee`, over 4,564 corpus and 119 real captures), so
+  **rules:coverage read 1 real on 2026-09-24** ([#31, 2026-09-24T08:11Z](https://github.com/a11ign/a11ign/issues/31#issuecomment-5810389692)):
+
+  ```
+  criterion  claimed    corpus     real   verdict
+  1.4.13     partial       23        1   validated on real evidence
+  ```
+
+  Quoted, not re-taken here. **`1 real` is ONE real capture, and it is not the fixture-pair condition above:**
+  it says a real page has fired the rule, not that the probe finds `Daytime telephone` → panel through the
+  real-page path with `revealed: true` on the bad half and `revealed: false` on the good half. That condition
+  stays open.
 
 So this section stays open for the real-page half, and no longer for the question of whether the probe is
 position-dependent on the corpus.
@@ -3254,3 +3266,29 @@ and treats **the first real refresh as the measurement**. What is and is not kno
 
 **What closes it:** the first natural refresh (due after 2026-10-03T18:47Z) with N instances live, read from
 `reviewer-refreshes`, beside the wake ledger. Record it here, and then choose the bound and the count from it.
+
+## 50. THE COMPILE CACHE MOVED OFF `/tmp` FOR SHIPPED UNITS AND ONE HOST DOTFILE, and a session already running still writes the old place — HOST FACT, nothing in the repo verifies the dotfile (#2458)
+
+**The writer, measured 2026-09-25 by worker-15 with one command at a time under a private `TMPDIR`** (only that
+command's writes are counted): `tsc`, `eslint`, `rstest` and `changeset` each call `module.enableCompileCache()`
+with no directory, and Node then writes `<os.tmpdir()>/node-compile-cache`. `npm run lint` left 895 files,
+`eslint --version` 194 (entries, directories included), `rstest --version` 28, `changeset --version` 14,
+`tsc --version` 4, `node -e 1` and a `tsx` one-liner no file at all. The row's first reading ("not a launcher") was right about launchers and blind to these four, which
+write on load. **One file copied to two directories made two entries** (measured with a two-file fixture), so the
+key includes the path and every checkout multiplies it: that is the mechanism behind 141,353 inodes, **inferred**
+from that fixture and not counted on the outage's own directory: it was rebuilt after the reboot and held 2,330
+files when read.
+
+**What was done.** Every shipped `.service` carries `Environment=NODE_COMPILE_CACHE=%h/.cache/node-compile-cache`,
+pinned by `host-units.test.ts` (`compileCacheDrift`, with a negative control). And the agent account's `.zshenv`
+exports the same value for every session shell; **that file is on the host and outside this tree, so nothing here
+verifies it and a fresh host would not have it.** Re-run `zsh -c 'echo $NODE_COMPILE_CACHE'` to read it.
+
+**What is NOT done.**
+- **A session whose shell started before the `.zshenv` line still writes `/tmp/node-compile-cache`** until it is
+  restarted, and the directory that exists there now was not removed (a cache, safe to delete, and not this row's
+  to do to other sessions' live work).
+- **`host:check` does not read the dotfile.** A session started without it regresses silently; the tell is a new
+  `/tmp/node-compile-cache` after a session has run `npm run lint`.
+- **The cache directory is unbounded** under the home too, and has no sweep: it costs the same inodes on a
+  persistent disk, where nothing ages it out. A per-checkout key is why it grows with the number of worktrees.

@@ -420,9 +420,23 @@ packages published for real — `a11ign@0.1.0` and `@a11ign/{evidence,judge,nvda
 worker-fleet}@0.1.0`, verified independently against the live registry (`npm view` and a raw `curl`
 to `registry.npmjs.org`), all on `latest`, all naming `a11ign/a11ign`. Full record: #63.
 
+**UPDATE 2026-09-25: B1 is closed, by the chairman's ruling, and the list of open blockers is empty.** One person
+outside the project had already run the tool for the first time; the chairman relayed their feedback on
+2026-09-24 (~08:06Z) and ruled on 2026-09-25 that it is B1's outsider reaction. Their three points, in the
+chairman's words: (1) in the YAML, `task: Send an enquiry` "doesn't do anything" as far as the person running the
+workflow can see; (2) "most people want more than one page validated on their website", by navigating to where the
+user says or from a list of links they supply; (3) "the majority of users who will get loads of value out of this
+aren't just marketing sites. It's actually proper SaaS products", and their challenge is that this is "usually
+behind auth". **Two things B1's own wording asks for were NOT STATED, and are recorded as not stated rather than
+inferred:** a plain statement of whether the output was worth their time, and whether the app was theirs (`ceo`'s
+reading of it on 2026-09-24 was a public page). B1 is closed because the chairman owns B1 ("Whose call: Yours"),
+not because those two are met, and a later outsider's plain statement, if it comes, is welcome and would be added
+here. What the feedback started, each as its own row: `task:` honesty #2268 (open), a list of URLs #2272
+(closed), authenticated capture #2359 (in progress; ADR 0038). Full record: #2262.
+
 | | blocker | whose | state |
 |---|---|---|---|
-| **B1** | someone outside the project runs it on an app they own | yours | open |
+| **B1** | ~~someone outside the project runs it on an app they own~~ | yours | **CLOSED 2026-09-25 by the chairman's ruling** — one outsider's first run, reaction recorded below and in #2262; **worth-their-time NOT STATED** |
 | **B5** | ~~the name, and the first publish~~ | yours | **CLOSED 2026-09-19** — see #63, `a11ign@0.1.0` and five `@a11ign/*` packages live on npm |
 | **B7** | ~~the release machinery decided in ADR 0007 does not exist~~ | ours | **CLOSED 2026-08-31** — see `not-working.md` §8 |
 | **B8** | ~~the scorer's 225 free vetoes~~ | ours | **CLOSED 2026-09-05** — see `not-working.md` §2 |
@@ -494,7 +508,7 @@ feature/subtype pairs 263 → 178 by construction, with the rest awaiting the re
 > `4.1.2:state-change-silent` and 1.4.13 did) is a separate, still-open ADR 0021 question — not decided by
 > this closure and not required to close B8.
 
-### B1. Someone other than the author runs it on an app they own
+### B1. ~~Someone other than the author runs it on an app they own~~ — CLOSED 2026-09-25 by the chairman's ruling; worth-their-time NOT STATED
 
 **Why it blocks.** Every verification in this repo is one person's, on one Mac, against W3C's own pages.
 That is a real gap, and it is the gap most likely to contain a wrong assumption nobody has noticed. A
