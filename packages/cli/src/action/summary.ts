@@ -92,6 +92,8 @@ export interface RunResult {
    * and until this field was declared the summary could not show it. Absent on older results, which say nothing.
    */
   conformance?: { number: number; name: string; establishes: string; limitation: string }[];
+  /** An authenticated run's whole list of pressed controls, by accessible name (ADR 0038); absent on every other run. */
+  pressed?: string[];
 }
 
 /**
@@ -577,6 +579,16 @@ export function multiPageLogLines(multi: MultiPageResult, failOn: FailOn): strin
   return lines;
 }
 
+/** The pressed list for the summary: a line each, and never a value. Nothing at all when the run is not authenticated. */
+export function pressedSummaryLines(pressed: readonly string[] | undefined): string[] {
+  if (pressed === undefined) return [];
+  return [
+    "",
+    "**What this run pressed** (an authenticated run presses only what its files name):",
+    ...(pressed.length > 0 ? pressed.map((name) => `- ${name}`) : ["- nothing: automatic pressing and link-following are off"]),
+  ];
+}
+
 export function renderSummary(result: RunResult, options: SummaryOptions = {}): string {
   const taskQuestion = options.taskQuestion ?? DEFAULT_TASK_QUESTION;
   const isTaskClaim = options.isTaskClaim ?? false;
@@ -625,6 +637,7 @@ export function renderSummary(result: RunResult, options: SummaryOptions = {}): 
     `**Page:** ${result.url}`,
     `**Task:** ${result.task}`,
     `**Screen reader:** ${result.screenReader}${result.transcript ? ` · ${result.transcript.length} announcements` : ""}`,
+    ...pressedSummaryLines(result.pressed),
     "",
     // See SummaryOptions.taskQuestion/isTaskClaim. This is posted on a PULL REQUEST in bold, and with
     // the shipped local scorer it used to ask "could a screen-reader user complete the task?" (or claim
