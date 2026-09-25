@@ -1,0 +1,5 @@
+---
+"@a11ign/lab": patch
+---
+
+**A capture in which NVDA read a `cmd.exe` console is no longer "usable", and the calibration sweep says which captures it refused (#2433).** `isUsableCapture` answered "NVDA and a non-empty transcript", so Southwark's protocol-21 capture (transcript `["blank","blank"]`, `documentReady` titled "C: Windows SYSTEM 32 cmd dot exe") was scored as a calibration page and counted among the 49 (#2412). It now also refuses a capture whose every transcript line is `blank`, or whose last `documentReady` title names the console (`cmd dot exe`) — defined by what the capture says, with no length threshold. The reason comes from `unusableReason`, and `calibrate-abstention.mjs` prints each refused url with it and scores only the rest; a sweep that refuses nothing prints no such line. The capture cache, capture-resume and the dataset export share the predicate, so a console capture is now re-captured (resume/cache) or left out of the export instead of trusted. No figure is restated and nothing was recaptured here: the next sweep says what the calibration numbers become.

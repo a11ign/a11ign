@@ -36,10 +36,10 @@
 // command's own argv, not only to prose. `--run` makes the two uses of the pattern the same JS array.
 import { globSync, realpathSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { spawnSync } from "node:child_process";
 import { refuseUnknownFlags, flagValue } from "@a11ign/worker-fleet/cli-flags";
 import { npmCliInvocation } from "../../../scripts/npm-cli-executable.mjs";
 import { suiteStartVerdict } from "./worktree-resolution.mjs";
+import { runUnderCap } from "./test-memory-cap.mjs";
 
 /**
  * Pure: which of the given globs resolved to fewer than `min` files, and how many each actually matched.
@@ -199,8 +199,9 @@ function main() {
   const env = { ...process.env };
   delete env.NODE_TEST_CONTEXT;
   const npx = npmCliInvocation("npx", args);
-  const result = spawnSync(npx.command, npx.args, { stdio: "inherit", env });
-  process.exitCode = result.status ?? 1;
+  // #2507: THE CHOKE POINT. `test:ts`, `test:org`, `test:all`, `test:changed` and `coverage`'s floor all reach a runner
+  // from this one line, so this is where a runaway `node` is capped to its own scope. It prints which path it took.
+  process.exitCode = runUnderCap({ name: args[0], command: npx.command, args: npx.args, env });
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {

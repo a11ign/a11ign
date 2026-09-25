@@ -1,0 +1,5 @@
+---
+"@a11ign/guards": patch
+---
+
+**Every test run the org starts now runs under a per-process memory cap (#2507).** Three kernel OOM kills on 2026-09-25 were each ONE `node` process of 25.7, 27.4 and 26.0 GB, so a concurrency ceiling would have prevented none of them; `runnerInvocation`'s caller in `assert-glob-not-empty.mjs` (the one place `test:ts`, `test:org`, `test:all` and `test:changed` reach a runner) now starts it through `test-memory-cap.mjs`: `systemd-run --user --scope -p MemoryMax=4G -p MemorySwapMax=0 -p OOMPolicy=continue`, with `A11Y_TEST_MEMORY_MAX` to override. It prints which path it took (`memory cap: MemoryMax=4G via systemd-run`, or `memory cap: none, systemd-run absent` / `none, no user manager answered`), and a supervisor inside the scope reads its `memory.events` and reports a kill by the command's name, the cap's value and the `oom_kill` count, exiting 137. `4G` is CHOSEN, not measured. The pre-push hook's leak scan goes through the same module. `OOMPolicy=continue` is load-bearing: the scope's default `stop` SIGTERMs the supervisor too and the run exits 143 with no word about memory.
