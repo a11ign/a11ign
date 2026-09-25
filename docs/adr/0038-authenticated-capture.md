@@ -204,12 +204,12 @@ build row runs it.
 
 1. **Prevention, by construction.** Login steps enter values with the browser protocol's text insertion, which
    produces no key events, and the transcript does not begin until the login flow has ended and the page has
-   settled. So the login is not in the transcript to start with. **That NVDA stays quiet on inserted text is
-   UNMEASURED**: NVDA's typed-character setting is one this worker has never called
-   (`docs/screenreader-settings-audit.md`, "`speakTypedCharacters` is real and never called"), so it is at
-   NVDA's default, and that default is not recorded in the repo. The build reads it from
-   `/diagnostics.screenReaderDefaults` as its first act, and the design does not depend on the answer,
-   because of the second defence.
+   settled. So the login is not in the transcript to start with. **As of 2026-09-24, that NVDA stays quiet on
+   inserted text was UNMEASURED**: NVDA's typed-character setting was one this worker had never called
+   (`docs/screenreader-settings-audit.md`, "`speakTypedCharacters` is real and never called"), so it was at
+   NVDA's default, and that default was not recorded in the repo. The build was to read it from
+   `/diagnostics.screenReaderDefaults` as its first act, and the design did not depend on the answer,
+   because of the second defence. Both readings have since been taken, in the two measured paragraphs below.
 
    **Measured by the build (PR 4), 2026-09-24 ~13:50Z, `a11y-worker-3`, worker code `ce5ba647396883b4`:** NVDA's
    `keyboard.speakTypedCharacters` DEFAULT is `1` (ON) and `speakTypedWords` is `0`, read from the `configSpec` the
