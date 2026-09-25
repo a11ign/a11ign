@@ -60,6 +60,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node packages/guards/src/changed-files.mjs` — list the paths a range changed, BOTH SIDES OF A RENAME
 - `node packages/guards/src/changed-packages.mjs` — list which packages/<name> directories a branch touched against origin/main
 - `node packages/guards/src/isolation-gate.mjs` — prove a published package installs and works standalone, by actually installing and running it
+- `node packages/guards/src/mutant-survivors.mjs` — choose mutants on a diff's changed lines by machine, run the named tests against each, and list the survivors
 - `node packages/guards/src/mutation-check.mjs` — prove a guard actually bites: mutate a file, confirm its test fails, restore, confirm it passes
 - `node packages/guards/src/piped-exit-status-guard.mjs` — detect a piped command whose exit status was read from the wrong side of the pipe
 - `node packages/guards/src/tree-wide-guards.mjs` — every tracked *.test.ts file that DECLARES ITSELF a TREE-WIDE GUARD by importing and calling
@@ -82,9 +83,11 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/manifest-repository-check.mjs` — refuse a publish whose manifests name a different repository than the run publishing them
 - `node scripts/npm-token-liveness.mjs` — say whether the first-publish npm token is still present after it should have been revoked
 - `node scripts/prune-stale-workspace-scope.mjs` — remove a stale workspace-scope's node_modules symlinks a rename left behind
+- `node scripts/registry-consumer-gate.mjs` — install what is PUBLISHED (a11ign from the registry) into an empty directory and refuse what a consumer could not run
 - `node scripts/release-commit-version-bump.mjs` — commit changeset version's manifest bump and consumed changesets back to main after a real publish
 - `node scripts/release-gate-scope.mjs` — warn which release:gate stages release:gate:ci does not run, and how many
 - `node scripts/release-print-versions.mjs` — print the version each published package's manifest now holds
+- `node scripts/release-publish-rehearsal.mjs` — rehearse the release's pnpm-to-npm publish hand-off for every published package, publishing nothing
 - `node scripts/release-reuses-verdict.mjs` — does the release job need to run coverage itself, or can it reuse nightly's verdict for this sha
 - `node scripts/run.mjs` — the one-line dispatcher: run a named command from commands.mjs, or --list every command declared
 - `node scripts/select-changed-tests.mjs` — pick only the test files that reference a changed file, narrower than package scoping

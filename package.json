@@ -84,6 +84,7 @@
     "guest:run": "node packages/worker-fleet/src/guest-run.mjs",
     "gate:stability": "tsx packages/lab/scripts/stability-gate.mjs",
     "gate:isolation": "node packages/guards/src/isolation-gate.mjs --all",
+    "gate:registry": "node scripts/registry-consumer-gate.mjs",
     "fleet:normalise": "node packages/worker-fleet/src/normalise-fleet.mjs",
     "fleet:env": "node packages/worker-fleet/src/fleet-env.mjs",
     "fleet:status": "node packages/control/src/fleet-status.mjs",

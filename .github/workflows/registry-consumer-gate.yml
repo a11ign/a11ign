@@ -1,0 +1,207 @@
+# The REGISTRY gate -- #2519, the first child of #69 and the one `ceo` ruled comes before any code moves (2026-09-25):
+# install what is PUBLISHED into an empty directory, and run `npx a11ign <url>` there.
+#
+# WHAT NO OTHER WORKFLOW READS. `consumer-gate.yml` and `action-smoke.yml` both run the Action from a commit of THIS
+# repository, so every package resolves through the workspace, and `release.yml`'s `gate:isolation` installs the
+# tarballs a publish WOULD make. Nothing installs what the registry SERVES. A published `a11ign@0.1.0` that cannot
+# resolve `@a11ign/evidence@0.1.0` in a directory with no monorepo beside it would pass every one of them, and that
+# guarantee is exactly what a split of the repository removes.
+#
+# THE TWO JOBS ARE TWO QUESTIONS, and the cheap one gates the dear one.
+#   `install`      (ubuntu, seconds)  `scripts/registry-consumer-gate.mjs`: what the install contains. Refuses a
+#                  `workspace:` or `0.0.0` dependency, a second copy of `@a11ign/evidence`, an `@a11ign/*` range the
+#                  installed sibling does not satisfy, a `--version` that disagrees, an entry point that will not
+#                  import. Says which layers it did NOT check. The decisions are pure and tested without a network.
+#   `combination`  (windows-2022)     installs into a clean directory AGAIN and runs `npx a11ign <url>` from it, with
+#                  a worker started from THE INSTALLED `@a11ign/nvda-worker`, the scorer's requirements and encoder
+#                  fetch taken from THE INSTALLED `@a11ign/scorer`, and the foreground-lock script from THE INSTALLED
+#                  `@a11ign/worker-fleet`. This is `ceo`'s Acceptance line, and it is what makes this a combination
+#                  gate and not an install check: every layer here is the published one, at the published version.
+#
+# WHERE EACH TRIGGER LIVES (the row asked the claimant to say). ALL THREE ARE IN THIS FILE, and `release.yml` is not
+# touched: `workflow_run` fires when `release` completes, which is the "after a publish" path, and it needs nothing in
+# the file it watches. That is deliberate. `release-safety.test.ts` pins that `release.yml` calls exactly three local
+# workflows and names every guard, so a fourth `uses:` there is a change to the release guards and not to this gate.
+#   - `schedule`         daily, off the hour (GitHub's cron queue is worst at :00, #965).
+#   - `workflow_run`     after `release` completes. A DRY run also completes, and gating `latest` after one costs a
+#                        few minutes and proves the same thing, so this does not try to tell them apart: the run's
+#                        inputs are not in the event payload.
+#   - `workflow_dispatch` on demand, with `spec` for a version or dist-tag (`next`, `0.1.0`).
+name: registry-consumer-gate
+
+on:
+  schedule:
+    - cron: "43 5 * * *"
+  workflow_run:
+    workflows: [release]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      spec:
+        description: 'What to install: a version or dist-tag of `a11ign`. Empty is `latest`, which is what a stranger gets.'
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+env:
+  # `latest` is what `npm install a11ign` resolves to. A dispatch may name another version or a dist-tag.
+  SPEC: ${{ inputs.spec || 'latest' }}
+
+jobs:
+  install:
+    # A publish that FAILED published nothing new, and `release`'s own run says so. Gating `latest` after it would only
+    # repeat the daily run.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+
+      # `npm publish` returns before every registry edge serves the new version, and a consumer's `npm install`
+      # right after it can still resolve the previous `latest`. Waiting is honest here: the gate is asking what a
+      # consumer gets, and a consumer who installs within a minute of a publish is not the one this is about.
+      - name: Let the registry settle after a publish
+        if: github.event_name == 'workflow_run'
+        run: sleep 180
+
+      # No `npm ci`, no `pnpm install`: this repository's own dependencies are irrelevant to the question and their
+      # presence would put a monorepo `node_modules` on a resolution path the gate must keep clean. The script imports
+      # nothing outside the checkout's own files and Node.
+      - name: Install the published package into an empty directory and read it
+        run: node scripts/registry-consumer-gate.mjs --spec="$SPEC"
+
+  combination:
+    needs: [install]
+    # NVDA is Windows-only; GitHub hosts these. Never a fleet worker.
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      # The checkout is for `scripts/registry-consumer-gate.mjs` ONLY. The a11ign that runs below is the registry's,
+      # installed into `$RUNNER_TEMP/clean`, a directory with nothing else in it and no repository above it.
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+
+      # `--require-imports`: on THIS platform `@a11ign/nvda-worker` must import, so a throw at evaluation is a
+      # refusal here and only "unchecked" on the ubuntu job above.
+      - name: Install into a clean directory, and refuse what a consumer could not run
+        shell: bash
+        run: node scripts/registry-consumer-gate.mjs --into="$RUNNER_TEMP/clean" --require-imports --spec="$SPEC"
+
+      # The pinned installer, from this repository's own manifest so the two cannot drift. It runs FROM the clean
+      # directory because it reads `node_modules/@guidepup/guidepup/manifest.json` for the NVDA build to fetch, and
+      # that file is the one the PUBLISHED `@a11ign/nvda-worker` brought.
+      - name: Set up NVDA
+        shell: bash
+        working-directory: ${{ runner.temp }}/clean
+        run: |
+          setup_version=$(node -p "require(process.env.GITHUB_WORKSPACE + '/package.json').devDependencies['@guidepup/setup']")
+          npx --yes "@guidepup/setup@$setup_version" setup
+          npx --yes "@guidepup/setup@$setup_version" install nvda
+
+      - name: Disable the NVDA Speech Viewer
+        shell: pwsh
+        run: |
+          $cacheRoot = if ($env:GUIDEPUP_SCREEN_READERS_PATH) { $env:GUIDEPUP_SCREEN_READERS_PATH }
+                       else { Join-Path $env:LOCALAPPDATA 'guidepup' }
+          $inis = Get-ChildItem (Join-Path $cacheRoot 'nvda') -Recurse -Filter 'nvda.ini' -ErrorAction SilentlyContinue
+          if (-not $inis) { throw "No NVDA config found under $cacheRoot - the install step failed." }
+          foreach ($ini in $inis) {
+            $body = Get-Content $ini.FullName -Raw
+            Set-Content -Path $ini.FullName -NoNewline `
+              -Value ($body -replace 'showSpeechViewerAtStartup = True', 'showSpeechViewerAtStartup = False')
+          }
+          if ($inis | Select-String 'showSpeechViewerAtStartup = True') { throw 'Speech Viewer still enabled.' }
+
+      - name: Suppress Edge's first-run experience
+        shell: pwsh
+        run: |
+          $key = "HKLM:\SOFTWARE\Policies\Microsoft\Edge"
+          New-Item -Path $key -Force | Out-Null
+          Set-ItemProperty -Path $key -Name "HideFirstRunExperience" -Value 1 -Type DWord
+          Set-ItemProperty -Path $key -Name "BrowserSignin" -Value 0 -Type DWord
+
+      # THE PUBLISHED script, not this checkout's: a `.ps1` the `files` allow-list dropped is one of the failures this
+      # gate exists to find, and running the checkout's copy would hide it.
+      - name: Allow Edge to be forced into the foreground
+        shell: pwsh
+        working-directory: ${{ runner.temp }}/clean
+        run: |
+          ./node_modules/@a11ign/worker-fleet/src/provisioning/apply-foreground-lock-timeout.ps1
+          $v = (Get-ItemProperty 'HKCU:\Control Panel\Desktop' -Name ForegroundLockTimeout -ErrorAction SilentlyContinue).ForegroundLockTimeout
+          if ($v -ne 0) { throw "ForegroundLockTimeout is '$v', not 0 - the capture would return 0 phrases with no error." }
+
+      # The scorer's requirements and its `a11ign-scorer-fetch-encoder` bin are the published `@a11ign/scorer`'s.
+      - name: Set up the local scorer from the installed package
+        shell: bash
+        working-directory: ${{ runner.temp }}/clean
+        env:
+          A11Y_PYTHON: python
+        run: |
+          python -m pip install --quiet --upgrade pip
+          pins=$(grep -E '^(onnxruntime|transformers|safetensors|numpy)==' node_modules/@a11ign/scorer/requirements.txt)
+          count=$(echo "$pins" | grep -c .)
+          if [ "$count" -ne 4 ]; then
+            echo "::error::expected 4 pinned packages in the published @a11ign/scorer's requirements.txt, found $count: $pins" >&2
+            exit 1
+          fi
+          python -m pip install --quiet $pins
+          npx --no-install a11ign-scorer-fetch-encoder
+          test -f node_modules/@a11ign/scorer/models/screenreader-scorer/model.safetensors \
+            || { echo "::error::the published @a11ign/scorer carries no trained model." >&2; exit 1; }
+
+      # `ceo`'s Acceptance line, verbatim: `npx a11ign <url>`, from the clean install, against the page the Action's own
+      # smoke uses (W3C publishes it WITH a conformance claim). The worker is the INSTALLED `@a11ign/nvda-worker`.
+      - name: npx a11ign <url>, from the clean install
+        id: run
+        shell: bash
+        working-directory: ${{ runner.temp }}/clean
+        env:
+          A11Y_WORKER: http://127.0.0.1:8765
+          A11Y_PYTHON: python
+          PAGE: https://www.w3.org/WAI/demos/bad/after/survey.html
+        run: |
+          node node_modules/@a11ign/nvda-worker/src/server.mjs > "$RUNNER_TEMP/worker.log" 2> "$RUNNER_TEMP/worker.err" &
+          worker=$!
+          trap 'kill $worker 2>/dev/null || true' EXIT
+
+          ready=""
+          for _ in $(seq 1 360); do
+            health=$(curl -fsS --max-time 5 http://127.0.0.1:8765/health 2>/dev/null || true)
+            case "$health" in *'"ready":true'*) ready=1; break ;; esac
+            sleep 0.5
+          done
+          if [ -z "$ready" ]; then
+            echo "--- worker stdout ---"; cat "$RUNNER_TEMP/worker.log" 2>/dev/null || true
+            echo "--- worker stderr ---"; cat "$RUNNER_TEMP/worker.err" 2>/dev/null || true
+            echo "::error::the INSTALLED @a11ign/nvda-worker never became ready. Last /health: $health" >&2
+            exit 1
+          fi
+
+          status=0
+          npx --no-install a11ign "$PAGE" > "$RUNNER_TEMP/a11ign-report.txt" || status=$?
+          cat "$RUNNER_TEMP/a11ign-report.txt"
+
+          # The finding-count line is the proof the whole chain ran: capture, judge, report. A run that printed
+          # a usage error or a crash has no such line, whatever its exit status said.
+          count_line=$(grep -E '^[0-9]+ finding\(s\):' "$RUNNER_TEMP/a11ign-report.txt" | head -1 || true)
+          if [ -z "$count_line" ]; then
+            echo "::error::npx a11ign exited $status and printed no 'N finding(s):' line: the installed package did not produce a report." >&2
+            exit 1
+          fi
+          echo "::notice::npx a11ign from the registry install printed: $count_line (exit $status)"
+
+      - name: Keep the report and the worker's logs when this fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: registry-consumer-gate-logs
+          path: |
+            ${{ runner.temp }}/a11ign-report.txt
+            ${{ runner.temp }}/worker.log
+            ${{ runner.temp }}/worker.err
+          if-no-files-found: warn
