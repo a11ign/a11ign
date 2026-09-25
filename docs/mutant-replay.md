@@ -6,15 +6,24 @@ the commits the reviewer refused, and ship it only if it surfaces the path the r
 Fewer, and the row closes as a recorded null result. `packages/lab/src/packaging/mutant-replay-record.test.ts` holds this
 file's verdict line to the count below and to the wiring in `pr-open.mjs`, in both directions.
 
-Verdict: SHIP
+Verdict: NULL RESULT
 
-Found: 2 of 3, and **read the two caveats before quoting that** (the second replay is half a path; the third was not found).
+Found: 1 of 3 (one exact, one half, one miss), **and that one is in-sample.** `ceo` ruled NULL RESULT on #2415 (2026-09-25):
+nothing ships into `pr-open.mjs`, the row closes on this record, and the generator stays as a script run by hand.
+
+**How each was read.** #2384 is found exactly, but `arg-empty` is the #2384 mutant turned into an operator class, so finding
+it shows the operators were written from the answer, not that they find a path they have not been shown. #2392 is HALF a
+path: the reviewer's mutant discarded `element` AND `field`, the tool covers `field`, and **no operator replaces the
+`<${element}>` interpolation, so a builder that ignores `element` passes, which is the path the reviewer named.** An earlier
+draft of this record counted that as found on "the same file, line and kind"; `ceo` refused that reading, because it lets the
+author of the operators decide what counts as found. #2368 is not found: 12 of 695 mutants ran at the default budget. A half
+is counted as not found, in the `Found:` line of each section (`yes`, `half`, `no`) and in the count above.
 
 ## What was replayed, and how
 
 - **The generator** is `packages/guards/src/mutant-survivors.mjs`, run as `node packages/guards/src/mutant-survivors.mjs run
-  --base=<merge base> --test='<the Acceptance commands the reviewer ran>' --budget=300 --cap=10`, which is exactly what
-  `pr:open` runs on a `create` (budget and cap are its defaults). It chooses mutants on the lines the diff **added**, in
+  --base=<merge base> --test='<the Acceptance commands the reviewer ran>' --budget=300 --cap=10`, which is the
+  budget and cap this row proposed for `pr:open` (its defaults), run by hand. It chooses mutants on the lines the diff **added**, in
   source files (never tests, comments or docs), with six line-local operators; it applies each through
   `mutation-check.mjs` (`npm run mutate`), so the copy-aside, the byte-for-byte restore and the exit codes are that tool's.
 - **Each PR at the commit the reviewer refused**, in a detached worktree (`git worktree add --detach <dir> <commit>`),
@@ -25,9 +34,10 @@ Found: 2 of 3, and **read the two caveats before quoting that** (the second repl
 - **Every mutant's exit was believed only with `mutation-check.mjs`'s own sentence beside it** (`THE GUARD BITES.` /
   `THE GUARD DID NOT BITE.`): a crash also exits 1, which is the code for "survived". In these three replays, 0 mutants were
   refused or unreadable, so no result below rests on a crash.
-- **"Found" means:** a survivor sits on a line the reviewer's own mutation (or, where the reviewer named none, the line the
-  blocker names) edited, and is the same kind of edit -- a value the named tests never read. It is a judgement about
-  a match of file, line and kind, and each row below states the survivor so it can be argued with.
+- **"Found" means:** a survivor reproduces the WHOLE of what the reviewer's own mutation did (or, where the reviewer named
+  none, of what the blocker names). A survivor on the same line that covers only part of it is `half`, and `half` does not
+  count. This is `ceo`'s reading; the first draft's looser one (file, line and kind) is withdrawn. Each row below states
+  the survivor so it can be argued with.
 
 ## The replays
 
@@ -57,15 +67,15 @@ Found: 2 of 3, and **read the two caveats before quoting that** (the second repl
 - Reviewer's path:
 > The new test checks the population floor, announced strings, status roles, and well-formedness, but never checks those shape distributions. I changed both builders to discard `element` and `field`, making every new page a `<p>` with no named field; the acceptance suite remained green.
 - Tests run: `A11Y_ALLOW_FOREIGN_RESOLUTION=1 node packages/guards/src/assert-glob-not-empty.mjs "packages/lab/src/training/case-matrix.test.ts" --min=1 --run` and the same for `held-out-is-disjoint-from-training.test.ts`
-- Found: yes
+- Found: half
 - Operators that found it: arg-empty, cond-false
-- Survivor covering it: `packages/lab/src/training/case-matrix.mjs:1409` (`label ? <label>...: ""` -> `false ? ...`, so `statusPageField` always returns `""`: the reviewer's `statusPageField("")` mutant in behaviour), and `:1435` and `:1456`, one in each of the two builders the reviewer edited (`statusPageField(field)` -> `statusPageField([])`, the field discarded).
-- **Half a path.** The reviewer discarded `element` AND `field`. The `field` half is found; **the `element` half is not**: `<${element} id="state">` is a template interpolation and no operator here replaces one, so a builder that ignores `element` is not among the mutants. The row's third dimension, heading presence, is not either. If "found" is read as "the whole of the reviewer's mutation", this row is a NO and **the verdict below is NULL RESULT**; it is read here as the file, line and kind the record's own definition gives, and that reading is `ceo`'s to overrule.
+- Survivor covering it: the `field` half only, `packages/lab/src/training/case-matrix.mjs:1409` (`label ? <label>...: ""` -> `false ? ...`, so `statusPageField` always returns `""`: the reviewer's `statusPageField("")` mutant in behaviour), and `:1435` and `:1456`, one in each of the two builders the reviewer edited (`statusPageField(field)` -> `statusPageField([])`, the field discarded).
+- **Half a path.** The reviewer discarded `element` AND `field`. The `field` half is found; **the `element` half is not**: `<${element} id="state">` is a template interpolation and no operator here replaces one, so a builder that ignores `element` is not among the mutants. The row's third dimension, heading presence, is not either. If "found" is read as "the whole of the reviewer's mutation", this row is a NO, and that is the reading `ceo` ruled: **it is `half`, it does not count, and the verdict is NULL RESULT.** What the operators missed is the `element` half (no operator replaces a template interpolation) and the row's third dimension, heading presence.
 - Size: 5 mutants chosen, 5 run, 2 killed, 3 survived, 4.6 minutes at a host load average of 33-46 (each mutant runs the two test files three times).
 
 ## What the operators missed on #2368, and why
 
-**The operators can express it; the budget does not reach it.** To separate the two, a side run (NOT the shipped configuration,
+**The operators can express it; the budget does not reach it.** To separate the two, a side run (NOT the default configuration,
 and chosen with the answer in hand) restricted the mutants to the lines of the three helpers the reviewer named in
 `packages/nvda-worker/src/auth-flow.mjs` -- `requiredEnvNames` (:232-236), `controlsNamed` (:344-356), `expectationMet`
 (:358-366) -- and ran them against the same two test files with no time limit. **47 mutants, 47 run, 22 killed, 25 survived, 0 refused,
@@ -88,24 +98,27 @@ So the miss on this PR is a miss of REACH, and there are three reasons, none of 
 
 ## Threats to this reading
 
-- **It is in-sample.** The operators were written AFTER the three refusals were read, and `arg-empty` (an argument replaced with `[]`) is the reviewer's own #2384 mutant turned into a class. The two hits are therefore evidence that the operators can express what these reviewers did, not that they find what a reviewer will do next. The ruling's threshold is the ruling's; this is why the tool ships advisory-only and does not refuse.
+- **It is in-sample.** The operators were written AFTER the three refusals were read, and `arg-empty` (an argument replaced with `[]`) is the reviewer's own #2384 mutant turned into a class. The hit is therefore evidence that the operators can express what one reviewer did, not that they find what a reviewer will do next; it is one of the reasons the verdict is NULL RESULT.
 - **Wall-clock budgets are measured on a shared host.** These runs shared the box with other sessions' suites (load average 15-71 while they ran), so "ran 12 of 695" is a count under that load and would read higher on a quiet machine. The direction is not in doubt: `mutation-check.mjs` runs the test three times per mutant (before, mutated, after), so a PR whose named test takes 12s costs 36s a mutant.
-- **A big PR is exactly where the budget bites.** #2368 changed 28 files and added `auth-flow.mjs` whole; the budget covers under 2% of its mutants. "DID NOT FINISH", and how many never ran, is printed on the PR body for that reason.
-- **Noise.** #2384: 12 survivors of 24. Equivalent mutants are in there (a comparator's tie-breaker, an unread argument); the cap (10) and the count cut are stated on the body, and nobody is refused on the list.
+- **A big PR is exactly where the budget bites.** #2368 changed 28 files and added `auth-flow.mjs` whole; the budget covers under 2% of its mutants. "DID NOT FINISH", and how many never ran, is printed for that reason.
+- **Noise.** #2384: 12 survivors of 24. Equivalent mutants are in there (a comparator's tie-breaker, an unread argument); the cap (10) and the count cut are stated in the output, and nobody is refused on the list. (A wired `pr:open` would have printed this on every PR.)
 - **A syntax-error mutant reads as killed.** The suite goes red for the wrong reason; that can hide a survivor and cannot invent one.
 
 ## The generator run on its own diff
 
-`survivorsOfThisTree` was run on this branch before the PR opened (`A11Y_SURVIVORS_BUDGET=150`): **16 of 247 mutants ran, 4 survived**, and
-"DID NOT FINISH" was printed. All four were real gaps in the first draft of this row's own tests, and the fix is what the four
-lines say: `matchAll(CALLEE)` -> `matchAll([])` and `slice(0, m.index)` -> `slice(0, [])` in the generator (no test pinned the
-callee, or a signature whose `{` sits on the next line), `earlier.slice(0, from)` -> `slice(0, [])` in `pr-open.mjs` (replacing an
-existing section kept nothing before it) and `survivors(body)` -> `survivors([])` (the fake ignored its argument). Each was
-re-run through `npm run mutate` after the tests were strengthened and now reads `THE GUARD BITES.` One PR is not a rate: it is the
-tool finding something on the first diff it saw that its author had not.
+Before the wiring was removed, the generator was run on this branch's own diff (`A11Y_SURVIVORS_BUDGET=150`): **16 of 247 mutants ran,
+4 survived**, and "DID NOT FINISH" was printed. All four were real gaps in the first draft of this row's own tests
+(`matchAll(CALLEE)` -> `matchAll([])` and `slice(0, m.index)` -> `slice(0, [])` in the generator, and two in the `pr-open.mjs`
+wiring that has since been removed). One PR is not a rate: it is the tool finding something on the first diff it saw that its
+author had not, and the author had written the operators.
 
 ## What ships
 
-`pr:open create` runs the generator over the branch's added lines against the tests the body's `Acceptance:` names, for
-`A11Y_SURVIVORS_BUDGET` seconds (default 300; `0` skips it and says so), and appends a `## Survivors` section to the body it
-sends. It refuses nothing; it never runs on `edit`; an author's own `Mutation:` section still runs as #2307 built it.
+**Nothing into `pr-open.mjs`**, and no `## Survivors` section, `A11Y_SURVIVORS_BUDGET` or `survivors` dependency there. The
+generator and its test stay as a script run by hand (`node packages/guards/src/mutant-survivors.mjs run ...`, the command in
+the first section) so this record can be reproduced; it is not an npm script and nothing calls it. **The row closes on this
+record, and a null result is a finished row.**
+
+**Not closed for good.** A one-run-per-mutant mode in `mutation-check.mjs` (#2448) would triple the reach, and bears on the
+#2368 miss. If it lands, a re-replay is a NEW row with its own gate, and its operators must be fixed BEFORE the three refusals
+are re-read, or run on refusals not yet seen. This record does not pre-decide it.

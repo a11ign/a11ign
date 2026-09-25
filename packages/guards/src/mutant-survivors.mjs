@@ -3,6 +3,10 @@
 // command: choose mutants on a diff's changed lines by machine, run the named tests against each, and list the survivors
 // MACHINE-CHOSEN MUTANTS -- ADVISORY, BOUNDED, AND NEVER A REFUSAL (#2415, `ceo`'s ruling 1 on #928).
 //
+// RUN BY HAND, AND WIRED INTO NOTHING. The replay over the three refusals did not clear the ruling's bar
+// (`docs/mutant-replay.md`: NULL RESULT), so `ceo` ruled that this file is not called from `pr-open.mjs` and is not an npm
+// script. It stays so the record can be reproduced, not because the tool is adopted.
+//
 // AUTHOR-CHOSEN MUTANTS MEASURE DILIGENCE, NOT COVERAGE. On #2368 the author ran 13 mutants, every one red, and
 // the reviewer still found the path no test exercised. `mutation-check.mjs` cannot help there: it applies the ONE
 // mutation its caller supplies and has no operator table, no line targeting and no idea what changed. This file is
@@ -20,8 +24,8 @@
 //      Equivalent mutants make the list noisy, so it is CAPPED and SAYS THE CAP and how many it cut.
 //   2. BOUNDED. Only the tests it is given run, only on changed lines, under a wall-clock budget. Over budget
 //      it says "DID NOT FINISH" and how many mutants never ran: it never silently lists fewer.
-//   3. GATED ON A REPLAY (`docs/mutant-replay.md`). The operators were written AFTER the three refusals were
-//      read, so the replay is in-sample; the record says so.
+//   3. GATED ON A REPLAY (`docs/mutant-replay.md`), WHICH DID NOT PASS. The operators were written AFTER the three
+//      refusals were read, so the replay is in-sample; the record says so and reads NULL RESULT.
 //
 // Usage:
 //   node packages/guards/src/mutant-survivors.mjs run --base=<rev> --test='<shell>' [--budget=<seconds>] [--cap=<n>] [--json]
@@ -431,8 +435,8 @@ function runCommand(argv) {
 }
 
 async function main() {
-  // Imported here and not at the top: `pr-open.mjs` imports THIS file for its functions, and a checkout with no
-  // build must still be able to open a PR. Only the command line needs the flag guard, and only it needs `dist`.
+  // Imported here and not at the top: only the command line needs the flag guard, and only it needs `dist`, so a
+  // checkout with no build can still import this file's functions.
   const { refuseUnknownFlags } = await import("@a11ign/worker-fleet/cli-flags");
   refuseUnknownFlags(["--file", "--line", "--operator", "--occurrence", "--base", "--test", "--budget", "--cap", "--json"],
     { entry: import.meta.url, command: "node packages/guards/src/mutant-survivors.mjs" });
