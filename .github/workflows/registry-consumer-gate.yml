@@ -30,11 +30,6 @@
 name: registry-consumer-gate
 
 on:
-  # TEMPORARY (#2519): a workflow file that is only on a branch cannot be dispatched, so this is the only way to run
-  # the Windows job before the merge. REMOVED before the PR is marked ready; push-trigger-allowlist.test.ts refuses it.
-  push:
-    branches: [agent/the-registry-gate-install-2519]
-    paths: [.github/workflows/registry-consumer-gate.yml]
   schedule:
     - cron: "43 5 * * *"
   workflow_run:
