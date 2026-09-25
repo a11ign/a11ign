@@ -45,6 +45,14 @@ Three things, and they are all one thing seen from different distances.
   ```
   git log --branches='agent/*' --not origin/main --oneline --source -- <region path>
   ```
+- **A ready audit that names a B4 holder says `SOLE HOLDER IS A HELD PR` when the only holder carries `hold:`** (#2493).
+  A hold is the PR owner's "do not merge me yet", so the row behind it is waiting on a PR that cannot merge until the
+  hold lifts, and if that PR is itself waiting on this row the cycle is closed. #2399 sat behind #2376 that way and the
+  audit re-named the holder five times before the cycle was seen. Say it at the FIRST audit, then read the edge:
+  `gh issue view <closed row> --json blockedBy` for each row the held PR `Closes`. **If every one is `blockedBy` the
+  asking row, B4 already excludes that PR (claim and gate both), so the row is not held on it.** If not, the fix is
+  the owner's and it is DATA, not a comment: `gh issue edit <closed row> --add-blocked-by <asking row>`, and
+  `blocker-cleared` wakes them when the last blocker closes.
 - **Proposing the release date from the issues**, and recording every move of it with its cause.
 - **Publishing an edition daily**, including on a day with nothing to say — an absent report and a quiet
   day are different facts and only one of them is about the work.
