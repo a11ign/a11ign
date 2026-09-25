@@ -56,18 +56,32 @@ export const PRESSING_OFF_NOTICE = "authenticated run: automatic pressing and li
 
 /**
  * WHAT THIS RUN PRESSED (ADR 0038, Constraint 7, "how a user is told", place 2): the controls its own files name, by
- * accessible name, in the order they run — a login's `press:`, `check:` and `choose:` steps. **No value**: not what was
- * typed, not what was chosen, and not which variable supplied it. A run that names nothing to press says so, because the
- * absence is the finding: automatic pressing is off, so nothing else was.
+ * accessible name, in the order they run — a login's `press:`, `check:` and `choose:` steps, then a flow's, then the
+ * state a forms config (ADR 0024) names: each `check`/`choose` field, then its `submit` control. **No value**: not what
+ * was typed, not what was chosen, and not which variable supplied it. A run that names nothing to press says so,
+ * because the absence is the finding: automatic pressing is off, so nothing else was.
  */
-export function pressedByThisRun(auth: AuthRequest): string[] {
-  const names = [...auth.login, ...(auth.flow ?? []).slice(0, auth.upTo ?? auth.flow?.length ?? 0)].flatMap((step) => {
+export function pressedByThisRun(auth: AuthRequest, formState?: PressedFormState): string[] {
+  const steps = [...auth.login, ...(auth.flow ?? []).slice(0, auth.upTo ?? auth.flow?.length ?? 0)].flatMap((step) => {
     if ("press" in step) return [step.press.control];
     if ("check" in step) return [step.check.field];
     if ("choose" in step) return [step.choose.field];
     return [];
   });
-  return names;
+  return [...steps, ...pressedByFormState(formState)];
+}
+
+/** The part of a forms config's state this list reads: names only, so a `value` cannot reach the report. */
+export interface PressedFormState {
+  submit: string;
+  fields: readonly { field: string; choose?: string; check?: boolean }[];
+}
+
+/** A `fill` presses nothing; a `check` or `choose` toggles a control, and the submit control is pressed last. */
+function pressedByFormState(formState: PressedFormState | undefined): string[] {
+  if (!formState) return [];
+  const toggled = formState.fields.filter((entry) => entry.check !== undefined || entry.choose !== undefined);
+  return [...toggled.map((entry) => entry.field), formState.submit];
 }
 
 /** One login per capture for the screen-reader layer, plus one per page for the rule layer. Stated, because it is real requests with a real account. */

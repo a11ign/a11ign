@@ -937,13 +937,13 @@ async function runWitness(
   if (json) {
     printJson({
       url, task, cap: examined, verdict, ruleFindings, captureVerified, unverifiedReason, conformance, outcomes,
-      leftSite: left, ...(auth ? { pressed: pressedByThisRun(auth) } : {}),
+      leftSite: left, ...(auth ? { pressed: pressedByThisRun(auth, formState) } : {}),
       artifactPath: artifactPath ? relative(process.cwd(), artifactPath) : null,
     }, sink);
   } else {
     printReport({
       url, task, screenReader: cap.screenReader, announcements: cap.transcript.length,
-      verdict, axe: ruleFindings, conformance, outcomes, environment: cap.environment, ...(auth ? { pressed: pressedByThisRun(auth) } : {}),
+      verdict, axe: ruleFindings, conformance, outcomes, environment: cap.environment, ...(auth ? { pressed: pressedByThisRun(auth, formState) } : {}),
     });
     // THE LAST LINE, per #431's acceptance -- printed after the report, never folded into `--json`'s one
     // JSON blob, which carries `artifactPath` as a field instead so a machine consumer still gets one

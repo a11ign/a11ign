@@ -159,6 +159,19 @@ test("what this run pressed: the controls its files name, by accessible name, in
   assert.ok(!JSON.stringify(pressedByThisRun(resolved!.auth)).includes("United Kingdom"));
 });
 
+test("what this run pressed, with a forms config: its check/choose fields and its submit control, by name, and never a value", async () => {
+  const resolved = await withJudge("local", () => resolveAuthentication(request()));
+  const formState = {
+    state: "empty", submit: "Save order",
+    fields: [{ field: "Note", value: "hello" }, { field: "Remember me", check: true }, { field: "Country", choose: "United Kingdom" }],
+  };
+  const pressed = pressedByThisRun(resolved!.auth, formState);
+  assert.deepEqual(pressed, ["Sign in", "Remember me", "Country", "Save order"], "the login first, then the state's toggles, then its submit");
+  assert.ok(!JSON.stringify(pressed).includes("hello") && !JSON.stringify(pressed).includes("United Kingdom"), "no value");
+  assert.deepEqual(pressedByThisRun(resolved!.auth), ["Sign in"], "no forms config: the list is what the login named, as before");
+  assert.deepEqual(pressedByThisRun({ login: [] }, { submit: "Send", fields: [] }), ["Send"], "a forms config alone still presses its submit");
+});
+
 test("the new flags parse: --flows, --login-flow and the override, as an argument", () => {
   const args = parseArgs(["https://app.example.test/orders", "--flows", "a11y-flows.yml", "--login-flow", "login", "--send-authenticated-transcript-to-judge-vendor"]);
   assert.equal(args.flows, "a11y-flows.yml");

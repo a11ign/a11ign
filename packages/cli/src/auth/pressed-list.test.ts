@@ -4,6 +4,7 @@
 // run, where the heading would claim a completeness the probes do not have.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import { pressedSection, reportLines, type Report } from "../report.js";
 import { pressedSummaryLines, renderSummary, type RunResult } from "../action/summary.js";
@@ -40,4 +41,14 @@ test("renderSummary carries the list for an authenticated result, and nothing fo
   assert.match(renderSummary({ ...RESULT, pressed: ["Sign in"] }), /\*\*What this run pressed\*\* \(an authenticated run presses only what its files name\):\n- Sign in/);
   assert.match(renderSummary({ ...RESULT, pressed: [] }), /- nothing: automatic pressing and link-following are off/);
   assert.ok(!renderSummary(RESULT).includes("What this run pressed"));
+});
+
+// The report is built in cli.ts, which cannot be run to a report here (the judge needs a Python scorer). So the wiring is
+// read where it lives: BOTH report paths (--json and printed) must hand the run's forms state to the list, or an
+// authenticated run with a forms config under-states what it pressed (reviewer-2 on #2376). The count is the positive control.
+test("cli.ts builds the pressed list from the run's forms state on BOTH report paths", () => {
+  const source = readFileSync(new URL("../cli.ts", import.meta.url), "utf8");
+  const calls = source.match(/pressedByThisRun\([^)]*\)/g) ?? [];
+  assert.equal(calls.length, 2, "the --json path and the printed path");
+  assert.deepEqual(calls.filter((call) => !call.includes("formState")), [], "every call passes formState");
 });
