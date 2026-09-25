@@ -435,6 +435,12 @@ not because those two are met, and a later outsider's plain statement, if it com
 here. What the feedback started, each as its own row: `task:` honesty #2268 (closed), a list of URLs #2272
 (closed), authenticated capture #2359 (in progress; ADR 0038). Full record: #2262.
 
+**Recorded 2026-09-25 (#928, D1 and D2): version one DECLARED 2026-09-25 by the chairman,** on the record as it
+stands above: the outsider's "worth their time" and whether the app was theirs stay NOT
+STATED. The SECOND outsider's run is the first measurement of the next phase, and its "was it worth your time"
+verdict is captured in their words. **The next phase's axis is SaaS depth: products behind a login.**
+Authenticated capture (#2359) is built; MFA, SSO and CAPTCHA are still out, per `docs/known-gaps.md` §51.
+
 | | blocker | whose | state |
 |---|---|---|---|
 | **B1** | ~~someone outside the project runs it on an app they own~~ | yours | **CLOSED 2026-09-25 by the chairman's ruling** — one outsider's first run, reaction recorded below and in #2262; **worth-their-time NOT STATED** |
