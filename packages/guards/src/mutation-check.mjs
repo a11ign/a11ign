@@ -61,12 +61,17 @@
 //   2  refused before mutating -- the test was already failing, or the arguments are unusable
 //   3  THE RESTORE FAILED -- the file on disk is not what it was. Loud, and the copy is left in place.
 //
+// THE COPY-ASIDE DIRECTORY IS REMOVED ONLY ONCE THE RESTORE IS PROVEN (#2520). Before that it is the only
+// copy of the original, so every path that exits 3 leaves it, and says where it is. Every other end of a run
+// removes it: it was one `mutate-*` directory in tmpdir per run, by construction, and nothing else did.
+// `--per-mutant` runs are one process per mutant, so each one makes and removes its own directory.
+//
 // #516: DO NOT NAME THIS SCRIPT ON A `Refutation:` LINE. `Refutation:` (packages/agent-org/src/acceptance-commands.mjs)
 // reads success as any NON-ZERO exit (#438) -- the OPPOSITE of exit 0 above meaning the guard bites. That
 // parser now refuses (rather than misreads) a `Refutation:` line naming `mutate`; paste this script's real
 // output under an unparsed heading instead (#504).
 import { execSync } from "node:child_process";
-import { copyFileSync, existsSync, readFileSync, mkdtempSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync, mkdtempSync, rmSync } from "node:fs";
 import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
@@ -206,6 +211,15 @@ function judgeMutation({ file, test, applied, changed }) {
 }
 
 /**
+ * Remove the copy-aside directory. Called only after the restore is proven: until then the stash is the
+ * only copy of the original, which is why the script copies aside rather than `git checkout --`.
+ * @param {string} stash
+ */
+function discardStash(stash) {
+  rmSync(path.dirname(stash), { recursive: true, force: true });
+}
+
+/**
  * 5. RESTORE, AND PROVE IT -- by bytes always, and by running the test again unless per-mutant mode moved
  * that proof to the end of the batch (`--prove-restored`).
  * @param {{ file: string, stash: string, original: string, test: string, perMutant: boolean }} restore
@@ -220,6 +234,7 @@ function restoreAndProve({ file, stash, original, test, perMutant }) {
   if (perMutant) {
     console.log(`restored: ${file} is byte-identical. The test was NOT re-run (--per-mutant): run `
       + "--prove-restored once after the last mutant.");
+    discardStash(stash);
     return;
   }
   const after = run(test);
@@ -230,6 +245,7 @@ function restoreAndProve({ file, stash, original, test, perMutant }) {
     process.exit(EXIT.RESTORE_FAILED);
   }
   console.log(`restored: ${file} is byte-identical and the test PASSES again.`);
+  discardStash(stash);
 }
 
 function main() {
