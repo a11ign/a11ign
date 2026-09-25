@@ -30,12 +30,13 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
+          cache: pnpm
       # Capture needs @guidepup/guidepup at runtime but NOT Playwright browsers.
-      - run: npm ci
+      - run: pnpm install --frozen-lockfile
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
       # Install NVDA via the repo's OWN guidepup rather than guidepup/setup-action:

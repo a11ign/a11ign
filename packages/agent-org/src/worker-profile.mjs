@@ -138,6 +138,17 @@ export const PROFILES = Object.freeze({
     why: "the act is one command; telling a repository-wide credential outage from one PR that missed "
       + "its arming event is the judgment, and the cheap answer leaves the outage running",
   }),
+  "verdict-comment-unreviewed": Object.freeze({
+    kind: "codex",
+    model: "gpt-5.6-luna",
+    // LOW, and `draft-awaiting-verdict`'s `medium` is the contrast. That cause asks for a REVIEW -- judgment
+    // over a diff. This one asks the reviewer to re-post a verdict it already formed, through the one script
+    // that turns a comment into a review (#2365): the judgment was spent, and what remains is getting a
+    // first line right. `codex` and not `claude` because the recipient is `reviewer`/`reviewer-2`.
+    effort: "low",
+    why: "the verdict already exists as a comment; the act is one `pr-review-verdict` call, so the "
+      + "reasoning was spent writing it and low effort is enough to re-post it correctly",
+  }),
   "pr-merge-conflict": Object.freeze({
     kind: "claude",
     model: "sonnet",
@@ -148,6 +159,19 @@ export const PROFILES = Object.freeze({
     effort: "high",
     why: "resolving a merge conflict is judgment about which side of each hunk wins, and a wrong guess "
       + "either costs a CI cycle or silently drops the other pull request's change",
+  }),
+  "trunk-red": Object.freeze({
+    kind: "claude",
+    model: "sonnet",
+    // HIGH, for `pr-checks-failing`'s reason with a sharper edge: this is a red build on the branch every
+    // other pull request merges onto, so a wrong guess costs a CI cycle for the whole org rather than for one
+    // author. It is debugging against a failing test, which is where a cheap tier guesses, pushes, waits and
+    // guesses again. NOT `opus`: `agent-practices.md` reserves it for reasoning a cheaper tier has MEASURABLY
+    // got wrong, and no red trunk has been fixed on `sonnet`/`high` and recorded failing yet -- when one is,
+    // raise it HERE with the run.
+    effort: "high",
+    why: "a red trunk is a debugging job on the branch every pull request lands on, so a wrong guess costs "
+      + "the whole org a CI cycle, and the cheaper tier is not cheaper here",
   }),
   "pr-review-blocked": Object.freeze({
     kind: "claude",
@@ -287,6 +311,18 @@ export const PROFILES = Object.freeze({
     why: "diagnosis from an absence: the gate found nothing and the answer is whichever of a dozen gates "
       + "silently stopped being true. Measured over 48 hours, every instance was a different shape, and "
       + "the only thing that ever noticed was a human reading a terminal.",
+  }),
+  "reviewer-auth-failed": Object.freeze({
+    kind: "claude",
+    model: "sonnet",
+    // MEDIUM, and the recipient is `ceo`, so this is the profile a spawned worker would take if one ever were
+    // (`ceo` is a standing decision-holder and is never spawned). The work is a BRIEF FOR THE CHAIRMAN: which
+    // instances, on which signal, and the one action that fixes it -- a re-login of the reviewer's codex
+    // account, interactive, so nothing here can do it. The reasoning is reading two signals the gate already
+    // named, not diagnosing an absence, so `org-stalled`'s `high` would be paid for nothing (#2401).
+    effort: "medium",
+    why: "the gate has already named the instances and the signal; the output is a short brief for the "
+      + "chairman, whose only action is a re-login no session can perform",
   }),
   "chairman-blocked": Object.freeze({
     kind: "claude",

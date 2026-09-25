@@ -157,10 +157,17 @@ jobs:
             git fetch origin main:main
           fi
 
+      # #2301: THE PUBLISH PATH IS pnpm'S NOW, and so is the install. `changeset publish` chooses its tool from the
+      # workspace (`pnpm-workspace.yaml`, `packageManager`), so with pnpm here the publish runs `pnpm publish`,
+      # which packs with pnpm and then hands the tarball to the runner's NPM -- the only thing that talks to the
+      # registry, which is why provenance and OIDC below are still npm's business. `pnpm/action-setup` reads the
+      # version out of `packageManager`, and comes before setup-node because `cache: pnpm` shells out to it.
+      # `registry-url` stays: it is what writes the `.npmrc` that npm publishes with.
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm, registry-url: https://registry.npmjs.org }
+        with: { node-version: 22, cache: pnpm, registry-url: https://registry.npmjs.org }
 
-      - run: npm ci
+      - run: pnpm install --frozen-lockfile
       - run: npm run build
 
       # THE WHOLE-REPO COVERAGE THRESHOLD, HERE AND ON A NIGHTLY SCHEDULE (`nightly.yml`'s `coverage`
@@ -251,11 +258,13 @@ jobs:
       # 34785498618 was arithmetic done by whoever read the log, not something the log said. `--verbose`
       # prints `<name> -> <newVersion>` for every package the release plan touches.
       - name: What is pending, before anything is applied
-        run: npx changeset status --verbose
+        run: pnpm exec changeset status --verbose
 
-      # `changeset version` does NOT update package-lock.json under npm workspaces. Without the install
-      # that follows, the lockfile ships describing the PREVIOUS versions — invisible until a consumer's
-      # clean install resolves the wrong tree. `npm run release:version` does both; see .changeset/README.md.
+      # `changeset version` does NOT update the lockfile, under pnpm or npm. Without the lockfile-only install
+      # that follows, the lockfile ships describing the PREVIOUS versions — and under pnpm the failure is
+      # louder but no better: the next `pnpm install --frozen-lockfile` refuses a workspace whose manifests
+      # moved, so the release commit would break every CI job after it. `npm run release:version` does both;
+      # see .changeset/README.md.
       - name: Apply the pending changesets
         run: npm run release:version
 
@@ -273,8 +282,13 @@ jobs:
         run: git --no-pager diff --stat
 
       # PACK, not publish. This is the last step on the default path and it is the one that would have
-      # caught the failures M0 found: `npm pack` includes untracked files, so "it worked locally" was never
+      # caught the failures M0 found: a pack includes untracked files, so "it worked locally" was never
       # evidence, and a package with no `prepack` ships an empty `dist` on any machine that has not built.
+      #
+      # #2301: PACKED BY pnpm, INSTALLED BY npm -- the pack is the tool that will publish, the install is the
+      # tool a stranger runs -- and the packed `package.json` of every package is read back for a
+      # `workspace:` protocol or an internal range its sibling does not satisfy. The gate prints which tool
+      # did which half, so this log says it rather than a comment.
       - name: Pack every package, which is what a consumer receives
         run: npm run gate:isolation
 
@@ -318,12 +332,16 @@ jobs:
       #
       # RETROFITTING IS THE EXPENSIVE PART, exactly as the ADR says: provenance attaches at publish time,
       # so a version shipped without it can never gain it. The first publish is the only chance.
+      # #2301: `pnpm exec changeset publish`, which runs `pnpm publish` per package (the tool is read from the
+      # workspace). pnpm packs, then shells out to `npm publish <tarball>` with THE STEP'S environment, so
+      # `NPM_CONFIG_PROVENANCE` below reaches the npm that signs -- proved by the rehearsal step after this one,
+      # not assumed from the setting.
       - name: Publish
         if: inputs.dry-run == false && inputs.confirm == 'publish-for-real'
         # `--tag` ONLY when a dist-tag was given -- changesets' own default (no flag) is "latest", and
         # passing an empty `--tag ""` is not the same as omitting the flag, so the flag itself is built
         # conditionally rather than always passed.
-        run: npx changeset publish${{ inputs.dist-tag != '' && format(' --tag {0}', inputs.dist-tag) || '' }}
+        run: pnpm exec changeset publish${{ inputs.dist-tag != '' && format(' --tag {0}', inputs.dist-tag) || '' }}
         env:
           # NO `NODE_AUTH_TOKEN`, AND ITS ABSENCE IS THE POINT (#63 step 11, 2026-09-19). All six packages
           # now name this repository and this workflow as a TRUSTED PUBLISHER on npm, so each publish
@@ -338,6 +356,19 @@ jobs:
           # has succeeded without it -- the failure mode here is at publish time, which this file's own
           # header calls "the moment they are least able to check the result".
           NPM_CONFIG_PROVENANCE: "true"
+
+      # #2301: THE DRY RUN PROVES THE PART OF THE PUBLISH THAT A DRY RUN CAN REACH, and it is the step that
+      # answers "does provenance still get requested now that pnpm is the one calling npm". Setting
+      # `NPM_CONFIG_PROVENANCE` and reading the setting proves nothing about whether it arrives; this runs the
+      # SAME hand-off the real publish uses (`pnpm publish` -> `npm publish`, `--dry-run`) for every published
+      # package, with the same variable, and REFUSES unless the npm at the far end reports provenance on. It
+      # reaches the registry-facing code path and stops before the upload, so it publishes nothing: the
+      # signing itself happens only on a real publish, and that is the one thing this cannot show.
+      - name: Dry run only -- the pnpm-to-npm publish hand-off, with provenance requested
+        if: inputs.dry-run == true
+        env:
+          NPM_CONFIG_PROVENANCE: "true"
+        run: node scripts/release-publish-rehearsal.mjs
 
       # #1824: NOTHING ELSE IN THIS JOB COMMITS `release:version`'s RESULT BACK TO `main`. Measured on run
       # 35544379475, the first real dispatch since 0.1.0: `packages/*/package.json` stayed at `0.0.0` after
@@ -360,8 +391,8 @@ jobs:
         run: |
           if [ "${{ inputs.dry-run }}" = "false" ] && [ "${{ inputs.confirm }}" = "publish-for-real" ]; then
             if [ -n "${{ inputs.dist-tag }}" ]; then
-              echo "Published under dist-tag '${{ inputs.dist-tag }}' -- 'npm install <pkg>' still "
-              echo "resolves to whatever 'latest' already points at; only 'npm install <pkg>@${{ inputs.dist-tag }}' reaches this."
+              echo "Published under dist-tag '${{ inputs.dist-tag }}' -- a plain install of <pkg> still "
+              echo "resolves to whatever 'latest' already points at; only <pkg>@${{ inputs.dist-tag }} reaches this."
             fi
             echo "Published. npm versions cannot be unpublished after 72 hours, only deprecated."
           else

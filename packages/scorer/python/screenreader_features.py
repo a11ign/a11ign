@@ -120,7 +120,13 @@ ENGINEERED_FEATURE_MULTIPLIERS = {
 # A MEANING change and a WIDTH change: four new columns, and every weight file fitted before them was
 # fitted to a different input space. Starts with the two pairs whose starvation is measured; the rest
 # follow if the gates hold. Those gates are in known-gaps §35, and a REFUTED outcome reverts this.
-FEATURE_SCHEMA_VERSION = "screenreader-structured-v19"
+#
+# v20 (#2188): `generic_heading_present` changes MEANING, from "a heading is on a hand-written word list" to
+# "a one-word section heading names nothing its section says" (`unrelated_section_heading_present`). Values
+# change on records that already exist -- on the export at the time, 4 conformant "Afterwards" pages turn on
+# and, on the acceptance set, `Info` and `General` turn on while `Help` above help content turns OFF -- so
+# a v19 head was fitted to a different input and this is not a bump the way #1918's was not.
+FEATURE_SCHEMA_VERSION = "screenreader-structured-v20"
 
 FEATURE_NAMES = (
     "transcript_present",
@@ -275,7 +281,10 @@ STATUS_UPDATE = re.compile(r"^(?:showing|displaying|updated|loaded|filtered)\b",
 
 FORM_FIELD_ROLE = re.compile(r"\b(?:edit(?:\s+text)?|combo\s*box|list\s*box|checkbox|radio|spin\s*button)\b", re.IGNORECASE)
 
-GENERIC_HEADINGS = {"welcome", "overview", "stuff", "things", "information", "notes", "options", "updates", "more", "section", "introduction", "help", "miscellaneous", "details", "next"}
+# "help" is NOT here (#2188): a heading reading "Help" above help content DESCRIBES its topic, and WCAG 2.4.6 says
+# "a word, or even a single character, may suffice". It sat in this set and read as vague on both halves of
+# `acceptance-b3-icon-help`, whose only heading is that word above a button named "Open help".
+GENERIC_HEADINGS = {"welcome", "overview", "stuff", "things", "information", "notes", "options", "updates", "more", "section", "introduction", "miscellaneous", "details", "next"}
 
 # DELIBERATELY NOT THE SAME LIST AS `VAGUE_LINK_NAMES` (packages/judge/src/rules.ts) -- audited 2026-09-06
 # and confirmed intentional, not drift. This one answers "is the text vague ALONE" (2.4.9, AAA, unreported),
@@ -762,6 +771,100 @@ def vague_link_lacks_context(record: dict[str, Any]) -> bool:
     return False
 
 
+# What a heading is judged AGAINST, and why it is not a list of bad words (#2188, `product-manager`'s ruling).
+#
+# WCAG 2.4.6 is one sentence with no exception clause -- "Headings and labels describe topic or purpose" --
+# and its Understanding page says "a word, or even a single character, may suffice if it provides an
+# appropriate cue". ACT rule b49b2e tests each heading against "the first perceivable content after" it:
+# `<h1>Opening hours</h1>` passes and `<h1>Weather</h1>` fails above THE SAME content, and its Passed
+# Example 4 is the single character `A` above a list of words beginning with A. So the criterion asks whether
+# the heading RELATES to what it introduces, which a word list cannot answer in either direction:
+#
+#   "Help" above help content      on the list -> fired    conformant (the 4 acceptance false positives)
+#   "Info" / "General" / "Weather" not on the list -> silent  vague  (the 0.086 and 0.048 false negatives)
+#
+# The feature was measuring a different question from the criterion, so no threshold could rank the two
+# right. This asks the criterion's own: is the heading a single word that the content it introduces never
+# uses? A word list survives only as a VETO on that relation (below), never as the decider.
+#
+# Deliberately narrow, and each restriction is measured rather than assumed:
+#   - LEVEL 2 AND DEEPER. An h1 names the page and what follows it is chrome -- a skip link, a navigation
+#     list -- so a one-word h1 ("Archive") always looked unrelated to it: 3 conformant training pages.
+#   - ONE WORD. A phrase ("Documents needed to renew") carries a topic of its own without needing the
+#     content to repeat it; requiring the overlap of a phrase would accuse every descriptive heading whose
+#     section is worded differently. This is the ACT `Weather` shape, and it is the shape the corpus's
+#     vague headings take.
+#   - CONTENT MUST EXIST. 2.4.6 "does not require headings or labels", and a heading with nothing under it
+#     has nothing to be unrelated to. Absence of content never fires this.
+#
+# KNOWN COST, measured on the export at the time: 4 conformant records of one family (`headings-none-guide`)
+# carry the one-word h2 "Afterwards" over a paragraph that never says it. Whether that heading is
+# descriptive is exactly the judgement 2.4.6 leaves to a person, which is why every finding this feeds is
+# `cantTell` and 2.4.6 is not among the asserting subtypes.
+MIN_SECTION_HEADING_LEVEL = 2
+
+HEADING_LEVEL = re.compile(r"level\s+(\d+)", re.IGNORECASE)
+
+
+def heading_level(states: list[Any]) -> int:
+    """The level NVDA announced ("level 2" -> 2), or 0 when it announced none."""
+    for state in states:
+        match = HEADING_LEVEL.search(str(state))
+        if match:
+            return int(match.group(1))
+    return 0
+
+
+def topic_words(text: str) -> set[str]:
+    """Lower-cased words of `text`, with a plural `s` removed so "drafts" meets "draft"."""
+    words = re.findall(r"[^\W_]+", text.lower())
+    return {word[:-3] + "y" if word.endswith("ies") and len(word) > 4
+            else word[:-1] if word.endswith("s") and not word.endswith("ss") and len(word) > 3
+            else word
+            for word in words}
+
+
+def heading_sections(record: dict[str, Any]) -> list[tuple[str, int, str]]:
+    """(name, level, the words announced under it) for every heading in the transcript, in order.
+
+    A section runs to the next heading. Only NAMES and free text are collected, never the role words NVDA
+    adds ("list", "link", "button", "same page"), which would let a heading called "Links" be related to any
+    page that has one.
+
+    One announcement can carry several objects ("heading, level 2, Archive, link, Timetable"), so a unit is
+    read object by object rather than as either "a heading" or "content": what follows a heading INSIDE its
+    own unit, and that unit's trailing text, is that heading's section. Objects before the heading stay in
+    the section already open.
+    """
+    sections: list[list[Any]] = []
+    for unit in parsed_units(record, "transcript"):
+        for obj in unit.get("objects") or []:
+            if obj.get("role") == "heading":
+                sections.append([str(obj.get("name") or ""), heading_level(obj.get("states") or []), []])
+            elif sections:
+                sections[-1][2].append(str(obj.get("name") or ""))
+        if sections:
+            sections[-1][2].extend(str(text) for text in unit.get("trailing") or [])
+    return [(name, level, " ".join(words)) for name, level, words in sections]
+
+
+def unrelated_section_heading_present(record: dict[str, Any]) -> bool:
+    """Is there a one-word section heading whose section never uses that word? See the comment above.
+
+    A word from GENERIC_HEADINGS is unrelated to its section even when the section repeats it: the corpus's
+    own vague heading "Section" sits over "The section explains the next step.", and repeating a word that
+    says nothing is not describing a topic. The list is a veto on the relation and decides nothing alone.
+    """
+    for name, level, content in heading_sections(record):
+        heading = topic_words(name)
+        if level < MIN_SECTION_HEADING_LEVEL or len(heading) != 1 or not content.strip():
+            continue
+        repeated = heading & topic_words(content)
+        if not repeated or name.strip().lower() in GENERIC_HEADINGS:
+            return True
+    return False
+
+
 def cross_with_observation(
     values: dict[str, float], record: dict[str, Any], feature: str, channel: str, present: bool,
 ) -> None:
@@ -1036,9 +1139,7 @@ def structured_feature_values(record: dict[str, Any]) -> dict[str, float]:
         and bool(submitted_silently)
         and not values["validation_error_announced"]
     )
-    values["generic_heading_present"] = float(
-        any(heading_name(value) in GENERIC_HEADINGS for value in headings)
-    )
+    values["generic_heading_present"] = float(unrelated_section_heading_present(record))
     values["vague_link_without_context"] = float(vague_link_lacks_context(record))
     values["generic_graphic_present"] = float(
         any(graphic_name(value) in GENERIC_GRAPHICS for value in all_evidence(record))

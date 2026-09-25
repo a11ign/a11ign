@@ -35,6 +35,8 @@ entry names what is missing, what it would cost, and what would tell you it is f
 - [§45](#45-focusevents-is-not-deterministic-and-nothing-compared-it-until-the-day-before-this-was-found) focusEvents IS NOT DETERMINISTIC, and nothing compared it until the day before this was found
 - [§46](#46-a-document-identity-drops-the-query-string-so-a-site-whose-documents-differ-only-by-query-reads-as-one-document) A DOCUMENT IDENTITY DROPS THE QUERY STRING, so a site whose documents differ only by query reads as ONE document
 - [§47](#47-the-walk-alone-is-177-seconds-on-a-926-trip-page-so-no-probe-budget-can-rescue-it-and-the-report-has-to-say-what-it-did-not-walk) THE WALK ALONE IS 177 SECONDS ON A 926-TRIP PAGE, so no probe budget can rescue it and the report has to say what it did not walk
+- [§48](#48-a-reviewer-can-act-as-a11ign-bot-through-any-shell-wrapper-and-no-path-shim-can-change-that-accepted-by-ceo-2026-09-24-2402) A REVIEWER CAN ACT AS a11ign-bot THROUGH ANY SHELL WRAPPER, AND NO PATH SHIM CAN CHANGE THAT — ACCEPTED by ceo, 2026-09-24 (#2402)
+- [§49](#49-reviewer-auth-failure-is-detected-from-text-nobody-has-seen-render-and-the-refresh-race-is-unmeasured-open-by-design-2401) REVIEWER AUTH FAILURE IS DETECTED FROM TEXT NOBODY HAS SEEN RENDER, and the refresh race is UNMEASURED — OPEN, by design (#2401)
 <!-- known-gaps-index:end -->
 
 ## The order these should be done in
@@ -3169,3 +3171,112 @@ the board.
 **Three definitions remain three definitions** — `domCensus.formField` counts DOM elements, `structureCensus.formControl` counts AX nodes in `FORM_CONTROL_ROLES` (excluding `link`, `menuitem`, `option`, `tab`), and `sweep.found` counts distinct announcements — but the role set cannot be settled before the moment is. A wider bucket measured at load, compared against a sweep that ran five minutes later on content it partly revealed itself, is a corrected number about the wrong instant.
 
 **The lean this section carried is retracted, by the session that wrote it.** It read: *"At 926/265 the sweep is doing 3.5 trips per control, which is what every sweep type runs at — so it leans toward the page being real and the deadline being too small for it."* Trips per found control cannot decide that question, for two reasons that were each verified in the code before the lean was withdrawn. **It measures the other failure mode:** `collectPhrase` dedupes on `dedupeKey(phrase)` (`capture-probes.mjs:1155-1158`), so `found` is distinct announcements — one control announced under two distinct keys grows trips and `found` together and leaves the ratio flat, while an element revisited with an identical announcement moves it. The ratio sees walk efficiency and is blind to over-counting. **And the uniformity it rested on is the instrument:** `sweepInDirection` does `trips.count += 2` per step (`capture-probes.mjs:1260`), so `trips/found ≥ 2 × steps/found` by construction and every type inherits that floor; on this very capture the four sweeps that ran spread 1.9× — heading 2.25, landmark 4.33, formField 3.49, graphic 2.94 — with `formField` mid-range. *"What every sweep type runs at"* was a uniform answer read across a varied set, which is this repo's own recorded shape for a broken checker.
+
+## 48. A REVIEWER CAN ACT AS `a11ign-bot` THROUGH ANY SHELL WRAPPER, AND NO PATH SHIM CAN CHANGE THAT — ACCEPTED by `ceo`, 2026-09-24 (#2402)
+
+**The reviewer's `gh api` rule is advice, not a wall, and the hole is wider than #2325 first measured.** Re-read
+2026-09-24 at `a7a91408a` on the agent host, `codex-cli 0.156.1`, against `~/.codex/rules/default.rules`
+(`prefix_rule(pattern=["gh","api"], decision="forbidden")`, which matches the program name only):
+
+```
+$ codex execpolicy check --rules ~/.codex/rules/default.rules -- gh api user
+{"matchedRules":[{"prefixRuleMatch":{"matchedPrefix":["gh","api"],"decision":"forbidden", ...}}],"decision":"forbidden"}
+$ ... -- zsh -lc 'x=$(gh api user --jq .login); echo $x'     -> {"matchedRules":[]}   (the row's probe)
+$ ... -- zsh -lc 'gh api user'                              -> {"matchedRules":[]}   (no substitution needed)
+$ ... -- /usr/bin/gh api user                               -> {"matchedRules":[]}
+$ ... -- env gh api user                                    -> {"matchedRules":[]}
+$ ... -- curl -s https://api.github.com/user                -> {"matchedRules":[]}
+```
+
+**And it runs, in the reviewer's own sandbox settings** (`codex sandbox` with `workspace-write` and
+`network_access=true`, the two lines `~/.codex/config.toml` carries; the reviewer's `GH_CONFIG_DIR` is
+`/home/agent/reviewer/gh`, and the process is uid `agent`, the same user as every other session here):
+
+```
+$ zsh -lc 'GH_CONFIG_DIR=/home/agent/reviewer/gh /usr/bin/gh api user --jq .login'
+a11ign-bot
+$ zsh -lc 'tok=$(awk "/oauth_token/{print \$2; exit}" /home/agent/reviewer/gh/hosts.yml); curl -s -H "Authorization: token $tok" https://api.github.com/user | grep "\"login\""'
+  "login": "a11ign-bot",
+```
+
+**Why the row's first option (a `gh` wrapper earlier on PATH, the shape of `packages/agent-org/host/gh`) was
+not built: it is refused by the second probe above, not by argument.** A shim is one program on the path the
+reviewer's shell happens to search. The token sits in `hosts.yml`, readable by the reviewer's own uid, so
+`/usr/bin/gh` by absolute path and `curl` with the token both go around any shim and any execpolicy prefix
+rule. **A wall here needs the credential or the uid to differ, not the PATH.** Neither is a repository change:
+a fine-grained token scoped to pull-request reviews is issued by the account's owner (the chairman), and
+running the reviewer as another OS user changes what the host installs. **Removing `/usr/bin/gh` is not it
+either:** `pr-review-verdict` calls `gh api` itself (`pr-review-verdict.sh`), and `curl` is still there.
+
+**What is accepted, and what it does not add.** A reviewer can do whatever the `a11ign-bot` account can do
+(comment, close, edit labels, and the approval that `main` requires), through any shell form. That was already
+true of each reviewer before #2325: **N per-PR instances add processes, not power.** The rules still stop the
+accidental use, which is the case they were written for, and the plain form stays forbidden.
+
+**Who accepted it: `ceo`, on the chairman's word (the ruling on #2401), 2026-09-24.** `ceo` read this section at the
+PR head on #2402 and confirmed the transcripts hold: the compound form, `/usr/bin/gh`, `env gh` and `curl` each match
+no rule, and the reviewer's own sandbox settings print `a11ign-bot`. Removing `gh` and a PATH shim were refused by
+that measurement, not by taste.
+
+**The check that would change the decision:** the chairman issuing the reviewer a token scoped to review-posting
+(it can post a review but not close, merge or edit, so the exposure shrinks to what that token can do), or the
+reviewer running under its own uid (so `hosts.yml` is no longer readable by every session's user). Either makes a
+wall possible, and neither is an engineering step, so no row is filed for it and nothing else reopens this. `reviewer-setup.test.ts` pins that this entry and `reviewer.md` keep saying so.
+
+## 49. REVIEWER AUTH FAILURE IS DETECTED FROM TEXT NOBODY HAS SEEN RENDER, and the refresh race is UNMEASURED — OPEN, by design (#2401)
+
+Per-PR reviewers (#2401) put N codex instances on ONE credential (`~/.codex/auth.json`), and `ceo`'s ruling was that
+the refresh reading does NOT gate the build: the access token is valid to 2026-10-03T18:47Z, and forcing a refresh
+could log out live reviewers. So the row ships a DETECTOR (`work-gate.mjs`, cause `reviewer-auth-failed`, to `ceo`)
+and treats **the first real refresh as the measurement**. What is and is not known, as of 2026-09-24:
+
+- **Signal (a), codex's own text, was OBTAINED without forcing a refresh and is NOT VERIFIED TO RENDER.** The four
+  phrases in `CODEX_AUTH_FAILURE_TEXT` are verbatim strings of the installed `codex-cli 0.156.1` binary (the
+  detector's test re-reads them from it). No live failure was available, so nothing shows that a failed login
+  puts any of them **in a pane** rather than only in a log, and a newer codex may reword them. A pane that fails
+  silently is caught by signal (b) alone, after `REVIEWER_SILENCE_MS` (30 min, **a chosen number, not a measurement**).
+- **Signal (b) can only fire for an instance that STILL OWES a verdict.** A refresh that logs out an instance which
+  had already answered is invisible until that instance is next prompted, and then it looks like signal (b) for a
+  reason a reader must not confuse with a fresh failure.
+- **"Live instances" in the refresh ledger is the REGISTRY's count** (instances this path started and has not
+  ended), not a herdr reading: one closed by hand stays counted until its pull request closes.
+- **The ledger records a failure at DETECTION, not at the refresh**, up to 30 minutes later, as its own line naming
+  the refresh it followed. "Whether any then failed" is therefore answerable only for refreshes older than that bound.
+- **The review checkout is a linked worktree under `~/reviews`, chosen on a measurement of `codex sandbox` and NOT
+  seen in a live instance.** Under the reviewer's own policy `git checkout` and `git fetch` were refused with `Read-only
+  file system` in both a shallow clone and a linked worktree (codex protects `.git`), so the tick prepares and
+  re-points the tree and the order says so. Not measured live: that an instance reviews correctly from it, and that
+  a teardown removes it on the host. A teardown that fails leaves the tree on DISK (not `/tmp`, #2163), so a leaked
+  tree costs disk until someone removes it; the failure is reported, not retried.
+- **The per-instance clean-verdict count** the role document keeps for the standing `reviewer` (`ceo` samples every
+  fifth `convinced` per instance) **has no defined meaning for an instance that sees one pull request.** Instances
+  start OFF the line until `ceo` rules how the count is kept.
+
+**What closes it:** the first natural refresh (due after 2026-10-03T18:47Z) with N instances live, read from
+`reviewer-refreshes`, beside the wake ledger. Record it here, and then choose the bound and the count from it.
+
+## 50. THE COMPILE CACHE MOVED OFF `/tmp` FOR SHIPPED UNITS AND ONE HOST DOTFILE, and a session already running still writes the old place — HOST FACT, nothing in the repo verifies the dotfile (#2458)
+
+**The writer, measured 2026-09-25 by worker-15 with one command at a time under a private `TMPDIR`** (only that
+command's writes are counted): `tsc`, `eslint`, `rstest` and `changeset` each call `module.enableCompileCache()`
+with no directory, and Node then writes `<os.tmpdir()>/node-compile-cache`. `npm run lint` left 895 files,
+`eslint --version` 194 (entries, directories included), `rstest --version` 28, `changeset --version` 14,
+`tsc --version` 4, `node -e 1` and a `tsx` one-liner no file at all. The row's first reading ("not a launcher") was right about launchers and blind to these four, which
+write on load. **One file copied to two directories made two entries** (measured with a two-file fixture), so the
+key includes the path and every checkout multiplies it: that is the mechanism behind 141,353 inodes, **inferred**
+from that fixture and not counted on the outage's own directory: it was rebuilt after the reboot and held 2,330
+files when read.
+
+**What was done.** Every shipped `.service` carries `Environment=NODE_COMPILE_CACHE=%h/.cache/node-compile-cache`,
+pinned by `host-units.test.ts` (`compileCacheDrift`, with a negative control). And the agent account's `.zshenv`
+exports the same value for every session shell; **that file is on the host and outside this tree, so nothing here
+verifies it and a fresh host would not have it.** Re-run `zsh -c 'echo $NODE_COMPILE_CACHE'` to read it.
+
+**What is NOT done.**
+- **A session whose shell started before the `.zshenv` line still writes `/tmp/node-compile-cache`** until it is
+  restarted, and the directory that exists there now was not removed (a cache, safe to delete, and not this row's
+  to do to other sessions' live work).
+- **`host:check` does not read the dotfile.** A session started without it regresses silently; the tell is a new
+  `/tmp/node-compile-cache` after a session has run `npm run lint`.
+- **The cache directory is unbounded** under the home too, and has no sweep: it costs the same inodes on a
+  persistent disk, where nothing ages it out. A per-checkout key is why it grows with the number of worktrees.

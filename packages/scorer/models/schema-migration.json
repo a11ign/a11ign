@@ -1,0 +1,12 @@
+{
+  "shippedSchema": "screenreader-structured-v19",
+  "pendingSchema": "screenreader-structured-v20",
+  "why": "#2188. `generic_heading_present` tested a heading's STRING against a hand-written word list; WCAG 2.4.6 tests a heading against the CONTENT IT INTRODUCES (ACT b49b2e: 'describes the topic or purpose of the first perceivable content after the test target'), and the two gave opposite answers on the held-out set. 'Help' above help content sat on the list and fired on both halves of acceptance-b3-icon-help (raw 2.4.6:regex 0.980 / 0.870, four false positives), while 'Info' and 'General' above unrelated content were not on it and scored 0.086 and 0.048 against a cut of 0.605 (four false negatives), and both declared pairs ranked good ABOVE bad. No threshold classifies all three, so the feature changed rather than the cut: it now fires for a one-word heading at level 2 or deeper whose section never uses that word, and the word list survives only as a veto on that relation. The values change on records that already exist, so the v19 heads were fitted to a different input. Measured offline before opening, as the FEATURE's reading over the stored records and not as a head score (the retrain has not run): acceptance 16 of 16 positives and 0 of 420 negatives (was 14 and 2 false positives), training export 211 of 221 positives with 4 false positives (was 211 and 0) -- the four are one conformant family whose h2 is the single word 'Afterwards'. Opened 2026-09-24; closes when the retrain stamps v20 into the weights and `job=acceptance` is read over the same stored captures.",
+  "openedAt": "2026-09-24",
+  "closesWith": "a retrain over the exports already on the lab, then `npm run lab:job -- -e job=acceptance` -- NO recapture, because no case definition changed",
+  "gatesToClose": [
+    "held-out acceptance: `.criteria[\"2.4.6\"] | .falsePositiveCases == [] and .falseNegativeCases == []`, with `.positive >= 28 and .truePositive == .positive` as its positive control",
+    "scorer:shortcuts: no head gains a veto on `generic_heading_present`, and its closable vetoes do not rise",
+    "rules:real-pages: no new finding on the conformant real pages"
+  ]
+}

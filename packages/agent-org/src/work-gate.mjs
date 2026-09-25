@@ -30,7 +30,8 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { pathToFileURL, fileURLToPath } from "node:url";
-import { realpathSync, existsSync } from "node:fs";
+import { realpathSync, existsSync, readFileSync, appendFileSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 // RELATIVE, not the package specifier -- this must run before any `npm ci`/build, the same constraint
 // `org-watch.mjs` and `build-packages.mjs` state at their own imports.
 import { refuseUnknownFlags } from "../../worker-fleet/src/cli-flags.mjs";
@@ -38,7 +39,7 @@ import { READY_LABEL, CLAIM_LABEL, CLAIM_RECORD_MARKER } from "./claim-labels.mj
 import { verdictAtHead } from "./review-verdict.mjs";
 import { waitingOn, fleetWaitingOn, todayIso, describeWaiting, ANSWER_PREFIX } from "./waiting-condition.mjs";
 import { newestPerName } from "./newest-check-run.mjs";
-import { parityOwner } from "./review-attribution.mjs";
+import { parityOwner, reviewerInstanceNumber } from "./review-attribution.mjs";
 import { NO_VERDICT } from "./merge-guard/checks-rule.mjs";
 // B4, ASKED EARLY. These are the SAME two functions `row-claim.mjs` runs at claim time, imported
 // rather than reimplemented: `region-paths.mjs`'s own header records why a second copy of "what
@@ -69,6 +70,9 @@ import { poolDiagnosis, refusalPoolLine } from "./api-pool.mjs";
 import { armedFromApi, openPullRequestsQueryArgs } from "./auto-arm-sweep.mjs";
 import { armabilityOf } from "./pr-hold-state.mjs";
 import { REPO } from "../../../scripts/repo-identity.mjs";
+// #2356: A RED `main` WAKES A FIXER. Imports only `node:*`, `parent-recheck-summary.mjs` and the repo identity,
+// so the gate keeps the property its own header states -- it runs before any `npm ci` or build.
+import { readTrunkRed, trunkRedOrders } from "./trunk-red.mjs";
 
 /**
  * FOUR STATES, AND THE POLARITY IS DELIBERATE.
@@ -91,7 +95,8 @@ export const CAUSES = ["draft-awaiting-verdict", "ready-row-unclaimed", "draft-c
   "chairman-blocked", "org-stalled", "epic-unfiled", "epic-finished", "answer-owed",
   "blocked-unexaminable", "fleet-batch-due", "blocker-cleared", "pr-green-unarmed",
   "claimed-row-amended", "row-branch-unshipped", "host-units-stale", "pr-review-blocked",
-  "unclaimed-blocker-cleared", "pr-merge-conflict"];
+  "unclaimed-blocker-cleared", "pr-merge-conflict", "trunk-red", "verdict-comment-unreviewed",
+  "reviewer-auth-failed"];
 
 /**
  * Causes whose answer is a JUDGMENT about the current state, not an action on a named thing.
@@ -148,7 +153,7 @@ export const CAUSES = ["draft-awaiting-verdict", "ready-row-unclaimed", "draft-c
 export const JUDGMENT_CAUSES = Object.freeze(["ready-queue-empty", "lane-backlog-unpromoted",
   "chairman-blocked", "org-stalled", "epic-unfiled", "epic-finished", "answer-owed",
   "blocked-unexaminable", "fleet-batch-due", "row-branch-unshipped", "claimed-row-amended",
-  "unclaimed-blocker-cleared"]);
+  "unclaimed-blocker-cleared", "reviewer-auth-failed"]);
 
 /**
  * The causes that START new work, as opposed to finishing work already begun.
@@ -255,7 +260,13 @@ export function readPrs(run = defaultRun) {
       // offers both names (checked 2026-09-24), so this is two more names on a request already made --
       // not the second, refusable call `queue-table.mjs`'s header records avoiding. GitHub computes them
       // lazily and may answer `UNKNOWN`; `conflictStateOf` reads that as unread, never as clean.
-      + "mergeStateStatus,mergeable"]);
+      + "mergeStateStatus,mergeable,"
+      // #2365: `reviews` AND NOT `latestReviews`, MEASURED 2026-09-24 against `gh` on this host. Both ride on
+      // the `--limit 100` call without tripping GraphQL's node limit (which `commits` does), but
+      // `latestReviews[].commit.oid` comes back the EMPTY STRING and `reviews[].commit.oid` carries the sha the
+      // review was posted at -- and "was this convinced verdict converted into a review AT THIS HEAD" is a
+      // question about exactly that sha. `gh api .../pulls/N/reviews` `commit_id` agrees with it. No second call.
+      + "reviews"]);
     const parsed = JSON.parse(out);
     return Array.isArray(parsed) ? parsed : null;
   } catch {
@@ -290,14 +301,14 @@ export function readPrs(run = defaultRun) {
  */
 export const GH_READS = Object.freeze({
   unconditional: ["pr list", "issue list --label ready", "issue list --label backlog",
-    "issue list --label chairman-blocked", "issue list (all open: answer/blocked labels)"],
+    "issue list --label chairman-blocked", "issue list (all open: answer/blocked labels)",
+    // #2356: ONE REST CALL on the core pool -- the newest runs of `trunk.yml` on `main` (readTrunkRed).
+    "api actions/workflows/trunk.yml/runs (readTrunkRed -- trunk-red)"],
   conditionalOnEmptyShelf: "issue list --label epic (readEpics)",
-  // #2106 ADDED THE SECOND HALF OF THIS LINE, AND IT IS COUNTED FOR THE SAME REASON AS THE LINE BELOW:
-  // `refusedProtectionDiagnosis` reads `branches/main` to tell FORBIDDEN from ABSENT, and a read that is
-  // not written down here is one the next person inherits uncounted. It is conditional on the FIRST read
-  // being refused, so a tick that can read the contexts pays one call and a healthy tick pays none.
-  conditionalOnRed: "api branches/main/protection (requiredCheckNames), then -- only if that is refused --"
-    + " api branches/main (the .protected discriminator, #2022)",
+  // ONE call, and it needs no admin (#2331). It used to be two -- the admin-only protection endpoint, then
+  // `branches/main` as the discriminator for its 404 (#2106, #2022) -- and the discriminator's only job
+  // was to explain the admin-only 404, which `branches/main` does not give a non-admin credential. Conditional on a settled-red check.
+  conditionalOnRed: "api branches/main (requiredCheckNames)",
   // #1969, AND IT IS COUNTED HERE BECAUSE THE LAST ONE WAS NOT. This constant exists because "two `gh`
   // calls" was repeated for weeks while three readers were added, and a reviewer had to measure the call
   // sites to find it. The condition is `shouldBeMerging` finding a green, unheld, non-draft PR -- which
@@ -326,6 +337,11 @@ export const GH_READS = Object.freeze({
   // cost a function of how many rows are waiting.
   conditionalOnClearedRows: "issue list --state closed --limit 100 --json number,closedAt"
     + " (readRecentlyClosed -- unclaimed-blocker-cleared's backoff)",
+  // #2356: FOUR MORE REST CALLS, paid ONLY by a tick that found `main` red -- the run's jobs, the recheck
+  // job's annotations, `run view --log-failed` for the failing test names, and the merged PR's session.
+  // A healthy `main` pays none of them; a red one is rare and short-lived by the ruling this cause serves.
+  conditionalOnRedTrunk: "api runs/{id}/jobs, check-runs/{id}/annotations, run view --log-failed,"
+    + " commits/{sha}/pulls (readTrunkRed -- trunk-red)",
 });
 
 /**
@@ -502,6 +518,13 @@ export function ownerOf(row) {
 export const CHAIRMAN_LABEL = "needs:chairman";
 
 /**
+ * Where a `ready-row-unclaimed` order says which directory to launch the claim from -- FILLED IN BY `wake.mjs` (#2405),
+ * because the answer is a fact about the RECIPIENT (does `role-<you>` exist?) and the gate routes a pool order before
+ * anyone has taken it. Exported from here so the two files cannot spell it differently; `wake.mjs` already imports this one.
+ */
+export const LAUNCH_PLACEHOLDER = "<launch-directory>";
+
+/**
  * Rows waiting on the chairman, oldest first.
  *
  * WHY THIS EXISTS, MEASURED: #63 (the org transfer) sat four days with its last comment from the chairman
@@ -616,6 +639,9 @@ export function readReadyRows(run = defaultRun) {
  * Raise it when there are more engineers than this, not before.
  */
 export const MAX_ROW_ORDERS_PER_TICK = 8;
+
+/** The label `ceo` created for "offer this row before others"; `offerOrder` reads it (#2296). */
+export const PRIORITY_LABEL = "priority";
 
 /** @param {any} x @returns {string[]} */
 const labelsOf = (x) => (x?.labels ?? []).map((/** @type {any} */ l) => String(l?.name ?? l));
@@ -2178,11 +2204,22 @@ export function anyChecksRed(prs) {
 }
 
 /**
- * ONE SPELLING OF THE ENDPOINT, so the report names what the read actually asked for. A report that
+ * ONE SPELLING OF THE ENDPOINT, so the report names what the read actually asks for. A report that
  * quotes a path by hand drifts from the call beside it, and a wrong path in a diagnostic sends the next
  * reader to test something the gate never did.
+ *
+ * `branches/main`, NOT `branches/main/protection` (#2331). The protection endpoints are repository-ADMIN
+ * only, and this gate runs as `a11ign-ai-workers` (`permissions.admin: false`), so it 404'd on every tick
+ * for four days (#2106). `branches/main` needs only `pull` and carries the same list.
  */
-const PROTECTION_ENDPOINT = "repos/{owner}/{repo}/branches/main/protection";
+const BRANCH_ENDPOINT = "repos/{owner}/{repo}/branches/main";
+
+/**
+ * What the gate asks of `BRANCH_ENDPOINT`: the list, plus `protected` so the "no usable list" report quotes
+ * whether `main` is protected at all (`false` is a trunk fact worth escalating) instead of leaving the
+ * reader to guess. Small enough to quote whole.
+ */
+const BRANCH_JQ = "{protected, contexts: .protection.required_status_checks.contexts}";
 
 /**
  * The checks that can actually BLOCK A MERGE, or `null` when that could not be read.
@@ -2223,15 +2260,15 @@ const PROTECTION_ENDPOINT = "repos/{owner}/{repo}/branches/main/protection";
 export function requiredCheckNames(run = defaultRun, log = (line) => process.stderr.write(line)) {
   let answer;
   try {
-    answer = run(["api", PROTECTION_ENDPOINT, "--jq", ".required_status_checks.contexts"]);
+    answer = run(["api", BRANCH_ENDPOINT, "--jq", BRANCH_JQ]);
   } catch (error) {
-    // THE REFUSAL AND THE UNUSABLE ANSWER ARE DIFFERENT FACTS, so the call is separated from the parse
-    // rather than sharing one `catch`. Only a call that never answered is worth asking a discriminator
-    // about; a malformed body already proves the endpoint was reachable.
-    log(cannotReadRequiredChecks(refusedProtectionDiagnosis({ run, error })));
+    // THE REFUSAL AND THE UNUSABLE ANSWER ARE DIFFERENT FACTS, so the call is separated from the parse.
+    // A refusal says nothing about whether `main` is protected, and #2022 forbids reading it as if it did.
+    const why = String(/** @type {any} */ (error)?.message ?? error).split("\n")[0].trim();
+    log(cannotReadRequiredChecks(`was REFUSED (${why}).`));
     return null;
   }
-  const contexts = parsedOrNull(answer);
+  const contexts = parsedOrNull(answer)?.contexts;
   if (Array.isArray(contexts) && contexts.length > 0) return contexts;
   log(cannotReadRequiredChecks(`answered, but with no usable list of contexts: ${quoted(answer)}.`));
   return null;
@@ -2271,63 +2308,9 @@ function parsedOrNull(text) {
  * @param {string} diagnosis
  */
 function cannotReadRequiredChecks(diagnosis) {
-  return `CANNOT READ the required checks: \`gh api ${PROTECTION_ENDPOINT}\` ${diagnosis} `
+  return `CANNOT READ the required checks: \`gh api ${BRANCH_ENDPOINT}\` ${diagnosis} `
     + "Falling back to EVERY check on the head (pre-#1750 behaviour): no red pull request is missed, "
     + "but the wasted prompts #1750 was filed to stop are still being sent.\n";
-}
-
-/**
- * FORBIDDEN OR ABSENT -- and #2022's ruling is that a 404 here may NEVER be read as "unprotected".
- *
- * `branches/main/protection` 404s for both, so the 404 alone decides nothing. `branches/main.protected`
- * is the discriminator, it needs no admin, and it was measured 2026-09-22T23:05Z reading `true` in the
- * same second the protection endpoint 404'd for `a11ign-ai-workers` -- whose `permissions.admin` is
- * `false`, and which is the credential this gate runs with.
- *
- * DOUBLY CONDITIONAL, SO A HEALTHY TICK PAYS NOTHING. `requiredCheckNames` is itself paid only by a tick
- * that saw a settled-red check, and this second call is made only when THAT one was refused. A tick that
- * reads the contexts successfully never reaches this function at all -- which is the `GH_READS` bargain,
- * not a new unconditional cost.
- *
- * FAIL OPEN LIKE ITS CALLER. The discriminator can be refused too, and a refused discriminator produces a
- * loud `cannot tell` rather than a guess in either direction: guessing ABSENT is the reading #2022
- * forbids, and guessing FORBIDDEN would hide a genuinely unprotected trunk.
- *
- * @param {{ run: (args: string[]) => string, error: unknown }} deps
- */
-function refusedProtectionDiagnosis({ run, error }) {
-  const why = String(/** @type {any} */ (error)?.message ?? error).split("\n")[0].trim();
-  const isProtected = branchProtectedFlag(run);
-  if (isProtected === true) {
-    return `was REFUSED (${why}), and \`branches/main.protected\` reads \`true\` in the same tick, `
-      + "so this is FORBIDDEN rather than ABSENT: classic branch protection is admin-only and this "
-      + "credential has `permissions.admin: false` (#2022's discriminator).";
-  }
-  if (isProtected === false) {
-    return `was REFUSED (${why}), and \`branches/main.protected\` reads \`false\`, so protection is `
-      + "genuinely ABSENT -- a trunk-protection fact, not a credential one, and worth escalating.";
-  }
-  return `was REFUSED (${why}), and the discriminator \`branches/main.protected\` could not be read `
-    + "either, so this tick CANNOT TELL forbidden from absent. #2022 forbids reading it as unprotected.";
-}
-
-/**
- * `main`'s `protected` flag: `true`, `false`, or `null` when even this could not be read.
- *
- * READABLE WITHOUT ADMIN, which is the entire reason it can answer a question the protection endpoint
- * refuses to. Anything that is not a boolean is `null`: a field that came back missing or reshaped tells
- * us nothing, and inventing a `false` from it is the exact reading #2022 rules out.
- *
- * @param {(args: string[]) => string} run
- * @returns {boolean | null}
- */
-function branchProtectedFlag(run) {
-  try {
-    const value = JSON.parse(run(["api", "repos/{owner}/{repo}/branches/main", "--jq", ".protected"]));
-    return typeof value === "boolean" ? value : null;
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -2761,9 +2744,10 @@ export function reviewBlockedOrders(blocked) {
       + "claim refusal -- which is why a pull request in this state read as healthy everywhere: #2049 "
       + "was green and armed and unmergeable for over seven hours, and no org read could say why.\n"
       + "AWAITING_REVIEW is a PR nobody has reviewed. Since #2176 `draft-awaiting-verdict` covers a READY "
-      + "pull request as well as a draft, so its parity reviewer has normally been ordered already -- read "
-      + "the wake ledger before prompting: `npm run prompt:session -- reviewer \"#<n> ...\"` for an odd "
-      + "number, `reviewer-2` for an even one. A `QUEUED` exit 2 is delivery; do not retry it.\n"
+      + "pull request as well as a draft, so its reviewer, `reviewer-<n>` for pull request n, has normally "
+      + "been ordered already (and started, if none was live) -- read the wake ledger before prompting: "
+      + "`npm run prompt:session -- reviewer-<n> \"#<n> ...\"`. A `QUEUED` exit 2 is delivery; do not "
+      + "retry it.\n"
       + "REFUSED is a reviewer's `CHANGES_REQUESTED`, and it does NOT clear by being pushed past. Decide "
       + "whether it stands: rework belongs to the session on the PR's `session:` label, and a newer "
       + "review is the only thing that lifts it.\n"
@@ -2868,6 +2852,76 @@ function notConvincedOrder(pr, found, { head8, keyHead8 }) {
 }
 
 /**
+ * Whether a review APPROVED this pull request at the head a verdict may sit at: `true`, `false`, or `null`
+ * when the payload never carried `reviews` -- unread, which is NOT "no review" (`readPrs`'s rule, #1286: a
+ * missing field never becomes an order). `reviewDecision` IS NOT READ HERE, deliberately (reviewer-2 on #2388):
+ * it is PULL-REQUEST-WIDE, and `main` keeps an approval posted at an older head, so it can say APPROVED while
+ * nothing approves THIS one -- `reviewStateOf` documents that it is no statement about the head. Reading it
+ * as an answer would silence the order for exactly a stale approval, so the answer comes from the reviews'
+ * own commit oids. (`pr-review-blocked` keeps reading the field; the two ask different questions.)
+ *
+ * ANY equivalent head counts, not only the current one: an approval at the authored head is the same work
+ * as the merge-from-main after it, exactly as `verdictAmong` treats a verdict.
+ * @param {any} pr @param {string[]} heads @returns {boolean | null}
+ */
+function approvedAtHead(pr, heads) {
+  if (!Array.isArray(pr.reviews)) return null;
+  return pr.reviews.some((/** @type {any} */ r) =>
+    r?.state === "APPROVED" && heads.includes(String(r?.commit?.oid ?? "")));
+}
+
+/**
+ * #2365: A CONVINCED VERDICT THAT IS ONLY A COMMENT, on a pull request that is not a draft.
+ *
+ * THE QUESTION `settledVerdictOrder` NEVER ASKED. It answered "is a draft convinced" and returned `null` for
+ * a ready pull request, correctly for "flip it ready" -- so a verdict posted as a COMMENT with no review at
+ * that head was invisible, and GitHub's `reviewDecision` stayed `REVIEW_REQUIRED` with nothing to say why.
+ * Measured 2026-09-24 on #2337: `reviewer-2`'s *convinced (provisional)* at 14:02Z, `/reviews` empty, held
+ * until somebody read it by hand. `ceo`'s ruling on #928: the reviewer's typo is not the remedy, the STATE is
+ * a gate question. (The comment existed because `pr-review-verdict.sh` refused a malformed first line AFTER
+ * `gh pr comment` had posted.)
+ *
+ * TO THE PARITY REVIEWER, NOT `product-manager`, and that is the difference from `pr-review-blocked`: that
+ * order says "nobody has approved" for a SET; this one names a single comment and a remedy that is not a new
+ * review round -- re-post it through `pr-review-verdict`.
+ *
+ * WHICH CAUSE WINS WHEN BOTH APPLY: a DRAFT is `draft-convinced-not-ready`'s, whose next act (flip it ready)
+ * comes first, and this function returns `null` for one. Once flipped, the next tick asks this question.
+ *
+ * NOT HELD, and green (`draftOrder` has already required green): a held pull request is not merging BY
+ * DECISION, so an approval nobody wants yet is no defect. Keyed on the AUTHORED head, so update-branch does
+ * not re-fire it.
+ *
+ * @param {any} pr @param {{verdict: string | null, by: string | null, byIsAuthor: boolean | null}} found
+ * @param {ReviewHeads} heads
+ */
+function unreviewedConvincedOrder(pr, found, heads) {
+  if (pr.isDraft) return null;
+  if (!armabilityOf({ labels: labelsOf(pr) }).arm) return null;
+  if (approvedAtHead(pr, heads.all ?? []) !== false) return null;
+  const { head8, keyHead8 } = heads;
+  const session = parityOwner(pr.number);
+  const authored = found.byIsAuthor === true
+    ? " That comment is signed by the pull request's own author, so it is not a review of anything: "
+      + "review the change first, and post the approval only if it stands."
+    : "";
+  return {
+    session,
+    cause: "verdict-comment-unreviewed",
+    subject: `pr-${pr.number}`,
+    discriminator: keyHead8,
+    prompt: `Ready #${pr.number} at \`${head8}\` is green and carries a CONVINCED verdict`
+      + `${found.by ? ` from ${found.by}` : ""} as a COMMENT, and no APPROVED review at that head -- `
+      + "so GitHub's `reviewDecision` is not APPROVED and it cannot merge. The comment did not become a "
+      + "review. Post the approving review with `pr-review-verdict` at the CURRENT head; its first line "
+      + `must begin "**Review of #${pr.number} at " or the script refuses (after any comment was posted). `
+      + "This is not a new review round: if your verdict stands, re-post it; do not re-read the diff."
+      + authored,
+    causeKey: `${session}/verdict-comment-unreviewed/pr-${pr.number}/${keyHead8}`,
+  };
+}
+
+/**
  * The follow-up a SETTLED verdict deserves, or `null` when it deserves none.
  *
  * A VERDICT IS NOT THE END OF THE WORK, AND READING IT AS ONE LEFT PULL REQUESTS ABANDONED. The gate used
@@ -2885,8 +2939,9 @@ function notConvincedOrder(pr, found, { head8, keyHead8 }) {
  * `verdict-not-convinced` no longer does: see `notConvincedOrder`.
  *
  * `draft-convinced-not-ready` IS THE ONE REVIEW CAUSE THAT STAYS DRAFT-ONLY (#2176): it is about flipping a
- * draft ready, and a convinced verdict on a pull request that is already ready asks nothing of anybody.
- * `not-convinced` applies to both, because rework is owed whatever state the pull request is in.
+ * draft ready. A convinced verdict on a pull request that is already ready asks nothing of anybody -- UNLESS
+ * it is only a comment (#2365), which `unreviewedConvincedOrder` asks about. `not-convinced` applies to both,
+ * because rework is owed whatever state the pull request is in.
  *
  * @param {any} pr @param {{verdict: string | null, by: string | null,
  *        byIsAuthor: boolean | null}} found @param {ReviewHeads} heads
@@ -2916,6 +2971,7 @@ function settledVerdictOrder(pr, found, heads) {
       ...(found.byIsAuthor === false ? { action: { kind: "ready", pr: Number(pr.number) } } : {}),
     };
   }
+  if (found.verdict === "convinced") return unreviewedConvincedOrder(pr, found, heads);
   if (found.verdict === "not-convinced") return notConvincedOrder(pr, found, heads);
   // Any other settled verdict -- `unrecognised`, or one the opener did not attribute -- is left alone:
   // re-prompting a reviewer who has already answered costs more than waiting for a human to look.
@@ -2923,9 +2979,10 @@ function settledVerdictOrder(pr, found, heads) {
 }
 
 /**
- * @typedef {{head8: string, keyHead8: string}} ReviewHeads
+ * @typedef {{head8: string, keyHead8: string, all?: string[]}} ReviewHeads
  * `head8` is the head a reviewer would be reading; `keyHead8` is the head the ORDER is keyed on -- the last
  * one the AUTHOR produced (#2176). They are the same string unless an update-branch has moved the head.
+ * `all` is every full head that update-branches made equivalent, newest first (`reviewChainOf`'s `heads`).
  */
 
 /** GitHub's update-branch headline (`Merge branch 'main' into <branch>`) and a session's own merge of it
@@ -3039,7 +3096,7 @@ function draftOrder(pr, required = null) {
   const head = reviewableHead(pr);
   if (!head) return null;
   const chain = reviewChainOf(pr) ?? { authored: head, heads: [head] };
-  const heads = { head8: head.slice(0, 8), keyHead8: chain.authored.slice(0, 8) };
+  const heads = { head8: head.slice(0, 8), keyHead8: chain.authored.slice(0, 8), all: chain.heads };
   const found = verdictAmong(pr, chain.heads);
   // A VERDICT THE OPENER DID NOT ATTRIBUTE COUNTS AS SETTLED, and that is the wake side's default rather
   // than a reading of the comment: `verdictAtHead` returns `byIsAuthor: null` for it and refuses to guess
@@ -3048,10 +3105,10 @@ function draftOrder(pr, required = null) {
   // verdict in five is the control for.
   if (found.verdict !== null) return settledVerdictOrder(pr, found, heads);
 
-  // ODD/EVEN PARITY IS THE ORG'S OWN SPLIT (`.claude/rules/agent-practices.md`): odd PR numbers go to
-  // `reviewer`, even to `reviewer-2`. Stated there, applied here, spelled in neither twice -- and since
-  // #2127 the arithmetic itself lives in `review-attribution.mjs`, beside the reader that checks whether
-  // a posted review obeyed it. A detector with its own copy would agree with a router that had drifted.
+  // PULL REQUEST n IS `reviewer-<n>`'S (#2401; the odd/even split it replaced is retired). The name is
+  // herdr's, and `wake.mjs` starts the instance when none is live. The arithmetic lives in
+  // `review-attribution.mjs`, beside the reader that checks whether a posted review obeyed it -- a
+  // detector with its own copy would agree with a router that had drifted.
   const session = parityOwner(pr.number);
   return {
     session,
@@ -3105,7 +3162,25 @@ export function withCommitChains(prs, run = defaultRun) {
 }
 
 /**
- * One order per unclaimed Ready row, oldest first, capped.
+ * THE `priority` LABEL ORDERS OFFERS, AND DOES NOT GRANT (#2296). `ceo` created it 2026-09-24 as "offer this
+ * row before others"; nothing read it, so a priority row waited its turn by row number like any other.
+ * Labelled rows go AHEAD of the rest and this runs BEFORE the per-tick slice, or a high-numbered priority
+ * row would be cut by the very cap it exists to beat. A row `partitionUnclaimed` shelved never reaches
+ * here, so the label cannot walk a row past B4 or a claim label.
+ *
+ * OLDEST FIRST WITHIN EACH GROUP, because a queue that hands out its newest rows first starves its oldest --
+ * and the number is a row number, so ascending IS oldest. Hand assignment stays the fallback.
+ *
+ * @param {any[]} unclaimed
+ */
+function offerOrder(unclaimed) {
+  const isPriority = (/** @type {any} */ row) => labelsOf(row).includes(PRIORITY_LABEL);
+  return [...unclaimed].sort((a, b) =>
+    Number(isPriority(b)) - Number(isPriority(a)) || Number(a.number) - Number(b.number));
+}
+
+/**
+ * One order per unclaimed Ready row, priority rows first then oldest first, capped.
  *
  * SPLIT OUT OF `decide` for the same reason `laneBacklogOrders` was: adding lane routing took that
  * function past `local/max-physical-lines-per-function` 90. `decide` asks what the queue needs;
@@ -3132,10 +3207,7 @@ function rowOrders(unclaimed) {
   // Per-row orders also make the ledger do the right thing. `wake` marks an agent working the moment it
   // prompts it, so several orders in one tick fan out across whoever is free, and a row already woken
   // for is a `causeKey` already spent -- the same row cannot recruit a second engineer on the next tick.
-  // OLDEST FIRST, because a queue that hands out its newest rows first starves its oldest -- and the
-  // number is a row number, so ascending IS oldest.
-  const oldestFirst = [...unclaimed].sort((a, b) => Number(a.number) - Number(b.number));
-  for (const row of oldestFirst.slice(0, MAX_ROW_ORDERS_PER_TICK)) {
+  for (const row of offerOrder(unclaimed).slice(0, MAX_ROW_ORDERS_PER_TICK)) {
     // NO SESSION NAMED. Which engineer takes it depends on who is idle RIGHT NOW, which only
     // `herdr agent list` knows -- so the order names the lane and `wake.mjs` picks the body.
     // ROUTED BY LANE. Every ready row went to `engineers` regardless of its lane, so a `lane:ceo` row
@@ -3146,6 +3218,8 @@ function rowOrders(unclaimed) {
       session: owner ?? "engineers",
       cause: "ready-row-unclaimed",
       subject: `row-${row.number}`,
+      // The spawner names the branch and the instance's first message from it (#2405).
+      title: row.title ?? "",
       // THE ROW IS THE DISCRIMINATOR NOW, not the queue depth. Keyed on the count, every claim rewrote
       // every remaining order's key and re-woke someone for rows already being offered.
       discriminator: String(row.number),
@@ -3158,15 +3232,13 @@ function rowOrders(unclaimed) {
         // system (2026-09-17) stopped and asked a human for both facts, because the order named
         // neither -- so they are named here rather than left to a role brief the session may not have
         // read yet. `../wt-<n>` is the sibling convention every live worktree on the host follows.
-        // THE LAUNCH DIRECTORY IS NAMED, AND IT IS NOT THE PRIMARY (#2237). This sentence said "run the
-        // command from the primary checkout" for nine days after `launchGate` (#1352) began refusing
-        // exactly that launch, so every engineer woken by this cause paid a refused command first. The
-        // role worktree is what `wake.mjs` documents as not universal (`worker-capture` has none), hence
-        // the fallback to any linked worktree -- what `launchGate` tests is "is `.git` a file", not whose.
-        + "The claim creates that worktree for you; run the command from your own linked worktree, "
-        + "`/home/agent/repos/role-<you>` (or any other linked worktree `git worktree list` names) -- NOT "
-        + "the primary checkout at `/home/agent/repos/a11y-witness`, which the tooling refuses -- then do "
-        + "all the work inside the new worktree.\n"
+        // THE LAUNCH DIRECTORY IS NAMED, AND IT IS NOT THE PRIMARY (#2237) -- BUT NAMED AT DELIVERY, NOT HERE (#2405).
+        // This sentence named `/home/agent/repos/role-<you>` for nine days after `launchGate` (#1352) began
+        // refusing the primary, and `role-<you>` did not exist for six of the eight engineer addresses; the
+        // fallback it offered instead (whichever linked worktree `git worktree list` named) let an engineer BORROW one a peer was working in.
+        // The gate cannot know who takes a pool order, and so cannot know whether that address has a
+        // worktree, so `wake.mjs` fills `LAUNCH_PLACEHOLDER` in when it knows the recipient (`addressed`).
+        + `The claim creates that worktree for you. ${LAUNCH_PLACEHOLDER}\n`
         + "If the claim is refused because someone took it first, that is an answer: stop and say so.",
       causeKey: `${owner ?? "engineers"}/ready-row-unclaimed/${row.number}`,
     });
@@ -3813,7 +3885,7 @@ export function performActions(orders, run = defaultRun, log = (line) => process
  *           claimedComments?: {number?: number, comments?: {body?: string, id?: string}[]}[],
  *           rowBranches?: {branch: string, head: string, row: number}[] | null,
  *           hostDrift?: {unit: string, problem: string, detail: string}[] | null,
- *           closings?: Map<number, number> | null }} state
+ *           closings?: Map<number, number> | null, trunkRed?: ReturnType<typeof readTrunkRed> }} state
  *        `required` is the checks that can block a merge (`requiredCheckNames`), or `null` for
  *        "could not be read", which counts EVERY check as before this existed.
  *        `epics` are the open `epic` rows with their `subIssuesSummary` (`readEpics`); `[]` when
@@ -3841,6 +3913,9 @@ export function performActions(orders, run = defaultRun, log = (line) => process
  *        default for `rowBranches`'s reason -- a default parameter is a branch `complexity` counts,
  *        and `decide` sits exactly on its limit of 15.
  *        It spends NO API pool: see `readHostDrift`.
+ *        `trunkRed` is `readTrunkRed()` -- the facts about a red `main`, or `null` when it is green or the
+ *        read was refused. OMITTED AND `null` MEAN THE SAME THING and it carries no `= null` default, for
+ *        `rowBranches`'s reason: `decide` sits exactly on its limit of 15.
  *        `unarmed` is `readUnarmed(shouldBeMerging(prs, required))` -- the green, unheld pull requests
  *        the API says nothing has armed. It DEFAULTS TO `null`, which is "not asked or refused" and
  *        emits no order: a caller that cannot make that read must never produce a false all-clear, and
@@ -3850,10 +3925,10 @@ export function performActions(orders, run = defaultRun, log = (line) => process
  */
 export function decide({ prs, readyRows, promotableRows = [], chairmanBlocked = [], prFiles = [],
   drain = false, required = null, epics = [], answerOwed = [], openRows = [], unarmed = null,
-  claimedComments = [], rowBranches, hostDrift, closings }) {
-  // FIRST, BEFORE EVERY OTHER CAUSE. Every other order asks a session what should happen next; this one
-  // says another session is ALREADY STOPPED waiting on them. That outranks any standing question.
-  const orders = [...answerOrders(answerOwed)];
+  claimedComments = [], rowBranches, hostDrift, closings, trunkRed }) {
+  // FIRST, BEFORE EVERY OTHER CAUSE (#2356): a red `main` outranks even `answer-owed` -- see `trunkRedOrders`.
+  // `answer-owed` says another session is ALREADY STOPPED waiting on them, which outranks any standing question.
+  const orders = [...trunkRedOrders(trunkRed), ...answerOrders(answerOwed)];
   // SECOND, AND AHEAD OF `blocker-cleared` DELIBERATELY (#2110). Both address a session that already
   // holds a row, so both outrank every cause that offers new work -- but between the two, a constraint
   // the holder has not read is worse than a row they have not resumed. `blocker-cleared` says work can
@@ -3961,6 +4036,258 @@ function reportWithheld({ drain, blocked }) {
     process.stderr.write(`SHELVED row #${row.number}: ${row.reason}\n`);
   }
 }
+
+// --- #2401: A REVIEWER WHOSE CODEX FAILED TO AUTHENTICATE ---------------------------------------------------
+
+/** Where the org's runtime state lives -- beside `wake.mjs`'s ledger, which defaults to the same directory. */
+export const REVIEWER_STATE_DIR = `${process.env.HOME}/.cache/a11ign`;
+
+/** The instances `wake.mjs` STARTED and has not ended: `{ "reviewer-<n>": { spawnedAt } }`. `wake` writes, this reads. */
+export const REVIEWER_REGISTRY_FILE = "reviewer-instances.json";
+
+/** Every change of the credential's `last_refresh`, one JSON line each -- the reading ruling 2 asked for. */
+export const REVIEWER_REFRESH_LEDGER_FILE = "reviewer-refreshes";
+
+/** The reviewers' codex credential. Only `last_refresh` is ever read from it: the tokens beside it are secrets. */
+export const CODEX_AUTH_FILE = `${process.env.HOME}/.codex/auth.json`;
+
+/**
+ * CODEX'S OWN AUTH-FAILURE TEXT (signal a), READ FROM CODEX AND NOT INVENTED.
+ *
+ * Measured 2026-09-24 by scanning the printable strings of the installed `codex-cli 0.156.1` binary
+ * (`~/.codex/packages/standalone/releases/0.156.1-x86_64-unknown-linux-musl/bin/codex`), no refresh forced.
+ * These are the user-facing messages of its auth-recovery path, each verbatim:
+ *   - "Your access token could not be refreshed. Please log out and sign in again."
+ *   - "Your access token could not be refreshed because you have since logged out or signed in to another
+ *      account. Please sign in again."
+ *   - "Your authentication session could not be refreshed automatically. Please log out and sign in again."
+ *   - "OAuth refresh token was rejected: " and "Failed to refresh token: " (the error prefixes)
+ * WHAT THIS DOES NOT PROVE: that any of them RENDERS in a pane as written. No live failure was available -- forcing one
+ * could log out live reviewers, which ruling 2 excluded -- so the match is a needle into a pane's recent
+ * output, and the first real refresh either finds it or is caught by signal (b). A new codex may reword
+ * these; `docs/known-gaps.md` says so.
+ */
+export const CODEX_AUTH_FAILURE_TEXT = Object.freeze([
+  "Your access token could not be refreshed",
+  "Your authentication session could not be refreshed automatically",
+  "OAuth refresh token was rejected",
+  "Failed to refresh token",
+]);
+
+const MS_PER_MINUTE = 60_000;
+
+/**
+ * How long a reviewer may go without a verdict after the credential refreshed before that is called a failure.
+ * A review is minutes of reading, not an hour, and a healthy reviewer that refreshed mid-review still answers
+ * inside this; a number, not a measurement, and the refresh ledger is where the first real one is read.
+ */
+export const REVIEWER_SILENCE_MS = 30 * MS_PER_MINUTE;
+
+/** The two causes whose recipient is a reviewer that owes a verdict. */
+const REVIEWER_VERDICT_CAUSES = Object.freeze(["draft-awaiting-verdict", "verdict-comment-unreviewed"]);
+
+/**
+ * `credential.last_refresh` as epoch milliseconds, or `null` when the file cannot be read or carries none.
+ * `null` is "could not ask" and signal (b) says nothing for it; it is never a time.
+ * @param {string} [path] @param {(path: string, enc: "utf8") => string} [read]
+ * @returns {number | null}
+ */
+export function readLastRefresh(path = CODEX_AUTH_FILE, read = readFileSync) {
+  try {
+    const at = Date.parse(String(JSON.parse(read(path, "utf8"))?.last_refresh ?? ""));
+    return Number.isNaN(at) ? null : at;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The instances `wake.mjs` started, from the registry file. `{}` for a missing file (nothing was started) AND for
+ * one that will not parse -- the second is a lost reading, so it is never confused with an instance that FAILED.
+ * @param {string} path @param {(path: string, enc: "utf8") => string} [read]
+ * @returns {Record<string, {spawnedAt: number}>}
+ */
+export function readReviewerRegistry(path, read = readFileSync) {
+  try {
+    const parsed = JSON.parse(read(path, "utf8"));
+    return parsed !== null && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * The phrase of codex's own auth-failure text a pane shows, or `null`.
+ * @param {string | null | undefined} text
+ * @returns {string | null}
+ */
+export function authFailureShownIn(text) {
+  return CODEX_AUTH_FAILURE_TEXT.find((phrase) => String(text ?? "").includes(phrase)) ?? null;
+}
+
+/**
+ * The reviewer sessions this tick's orders say still OWE a verdict: an order addressed to `reviewer-<n>` for one
+ * of the two verdict causes. The gate derives those from GitHub each tick, so "still emitted" is "still owed".
+ * @param {{session: string, cause?: string}[]} orders
+ * @returns {Set<string>}
+ */
+export function sessionsOwingVerdict(orders) {
+  return new Set(orders
+    .filter((o) => REVIEWER_VERDICT_CAUSES.includes(String(o.cause)) && reviewerInstanceNumber(o.session) !== null)
+    .map((o) => o.session));
+}
+
+/**
+ * WHICH LIVE REVIEWER INSTANCES HAVE FAILED TO AUTHENTICATE -- two signals, each named on the failure it yields.
+ *
+ *   pane            (a) the instance's pane shows codex's own auth-failure text. Asked of EVERY registered instance,
+ *                   because the text is the failure itself and needs no bound.
+ *   refresh-silence (b) `last_refresh` is later than the instance's start, it still owes a verdict, and the refresh is
+ *                   older than `silenceMs`. A healthy reviewer that refreshed answers inside the bound; one that
+ *                   lost its login sits at the prompt and never does.
+ *
+ * (b) NEEDS THE VERDICT STILL OWED, and that is what keeps an idle instance -- verdict posted, PR waiting to
+ * merge -- from reading as failed the moment the credential moves. A `paneText` that cannot be read is `null`,
+ * which says nothing for (a) and leaves (b) to stand alone.
+ *
+ * @param {{instances: Record<string, {spawnedAt: number}>, owing: Set<string>, lastRefresh: number | null,
+ *   paneText: (session: string) => string | null, now: number, silenceMs?: number}} facts
+ * @returns {{session: string, signals: string[]}[]}
+ */
+export function reviewerAuthFailures({ instances, owing, lastRefresh, paneText, now, silenceMs = REVIEWER_SILENCE_MS }) {
+  return Object.entries(instances).flatMap(([session, { spawnedAt }]) => {
+    const signals = [];
+    if (authFailureShownIn(paneText(session)) !== null) signals.push("pane");
+    const refreshedSinceStart = lastRefresh !== null && lastRefresh > spawnedAt;
+    if (refreshedSinceStart && owing.has(session) && now - lastRefresh > silenceMs) signals.push("refresh-silence");
+    return signals.length > 0 ? [{ session, signals }] : [];
+  });
+}
+
+/**
+ * The incident order to `ceo`, or none. `ceo` because the remedy is a re-login of the reviewer's codex account, an
+ * interactive step only the chairman can take (ruling 2). JUDGMENT-keyed on the failed set and the refresh it
+ * followed, so the same failure is not re-asked every twenty minutes and a NEW one is a new question.
+ * @param {{session: string, signals: string[]}[]} failures @param {number | null} lastRefresh
+ * @returns {{session: string, cause: string, subject: string, discriminator: string, prompt: string, causeKey: string}[]}
+ */
+export function reviewerAuthOrders(failures, lastRefresh) {
+  if (failures.length === 0) return [];
+  const key = `${failures.map((f) => f.session).sort().join(".")}/${lastRefresh === null ? "no-refresh" : new Date(lastRefresh).toISOString()}`;
+  return [{
+    session: "ceo",
+    cause: "reviewer-auth-failed",
+    subject: "reviewer-auth",
+    discriminator: key,
+    prompt: `${failures.length} reviewer instance(s) have FAILED TO AUTHENTICATE with codex:\n`
+      + failures.map((f) => `  ${f.session}  (${f.signals.join(" + ")})`).join("\n") + "\n"
+      + "`pane` is codex's own auth-failure text in the instance's pane; `refresh-silence` is the credential's "
+      + "`last_refresh` moving after the instance started while it still owes a verdict for more than "
+      + `${REVIEWER_SILENCE_MS / MS_PER_MINUTE} minutes.\n`
+      + "THE REMEDY IS A RE-LOGIN OF THE REVIEWER'S CODEX ACCOUNT, and only the chairman can do it (`codex "
+      + "login`, interactive). Afterwards close each failed workspace (`herdr --session org workspace close "
+      + "<id>`): the gate starts a fresh instance for a pull request that still needs a verdict on its next tick. "
+      + "The reading is `reviewer-refreshes`, beside the wake ledger (every refresh, with the live-instance count).",
+    causeKey: `ceo/reviewer-auth-failed/${key}`,
+  }];
+}
+
+/**
+ * The ledger lines to append for this tick: a `refresh` line when `last_refresh` differs from the newest recorded
+ * one, and a `failure` line for each instance found failed on a refresh not yet recorded as failing.
+ *
+ * EVERY REFRESH IS A READING (ruling 2): how many instances were live when it moved, and whether any then
+ * failed, so "the first real refresh is the measurement" is a file someone can read. A failure is detected up to
+ * `REVIEWER_SILENCE_MS` AFTER the refresh, so it is its own line naming the refresh it followed, never a
+ * rewrite of the `refresh` line.
+ *
+ * @param {{ledger: {type: string, lastRefresh: string | null, session?: string}[], lastRefresh: number | null,
+ *   live: string[], failures: {session: string, signals: string[]}[], now: number}} facts
+ * @returns {object[]}
+ */
+export function refreshLedgerLines({ ledger, lastRefresh, live, failures, now }) {
+  if (lastRefresh === null) return [];
+  const iso = new Date(lastRefresh).toISOString();
+  const at = new Date(now).toISOString();
+  const lines = [];
+  const known = ledger.some((l) => l.type === "refresh" && l.lastRefresh === iso);
+  const hadOtherRefresh = ledger.some((l) => l.type === "refresh");
+  if (!known) lines.push({ type: "refresh", at, lastRefresh: iso, live: live.length, liveSessions: live,
+    firstRecorded: !hadOtherRefresh });
+  for (const f of failures) {
+    if (ledger.some((l) => l.type === "failure" && l.lastRefresh === iso && l.session === f.session)) continue;
+    lines.push({ type: "failure", at, lastRefresh: iso, session: f.session, signals: f.signals });
+  }
+  return lines;
+}
+
+/** @param {string} path @param {(path: string, enc: "utf8") => string} [read] */
+function readRefreshLedger(path, read = readFileSync) {
+  try {
+    return String(read(path, "utf8")).split("\n").filter((l) => l.trim() !== "").map((l) => JSON.parse(l));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The live reviewer instances' panes as text, through herdr: workspace list, the pane of the one labelled
+ * `session`, and that pane's recent output. `null` for anything herdr will not say -- never `""`, which would
+ * read as "a pane that shows no failure".
+ *
+ * A HERDR CALL FROM THE GATE, AND THE ONE EXCEPTION to its header (which keeps herdr to `wake.mjs` so this file
+ * stays testable): the seam is `run`, INJECTED, and it is reached only for an instance in the registry, so a tick
+ * with no reviewer instance makes no call at all.
+ * @param {(args: string[]) => string} run
+ * @returns {(session: string) => string | null}
+ */
+export function herdrPaneReader(run) {
+  return (session) => {
+    try {
+      const workspaces = JSON.parse(run(["--session", "org", "workspace", "list"]))?.result?.workspaces ?? [];
+      const workspace = workspaces.find((/** @type {any} */ w) => w.label === session)?.workspace_id;
+      if (typeof workspace !== "string") return null;
+      const panes = JSON.parse(run(["--session", "org", "pane", "list", "--workspace", workspace]))?.result?.panes ?? [];
+      const pane = panes[0]?.pane_id;
+      return typeof pane === "string" ? run(["--session", "org", "pane", "read", pane, "--lines", "60"]) : null;
+    } catch {
+      return null;
+    }
+  };
+}
+
+/**
+ * The detector's whole tick: read the registry, the credential and the panes; append the refresh ledger; return
+ * the incident order. Reads the SAME state directory `wake.mjs` writes its registry into.
+ *
+ * NEVER THROWS -- a detector that can crash the gate would stop every order behind it. A failure to append the
+ * ledger is said on stderr and the order is still returned.
+ *
+ * @param {{orders: {session: string, cause?: string}[], dir?: string, authFile?: string, now?: number,
+ *   run?: (args: string[]) => string, log?: (line: string) => void}} args
+ */
+export function reviewerAuthTick({ orders, dir = REVIEWER_STATE_DIR, authFile = CODEX_AUTH_FILE, now = Date.now(),
+  run = herdrRun, log = (line) => process.stderr.write(line) }) {
+  const instances = readReviewerRegistry(`${dir}/${REVIEWER_REGISTRY_FILE}`);
+  const lastRefresh = readLastRefresh(authFile);
+  const failures = reviewerAuthFailures({ instances, owing: sessionsOwingVerdict(orders), lastRefresh,
+    paneText: Object.keys(instances).length > 0 ? herdrPaneReader(run) : () => null, now });
+  const ledgerPath = `${dir}/${REVIEWER_REFRESH_LEDGER_FILE}`;
+  const lines = refreshLedgerLines({ ledger: readRefreshLedger(ledgerPath), lastRefresh,
+    live: Object.keys(instances), failures, now });
+  try {
+    if (lines.length > 0) {
+      mkdirSync(dirname(ledgerPath), { recursive: true });
+      appendFileSync(ledgerPath, lines.map((l) => `${JSON.stringify(l)}\n`).join(""));
+    }
+  } catch (err) {
+    log(`reviewer-auth: could not append ${ledgerPath} (${String(/** @type {any} */ (err)?.message ?? err).split("\n")[0]}) -- the order below is unaffected.\n`);
+  }
+  return reviewerAuthOrders(failures, lastRefresh);
+}
+
+/** @param {string[]} args */
+const herdrRun = (args) => execFileSync("herdr", args, { encoding: "utf8", timeout: 10_000 });
 
 /**
  * The dead man's switch, wired: asked ONLY when everything else said nothing.
@@ -4143,8 +4470,12 @@ function main() {
     // is what lets the detection exist at all.
     hostDrift: readHostDrift(),
     // #2286: CONDITIONAL, and the condition is answered for free from the list already in hand.
-    closings: closingsWhenRowsCleared(allOpen) });
+    closings: closingsWhenRowsCleared(allOpen),
+    // #2356: `null` for a refused read or a green `main`, and the two need no telling apart HERE -- both
+    // emit nothing, and a refused read is not reported as health because nothing else reads "trunk is fine".
+    trunkRed: readTrunkRed() });
   const { delivered: orders, performed } = performActions(decided);
+  orders.push(...reviewerAuthTick({ orders }));
   orders.push(...deadMansSwitch({ orders, drain, performed, openRows: openRowsRead }));
   for (const order of orders) process.stdout.write(`${JSON.stringify(order)}\n`);
 

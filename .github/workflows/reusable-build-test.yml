@@ -13,11 +13,13 @@ name: reusable-build-test
 # THREE INDEPENDENT AXES, because the two real callers are NOT step-identical -- verified against
 # `origin/main` before writing this, not assumed:
 #
-#   ci.yml's `ts` job:        build, docs:coverage, lint, typecheck, SCOPED tests, node_modules cache -- no python
+#   ci.yml's `ts` job:        build, docs:coverage, lint, typecheck, SCOPED tests -- no python
 #   ci.yml's `python` job:    build only (a prerequisite for a python test that shells to node) -- no lint/
-#                             typecheck/ts-tests, no docs:coverage, no dedicated node_modules cache step
-#   trunk-guard's `trunkGate`: build, lint, typecheck, UNSCOPED tests, python -- no docs:coverage, no
-#                              dedicated node_modules cache step (relies on setup-node's own npm cache only)
+#                             typecheck/ts-tests, no docs:coverage
+#   trunk-guard's `trunkGate`: build, lint, typecheck, UNSCOPED tests, python -- no docs:coverage
+#
+# (#2298: these three once differed by a fourth axis, a dedicated `node_modules` cache only the `ts` job
+# carried. pnpm's STORE is what is cached now, by setup-node for every caller alike, so the axis is gone.)
 #
 # So parameterizing on "scope" ALONE would either give trunk-guard `docs:coverage` it never had (new work
 # on every merge to `main`) or silently drop it from `ci.yml` (a check deleted without anyone deciding to).
@@ -53,10 +55,6 @@ on:
         default: ""
       run-python-tests:
         description: "Run the Python setup + pytest suite. On for ci.yml's python job and trunk's trunkGate; off for ci.yml's ts job, which never touched Python."
-        type: boolean
-        default: false
-      use-node-modules-cache:
-        description: "Add the dedicated actions/cache@v4 node_modules step, keyed on package-lock.json, on top of setup-node's own npm-download cache. Only ci.yml's ts job had this -- python and trunkGate rely on setup-node's cache alone."
         type: boolean
         default: false
       # NOT AN INPUT, DELIBERATELY -- checkout depth is DERIVED below from run-ts-tests/ts-test-scope, not
@@ -105,27 +103,15 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      # Same key, same reasoning as the original `ts` job's step: keyed on the lockfile because that is
-      # the only thing that can make a previously-installed `node_modules` wrong. Only ci.yml's `ts` job
-      # ever carried this dedicated step; python and trunkGate relied on setup-node's own npm cache alone,
-      # preserved here as `use-node-modules-cache: false` by default.
-      - if: inputs.use-node-modules-cache
-        uses: actions/cache@v4
-        id: node-modules-cache
-        with:
-          # #1319: rstest's build cache lives under node_modules/.cache and has its own step below, keyed on the lockfile
-          # AND the rstest config. Left inside this one, a node_modules restore would bring back a cache the rstest step
-          # then reports as a MISS, and a cold figure would be measured warm.
-          path: |
-            node_modules
-            !node_modules/.cache
-          key: node-modules-${{ hashFiles('package-lock.json') }}
-      - if: inputs.use-node-modules-cache && steps.node-modules-cache.outputs.cache-hit != 'true'
-        run: npm ci --ignore-scripts
-      - if: '!inputs.use-node-modules-cache'
-        run: npm ci --ignore-scripts
+        with: { node-version: 22, cache: pnpm }
+      # #2298: NO DEDICATED `node_modules` CACHE. `ts` used to restore `node_modules` itself, keyed on the npm
+      # lockfile, and skip the install on a hit. What is cached now is pnpm's STORE (setup-node's `cache: pnpm`,
+      # keyed on pnpm-lock.yaml, for every caller), and the install always runs: it links from the store, so a
+      # warm run pays for linking rather than for downloads. A restored `node_modules` keyed on the OLD lockfile
+      # would never have invalidated when pnpm-lock.yaml changed.
+      - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: npm run build
       # #168: WHAT THE BUILD ACTUALLY PRODUCED, kept only when something after it fails. See the ORIGINAL
       # comment in ci.yml's history for the full incident (an intermittent cross-package dist race) --
@@ -160,7 +146,7 @@ jobs:
         id: rstest-build-cache
         with:
           path: node_modules/.cache/rstest-*
-          key: rstest-build-${{ runner.os }}-${{ hashFiles('package-lock.json', 'scripts/rstest/rstest.config.mjs') }}
+          key: rstest-build-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'scripts/rstest/rstest.config.mjs') }}
       - name: "#1319: rstest build cache HIT or MISS, printed so the run log can be quoted"
         if: inputs.run-ts-tests
         run: |

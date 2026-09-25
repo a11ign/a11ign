@@ -16,7 +16,7 @@ on what you want to change. Read the section that matches.
 | docs, ADRs | no | read them back |
 
 ```bash
-npm install
+corepack pnpm install --frozen-lockfile   # pnpm, pinned by `packageManager`; there is no package-lock.json any more (#2301)
 npm test          # the product suite: 206 files, ~1,800 tests, no worker, no network, ~26s
 npm run lint
 npm run typecheck

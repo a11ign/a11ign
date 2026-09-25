@@ -84,12 +84,16 @@ the direction where being wrong costs more.
 | Worker (retired #913; own file not yet swept) | `worker-contracts` | [`worker-contracts.md`](./worker-contracts.md) | — |
 | Worker | `worker-judge` | [`worker-judge.md`](./worker-judge.md) | `product-manager` |
 
-**Two spare engineer roles, `worker-4` and `worker-5` (#2279), are in `sessions.json`'s `live` and NOT in the
-table above, on purpose.** A table row is a role with a brief file this check reads for its name, reporter and
-lane, and a spare has none (`brief: null`, as `worker-tooling`'s is): it is an ADDRESS for an instance the spawn
-pilot (`wake.mjs`, #1952) starts when an order is undeliverable and every other engineer role holds a process,
-so it has no standing session and nothing to brief. It answers to the engineer rules and to `product-manager`
-like the standing three. The count is `ceo`'s ceiling on the pilot, not a claim about capacity.
+**The spare engineer FAMILY, `worker-<n>` for n from 4 (#2279, #2323, #2403), is one entry in `sessions.json`'s `live`
+and NOT in the table above, on purpose.** A table row is a role with a brief file this check reads for its name,
+reporter and lane, and a spare has none of its own: its `brief` is the ONE engineer brief,
+[`engineer.md`](./engineer.md), as `worker-tooling`'s is (#2406; `addressed()` in `wake.mjs` tells every engineer role
+to read it, and no other). A spare is an ADDRESS for an instance the spawn pilot (`wake.mjs`, #1952) starts when an
+order is undeliverable and every other engineer address holds a process, so it has no standing session and no lane of
+its own; the tick ENDS the instance when the row it claimed closes (#2323, `sessions.json`'s `spare` mark). It answers
+to the engineer rules and to `product-manager` like the standing three. There is no count: the pilot allocates the
+lowest free `worker-<n>`, and the bound is the orders `route` could not place, one per tick, for rows that are
+claimable (#2403).
 
 **The pipeline-owner role retired by #913 kept its file named `worker-loop-orchestrator.md`, never
 `<agent-name>.md`** — the file predates this page and describes the ROLE (worker-loop orchestration)
@@ -306,7 +310,7 @@ Two companions, ruled the same morning:
 - **A count or a verdict is never read from a truncated pipe, and a step that summarises a log prints
   the failures it found or says it found none.** Four in one day, every command exit 0: `| tail -8` on
   a 53-line prune report read as "seven"; `| head -5` hiding five typecheck errors under a printed
-  "tsc ok"; `2>&1 >/dev/null` swallowing a squash refusal; and decideRevert's parent re-check printing
+  "tsc ok"; `2>&1 >/dev/null` swallowing a squash refusal; and the parent re-check in `trunk.yml` printing
   `tail -40` of a test log, twenty-eight trailing `ok` lines, under a verdict of `fail` (#744), which
   turned "revert this push" into "leave main red, reason recorded as considered" for forty minutes. A
   truncation that succeeds produces a plausible number, and a plausible number is indistinguishable

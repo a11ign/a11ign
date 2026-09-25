@@ -346,7 +346,7 @@ runs:
         #
         # So caching here is not achievable through `cache-dependency-path` at all, and this step simply
         # does not cache -- ~18 s per run, on an install of the action's OWN small package.json, which is
-        # cheap next to NVDA setup, Edge policy and a real capture. `npm ci` below still installs correctly;
+        # cheap next to NVDA setup, Edge policy and a real capture. The install below still installs correctly;
         # it is just never cache-accelerated.
 
     # Installed into the ACTION's own checkout, not the caller's workspace: `github.action_path` is where
@@ -362,16 +362,26 @@ runs:
     # falls back to `channel: "msedge"`, which Windows runners DO have, and which is the same engine the
     # capture itself drives. Skipping the download is what puts every Action run on that fallback path
     # rather than an occasional one.
+    #
+    # #2301: `corepack pnpm install --frozen-lockfile`, NOT `npm ci`. The repository's only lockfile is now
+    # `pnpm-lock.yaml` (`package-lock.json` was deleted when the publish path moved to pnpm), and `npm ci`
+    # refuses to run without an npm lockfile, so leaving it here would have broken every run of this Action
+    # at its first install step. `corepack` ships with the Node this action sets up (22 by default, and every
+    # version through 24), reads the pinned pnpm from `packageManager` in the root manifest, and needs no
+    # separate setup step, which is why it is not `pnpm/action-setup` (that one reads the CONSUMER's
+    # workspace, not this action's checkout). Frozen, like `npm ci` was: a lockfile that disagrees with a
+    # manifest fails here rather than resolving something nobody reviewed. pnpm runs the root `prepare`
+    # exactly as `npm ci` did, which is what builds `dist` for the `tsx` steps below.
     - name: Install a11ign
       shell: bash
       working-directory: ${{ github.action_path }}
-      run: npm ci
+      run: corepack pnpm install --frozen-lockfile
       env:
         PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
 
     # Cache the NVDA install (31 s). Keyed on the LOCKFILE plus the RESOLVED MANIFEST -- publish
     # blocker B4. Two things used to be conflated here: the CLIENT that drives NVDA (`@guidepup/guidepup`,
-    # pinned in package-lock.json at 0.31.0) and the INSTALLER that fetches NVDA itself
+    # pinned in pnpm-lock.yaml at 0.31.0) and the INSTALLER that fetches NVDA itself
     # (`@guidepup/setup`, invoked below), which was not a declared dependency at all -- `npx --yes
     # @guidepup/setup ...` fetched whatever npm currently published, on every run, unversioned and outside
     # every cache key. `@guidepup/setup` is now a pinned devDependency (see package.json), so the lockfile
@@ -400,7 +410,7 @@ runs:
       uses: actions/cache@v4
       with:
         path: ~\AppData\Local\guidepup
-        key: a11ign-nvda-${{ runner.os }}-${{ hashFiles('package-lock.json', 'node_modules/@guidepup/guidepup/manifest.json') }}
+        key: a11ign-nvda-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'node_modules/@guidepup/guidepup/manifest.json') }}
 
     # Install NVDA with the repo's OWN guidepup rather than guidepup/setup-action. The action predates
     # the @guidepup/setup 0.24.0 CLI rewrite and installs the pre-0.29 layout (registry pointer +
@@ -409,7 +419,7 @@ runs:
     # our manifest, keeping the screen reader and the driver in lockstep.
     #
     # No `--yes`: that flag exists so npx may fetch a package it does not already have, and `@guidepup/setup`
-    # is now a pinned devDependency installed by `npm ci` two steps up -- the same reason `npx tsx ...`
+    # is now a pinned devDependency installed by the frozen install two steps up -- the same reason `npx tsx ...`
     # elsewhere in this file never needs it either. Its absence is the point: this must run the pinned
     # local copy or fail, never silently fetch a different one.
     - name: Set up NVDA

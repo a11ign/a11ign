@@ -28,17 +28,34 @@
 // prompt into a bare shell. But declining SILENTLY is the defect the org already had once: the
 // lead-orchestrator brief records 2026-09-08, when "every session went idle at 20:52Z and nothing woke
 // anyone for ten" hours. So an order with nowhere to go exits ATTENTION and names the session, every time.
-import { execFileSync } from "node:child_process";
-import { pathToFileURL } from "node:url";
-import { readFileSync, writeFileSync, mkdirSync, realpathSync } from "node:fs";
-import { dirname } from "node:path";
+import { execFileSync, spawnSync } from "node:child_process";
+import { pathToFileURL, fileURLToPath } from "node:url";
+import { readFileSync, writeFileSync, mkdirSync, realpathSync, existsSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { createHash } from "node:crypto";
 // RELATIVE, not the package specifier -- this must run before any `npm ci`/build, the same constraint
 // `work-gate.mjs` and `org-watch.mjs` state at their own imports.
 import { refuseUnknownFlags, flagValue } from "../../worker-fleet/src/cli-flags.mjs";
 import { profileFor, agentArgs } from "./worker-profile.mjs";
-import { JUDGMENT_CAUSES, CHAIRMAN_LABEL } from "./work-gate.mjs";
-import { inBuildReason, isInBuild, unansweredRefusal, lookupHeldRows } from "./row-claim/own-pr-health-rule.mjs";
+import { JUDGMENT_CAUSES, CHAIRMAN_LABEL, LAUNCH_PLACEHOLDER, REVIEWER_REGISTRY_FILE, readReviewerRegistry }
+  from "./work-gate.mjs";
+import { reviewerInstanceNumber } from "./review-attribution.mjs";
+import { REPO } from "../../../scripts/repo-identity.mjs";
+import { inBuildReason, isInBuild, unansweredRefusal, lookupHeldRows, lookupOtherHeldIssues }
+  from "./row-claim/own-pr-health-rule.mjs";
+import { parseWorktreeList, isPrimaryWorktree, isWorkingTreeClean, mergeStatus, detachedMergeStatus }
+  from "./prune-worktrees.mjs";
+import { worktreeOwner } from "./worktree-owner.mjs";
+// THE FAMILY IS THE ROSTER'S, READ BY ONE MODULE (#2403): `worker-<n>` for n from 4 is a spare engineer role, and
+// `arm-pr.mjs` is where every other reader of a `session:<name>` label already asks whether a name is one.
+import { SPARE_FAMILIES, familyNumber } from "./arm-pr.mjs";
+// THE CLAIM'S OWN CHECKS, called rather than restated (#2324): a spawn is refused for the reasons the claim
+// would refuse the row, and a copy of either rule here would go stale the next time the rule changed.
+import { lookupBlockedByEdge, blockedByEdgeReason } from "./row-claim/blocked-by-edge-rule.mjs";
+import { fileOverlapReason, lookupMyRegionFiles, lookupOpenPrFiles } from "./row-claim/file-overlap-rule.mjs";
+// The scrubbing helper, RELATIVE like the imports above: a leaked GIT_DIR must not redirect the teardown's
+// `git worktree list` onto another repository (git-spawn-classification.test.ts).
+import { sandboxGitEnv } from "../../guards/src/git-env.mjs";
 
 /**
  * `0` QUIET nothing to deliver; `1` ATTENTION an order had nowhere to go; `2` CANNOT_ASK herdr did not
@@ -174,6 +191,29 @@ export function route(session, agents, roster, ineligibleReason = () => null) {
 }
 
 /**
+ * `route`, WITH THE ORDER'S OWN WAY OUT WHEN ITS SESSION CANNOT BE WOKEN (#2356).
+ *
+ * `trunk-red` is addressed to the session that merged the red -- it holds the context -- but a red `main`
+ * is not worth waiting on that session: it may be gone (a spare instance ends with its row), busy, or
+ * blocked, and every other order that finds its session unwakeable simply waits for the next tick. An order
+ * carrying `fallback` names WHERE ELSE it may go, and only a refusal from the first choice reaches it, so
+ * a session that CAN be woken is never bypassed. The refusal reported when both fail names both.
+ *
+ * @param {{session: string, fallback?: string}} order
+ * @param {{label: string, status: string}[]} agents
+ * @param {string[]} roster
+ * @param {(label: string) => string | null} [ineligibleReason]
+ * @returns {{label: string} | {refusal: string}}
+ */
+export function routeWithFallback(order, agents, roster, ineligibleReason) {
+  const first = route(order.session, agents, roster, ineligibleReason);
+  if (!("refusal" in first) || typeof order.fallback !== "string") return first;
+  const second = route(order.fallback, agents, roster, ineligibleReason);
+  if (!("refusal" in second)) return second;
+  return { refusal: `${first.refusal}; and the fallback "${order.fallback}": ${second.refusal}` };
+}
+
+/**
  * B2's verdict on one session, SHORT enough to sit in a `seen` list -- or `null` when B2 would let it claim.
  *
  * THE DECIDER IS `inBuildReason` ITSELF, called rather than restated: a copy of B2's clauses here would go
@@ -209,14 +249,21 @@ export function b2Verdict(rows) {
  * is the claim's behaviour and is left as it is: the dispute is discovered here a few minutes earlier than the
  * claim would discover it, and nothing here can make it happen twice.
  *
- * @param {{ lookup?: typeof lookupHeldRows, warn?: (line: string) => void }} [deps]
+ * A DRAINED ROLE IS REFUSED BEFORE ANY LOOKUP (#2324). `route` asks this only for an order addressed to the
+ * POOL, and the pool's one cause is `ready-row-unclaimed` -- a NEW row -- so this is where "claims no new rows"
+ * lives, while an order about a row the role already holds is addressed to it by NAME and never reaches here.
+ * It costs no API call: the drain is a fact about the role, not about what it holds.
+ *
+ * @param {{ lookup?: typeof lookupHeldRows, warn?: (line: string) => void, drained?: readonly string[] }} [deps]
+ *   `drained` is the roles the drain holds back NOW ({@link activeDrain}) -- already empty once a cycle failed
  * @returns {(label: string) => string | null}
  */
-export function engineerEligibility({ lookup = lookupHeldRows,
+export function engineerEligibility({ lookup = lookupHeldRows, drained = [],
   warn = (line) => { process.stderr.write(`${line}\n`); } } = {}) {
   /** @type {Map<string, string | null>} */
   const memo = new Map();
   return (label) => {
+    if (drained.includes(label)) return DRAINED_SEEN;
     if (memo.has(label)) return memo.get(label) ?? null;
     // No row is excluded: the order's row is unclaimed, so it is not one of the session's held rows.
     const rows = lookup(label, 0, {});
@@ -291,12 +338,17 @@ export const SPAWN_CAUSES = Object.freeze(["ready-row-unclaimed"]);
  * the offer order, so the standing three come before the spares and a spare is only started once they are
  * all taken.
  *
+ * ADDRESSES THE FILE NAMES, NEVER THE FAMILY (#2403): the `worker-<n>` entry is a RULE for addresses, not one, so
+ * it is not in this list. The instances that exist reach the offer through {@link withSpareInstances}, and the
+ * next free number is {@link nextSpareLabel}'s.
+ *
  * @param {string | URL} [path] the roster file; a parameter so a test can hand it a fixture
  * @returns {string[]}
  */
 export function engineerRoles(path = new URL("../docs/roles/sessions.json", import.meta.url)) {
-  const { live } = /** @type {{ live: { name: string, role: string }[] }} */ (JSON.parse(readFileSync(path, "utf8")));
-  return live.filter((s) => s.role === "engineer").map((s) => s.name);
+  const { live } = /** @type {{ live: { name: string, role: string, family?: object }[] }} */ (
+    JSON.parse(readFileSync(path, "utf8")));
+  return live.filter((s) => s.role === "engineer" && s.family === undefined).map((s) => s.name);
 }
 
 /**
@@ -376,18 +428,27 @@ export function isPilotOrder(order) {
  * THE ROSTER MUST HOLD ROLES THAT NOBODY RUNS, OR THIS NEVER FIRES (#2279). Every standing engineer role is
  * permanently occupied, so "the first ABSENT role" was empty by construction and the pilot could start only
  * after a standing session died -- which reported live as three UNDELIVERED orders in a row. `sessions.json`
- * therefore lists spare engineer roles (`worker-4`, `worker-5`) with no standing process: an address for
- * an instance to answer to, since two processes under one address would share one B2 budget. The number of
- * instances is bounded by the orders `route` could not place, one per tick (`MAX_SPAWNS_PER_TICK`); the
- * spare count is only `ceo`'s ceiling on that, and the refusal below says so rather than blaming the
- * standing three.
+ * therefore declares a spare engineer FAMILY (`worker-<n>` for n from 4, marked `spare`) with no standing
+ * process: an address for an instance to answer to, since two processes under one address would share one B2
+ * budget.
+ *
+ * THERE IS NO CEILING (#2403, the chairman, 2026-09-24). The roster was a list of five and its size was the
+ * bound, lifted by an edit once somebody read the refusal in a log. Now, when every address in `roster` holds
+ * a process, {@link nextSpareLabel} allocates the LOWEST free number of the family, so the bound is the orders
+ * `route` could not place, one per tick (`MAX_SPAWNS_PER_TICK`), for rows `spawnClaimability` finds claimable
+ * -- and no count appears here. A spare is ENDED when its row closes (`endFinishedSpares`, #2323), so its
+ * address is free again for the next row's instance and the numbers stay as small as the concurrency needs.
+ *
+ * A DRAINED ROLE IS NEVER SPAWNED INTO (#2324), even when absent: `row-claim` refuses it a claim, so an instance
+ * started under its address could read the order, be refused, and sit there holding the address.
  *
  * @param {{session: string, cause?: string}} order
  * @param {{label: string, status: string}[]} agents
  * @param {string[]} roster engineer labels, in the order they should be offered work
+ * @param {readonly string[]} [drained] the roles the drain holds back now
  * @returns {{role: string} | {refusal: string}}
  */
-export function spawnableRole(order, agents, roster) {
+export function spawnableRole(order, agents, roster, drained = []) {
   if (order.session !== "engineers") {
     return { refusal: `no spawn: the pilot covers the engineer pool, and this order is addressed to `
       + `"${order.session}"` };
@@ -396,15 +457,60 @@ export function spawnableRole(order, agents, roster) {
     return { refusal: `no spawn: "${order.cause ?? "an order carrying no cause"}" is not a pilot cause `
       + `(${SPAWN_CAUSES.join(", ")})` };
   }
-  const role = roster.find((label) => !agents.some((a) => a.label === label));
-  if (!role) {
+  const role = roster.find((label) => !agents.some((a) => a.label === label) && !drained.includes(label))
+    ?? nextSpareLabel({ agents, drained });
+  if (role === null) {
     const seen = roster.map((label) => `${label}=${agents.find((a) => a.label === label)?.status}`).join(", ");
-    return { refusal: `no spawn: all ${roster.length} engineer roles hold a process (${seen}) -- that is the `
-      + "ceiling: the engineer roles `sessions.json` lists, and adding one is `ceo`'s. A busy, blocked or "
-      + "agentless one is not reused, and `spawnableRole` says why for each" };
+    return { refusal: `no spawn: all ${roster.length} engineer roles hold a process (${seen}) and \`sessions.json\` `
+      + "declares no spare family to allocate the next address from (#2403). A busy, blocked or agentless one "
+      + "is not reused, and `spawnableRole` says why for each" };
   }
   return { role };
 }
+
+/**
+ * The next address of a spare family: the LOWEST number, from the family's `from`, that holds no process and is
+ * not drained -- or `null` when the roster declares no family (#2403).
+ *
+ * LOWEST FIRST, AND THAT IS WHAT KEEPS THE NUMBERS SMALL. A finished spare's workspace is closed and its address
+ * is free again, so `worker-5` finishing while `worker-9` still works makes `worker-5` the next answer; the
+ * numbers track the concurrency and not the count of rows the org has ever run. ONE family is declared, and the
+ * first is the one allocated from. ANY process at an address
+ * holds it, whatever its status, for the reason {@link spawnableRole} gives for `working`, `blocked` and
+ * `unknown`. The loop ends because a tick's agents are finite.
+ *
+ * @param {{ agents: {label: string}[], drained?: readonly string[], families?: readonly {prefix: string, from: number}[] }} args
+ * @returns {string | null}
+ */
+export function nextSpareLabel({ agents, drained = [], families = SPARE_FAMILIES }) {
+  const taken = new Set([...agents.map((a) => a.label), ...drained]);
+  const family = families[0];
+  if (family === undefined) return null;
+  let n = family.from;
+  while (taken.has(`${family.prefix}${n}`)) n += 1;
+  return `${family.prefix}${n}`;
+}
+
+/**
+ * The roster this tick OFFERS work to: the addresses the file names, then every spare-family instance that
+ * exists, lowest number first (#2403).
+ *
+ * WITHOUT THIS A SPAWNED `worker-9` IS INVISIBLE TO `route`. The file lists a family as a rule, so the next
+ * tick's roster held no `worker-9` and an instance that had started (and was idle, waiting for its order after
+ * a refused prompt) could never be offered one -- the very case `deliver` says the ordinary path handles.
+ * Present instances only: an absent address is {@link nextSpareLabel}'s to allocate, never `route`'s to offer.
+ *
+ * @param {string[]} roster @param {{label: string}[]} agents
+ * @param {readonly {prefix: string, from: number}[]} [families]
+ * @returns {string[]}
+ */
+export function withSpareInstances(roster, agents, families = SPARE_FAMILIES) {
+  const numbered = agents
+    .map((a) => ({ label: a.label, n: familyNumber(a.label, families) }))
+    .filter((a) => a.n !== null && !roster.includes(a.label));
+  return [...roster, ...numbered.sort((a, b) => Number(a.n) - Number(b.n)).map((a) => a.label)];
+}
+
 
 /**
  * A new workspace for `label`, and the pane to start an agent in -- or a refusal.
@@ -413,21 +519,32 @@ export function spawnableRole(order, agents, roster) {
  * answers with `result.root_pane.pane_id` and `result.workspace.workspace_id`, and `workspace close <id>`
  * answers `{"type":"ok"}`.
  *
- * NO `--cwd`, DELIBERATELY. The default is `/home/agent/repos/a11y-witness`, the primary checkout, which is
- * where all six standing sessions already run -- so passing one would invent a convention rather than
- * follow it. The obvious candidate, a `role-<name>` worktree, is NOT a convention: four of the six roles
- * have one. The order's own text tells the woken session that `row-claim` creates its worktree.
+ * THE PANE STARTS IN A NAMED DIRECTORY WHEN THE CALLER HAS ONE (#2405, #2401). Without `--cwd` herdr's default is
+ * `/home/agent/repos/a11y-witness`, the PRIMARY checkout, which is the one directory `launchGate` (#1352) refuses
+ * every policy script from -- so a spawned engineer began in the place it was forbidden to work, and its order
+ * then named a directory that usually did not exist. The spawner has claimed the row by now (`spawnWorker`), so
+ * the worktree exists and the agent's cwd is its unit of work; it never touches the primary and never borrows a
+ * peer's tree. A REVIEWER passes its verified checkout (#2401: its whole task is one pull request's tree, prepared before the
+ * pane opens). A `cwd` of `undefined` is the old default, kept for a caller that has claimed nothing.
  *
  * `--no-focus` because a tick must not steal the display from whoever is watching it.
  *
+ * `--env` IS HOW THE SPAWN DECIDES WHO IT ACTS AS (#2323). herdr's server starts the pane's shell, so the
+ * ticking process's own environment never reaches it -- measured 2026-09-24: `workspace create --env
+ * GH_CONFIG_DIR=...` and `echo $GH_CONFIG_DIR` in that pane answers the value. See {@link spawnEnvironment}.
+ *
  * @param {(args: string[]) => string} run
  * @param {string} label
+ * @param {Record<string, string>} env
+ * @param {string} [cwd] the directory the pane's shell starts in
  * @returns {{pane: string, workspace: string} | {refusal: string}}
  */
-function openPane(run, label) {
+function openPane(run, label, env, cwd) {
   let created;
   try {
-    created = JSON.parse(run(["--session", "org", "workspace", "create", "--label", label, "--no-focus"]));
+    created = JSON.parse(run(["--session", "org", "workspace", "create", "--label", label, "--no-focus",
+      ...(cwd === undefined ? [] : ["--cwd", cwd]),
+      ...Object.entries(env).flatMap(([key, value]) => ["--env", `${key}=${value}`])]));
   } catch (err) {
     return { refusal: `herdr could not open a pane for "${label}" (${firstLine(err)})` };
   }
@@ -445,10 +562,14 @@ function openPane(run, label) {
 /**
  * Close a workspace this tick opened, and say so in the same breath as whatever failed.
  *
- * THE TEARDOWN IS ONLY FOR A HALF-STARTED SPAWN, and that bound is the design rather than a gap. A
- * workspace whose agent started IS the role's workspace from then on -- its label is the role's own name,
- * so `route` finds it, follow-up causes reach it, and there is nothing orphaned to collect. Only the window
- * between `workspace create` and a successful `agent start` can leave a pane nobody will ever use.
+ * THIS TEARDOWN IS FOR A HALF-STARTED SPAWN; A FINISHED INSTANCE IS ENDED BY `endFinishedSpares` (#2323). A
+ * workspace whose agent started IS the role's workspace while its row is open -- its label is the role's own
+ * name, so `route` finds it and follow-up causes reach it. Only the window between `workspace create` and a
+ * successful `agent start` leaves a pane nobody will ever use, and that is what this closes. Once the row
+ * that instance claimed has closed (or been released) the tick ends it, on a rule read from `sessions.json`'s
+ * `spare` mark and not from this comment -- the old bound ("nothing orphaned to collect") was true of the
+ * pane and false of the ROLE: a spawned engineer that was never ended became a standing seat the first time
+ * it claimed, and #1950's clean-cycle count could not count it.
  *
  * AND LEAVING ONE IS NOT A TIDINESS PROBLEM. A workspace with no agent reports `agent_status: "unknown"`,
  * which `WAKEABLE` excludes and `spawnableRole` refuses -- so an abandoned pane carrying a role's label
@@ -475,37 +596,449 @@ function closedNote(run, workspace) {
  * Start a fresh process for an engineer role that has none, and return the address it answers to.
  *
  * THE CALLER `spawnInvocation` NEVER HAD. Everything it needs beyond the invocation itself is here: the
- * name (a roster role, per `spawnableRole`), the pane (`openPane`), and the teardown (`closedNote`).
+ * name (a roster role, per `spawnableRole`), the claim (`claimer`), the pane (`openPane`), and the teardown
+ * (`closedNote`, `SpawnClaimer.release`).
+ *
+ * THE ROW IS CLAIMED BEFORE ANY PANE EXISTS (#2405, `ceo`'s ruling on the chairman's message). The claim creates
+ * the row's worktree, and the pane starts in it -- so the engineer's first directory is the one it builds in. A
+ * REFUSED CLAIM IS AN ANSWER, NOT A FAILURE: someone took the row first, no pane is opened, nothing is registered
+ * and no `spare-cycles` line is written, and the next tick offers the next row. A FAILURE AFTER THE CLAIM landed
+ * (the workspace will not open, the agent will not start) RELEASES IT, or the row would sit claimed by a role with
+ * no process, which nothing reads as a fault.
  *
  * IT DOES NOT PROMPT. `deliver` does, through the same `addressed(...)` call every other delivery uses, so
  * a spawned session is told who it is by the same line that tells a standing one -- and a spawn whose
  * prompt is refused leaves a live, idle session the next tick routes to normally.
  *
- * @param {{session: string, cause?: string}} order
+ * @param {{session: string, causeKey: string, cause?: string, title?: string}} order
  * @param {{label: string, status: string}[]} agents
  * @param {string[]} roster
- * @param {{run?: (args: string[]) => string}} [deps]
- * @returns {{label: string, workspace: string, profile: {kind: string, model: string, effort: string}}
- *   | {refusal: string}}
+ * @param {{run?: (args: string[]) => string, env?: Record<string, string>, drained?: readonly string[],
+ *   claimable?: (order: {causeKey: string}) => string | null, claimer?: SpawnClaimer}} [deps]
+ *   `claimable` says why the CLAIM would refuse this order's row, or `null` -- see {@link spawnClaimability};
+ *   `claimer` claims the row for the role about to start -- see {@link spawnClaimer}. With none, the pane opens
+ *   in herdr's default directory and nothing is claimed (the pre-#2405 spawn, kept for a caller that has no claim)
+ * @returns {{label: string, workspace: string, profile: {kind: string, model: string, effort: string},
+ *   claimed?: ClaimedRow} | {refusal: string}}
  */
-function spawnWorker(order, agents, roster, { run = defaultRun } = {}) {
-  const role = spawnableRole(order, agents, roster);
+function spawnWorker(order, agents, roster, { run = defaultRun, env = spawnEnvironment(), drained = [],
+  claimable = () => null, claimer } = {}) {
+  const role = spawnableRole(order, agents, roster, drained);
   if ("refusal" in role) return role;
-  const pane = openPane(run, role.role);
-  if ("refusal" in pane) return pane;
+  // AFTER THE ROLE AND BEFORE THE PANE: a pane is the first thing this opens, and "no instance is created to be
+  // refused and sit idle" (#2324) means the answer is known before it exists.
+  const unclaimable = claimable(order);
+  if (unclaimable !== null) return { refusal: `no spawn: ${unclaimable}` };
+  const claimed = claimer?.claim(order, role.role, env);
+  if (claimed !== undefined && "refusal" in claimed) return { refusal: `no spawn: ${claimed.refusal}` };
+  /** @param {string} refusal @param {string} [workspace] a workspace this call opened, to close with it */
+  const unwound = (refusal, workspace) => `${refusal}${workspace ? closedNote(run, workspace) : ""}`
+    + `${claimed && claimer ? claimer.release(claimed, role.role, env) : ""}`;
+  const pane = openPane(run, role.role, env, claimed?.worktree);
+  // `openPane` closes a workspace it opened and could not use, so only the claim is left to undo here.
+  if ("refusal" in pane) return { refusal: unwound(pane.refusal) };
   // `spawnableRole` has already refused anything whose cause is not in `SPAWN_CAUSES`, so by here the
   // cause is one of those strings -- narrowed for the type rather than re-checked.
   const invocation = spawnInvocation({ ...order, cause: String(order.cause) }, role.role, pane.pane);
-  if ("refusal" in invocation) {
-    return { refusal: `${invocation.refusal}${closedNote(run, pane.workspace)}` };
-  }
+  if ("refusal" in invocation) return { refusal: unwound(invocation.refusal, pane.workspace) };
   try {
     run(invocation.args);
   } catch (err) {
-    return { refusal: `herdr refused to start "${role.role}" (${firstLine(err)})`
-      + `${closedNote(run, pane.workspace)}` };
+    return { refusal: unwound(`herdr refused to start "${role.role}" (${firstLine(err)})`, pane.workspace) };
   }
-  return { label: role.role, workspace: pane.workspace, profile: invocation.profile };
+  return { label: role.role, workspace: pane.workspace, profile: invocation.profile, claimed };
+}
+
+// --- #2401: ONE REVIEWER INSTANCE PER PULL REQUEST, ADDRESSED BY HERDR NAME ---
+
+/**
+ * The causes whose recipient is the pull request's reviewer, and so the only ones a reviewer INSTANCE is started for.
+ * A SIBLING OF `SPAWN_CAUSES`, NEVER A WIDENING OF IT: that list is the engineer pilot's and #1950's 20-clean-cycles
+ * counter is running on it, so a reviewer cause added there would start counting as an engineer cycle.
+ */
+export const REVIEWER_CAUSES = Object.freeze(["draft-awaiting-verdict", "verdict-comment-unreviewed"]);
+
+/**
+ * The account a reviewer instance acts as: the reviewer's own `gh` config (`a11ign-bot`), never the workers' one the
+ * engineers get -- self-approval is refused for the author and `a11ign-bot` approves both engineer accounts
+ * (`docs/reviewer-instancing.md`, section 1). It is `/home/agent/reviewer/gh` on the host.
+ */
+export const REVIEWER_GH_CONFIG_DIR = "/home/agent/reviewer/gh";
+
+/**
+ * The environment a reviewer instance's workspace starts with: its own `gh` account and, as
+ * `A11Y_REVIEWER_SESSION`, the name `pr-review-verdict` writes into the attribution status (#2127) -- without it
+ * the review posts UNATTRIBUTED. An `override` wins, key by key, as in {@link spawnEnvironment}.
+ * @param {string} session @param {Record<string, string>} [override]
+ * @returns {Record<string, string>}
+ */
+export function reviewerEnvironment(session, override = {}) {
+  return { GH_CONFIG_DIR: REVIEWER_GH_CONFIG_DIR, A11Y_REVIEWER_SESSION: session, ...override };
+}
+
+/**
+ * Is this an order a reviewer INSTANCE may be started for: a reviewer cause addressed to `reviewer-<n>`.
+ * Asked before {@link isPilotOrder}, which is the engineer's question and stays exactly as it was.
+ * @param {{session: string, cause?: string}} order
+ */
+export function isReviewerOrder(order) {
+  return reviewerInstanceNumber(order.session) !== null && REVIEWER_CAUSES.includes(String(order.cause));
+}
+
+/**
+ * The live reviewer instances -- workspaces labelled `reviewer-<n>`, the retired standing pane excluded.
+ * @param {{label: string}[]} agents @returns {string[]}
+ */
+export function liveReviewers(agents) {
+  return agents.filter((a) => reviewerInstanceNumber(a.label) !== null).map((a) => a.label);
+}
+
+/**
+ * The pull request an order is ABOUT, read from its cause key (`reviewer-<n>/<cause>/pr-<n>/<head>`), or `null`
+ * when the key names none. The gate writes the number into the key of every order about a pull request, so this
+ * reads the one fact an instance's exclusivity has to be judged on without asking GitHub.
+ * @param {{causeKey?: string}} order @returns {number | null}
+ */
+export function orderPullRequest(order) {
+  const match = /(?:^|\/)pr-([1-9][0-9]*)(?:\/|$)/.exec(String(order.causeKey ?? ""));
+  return match === null ? null : Number(match[1]);
+}
+
+/**
+ * WHY THIS ORDER MAY NOT REACH THIS SESSION, or `null` when it may (#2401, Done-when 8). `reviewer-<n>` reviews
+ * pull request n AND NOTHING ELSE: it belongs to no pool, so an order about any other pull request -- or about
+ * none -- is refused even when the instance is idle and the only reviewer alive. FAIL CLOSED: an order whose key
+ * names no pull request cannot be shown to be about this one.
+ *
+ * ASKED OF EVERY ROUTED TARGET, whatever the cause and whether the route was direct or a fallback, because the
+ * guarantee is about the instance and not about the two causes that usually address it. A label that is not an
+ * instance (an engineer, a standing session, the retired pane) answers `null`: this file does not judge them.
+ * @param {{causeKey?: string}} order @param {string} label @returns {string | null}
+ */
+export function reviewerMismatch(order, label) {
+  const owned = reviewerInstanceNumber(label);
+  if (owned === null) return null;
+  const pr = orderPullRequest(order);
+  if (pr === owned) return null;
+  return `"${label}" reviews PR #${owned} and nothing else, and this order is ${pr === null
+    ? "about no pull request" : `about PR #${pr}`} (${order.causeKey})`;
+}
+
+/**
+ * May a reviewer instance be started for this order, or why not. THERE IS NO COUNT IN THIS FUNCTION AND NO REFUSAL
+ * MAY CITE ONE (#2401, Done-when 2; the chairman ruled the pool follows the pull requests waiting): a start
+ * refuses for a NAMED CAUSE -- the order is not for an instance, the label is in use, or the label was started
+ * earlier and herdr does not list it now.
+ *
+ * THE LAST IS WHAT THE OLD PER-TICK LIMIT WAS FOR. A partial workspace list reads every instance as absent, and
+ * without a limit a tick would start a SECOND process under every waiting pull request's label. The registry is
+ * the tick's own record of what it started, so an instance it started and cannot see is refused rather than
+ * duplicated -- a duplicate label makes `route` ambiguous. If the instance really died, the refusal says how to
+ * clear it.
+ *
+ * @param {{session: string, cause?: string, causeKey?: string}} order @param {{label: string}[]} agents
+ * @param {Record<string, {spawnedAt: number}>} [registry] what this path started and has not ended
+ * @returns {{session: string} | {refusal: string}}
+ */
+export function spawnableReviewer(order, agents, registry = {}) {
+  if (!isReviewerOrder(order)) {
+    return { refusal: `no reviewer spawn: "${order.session}" is not a reviewer instance for a reviewer cause` };
+  }
+  if (agents.some((a) => a.label === order.session)) {
+    return { refusal: `no reviewer spawn: a workspace labelled "${order.session}" already exists` };
+  }
+  const started = registry[order.session];
+  if (started !== undefined) {
+    return { refusal: `no reviewer spawn: "${order.session}" was started at ${new Date(started.spawnedAt).toISOString()} `
+      + "and herdr does not list it now (a partial workspace list, or the instance died) -- not starting a second "
+      + `under the same label; if it died, delete its key from ${REVIEWER_REGISTRY_FILE} and the next tick starts a fresh one` };
+  }
+  return { session: order.session };
+}
+
+/**
+ * WHERE A REVIEWER'S TREE LIVES: ON DISK, NOT UNDER `/tmp`. `/tmp` is RAM-backed on this host and 58% full when
+ * this was measured (2026-09-24), and a per-PR tree that is never removed there is #2163's defect. A tree here
+ * costs disk and, if a teardown ever fails, leaks disk.
+ */
+export const REVIEW_CHECKOUT_ROOT = `${process.env.HOME}/reviews`;
+
+/** The tick's own checkout, where every review tree's git metadata lives (a linked worktree keeps it there). */
+const REPO_ROOT = new URL("../../..", import.meta.url).pathname;
+
+/**
+ * The path of `session`'s tree: named for the instance, and so for the pull request it may never leave.
+ * @param {string} session @param {string} [root]
+ */
+export function reviewCheckoutPath(session, root = REVIEW_CHECKOUT_ROOT) {
+  return `${root}/${session}`;
+}
+
+/**
+ * The private ref pull request `pr`'s head is fetched into. NOT `FETCH_HEAD`: that file is shared by every session
+ * that fetches in this checkout, and another fetch between ours and the read would hand the reviewer some other
+ * pull request's commit.
+ * @param {number} pr
+ */
+const reviewRef = (pr) => `refs/review/pr-${pr}`;
+
+/**
+ * @typedef {{git?: (cmd: string, args: string[], opts?: object) => string, exists?: (path: string) => boolean,
+ *   root?: string, repoRoot?: string}} CheckoutDeps
+ */
+
+/**
+ * PREPARE `session`'s tree at pull request `pr`'s CURRENT head, and return where it is -- or say why not.
+ * DONE BY THE TICK, NEVER BY THE REVIEWER: measured 2026-09-24 with `codex sandbox` under the reviewer's own policy
+ * (`workspace-write`, `/tmp` writable, network on), `git checkout` and `git fetch` are refused with `Read-only file
+ * system` in BOTH a shallow clone and a linked worktree, because codex protects `.git`; reading (`log`, `diff`,
+ * `show`, `status`) and writing files in the tree work in both. So the kind was chosen on what else differs: a
+ * linked worktree adds no second object store (30 MB against 40 MB) and can be removed in one command.
+ *
+ * SO A CHECKOUT THAT DOES NOT EXIST IS A REFUSAL, and the order is not sent: an order that names a path the
+ * reviewer cannot find is a review of nothing. The same call re-points an existing tree at a new head, which is
+ * how the one instance follows every head-changing push.
+ *
+ * @param {{pr: number, session: string} & CheckoutDeps} args
+ * @returns {{path: string, head: string} | {refusal: string}}
+ */
+export function prepareReviewCheckout({ pr, session, git = defaultGit, exists = existsSync,
+  root = REVIEW_CHECKOUT_ROOT, repoRoot = REPO_ROOT }) {
+  const path = reviewCheckoutPath(session, root);
+  try {
+    git("git", ["-C", repoRoot, "fetch", "--quiet", "origin", `+refs/pull/${pr}/head:${reviewRef(pr)}`]);
+    const head = git("git", ["-C", repoRoot, "rev-parse", "--verify", reviewRef(pr)]).trim();
+    if (exists(path)) git("git", ["-C", path, "checkout", "--quiet", "--detach", head]);
+    // `worktree add` makes the missing parents of `path`, so the first tree needs no directory made for it.
+    else git("git", ["-C", repoRoot, "worktree", "add", "--quiet", "--force", "--detach", path, head]);
+    const at = git("git", ["-C", path, "rev-parse", "HEAD"]).trim();
+    if (at !== head || !exists(path)) return { refusal: `no review checkout: ${path} is at ${at || "nothing"}, not PR #${pr}'s head ${head}` };
+    return { path, head };
+  } catch (err) {
+    return { refusal: `no review checkout for PR #${pr} at ${path} (${firstLine(err)})` };
+  }
+}
+
+/**
+ * REMOVE `session`'s tree and its private ref, and answer `null` when nothing is left, or WHY it could not.
+ * The counterpart of {@link prepareReviewCheckout}, called when the instance is ended (#2401, Done-when 7): a tree
+ * that outlives its pull request is the leak #2163 measured, and this row must not add instances of it.
+ * A tree that is already gone is done, not an error.
+ *
+ * @param {{pr: number, session: string} & CheckoutDeps} args @returns {string | null}
+ */
+export function removeReviewCheckout({ pr, session, git = defaultGit, exists = existsSync,
+  root = REVIEW_CHECKOUT_ROOT, repoRoot = REPO_ROOT }) {
+  const path = reviewCheckoutPath(session, root);
+  try {
+    if (exists(path)) git("git", ["-C", repoRoot, "worktree", "remove", "--force", path]);
+    if (exists(path)) return `${path} is still there after \`git worktree remove\``;
+    git("git", ["-C", repoRoot, "update-ref", "-d", reviewRef(pr)]);
+    return null;
+  } catch (err) {
+    return `could not remove ${path} (${firstLine(err)})`;
+  }
+}
+
+/**
+ * The order's text, with the sentence that says where the reviewer's tree is and what it cannot do to it. The path
+ * named here is one {@link prepareReviewCheckout} has just verified exists, so it is the only path an order names.
+ * @param {{prompt: string}} order @param {{path: string, head: string}} checkout @param {number} pr
+ */
+export function withReviewCheckout(order, checkout, pr) {
+  return { ...order, prompt: `${order.prompt}\n\nYour checkout of #${pr} is \`${checkout.path}\`, detached at the pull `
+    + `request's current head \`${checkout.head.slice(0, 8)}\`. It was prepared for you and is re-pointed on every push. Your `
+    + "sandbox cannot write `.git`, so `git checkout`, `git fetch` and `git worktree` are refused there: review from "
+    + "this path and do not make another checkout." };
+}
+
+/**
+ * Start a reviewer instance for `order.session` -- a workspace labelled with that name, opened IN its checkout, and
+ * a codex started in it with the profile of the order's cause -- and return the address it answers to. Its own
+ * path beside {@link spawnWorker}: no role, no drain, no claim precheck, because a reviewer holds no row.
+ *
+ * @param {{session: string, cause?: string, causeKey?: string}} order @param {{label: string, status: string}[]} agents
+ * @param {{run?: (args: string[]) => string, env?: Record<string, string>, cwd: string,
+ *   registry?: Record<string, {spawnedAt: number}>}} deps `cwd` is the verified checkout
+ * @returns {{label: string, workspace: string, profile: {kind: string, model: string, effort: string}}
+ *   | {refusal: string}}
+ */
+function spawnReviewer(order, agents, { run = defaultRun, env, cwd, registry }) {
+  const reviewer = spawnableReviewer(order, agents, registry);
+  if ("refusal" in reviewer) return reviewer;
+  const pane = openPane(run, reviewer.session, env ?? reviewerEnvironment(reviewer.session), cwd);
+  if ("refusal" in pane) return pane;
+  const invocation = spawnInvocation({ ...order, cause: String(order.cause) }, reviewer.session, pane.pane);
+  if ("refusal" in invocation) return { refusal: `${invocation.refusal}${closedNote(run, pane.workspace)}` };
+  try {
+    run(invocation.args);
+  } catch (err) {
+    return { refusal: `herdr refused to start "${reviewer.session}" (${firstLine(err)})${closedNote(run, pane.workspace)}` };
+  }
+  return { label: reviewer.session, workspace: pane.workspace, profile: invocation.profile };
+}
+
+/**
+ * @typedef {{run: (args: string[]) => string, reviewerEnv?: Record<string, string>, checkout?: CheckoutDeps,
+ *   registry?: () => Record<string, {spawnedAt: number}>, registerReviewer?: (session: string) => void}} ReviewerDeps
+ */
+
+/**
+ * WHERE A REVIEWER ORDER GOES, and what it carries: the instance for its pull request, started when none exists,
+ * with its tree at the pull request's current head. NOTHING ELSE CAN RECEIVE IT -- no roster, no fallback, no
+ * other instance (Done-when 8) -- so this asks {@link route} for the order's own session and for nothing more.
+ *
+ * ORDER OF THE STEPS IS THE POINT. The checkout is prepared BEFORE a pane is opened or a prompt typed, so a failed
+ * fetch costs no process and no order names a path that is not there; a `reviewer-<n>` that exists and is working
+ * WAITS for the next tick, because a second workspace under its label would make `route` ambiguous.
+ *
+ * @param {{session: string, cause?: string, causeKey?: string, prompt: string}} order
+ * @param {{label: string, status: string}[]} live
+ * @param {ReviewerDeps} deps
+ * @returns {{label: string, profile?: {kind: string, model: string, effort: string}, reviewer: true,
+ *   order: {prompt: string}} | {refusal: string}}
+ */
+function reviewerTarget(order, live, deps) {
+  const wrong = reviewerMismatch(order, order.session);
+  if (wrong !== null) return { refusal: wrong };
+  const routed = route(order.session, live, []);
+  if ("refusal" in routed) {
+    const may = spawnableReviewer(order, live, deps.registry?.());
+    if ("refusal" in may) return { refusal: `${routed.refusal}; ${may.refusal}` };
+  }
+  const pr = Number(orderPullRequest(order));
+  const checkout = prepareReviewCheckout({ pr, session: order.session, ...deps.checkout });
+  if ("refusal" in checkout) return checkout;
+  const carried = withReviewCheckout(order, checkout, pr);
+  if (!("refusal" in routed)) return { label: routed.label, reviewer: true, order: carried };
+  const spawn = spawnReviewer(order, live, { run: deps.run, env: deps.reviewerEnv, cwd: checkout.path,
+    registry: deps.registry?.() });
+  if ("refusal" in spawn) return { refusal: `${routed.refusal}; ${spawn.refusal}` };
+  // REGISTERED BEFORE THE PROMPT, as the engineer path does: a refused prompt leaves the process running.
+  deps.registerReviewer?.(spawn.label);
+  return { label: spawn.label, profile: spawn.profile, reviewer: true, order: carried };
+}
+
+/** @param {string} ledgerPath @returns {{registry: string, endings: string}} */
+export function reviewerPathsFrom(ledgerPath) {
+  return { registry: `${dirname(ledgerPath)}/${REVIEWER_REGISTRY_FILE}`,
+    endings: `${dirname(ledgerPath)}/reviewer-endings` };
+}
+
+/**
+ * Note that a reviewer instance was STARTED for `session`: the gate's auth detector reads `spawnedAt` to tell a
+ * refresh that came after the instance started from one it lived through, and the teardown reads the keys.
+ * @param {{registry: string}} paths @param {string} session @param {number} [now]
+ */
+export function registerReviewer(paths, session, now = Date.now()) {
+  const registry = readReviewerRegistry(paths.registry);
+  registry[session] = { spawnedAt: now };
+  writeFileSync(paths.registry, `${JSON.stringify(registry)}\n`);
+}
+
+/**
+ * END EVERY REVIEWER INSTANCE WHOSE PULL REQUEST HAS MERGED OR CLOSED, and write one ledger line for each ending.
+ *
+ * ONLY INSTANCES THIS PATH STARTED (the registry's keys), NEVER A WORKSPACE THAT MERELY LOOKS LIKE ONE: the two
+ * standing panes stay running until `ceo` closes them (Done-when 6), and `reviewer-2` is a name the retired pane
+ * carries. An instance survives head-changing pushes -- it is ended by the PULL REQUEST's state, not by a verdict.
+ *
+ * AN ENDING REMOVES THE INSTANCE'S CHECKOUT TOO (Done-when 7): a tree that outlives its pull request is #2163's
+ * defect. The workspace closes first (nothing may be reading the tree), and a tree that will not go leaves the
+ * instance REGISTERED, so the next tick -- which finds the workspace already gone -- retries just the removal.
+ *
+ * A LOOKUP THAT CANNOT ASK ENDS NOTHING, a working instance is left until it is between turns, and a workspace that
+ * will not close is left, said, and retried -- no line is written for an ending that did not happen.
+ *
+ * @param {{label: string, status: string}[]} agents
+ * @param {{registry: Record<string, {spawnedAt: number}>, now: number, run: (args: string[]) => string,
+ *   prState: (pr: number) => string | null, removeCheckout: (session: string, pr: number) => string | null,
+ *   record: (line: object) => void, warn: (line: string) => void}} deps
+ * @returns {{ended: string[], registry: Record<string, {spawnedAt: number}>}}
+ */
+export function endFinishedReviewers(agents, deps) {
+  const registry = { ...deps.registry };
+  /** @type {string[]} */
+  const ended = [];
+  for (const session of Object.keys(registry)) {
+    const pr = reviewerInstanceNumber(session);
+    const state = pr === null ? null : deps.prState(pr);
+    if (state === null) {
+      if (pr !== null) deps.warn(`reviewer teardown: could not read PR #${pr}'s state -- leaving "${session}" running.`);
+      continue;
+    }
+    if (state === "open") continue;
+    const agent = agents.find((a) => a.label === session);
+    if (agent !== undefined && !WAKEABLE.includes(agent.status)) continue;
+    if (agent !== undefined && !closeReviewer(session, deps)) continue;
+    const left = deps.removeCheckout(session, Number(pr));
+    if (left !== null) {
+      deps.warn(`reviewer teardown: "${session}" is finished but its checkout was not removed (${left}) -- retried next tick.`);
+      continue;
+    }
+    deps.record({ session, pr, state, at: new Date(deps.now).toISOString(),
+      workspace: agent === undefined ? "already gone" : "closed", checkout: "removed" });
+    delete registry[session];
+    ended.push(session);
+  }
+  return { ended, registry };
+}
+
+/**
+ * Close one reviewer instance's workspace; `false`, with a warning, when it would not close.
+ * @param {string} session @param {{run: (args: string[]) => string, warn: (line: string) => void}} deps
+ */
+function closeReviewer(session, deps) {
+  const id = workspaceIdOf(deps.run, session);
+  if (id === null) {
+    deps.warn(`reviewer teardown: "${session}" is finished but its workspace id is not exactly one -- left running.`);
+    return false;
+  }
+  try {
+    deps.run(["--session", "org", "workspace", "close", id]);
+    return true;
+  } catch (err) {
+    deps.warn(`reviewer teardown: "${session}" (${id}) could not be closed (${firstLine(err)}) -- retried next tick.`);
+    return false;
+  }
+}
+
+/**
+ * `open`, `closed` (merged pulls are closed too) or `null` for anything GitHub would not say -- REST, so the
+ * per-tick lookup spends the CORE pool and not the GRAPHQL one the gate already leans on.
+ * @param {number} pr @returns {string | null}
+ */
+function pullRequestState(pr) {
+  try {
+    const state = defaultGh(["api", `repos/${REPO}/pulls/${pr}`, "--jq", ".state"]).trim();
+    return state === "open" || state === "closed" ? state : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The reviewer teardown with its real dependencies, called by `work-tick` on every tick beside {@link tearDownSpares}
+ * and for the same reason: a merge produces no order, so a quiet gate is the tick a finished instance needs ending.
+ * Reports and never throws.
+ *
+ * @param {{label: string, status: string}[]} agents @param {string} ledgerPath
+ * @param {(line: string) => void} [say]
+ */
+export function tearDownReviewers(agents, ledgerPath, say = (line) => process.stderr.write(line)) {
+  try {
+    const paths = reviewerPathsFrom(ledgerPath);
+    const before = readReviewerRegistry(paths.registry);
+    if (Object.keys(before).length === 0) return;
+    const { ended, registry } = endFinishedReviewers(agents, { registry: before, now: Date.now(), run: defaultRun,
+      prState: pullRequestState, removeCheckout: (session, pr) => removeReviewCheckout({ session, pr }),
+      warn: (line) => say(`${line}\n`),
+      record: (line) => writeFileSync(paths.endings, `${JSON.stringify(line)}\n`, { flag: "a" }) });
+    writeFileSync(paths.registry, `${JSON.stringify(registry)}\n`);
+    for (const session of ended) say(`ENDED ${session}: its pull request is no longer open\n`);
+  } catch (err) {
+    say(`reviewer teardown FAILED (${firstLine(err)}): no reviewer instance was ended this tick.\n`);
+  }
 }
 
 /**
@@ -1431,6 +1964,30 @@ function escalationFor(label) {
   return "product-manager";
 }
 
+/** The one engineer brief, from the repository root: general lessons, the acceptance standard, the resource ban. */
+export const ENGINEER_BRIEF = "packages/agent-org/docs/roles/engineer.md";
+
+/**
+ * The paragraph that tells an ENGINEER to read {@link ENGINEER_BRIEF}, or nothing for any other label.
+ *
+ * MEMBERSHIP IN THE ROSTER, NOT A NAME TEST: the roster is `sessions.json`'s engineer roles, so a role added
+ * there is briefed with no edit here, and `ceo`, `product-manager`, `orchestrator` and a reviewer -- none of
+ * which is an engineer role -- are not told to read a brief written for someone else.
+ *
+ * A SPARE-FAMILY MEMBER IS A MEMBER (#2403): `engineerRoles` lists ADDRESSES, and `worker-9` is listed nowhere, so
+ * an address-only test would leave the instance the pilot spawns -- the one that starts knowing nothing -- the one
+ * engineer never told to read the brief. The family is read from the same file, so it is a rule and not a name test.
+ *
+ * @param {string} label
+ * @param {string[]} engineers
+ * @param {readonly import("./arm-pr.mjs").SpareFamily[]} families
+ */
+function engineerBriefLine(label, engineers, families) {
+  if (!engineers.includes(label) && familyNumber(label, families) === null) return "";
+  return `Before you start, read \`${ENGINEER_BRIEF}\`: the resource ban, the acceptance standard and `
+    + "the habits every engineer is held to. Nothing else tells you them.\n\n";
+}
+
 /**
  * The prompt as the woken session receives it: the order's text, prefixed with WHO IT IS.
  *
@@ -1447,21 +2004,35 @@ function escalationFor(label) {
  * point of this design is that nobody is sitting at that terminal. An agent that blocks on a human it
  * cannot reach is an agent that has stopped.
  *
- * @param {{session: string, prompt: string}} order
+ * AND, FOR AN ENGINEER ONLY, THE BRIEF TO READ (#2406). No code read `sessions.json`'s `brief` field, and this
+ * function named no file under `docs/roles`, so a spawned engineer -- which starts knowing nothing -- was
+ * never told the acceptance standard or the resource ban. {@link engineerBriefLine} adds one line for the
+ * roster's engineer roles and for no other label.
+ *
+ * A SPAWNED ENGINEER'S ORDER IS DIFFERENT IN KIND (#2405): its row is already claimed and it is already in the
+ * row's worktree, so `spawned` REPLACES the order's text with {@link spawnedPrompt} -- there is no claim command
+ * to run and no other directory to name. A STANDING session keeps the order's own text, with `LAUNCH_PLACEHOLDER`
+ * filled by {@link launchAdvice}. `engineers` and `families` are parameters so a test can hand `addressed` a roster.
+ *
+ * @param {{session: string, prompt: string, title?: string, causeKey?: string}} order
  * @param {string} label the concrete session this went to
+ * @param {LaunchFacts & {spawned?: ClaimedRow, engineers?: string[],
+ *   families?: readonly import("./arm-pr.mjs").SpareFamily[]}} [facts]
  */
-export function addressed(order, label) {
+export function addressed(order, label,
+  { spawned, engineers = engineerRoles(), families = SPARE_FAMILIES, ...launch } = {}) {
   // `<you>` SUBSTITUTED, not merely explained: the order's own command text carries the placeholder, and
   // an agent that has been told its name still has to edit the command it was handed. Handing it a
   // command it can run is the difference between an instruction and a task.
-  const prompt = order.prompt.replaceAll("<you>", label);
+  const prompt = spawned ? spawnedPrompt(order, spawned)
+    : order.prompt.replaceAll("<you>", label).replaceAll(LAUNCH_PLACEHOLDER, launchAdvice(label, launch));
   return `You are \`${label}\`, an org session in this repository. Use that name wherever a command `
     + `asks which session you are (\`--session=${label}\`).\n\n`
     + `${prompt}\n\n`
+    + engineerBriefLine(label, engineers, families)
     + "Work autonomously to the end: nobody is at this terminal to answer you. If something genuinely "
     + `blocks you, say so on the row and message \`${escalationFor(label)}\` -- never stop and wait on a `
-    + "human. If you cannot claim the row (already taken, or the claim refuses), that is an answer: "
-    + "report it and stop, rather than working outside a claim.\n\n"
+    + `human.${spawned ? "" : ` ${REFUSED_CLAIM_IS_AN_ANSWER}`}\n\n`
     + "ENDING YOUR TURN WITH A QUESTION IS THE SAME AS STOPPING. Nobody reads this terminal, so "
     + "\"want me to file it?\" and not filing it are the same outcome -- except the first also looks "
     + "like progress. IF THE ACTION IS IN YOUR LANE, TAKE IT AND REPORT WHAT YOU DID. Measured "
@@ -1474,6 +2045,10 @@ export function addressed(order, label) {
     + "job, and polling a pull request for a verdict that has its own cause is a turn spent on a "
     + "question the tick already answers.";
 }
+
+/** What a session that must claim its row is told about a refusal; a spawned one has nothing left to claim (#2405). */
+const REFUSED_CLAIM_IS_AN_ANSWER = "If you cannot claim the row (already taken, or the claim refuses), that is an "
+  + "answer: report it and stop, rather than working outside a claim.";
 
 /**
  * Does this delivery begin a new run -- i.e. was nobody told for longer than `RUN_IDLE_RESET_MS`?
@@ -1787,25 +2362,55 @@ export function clearContext(run, label) {
  * fact that a spawn was attempted and why it did not happen, which is precisely the question a pilot exists
  * to answer.
  *
- * @param {{session: string, causeKey: string, prompt: string, cause?: string}} order
+ * @param {{session: string, causeKey: string, prompt: string, cause?: string, title?: string}} order
  * @param {{label: string, status: string}[]} live
  * @param {string[]} roster
- * @param {{run: (args: string[]) => string, spawned: number, ineligibleReason?: (label: string) => string | null}} deps
- *   `spawned` is how many processes this tick has already started -- see `MAX_SPAWNS_PER_TICK`;
- *   `ineligibleReason` is {@link route}'s
- * @returns {{label: string, profile?: {kind: string, model: string, effort: string}} | {refusal: string}}
+ * @param {{run: (args: string[]) => string, spawned: number, ineligibleReason?: (label: string) => string | null,
+ *   env?: Record<string, string>, registerSpawn?: (role: string) => void, drained?: readonly string[],
+ *   claimable?: (order: {causeKey: string}) => string | null, claimer?: SpawnClaimer} & ReviewerDeps} deps
+ *   `spawned` is how many ENGINEER processes this tick has already started -- see `MAX_SPAWNS_PER_TICK`, which a
+ *   reviewer start never spends (#2401); `ineligibleReason` is {@link route}'s; `env` is the spawn's environment
+ *   ({@link spawnEnvironment})
+ * @returns {{label: string, profile?: {kind: string, model: string, effort: string}, claimed?: ClaimedRow,
+ *   reviewer?: true, order?: {prompt: string}} | {refusal: string}}
  */
 function targetFor(order, live, roster, deps) {
-  const routed = route(order.session, live, roster, deps.ineligibleReason);
-  if (!("refusal" in routed)) return { label: routed.label };
+  // A REVIEWER ORDER IS ASKED FIRST AND SEPARATELY (#2401): the engineer pilot's checks below are unchanged.
+  if (isReviewerOrder(order)) return reviewerTarget(order, live, deps);
+  const routed = routeWithFallback(order, live, withSpareInstances(roster, live), deps.ineligibleReason);
+  if (!("refusal" in routed)) {
+    // AN INSTANCE TAKES ITS OWN PULL REQUEST'S ORDERS ONLY, whatever cause or fallback brought the order here.
+    const wrong = reviewerMismatch(order, routed.label);
+    return wrong === null ? { label: routed.label } : { refusal: wrong };
+  }
   if (!isPilotOrder(order)) return { refusal: routed.refusal };
   if (deps.spawned >= MAX_SPAWNS_PER_TICK) {
     return { refusal: `${routed.refusal}, and this tick has already started ${deps.spawned} `
       + `(MAX_SPAWNS_PER_TICK is ${MAX_SPAWNS_PER_TICK})` };
   }
-  const spawn = spawnWorker(order, live, roster, { run: deps.run });
+  const spawn = spawnWorker(order, live, roster,
+    { run: deps.run, env: deps.env, drained: deps.drained, claimable: deps.claimable, claimer: deps.claimer });
   if ("refusal" in spawn) return { refusal: `${routed.refusal}; ${spawn.refusal}` };
-  return { label: spawn.label, profile: spawn.profile };
+  // REGISTERED BEFORE THE PROMPT, because a refused prompt leaves the process running (see `deliver`).
+  deps.registerSpawn?.(spawn.label);
+  return { label: spawn.label, profile: spawn.profile, claimed: spawn.claimed };
+}
+
+/**
+ * What a placed target costs the ENGINEER pilot's per-tick allowance: one for a process started for an engineer, none
+ * for anything else -- a reviewer start never spends it (#2401), so `MAX_SPAWNS_PER_TICK` reads as it always did.
+ * @param {{profile?: object, reviewer?: true}} target @returns {number}
+ */
+function engineerStarts(target) {
+  return target.profile !== undefined && target.reviewer !== true ? 1 : 0;
+}
+
+/**
+ * The order as it is TYPED: a reviewer's carries the sentence naming its verified checkout ({@link withReviewCheckout}).
+ * @param {{session: string, prompt: string}} order @param {{order?: {prompt: string}}} target
+ */
+function carriedOrder(order, target) {
+  return target.order === undefined ? order : { ...order, ...target.order };
 }
 
 /**
@@ -1815,14 +2420,26 @@ function targetFor(order, live, roster, deps) {
  * between the two re-wakes rather than losing the wake. Re-waking is visible and costs one turn; losing one
  * is invisible and costs however long until someone notices -- the 2026-09-08 shape.
  *
- * @param {{session: string, causeKey: string, prompt: string, cause?: string}[]} orders
+ * @param {{session: string, causeKey: string, prompt: string, cause?: string, title?: string}[]} orders
  * @param {{label: string, status: string}[]} agents
  * @param {string[]} roster
  * @param {{run?: (args: string[]) => string, record?: (key: string, recipient?: string) => void,
- *          counts?: Map<string, number>, ineligibleReason?: (label: string) => string | null}} [deps]
+ *          counts?: Map<string, number>, ineligibleReason?: (label: string) => string | null,
+ *          env?: Record<string, string>, registerSpawn?: (role: string) => void, drained?: readonly string[],
+ *          claimable?: (order: {causeKey: string}) => string | null, claimer?: SpawnClaimer,
+ *          launch?: LaunchFacts} & Partial<ReviewerDeps>} [deps]
+ *   `registerReviewer` is told of every reviewer instance this tick starts (#2401), for the auth detector;
+ *   `checkout` and `registry` are the reviewer path's seams (its git, its filesystem, what it has started);
+ *   `registerSpawn` is told of every process this tick STARTS, so the teardown can tell an instance that has
+ *   not claimed yet from one that finished ({@link endFinishedSpares}); `drained` is the roles the drain holds
+ *   back now, which a spawn must not start into; `claimable` is the spawn's precheck ({@link spawnClaimability});
+ *   `claimer` claims the row for a spawn before its pane opens ({@link spawnClaimer}); `launch` is what `addressed`
+ *   asks about a standing session's worktree
  * @returns {{sent: string[], refused: string[], stuck: string[]}}
  */
-export function deliver(orders, agents, roster, { run = defaultRun, record, counts, ineligibleReason } = {}) {
+export function deliver(orders, agents, roster,
+  { run = defaultRun, record, counts, ineligibleReason, env, registerSpawn, drained, claimable, claimer,
+    launch, reviewerEnv, registerReviewer, checkout, registry } = {}) {
   const sent = [];
   const refused = [];
   const stuck = [];
@@ -1837,7 +2454,8 @@ export function deliver(orders, agents, roster, { run = defaultRun, record, coun
       stuck.push(`${order.causeKey}: delivered ${already} times and the cause is still true`);
       continue;
     }
-    const target = targetFor(order, live, roster, { run, spawned, ineligibleReason });
+    const target = targetFor(order, live, roster, { run, spawned, ineligibleReason, env, registerSpawn, drained,
+      claimable, claimer, reviewerEnv, registerReviewer, checkout, registry });
     if ("refusal" in target) {
       refused.push(`${order.causeKey}: ${target.refusal}`);
       continue;
@@ -1846,15 +2464,16 @@ export function deliver(orders, agents, roster, { run = defaultRun, record, coun
     // prompt, a bounded wait and a five-second settle (`CLEAR_SETTLE_MS`) before the order can be typed.
     // Spending that on a session whose context is its own prefix would be paying the standing path's cost
     // to reach a floor the spawn already started at -- which is the whole argument for spawning.
-    if (target.profile) spawned += 1;
-    else {
+    spawned += engineerStarts(target);
+    if (!target.profile) {
       // CLEARED BEFORE PROMPTED, always. See `clearContext` for the measurement; in short, a session on its
       // 500th turn costs ~24x one on its 10th for identical output, and the clear costs one cheap turn.
       const clearRefusal = clearContext(run, target.label);
       if (clearRefusal) refused.push(`${order.causeKey}: ${clearRefusal} -- delivered anyway`);
     }
     try {
-      run(["--session", "org", "agent", "prompt", target.label, addressed(order, target.label)]);
+      run(["--session", "org", "agent", "prompt", target.label,
+        addressed(carriedOrder(order, target), target.label, { ...launch, spawned: target.claimed })]);
     } catch (err) {
       // A STARTED PROCESS IS LEFT RUNNING HERE, and the causeKey is NOT recorded. It is a healthy, idle
       // session under a roster label, so the next tick's `route` offers it this same order by the ordinary
@@ -1873,7 +2492,8 @@ export function deliver(orders, agents, roster, { run = defaultRun, record, coun
     // A POOL ORDER'S RECIPIENT IS RECORDED (#2226): its causeKey names `engineers`, so the ledger alone could
     // not say who was woken, and the only account of a wrong delivery was the recipient's own prose. A NAMED
     // order's recipient is already in its key and is not repeated.
-    if (record) record(order.causeKey, order.session === "engineers" ? target.label : undefined);
+    // A FALLBACK DELIVERY IS RECORDED THE SAME WAY (#2356): the key names the session it was ADDRESSED to.
+    if (record) record(order.causeKey, target.label !== order.session ? target.label : undefined);
     sent.push(target.profile
       ? `${target.label} <- ${order.causeKey} (STARTED ${target.profile.model}/${target.profile.effort})`
       : `${target.label} <- ${order.causeKey}`);
@@ -1881,15 +2501,792 @@ export function deliver(orders, agents, roster, { run = defaultRun, record, coun
   return { sent, refused, stuck };
 }
 
+// --- #2323: A SPAWNED INSTANCE ENDS WHEN ITS ROW DOES, AND EVERY ENDING IS A LEDGER LINE ---
+
+/**
+ * The account a spawned engineer acts as -- `ceo`'s ruling on #2323, which #916 makes `ceo`'s to make:
+ * `a11ign-ai-workers`, like the standing three, and never the person.
+ *
+ * WHY THE SPAWN DECIDES AND A LIST DOES NOT. The `gh` wrapper routes by matching `HERDR_WORKSPACE_ID` against
+ * a file of ids, and an instance gets a FRESH workspace id per row: `worker-4` ran in `wD` and `worker-5` in
+ * `wE`, both absent, so every `gh` call they made from 09:42Z (2026-09-24) spent the chairman's GraphQL pool
+ * and wrote as him. An explicit `GH_CONFIG_DIR` always wins in that wrapper, so setting it at spawn removes
+ * the id list from the question altogether.
+ */
+export const WORKERS_GH_CONFIG_DIR = "/home/agent/workers/gh";
+
+/**
+ * The environment a spawned workspace's shell starts with. An `override` wins, key by key, because a caller
+ * that names its own account has decided something this default has no business second-guessing.
+ * @param {Record<string, string>} [override]
+ * @returns {Record<string, string>}
+ */
+export function spawnEnvironment(override = {}) {
+  return { GH_CONFIG_DIR: WORKERS_GH_CONFIG_DIR, ...override };
+}
+
+/**
+ * The engineer roles `sessions.json` MARKS spare, in file order: the only roles this file ever ends a process
+ * for. READ, NOT TYPED, for #2279's reason -- a second copy of the list drifts -- and a ROLE fact rather than
+ * an instance one, so `_rolesNotProcesses` stands. THE ADDRESSES IT NAMES ONLY (#2403): a family is not in this
+ * list, its members are found among the running processes ({@link spareInstances}).
+ *
+ * @param {string | URL} [path] the roster file; a parameter so a test can hand it a fixture
+ * @returns {string[]}
+ */
+export function spareRoles(path = new URL("../docs/roles/sessions.json", import.meta.url)) {
+  return spareEntries(path).addresses;
+}
+
+/**
+ * @param {string | URL} path
+ * @returns {{ addresses: string[], families: { prefix: string, from: number }[] }} the spare roles the file marks:
+ *   the addresses it names, and the families it declares
+ */
+function spareEntries(path) {
+  const { live } = /** @type {{ live: { name: string, role: string, spare?: boolean,
+    family?: { prefix: string, from: number } }[] }} */ (JSON.parse(readFileSync(path, "utf8")));
+  const spares = live.filter((s) => s.role === "engineer" && s.spare === true);
+  return {
+    addresses: spares.filter((s) => s.family === undefined).map((s) => s.name),
+    families: spares.flatMap((s) => (s.family === undefined ? [] : [s.family])),
+  };
+}
+
+/**
+ * The spare instances that EXIST: the marked addresses that hold a process, and every process whose label is a
+ * member of a marked family (#2403). What the teardown ends from -- a family has no list to walk, so the
+ * agents are where its members are found.
+ *
+ * @param {{label: string}[]} agents
+ * @param {string | URL} [path] the roster file; a parameter so a test can hand it a fixture
+ * @returns {string[]}
+ */
+export function spareInstances(agents, path = new URL("../docs/roles/sessions.json", import.meta.url)) {
+  const { addresses, families } = spareEntries(path);
+  const labels = agents.map((a) => a.label);
+  return [...new Set([...addresses, ...labels.filter((l) => familyNumber(l, families) !== null)])];
+}
+
+/**
+ * How long a spawned instance may sit idle without ever holding a row before the cycle counts as FAILED.
+ * Generous on purpose: the instance's first turn is reading the order, the row and its own worktree, and an
+ * idle reading inside it is not yet a defect.
+ */
+export const SPARE_CLAIM_BOUND_MS = 30 * 60 * 1000;
+
+/**
+ * What one tick knows about one spare instance: when it was first seen, and every row it has been seen holding.
+ * @typedef {{ spawnedAt: number, rows: number[] }} SpareInstance
+ */
+
+/**
+ * Whether a present spare instance is ended this tick, and if not, why not.
+ *
+ * `held` IS WHAT IS HELD NOW AND `instance.rows` IS WHAT WAS EVER HELD, and the rule needs both: "holds no open
+ * row" is true of an instance that has not claimed yet, which is in its FIRST TURN, so it alone would end
+ * every spare the moment it was spawned. The rule is "has held a row, holds none now, and is idle".
+ *
+ * `idle` OR `done`, the two states `WAKEABLE` already names: herdr says `done` for a finished turn nobody has
+ * looked at yet, and a spare parked there would otherwise never end. `working` is mid-turn, `blocked` is stopped
+ * on a question whose text is the only record of it (`blockedSessions`), and `unknown` is not known to be
+ * anything -- none of the three is ended.
+ *
+ * AN INSTANCE THAT NEVER CLAIMS IS ENDED TOO, and RECORDED AS A FAILURE rather than silently: it holds a role's
+ * address and does nothing with it. The verdict says `failed`; the caller writes the line.
+ *
+ * @param {{ status: string, instance: SpareInstance, held: number[], now: number, claimBoundMs?: number }} facts
+ * @returns {{ end: false, why: string } | { end: true, failed?: string }}
+ */
+export function spareDecision({ status, instance, held, now, claimBoundMs = SPARE_CLAIM_BOUND_MS }) {
+  if (!WAKEABLE.includes(status)) return { end: false, why: `${status}: not between turns` };
+  if (held.length > 0) return { end: false, why: `holds ${held.map((n) => `#${n}`).join(", ")}` };
+  if (instance.rows.length > 0) return { end: true };
+  const waited = now - instance.spawnedAt;
+  if (waited < claimBoundMs) return { end: false, why: "has not claimed a row yet (first turn)" };
+  return { end: true, failed: `never claimed a row in ${Math.round(waited / 60_000)} minutes` };
+}
+
+/**
+ * @typedef {{ path: string, clean: boolean | "unknown", merge: "merged" | "not-merged" | "unknown" }} SpareWorktree
+ * @typedef {{ role: string, row: number | null, at: number, clean: boolean, why: string }} SpareCycle
+ */
+
+/**
+ * Was this cycle CLEAN -- the one fact #1950's "20 consecutive clean spawn-and-teardown cycles" counts.
+ *
+ * PURE, and stricter than "it ended": every row the instance held is CLOSED (a row released or abandoned is a
+ * cycle that left work behind), no open row still carries its `session:` label, and every worktree it made is
+ * clean and merged, i.e. `worktrees:prune` may take it. Anything the reads could not establish is NOT clean --
+ * a counter that rounds "could not tell" up to "clean" reaches 20 by not looking.
+ *
+ * NO WORKTREE FOUND IS CLEAN: nothing was left. It is the caller's job to look under the row's own name.
+ *
+ * @param {{ role: string, rows: { number: number, state: string }[], held: number[], worktrees: SpareWorktree[] }} facts
+ * @returns {{ clean: boolean, why: string }}
+ */
+export function cycleVerdict({ role, rows, held, worktrees }) {
+  /** @type {string[]} */
+  const problems = [];
+  for (const row of rows) {
+    if (row.state !== "CLOSED") problems.push(`#${row.number} is ${row.state.toLowerCase()}, not closed`);
+  }
+  if (held.length > 0) problems.push(`session:${role} still labels ${held.map((n) => `#${n}`).join(", ")}`);
+  for (const tree of worktrees) {
+    if (tree.clean === "unknown" || tree.merge === "unknown") problems.push(`${tree.path} could not be read`);
+    else if (tree.clean === false) problems.push(`${tree.path} has uncommitted changes`);
+    else if (tree.merge !== "merged") problems.push(`${tree.path} is not merged into origin/main`);
+  }
+  if (problems.length > 0) return { clean: false, why: problems.join("; ") };
+  const rowsSaid = rows.map((r) => `#${r.number}`).join(", ") || "no row";
+  return { clean: true,
+    why: `${rowsSaid} closed; no open row carries session:${role}; ${worktrees.length > 0
+      ? "worktree clean and merged" : "no worktree left"}` };
+}
+
+/**
+ * The current run of clean cycles, read from the ledger -- THE FUNCTION #1950's 20 IS READ FROM.
+ *
+ * `empty` IS SEPARATE FROM `run: 0` because they are different statements: a ledger of one failure says the
+ * run was broken, and an EMPTY ledger says nothing has been measured, which must not read as "0 of 20 clean"
+ * to anyone deciding whether the condition is close. A failure resets the run; a clean line extends it.
+ *
+ * @param {Pick<SpareCycle, "clean">[]} ledger oldest first
+ * @returns {{ run: number, empty: boolean }}
+ */
+export function consecutiveClean(ledger) {
+  let run = 0;
+  for (const line of ledger) run = line.clean === true ? run + 1 : 0;
+  return { run, empty: ledger.length === 0 };
+}
+
+/**
+ * The ledger of ended cycles, oldest first. A LINE THAT CANNOT BE PARSED IS A FAILED CYCLE, never a skipped
+ * one: this file is what a retirement is argued from, and a corrupt line that vanished from the count would
+ * let a run of clean ones bridge a failure nobody could read.
+ *
+ * @param {string} path @param {typeof readFileSync} [read]
+ * @returns {SpareCycle[]}
+ */
+export function readSpareCycles(path, read = readFileSync) {
+  let text;
+  try {
+    text = String(read(path, "utf8"));
+  } catch (err) {
+    if (/** @type {any} */ (err)?.code === "ENOENT") return [];
+    throw err;
+  }
+  return text.split("\n").filter((line) => line.trim() !== "").map((line) => {
+    try {
+      return /** @type {SpareCycle} */ (JSON.parse(line));
+    } catch {
+      return { role: "?", row: null, at: 0, clean: false, why: `unreadable ledger line: ${line.slice(0, 60)}` };
+    }
+  });
+}
+
+/** Where the instance registry and the cycle ledger live: beside the delivery ledger, with the org's other state. */
+export function sparePathsFrom(/** @type {string} */ ledgerPath) {
+  return { registry: `${dirname(ledgerPath)}/spare-instances.json`, cycles: `${dirname(ledgerPath)}/spare-cycles` };
+}
+
+// --- #2324: THE STANDING ENGINEERS DRAIN, AND A SPAWN IS ONLY MADE FOR A ROW THAT WOULD PASS THE CLAIM ---
+//
+// DRAIN, DON'T RETIRE (`ceo`, #1950 ruling b). The three standing engineers keep their panes, their roles and
+// every order about a row they hold; they stop being OFFERED new rows, so every new row goes through spawn and
+// #1950's 20 clean cycles build at full throughput. `sessions.json`'s `drain` mark is the fact, and it lifts
+// itself: see {@link drainInForce}.
+
+const SESSIONS_FILE = new URL("../docs/roles/sessions.json", import.meta.url);
+
+/** What `route`'s refusal calls a drained engineer -- short enough to sit in a `seen` list beside a status. */
+export const DRAINED_SEEN = "drained (#2324)";
+
+/** #1950's bar: consecutive clean spawn-and-teardown cycles before `ceo` files the retirement row. */
+export const CLEAN_CYCLES_TARGET = 20;
+
+/**
+ * The engineer roles `sessions.json` MARKS `drain`, in file order. READ, NOT TYPED, for #2279's reason, and a
+ * ROLE fact like `spare` (`_rolesNotProcesses`): it names no pane.
+ *
+ * @param {string | URL} [path] the roster file; a parameter so a test can hand it a fixture
+ * @returns {string[]}
+ */
+export function drainedRoles(path = SESSIONS_FILE) {
+  const { live } = /** @type {{ live: { name: string, role: string, drain?: boolean }[] }} */ (
+    JSON.parse(readFileSync(path, "utf8")));
+  return live.filter((s) => s.role === "engineer" && s.drain === true).map((s) => s.name);
+}
+
+/**
+ * Is the drain in force, given the cycle ledger (oldest first)?
+ *
+ * IT LIFTS ITSELF ON A FAILED CYCLE, which is the chairman's safety condition for having no fixed cap: the drain
+ * is in force only while the NEWEST line is clean, so one failure hands the standing three their claims back
+ * with nobody's edit. Re-arming it is `ceo`'s and is an edit to `sessions.json`.
+ *
+ * AN EMPTY LEDGER KEEPS IT IN FORCE. Nothing has failed, and nothing else would ever start the count: with the
+ * drain off until a first line existed, the standing three would take every row and no cycle would be run.
+ * (`spawn:cycles` still refuses to print that as a count -- the two questions are different.) A line that could
+ * not be parsed reads as a failure (`readSpareCycles`), so a corrupt ledger lifts the drain rather than hiding it.
+ *
+ * @param {Pick<SpareCycle, "clean">[]} ledger
+ * @returns {boolean}
+ */
+export function drainInForce(ledger) {
+  return ledger.length === 0 || ledger[ledger.length - 1].clean === true;
+}
+
+/**
+ * The roles the drain holds back RIGHT NOW: the file's drained roles while {@link drainInForce}, none once a
+ * cycle failed. The one reader `route`, the spawn and `row-claim` all take, so they cannot disagree.
+ *
+ * @param {{ cycles: string, sessions?: string | URL, read?: typeof readFileSync }} paths `cycles` is the
+ *   ledger file ({@link sparePathsFrom})
+ * @returns {string[]}
+ */
+export function activeDrain({ cycles, sessions = SESSIONS_FILE, read = readFileSync }) {
+  return drainInForce(readSpareCycles(cycles, read)) ? drainedRoles(sessions) : [];
+}
+
+/**
+ * `spawn:cycles` -- #1950's 20 as a command's output rather than a comment.
+ *
+ * AN EMPTY LEDGER IS NOT `0` and exits non-zero: "no cycle has run" and "the run was broken at zero" are
+ * different statements, and a count that printed `0` for the first would be read by whoever is deciding whether
+ * the condition is near. The last line is printed verbatim, so the run length can be checked against it.
+ *
+ * @param {SpareCycle[]} ledger oldest first @param {string[]} drained the drain `sessions.json` marks
+ * @returns {{ exit: number, stdout: string, stderr: string }}
+ */
+export function cyclesReport(ledger, drained) {
+  const { run, empty } = consecutiveClean(ledger);
+  if (empty) {
+    return { exit: EXIT.ATTENTION, stdout: "", stderr: "spawn:cycles: the ledger is EMPTY -- no spawn-and-teardown "
+      + "cycle has ended yet, so nothing has been counted. That is NOT 0 of "
+      + `${CLEAN_CYCLES_TARGET}: a run of zero would mean a cycle failed.\n` };
+  }
+  const last = ledger[ledger.length - 1];
+  const held = drainInForce(ledger)
+    ? `IN FORCE on ${drained.join(", ") || "no role (no role is marked drain)"}`
+    : "LIFTED -- the last cycle was not clean, so the standing engineers claim again until `ceo` re-arms it";
+  return { exit: 0, stderr: "", stdout: `clean cycles in the current run: ${run} of ${CLEAN_CYCLES_TARGET}\n`
+    + `last ledger line: ${JSON.stringify(last)}\n`
+    + `ledger lines: ${ledger.length}\n`
+    + `drain: ${held}\n` };
+}
+
+/**
+ * The row an order is about, from its `causeKey` (`engineers/ready-row-unclaimed/<row>`), or `null`.
+ * @param {{ causeKey: string }} order @returns {number | null}
+ */
+export function rowOfOrder(order) {
+  const found = /\/ready-row-unclaimed\/(\d+)$/.exec(order.causeKey);
+  return found ? Number(found[1]) : null;
+}
+
+/**
+ * SPAWN ONLY FOR A ROW THAT WOULD PASS THE CLAIM (`ceo`, #1950 ruling d): the answer to "would the claim refuse
+ * this row" for an order about to start a process, so no instance is created to be refused and sit idle.
+ *
+ * THE CLAIM'S OWN CHECKS, CALLED: #1886's `blockedBy` edge and B4's file overlap, through the same readers
+ * `row-claim` uses (`blockedByEdgeReason`, `fileOverlapReason`). B2 is not asked -- a fresh instance holds no
+ * rows. `lane:` and `runner:` are not asked either: the gate already routes by lane, and a `lane:ceo` order is
+ * not addressed to the pool.
+ *
+ * EACH REFUSAL NAMES ITS CHECK, because the log line is the only place a row that keeps not spawning can be
+ * explained. The row stays OFFERED: a derived cause is not recorded for a refusal, so the next tick asks again
+ * and the row spawns once the edge closes or the other pull request merges.
+ *
+ * A LOOKUP THAT CANNOT ASK OFFERS THE ROW, as the claim does (B2/B4/#1886 all fail open): a guard that stops all
+ * spawning when GitHub is down is bypassed and then never consulted. It is SAID. The open-PR list is read once
+ * per tick and only when a row has a Region to compare -- it is the expensive read.
+ *
+ * @param {{ run?: (args: string[]) => string, warn?: (line: string) => void }} [deps]
+ * @returns {(order: { causeKey: string }) => string | null} why the claim would refuse, or `null`
+ */
+export function spawnClaimability({ run = defaultGh,
+  warn = (line) => { process.stderr.write(`${line}\n`); } } = {}) {
+  /** @type {ReturnType<typeof lookupOpenPrFiles> | undefined} */
+  let openPrs;
+  return (order) => {
+    const row = rowOfOrder(order);
+    if (row === null) return `cannot tell which row "${order.causeKey}" is about, so cannot ask the claim's checks`;
+    const blocked = blockedByEdgeReason(lookupBlockedByEdge(row, { run }));
+    if (blocked) return `#${row} would be refused at the claim by the \`blockedBy\` check (#1886): ${blocked}`;
+    const mine = lookupMyRegionFiles(row, { run });
+    if (mine === null || mine.length === 0) return null;
+    openPrs ??= lookupOpenPrFiles({ run, log: warn });
+    if (openPrs === null) {
+      warn(`wake: could not read the open pull requests -- offering #${row} a spawn anyway (B4 fails open).`);
+      return null;
+    }
+    const { reason } = fileOverlapReason(mine, openPrs, { rowNumber: row });
+    return reason ? `#${row} would be refused at the claim by the file-overlap check (B4): ${reason}` : null;
+  };
+}
+
+// --- #2405: A SPAWNED ENGINEER STARTS IN ITS ROW'S WORKTREE, BECAUSE THE SPAWNER CLAIMED THE ROW FIRST ---
+//
+// Measured by the chairman watching `worker-6` on 2026-09-24 and re-read at `a7a91408a`: the pane opened in the
+// primary checkout, which `launchGate` refuses, and its order named `role-worker-6`, which did not exist (six of
+// the eight engineer addresses have no such directory). The order also offered whichever linked worktree `git
+// worktree list` named, which makes a spawned engineer BORROW one -- possibly `role-worker-5` while `worker-5` works in it, two agents' git
+// commands in one tree. `ceo` accepted the pre-claim on the chairman's message: this section is the claim, run
+// by the spawner as the address it is about to start, from a linked worktree that address owns.
+
+/**
+ * The host's layout, which the gate's own order text already hardcoded (`/home/agent/repos/...`): the PRIMARY
+ * checkout, and the directory its linked worktrees (`role-<name>`, `wt-<row>`) sit beside it in.
+ */
+export const HOST_REPOS = "/home/agent/repos";
+export const PRIMARY_CHECKOUT = `${HOST_REPOS}/a11y-witness`;
+
+/** Where `row-claim` lives, resolved from THIS file: the claim a spawn runs is the code the tick itself runs. */
+const ROW_CLAIM = fileURLToPath(new URL("./row-claim.mjs", import.meta.url));
+
+/** One `git fetch` plus a claim (which fetches again and reads GitHub) -- generous, because a killed claim can land writes. */
+const CLAIM_TIMEOUT_MS = 120_000;
+
+/** A branch slug is a hint to a human reading the branch list, so a few words of the title are enough. */
+const SLUG_WORDS = 4;
+const SLUG_MAX_CHARS = 40;
+
+/**
+ * The host's directory layout under one root: the linked worktrees AND the primary checkout beside them
+ * (`PRIMARY_CHECKOUT` is `${HOST_REPOS}/a11y-witness`). `--worktrees-dir` moves the whole of it, because the claim's
+ * `git fetch` runs IN the primary, which a CI runner does not have at the host's path (`spawnSync git ENOENT`).
+ * @param {string} root
+ */
+function layoutUnder(root) {
+  return { worktreesDir: root, primary: join(root, basename(PRIMARY_CHECKOUT)) };
+}
+
+/**
+ * What `addressed` asks about the host, so a test can hand it a fixture instead of the real directory.
+ * @typedef {{ exists?: (path: string) => boolean, worktreesDir?: string, primary?: string }} LaunchFacts
+ */
+
+/**
+ * A row claimed for a spawn, and where.
+ * @typedef {{ row: number, branch: string, worktree: string, launchDir: string }} ClaimedRow
+ */
+
+/**
+ * The claim a spawn makes before it has a pane, and the release for a spawn that fails after it.
+ * @typedef {{
+ *   claim: (order: { causeKey: string, title?: string }, role: string, env: Record<string, string>)
+ *     => ClaimedRow | { refusal: string },
+ *   release: (claimed: ClaimedRow, role: string, env: Record<string, string>) => string,
+ * }} SpawnClaimer
+ */
+
+/**
+ * One process run, without `execFileSync`'s throw: the status decides what a claim MEANS (a refusal and a claim that
+ * landed and then failed are different exits), so it is read, not caught.
+ * @typedef {(command: string, args: string[], options: { cwd: string, env: Record<string, string> })
+ *   => { status: number | null, output: string }} Exec
+ */
+
+/** @type {Exec} */
+const defaultExec = (command, args, { cwd, env }) => {
+  const ran = spawnSync(command, args, { cwd, env: sandboxGitEnv(env), encoding: "utf8", timeout: CLAIM_TIMEOUT_MS });
+  return { status: ran.status, output: `${ran.stdout ?? ""}${ran.stderr ?? ""}${ran.error ? ran.error.message : ""}` };
+};
+
+/**
+ * The line of a command's output that says what happened: `row-claim` prints a board-snapshot notice before its
+ * verdict, so the FIRST line names the snapshot and not the refusal.
+ * @param {string} output
+ */
+function verdictLine(output) {
+  const lines = output.split("\n").map((l) => l.trim()).filter(Boolean);
+  const found = lines.find((l) => /NOT CLAIMED|REFUSED|COULD NOT|PARTIALLY WRITTEN|fatal:|error:/i.test(l));
+  return (found ?? lines[lines.length - 1] ?? "no output").slice(0, REFUSAL_EXCERPT * 2);
+}
+
+/** A branch slug from a row title, or `row` when the title has no words in it. @param {string | undefined} title */
+export function slugOf(title) {
+  const words = String(title ?? "").toLowerCase().match(/[a-z0-9]+/g) ?? [];
+  return words.slice(0, SLUG_WORDS).join("-").slice(0, SLUG_MAX_CHARS).replace(/-$/, "") || "row";
+}
+
+/**
+ * The linked worktree the claim is LAUNCHED from, created for the address if it has none.
+ *
+ * THE CLAIM NEEDS A LINKED-WORKTREE LAUNCH (`launchGate`), and the tick runs from the primary checkout -- so the spawner
+ * needs a directory that is not the primary and is not somebody else's. `role-<name>` is the address's own: a spawn is
+ * only made for a role no process holds, so nobody is working in it, which is exactly what the "any other linked
+ * worktree" the order used to offer could not promise. It is created DETACHED at `origin/main` (no branch to collide
+ * with), and an existing one is brought to `origin/main` only when that cannot lose anything: detached and clean. The
+ * claim's own stale-rule guard is the backstop for one left behind, and it says so in the refusal.
+ *
+ * @param {string} role
+ * @param {{ exec: Exec, exists: (path: string) => boolean, worktreesDir: string, primary: string }} host
+ * @returns {{ dir: string } | { refusal: string }}
+ */
+function launchWorktree(role, { exec, exists, worktreesDir, primary }) {
+  const dir = join(worktreesDir, `role-${role}`);
+  const git = (/** @type {string[]} */ args, /** @type {string} */ cwd) => exec("git", args, { cwd, env: {} });
+  const fetched = git(["fetch", "--quiet", "origin"], primary);
+  if (fetched.status !== 0) return { refusal: `git fetch origin failed (${verdictLine(fetched.output)})` };
+  if (!exists(dir)) {
+    const made = git(["worktree", "add", "--detach", dir, "origin/main"], primary);
+    return made.status === 0 ? { dir } : { refusal: `could not create ${dir} (${verdictLine(made.output)})` };
+  }
+  const onBranch = git(["symbolic-ref", "-q", "HEAD"], dir).status === 0;
+  const dirty = git(["status", "--porcelain", "--untracked-files=no"], dir).output.trim() !== "";
+  // BEST EFFORT, and its failure is not a refusal: a tree that cannot be moved is still a launch directory, and the
+  // stale-rule guard names the case where it matters.
+  if (!onBranch && !dirty) git(["checkout", "--quiet", "--detach", "origin/main"], dir);
+  return { dir };
+}
+
+/** Exits of a claim that HELD: `STARTED` (0), and `STARTED ... BUT the Project Status could not be moved` (3, still claimed). */
+const CLAIM_LANDED = Object.freeze([0, 3]);
+
+/** Exits after which the claim did NOT land: `NOT CLAIMED` (1) and `could not determine`/the launch refusal (2). */
+const CLAIM_NOT_LANDED = Object.freeze([1, 2]);
+
+/**
+ * Release a claim this call made and could not use -- `row-claim decline`, which also removes the worktree it created
+ * and refuses by name if that is dirty. NEVER THROWS, and says what remained, like {@link closedNote}.
+ *
+ * @param {ClaimedRow} claimed @param {string} role @param {Record<string, string>} env
+ * @param {Exec} exec
+ * @returns {string} a clause to append to the refusal being reported
+ */
+function releaseClaim(claimed, role, env, exec) {
+  const ran = exec("node", [ROW_CLAIM, "decline", String(claimed.row), `--session=${role}`],
+    { cwd: claimed.launchDir, env });
+  if (ran.status === 0) return ` -- the claim on #${claimed.row} was released`;
+  return ` -- AND the claim on #${claimed.row} could NOT be released (${verdictLine(ran.output)}): the row is held by `
+    + `"${role}" with no process, which nothing reads as a fault -- run \`node packages/agent-org/src/row-claim.mjs `
+    + `decline ${claimed.row} --session=${role}\` from a linked worktree`;
+}
+
+/**
+ * The spawner's claim: `row-claim claim <row> --session=<role> --branch=agent/<slug>-<row> --worktree=../wt-<row>`,
+ * run from the role's own launch worktree under the environment the agent will run in (`spawnEnvironment`), because a
+ * claim writes labels and comments and must be attributed to the account the agent acts as (#916).
+ *
+ * @param {{ exec?: Exec, exists?: (path: string) => boolean, worktreesDir?: string, primary?: string }} [host]
+ *   every one a seam, so the claim is testable without a host: the defaults are the tick's own
+ * @returns {SpawnClaimer}
+ */
+export function spawnClaimer({ exec = defaultExec, exists = existsSync, worktreesDir = HOST_REPOS,
+  primary = PRIMARY_CHECKOUT } = {}) {
+  return {
+    claim(order, role, env) {
+      const row = rowOfOrder(order);
+      if (row === null) return { refusal: `cannot tell which row "${order.causeKey}" is about, so cannot claim it` };
+      const launch = launchWorktree(role, { exec, exists, worktreesDir, primary });
+      if ("refusal" in launch) return launch;
+      const branch = `agent/${slugOf(order.title)}-${row}`;
+      const claimed = { row, branch, launchDir: launch.dir, worktree: join(worktreesDir, `wt-${row}`) };
+      const ran = exec("node", [ROW_CLAIM, "claim", String(row), `--session=${role}`, `--branch=${branch}`,
+        `--worktree=../wt-${row}`], { cwd: launch.dir, env });
+      const landed = /^STARTED/m.test(ran.output) && CLAIM_LANDED.includes(Number(ran.status));
+      if (landed && exists(claimed.worktree)) return claimed;
+      const why = landed ? `${claimed.worktree} was not created` : verdictLine(ran.output);
+      const undone = landed || !CLAIM_NOT_LANDED.includes(Number(ran.status))
+        ? releaseClaim(claimed, role, env, exec) : "";
+      return { refusal: `the claim of #${row} as ${role} did not hold (${why})${undone}` };
+    },
+    release: (claimed, role, env) => releaseClaim(claimed, role, env, exec),
+  };
+}
+
+/**
+ * What a STANDING session is told about where to launch the claim from (#2405): `role-<you>` when it EXISTS, and the one
+ * command that creates it when it does not -- never a path that is absent, and never a peer's worktree to borrow. The primary is named only to say the tooling refuses it, AFTER the directory to use.
+ *
+ * @param {string} label
+ * @param {LaunchFacts} [facts]
+ * @returns {string}
+ */
+export function launchAdvice(label, { exists = existsSync, worktreesDir = HOST_REPOS, primary = PRIMARY_CHECKOUT } = {}) {
+  const dir = join(worktreesDir, `role-${label}`);
+  const refused = `NOT the primary checkout at \`${primary}\`, which the tooling refuses`;
+  if (exists(dir)) {
+    return `Run the command from your own linked worktree \`${dir}\` -- ${refused} -- then do all the work inside `
+      + "the new worktree.";
+  }
+  return `You have no linked worktree yet (\`${dir}\` does not exist), so create it and run the command from there: `
+    + `\`git -C ${primary} fetch --quiet origin && git -C ${primary} worktree add --detach ${dir} origin/main\` `
+    + `-- ${refused} -- then do all the work inside the new worktree.`;
+}
+
+/**
+ * The order a SPAWNED engineer gets (#2405). The row is already claimed and the pane is already in the worktree the
+ * claim created, so the order says both, names no command to run the claim and no directory but that worktree, and
+ * sends the engineer straight to building.
+ *
+ * @param {{ title?: string }} order @param {ClaimedRow} claimed
+ * @returns {string}
+ */
+export function spawnedPrompt(order, claimed) {
+  return `Row #${claimed.row}${order.title ? `: ${order.title}` : ""} has been claimed for you, and you are in its `
+    + `worktree \`${claimed.worktree}\` on branch \`${claimed.branch}\`. Build it here: read the row, then do the work `
+    + "in this directory. The claim was made before your process started, as your own session, so there is nothing "
+    + "left to claim.";
+}
+
+/**
+ * @param {string} path @param {typeof readFileSync} [read]
+ * @returns {Record<string, SpareInstance>}
+ */
+export function readSpareRegistry(path, read = readFileSync) {
+  try {
+    return JSON.parse(String(read(path, "utf8")));
+  } catch (err) {
+    if (/** @type {any} */ (err)?.code === "ENOENT") return {};
+    throw err;
+  }
+}
+
+/**
+ * Where a live workspace's id is, by its label -- or `null` when there is not exactly one. `workspace close`
+ * takes an id, and two workspaces under one label (the ambiguity `spawnableRole` refuses to create) must never
+ * be closed by guessing which was meant.
+ *
+ * @param {(args: string[]) => string} run @param {string} label
+ * @returns {string | null}
+ */
+function workspaceIdOf(run, label) {
+  try {
+    const list = JSON.parse(run(["--session", "org", "workspace", "list"]))?.result?.workspaces;
+    const named = (Array.isArray(list) ? list : []).filter((w) => w.label === label);
+    return named.length === 1 && typeof named[0].workspace_id === "string" ? named[0].workspace_id : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The worktrees a spare role made for these rows: stamped by the role (`row-claim` stamps every tree it makes,
+ * #1128) and named for a row -- `wt-<row>` or a branch ending `-<row>`, the shape every claim here has. Read
+ * from git, and each fact carries "could not read" as its own answer.
+ *
+ * @param {{ role: string, rows: number[], repoRoot: string, run?: (cmd: string, args: string[], opts?: object) => string }} query
+ * @returns {SpareWorktree[]}
+ */
+export function spareWorktrees({ role, rows, repoRoot, run = defaultGit }) {
+  const named = (/** @type {string} */ path, /** @type {string | null} */ branch) => rows.some(
+    (row) => path.endsWith(`/wt-${row}`) || (branch !== null && branch.endsWith(`-${row}`)));
+  return parseWorktreeList(run("git", ["worktree", "list", "--porcelain"], { cwd: repoRoot }))
+    .filter((tree) => !isPrimaryWorktree(tree.path) && named(tree.path, tree.branch)
+      && worktreeOwner(tree.path) === role)
+    .map((tree) => ({ path: tree.path, clean: isWorkingTreeClean(tree.path, { run }),
+      merge: tree.branch === null ? detachedMergeStatus(tree.path, { run }) : mergeStatus(repoRoot, tree.branch, { run }) }));
+}
+
+/** @param {string} cmd @param {string[]} args @param {object} [opts] */
+const defaultGit = (cmd, args, opts) =>
+  execFileSync(cmd, args, { encoding: "utf8", timeout: 30_000, ...opts, env: sandboxGitEnv() });
+
+/**
+ * The facts `endFinishedSpares` reads through, every one injected so the tick's teardown is tested without a
+ * host. `heldRows` and `rowState` answer `null` when GitHub could not be asked -- never `[]`, never a state.
+ *
+ * @typedef {{
+ *   spares: string[],
+ *   registry: Record<string, SpareInstance>,
+ *   now: number,
+ *   run: (args: string[]) => string,
+ *   heldRows: (role: string) => number[] | null,
+ *   rowState: (row: number) => string | null,
+ *   worktrees: (role: string, rows: number[]) => SpareWorktree[],
+ *   record: (cycle: SpareCycle) => void,
+ *   warn: (line: string) => void,
+ * }} TeardownDeps
+ */
+
+/**
+ * END EVERY SPARE INSTANCE WHOSE ROW HAS CLOSED, and write one ledger line for each ending. The tick's
+ * teardown step (#2323); {@link spareDecision} is the rule and {@link cycleVerdict} the reading.
+ *
+ * ASKED ON EVERY TICK, INCLUDING A QUIET ONE, because an instance's row closing is exactly the event that
+ * produces no order -- a gate with nothing to say is the tick on which a finished spare most needs closing.
+ * So this is called by `work-tick` before its quiet exit and not from `wake`, which a quiet gate never runs.
+ *
+ * EVERY PRESENT SPARE IS OBSERVED, WORKING OR NOT: the row it holds is recorded while it holds it, because
+ * closing the row removes the `session:` label and with it the only account of what the instance did.
+ * A spare no earlier tick saw (started before this shipped, or by hand) is ADOPTED as first seen now -- its
+ * unclaimed clock starts at the adoption, never at a spawn nobody recorded.
+ *
+ * A LOOKUP THAT CANNOT ASK ENDS NOTHING: an unread label list would read as "holds no row" and end a
+ * working engineer. And a workspace that will not close is left, said, and retried -- no line is written for
+ * an ending that did not happen.
+ *
+ * @param {{label: string, status: string}[]} agents
+ * @param {TeardownDeps} deps
+ * @returns {{ ended: SpareCycle[], registry: Record<string, SpareInstance> }}
+ */
+export function endFinishedSpares(agents, deps) {
+  const registry = { ...deps.registry };
+  /** @type {SpareCycle[]} */
+  const ended = [];
+  for (const role of deps.spares) {
+    const agent = agents.find((a) => a.label === role);
+    if (agent === undefined) continue; // A partial read looks the same as absence, so this records nothing.
+    const held = deps.heldRows(role);
+    if (held === null) {
+      deps.warn(`teardown: could not read the rows "${role}" holds -- leaving it running.`);
+      continue;
+    }
+    const before = registry[role] ?? { spawnedAt: deps.now, rows: [] };
+    const instance = { spawnedAt: before.spawnedAt, rows: [...new Set([...before.rows, ...held])] };
+    registry[role] = instance;
+    const decision = spareDecision({ status: agent.status, instance, held, now: deps.now });
+    if (!decision.end) continue;
+    const cycle = closeInstance(role, instance, decision.failed, deps);
+    if (cycle === null) continue;
+    ended.push(cycle);
+    delete registry[role];
+  }
+  return { ended, registry };
+}
+
+/**
+ * Close one instance's workspace and write its ledger line -- or `null`, with a warning, when the workspace
+ * could not be closed. The verdict is read BEFORE the close, while the worktree and the rows are still there
+ * to be read.
+ *
+ * @param {string} role @param {SpareInstance} instance @param {string | undefined} failed
+ * @param {TeardownDeps} deps
+ * @returns {SpareCycle | null}
+ */
+function closeInstance(role, instance, failed, deps) {
+  const id = workspaceIdOf(deps.run, role);
+  if (id === null) {
+    deps.warn(`teardown: "${role}" is finished but its workspace id is not exactly one -- left running.`);
+    return null;
+  }
+  const row = instance.rows.length > 0 ? instance.rows[instance.rows.length - 1] : null;
+  const verdict = failed === undefined ? readVerdict(role, instance, deps) : { clean: false, why: failed };
+  try {
+    deps.run(["--session", "org", "workspace", "close", id]);
+  } catch (err) {
+    deps.warn(`teardown: "${role}" (${id}) could not be closed (${firstLine(err)}) -- retried next tick.`);
+    return null;
+  }
+  const cycle = { role, row, at: deps.now, ...verdict };
+  deps.record(cycle);
+  return cycle;
+}
+
+/**
+ * @param {string} role @param {SpareInstance} instance @param {TeardownDeps} deps
+ * @returns {{ clean: boolean, why: string }}
+ */
+function readVerdict(role, instance, deps) {
+  const rows = instance.rows.map((number) => ({ number, state: deps.rowState(number) ?? "UNREADABLE" }));
+  return cycleVerdict({ role, rows, held: [], worktrees: deps.worktrees(role, instance.rows) });
+}
+
+/**
+ * Note that a process was STARTED for `role`. A registry entry already there means the previous instance left
+ * without the teardown -- closed by hand, crashed -- and THAT is a failed cycle, written now because this is the
+ * one moment the role is known to have been absent rather than merely missing from a partial list.
+ *
+ * @param {{ registry: string, cycles: string }} paths
+ * @param {string} role @param {number} [now]
+ */
+export function registerSpawn(paths, role, now = Date.now()) {
+  const registry = readSpareRegistry(paths.registry);
+  if (registry[role] !== undefined) {
+    const rows = registry[role].rows;
+    appendSpareCycle(paths.cycles, { role, row: rows.length > 0 ? rows[rows.length - 1] : null, at: now,
+      clean: false, why: "the previous instance left without the teardown (closed by hand or crashed)" });
+  }
+  registry[role] = { spawnedAt: now, rows: [] };
+  writeFileSync(paths.registry, `${JSON.stringify(registry)}\n`);
+}
+
+/** @param {string} path @param {SpareCycle} cycle */
+function appendSpareCycle(path, cycle) {
+  writeFileSync(path, `${JSON.stringify(cycle)}\n`, { flag: "a" });
+}
+
+/**
+ * The tick's teardown step with its real dependencies, called by `work-tick` on every tick. It reports and
+ * never throws: a broken teardown must not stop the tick that delivers work, and a swallowed one is the defect
+ * this file exists to refuse -- so the failure is a line on stderr naming what to look at.
+ *
+ * @param {{label: string, status: string}[]} agents
+ * @param {string} ledgerPath the delivery ledger; the teardown's state lives beside it
+ * @param {(line: string) => void} [say]
+ */
+export function tearDownSpares(agents, ledgerPath, say = (line) => process.stderr.write(line)) {
+  try {
+    const paths = sparePathsFrom(ledgerPath);
+    mkdirSync(dirname(ledgerPath), { recursive: true });
+    const repoRoot = new URL("../../..", import.meta.url).pathname;
+    const { ended, registry } = endFinishedSpares(agents, {
+      spares: spareInstances(agents), registry: readSpareRegistry(paths.registry), now: Date.now(), run: defaultRun,
+      heldRows: (role) => lookupOtherHeldIssues(role, 0),
+      rowState: (row) => rowStateOf(row),
+      worktrees: (role, rows) => spareWorktrees({ role, rows, repoRoot }),
+      record: (cycle) => appendSpareCycle(paths.cycles, cycle),
+      warn: (line) => say(`${line}\n`),
+    });
+    writeFileSync(paths.registry, `${JSON.stringify(registry)}\n`);
+    for (const c of ended) say(`ENDED ${c.role} (#${c.row ?? "none"}, ${c.clean ? "clean" : "NOT clean"}): ${c.why}\n`);
+  } catch (err) {
+    say(`teardown FAILED (${firstLine(err)}): no spare was ended this tick, and none was recorded.\n`);
+  }
+}
+
+/**
+ * The roles the drain holds back this tick. A ledger or roster that cannot be READ lifts the drain and says so:
+ * an unreadable file is not a clean bill, and the alternative -- routing on a guess -- is what a drain that could
+ * strand every new row would do.
+ * @param {string} cyclesPath @returns {string[]}
+ */
+function drainNow(cyclesPath) {
+  try {
+    return activeDrain({ cycles: cyclesPath });
+  } catch (err) {
+    process.stderr.write(`wake: could not read the drain (${firstLine(err)}) -- treating it as LIFTED this tick.\n`);
+    return [];
+  }
+}
+
+/** @param {number} row @returns {string | null} */
+function rowStateOf(row) {
+  try {
+    return String(JSON.parse(defaultGh(["issue", "view", String(row), "--json", "state"])).state);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * `npm run spawn:cycles`: print the current clean run and the ledger's last line, from the same ledger the
+ * teardown writes. Kept out of `main` so a `--cycles` call never reads the tick's stdin.
+ * @param {string} ledgerPath
+ */
+function printCycles(ledgerPath) {
+  const report = cyclesReport(readSpareCycles(sparePathsFrom(ledgerPath).cycles), drainedRoles());
+  process.stdout.write(report.stdout);
+  process.stderr.write(report.stderr);
+  process.exit(report.exit);
+}
+
 function main() {
-  refuseUnknownFlags(["--ledger", "--roster"], {
+  refuseUnknownFlags(["--ledger", "--roster", "--cycles", "--worktrees-dir"], {
     entry: import.meta.url, command: "node packages/agent-org/src/wake.mjs",
   });
   const ledgerPath = ledgerPathFrom(process.argv);
+  if (process.argv.includes("--cycles")) printCycles(ledgerPath);
   // Beside the ledger: one directory holds the org's runtime state.
   const emittedPath = `${dirname(ledgerPath)}/wake-emitted`;
   const queuePath = handoffQueuePath(ledgerPath);
   const roster = rosterFrom(process.argv);
+  // WHERE THE LINKED WORKTREES LIVE (#2405): the host's own directory unless a run names another, which is what lets a
+  // test drive this entry through PATH stubs without the claim creating `role-<name>` beside the real checkout.
+  const hostLayout = layoutUnder(flagValue(process.argv, "worktrees-dir") ?? HOST_REPOS);
 
   const orders = parseOrders(readFileSync(0, "utf8"));
   // A QUEUED ORDER IS WORK EVEN WHEN THE GATE FOUND NONE, and this is the line that makes it so. The
@@ -1938,8 +3335,14 @@ function main() {
     writeFileSync(ledgerPath, `${Date.now()}\t${RESET}\t${key}\n`, { flag: "a" });
   }
 
+  const spares = sparePathsFrom(ledgerPath);
+  const drained = drainNow(spares.cycles);
   const { sent, refused: gateRefused, stuck } = deliver(todo, free, roster, { record,
-    counts: deliveryCounts(ledgerPath), ineligibleReason: engineerEligibility() });
+    counts: deliveryCounts(ledgerPath), ineligibleReason: engineerEligibility({ drained }),
+    registerSpawn: (role) => registerSpawn(spares, role), drained, claimable: spawnClaimability(),
+    claimer: spawnClaimer(hostLayout), launch: hostLayout,
+    registerReviewer: (session) => registerReviewer(reviewerPathsFrom(ledgerPath), session),
+    registry: () => readReviewerRegistry(reviewerPathsFrom(ledgerPath).registry) });
   const refused = [...handed.refused, ...gateRefused];
   for (const line of [...handed.sent, ...sent]) process.stdout.write(`WOKE ${line}\n`);
   for (const line of stuck) process.stderr.write(`STUCK ${line}\n`);

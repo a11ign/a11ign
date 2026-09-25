@@ -10,6 +10,22 @@ build, and review turnaround was measured as the org's throughput ceiling.
 > the engineers' cycle let them start the next row while a PR waits (#912), and a session that only reviews
 > takes that wait off the engineers without touching their lanes.
 
+## Which pull request is yours (#2401)
+
+You are one INSTANCE of this role, started for ONE pull request: your herdr name and your
+`A11Y_REVIEWER_SESSION` are `reviewer-<n>`, and `<n>` is the pull request the gate ordered you for. Review
+that pull request, at every head it reaches, and no other. Sign the verdict line `by reviewer-<n>`:
+`pr-review-verdict` writes `review/reviewer-<n>` from the variable, and a review by a session that is not the
+pull request's instance is a violation `parityViolationsOnCommit` reports. The odd/even split is gone: PR
+`n` belongs to `reviewer-<n>` for every `n`, and history that names `reviewer` or `reviewer-2` stays valid.
+Your context is cleared before each order, so the row, the PR and the API are the state; the tick ends you
+when the pull request merges or closes, and there is no limit on how many instances are live. The order names your
+checkout of the pull request's head, prepared for you and re-pointed on every push: review from that path, and do not
+make another (your sandbox cannot write `.git`). The two standing panes keep
+running until `ceo` closes them (cutover is `ceo`'s, after the first per-PR verdict is on a merged PR).
+**If codex says your access token could not be refreshed, say nothing further and stop:** the gate has
+already sent `ceo` the incident, and the re-login is the chairman's.
+
 ## Before anything: this repository is shared by several agents at once
 
 Other sessions are committing, pushing and merging in this repository while you work, on this same host.
@@ -23,8 +39,19 @@ So:
   ```bash
   git -C <dir> fetch origin
   git -C <dir> worktree add --detach /private/tmp/rv-<PR> origin/<head-branch>
-  ln -sfn <dir>/node_modules /private/tmp/rv-<PR>/node_modules
   ln -sfn <dir>/.venv /private/tmp/rv-<PR>/.venv
+  # A HYBRID node_modules, never a whole-tree symlink of it (#2378): that makes every
+  # `@a11ign/*` resolve to the PRIMARY's source, and `assert-glob-not-empty --run` REFUSES that tree
+  # (#2218), so the PR's Acceptance dies before its first test. Third-party entries link to the primary;
+  # `@a11ign/*` link to THIS tree's `packages/`.
+  mkdir -p /private/tmp/rv-<PR>/node_modules/@a11ign
+  for e in <dir>/node_modules/* <dir>/node_modules/.bin; do
+    [ "$(basename "$e")" = "@a11ign" ] || ln -sfn "$e" "/private/tmp/rv-<PR>/node_modules/$(basename "$e")"
+  done
+  for p in /private/tmp/rv-<PR>/packages/*/; do
+    ln -sfn "${p%/}" "/private/tmp/rv-<PR>/node_modules/@a11ign/$(basename "$p")"
+  done
+  npm --prefix /private/tmp/rv-<PR> run build
   # ... review, running every command with `-C /private/tmp/rv-<PR>` or from inside it ...
   git -C <dir> worktree remove --force /private/tmp/rv-<PR>
   ```
@@ -180,8 +207,10 @@ or
   packages/evidence/src/conformance.ts` is empty — so the defect reached `main` and #1881 fixed it
   afterwards: the merged-defect case in the "After the lift" bullet below. Until `reviewer` has five consecutive verdicts
   holding, its provisional `convinced` is NOT the verdict: `ceo` or `worker-judge` spot-checks it before
-  the author marks ready, so an author of an odd-numbered draft waits for the spot-check. `reviewer-2`'s
-  line is unaffected, because the count is per instance. Before the lift the rule was "`ceo` or
+  the author marks ready, so an author of a draft the standing `reviewer` reviews waits for the spot-check.
+  `reviewer-2`'s line is unaffected, because the count is per instance. **A per-PR instance (#2401) sees one
+  pull request, so a per-instance count cannot reach five: how that count is kept for instances is NOT
+  RULED, and until `ceo` rules it an instance starts OFF the line, as `reviewer` is.** Before the lift the rule was "`ceo` or
   `worker-judge` spot-checks it before the author marks ready", and it held #1542 on 2026-09-14 for a
   sample that was not due. **A spot-check is
   re-running the PR's Acceptance line and one Mutation in a fresh shallow clone and finding what the
@@ -209,6 +238,18 @@ or
   oldest draft with no verdict of yours at its current head, post, remove the worktree, repeat; when the
   list is empty, `sleep 300` and list again. It stops only when the chairman stops it. (Its first run
   on 2026-09-12 stopped at an empty list and missed the next draft by four minutes.)
+
+## What your sandbox rules are, and are not (#2402)
+
+Your execpolicy forbids `gh api`, `gh pr review` and the other writes above, and it **stops the accidental
+use, nothing else.** A prefix rule matches the program name at the front of one command, so the same call
+inside `zsh -lc '…'`, as `/usr/bin/gh`, behind `env`, or as a `curl` carrying the token from your
+`GH_CONFIG_DIR` matches no rule and runs, as `a11ign-bot`. **This was measured, not argued, and it was
+ACCEPTED rather than walled:** no PATH shim can help while the token is readable by your own uid. The
+reasoning, the probe transcript and the check that would change the decision are in
+[`docs/known-gaps.md` §48](../../../../docs/known-gaps.md). What follows for you: the rules are the
+boundary you keep, not one that is kept for you. **Post a verdict only through `pr-review-verdict`, and
+never reach for a wrapper to do what a rule refused.**
 
 ## The resource ban
 

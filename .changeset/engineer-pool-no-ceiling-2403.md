@@ -1,0 +1,5 @@
+---
+"@a11ign/agent-org": patch
+---
+
+**The engineer pool has no ceiling: when every engineer address holds a process and a claimable row waits, the spawn path allocates the next `worker-<n>` itself (#2403, chairman 2026-09-24).** `sessions.json` declares the spare engineers as ONE family entry (`worker-<n>`, `"family": {"prefix": "worker-", "from": 4}`) instead of `worker-4` to `worker-8`, and `spawnableRole` takes the LOWEST number from 4 that has no process and is not drained, so the numbers track the concurrency. Every reader of a `session:<name>` label (the arm-pr live and unknown-label checks, `laneReason`, `pr-open`'s owner label) asks `arm-pr.mjs`'s `isLiveSession`, which matches the family; a number below 4 or a second spelling such as `worker-09` is still refused. The refusal that named the roster's size as "the ceiling" is gone. What starts an instance (one per tick, for a row `spawnClaimability` finds claimable) and what ends one (`endFinishedSpares`, which now finds family members among the running processes) is unchanged, so #1950's clean-cycle count continues.

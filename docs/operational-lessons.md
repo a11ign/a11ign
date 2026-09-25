@@ -2023,11 +2023,35 @@ evidence, and with what would reopen it.
 *The rule is in [`CLAUDE.md`](../CLAUDE.md); these are its numbers, and each is a reading at a moment.*
 
 This paragraph used to say the trained scorer "assesses the judgment-based WCAG failures" — it does not
-assess them in the sense of concluding anything. Measured 2026-09-14 on the 41 conformant real pages of the calibration
-set at the shipped floor (run 2f9c51aa): **0 criteria asserted wrongly, 422 referred.** One count first read as wrong
-was a publisher-declared exception the corpus lacked (#1610). The product-path figure before it, the last one published,
-2026-08-24 on 18 conformant real pages, is superseded: re-derived at today's code on the 17 of those pages still in
-the corpus, 0 asserted wrongly, 180 referred (#1612).
+assess them in the sense of concluding anything. Measured 2026-09-24 on the 40 conformant real pages of the calibration
+set at the shipped floor 0.6557, captures taken that day at capture protocol 21 (sweep `a11y-job-sweep` at
+`592785c3b8bf`, recorded in `docs/board/reported/gates/sweep-protocol-21-2212.json`): **0 criteria asserted wrongly,
+395 referred.** The headline did not move. The claim says "re-measured at protocol 21" and no more: the two readings
+differ in the capture protocol, ten days of page drift and one moved Ofgem url, and the row cannot separate them, so
+the fall from 422 to 395 and from 41 pages to 40 carry no asserted cause (#2212, #2340).
+
+**The 40 is not the 41 minus one page.** Three pages left the conformant-at-floor set (`gla.ac.uk/undergraduate/degrees/`,
+`data.southwark.gov.uk/data-catalog-explorer/`, and Ofgem's price-cap page at its moved url) and two joined it
+(`gov.uk/vehicle-tax`, `gov.scot/about/`), net −1; the per-page lists are in
+`sweep-compare-protocol-18-vs-21-2212.json`. The −27 in referrals is attributable by page (membership −15, pages that
+stayed −12) and not by cause.
+
+**OPEN reading, not in README (#2412 read it, 2026-09-24):** GLA fell 0.8037 → 0.6241 (−0.18) and Southwark 0.7665 →
+0.5069 (−0.26), further than ten days of drift explains. The orchestrator opened both stored captures (#2412,
+2026-09-24T22:46Z). **Southwark's fall is a capture artefact, not a page result:** NVDA read a `cmd.exe` window, the
+transcript is `["blank","blank"]`, and the page's own DOM census matches protocol 18, so 0.5069 with 0 referred is what
+the scorer says about two blank lines. That capture was scored as one of the 49 calibration pages (#2433 is the row to
+refuse such a capture). **GLA is not attributable** between "the page changed" and "the capture's state": the whole
+difference is a ten-line consent-dialog prologue, and whether it moves the score is untested (#2434). The claim still
+does not say why the set fell. The `rules:real-pages` reading of the moved Ofgem capture was made by the orchestrator
+(#2212, 2026-09-24T13:05Z) and is NOT a recorded gate: the new url reads `["2.4.3"]` against the baseline's `["2.4.3"]`,
+unchanged by the re-key.
+
+**Superseded readings.** 2026-09-14, captures at protocol 18, run `2f9c51aa`, 41 conformant real pages: 0 asserted
+wrongly, 422 referred — superseded by the 2026-09-24 reading above. The product-path figure before that, the last one
+published, 2026-08-24 on 18 conformant real pages, is superseded: re-derived at today's code on the 17 of those pages
+still in the corpus, 0 asserted wrongly, 180 referred (#1612). One count first read as wrong was a publisher-declared
+exception the corpus lacked (#1610).
 README's claim block carries the current statement.
 
 ## axe-core beside the screen-reader layer
@@ -2210,7 +2234,8 @@ directory it works in. [What moved →](docs/operational-lessons.md#the-nested-c
 a11y-witness drives a **real screen reader (NVDA)** through real navigation, **alongside** axe-core (the
 rule/visual layer) rather than instead of it. See `README.md`, `PLAN.md`, `docs/adr/`.
 
-Measured 2026-09-14 on the calibration set: **0 criteria asserted wrongly, 422 referred** — a reading at
+Measured 2026-09-14 on the calibration set: **0 criteria asserted wrongly, 422 referred** (superseded 2026-09-24: 395
+referred at protocol 21, see the section above) — a reading at
 a moment, so re-derive before quoting. README's claim block carries the current statement.
 
 
@@ -2270,3 +2295,87 @@ the table above, and re-declare the Region.**
 one destination, none is duplicated, none is added -- and a reworded section reads as one dropped and one
 added. It compares two immutable commits, not "main versus now", so striking a stale rule later is not
 refused by it. A separate test holds the directory to the list `rules-files.ts` names, in both directions.
+
+## The `priority` label orders the gate's offers; hand assignment is the fallback (#2296)
+
+`ceo` created the `priority` label 2026-09-24 as "offer this row before others" and nothing read it: the
+chairman measured that no code consulted it, and #2279 reached worker-judge by hand assignment, not because
+the gate offered it first. `ceo` ruled to honour it rather than delete it. `rowOrders` now sorts rows
+carrying the label AHEAD of the rest, oldest-first within each group, and does so BEFORE the
+`MAX_ROW_ORDERS_PER_TICK` slice -- after it, a high-numbered priority row would be cut by the cap it exists
+to beat.
+
+**The label reorders offers; it does not grant a claim.** A `priority` row that `partitionUnclaimed` shelves
+(B4 overlap with an open PR, a claim label) never reaches `rowOrders`, so it stays shelved. **Hand
+assignment is still the fallback** for a row the gate cannot offer (shelved, or waiting on a lane), and for a
+decision the label cannot express.
+
+## The org fixes forward and nothing reverts a merge automatically (#2356)
+
+**The chairman's ruling, 2026-09-24:** *"this needs to be a process change that we shouldn't revert, we
+should always fix forward. My worry is that that reverting logic is built into the CI."* It superseded
+`ceo`'s own #2349 (auto-revert as a fallback after 60 minutes) -- **there is no fallback either.** The
+incident was #2341: the auto-revert of #2329 would have removed a correct doc for a two-entry map miss in
+`control-plane-checkout-is-one-fact.test.ts`, and the fix (#2346/#2347) was smaller than the re-land.
+
+**What was deleted:** `trunk.yml`'s `decideRevert` job and its step *"Revert this push, unless the failure is
+inherited or main has already moved on"*, `packages/agent-org/src/trunk-revert.mjs` and its two test files,
+the `A11IGN_BOT_TOKEN` grant the job carried, and `contents: write` / `pull-requests: write`. **What was kept:**
+`trunkGate` and `trunk-revert-guard.mjs` -- despite the name it reverts nothing, it checks that a push did not
+silently UNDO work already on `main` (#411), which fix-forward needs more, not less -- and
+`parent-recheck-summary.mjs` with the parent re-check itself.
+
+**What replaced it, because deleting alone leaves `main` red until somebody happens to look:** the
+`trunkRecheck` job (the old job minus every write) records its answer as an annotation on its own check-run,
+and `work-gate.mjs`'s `trunk-red` cause reads the newest verdict run of `trunk.yml` on `main` -- one REST call
+when healthy, four more only when red -- and emits ONE order, first in `decide()`, named for the failing
+test, the run and the merge, saying *fix forward, do not revert*. **Three attributions, none of them silent:**
+`own` (the parent passes, or fails only tests this merge did not -- #1359) goes to the merged PR's session;
+`inherited` (the parent fails the SAME test now -- #316's 13-of-19, #616's wall-clock) goes to `engineers`,
+because waking a PR's author for a failure they did not cause is the misattribution the old revert made;
+`unknown` (the re-check could not run or could not name the tests) goes to the merged PR's session and says so.
+**The order is never withheld for being inherited.** `wake.mjs` reads `fallback: "engineers"`, so a merged
+session that is gone -- a spare instance ends with its row (#2323) -- or busy hands the order to any idle
+engineer instead of waiting a tick.
+
+**The policy the row asked to be decided, and it is pinned (`RED_TRUNK_POLICY`):** *other pull requests keep
+merging while a fix is in flight.* A freeze needs an admin edit of the ruleset or the classic protection,
+which is a hole in the review requirement (`main-review-requirement.md`); a red `main` already stops the merges
+that touch the break because the queue tests each merge result; and `trunkGate` keeps refusing a merge that
+silently undoes work. **The fix goes first by its ORDER**, not by the queue. **Jumping the fix PR past the merge
+queue is not built:** `EnqueuePullRequestInput.jump` exists (schema read 2026-09-24), but arming with it is a
+write only a live queue can verify, and a misfire costs more than the wait it saves. It is its own row, #2391.
+
+**Nothing opens a `revert/` branch:** `trunk-revert.test.ts` walks every workflow and fails on `git revert`, a
+`revert/` branch, a revert pull request, or a name of the deleted script -- with a positive control that the
+walk found the workflows, since an emptiness assertion over a walk that found nothing passes.
+
+## The standing three are DRAINED, not retired, and the drain lifts itself (#2324)
+
+`ceo`'s #1950 ruling (b, 2026-09-24): once #2323's teardown exists, the three standing engineers finish the rows
+they hold and claim no NEW ones, so every new row goes through spawn and #1950's 20 clean cycles build at full
+throughput. **Nothing is retired** -- a drained role keeps its pane, its role and every order about a row it
+already holds (rework, review answers, which are addressed to it by name and never reach the pool's
+`ineligibleReason`). The fact is `"drain": true` in `sessions.json`, read by `drainedRoles`, and **it is reversible
+by removing one field**.
+
+**Both halves are needed.** `route` skipping a drained role stops the tick OFFERING it a row; `row-claim` refusing
+its hand claim is what stops an engineer that finishes a row from claiming the next itself and keeping the history
+the design exists to drop (the chairman's own reading of `worker-4`). Both read one function, `activeDrain`, so the
+offer and the refusal cannot disagree. The spawn also refuses to start INTO a drained role's address: an instance
+there would be refused at the claim and sit holding it.
+
+**It lifts itself on a failed cycle** -- the chairman's safety condition for having no fixed cap. `drainInForce` is
+true while the NEWEST `spare-cycles` line is clean, and **true on an empty ledger** (nothing has failed, and
+nothing else would ever start the count). One failed line, or a line that cannot be parsed, and the standing three
+claim again until `ceo` re-arms it by editing the file. `npm run spawn:cycles` prints the current run, the last
+line and the drain's state; on an EMPTY ledger it exits non-zero rather than print `0`, because "no cycle has run"
+and "the run broke at zero" are different statements.
+
+**Spawn only for a row that would pass the claim (ruling d).** Before the tick opens a pane it runs the claim's own
+#1886 `blockedBy` check and B4's file-overlap check on the order's row (`spawnClaimability`, calling
+`blockedByEdgeReason` and `fileOverlapReason` rather than restating them) and starts nothing for a row either
+refuses; the tick log names the check and the row stays offered. B2 is not asked -- a fresh instance holds no rows.
+Both fail open on a lookup that cannot ask, as the claim's do, and say so. **The bound on the pool is the dependency
+graph, and it is only as good as the edges in it:** a row that needs the worker fleet and carries no edge to it gets
+an instance that cannot finish, so a missing edge is a defect in the row (`product-manager`'s to fix).

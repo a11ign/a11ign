@@ -93,9 +93,13 @@ jobs:
         with:
           node-version: 22
 
+      - name: Set up pnpm
+        if: steps.hour.outputs.london == '08' || (github.event_name == 'workflow_dispatch' && inputs.republish)
+        uses: pnpm/action-setup@v4
+
       - name: Install
         if: steps.hour.outputs.london == '08' || (github.event_name == 'workflow_dispatch' && inputs.republish)
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       # REPUBLISH: THE ONE WAY PAST THE HOUR GATE, AND IT CANNOT CREATE AN EDITION.
       #
