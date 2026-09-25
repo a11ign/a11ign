@@ -21,7 +21,12 @@ pull request's instance is a violation `parityViolationsOnCommit` reports. The o
 Your context is cleared before each order, so the row, the PR and the API are the state; the tick ends you
 when the pull request merges or closes, and there is no limit on how many instances are live. The order names your
 checkout of the pull request's head, prepared for you and re-pointed on every push: review from that path, and do not
-make another (your sandbox cannot write `.git`). The two standing panes keep
+make another (your sandbox cannot write `.git`). **The tick also links that checkout's dependencies in and gives your pane a cache it can
+write (#2498):** third-party `node_modules` entries point at the tick's checkout, `@a11ign/*` at THIS tree's `packages/`, and
+`npm_config_cache` at `<checkout>/node_modules/.cache/npm`, because `~/.npm` is read-only in your sandbox. Run `npm run build` first when the
+Acceptance needs `dist`; do not install, and do not build a `node_modules` of your own. **Your pane may hold no `A11Y_REVIEWER_SESSION`**
+(the tick sets it when it starts you, and herdr's restore of you after a `herdr.service` restart, a `codex resume`, does not), so the order says to post the verdict as
+`A11Y_REVIEWER_SESSION=reviewer-<n> pr-review-verdict …`, which signs it whatever the pane holds. The two standing panes keep
 running until `ceo` closes them (cutover is `ceo`'s, after the first per-PR verdict is on a merged PR).
 **If codex says your access token could not be refreshed, say nothing further and stop:** the gate has
 already sent `ceo` the incident, and the re-login is the chairman's.
@@ -35,7 +40,8 @@ So:
   this file never states it (a path on a private machine does not belong in a public tree).
   It is read-only except fast-forward, another session moves it, and its `dist` may be stale. Reading a
   PR from it reads the wrong tree.
-- **Make your own detached worktree for each review and remove it after:**
+- **A per-PR instance (#2401) skips this and the next bullet: its checkout and dependencies are the tick's, above. The rest is
+  for a standing pane.** **Make your own detached worktree for each review and remove it after:**
   ```bash
   git -C <dir> fetch origin
   git -C <dir> worktree add --detach /private/tmp/rv-<PR> origin/<head-branch>
@@ -227,6 +233,24 @@ or
 - **After the lift, `ceo` spot-checks one reviewer verdict in five.** One that does not hold — or a merged
   defect traced to a reviewer-only *convinced* — **puts the line back and restarts the count from zero.**
 - The author marks the PR ready. You do not.
+
+## A verdict whose Acceptance did not execute (#2498)
+
+**The environment is the tick's to prepare, and it does.** So a verdict never says the Acceptance is "not runnable" for an ENVIRONMENTAL
+reason (no dependencies, an unwritable cache, a tool that would not start): that is a defect to remove or to report as one, and never a
+reason to read the diff instead. Measured on #2376: at `2e0ee2ce` the Acceptance was "unavailable (0/4; `npx` failed before execution because
+its cache path is read-only/EROFS)", and at `a2059643` a `convinced (provisional)` rested on "settled CI and prior acceptance evidence" and
+named no run.
+
+- **Try the remedies first:** `npm run build` when the command needs `dist`; `printenv npm_config_cache` (set it to the path the order names
+  when it is empty); `ls node_modules/@a11ign`. If the Acceptance still did not execute, put the command and its first error line under
+  `Acceptance:` and say which of the three it is.
+- **A `convinced` verdict whose Acceptance did not execute names the CI run it relies on (run id or job URL) in the verdict line**, at the
+  head you reviewed and for the job that ran the command: `**Review of #<n> at `<head8>`, by reviewer-<n>: convinced (CI run <id or URL>).**`
+  **Without one it is `not convinced (environment)`:**
+  `**Review of #<n> at `<head8>`, by reviewer-<n>: not convinced (environment) — <what did not run>.**`
+- **A partial run is still a verdict on what ran.** #2481 ran its primary Acceptance and a mutation, and only an ancillary check did not: name
+  that check, and it is the one thing the CI run has to cover.
 
 ## What this role does not do
 
