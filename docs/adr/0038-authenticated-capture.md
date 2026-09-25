@@ -461,8 +461,16 @@ urls:
 - **The login is run-level and a per-entry `auth: none` opts one entry out.** WCAG-EM's sample includes
   authentication pages, and the login page examined **while logged out** is one of them.
 - **A flow yields one capture per `capture:` step**, or one at its end. Each is one capture for the cap and
-  for the "N captures, about X minutes" line, which for an authenticated run also says how many logins it
-  will perform.
+  for the "N captures, about X minutes" line, which for an authenticated run also states its login
+  MINIMUM (#2562): "at least N logins", one per capture and one per capture for the rule layer, and says a
+  repeated capture raises it. The run then REPORTS the logins it performed (`logins` in `--json`, a line in the
+  roll-up), counted where a login is sent, because a repeated capture makes a page-derived figure wrong.
+- **Not built (#2562 checked it against the shipped code):** the YAML list above is a shape, not the shipped
+  form. `--urls` is a whitespace-split string with no per-entry keys, so there is nothing to refuse and
+  `auth: none` is not implemented. `--urls` and `--login-flow` DO compose: every page runs the run-level login.
+- **A failed login stops the list (#2562).** After an authentication fault the remaining pages are recorded
+  `notAttempted`, naming the fault, and no further login is made. Any other per-page failure still continues.
+  Without this a wrong password was retried on every remaining page, which is how an account is locked.
 - **v1 of the URL-list row must REFUSE `flow:` and `auth:` by name** ("flows arrive with the authenticated
   capture build"), and never ignore them. A v1 that skipped an unknown key would capture the page unscripted
   and report it as the scripted one, which is Constraint 1's defect arriving through the list.
@@ -471,12 +479,14 @@ urls:
 and the worker replays the login and then the flow to that point. **The login runs once per capture** and
 the session is destroyed after it. Holding a session across captures in the worker was rejected for v1: it
 makes the worker stateful with a credential-equivalent that any client of that port could reuse, which is
-Constraint 1's exposure in a new place. The price is named: N captures are N logins, and a flow with k
+Constraint 1's exposure in a new place. The price is named: N captures are AT LEAST N logins (a
+capture repeated because it did not read the page logs in again, up to 3 attempts), and a flow with k
 capture points replays its prefix each time. That can trip a lockout or bot detection, which ADR 0024
 already recorded for repeated submissions, and it is a falsifier below.
 
 **The rule layer logs in for itself.** The CLI runs the same flow in its own Playwright context before axe
-scans, from the same environment, on the same machine. That is two logins per capture. The flow interpreter
+scans, from the same environment, on the same machine. That is two logins per capture AT LEAST: the
+floor, since a repeated capture adds one (#2562: "pages x 2" is a floor and not a count). The flow interpreter
 is written over a small driver interface with two implementations (the browser protocol in the worker,
 Playwright in the CLI). Exporting the worker's session to Playwright was rejected because it is Constraint 1's
 channel. **If the second driver proves the largest part of the build, the cut is to skip axe on an
@@ -537,7 +547,9 @@ be the alternative.
 follow anything the author did not name. The report says so, and for the criteria that need a press it says
 they were not reachable rather than clean.
 
-**Every authenticated run costs at least two logins per capture**, one per layer, and a login is a real
+**Every authenticated run costs at least two logins per capture**, one per layer, and **a run whose floor passes
+`MAX_LOGINS` (20, the default 5-page run's worst case, 5 x (3 capture attempts + 1 scan)) is refused before any
+worker is leased (#2562)**. A login is a real
 request to somebody's system with a real account. The docs lead with a dedicated test account and staging,
 as ADR 0024's do for form states.
 
