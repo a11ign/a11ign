@@ -185,6 +185,21 @@ test("#1353: only the a11y-witness step's own `with:` is read as its inputs -- n
     "an a11y-witness step with no `with:` of its own passes nothing, whatever the next step passes");
 });
 
+/** Names of the inputs an action.yml marks `required: true`, each read from its OWN entry and never from a later one. */
+function requiredInputs(actionYml: string): string[] {
+  return [...actionYml.matchAll(/^ {2}([a-z-]+):\n((?:(?: {4}.*)?\n)*)/gm)]
+    .filter(([, , entry]) => /^ {4}required: true$/m.test(entry)).map(([, name]) => name);
+}
+
+test("requiredInputs finds a required input, and does not credit it to an earlier optional one", () => {
+  const fixture = [
+    "inputs:", "  url:", "    description: a", "    required: false",
+    "  task:", "    description: b", "  token:", "    description: c", "    required: true", "",
+  ].join("\n");
+  assert.deepEqual(requiredInputs(fixture), ["token"]);
+  assert.deepEqual(requiredInputs(fixture.replace("required: true", "required: false")), []);
+});
+
 test("the README's quickstart workflow is one a stranger can actually paste", () => {
   // The single most consequential snippet in the repo: B1 is someone outside the project running this on an
   // app they own, and for most readers this is the ONLY path that needs no hardware — a screen reader is an
@@ -212,8 +227,10 @@ test("the README's quickstart workflow is one a stranger can actually paste", ()
 
   const action = readFileSync(fileURLToPath(new URL("../../../action.yml", import.meta.url)), "utf8");
   const declared = new Set([...action.matchAll(/^ {2}([a-z-]+):\n\s+description:/gm)].map((m) => m[1]));
-  const required = [...action.matchAll(/^ {2}([a-z-]+):\n(?:[\s\S]*?)\n {4}required: true/gm)].map((m) => m[1]);
-  assert.ok(declared.size > 0 && required.length > 0, "action.yml no longer parses — this guard went blind");
+  const required = requiredInputs(action);
+  // `action.yml` declares NO required input since #2268 (`task` became optional), so the real file cannot show that
+  // `requiredInputs` still finds one: its positive control is the fixture in the test that follows this one.
+  assert.ok(declared.size > 0, "action.yml no longer parses — this guard went blind");
 
   for (const name of required) {
     assert.ok(given.has(name), `the quickstart omits the required input "${name}"`);
