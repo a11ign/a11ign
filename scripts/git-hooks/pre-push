@@ -613,7 +613,13 @@ run_gate() { # run_gate <branch-label>
   # later; a pushed branch on a public repository is visible the moment it lands, so this one cannot wait
   # for the merge. It was two of the 22 files in `guards:sweep`, which is why "keep the leak scan while
   # deleting the sweep" would have deleted it.
-  run "leak scan" npx tsx --test \
+  #
+  # #2507: IT RUNS UNDER THE MEMORY CAP, through `test-memory-cap.mjs` and not through `assert-glob-not-empty.mjs --run`.
+  # The leak scan is a runner start like any other, and these two files read tracked blobs, the shape #1995 measured
+  # growing to 25 GB. The entry that `test:*` use refuses a suite start in a tree whose `node_modules` reads another
+  # checkout (#2218), which is 42 of 56 linked worktrees, and a push hook that newly refused those pushes would be a
+  # different change. The cap module is the shared half; it prints `memory cap: ...` so this run says which path it took.
+  run "leak scan" node packages/guards/src/test-memory-cap.mjs run tsx -- npx tsx --test \
     packages/lab/src/packaging/tracked-source-leak-guard.test.ts \
     packages/lab/src/packaging/tracked-prose-leak-guard.test.ts
 

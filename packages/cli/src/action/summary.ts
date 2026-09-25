@@ -92,7 +92,16 @@ export interface RunResult {
    * and until this field was declared the summary could not show it. Absent on older results, which say nothing.
    */
   conformance?: { number: number; name: string; establishes: string; limitation: string }[];
+  /** An authenticated run's whole list of pressed controls, by accessible name (ADR 0038); absent on every other run. */
+  pressed?: string[];
 }
+
+/**
+ * What the `Task:` line IS, said beside it in BOTH renderers (`report.ts` imports this): an echo of the input,
+ * which names a button for the probe to press and labels the report. Unmarked, a reader takes the line for a
+ * finding about the page, and on the default `local` judge it changes nothing that is found (#2268, #2262 a).
+ */
+export const TASK_LABEL_NOTE = "a label you gave this run, not a finding";
 
 /**
  * The conformance scope's own sentence for a capture whose marks named more than one document -- #1387.
@@ -577,6 +586,16 @@ export function multiPageLogLines(multi: MultiPageResult, failOn: FailOn): strin
   return lines;
 }
 
+/** The pressed list for the summary: a line each, and never a value. Nothing at all when the run is not authenticated. */
+export function pressedSummaryLines(pressed: readonly string[] | undefined): string[] {
+  if (pressed === undefined) return [];
+  return [
+    "",
+    "**What this run pressed** (an authenticated run presses only what its files name):",
+    ...(pressed.length > 0 ? pressed.map((name) => `- ${name}`) : ["- nothing: automatic pressing and link-following are off"]),
+  ];
+}
+
 export function renderSummary(result: RunResult, options: SummaryOptions = {}): string {
   const taskQuestion = options.taskQuestion ?? DEFAULT_TASK_QUESTION;
   const isTaskClaim = options.isTaskClaim ?? false;
@@ -623,8 +642,9 @@ export function renderSummary(result: RunResult, options: SummaryOptions = {}): 
     "## a11ign — what a screen reader actually experienced",
     "",
     `**Page:** ${result.url}`,
-    `**Task:** ${result.task}`,
+    `**Task:** ${result.task} _${TASK_LABEL_NOTE}_`,
     `**Screen reader:** ${result.screenReader}${result.transcript ? ` · ${result.transcript.length} announcements` : ""}`,
+    ...pressedSummaryLines(result.pressed),
     "",
     // See SummaryOptions.taskQuestion/isTaskClaim. This is posted on a PULL REQUEST in bold, and with
     // the shipped local scorer it used to ask "could a screen-reader user complete the task?" (or claim

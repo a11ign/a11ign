@@ -18,7 +18,7 @@ import { notAConformanceClaim, type ConformanceRequirement }
   from "@a11ign/evidence/conformance";
 import { outcomeTally, type CriterionOutcome } from "@a11ign/judge/outcomes";
 import { WCAG_22_AA } from "@a11ign/evidence/wcag";
-import { documentsSpannedSentence, insideFrame } from "./action/summary.js";
+import { documentsSpannedSentence, insideFrame, TASK_LABEL_NOTE } from "./action/summary.js";
 
 /**
  * A bare criterion number, with its plain-language name appended when we know it -- "4.1.2 Name,
@@ -77,6 +77,12 @@ export interface Report {
    * asked for, and only the instrument can say what was there. Optional so an older caller still renders.
    */
   environment?: Record<string, string>;
+  /**
+   * The controls an AUTHENTICATED run pressed, by accessible name (ADR 0038, Constraint 7). Present only on an authenticated
+   * run, where it is the whole list: automatic pressing and link-following are off there, so a run presses only what its own
+   * files name. Never a value. Absent on every other run, whose probes press by the rules SECURITY.md documents.
+   */
+  pressed?: string[];
 }
 
 /**
@@ -478,15 +484,25 @@ function documentsSpannedLead(conformance: Report["conformance"]): string[] {
 }
 
 /** The whole report, ready to print. */
+/** "What this run pressed": the list, headed, and never a value. Nothing at all for a run that is not authenticated. */
+export function pressedSection(pressed: readonly string[] | undefined): string[] {
+  if (pressed === undefined) return [];
+  return [
+    "What this run pressed (an authenticated run presses only what its files name):",
+    ...(pressed.length > 0 ? pressed.map((name) => `  - ${name}`) : ["  (nothing: automatic pressing and link-following are off)"]),
+  ];
+}
+
 export function reportLines(
-  { url, task, screenReader, announcements, verdict, axe, pdf, conformance, outcomes, environment }: Report,
+  { url, task, screenReader, announcements, verdict, axe, pdf, conformance, outcomes, environment, pressed }: Report,
 ): string[] {
   return [
     "",
     "a11ign report",
     "===================",
     `URL:   ${url}`,
-    `Task:  ${task}`,
+    `Task:  ${task}  (${TASK_LABEL_NOTE})`,
+    ...pressedSection(pressed),
     // #1387: the same lead the Action's summary gives, from the same sentence. §5.2 below still carries it,
     // but that is the last section a reader meets, and every finding in between may describe either page.
     ...documentsSpannedLead(conformance),

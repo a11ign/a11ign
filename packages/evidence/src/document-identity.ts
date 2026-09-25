@@ -37,6 +37,15 @@
  * document", and a guard whose whole job is to refuse must not have a path on which it blesses by
  * accident.
  *
+ * **An identity that read NOTHING has no digest** (`null`, #2116), for the same reason seen from the
+ * label's side: naming it would hand `null`, `{}`, a wrong-level wrapper and a `*-a11ign-result.json`
+ * fixture (a RESULT — it carries no `diagnostics`, which is what this reads) one render-shaped label, and
+ * an identity assertion written against the wrong object would pass by comparing nothing while printing
+ * what looks like a reading. **A NOTE FOR THE NEXT TEST AUTHOR:** assert `read` is non-empty, or
+ * `compared` is, before an emptiness assertion on `differing` — `[]` over an empty population is not a
+ * finding. `fixtures/calendly-687.json` (`captures[n].capture`) is the fixture that can fail; the
+ * `rehearsal*` result fixtures cannot answer identity, and that is what a result is.
+ *
  * ## Every component is optional, and an absence is never a difference
  *
  * Measured across the records on disk: a real-page capture carries `structureCensus`, `domCensus` and
@@ -112,8 +121,15 @@ export interface DocumentIdentity {
    * The COUNT only. See `servedFrom` for why the values are never recorded.
    */
   droppedQueryParams: number | null;
-  /** Eight hex characters naming this render in a report. A label; never the comparison. */
-  digest: string;
+  /**
+   * Eight hex characters naming this render in a report. A label; never the comparison.
+   *
+   * `null` when `read` is empty (#2116): an identity that read nothing is not a render, and an FNV of the
+   * empty string is one constant (`811c9dc5`) that `null`, `{}`, a result fixture and a capture wrapper one
+   * level too high would all be *named*. `null` cannot be mistaken for a digest, so a label that appears
+   * is always one a document produced.
+   */
+  digest: string | null;
 }
 
 export type IdentityVerdict = "SAME_DOCUMENT" | "DIFFERENT_DOCUMENT" | "UNCOMPARABLE";
@@ -276,7 +292,7 @@ export function documentIdentity(capture: CaptureRecord | null | undefined): Doc
     titleSource: titleSourceIn(diagnostics),
     ...shapeOf(diagnostics),
     targetMatch: targetMatchIn(diagnostics),
-    digest: shortDigest(canonical),
+    digest: read.length > 0 ? shortDigest(canonical) : null,
   };
 }
 
@@ -351,9 +367,9 @@ function targetMatchIn(diagnostics: readonly unknown[]): string | null {
  * between two pages.
  *
  * `UNCOMPARABLE` when nothing could be compared, and it must never be read as agreement. That is the
- * vacuity failure this module would otherwise have: an identity over an empty component set digests to
- * the same eight characters for every capture in the corpus, so a comparison resting on digest equality
- * would have declared every unexamined pair the same page.
+ * vacuity failure this module would otherwise have: an identity over an empty component set would share
+ * one label across every capture in the corpus, so a comparison resting on digest equality would have
+ * declared every unexamined pair the same page.
  */
 export function compareIdentity(before: DocumentIdentity, after: DocumentIdentity): IdentityComparison {
   const titleProvenanceDiffers = before.titleSource !== after.titleSource;
@@ -406,7 +422,9 @@ export function identitySentence(identity: DocumentIdentity): string {
   const unconfirmed = identity.targetMatch === "matched" ? ""
     : identity.targetMatch === null ? ""
       : ` The document this was read from was NOT CONFIRMED (targetMatch: ${identity.targetMatch}).`;
-  return `Document ${identity.digest}: ${served}${title}.${shapeSentence(identity)}${unconfirmed}`
+  // AN IDENTITY THAT READ NOTHING IS NOT A RENDER, so it is not named as one (#2116).
+  const opening = identity.digest === null ? "No document identity was read: " : `Document ${identity.digest}: `;
+  return `${opening}${served}${title}.${shapeSentence(identity)}${unconfirmed}`
     + droppedQuerySentence(identity) + unstableSentence(identity);
 }
 
