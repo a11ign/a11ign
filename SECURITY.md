@@ -10,7 +10,7 @@ response time nobody is on call to meet.
 
 ## What this tool does that you should know about before running it
 
-a11ign drives a real browser and a real screen reader against a page you name. Four of its behaviours
+a11ign drives a real browser and a real screen reader against a page you name. Five of its behaviours
 are worth understanding before you point it at something.
 
 ### It operates controls on the page, and one probe presses buttons
@@ -111,6 +111,75 @@ We are not claiming a checkbox can never do something surprising; an `onchange` 
 disclosure's can. The claim is narrower and checkable: **it cannot navigate**, and navigation is what
 separates "we observed the page" from "we left it".
 
+### It can log in to the page it examines, and then it holds a credential — 2026-09-24 (ADR 0038)
+
+Until this release nothing in the product could log in, and this file said the tool was "aimed at pages behind an
+organisation's authentication" anyway. **That sentence was ahead of the product**, and it is replaced below by what
+exists. Read [ADR 0038](docs/adr/0038-authenticated-capture.md) for the reasoning; this is what you need to know to run it.
+
+**What exists.** A **form login**: `--flows <file> --login-flow <name>` (the Action's `flows:` and `login-flow:`). The
+flows file names the login's steps by the *accessible name* of each control, in a closed vocabulary with no script step,
+no evaluated expression and no fixed sleep, and pins the site's `origin:`. **A secret enters the run only as an
+environment variable of the machine that drives the browser, and the flows file names the variable** (`from-env:`).
+There is no `--password`, `--token`, `--cookie` or `--header` flag and no `password:` input, on purpose: argv is
+readable in process listings and shell history, and an Action input is interpolated into shell text.
+
+**Its status, measured 2026-09-25 (#2399).** The form login is implemented and has completed one authenticated capture on a real worker (`a11y-worker-3`, 64 announcements, on a fixture page built for the test). On that run **NVDA did not speak the text inserted through the browser protocol**: `npm run auth:leak-check` exited `0` on the raw transcript, and its positive control, a page that echoes the value back, exited `1`, so the check can see a leak when there is one. **That is one run, one machine and one page, with NVDA's typed-character setting as read there; it does not show the same of your page.** Everything below is what the code does and refuses, plus that one reading.
+
+**What does not exist.** MFA, SSO and CAPTCHA (**use a dedicated test account without MFA or SSO**); saved storage
+state; attaching to a browser you have signed in. A login that reaches an identity provider ends in `auth-login-failed`
+(`left-origin`) and never in a capture.
+
+**What an authenticated run presses — and only this.** A login makes the buttons real, so an authenticated run turns
+`probe-forms` and `probe-navigation` **off, whatever you set**, and presses **only what its own files name**: the
+login flow's steps, a flow's `press:` steps, and the states a forms config names. In a logged-in application *Save* and
+*Send* are real, and the first link of a page is as likely to be *Sign out* as a skip link. Disclosures and Tab are
+unchanged (expanding activates nothing, and Tab moves focus). The run says so before it starts, on stderr and as a
+`::notice::` on the Action, and its report and `result-json` carry a **What this run pressed** list — by control name,
+never a value.
+
+**Where the credential goes, and where it does not.**
+
+- **Never over the worker's channel.** The request to the worker carries the flow and the variable NAMES, never a value,
+  and never a cookie or a storage state. A worker that is not on the same machine **refuses** an authentication request
+  (`auth-refused-remote-worker`), because that channel is plain HTTP with no authentication and no TLS; a worker that
+  predates the field is caught by insisting on `authApplied: true` in its answer (`auth-not-applied`).
+- **Not into what the run writes or prints.** A screen reader announces what is typed, so every value (and its JSON-escaped,
+  URL-encoded and base64 forms) is replaced with `‹credential›` before anything is written, printed, judged or reported,
+  the count is disclosed, and a value that survives redaction — or a run of one-character announcements spelling one —
+  ends the run with `auth-credential-in-artifact`, writing and printing nothing. **A value shorter than 8 characters is
+  refused** (`auth-credential-too-short`): replacing `admin` everywhere would rewrite the page's own words, and its
+  absence could not be proven. The Action also adds `::add-mask::` for the URL-encoded and base64 forms, which GitHub does
+  not derive. `npm run auth:leak-check` has been read once against a real NVDA (2026-09-25, #2399: exit `0`, with a working positive control), and the first defence held on that page. **The redaction and the per-character refusal above remain the defence to rely on**; one reading is not a promise about yours.
+- **Not to a rented judge.** Authentication with `JUDGE_BACKEND=codex|anthropic|openai` is refused
+  (`auth-refused-judge-backend`) unless the run names `--send-authenticated-transcript-to-judge-vendor` (the Action's
+  `send-authenticated-transcript-to-judge-vendor: "true"`), which **cannot be set from the environment** and, given,
+  prints which vendor receives the transcript before the judge runs. Credentials are redacted first either way; the
+  transcript is still the page's text.
+- **Not to a public repository.** An authenticated Action run on a repository that is **not private** is refused whole,
+  before NVDA is installed (`auth-refused-public-repository`): the pull-request comment, the job log, the uploaded
+  artifact and the job summary would each show text from behind your login to anyone. Use a private repository, or the CLI
+  on your own machine, where nothing is published unless you publish it.
+- **Not kept.** A session does not outlive its capture: the worker clears cookies, cache and storage for the origin, closes
+  the browser, and holds the response for one delivery only. The rule layer signs in for itself in its own in-memory
+  browser and never receives a session from the worker.
+
+**A worker that holds your variable is a credential custodian, and you must not make it one on a shared machine.** We do
+not become a credential custodian (ADR 0038, clause 2), and a fleet worker that has a customer's variable in its
+environment is one. **Do not export those variables into a shared fleet worker's environment.** In the Action the worker is
+started by the Action on a throwaway runner from the environment you gave the step, and that is the supported route.
+
+**What the SSH-tunnel tolerance does NOT cover.** A tunnel to a shared worker presents as loopback, so the refusal above
+cannot tell it from a worker on this machine, and it is tolerated because the run sends no value: the tunnelled worker's
+environment holds no such secret, and the run ends in `auth-credential-missing`, not in a session. **That reasoning stops
+at a worker whose environment DOES hold the variable.** The same tunnel to such a worker yields a real session, in a browser
+on a shared machine that other people can reach. Nothing in the tool can see the difference. It is why the paragraph above is
+a rule and not a warning.
+
+**A login is a real request to a real account.** Every authenticated run performs at least one login per capture and one per
+page for the rule layer, and says how many before it starts. Use a dedicated test account on staging: repeated logins can
+trip a lockout or bot detection.
+
 ### The capture worker has no authentication, and binds all interfaces
 
 The Windows worker that runs NVDA serves plain HTTP on port 8765 with **no authentication of any kind** and
@@ -165,7 +234,10 @@ machine. No page content, transcript or finding leaves the machine unless you op
 
 `JUDGE_BACKEND=codex|anthropic|openai` exist for comparison against a rented model. Setting one sends the
 capture transcript — which contains the page's text as a screen reader announced it — to that vendor. If the
-page is behind your authentication, that transcript may contain data from it.
+page is behind your authentication, that transcript may contain data from it. **An authenticated run therefore refuses a
+non-local backend by default** (`auth-refused-judge-backend`), and the one override is
+`--send-authenticated-transcript-to-judge-vendor`, an argument and never an environment variable: it prints the vendor
+that receives the transcript before the judge runs, and credentials are redacted before the transcript leaves either way.
 
 ### And it will not start collecting, deliberately
 
@@ -177,8 +249,9 @@ calibrated against 94 real pages from five publishers, and a page shape absent f
 mis-scored systematically without anyone learning. Every published rubric for a production model asks for
 exactly this feedback loop.
 
-It is still the wrong trade here. This tool is aimed at pages behind an organisation's authentication, and
-the transcript IS the page's text. A usage report that carried enough to be useful would carry that;
+It is still the wrong trade here. This tool can log in to a page behind your authentication (a form login, from a
+flows file, with the credential taken from an environment variable — see above; MFA, SSO and CAPTCHA are out), and the
+transcript IS the page's text. A usage report that carried enough to be useful would carry that;
 one stripped until it was safe would say nothing about the finding it came from. There is no version of
 this that is both informative and honest about the promise above.
 

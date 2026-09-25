@@ -33,6 +33,9 @@ import {
 import { isAuthFault } from "./auth/auth-faults.js";
 import { refuseAuthOnRemoteWorker, requireAuthApplied, type AuthRequest } from "./auth/refusals.js";
 import { ruleLayerSignIn } from "./auth/rule-layer.js";
+import { pressedByThisRun, resolveAuthentication } from "./auth/resolve.js";
+import { redactionNotice, scrubArtifact, type ScrubSet } from "./auth/scrub.js";
+import { FlowsError } from "./auth/flows.js";
 import { leaseWorker, isAfterRun, type AfterRun, type WorkerLease } from "@a11ign/worker-fleet";
 import { CAPTURE_CLIENT_TIMEOUT_MS, requestJson } from "@a11ign/worker-fleet/worker-http";
 import { captureTolerantly } from "@a11ign/worker-fleet/capture-client";
@@ -109,6 +112,21 @@ interface Args {
    * visible in the workflow file rather than inferred from a file being present.
    */
   formsConfig: string | null;
+  /**
+   * A flows file and the name of the flow in it that logs in (ADR 0038). Both or neither: a login flow is a named flow in a
+   * flows file. Explicit, never auto-discovered, for the reason `formsConfig` is: an authenticated run operates a real
+   * account, and that should be visible in the command or the workflow file rather than inferred.
+   */
+  flows: string | null;
+  loginFlow: string | null;
+  /**
+   * `--send-authenticated-transcript-to-judge-vendor`: the ONE override of clause 5. An ARGUMENT and never read from the
+   * environment, so a variable left in a shared runner cannot turn it on for a job that never named it.
+   */
+  sendAuthenticatedTranscriptToJudgeVendor: boolean;
+  /** SET BY `withAuthentication`, never by `parseArgs`: the resolved login, and the values the run must keep out of its output. */
+  auth?: AuthRequest;
+  scrubSet?: ScrubSet;
   /** Draft a forms config from what the screen reader announces on this page, and print it. */
   emitFormConfig: boolean;
   /** Say what WOULD be submitted, and submit nothing. */
@@ -138,7 +156,8 @@ const USAGE =
   + "[--worker http://host:port] " +
   "[--after restore|stop|pause|leave] [--json] [--debug] [--probe-forms] [--no-probe-focus] "
   + "[--no-probe-navigation] [--no-probe-focus-context] "
-  + "[--forms <file>] [--emit-form-config] [--plan] "
+  + "[--forms <file>] [--flows <file> --login-flow <name> [--send-authenticated-transcript-to-judge-vendor]] "
+  + "[--emit-form-config] [--plan] "
   + "[--no-axe] [--axe-results <file>] [--no-keep]";
 
 function defaultArgs(): Args {
@@ -189,6 +208,9 @@ function defaultArgs(): Args {
     // and three criteria were validated on real pages through a path the product does not take.
     probeFocusReveal: true,
     formsConfig: null,
+    flows: null,
+    loginFlow: null,
+    sendAuthenticatedTranscriptToJudgeVendor: false,
     emitFormConfig: false,
     plan: false,
     axe: process.env.A11Y_AXE !== "0",
@@ -221,6 +243,7 @@ const BOOLEAN_FLAGS: Readonly<Record<string, (args: Args) => void>> = Object.fre
   "--emit-form-config": (a) => { a.emitFormConfig = true; },
   "--plan": (a) => { a.plan = true; },
   "--no-keep": (a) => { a.keep = false; },
+  "--send-authenticated-transcript-to-judge-vendor": (a) => { a.sendAuthenticatedTranscriptToJudgeVendor = true; },
 });
 
 /**
@@ -230,6 +253,8 @@ const BOOLEAN_FLAGS: Readonly<Record<string, (args: Args) => void>> = Object.fre
 const LIST_FLAGS: Readonly<Record<string, (args: Args, value: string | undefined) => void>> = Object.freeze({
   "--urls": (a, value) => { a.listText = value ?? a.listText; },
   "--max-pages": (a, value) => { a.maxPages = value ?? a.maxPages; },
+  "--flows": (a, value) => { a.flows = value ?? a.flows; },
+  "--login-flow": (a, value) => { a.loginFlow = value ?? a.loginFlow; },
 });
 
 export function applyArg(args: Args, argv: string[], i: number): number {
@@ -550,8 +575,28 @@ async function capturePageStates(
   return results;
 }
 
+/**
+ * Resolve authentication BEFORE anything is leased or captured (ADR 0038), so a refused run spends nothing: the flows
+ * file, its origin, every variable and the floor on each, the judge backend, and the public-repository refusal. What it
+ * returns is the same arguments with the resolved login and the values to keep out of the output added, and the two
+ * automatic probes turned off — an authenticated run presses only what its own files name. Every notice goes to
+ * stderr, and to `::notice::` where the Action can show it.
+ */
+async function withAuthentication(args: Args): Promise<Args> {
+  const resolved = await resolveAuthentication({
+    args, urls: args.urls, task: args.task, axe: args.axe, env: process.env, isPdf: looksLikePdfUrl,
+    readText: (path) => readFile(path, "utf8"),
+  });
+  if (resolved === null) return args;
+  // On the Action a notice is a workflow command, and it goes to STDERR: this step's stdout IS the JSON result, and a
+  // `::notice::` line there would both corrupt it and go unread. Elsewhere it is a plain line.
+  const onAction = process.env.GITHUB_ACTIONS === "true";
+  for (const line of resolved.notices) process.stderr.write(onAction ? `::notice::${line}\n` : `${line}\n`);
+  return { ...args, ...resolved.overrides, auth: resolved.auth, scrubSet: resolved.scrubSet };
+}
+
 async function main(): Promise<void> {
-  const args = parseArgs();
+  const args = await withAuthentication(parseArgs());
   if (await planOnly(args)) return;
   if (args.urls.length > 1) { await runPages(args); return; }
   if (looksLikePdfUrl(args.url)) { await runPdfLayer(args); return; }
@@ -582,6 +627,23 @@ async function main(): Promise<void> {
 }
 
 type RunOptions = Omit<Args, "worker"> & { worker: string; formState?: FormStateRequest; sink?: JsonSink };
+
+/**
+ * The containment (ADR 0038, Constraint 4) at the one place bytes are about to leave: the capture and the rule layer's
+ * result are scrubbed BEFORE anything is written, printed, judged or reported, so every downstream product — the
+ * artifact, `--json`, the summary, the judge's own input — is derived from clean data and none can be the one that
+ * forgot. A value that survives redaction, or a run of one-character announcements spelling one, ends the run with
+ * `auth-credential-in-artifact` before any of them exists. The count is disclosed on stderr on every authenticated run.
+ * A run that asked for no authentication has no set and passes through untouched.
+ */
+export function keepCredentialsOut<T extends { cap: CaptureResponse; axe: Awaited<ReturnType<typeof pageContext>> }>(
+  captured: T, scrubSet: ScrubSet | undefined,
+): T {
+  if (!scrubSet) return captured;
+  const { value, redactions } = scrubArtifact({ cap: captured.cap, axe: captured.axe }, scrubSet);
+  process.stderr.write(`${redactionNotice(redactions)}\n`);
+  return { ...captured, cap: value.cap, axe: value.axe };
+}
 
 interface ShadowReport {
   mode?: string;
@@ -801,11 +863,11 @@ export function reportWitnessArtifact(path: string | null): void {
 
 async function runWitness(
   { url, task, worker, json, debug, probeForms, probeFocus, probeNavigation, probeFocusContext,
-    probeFocusReveal, emitFormConfig, formState, axe: wantAxe, axeResults, keep, sink }: RunOptions,
+    probeFocusReveal, emitFormConfig, formState, axe: wantAxe, axeResults, keep, sink, auth, scrubSet }: RunOptions,
 ): Promise<void> {
-  const { cap, axe } = await captureAndScan(
+  const { cap, axe } = keepCredentialsOut(await captureAndScan(
     { url, task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, probeFocusReveal,
-      wantAxe, axeResults, formState });
+      wantAxe, axeResults, formState, auth }), scrubSet);
   const artifactPath = keep ? writeWitnessArtifact(cap, task) : null;
   const ruleFindings = axe.findings;
   // A draft needs the ANNOUNCEMENTS and nothing downstream of them, so it returns before the judge runs.
@@ -875,13 +937,13 @@ async function runWitness(
   if (json) {
     printJson({
       url, task, cap: examined, verdict, ruleFindings, captureVerified, unverifiedReason, conformance, outcomes,
-      leftSite: left,
+      leftSite: left, ...(auth ? { pressed: pressedByThisRun(auth, formState) } : {}),
       artifactPath: artifactPath ? relative(process.cwd(), artifactPath) : null,
     }, sink);
   } else {
     printReport({
       url, task, screenReader: cap.screenReader, announcements: cap.transcript.length,
-      verdict, axe: ruleFindings, conformance, outcomes, environment: cap.environment,
+      verdict, axe: ruleFindings, conformance, outcomes, environment: cap.environment, ...(auth ? { pressed: pressedByThisRun(auth, formState) } : {}),
     });
     // THE LAST LINE, per #431's acceptance -- printed after the report, never folded into `--json`'s one
     // JSON blob, which carries `artifactPath` as a field instead so a machine consumer still gets one
@@ -1004,7 +1066,7 @@ export function examineWithinTheSite(cap: CaptureResponse):
  */
 export function printJson(
   { url, task, cap, verdict, ruleFindings, captureVerified, unverifiedReason, conformance, outcomes,
-    leftSite: left, artifactPath }: {
+    leftSite: left, artifactPath, pressed }: {
     // Always a real Judgment here: printJson serves only `runWitness`'s NVDA-capture path, which always
     // judges before reaching this call. A PDF-target run (no live page, no `Judgment`) never calls it —
     // see `runPdfLayer`'s own JSON output.
@@ -1012,6 +1074,8 @@ export function printJson(
     ruleFindings: AxeFinding[] | null; captureVerified: boolean; unverifiedReason?: CaptureDoubt;
     conformance: ConformanceRequirement[]; outcomes: CriterionOutcome[]; leftSite: LeftSite | null;
     artifactPath: string | null;
+    /** An authenticated run's whole list of pressed controls (ADR 0038); undefined for every other run. */
+    pressed?: string[];
   },
   sink: JsonSink = printAsJson,
 ): void {
@@ -1034,6 +1098,9 @@ export function printJson(
     // False when the capture could not be confirmed to have read the requested page. Findings from an
     // unverified capture may describe browser chrome, so a consumer must be able to refuse them.
     captureVerified,
+    // An authenticated run's list of what it pressed, by accessible name and never a value (ADR 0038, Constraint 7). Present
+    // ONLY on such a run, so a consumer reading an ordinary result sees no new key.
+    ...(pressed ? { pressed } : {}),
     // WHY it is unverified, because the two causes need different explanations to a reader: reading the
     // wrong thing entirely, versus reading only a modal dialog that sat in front of the right page.
     ...(unverifiedReason ? { captureUnverifiedReason: unverifiedReason } : {}),
@@ -1390,5 +1457,5 @@ if (isProgram) main().catch((err: unknown) => {
   // artifact-schema-mismatch) is a third thing again: not the caller's mistake and not an ordinary tool
   // bug, so exit 3 says "wait for a release" rather than inviting a retry loop the way exit 1 would.
   // An authenticated run's refusal is the caller's to fix, like a config error, and not "wait for a release".
-  process.exit(err instanceof FormsConfigError || err instanceof PageListError || isAuthFault(fault) ? 2 : fault ? 3 : 1);
+  process.exit(err instanceof FormsConfigError || err instanceof PageListError || err instanceof FlowsError || isAuthFault(fault) ? 2 : fault ? 3 : 1);
 });
