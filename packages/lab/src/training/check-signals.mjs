@@ -288,12 +288,10 @@ function main() {
   const { exitCode, summary } = signalVerdict(counts, { requireComplete: REQUIRE_COMPLETE });
   console.log(summary);
   if (exitCode !== 0) console.log(unsyncedCorpusHint(counts));
-  // SET the status and let the process END, never `process.exit` here (#2452). Into a pipe Node's stdout is
-  // asynchronous, so `process.exit` discards whatever the reader has not yet taken -- everything past the 64 KB
-  // pipe buffer on a full corpus -- and the verdict is the LAST thing printed. `corpus-restore-drill.mjs` reads
-  // this through a pipe, so a slow reader saw no verdict line. Nothing here keeps the event loop alive, so ending
-  // naturally costs nothing; draining before `exit` would spell the same thing with more code. The two earlier
-  // `process.exit` calls stay: each prints a few lines to stderr, far inside the pipe buffer, and stops.
+  // NOT `process.exit(exitCode)`: the output is ~170 KB on a full manifest, stdout to a pipe is asynchronous,
+  // and exiting drops whatever the reader has not yet taken -- the verdict line at the END. A parent busy
+  // enough to read slowly (the CI unit run) saw 'no verdict line' and read a gate that had answered as one
+  // that had not (#2441's trunk run, corpus-restore-drill). Setting the code lets the stream drain first.
   process.exitCode = exitCode;
 }
 
