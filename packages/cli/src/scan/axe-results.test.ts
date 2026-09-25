@@ -13,10 +13,11 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { tempDir } from "../../../guards/src/test-tmp.mjs";
 import { loadAxeResults, warnOnUrlMismatch } from "./axe-results.js";
 
 const VIOLATION = {
@@ -29,7 +30,7 @@ const VIOLATION = {
 
 /** Write a fixture and hand back its path; a temp dir per call keeps the tests Isolated. */
 function fixture(contents: unknown): string {
-  const path = join(mkdtempSync(join(tmpdir(), "axe-results-")), "axe.json");
+  const path = join(tempDir("axe-results-"), "axe.json");
   writeFileSync(path, typeof contents === "string" ? contents : JSON.stringify(contents));
   return path;
 }
