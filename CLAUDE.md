@@ -28,7 +28,7 @@ a11y-witness drives a **real screen reader (NVDA)** through real navigation, **a
 rule/visual layer) rather than instead of it. See `README.md`, `PLAN.md`, `docs/adr/`.
 
 **A finding is either ASSERTED or REFERRED, and knowing which is decided by which layer owns the subtype.**
-Measured 2026-09-14 on the calibration set: **0 criteria asserted wrongly, 422 referred** — a reading at
+Measured 2026-09-24 on the calibration set at protocol 21: **0 criteria asserted wrongly, 395 referred** — a reading at
 a moment, so re-derive before quoting. README's claim block carries the current statement.
 [The readings and the superseded 2026-08-24 figure →](docs/operational-lessons.md#what-asserted-versus-referred-was-measured-at)
 
