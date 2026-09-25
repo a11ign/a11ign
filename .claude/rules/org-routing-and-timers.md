@@ -16,7 +16,7 @@
   that cost four red runs: a DUPLICATED `Acceptance:` section, and a MISSING `Closes`. A PR finishing no
   row declares `Closes: none -- <reason>`, em dash required.
 - **A settled draft with no verdict goes to the external reviewer; an engineer reviews only when `ceo`
-  names one** (#1394). An engineer with no row in build claims the next Ready row.
+  names one** (#1394). A spawned engineer never claims a second row (#2407).
 
 ## `lane:ceo` protects review, not authorship (ceo, 2026-09-18)
 
