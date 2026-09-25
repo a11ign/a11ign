@@ -28,7 +28,7 @@ list of URLs composes with it, what an authenticated run presses, and an estimat
 **Read before quoting anything here as found.** The two research digests (#2262, comments 5810424674 and
 5810424916) are the evidence for the mechanism survey and were not re-run. Every item they marked unverified
 is still marked unverified where this file uses it, and the list is at the end. Every claim about NVDA's
-behaviour under typing is **unmeasured** and says so.
+behaviour under typing is **unmeasured** and says so, except the one reading in Constraint 4.
 
 ## Context
 
@@ -216,8 +216,7 @@ build row runs it.
    worker extracts from NVDA's own `library.zip` (`found: true`). So a credential typed by KEYSTROKE would be spoken one
    character at a time: the premise of the per-character detector is real and not hypothetical. The design's first
    defence therefore rests entirely on the protocol's text insertion producing no key events for that echo to hear.
-   **That is still unmeasured**; it is what the Windows acceptance of PR 4 and the leak check of PR 6 measure, and what
-   the disclosed redaction count will show on real runs.
+   **Measured once by the leak check (PR 6, #2399), 2026-09-25, `a11y-worker-3`, worker code `e19f726ecd7d245e`:** NVDA did not speak the inserted text on the `login-quiet` fixture (raw stage exit `0`, 64 announcements); the positive control `login-echo` exited `1` raw and `0` written with 2 redactions. One run, one box, one fixture, typed-character default ON as read there. The design still does not depend on it, because of the second defence.
 2. **Containment, at the one place bytes leave.** Everything the CLI writes or prints passes through one
    function that replaces every occurrence of every `from-env` value, in its raw, JSON-escaped, URL-encoded
    and base64 forms, with `‹credential›`, counts the replacements, and **discloses the count** ("2
@@ -631,7 +630,7 @@ cypress-axe (no primary source); Siteimprove's sources conflict on MFA; every pr
 **Not from the digests and mine:** the default cap numbers (`ceo`'s own, marked as chosen), every claim
 about NVDA's typed-character behaviour (unmeasured), and the three unverified assumptions named where they
 occur (`env:` reaching a composite action's steps, feasibility of mechanism 3, and that the browser
-protocol's text insertion produces no key events for NVDA to speak).
+protocol's text insertion produces no key events for NVDA to speak (measured once, Constraint 4)).
 
 ## Estimate of the build row
 

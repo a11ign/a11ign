@@ -494,9 +494,7 @@ never an input, because an input is interpolated into shell text. Whether a comp
 verified on the Action rehearsal recorded in [ADR 0038](adr/0038-authenticated-capture.md); if a runner ever does not, the fallback
 is an input mapped into the step's `env:`, never into `run:` text.
 
-`npm run auth:leak-check` is the check for whether a credential reaches a file, with a positive control, **and not yet a
-reading**: it has not been read against a real NVDA (2026-09-25, #2399), so the redaction and the per-character refusal are the
-only defence to rely on. See the ADR for its three invocations and what each must exit.
+`npm run auth:leak-check` is the check for whether a credential reaches a file, with a positive control. It has been read once against a real NVDA (2026-09-25, #2399: exit `0`, with a working positive control), and the first defence held on that page; **the redaction and the per-character refusal remain the defence to rely on**, and one reading is not a promise about yours. See the ADR for its three invocations and what each must exit.
 
 ## Outputs
 
