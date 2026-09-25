@@ -37,6 +37,7 @@ entry names what is missing, what it would cost, and what would tell you it is f
 - [§47](#47-the-walk-alone-is-177-seconds-on-a-926-trip-page-so-no-probe-budget-can-rescue-it-and-the-report-has-to-say-what-it-did-not-walk) THE WALK ALONE IS 177 SECONDS ON A 926-TRIP PAGE, so no probe budget can rescue it and the report has to say what it did not walk
 - [§48](#48-a-reviewer-can-act-as-a11ign-bot-through-any-shell-wrapper-and-no-path-shim-can-change-that-accepted-by-ceo-2026-09-24-2402) A REVIEWER CAN ACT AS a11ign-bot THROUGH ANY SHELL WRAPPER, AND NO PATH SHIM CAN CHANGE THAT — ACCEPTED by ceo, 2026-09-24 (#2402)
 - [§49](#49-reviewer-auth-failure-is-detected-from-text-nobody-has-seen-render-and-the-refresh-race-is-unmeasured-open-by-design-2401) REVIEWER AUTH FAILURE IS DETECTED FROM TEXT NOBODY HAS SEEN RENDER, and the refresh race is UNMEASURED — OPEN, by design (#2401)
+- [§51](#51-a-run-cannot-get-past-mfa-sso-or-a-captcha-and-nothing-in-the-tool-detects-the-third-out-of-v1-by-ruling-2275-2262) A RUN CANNOT GET PAST MFA, SSO OR A CAPTCHA, AND NOTHING IN THE TOOL DETECTS THE THIRD — OUT OF v1, by ruling (#2275, #2262)
 <!-- known-gaps-index:end -->
 
 ## The order these should be done in
@@ -3334,3 +3335,50 @@ verifies it and a fresh host would not have it.** Re-run `zsh -c 'echo $NODE_COM
   `/tmp/node-compile-cache` after a session has run `npm run lint`.
 - **The cache directory is unbounded** under the home too, and has no sweep: it costs the same inodes on a
   persistent disk, where nothing ages it out. A per-checkout key is why it grows with the number of worktrees.
+
+## 51. A RUN CANNOT GET PAST MFA, SSO OR A CAPTCHA, AND NOTHING IN THE TOOL DETECTS THE THIRD — OUT OF v1, by ruling (#2275, #2262)
+
+`ceo` ruled (#2262, "c. Auth", clause 6) that **MFA, SSO and CAPTCHA are OUT of v1 and recorded here**, with
+**"use a dedicated test account without MFA"** as the stated route. The capability that makes this true is the form
+login of [ADR 0038](adr/0038-authenticated-capture.md) (`--flows <file> --login-flow <name>`), built by #2359 in
+seven pull requests and complete at #2376; this entry was held back until then, because before a login could be run it
+would have described the limit of a feature that did not exist. **What it says below is read against the shipped code at
+this commit, not against the ADR's prose.**
+
+**What a run does, measured by reading `packages/cli/src/auth/`, not by running a login against an identity provider:**
+
+- **The login is a form login and nothing else.** It types into controls by accessible name in a closed vocabulary, on
+  ONE pinned `origin:`. There is no one-time-code step, no way to wait for a person, no storage-state import and no
+  attach to a browser somebody has signed in (mechanism 3 is the one route ADR 0038 says handles MFA or SSO, and it
+  is **not built**: interactive, CLI-only, a spike first).
+- **SSO ends the run, by name.** A login that sends the browser to another origin, such as an identity provider,
+  is `auth-login-failed` with reason `left-origin` (`assertStillOnOrigin`, `interpreter.ts`), and the remedy names the
+  dedicated test account. **This is checked when an `expect:` is met and again after the requested page loads, not after
+  every step**, so the run reads the redirect at those two moments and not earlier.
+- **MFA is caught only by the flow's own `expect:`.** Every login flow must end in an `expect:` (`login-final-expect`),
+  and a login that stops at a code prompt fails it (`expect-not-met`) **if, and only if, that `expect:` names something
+  only the signed-in page shows.** The tool cannot check that it does: a weak one (a heading the login wall also has)
+  reports the challenge page as the application. The ADR's wording, "a login that stops at a challenge fails its
+  `expect:`", is true of a well-chosen `expect:` and is not something the tool guarantees.
+- **A CAPTCHA is not detected at all.** Nothing in the code names one. A CAPTCHA before the login's `expect:` fails it like
+  any other wall, with no word saying a CAPTCHA was the cause. **One appearing after the login, mid-run, reads like a
+  broken page**, which ADR 0038 Constraint 6 records as this repo's most expensive recurring shape (ADR 0024).
+
+**The route, in the ruling's words: use a dedicated test account without MFA, and on staging.** It is the advice
+BrowserStack and LambdaTest give, and `SECURITY.md` and the `auth-login-failed` remedy repeat it. It is a way round the
+gap and not a fix: **a product whose only sign-in is SSO cannot be reached by v1**, and ADR 0038's "What would falsify
+this" says the known gap is then the first thing an outsider meets and the estimate is redone around mechanism 3.
+
+**Evidence, from the digests on #2262 (comments 5810424674 and 5810424916), whose sources are the vendors' own
+documentation:** every hosted tool surveyed that supports login excludes or leaves undocumented OTP, SMS, CAPTCHA and
+OAuth-only flows, and none is documented as handling them unattended. Attaching to a person-signed-in browser is the one
+mechanism that handles MFA or SSO, and it is for interactive use (ruling, clause 3).
+
+**UNVERIFIED, and not to be quoted as found:** Siteimprove's sources conflict on MFA; Level Access's help pages returned
+403 (snippets only); Accessibility Insights authentication has no authoritative source. axe DevTools Pro's limits and
+cypress-axe have no primary source either (ADR 0038's own unverified list).
+
+**NOT MEASURED:** that a real identity provider produces `left-origin` on a real run, or that a real MFA prompt fails a
+real `expect:`. The one authenticated capture on record (#2399, `a11y-worker-3`) was a fixture page. **What closes it:**
+one login against a site that redirects to an identity provider and one against a code prompt, on a test account, each
+read for the fault it ends in. Nobody is doing that; the first outsider run whose sign-in is SSO is the natural one.
