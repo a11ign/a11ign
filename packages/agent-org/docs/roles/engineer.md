@@ -155,6 +155,19 @@ premise before decomposing a number**: a "3.9x" turned out to compare a median a
 throughput" figure on two machine populations at two capture protocols, and a table built on an unsourced
 number is worth less than the finding that it has no source.
 
+## Keep your context small: it is re-read on every call
+
+**Whatever you paste in your first hour is paid for on every later turn** (191k cache-read tokens per call
+against a target of 120k, #928), so keep the large paste out rather than trimming a small one.
+
+- **Read ranges, not files.** `git grep -n` names the line, then `Read` with `offset` and `limit`. A whole read
+  only under about 200 lines: some org files run about 5,200 lines.
+- **Summarise output before it lands.** `| tail -n 20`, `| grep -E 'fail|error'`, or `> file` then `tail` when
+  the whole may be wanted later.
+- **No raw `gh` JSON where a projection answers.** `gh issue view N --json labels --jq '[.labels[].name]|join(",")'`.
+- **Send exploratory reading to a subagent.** `Agent` with `model="haiku"` to gather, `sonnet` to digest
+  (`.claude/rules/agent-practices.md`): "where is X called" is the case, and only its conclusion enters yours.
+
 ## Standing habits
 
 - **Absence is not proof.** *Confirmed false* and *could not determine* are different states and never share
