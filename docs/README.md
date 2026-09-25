@@ -10,6 +10,7 @@ human or agent, *working on* the repo rather than using it.
 |---|---|
 | [getting-started.md](./getting-started.md) | you have no capture worker and need one (~1.5–2 h, mostly downloading Windows) |
 | [try-it.md](./try-it.md) | you want the shortest honest path to a real run against your own page, before reading anything else — a GitHub Actions run, what to expect from a long marketing page, and the four questions we would like back |
+| [outsider-runs.md](./outsider-runs.md) | you are recording what someone outside the project said about a run of the tool, or want to see the fixed fields a record must have and the first outsider's, with `NOT STATED` where they said nothing |
 | [local-worker-vm.md](./local-worker-vm.md) | you are a single contributor on a Mac with no other hardware and want the scripted UTM worker. **Superseded by a declared fleet for anyone with more than one machine** — `leaseWorker` already prefers `inventory.yml` over a local VM |
 | [control-plane-proxmox.md](./control-plane-proxmox.md) | you have (or are setting up) more than one worker — the bare-metal fleet, and the recommended path over local VMs |
 | [github-action.md](./github-action.md) | you want it in CI against your own app |

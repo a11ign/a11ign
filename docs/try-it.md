@@ -319,6 +319,9 @@ this page.
 Open an issue, or reply to whoever sent you here. **A blunt "no" with a reason is worth more to us than a
 polite yes.**
 
+Your answers are recorded in [`outsider-runs.md`](./outsider-runs.md), in a fixed shape, in your own words
+where you said them and `NOT STATED` where you did not.
+
 ## Things you may reasonably want to know
 
 **Does it send anything anywhere?** No. The tool talks to the page you point it at and the machine running
