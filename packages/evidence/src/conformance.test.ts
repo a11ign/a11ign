@@ -771,6 +771,18 @@ test("no note when there is no render-line formField figure to have looked contr
   assert.doesNotMatch(said, /wider alphabet/);
 });
 
+test("#2116: an identity that read nothing reaches the limitation as 'no document identity was read', not as a render", () => {
+  const said = withBudgetAndRender({ fields: 18, allowed: 18, skipped: 0, exhausted: false },
+    documentIdentity({ diagnostics: [] }));
+  assert.match(said, /No document identity was read: served document NOT RECORDED\./,
+    "the honest half survives: the reader is told the document is not recorded");
+  assert.doesNotMatch(said, /Document [0-9a-f]{8}\b/, "and the render-shaped label the dishonest half carried is gone");
+  // THE POSITIVE CONTROL: an identity that read a served path is still named.
+  const named = withBudgetAndRender({ fields: 18, allowed: 18, skipped: 0, exhausted: false },
+    documentIdentity({ diagnostics: [{ event: "structureCensus", targetUrl: "https://example.org/a" }] }));
+  assert.match(named, /Document [0-9a-f]{8}: served https:\/\/example\.org\/a/);
+});
+
 test("activationBudgetFromDiagnostics reads the mark, and absence is null rather than a zeroed budget", () => {
   const read = activationBudgetFromDiagnostics([
     { event: "activationBudget", budgetMs: 175000, spentMs: 175200, allowed: 60, skipped: 40,

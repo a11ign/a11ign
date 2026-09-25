@@ -28,7 +28,7 @@ list of URLs composes with it, what an authenticated run presses, and an estimat
 **Read before quoting anything here as found.** The two research digests (#2262, comments 5810424674 and
 5810424916) are the evidence for the mechanism survey and were not re-run. Every item they marked unverified
 is still marked unverified where this file uses it, and the list is at the end. Every claim about NVDA's
-behaviour under typing is **unmeasured** and says so.
+behaviour under typing is **unmeasured** and says so, except the one reading in Constraint 4.
 
 ## Context
 
@@ -177,8 +177,14 @@ Three notes, each a decision.
   the worker owns the browser it launches (`--app` window, a debugging port it opens, and it kills stray
   browsers), so attaching the worker to somebody else's Edge conflicts with that ownership. It is therefore
   **a spike row first, before any build**, and the estimate below does not cover it.
-- **`env:` reaching a composite action's steps is believed, not verified.** If the build's first run shows it
-  does not, the fallback is an input mapped into the step's `env:` and **never** into `run:` text.
+- **`env:` reaching a composite action's steps: VERIFIED on a real runner, 2026-09-24** (`windows-2022`, run 36021132344 of a
+  throwaway workflow on a scratch branch, since deleted): `env: APP_TEST_USER: …` on the step that calls a composite action
+  reached that action's own `bash` step (`ENV-INHERITED: yes`), and a `::add-mask::` added from inside the composite action for
+  a value derived from it printed as `***` in the log. The same run showed the real Action refuse an authenticated run on this
+  (public) repository at its own check step, `auth-refused-public-repository`, with every later step skipped, so before
+  anything was installed. **What that run is not:** a full authenticated capture on a runner, which needs a PRIVATE
+  repository (the Action refuses this one by design) and NVDA; that run is still owed. If a runner ever stops passing the
+  step's `env:` through, the fallback is an input mapped into the step's `env:` and **never** into `run:` text.
   Interpolating `${{ inputs.x }}` into the shell is what the Action does today for `url` and `task`, and a
   secret must not go that way.
 - **The Action masks more than GitHub does.** GitHub masks a secret's exact value in logs and nothing derived
@@ -198,20 +204,19 @@ build row runs it.
 
 1. **Prevention, by construction.** Login steps enter values with the browser protocol's text insertion, which
    produces no key events, and the transcript does not begin until the login flow has ended and the page has
-   settled. So the login is not in the transcript to start with. **That NVDA stays quiet on inserted text is
-   UNMEASURED**: NVDA's typed-character setting is one this worker has never called
-   (`docs/screenreader-settings-audit.md`, "`speakTypedCharacters` is real and never called"), so it is at
-   NVDA's default, and that default is not recorded in the repo. The build reads it from
-   `/diagnostics.screenReaderDefaults` as its first act, and the design does not depend on the answer,
-   because of the second defence.
+   settled. So the login is not in the transcript to start with. **As of 2026-09-24, that NVDA stays quiet on
+   inserted text was UNMEASURED**: NVDA's typed-character setting was one this worker had never called
+   (`docs/screenreader-settings-audit.md`, "`speakTypedCharacters` is real and never called"), so it was at
+   NVDA's default, and that default was not recorded in the repo. The build was to read it from
+   `/diagnostics.screenReaderDefaults` as its first act, and the design did not depend on the answer,
+   because of the second defence. Both readings have since been taken, in the two measured paragraphs below.
 
    **Measured by the build (PR 4), 2026-09-24 ~13:50Z, `a11y-worker-3`, worker code `ce5ba647396883b4`:** NVDA's
    `keyboard.speakTypedCharacters` DEFAULT is `1` (ON) and `speakTypedWords` is `0`, read from the `configSpec` the
    worker extracts from NVDA's own `library.zip` (`found: true`). So a credential typed by KEYSTROKE would be spoken one
    character at a time: the premise of the per-character detector is real and not hypothetical. The design's first
    defence therefore rests entirely on the protocol's text insertion producing no key events for that echo to hear.
-   **That is still unmeasured**; it is what the Windows acceptance of PR 4 and the leak check of PR 6 measure, and what
-   the disclosed redaction count will show on real runs.
+   **Measured once by the leak check (PR 6, #2399), 2026-09-25, `a11y-worker-3`, worker code `e19f726ecd7d245e`:** NVDA did not speak the inserted text on the `login-quiet` fixture (raw stage exit `0`, 64 announcements); the positive control `login-echo` exited `1` raw and `0` written with 2 redactions. One run, one box, one fixture, typed-character default ON as read there. The design still does not depend on it, because of the second defence.
 2. **Containment, at the one place bytes leave.** Everything the CLI writes or prints passes through one
    function that replaces every occurrence of every `from-env` value, in its raw, JSON-escaped, URL-encoded
    and base64 forms, with `‹credential›`, counts the replacements, and **discloses the count** ("2
@@ -607,7 +612,7 @@ runners whose addresses change, and the change would be to the user's network an
   outsider hits it, the amendment to weigh is a selector escape hatch for the *login flow only*.
 - **Login per capture locks an account or trips bot detection.** Then the held-session design becomes the
   price of using the tool on that product, and Constraint 1 has to be re-read against it.
-- **The composite action does not pass step `env:` through.** Then the fallback in Constraint 3 applies.
+- **The composite action does not pass step `env:` through.** Then the fallback in Constraint 3 applies. (Verified that it does, 2026-09-24; see Constraint 3.)
 - **A worker that the refusal did not stop.** Any run in remote-worker mode that produces a report has
   falsified Constraint 1's enforcement, and the test that shows it is the first one the build row writes.
 
@@ -625,7 +630,7 @@ cypress-axe (no primary source); Siteimprove's sources conflict on MFA; every pr
 **Not from the digests and mine:** the default cap numbers (`ceo`'s own, marked as chosen), every claim
 about NVDA's typed-character behaviour (unmeasured), and the three unverified assumptions named where they
 occur (`env:` reaching a composite action's steps, feasibility of mechanism 3, and that the browser
-protocol's text insertion produces no key events for NVDA to speak).
+protocol's text insertion produces no key events for NVDA to speak (measured once, Constraint 4)).
 
 ## Estimate of the build row
 

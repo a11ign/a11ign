@@ -185,6 +185,55 @@ test("the report line names the render, and says so when it cannot", () => {
 });
 
 /**
+ * #2116 — AN IDENTITY THAT READ NOTHING IS NOT A RENDER, and must not be labelled as one.
+ *
+ * `null`, `undefined`, `{}`, a result fixture (no `diagnostics`) and a wrapper one level too high all read
+ * nothing, and used to share the FNV of the empty string — `811c9dc5` — so an assertion written against the
+ * wrong object passed by comparing nothing while printing what looked like a reading. THE NEGATIVE CONTROL.
+ */
+const unreadInputs: [string, Parameters<typeof documentIdentity>[0]][] = [
+  ["null", null],
+  ["undefined", undefined],
+  ["an empty object", {}],
+  ["a result object (no diagnostics)", { url: "https://example.org/", verdict: "pass", transcript: [] }],
+  ["a wrapper one level too high", fixture as never],
+  ["diagnostics that recorded nothing", { diagnostics: [] }],
+];
+
+test("an identity that read nothing carries no digest, whatever wrong thing it was asked about", () => {
+  for (const [what, input] of unreadInputs) {
+    const identity = documentIdentity(input);
+    assert.deepEqual(identity.read, [], `${what} must have read nothing, or this case is not the negative control`);
+    assert.equal(identity.digest, null, `${what} read nothing and so must not be named as a render`);
+  }
+});
+
+test("the sentence for an identity that read nothing says so, and names no render", () => {
+  const sentence = identitySentence(documentIdentity(null));
+  assert.match(sentence, /^No document identity was read: served document NOT RECORDED\./);
+  assert.doesNotMatch(sentence, /\b[0-9a-f]{8}\b/, "no render-id-shaped token may appear");
+  assert.doesNotMatch(sentence, /^Document /);
+});
+
+/**
+ * THE POSITIVE CONTROL, in the same file so the labelling path is shown to have a green state: the fix is
+ * not "refuse every label". The same fixture the negative control pulled a wrapper out of, read at the
+ * right level, still names two distinct renders and still says they are different documents.
+ */
+test("a capture that DID read a document is still labelled, and the comparison can still fail", () => {
+  const before = documentIdentity(first.capture);
+  const after = documentIdentity(second.capture);
+  assert.ok(before.read.length > 0 && after.read.length > 0, "the control must have read something");
+  assert.match(before.digest ?? "", /^[0-9a-f]{8}$/);
+  assert.match(after.digest ?? "", /^[0-9a-f]{8}$/);
+  assert.notEqual(before.digest, after.digest);
+  const result = compareIdentity(before, after);
+  assert.equal(result.verdict, "DIFFERENT_DOCUMENT");
+  assert.deepEqual(result.compared, ["servedPath"]);
+  assert.match(identitySentence(after), /^Document [0-9a-f]{8}: served /);
+});
+
+/**
  * THE SAME ASSERTION, AGAINST THE FILES THEMSELVES.
  *
  * `runs/` is a copy only as fresh as its last sync and CI has none at all, so this skips honestly rather

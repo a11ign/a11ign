@@ -24,7 +24,7 @@ const GUIDE = new URL("../../../../docs/github-action.md", import.meta.url);
 
 // The only top-level key `printJson` emits CONDITIONALLY (a spread, present only when the capture is
 // unverified). Stated by hand, per the row's own done-when: nothing here infers "conditional" from prose.
-const CONDITIONAL_KEYS = new Set(["captureUnverifiedReason"]);
+const CONDITIONAL_KEYS = new Set(["captureUnverifiedReason", "pressed"]);
 
 type FixtureResult = {
   url: string; task: string; screenReader: string; transcript: string[];
@@ -49,7 +49,7 @@ function captureOf(result: FixtureResult): CaptureResponse {
 }
 
 /** Calls the real printer over the real fixture and returns the top-level keys of what it wrote to stdout. */
-function emittedKeys(over: { unverifiedReason?: "wrong-content"; captureVerified?: boolean } = {}): Set<string> {
+function emittedKeys(over: { unverifiedReason?: "wrong-content"; captureVerified?: boolean; pressed?: string[] } = {}): Set<string> {
   const result = fixture();
   const lines: unknown[] = [];
   const realLog = console.log;
@@ -59,7 +59,7 @@ function emittedKeys(over: { unverifiedReason?: "wrong-content"; captureVerified
       url: result.url, task: result.task, cap: captureOf(result), verdict: result.verdict,
       ruleFindings: result.ruleBased, captureVerified: over.captureVerified ?? result.captureVerified,
       unverifiedReason: over.unverifiedReason, conformance: result.conformance, outcomes: result.outcomes,
-      leftSite: result.leftSite, artifactPath: result.artifactPath,
+      leftSite: result.leftSite, artifactPath: result.artifactPath, pressed: over.pressed,
     });
   } finally {
     console.log = realLog;
@@ -102,12 +102,14 @@ test("#1637: every top-level key the guide documents is one the printer actually
   const documented = documentedTopLevelFields();
   const baseline = emittedKeys();
   const withUnverified = emittedKeys({ unverifiedReason: "wrong-content", captureVerified: false });
+  // `pressed` is the other conditional key: present only on an AUTHENTICATED run (ADR 0038), so it has its own variation.
+  const withPressed = emittedKeys({ pressed: ["Sign in"] });
 
   for (const key of CONDITIONAL_KEYS) {
     assert.ok(!baseline.has(key), `${key} is documented as conditional but the baseline run emitted it anyway`);
-    assert.ok(withUnverified.has(key), `${key} is documented as conditional but never actually appears`);
+    assert.ok(withUnverified.has(key) || withPressed.has(key), `${key} is documented as conditional but never actually appears`);
   }
-  const emitted = new Set([...baseline, ...withUnverified]);
+  const emitted = new Set([...baseline, ...withUnverified, ...withPressed]);
 
   const { documentedNotEmitted, emittedNotDocumented } = compareFieldSets(documented, emitted);
   assert.deepEqual(documentedNotEmitted, [],
@@ -127,7 +129,7 @@ test("#1637 POSITIVE CONTROL: rehearsal 3's own recorded keys are a subset of wh
 
 /** The full emitted set the real test compares against: baseline plus the conditional key's own run. */
 function fullEmittedKeys(): Set<string> {
-  return new Set([...emittedKeys(), ...emittedKeys({ unverifiedReason: "wrong-content", captureVerified: false })]);
+  return new Set([...emittedKeys(), ...emittedKeys({ unverifiedReason: "wrong-content", captureVerified: false }), ...emittedKeys({ pressed: [] })]);
 }
 
 test("#1637 PLANTED DRIFT: a field added to a copy of the table is reported on the documented side", () => {

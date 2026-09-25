@@ -432,6 +432,70 @@ form state) and, for a failed page, `error`. The `findings` output is the sum ov
 `task-completable` is `true` only when every page was captured and judged completable. The CLI takes the same list:
 `npm run witness -- <url> <url> ...` or `--urls "<url> <url>"`, with `--max-pages N` as the override.
 
+## Logging in: `flows` and `login-flow`
+
+To test a page BEHIND a login, give the Action a flows file and the name of the flow in it that logs in
+([ADR 0038](adr/0038-authenticated-capture.md)). **Read [SECURITY.md](../SECURITY.md#it-can-log-in-to-the-page-it-examines-and-then-it-holds-a-credential--2026-09-24-adr-0038)
+first: the run holds a credential, and this section is only how to use it.**
+
+```yaml
+# .github/workflows/a11y.yml — the repository MUST be private (see below)
+on: pull_request
+jobs:
+  a11ign:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: a11ign/a11ign@v1
+        env:                                   # the credential enters HERE, from GitHub Secrets, and nowhere else
+          APP_TEST_USER: ${{ secrets.APP_TEST_USER }}
+          APP_TEST_PASSWORD: ${{ secrets.APP_TEST_PASSWORD }}
+        with:
+          url: https://staging.example.com/orders
+          task: Review my recent orders
+          flows: .github/a11y-flows.yml
+          login-flow: login
+```
+
+```yaml
+# .github/a11y-flows.yml
+version: 1
+origin: https://staging.example.com            # every goto is resolved against it, and leaving it fails the run
+flows:
+  login:
+    steps:
+      - goto: /login
+      - fill: { field: "Email address", from-env: APP_TEST_USER }
+      - fill: { field: "Password",      from-env: APP_TEST_PASSWORD }
+      - press: "Sign in"
+      - expect: { heading: "Dashboard" }       # REQUIRED as the last step of a login flow
+```
+
+**Steps** are `goto`, `fill`, `choose`, `check`, `press`, `expect` and `capture`, and nothing else: no script step, no
+evaluated expression, no fixed sleep (`expect` waits for a condition, and its wait is bounded). A control is named by the
+name a screen reader announces, never by selector, and `within:` and `nth:` tell two of the same name apart. **A login's
+`fill` takes `from-env:` only**; a literal in the login flow is refused, and so is a literal typed into a password field in
+any flow. A control the flow cannot address by its accessible name ends the run with `auth-login-failed` (`unbindable-field`):
+that is a real 4.1.2 failure of your login form, and nothing behind it can be examined.
+
+**What the run does to protect you, and what you must do.**
+
+| | |
+|---|---|
+| **Use** | A dedicated test account **without MFA or SSO**, on staging. Its username and password must each be **at least 8 characters and not an ordinary word** (`a11y-audit-7f3c`, not `admin`): a shorter value is refused, because hiding it would rewrite your page's own text. MFA, SSO and CAPTCHA are out of v1. |
+| **Private repositories only** | A run on a repository that is **not private is refused before NVDA is installed** (`auth-refused-public-repository`), whichever of `comment-on-pr`, the job log and the artifact you meant to use: all of them, and the job summary, are readable by anyone on a public repository. |
+| **What it presses** | Only what your files name. `probe-forms` and `probe-navigation` are turned off for an authenticated run **whatever you set** (an input's default cannot be told from a choice), and the run says so before it starts. The report and `result-json` list **What this run pressed**, by control name. |
+| **The judge** | `judge-backend: local` (the default). `anthropic` or `openai` is refused for an authenticated run unless you also set `send-authenticated-transcript-to-judge-vendor: "true"`, which names the vendor in the log before the judge runs. |
+| **The log** | The Action adds `::add-mask::` for the URL-encoded and base64 forms of every `from-env` value, which GitHub does not derive. Masks do not apply to FILES: every value is also replaced with `‹credential›` in `result-json` and the summary, and the count is disclosed ("2 announcements contained a value from your login and were redacted"). |
+| **The cost** | At least one login per capture and one per page for the rule layer, stated before the run starts. Repeated logins can trip a lockout or bot detection. |
+
+The secrets reach the run through `env:` on **the step that calls the Action**, and the flows file names the variables. They are
+never an input, because an input is interpolated into shell text. Whether a composite action's steps inherit that `env:` is
+verified on the Action rehearsal recorded in [ADR 0038](adr/0038-authenticated-capture.md); if a runner ever does not, the fallback
+is an input mapped into the step's `env:`, never into `run:` text.
+
+`npm run auth:leak-check` is the check for whether a credential reaches a file, with a positive control. It has been read once against a real NVDA (2026-09-25, #2399: exit `0`, with a working positive control), and the first defence held on that page; **the redaction and the per-character refusal remain the defence to rely on**, and one reading is not a promise about yours. See the ADR for its three invocations and what each must exit.
+
 ## Outputs
 
 | Output | Use |
@@ -466,6 +530,7 @@ its top-level fields, and what each one lets you check.
 | `captureVerified`, `captureUnverifiedReason` | `false` when the capture could not be confirmed to have read the requested page. The reason is `wrong-content` (it read something else, such as browser chrome) or `contained` (it read only part of the page, usually a consent dialog). The summary then reports no findings and the run exits 2: a failed measurement, not a clean page. |
 | `leftSite` | Where the examination ended because an activation took the browser off the page's site: the `control` activated, `from` and `to` (`null` when unknown), whether the worker `recorded` it or it was `derived` from the announcements (`source`), and the quoted `evidence`. `null` when every activation stayed on the page. `structure` and `interaction` are then only what was observed before it. |
 | `artifactPath` | Where the capture behind this result was written, or `null` under `--no-keep`. |
+| `pressed` | **Only on an authenticated run** ([below](#logging-in-flows-and-login-flow)): the controls the run pressed, by accessible name, never a value. An authenticated run presses only what its own files name (a login's `press:`, `check:` and `choose:` steps), so this is the whole list. Absent on every other run. |
 
 ### Reading `outcomes`
 
