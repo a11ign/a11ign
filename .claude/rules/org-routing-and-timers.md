@@ -16,7 +16,7 @@
   that cost four red runs: a DUPLICATED `Acceptance:` section, and a MISSING `Closes`. A PR finishing no
   row declares `Closes: none -- <reason>`, em dash required.
 - **A settled draft with no verdict goes to the external reviewer; an engineer reviews only when `ceo`
-  names one** (#1394). An engineer with no row in build claims the next Ready row.
+  names one** (#1394). A spawned engineer never claims a second row (#2407).
 
 ## `lane:ceo` protects review, not authorship (ceo, 2026-09-18)
 
@@ -38,15 +38,15 @@
 - **That reading is POSTED and DELIVERED (#2083):** post on **#928** (the RECORD), then deliver it with
   **`npm run prompt:session -- ceo "…"`**. **Both halves, or it is unrecorded or undelivered.**
 - **`orchestrator` is the first reader for fleet and lab questions**; answers are posted on the row.
-- **The author of a draft prompts its parity reviewer** on open and after every head-changing push:
-  `npm run prompt:session -- reviewer "…"` for odd PR numbers, `reviewer-2` for even. **`prompt:session`
-  CLEARS THE SESSION FIRST and a raw `herdr … agent prompt` does not** — use the raw call only to
-  RE-prompt the same draft. No verdict 30 minutes after it goes to `product-manager`, who re-prompts once,
-  then `ceo`.
+- **PR n's reviewer is `reviewer-<n>`, a herdr name, no roster entry (#2401):** the gate starts it.
+  The author re-prompts a live one after a push: `npm run prompt:session -- reviewer-<n> "…"`.
+  **`prompt:session` CLEARS A STANDING SEAT, never a `reviewer-<n>` or spawned `worker-<n>` (#2483)**, so
+  it re-prompts a reviewer; no raw `herdr … agent prompt`. No verdict in 30 min goes to `product-manager`,
+  who re-prompts once, then `ceo`.
 - **ONE CALL IS ENOUGH, AND RETRYING IS THE WRONG THING (#1966).** `prompt:session` **queues** the order
-  (**exit `2` is `QUEUED`, not a failure**) and the next `work:tick` delivers it, cleared. **Do not retry
-  and do not poll:** it clears its target first, so a retry landing as a session goes idle wipes the work
-  it interrupted. A refusal naming a session the org does not know is a typo — NOT queued, and it says so.
+  (**exit `2` is `QUEUED`, not a failure**) and the next `work:tick` delivers it. **Do not retry
+  and do not poll:** a retry is a second copy, and wipes a standing seat's work. A refusal naming a
+  session the org does not know is a typo — NOT queued, and it says so.
 - **A REPORT THAT NEEDS NO DECISION IS A ROW WRITE, NOT AN ORDER (#2167).** The comment plus the label
   change IS the completion, the claim report, the close-out — no turn, and read when its reader next
   acts. So `prompt:session` REFUSES a target already holding 10 (55 of 60 queued orders were for one

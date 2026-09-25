@@ -36,6 +36,7 @@ entry names what is missing, what it would cost, and what would tell you it is f
 - [§46](#46-a-document-identity-drops-the-query-string-so-a-site-whose-documents-differ-only-by-query-reads-as-one-document) A DOCUMENT IDENTITY DROPS THE QUERY STRING, so a site whose documents differ only by query reads as ONE document
 - [§47](#47-the-walk-alone-is-177-seconds-on-a-926-trip-page-so-no-probe-budget-can-rescue-it-and-the-report-has-to-say-what-it-did-not-walk) THE WALK ALONE IS 177 SECONDS ON A 926-TRIP PAGE, so no probe budget can rescue it and the report has to say what it did not walk
 - [§48](#48-a-reviewer-can-act-as-a11ign-bot-through-any-shell-wrapper-and-no-path-shim-can-change-that-accepted-by-ceo-2026-09-24-2402) A REVIEWER CAN ACT AS a11ign-bot THROUGH ANY SHELL WRAPPER, AND NO PATH SHIM CAN CHANGE THAT — ACCEPTED by ceo, 2026-09-24 (#2402)
+- [§49](#49-reviewer-auth-failure-is-detected-from-text-nobody-has-seen-render-and-the-refresh-race-is-unmeasured-open-by-design-2401) REVIEWER AUTH FAILURE IS DETECTED FROM TEXT NOBODY HAS SEEN RENDER, and the refresh race is UNMEASURED — OPEN, by design (#2401)
 <!-- known-gaps-index:end -->
 
 ## The order these should be done in
@@ -2842,9 +2843,21 @@ same page read `tabs 2, revealedAt 1` from one path and `tabs 8, revealedAt −1
   `revealed: false` on the good half, where the original capture read `tabs 8, revealedAt −1`). Every reading
   above is a corpus case; nobody has re-captured `Daytime telephone` → panel, so that path still rests on
   the reset being offline-proven only, as §43's "BOTH HALVES BUILT" paragraph says.
-- **NOT answered — `rules:coverage` reporting `1.4.13 … 1 real` rather than `0`.** It was read as
-  `15 corpus / 1 real` on 2026-09-10, before the reset fix landed, and nothing here re-reads it after; a
-  reading from before the fix cannot say the fix reached the product path.
+- **Answered — `rules:coverage` reporting `1.4.13 … 1 real` rather than `0`.** It was read as
+  `15 corpus / 1 real` on 2026-09-10, before the reset fix landed, and #31's merge (#2263) recorded it as not
+  re-read. `orchestrator` then read it after the fix, on the lab (`npm run lab:job -- -e job=rules-coverage`,
+  exit 0, at `c7ec09dbfaee`, over 4,564 corpus and 119 real captures), so
+  **rules:coverage read 1 real on 2026-09-24** ([#31, 2026-09-24T08:11Z](https://github.com/a11ign/a11ign/issues/31#issuecomment-5810389692)):
+
+  ```
+  criterion  claimed    corpus     real   verdict
+  1.4.13     partial       23        1   validated on real evidence
+  ```
+
+  Quoted, not re-taken here. **`1 real` is ONE real capture, and it is not the fixture-pair condition above:**
+  it says a real page has fired the rule, not that the probe finds `Daytime telephone` → panel through the
+  real-page path with `revealed: true` on the bad half and `revealed: false` on the good half. That condition
+  stays open.
 
 So this section stays open for the real-page half, and no longer for the question of whether the probe is
 position-dependent on the corpus.
@@ -3221,3 +3234,61 @@ that measurement, not by taste.
 (it can post a review but not close, merge or edit, so the exposure shrinks to what that token can do), or the
 reviewer running under its own uid (so `hosts.yml` is no longer readable by every session's user). Either makes a
 wall possible, and neither is an engineering step, so no row is filed for it and nothing else reopens this. `reviewer-setup.test.ts` pins that this entry and `reviewer.md` keep saying so.
+
+## 49. REVIEWER AUTH FAILURE IS DETECTED FROM TEXT NOBODY HAS SEEN RENDER, and the refresh race is UNMEASURED — OPEN, by design (#2401)
+
+Per-PR reviewers (#2401) put N codex instances on ONE credential (`~/.codex/auth.json`), and `ceo`'s ruling was that
+the refresh reading does NOT gate the build: the access token is valid to 2026-10-03T18:47Z, and forcing a refresh
+could log out live reviewers. So the row ships a DETECTOR (`work-gate.mjs`, cause `reviewer-auth-failed`, to `ceo`)
+and treats **the first real refresh as the measurement**. What is and is not known, as of 2026-09-24:
+
+- **Signal (a), codex's own text, was OBTAINED without forcing a refresh and is NOT VERIFIED TO RENDER.** The four
+  phrases in `CODEX_AUTH_FAILURE_TEXT` are verbatim strings of the installed `codex-cli 0.156.1` binary (the
+  detector's test re-reads them from it). No live failure was available, so nothing shows that a failed login
+  puts any of them **in a pane** rather than only in a log, and a newer codex may reword them. A pane that fails
+  silently is caught by signal (b) alone, after `REVIEWER_SILENCE_MS` (30 min, **a chosen number, not a measurement**).
+- **Signal (b) can only fire for an instance that STILL OWES a verdict.** A refresh that logs out an instance which
+  had already answered is invisible until that instance is next prompted, and then it looks like signal (b) for a
+  reason a reader must not confuse with a fresh failure.
+- **"Live instances" in the refresh ledger is the REGISTRY's count** (instances this path started and has not
+  ended), not a herdr reading: one closed by hand stays counted until its pull request closes.
+- **The ledger records a failure at DETECTION, not at the refresh**, up to 30 minutes later, as its own line naming
+  the refresh it followed. "Whether any then failed" is therefore answerable only for refreshes older than that bound.
+- **The review checkout is a linked worktree under `~/reviews`, chosen on a measurement of `codex sandbox` and NOT
+  seen in a live instance.** Under the reviewer's own policy `git checkout` and `git fetch` were refused with `Read-only
+  file system` in both a shallow clone and a linked worktree (codex protects `.git`), so the tick prepares and
+  re-points the tree and the order says so. Not measured live: that an instance reviews correctly from it, and that
+  a teardown removes it on the host. A teardown that fails leaves the tree on DISK (not `/tmp`, #2163), so a leaked
+  tree costs disk until someone removes it; the failure is reported, not retried.
+- **The per-instance clean-verdict count** the role document keeps for the standing `reviewer` (`ceo` samples every
+  fifth `convinced` per instance) **has no defined meaning for an instance that sees one pull request.** Instances
+  start OFF the line until `ceo` rules how the count is kept.
+
+**What closes it:** the first natural refresh (due after 2026-10-03T18:47Z) with N instances live, read from
+`reviewer-refreshes`, beside the wake ledger. Record it here, and then choose the bound and the count from it.
+
+## 50. THE COMPILE CACHE MOVED OFF `/tmp` FOR SHIPPED UNITS AND ONE HOST DOTFILE, and a session already running still writes the old place — HOST FACT, nothing in the repo verifies the dotfile (#2458)
+
+**The writer, measured 2026-09-25 by worker-15 with one command at a time under a private `TMPDIR`** (only that
+command's writes are counted): `tsc`, `eslint`, `rstest` and `changeset` each call `module.enableCompileCache()`
+with no directory, and Node then writes `<os.tmpdir()>/node-compile-cache`. `npm run lint` left 895 files,
+`eslint --version` 194 (entries, directories included), `rstest --version` 28, `changeset --version` 14,
+`tsc --version` 4, `node -e 1` and a `tsx` one-liner no file at all. The row's first reading ("not a launcher") was right about launchers and blind to these four, which
+write on load. **One file copied to two directories made two entries** (measured with a two-file fixture), so the
+key includes the path and every checkout multiplies it: that is the mechanism behind 141,353 inodes, **inferred**
+from that fixture and not counted on the outage's own directory: it was rebuilt after the reboot and held 2,330
+files when read.
+
+**What was done.** Every shipped `.service` carries `Environment=NODE_COMPILE_CACHE=%h/.cache/node-compile-cache`,
+pinned by `host-units.test.ts` (`compileCacheDrift`, with a negative control). And the agent account's `.zshenv`
+exports the same value for every session shell; **that file is on the host and outside this tree, so nothing here
+verifies it and a fresh host would not have it.** Re-run `zsh -c 'echo $NODE_COMPILE_CACHE'` to read it.
+
+**What is NOT done.**
+- **A session whose shell started before the `.zshenv` line still writes `/tmp/node-compile-cache`** until it is
+  restarted, and the directory that exists there now was not removed (a cache, safe to delete, and not this row's
+  to do to other sessions' live work).
+- **`host:check` does not read the dotfile.** A session started without it regresses silently; the tell is a new
+  `/tmp/node-compile-cache` after a session has run `npm run lint`.
+- **The cache directory is unbounded** under the home too, and has no sweep: it costs the same inodes on a
+  persistent disk, where nothing ages it out. A per-checkout key is why it grows with the number of worktrees.
