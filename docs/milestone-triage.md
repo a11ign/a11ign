@@ -39,7 +39,7 @@ Three verdict words, each matched by the two `grep` commands in #2273's Acceptan
 | #2132 | OFF | `prompt:session` cannot tell a decision from a report: the org's session tool |
 | #2188 | HELD (OFF) | 2.4.6 acceptance cases: a subtype outside the four that assert (`CLAUDE.md`), so its finding is a referral, and one failing pair is a fixture that does not vary the criterion. In progress under `session:worker-4`; moves when that claim closes or is released |
 | #2211 | HELD (OFF) | wording in the `fleet:status` output. In progress under `session:worker-judge` (the author of this document, PR #2437); moves when that PR merges and the row closes, so it never needs to move |
-| #2258 | HELD (OFF) | the retrained candidate fails held-out acceptance on 4.1.3. A candidate that has not shipped reaches no outsider (the first sort's reading, that the shipped model is the previous one, was not re-derived here). In progress under `session:orchestrator`, `fleet-gated`. **Moves LAST**, after #2430 merges and the retrain reading is posted on #2258, or when `product-manager` asks `orchestrator` there to release it: it is the only open `fleet-gated` row, and moving it empties the fleet batch (below) |
+| #2258 | HELD (OFF) | the retrained candidate fails held-out acceptance on 4.1.3. A candidate that has not shipped reaches no outsider (the first sort's reading, that the shipped model is the previous one, was not re-derived here). In progress under `session:orchestrator`, `fleet-gated`. **Moves LAST**, after #2430 merges and the retrain reading is posted on #2258, or when `product-manager` asks `orchestrator` there to release it: it is the only open `fleet-gated` row (the fleet batch is scoped by the label, not the milestone, since #2443, so moving it does not empty the batch) |
 | #2259 | HELD (OFF) | a held-out count that could overturn a cut ruling on the scratch model. In progress under `session:worker-9` |
 | #2273 | HELD (OFF) | this row. Sorting the milestone is the org's own process, and by the test it is OFF: it closes when its PR merges, so it is not moved |
 | #2358 | HELD (OFF) | `A11IGN_BOT_TOKEN` is the chairman's personal token and CI merges as `DanBeckDev`: the org's own CI identity. In progress under `session:worker-15`, filed `needs:chairman` |
@@ -54,14 +54,6 @@ Three verdict words, each matched by the two `grep` commands in #2273's Acceptan
 **Tally at this reading:** 20 open rows = 18 sorted + 2 not sorted. Of the 18: 6 ON, 5 OFF (moved), 7 HELD
 (OFF, not moved). So the milestone still holds 15 rows after the move: the 6 ON, the 7 HELD, and the 2 not
 sorted.
-
-## A `fleet-gated` row filed OFF-path is not offered to `orchestrator`; put it on the milestone or say so on the row
-
-Both feeders that hand `orchestrator` its fleet batch scope by MILESTONE, not by label: `FLEET_MILESTONE`
-in `packages/agent-org/src/work-gate.mjs` (used by `partitionFleetBatch`) and `MILESTONE` in
-`packages/agent-org/src/fleet-gated-nightly.mjs`. A `fleet-gated` row on `Out of release` is invisible to
-both. That is how #2212 hid for hours on 2026-09-24 until it was moved back in by hand. Scoping the feeders
-by the `fleet-gated` label instead is #2443 and is not built here.
 
 ## What became of the rows the first sort listed
 

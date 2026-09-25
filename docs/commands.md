@@ -20,7 +20,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node packages/agent-org/src/close-rows-sweep.mjs` — close the rows every PR merged in the window declared, riding trunk.yml's push and nightly's hourly cron
 - `node packages/agent-org/src/closes-mismatch-check.mjs` — refuse when a PR's declared Closes line disagrees with what GitHub will actually close
 - `node packages/agent-org/src/control-plane-hygiene.mjs` — print every control-plane hygiene number fresh, measured by command, never typed once
-- `node packages/agent-org/src/fleet-gated-nightly.mjs` — fleet-gated-nightly -- gather the fleet-gated rows on the milestone (no model), post the
+- `node packages/agent-org/src/fleet-gated-nightly.mjs` — fleet-gated-nightly -- gather the open fleet-gated rows (no model), post the
 - `node packages/agent-org/src/host-units.mjs` — compare the systemd units this repo SHIPS against the ones the agent host actually runs
 - `node packages/agent-org/src/mark-primary-checkout.mjs` — mark or query whether this checkout is the fleet-driving primary, which the hooks read
 - `node packages/agent-org/src/merge-guard.mjs` — ask whether a PR's checks actually ran and passed, never trusting mergeStateStatus alone
@@ -63,6 +63,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node packages/guards/src/mutant-survivors.mjs` — choose mutants on a diff's changed lines by machine, run the named tests against each, and list the survivors
 - `node packages/guards/src/mutation-check.mjs` — prove a guard actually bites: mutate a file, confirm its test fails, restore, confirm it passes
 - `node packages/guards/src/piped-exit-status-guard.mjs` — detect a piped command whose exit status was read from the wrong side of the pipe
+- `node packages/guards/src/test-memory-cap.mjs` — run a test runner under a per-process memory cap (systemd-run MemoryMax) and say what the cap did
 - `node packages/guards/src/tree-wide-guards.mjs` — every tracked *.test.ts file that DECLARES ITSELF a TREE-WIDE GUARD by importing and calling
 - `node scripts/auth-leak-check.mjs` — prove a login's credential never reaches what a run writes (ADR 0038) -- drives a real capture on THIS machine's worker with a fake credential, then searches for it. Exit 0 clean, 1 a leak, 2 could not examine.
 - `node scripts/build-packages.mjs` — run tsc --build across every package under packages/ in dependency order
