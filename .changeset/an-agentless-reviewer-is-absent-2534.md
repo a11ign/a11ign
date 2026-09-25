@@ -1,0 +1,5 @@
+---
+"@a11ign/agent-org": patch
+---
+
+**A reviewer whose codex EXITED is counted absent, closed, and replaced (#2534).** `reviewer-2525`'s codex self-updated, printed "Please restart Codex." and exited, leaving a workspace labelled `reviewer-2525` with `agent_status: "unknown"`; `reconcileOpenReviewer` read the label as presence, so #2465's dead-reviewer count never started and `spawnableReviewer` refused 14 ticks running while #2525 went unreviewed about 2 hours. A registered instance whose workspace reads `unknown` (no agent) now counts as absent under the same rule (a COMPLETE listing advances `REVIEWER_DEAD_AFTER_TICKS`, a partial one holds, a live status resets it); at the threshold the workspace is CLOSED first, since its label is what blocks the spawn, and only then is the key cleared so the next tick starts a fresh instance. A close that fails keeps the key one tick short of dead and retries. The `reviewer-absences` line carries `presence: "workspace with no agent"` beside `"absent from the listing"`. Only registered `reviewer-<n>` instances are reached; `ceo`, `orchestrator` and any other label are untouched even at `unknown`.
