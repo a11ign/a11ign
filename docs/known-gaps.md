@@ -3468,6 +3468,8 @@ would be invented and then pinned. The misses are accepted BY ENUMERATION as the
 glancing at a moment where a control announced nothing and nothing visible changed; what a miss costs is a status page the triage layer did not flag.
 **Inferred, not measured:** the rise from 10 to 18 misses is the same conflict paid in recall, because the heads are handed near-identical inputs with opposite labels.
 
+**`4.1.3:status-waiting` is SILENT at its operating point, and `ceo` ruled (2026-09-25, #2536) that the model MAY ship so.** It found 0 of 29 development positives at its cut, so **the model does not detect waiting-status announcements**, and nothing here or in the README may say otherwise. The named-head entry is `packages/lab/src/training/accepted-silent-heads.json`, read by `releasability()`'s callers; it excuses that head's SILENT line only, the id is the match and the count is provenance, and any other silent head still blocks. A later retrain where the head scores a true positive reports the entry as `stale`.
+
 **Option (ii) — take `4.1.3` status to the rules layer — is the only route that removes the false positive, and it is a PRICED OPTION, NOT QUEUED.**
 It is the capture change ADR 0021 already priced:
 - a before-and-after census on a `taskButton` (today `postSubmitNames`, the tree census, is written only by the `submit` probe, so every `taskButton` record reads `absent`);
