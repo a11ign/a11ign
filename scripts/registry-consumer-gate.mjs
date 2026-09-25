@@ -80,13 +80,18 @@ const DEPENDENCY_FIELDS = /** @type {const} */ (["dependencies", "optionalDepend
 const ZERO_PIN = /^(\^|~|>=)?0\.0\.0$/;
 
 /**
- * Node's own codes for "this specifier does not resolve", which is the packaging defect an entry-point import
- * exists to find. Anything else thrown at import ran the package's own code: see `importFindings`.
+ * Did NODE'S LOADER refuse this import, as opposed to the package's own code throwing? Node's loader failures all
+ * carry an `ERR_*` code (`ERR_MODULE_NOT_FOUND`, `ERR_PACKAGE_PATH_NOT_EXPORTED`, `ERR_PACKAGE_IMPORT_NOT_DEFINED`
+ * for an undefined `#alias`, ...) or CommonJS's `MODULE_NOT_FOUND`, and a syntax error is the loader's too. This was
+ * a list of seven codes and the reviewer of #2519 found the eighth (`ERR_PACKAGE_IMPORT_NOT_DEFINED`) passing as
+ * UNCHECKED, so it is now the SHAPE of the code rather than a list a new Node release can outgrow. Anything without
+ * one ran the package's own code: see `importFindings`.
+ * @param {{ code: string | null, errorName: string }} failure
+ * @returns {boolean}
  */
-const RESOLUTION_CODES = new Set([
-  "ERR_MODULE_NOT_FOUND", "MODULE_NOT_FOUND", "ERR_PACKAGE_PATH_NOT_EXPORTED", "ERR_UNSUPPORTED_DIR_IMPORT",
-  "ERR_INVALID_PACKAGE_CONFIG", "ERR_INVALID_PACKAGE_TARGET", "ERR_UNKNOWN_FILE_EXTENSION",
-]);
+export function isLoaderFailure({ code, errorName }) {
+  return (code !== null && (code === "MODULE_NOT_FOUND" || code.startsWith("ERR_"))) || errorName === "SyntaxError";
+}
 
 /**
  * @typedef {{
@@ -242,7 +247,7 @@ export function importFindings(imports, { requireImports }) {
   for (const outcome of imports) {
     if (outcome.ok) { out.checked.push(`import("${outcome.name}") succeeded`); continue; }
     const failure = `${outcome.errorName}${outcome.code ? ` ${outcome.code}` : ""}: ${outcome.message}`;
-    const resolution = (outcome.code !== null && RESOLUTION_CODES.has(outcome.code)) || outcome.errorName === "SyntaxError";
+    const resolution = isLoaderFailure(outcome);
     if (resolution || requireImports) {
       out.refused.push({ rule: "import-failed", package: outcome.name, detail: `import("${outcome.name}") failed -- ${failure}` });
     } else {
