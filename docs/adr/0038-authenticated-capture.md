@@ -131,6 +131,17 @@ changed, or a field the script cannot address by accessible name end in `auth-lo
 step at the end of a login flow is **required by the schema**: a login with no post-condition would report the
 login wall as a page.
 
+**A session that does not hold is `auth-session-lost`, a fault of its own (#2563).** Each capture logs in fresh, so a
+bounce can only happen between the login and the read of ONE capture. After the requested page loads on the pinned origin
+and before `authApplied` is marked, both interpreters read the page's accessibility tree; if **every** control the login
+flow FILLS (by accessible name, `within:` honoured) is on it, the run was shown the login wall and ends in
+`auth-session-lost`, with the same sentence from either layer. The signal is the form and not the flow's `expect:`,
+which holds on the dashboard and on no other page. It is a fault and not a fourth `auth-login-failed` reason, because the
+login itself succeeded. **What it does not do:** it reads the main frame's tree only (both drivers call
+`Accessibility.getFullAXTree` with no `frameId`), so a login form inside an iframe is not seen; it reads once, so a wall
+rendered after that read is not seen; a page carrying only some of the login's fields is not the wall, by design; and
+**one-session-per-account invalidation of the rule layer's concurrent login is NOT MEASURED in this repo and is not claimed.**
+
 **The channel is not designed here.** Making the worker's channel authenticated and encrypted is a separate
 decision with its own ADR, and until it exists the refusal stands. **Even then, shipping secrets to a shared
 fleet worker is Clause 2's custodianship**, so the ADR that opens the channel must answer that first.

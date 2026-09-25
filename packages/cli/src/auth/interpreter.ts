@@ -8,7 +8,7 @@
  * parameter here through which a cookie could arrive.
  *
  * It is a PORT of `packages/nvda-worker/src/auth-flow.mjs`'s interpreter, function for function and in the same
- * order, and the two are held equal by `interpreter-parity.test.ts`, which drives one table of scenarios through both
+ * order, and the two are held equal by `interpreter.test.ts`, which drives one table of scenarios through both
  * over one fake browser. They are two copies because they cannot be one: the worker is plain `.mjs` with no build step
  * (ADR 0031) and is not a dependency of this package, and this package must not import it (`isolation-smoke.mjs`).
  * The ADR calls the seam the DRIVER — two implementations of a small interface — and says the interpreter is written
@@ -170,6 +170,31 @@ async function currentOrigin(driver: AuthDriver): Promise<string> {
   return found;
 }
 
+/**
+ * Is the page the login wall? ALL of the controls the login FILLS are on it, found by accessible name. The flow's final
+ * `expect:` is the wrong signal: it holds on the dashboard and on no other page, so re-checking it on `/settings` would
+ * end healthy runs. A page with ONE control named like ONE login field (a "Password" box on a change-password page) is
+ * not the wall, and a login that fills nothing has no form to recognise, so it never is (`[].every` would say yes).
+ */
+export function landedOnLoginForm(nodes: readonly AxNode[], login: readonly FlowStep[]): boolean {
+  const fields = login.flatMap((step) => ("fill" in step ? [step.fill] : []));
+  return fields.length > 0 && fields.every(({ field, within }) => controlsNamed(nodes, { roles: FILL_ROLES, name: field, within }).length > 0);
+}
+
+/**
+ * A successful login followed by the login form on the page the run asked for: the session did not hold, or the page
+ * bounced or rendered the wall in place. Nothing else names it — a same-origin redirect ends as `wrong-page`, and a wall
+ * rendered in place is captured as the page. Reads the main frame's accessibility tree only, so a form in an iframe is
+ * not seen (ADR 0038's fault list).
+ */
+async function assertNotShownLoginWall(driver: AuthDriver, login: readonly FlowStep[]): Promise<void> {
+  if (!landedOnLoginForm(await driver.axNodes(), login)) return;
+  const names = login.flatMap((step) => ("fill" in step ? [`"${step.fill.field}"`] : []));
+  throw new AuthError("auth-session-lost", "the login succeeded, and then the requested page showed the login form: every field the "
+    + `login fills (${[...new Set(names)].join(", ")}) is on the page the run landed on. The session did not hold, so this page was `
+    + "not examined as the product.");
+}
+
 async function assertStillOnOrigin(driver: AuthDriver, origin: string, where: string): Promise<void> {
   const now = await currentOrigin(driver);
   if (now !== origin) {
@@ -262,5 +287,6 @@ export async function signIn(
   const landed = await driver.navigate(url);
   if (!landed.ok) throw new LoginFailedError("expect-not-met", "the requested page", `${url} could not be loaded after the login (${landed.error ?? "no reason given"})`);
   await assertStillOnOrigin(driver, origin, "the requested page");
+  await assertNotShownLoginWall(driver, plan.login);
   mark("authApplied", { steps: plan.login.length + flow.length });
 }

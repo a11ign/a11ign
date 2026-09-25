@@ -1,0 +1,6 @@
+---
+"a11ign": patch
+"@a11ign/nvda-worker": patch
+---
+
+**A run shown the login wall after a successful login now ends in a named fault, `auth-session-lost`, instead of being captured as a broken page (#2563).** Both interpreters (the CLI's, and the worker's `auth-flow.mjs`) read the accessibility tree of the page the run landed on, after the requested page loads and before `authApplied` is marked; if EVERY control the login flow fills is on it (found by accessible name, `within:` honoured), the run was shown the login form, whether by a same-origin redirect (which used to end as the generic `wrong-page`) or in place (which used to be captured as the page). The signal is the form, not the flow's `expect:`, which holds on the dashboard and on no other page. A page carrying one control named like one login field (a change-password page) is not the wall, and a login that fills nothing never trips it. It is a fault and not a fourth `auth-login-failed` reason: the login succeeded. `AUTH_FAULTS` goes from ten to eleven, with a `FAULT_REMEDIATION` entry and a worker `FAULT` code. **Not done:** the main frame's tree only (a login form in an iframe is not seen), one read (a wall rendered later is not seen), and one-session-per-account invalidation of the rule layer's login is not measured.
