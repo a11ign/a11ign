@@ -17,7 +17,7 @@ import { conformanceScope } from "@a11ign/evidence/conformance";
 import { documentIdentity } from "@a11ign/evidence/document-identity";
 import { reportLines, type Report } from "../report.js";
 import { readFileSync } from "node:fs";
-import { logLines, renderSummary, type RunFinding, type RunResult } from "./summary.js";
+import { logLines, renderSummary, TASK_LABEL_NOTE, type RunFinding, type RunResult } from "./summary.js";
 
 const NOT_A_TASK_CLAIM_FINDINGS = [
   { wcag: "2.4.7 Focus Visible (AA)", severity: "serious", confidence: 0.9,
@@ -89,7 +89,7 @@ test("#1387: both renderers lead with the same 'more than one document' sentence
   assert.ok(sentence, "the positive control: the producer writes the sentence for two titles");
   const { report, summary } = render(conformance);
   const lead = report.findIndex((line) => line.includes(sentence));
-  assert.equal(lead, report.indexOf("Task:  t") + 2, `report.ts must lead with it under URL/Task: ${report.join("\n")}`);
+  assert.equal(lead, report.findIndex((line) => line.startsWith("Task:  t")) + 2, `report.ts must lead with it under URL/Task: ${report.join("\n")}`);
   assert.ok(summary.indexOf(sentence) !== -1 && summary.indexOf(sentence) < summary.indexOf("## a11ign"),
     `summary.ts must lead with it above its heading: ${summary}`);
 
@@ -172,4 +172,21 @@ test("#1366: the two renderers agree finding by finding -- the summary marks ref
   assert.equal(report.filter(Boolean).length, 2, "the population: two referrals and one assertion");
   // Both renderers order by their own rule (layer, severity), so compare the counts of each kind rather than positions.
   assert.deepEqual([summary.filter(Boolean).length, summary.length], [report.filter(Boolean).length, report.length]);
+});
+
+/**
+ * #2268 (#2262 ruling a): THE `Task:` LINE ECHOES AN INPUT AND IS NOT A RESULT, in BOTH renderers.
+ *
+ * `report.ts` and `summary.ts` print the same field, and a reader met it as if it described a finding. The note
+ * is one exported constant, so changing only one renderer's line makes one of these two assertions fail.
+ */
+test("#2268: both renderers label the Task line as the input it is, in the same words", () => {
+  const report = reportLines({ url: "https://example.com", task: "Buy a bag", screenReader: "NVDA", announcements: 1,
+    verdict: { taskCompletable: true, confidence: 0.9, summary: "s", findings: [] } as unknown as Report["verdict"], axe: null });
+  const summary = renderSummary(withFindings([])).split("\n");
+  assert.ok(TASK_LABEL_NOTE.length > 0, "the note is not empty");
+  assert.ok(report.includes(`Task:  Buy a bag  (${TASK_LABEL_NOTE})`), `report.ts: ${report.join("\n")}`);
+  assert.ok(summary.includes(`**Task:** t _${TASK_LABEL_NOTE}_`), `summary.ts: ${summary.join("\n")}`);
+  assert.match(TASK_LABEL_NOTE, /label/);
+  assert.match(TASK_LABEL_NOTE, /not a finding/);
 });

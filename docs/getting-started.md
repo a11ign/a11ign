@@ -187,7 +187,7 @@ Captured 4 announcements; judging ...
 a11ign report
 ===================
 URL:   https://example.com
-Task:  Read and understand this page
+Task:  Read and understand this page  (a label you gave this run, not a finding)
 
 -- Rule-based layer (axe-core): contrast, colour, ARIA, parsing --
 not run. Visual criteria are unchecked, not clean.
