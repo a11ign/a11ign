@@ -2408,3 +2408,42 @@ refuses; the tick log names the check and the row stays offered. B2 is not asked
 Both fail open on a lookup that cannot ask, as the claim's do, and say so. **The bound on the pool is the dependency
 graph, and it is only as good as the edges in it:** a row that needs the worker fleet and carries no edge to it gets
 an instance that cannot finish, so a missing edge is a defect in the row (`product-manager`'s to fix).
+
+## A merged PR's close voids `answer:<session>`, and nothing said the wake had stopped (#2202)
+
+**A closed row wearing a live `answer:<session>` label means a named session still owes an answer there, and
+closing did not answer it.** `answer:<session>` is the org's only machine-readable "a session still owes an answer
+here". `readOpenRows` is `--state open`, so the instant a merge closed the row it left the population `answer-owed`
+reads, the 20-minute cadence stopped, and nothing anywhere said it had. That reads identically to having been
+answered.
+
+**Measured 2026-09-23T18:02Z by `product-manager`, off GitHub's own timestamps** -- three rows, all 2026-09-22, each
+labelled before a merged PR closed it, none of the three questions ever answered, all three still labelled 19-24 hours
+later:
+
+| row | `answer:` added | closed by | gap | question |
+|---|---|---|---|---|
+| #1936 | 18:04:09Z `answer:orchestrator` | PR #1944 merged 18:09:32Z | 5m23s | a lab read on the hollow-archive byte guard, asked "before merge" |
+| #1970 | 19:37:09Z `answer:product-manager` | PR #1975 merged 19:46:33Z | 9m24s | two follow-ups `ceo` assigned to `product-manager` |
+| #2034 | 23:05:54Z `answer:product-manager` | PR #2039 merged 23:20:39Z | 14m45s | re-prompt `reviewer` on draft #2039 |
+
+**The close was not the defect and is not prevented.** `Closes #N` often closes the row natively before the sweep
+runs, so the close stands. What changed is that it stopped being silent:
+
+- **`closurePlan` returns `owed: [{ number, session }]`**, across `close` and `already`, so the report is a return
+  value a test calls rather than a printed line. A `skip` row (reopened after the merge) is open again and is not in
+  it; an ordinary row is not either.
+- **`labelsToStrip` keeps `answer:*`, deliberately.** `was-ready` is kept because it is a record; `answer:*` is kept
+  because it is a live debt, and stripping it would end the wake and erase the question in one act. **So a closed row
+  wearing an `answer:` label is not `audit` debris** -- the DEBRIS finding is about claim labels, which are stripped.
+- **The closing comment says so** (`owedNote`), and the job log names every owed row, including one GitHub closed
+  first.
+- **The gate keeps waking the session.** `readClosedAnswerRows` lists the repo's own `answer:` labels, then asks for
+  the closed rows carrying any of them; `decide` takes them beside the open ones, and the prompt says the row is
+  closed and takes a comment. **Two calls, both exact, and the count moved `GH_READS.unconditional` from 6 to 8.** A
+  window over the newest closed rows would have been one call, but a question older than the window would fall out of
+  it silently -- the same defect one level down. A refused read prints a `NOTE:` on stderr rather than an empty list.
+
+**Not covered here:** `close-rows-sweep.mjs`'s own close loop (outside this row's Region) does not post the closing
+comment. It strips through the same `labelsToStrip`, so the label survives and the gate still reaches the session; only
+the note on the row is missing on that path.
