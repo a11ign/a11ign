@@ -97,6 +97,13 @@ export interface RunResult {
 }
 
 /**
+ * What the `Task:` line IS, said beside it in BOTH renderers (`report.ts` imports this): an echo of the input,
+ * which names a button for the probe to press and labels the report. Unmarked, a reader takes the line for a
+ * finding about the page, and on the default `local` judge it changes nothing that is found (#2268, #2262 a).
+ */
+export const TASK_LABEL_NOTE = "a label you gave this run, not a finding";
+
+/**
  * The conformance scope's own sentence for a capture whose marks named more than one document -- #1387.
  *
  * READ, never rephrased: `@a11ign/evidence`'s `document-identity.ts` writes it into Requirement 2, and the
@@ -635,7 +642,7 @@ export function renderSummary(result: RunResult, options: SummaryOptions = {}): 
     "## a11ign — what a screen reader actually experienced",
     "",
     `**Page:** ${result.url}`,
-    `**Task:** ${result.task}`,
+    `**Task:** ${result.task} _${TASK_LABEL_NOTE}_`,
     `**Screen reader:** ${result.screenReader}${result.transcript ? ` · ${result.transcript.length} announcements` : ""}`,
     ...pressedSummaryLines(result.pressed),
     "",

@@ -18,7 +18,7 @@ import { notAConformanceClaim, type ConformanceRequirement }
   from "@a11ign/evidence/conformance";
 import { outcomeTally, type CriterionOutcome } from "@a11ign/judge/outcomes";
 import { WCAG_22_AA } from "@a11ign/evidence/wcag";
-import { documentsSpannedSentence, insideFrame } from "./action/summary.js";
+import { documentsSpannedSentence, insideFrame, TASK_LABEL_NOTE } from "./action/summary.js";
 
 /**
  * A bare criterion number, with its plain-language name appended when we know it -- "4.1.2 Name,
@@ -501,7 +501,7 @@ export function reportLines(
     "a11ign report",
     "===================",
     `URL:   ${url}`,
-    `Task:  ${task}`,
+    `Task:  ${task}  (${TASK_LABEL_NOTE})`,
     ...pressedSection(pressed),
     // #1387: the same lead the Action's summary gives, from the same sentence. §5.2 below still carries it,
     // but that is the last section a reader meets, and every finding in between may describe either page.

@@ -65,7 +65,7 @@ A real run against `https://example.com`:
 a11ign report
 ===================
 URL:   https://example.com
-Task:  Read and understand this page
+Task:  Read and understand this page  (a label you gave this run, not a finding)
 
 -- Rule-based layer (axe-core): contrast, colour, ARIA, parsing --
 0 violation(s):
@@ -249,9 +249,11 @@ You keep your own axe, at your own version, on your own schedule; we consume its
 
 Running it is one command; getting value out of it is a few habits.
 
-**Give it a real task.** `--task` is not a label — task-completability is judged separately from the criteria, so "Find the contact details" produces a usable answer and "test accessibility" does not. Use the words a user would.
+**`task` is optional. It names a button for the probe to press, by a word from that button's label; it is a label for your report; and it does NOT change the analysis.** Leave it unset and the default, "Read and understand this page", is used.
 
-**On the shipped default (`judge-backend: local`), that separate judgement never happens.** The task still matters — it decides which control `probe-forms` activates, and therefore whether 3.3.1/4.1.3 evidence exists at all — but the local scorer has no head for task completion and never reads it, so a well-chosen task does not sharpen the *verdict*. Only a rented `anthropic`/`openai` backend reads the task and answers "could someone finish this?" See [`docs/github-action.md`'s "What `task` actually does"](./docs/github-action.md#what-task-actually-does) for the full breakdown.
+Set it when a button on the page should be pressed: a button whose announced name shares a meaningful word with the task is activated under `probe-forms`, and what NVDA says next is recorded as evidence. That word match is also what keeps "show only bags" off *Delete account*. The `Task:` line in the report echoes what you gave it and is not a finding.
+
+**On the shipped default (`judge-backend: local`), the task never reaches the judgement.** The local scorer has no head for task completion and never reads it, so no wording makes the *verdict* sharper. Only a rented `anthropic`/`openai` backend reads the task and answers "could someone finish this?". See [`docs/github-action.md`'s "What `task` actually does"](./docs/github-action.md#what-task-actually-does) for the full breakdown.
 
 **Read a finding as a claim plus its evidence.**
 

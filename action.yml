@@ -42,18 +42,19 @@ inputs:
     default: ""
   task:
     description: >-
-      What a user is trying to DO on this page, in plain words ("Complete the checkout").
+      Optional. What a user is trying to DO on this page, in plain words ("Complete the checkout").
+      Leave it unset and the CLI's default, "Read and understand this page", is used.
 
-      This changes the CAPTURE: a button whose announced name shares a meaningful word with the task gets
-      activated, and whatever the screen reader says next is recorded. That word match is the safety
-      guard — "show only bags" activates a *Bags* button and never a *Delete account* one. Since
-      `probe-forms` now defaults to true here, the task is load-bearing on a default run.
+      It does two things and NOT a third. It NAMES A BUTTON FOR THE PROBE TO PRESS: a button whose
+      announced name shares a meaningful word with the task gets activated, and whatever the screen reader
+      says next is recorded. That word match is the safety guard — "show only bags" activates a *Bags*
+      button and never a *Delete account* one. Since `probe-forms` defaults to true here, that matters on a
+      default run. It is also a LABEL FOR YOUR REPORT: the `Task:` line echoes it back.
 
-      It does NOT affect the default `local` judge's assessment. That scorer has no head for task
-      completion and never sees the task; findings come from the evidence, and the report deliberately
-      does not claim your task was completable. Only the `anthropic`/`openai` backends read the task and
-      answer "could someone finish this?"
-    required: true
+      It does NOT change the analysis. The default `local` judge never sees the task, so what it finds does
+      not depend on the wording, and the report deliberately does not claim your task was completable. Only
+      the `anthropic`/`openai` backends read it, to answer "could someone finish this?".
+    required: false
   judge-backend:
     description: >-
       local | anthropic | openai. Defaults to `local`: this project's own trained scorer, which ships in
@@ -603,7 +604,11 @@ runs:
         echo "worker ready"
 
         out="$RUNNER_TEMP/a11ign-result.json"
-        args=(--task "${{ inputs.task }}" --json)
+        args=(--json)
+        # `task` is optional, and the CLI has its own default. Pass the flag only when the input says something:
+        # an unset input is the empty string, and `--task ""` is not "no task" to a parser that only falls
+        # back on a MISSING value (#2268).
+        [ -n "${{ inputs.task }}" ] && args+=(--task "${{ inputs.task }}")
         # ONE OF THESE TWO, decided by the step above. The CLI takes a positional URL or `--urls <list>` and
         # refuses both. `max-pages` is the cap override: the flag, and only the flag -- nothing in the
         # environment reaches it, so raising the cap is always written in the workflow file (#2272).
