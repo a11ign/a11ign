@@ -48,7 +48,7 @@ on:
 
 permissions:
   contents: read
-  issues: write     # the failure comment below, on #169
+  issues: write     # the failure comments below, on #169 (coverage) and #928 (nightly-only)
 
 jobs:
   coverage:
@@ -122,10 +122,52 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: npm run build
+      # CAPTURED TO A FILE, NOT JUST THE ACTIONS LOG (#2576) -- the step below reads it to name the failing
+      # test files. `set -o pipefail`, because `| tee` on its own reports the PIPELINE's exit status as
+      # `tee`'s (always 0): without it this step would go GREEN over a red population, which is the exact
+      # failure this job exists to surface. `nightly-only-path.test.ts` pins the `pipefail`.
       - name: Run every test in the nightly-only population, refusing an empty one
         env:
           GH_TOKEN: ${{ github.token }}
-        run: npm run test:nightly
+        run: |
+          set -o pipefail
+          npm run test:nightly 2>&1 | tee nightly-only-output.log
+
+      # #2576: THE READER. Before this step a nightly-only failure was a red run on the Actions page and
+      # nothing else -- `org-watch.mjs`'s `mainColour` reads `trunk` only, so no gate cause, no comment, no
+      # row -- which is why #2546 could move no heavy test here (its rule 3: a move is allowed only when the
+      # nightly's red REACHES someone). `ceo`'s ruling on #2576 took `doc-report`'s shape over a
+      # `work-gate.mjs` question: ONE comment on #928, the org's nightly reading, naming the run and the
+      # files. A gate cause that reads this comment is a separate row.
+      # `if: failure()` fires whichever earlier step broke (install and build included), so a run with no
+      # `location:` line in the log SAYS that -- "which tests" then has no answer and the comment does not
+      # pretend it has. No `continue-on-error`: a reporter that swallows its own failure is the silence
+      # this step removes. `run_id` is in the link, so a rerun of the same failure is distinct from the next
+      # night's, and one run posts one comment.
+      - name: "Nightly-only failed -- say which test files, and where, on #928"
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          FILES=""
+          if [ -f nightly-only-output.log ]; then
+            # node:test prints `location:` under a `not ok` line and under no passing one.
+            FILES=$(awk '/^ *not ok /{f=1} f && /location: /{print; f=0}' nightly-only-output.log \
+              | grep -oE 'packages/[^/]+/nightly/[^:]+\.test\.ts' | sort -u || true)
+          fi
+          {
+            echo "**nightly-only FAILED** at \`$(git rev-parse --short HEAD)\` -- ${RUN_URL}"
+            echo
+            if [ -n "$FILES" ]; then
+              echo "Failing test files:"
+              echo
+              echo "$FILES" | sed 's/^/- /'
+            else
+              echo "No failing test file is named in the output: an earlier step (install, build) or the runner itself failed. Read the run."
+            fi
+          } > nightly-only-report.md
+          gh issue comment 928 --body-file nightly-only-report.md
 
   # #2120: THE LIVE RULESET READ, RUN UNATTENDED. Until this job existed, BOTH of
   # `branch-protection.test.ts`'s live reads were opt-in, nothing anywhere set either flag, and the skip
