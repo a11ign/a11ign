@@ -25,8 +25,11 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import test from "node:test";
-import { REPO_ROOT } from "../dataset-paths.mjs";
+import { fileURLToPath } from "node:url";
 
+// Resolved from THIS FILE, and not imported from `dataset-paths.mjs`: that module is the corpus reader, and importing
+// it charges this test the `runs/` the token-less acceptance job does not have.
+const REPO_ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
 const CHECK_SIGNALS = resolve(REPO_ROOT, "packages/lab/src/training/check-signals.mjs");
 
 /** Linux's default pipe buffer. Anything the child prints beyond it waits for the reader. */
