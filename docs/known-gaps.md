@@ -3399,14 +3399,23 @@ The gate now nudges a claim nothing has moved on for **N = 120 minutes** and rel
 - **The interrupted-pane needle (`INTERRUPTED_TEXT`) is the row's own quotation and was NOT SEEN RENDER by the author.** No pane was interrupted
   while it was written; `herdr agent read <name> --source recent` was read for ordinary idle panes only, and the layout the parser assumes (a rule,
   `❯`, a rule, a footer under the output) is copied from those. If Claude Code words the line differently the resume silently never fires, and the
-  chairman is the fallback he was before. **What closes it:** the next real interruption, read once by hand and pinned here.
-- **The nudge is offered for ONE wake window (20 minutes) and is never delivered to a session that is `working` for all of it.** A holder busy on
-  another row the whole window is never told, and is still released N minutes later. Offering it longer re-sends it every twenty minutes toward
-  `MAX_DELIVERIES`, which labels the ROW for the chairman for a stall this cause exists to handle; the trade is stated, not solved.
+  chairman is the fallback he was before. **What closes it:** the next real interruption, read once by hand and pinned here. **And the same
+  sentence is what Claude Code prints when a PERSON presses Esc**, which text cannot tell from a kill: a pane is resumed only after its session has been
+  silent for `INTERRUPTED_SETTLE_MS` (ten minutes, CHOSEN, not measured), and the resume prompt tells a deliberately stopped session to say so and stop.
+  A person who leaves a session stopped for longer than that is resumed once per twenty minutes.
+- **The second reading is fair only to a holder that was TOLD, and one that cannot be told is released anyway.** A nudge is offered every tick until the
+  wake ledger records it delivered, and the grace runs from THAT delivery. A holder that is never wakeable for `2N` (working for hours, out of allowance,
+  gone) is released at `2N` from the nudge without having been told; the work is kept either way, and the row's next instance starts in it.
+- **A release that keeps failing has no breaker beyond the tick's ATTENTION exit and a repeating `NOT RELEASED` line**, and an adoption the claim keeps
+  refusing (the kept tree re-stamped, its branch moved) is refused on every tick with nothing retiring `kept-claims.json`. Both are visible, neither escalates.
 - **The restart window (60 minutes) is measured from CAUSE deliveries only.** The handoff queue records when an order was delivered and never when
   it was answered, so the authored half has no latency here. `systemctl` answers only for the LATEST start: an earlier restart is not read, and a
   restart older than `RESTART_ACT_HORIZON_MS` (24 hours, a chosen number) is history.
 - **"Made no move" is read from the session's TRANSCRIPT** (an assistant entry between the delivery and the moment of asking), a superset of a commit,
   push, PR, row comment or label change. It errs toward NOT re-sending, and a transcript that cannot be read counts as a move.
+- **A released row whose branch is already on `origin` is NOT respawned by this.** #2031's `row-branch-unshipped` shelves a row with a pushed branch
+  and no pull request and asks `product-manager` to read it (open the PR, delete the branch, or rename it), which is right: that work may already be
+  finished. The kept worktree waits beside it, and the respawn adopts it once the row is offered again. A row released with only local work (the #2407
+  shape: uncommitted, unpushed) is offered at once and the respawn starts in the tree.
 - **A claim with no claim record (a dispatch, or a claim that named neither branch nor worktree) is not evaluated**, and the merged-PR release sees
   the newest 100 merged pull requests only.
