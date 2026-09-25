@@ -19,7 +19,7 @@
  *
  * PURE apart from the `write` callback `writeScrubbed` is handed. No file reads and no environment.
  */
-import { credentialForms, findLeaks, type Credential, type LeakHit } from "./leak-detector.js";
+import { credentialForms, findContiguousLeaks, findLeaks, type Credential, type LeakHit } from "./leak-detector.js";
 
 /** What replaces a value. Not a word a page says, and outside ASCII so it cannot be typed by accident. */
 export const MARKER = "‹credential›";
@@ -157,4 +157,27 @@ export function writeScrubbed(artifact: unknown, set: ScrubSet, write: (text: st
   const { value, redactions } = scrubArtifact(artifact, set);
   write(`${JSON.stringify(value, null, 2)}\n`);
   return redactions;
+}
+
+/**
+ * The values a run is HANDED before it captures anything — the URLs and the task — must not carry a `from-env` value
+ * either. `keepCredentialsOut` scrubs what the capture and the rule layer return, and these two are not returned by
+ * either: they are the run's own arguments, echoed by the `captureAndScan` log, `--json`, the plain report, the artifact
+ * and the Action summary. Chasing each echo would leave the next one unguarded, so a same-origin URL such as
+ * `/orders?token=<value>` (it passes the origin pin) or a task that quotes the password is REFUSED here, before a worker
+ * is leased: the value is also sent to the server and its logs in that URL, which is a leak in its own right.
+ * Names the variable and the argument, never the value.
+ */
+export function refuseIfAnArgumentCarriesAValue(
+  given: { urls: readonly string[]; task: string }, set: ScrubSet,
+): void {
+  const places = [...given.urls.map((url, index) => ({ label: `url ${index + 1}`, text: url })), { label: "the task", text: given.task }];
+  const found = places.flatMap(({ label, text }) => findContiguousLeaks(text, set.credentials).map(({ name }) => ({ label, name })));
+  if (found.length === 0) return;
+  const where = [...new Set(found.map(({ label }) => label))].join(", ");
+  const names = [...new Set(found.map(({ name }) => name))].join(", ");
+  throw new ScrubError("auth-credential-in-artifact",
+    `${where} contains a value from your login (${names}). Everything the run prints and writes repeats its URLs and `
+    + "its task, and the server would log that URL, so a run given a credential in either is refused before anything is "
+    + "captured. Remove the value from the URL or the task; the login flow supplies it.");
 }
