@@ -294,6 +294,8 @@ Two rough edges found by doing this, both recorded rather than hidden:
 
 Less than its name suggests, and worth knowing before you agonise over the wording.
 
+**`task` is optional. It names a button for the probe to press, by a word from that button's label; it is a label for your report; and it does NOT change the analysis.** Leave it unset and the default, "Read and understand this page", is used. The report's `Task:` line and the summary's `**Task:**` line echo it and say so: they are not findings.
+
 | setting | does the task matter? |
 |---|---|
 | `probe-forms: true` (**the default here**) | **Yes, for one of several things it presses.** A run under `probe-forms` always submits submit-like buttons and toggles checkboxes/radio buttons, whatever the task says; it activates any OTHER button only if its announced name shares a meaningful word with the task — so "show only bags" activates a *Bags* button, never *Delete account*. Disclosures are activated with no `probe-forms` gate at all. Asserted in `probe-choice.test.ts`; see [SECURITY.md](../SECURITY.md#it-operates-controls-on-the-page-and-one-probe-presses-buttons) for the full rule. |

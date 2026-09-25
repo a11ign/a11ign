@@ -257,6 +257,15 @@ const LIST_FLAGS: Readonly<Record<string, (args: Args, value: string | undefined
   "--login-flow": (a, value) => { a.loginFlow = value ?? a.loginFlow; },
 });
 
+/**
+ * `--task ""` is no task, so it keeps the default. `??` only falls back on a MISSING value, and the Action's
+ * `task` input is the empty string when unset, so an empty (or blank) task would otherwise REPLACE the default
+ * and print a blank `Task:` line (#2268).
+ */
+function taskOrDefault(given: string | undefined, fallback: string): string {
+  return given?.trim() ? given : fallback;
+}
+
 export function applyArg(args: Args, argv: string[], i: number): number {
   const v = argv[i];
   const setBoolean = BOOLEAN_FLAGS[v];
@@ -264,7 +273,7 @@ export function applyArg(args: Args, argv: string[], i: number): number {
   const setListFlag = LIST_FLAGS[v];
   if (setListFlag) { setListFlag(args, argv[++i]); return i; }
   switch (v) {
-    case "--task": args.task = argv[++i] ?? args.task; return i;
+    case "--task": args.task = taskOrDefault(argv[++i], args.task); return i;
     case "--worker": args.worker = argv[++i] ?? args.worker; return i;
     case "--after": args.after = afterRunArg(argv[++i]); return i;
     case "--axe-results": args.axeResults = argv[++i] ?? args.axeResults; return i;
