@@ -1518,6 +1518,7 @@ something this row silently decided either way.
 - `/compact` at 50–70% context fill, before auto-compact; quality degrades past 70%.
 - `/clear` between unrelated topics; a fresh window beats stale history.
 - Batch related requests into one message; every round-trip re-sends the whole config stack.
+- **Clauses trimmed from the loaded file under #2223 to fit the scratchpad section in the 20,000 B budget.** The opening read "These load with CLAUDE.md in every session. They are habits, not gates; the org clock on #912 reads whether they are followed." The opening also carried "One topic per file (#2092);" and "`prefix-budget.test.ts` prints it", and the Web-research bullet read "so pages stay in its context and only the digest reaches yours". The bullets above still carry the rest in full: "quality degrades past 70%", "every round-trip re-sends the whole config stack", the trigger for revisiting a model choice ("two `ceo` rulings in a week reversed as WRONG, not stale, justify raising that cause's effort or model via #1952"), and the list of what `haiku` gathers, including "directory walks". The rule itself, in each case, stays loaded.
 
 ## Web research — the 2.9 million tokens that produced the rule
 
@@ -1582,6 +1583,34 @@ something this row silently decided either way.
   *A record, not an instruction:* from 2026-09-12 until that ruling, a free engineer reviewed settled
   drafts unasked, because every verdict from 14:02Z that day was engineer-to-engineer and a draft could
   wait thirty minutes between wake-ups for the clock to name someone.
+
+## The scratchpad is shared
+
+*The rule is in [`.claude/rules/agent-practices.md`](../.claude/rules/agent-practices.md); this is the incident behind it (#2223, filed by `orchestrator`). It was written into the loaded file as a new section, never moved out of one, so there is no earlier heading to quote. **The cause was restated on 2026-09-25 by `ceo`:** the row was filed reading the outage as a full 16 GB `tmpfs`, and the host has since been rebuilt, so "the scratchpad is RAM" is no longer true and is not in the loaded rule.*
+
+- **What a session meets, and why it is the defect: a full scratchpad does not say so.** Commands return `Exit code 1` with no
+  output, or fail with `ENOSPC`; shell builtins still succeed, so the shell looks alive; a redirection CREATES the file and it is
+  0 bytes, which reads as "the command printed nothing" and not as "the filesystem refused the write". **The full disk is
+  ordinary; steps like these are indistinguishable from a command that legitimately produced nothing**, so a session will conclude
+  a grep found no matches, a job produced no artefact or a directory is empty.
+- **The corrected cause (`ceo` and `product-manager`, 2026-09-25): INODE exhaustion, 1,048,576 of 1,048,576 inodes used at 73% of
+  bytes.** That is why `df -h` looked healthy while every Bash call failed with `ENOSPC`. Test-fixture leaks from `mkdtemp`, not
+  scratchpads, held most of the inodes (#2163 watches free bytes and inodes; #2457 is the tests that never remove their
+  directory). **That is why the second rule says the scratchpad is counted in inodes as well as bytes**, and swept at one day.
+- **Measured on the agent host, 2026-09-23T19:2x-19:3xZ, the earlier reading:** `df -h /tmp` read `tmpfs 16G 13G 3.1G 80%` and
+  `du -sh /tmp/claude-1000` 9.7 GB (`/` had 52 GB free). It was then a `tmpfs`; the chairman has since moved `/tmp` to the root
+  filesystem and set the age rule to one day, and the host was rebooted at about 07:3xZ on 2026-09-25.
+- **Consumer one, 3.7 GB: a completed task's captured stdout that contained its own text.** A command read the task-output
+  directory while its own stdout was being captured into that same directory, so it quoted itself until the file was
+  3,688,951,808 bytes. Its head was the JSONL of a sibling output and its tail its own filename followed by
+  `[exited with code 0]`. `orchestrator` removed it as completed and provably self-referential, and `/tmp` went from 13 GB / 80% to
+  8.7 GB / 58% in one unlink. **That is why the first rule says never capture output into a directory you are also reading.**
+- **Consumer two, 3.5 GB: a Python venv holding the CUDA and torch wheels** (`libcublasLt`, `libtriton`, `libcufft`, `libnccl`,
+  `libcudnn`) under one session's scratchpad, left untouched because that session had live processes. **That is why the second rule
+  names virtualenvs, wheels, weights and fetched corpora:** the scratchpad is one pool for every session, and a gigabyte there is
+  a gigabyte nobody else has.
+- **What is NOT in this rule:** the host change (moving `/tmp` off `tmpfs`, the one-day age rule) was made by the chairman and is
+  recorded on #2223 rather than claimed here; the file-count half of the habit is #2457 and the free-space watch is #2163.
 
 ## The API budget — `gh api rate_limit` is a broken gauge
 
