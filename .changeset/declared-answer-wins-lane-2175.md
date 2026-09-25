@@ -1,0 +1,5 @@
+---
+"@a11ign/agent-org": patch
+---
+
+**A row's own answer to "Does the acceptance need the fleet or the lab?" now decides its lane over the five NAMED patterns, and a disagreement is printed (#2175).** #2174's Acceptance was `npm run test:org` and its numbered clause said "given a fake `systemctl`" — a test double — so `row-file` laned an offline row to `orchestrator`, which `laneReason` then refuses every other session, although the row's own section said No and nothing read it. `declaredFleetAnswer` reads the first word of that section (`No`/`Neither` → no, `Yes`/`Both` → yes; `Partly`, prose and an absent section are UNDECLARED and derive exactly as before). A No silences `systemctl`, `systemd`, the Proxmox key, `A11Y_CORPUS_REMOTE` and "on the lab" — things a test can name — and NOT an invocation (`fleet:*`, `lab:*`, `gate:stability` …), which still routes; a Yes routes with no pattern at all, the direction a null answer looked exactly like `lane:any`. `declarationDisagreement` names which side won and `row-file` prints it, so the pattern's old silent win is now a line on stderr.

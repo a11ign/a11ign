@@ -2669,7 +2669,7 @@ honest statement is that nobody knows how many real pages autofocus a control th
 
 ## 43. 1.4.13's PROBE FINDS THE PANEL ONLY FROM ONE STARTING POSITION, and the corpus path happens to start there
 
-**Status 2026-09-24: the corpus half is [VERIFIED](#verified-2026-09-24--the-corpus-half-the-probe-finds-the-panel-from-three-trigger-depths-0-1-and-5-and-only-those) at three trigger depths; the real-page half is still open.** The text below is the
+**Status 2026-09-24: the corpus half is [VERIFIED](#verified-2026-09-24--the-corpus-half-the-probe-finds-the-panel-from-three-trigger-depths-0-1-and-5-and-only-those) at three trigger depths; the real-page half is [VERIFIED](#verified-2026-09-25--the-real-page-half-the-fixture-pair-reads-revealed-true-on-both-halves-and-dismissed-splits-them) on the fixture pair, on ONE of two captures.** The text below is the
 original finding, kept as written.
 
 **Found 2026-09-06 by a fixture doing its job — by FAILING.** `rules:coverage` refused a promotion because
@@ -2843,12 +2843,66 @@ same page read `tabs 2, revealedAt 1` from one path and `tabs 8, revealedAt −1
   `revealed: false` on the good half, where the original capture read `tabs 8, revealedAt −1`). Every reading
   above is a corpus case; nobody has re-captured `Daytime telephone` → panel, so that path still rests on
   the reset being offline-proven only, as §43's "BOTH HALVES BUILT" paragraph says.
-- **NOT answered — `rules:coverage` reporting `1.4.13 … 1 real` rather than `0`.** It was read as
-  `15 corpus / 1 real` on 2026-09-10, before the reset fix landed, and nothing here re-reads it after; a
-  reading from before the fix cannot say the fix reached the product path.
+- **Answered — `rules:coverage` reporting `1.4.13 … 1 real` rather than `0`.** It was read as
+  `15 corpus / 1 real` on 2026-09-10, before the reset fix landed, and #31's merge (#2263) recorded it as not
+  re-read. `orchestrator` then read it after the fix, on the lab (`npm run lab:job -- -e job=rules-coverage`,
+  exit 0, at `c7ec09dbfaee`, over 4,564 corpus and 119 real captures), so
+  **rules:coverage read 1 real on 2026-09-24** ([#31, 2026-09-24T08:11Z](https://github.com/a11ign/a11ign/issues/31#issuecomment-5810389692)):
+
+  ```
+  criterion  claimed    corpus     real   verdict
+  1.4.13     partial       23        1   validated on real evidence
+  ```
+
+  Quoted, not re-taken here. **`1 real` is ONE real capture, and it is not the fixture-pair condition above:**
+  it says a real page has fired the rule, not that the probe finds `Daytime telephone` → panel through the
+  real-page path with `revealed: true` on the bad half and `revealed: false` on the good half. That condition
+  stays open.
 
 So this section stays open for the real-page half, and no longer for the question of whether the probe is
 position-dependent on the corpus.
+
+### VERIFIED 2026-09-25 — the real-page half: the fixture pair reads `revealed: true` on both halves and `dismissed` splits them
+
+**Two corrections to the wording above, then the reading.** (1) The section's own "what would tell you it is
+closed" says `revealed: false` on the good half. `good.html` is *"the same panel, revealed on focus and
+dismissed by Escape"* (`real-page-corpus.mjs`), and every corpus depth reads `good: revealed: true,
+dismissed: true`. A good half reading `revealed: false` would mean the probe **missed the panel**, which is
+the failure this section exists to rule out. **The discriminator is `dismissed`** — bad `false`, good `true` —
+with `revealed: true` on both. (2) A real-page capture of the pair from 2026-09-14 (protocol 18) already read `tabs 2,
+revealedAt 1` from `Account settings`, so `tabs 8, revealedAt −1` is a reading the walk can still fall back
+to, not the only one the real-page path produces.
+
+**The reading, off `lab:job -e job=capture-real-pages -e role=fixture`** (10 of 10 captured, 0 failed, twice),
+fetched with `lab:fetch` by `orchestrator`, workers 10/10 at `e19f726ecd7d245e`, protocol 21. The bad-half
+walk is from `Account settings, document, focused, read only`, NOT from `Daytime telephone`:
+
+| capture | half | worker | `revealed` | `dismissed` | `tabs` / `revealedAt` | `startedFrom` |
+|---|---|---|---|---|---|---|
+| 2026-09-25T11:42:39Z | bad | a11y-worker-8 | **true** | **false** | 2 / 1 | `Account settings, document, focused, read only` |
+| 2026-09-25T11:42:25Z | good | a11y-worker-4 | **true** | **true** | 2 / 1 | `Account settings, document, focused, read only` |
+| 2026-09-25T11:39:02Z | bad | a11y-worker-3 | `null` | not read | 8 / −1 | `Daytime telephone, edit, focused, blank` |
+| 2026-09-25T11:38:37Z | good | a11y-worker-10 | **true** | **true** | 2 / 1 | `Account settings, document, focused, read only` |
+
+All four carry `focusBefore: Security question, edit, focused, blank` where the walk got as far as the
+reveal, and `focusReset.applied: true`. **The condition is met on the second capture and on the good half of
+both. It is NOT met on the first capture's bad half, and this section does not round that to a pass.**
+
+**The first bad half is a DEGRADED capture, and what it read is the honest refusal.** Its `diagnostics[]`
+show the page was not the walk's starting point: the `focusContext` mark has `startedFrom: "terminal,
+focused, blank"`, both sweeps before it stopped `silent` (~5 s each) where the clean capture stopped
+`exhausted` (~0.3 s), and NVDA logged `browseBufferFresh` ("a new window was launched"). From that position
+the walk did read `tabs 8, revealedAt −1` from `Daytime telephone`, the very shape §43 was filed on — and
+`probeFocusReveal` answered **`revealed: null`, "a control held focus from an earlier probe, so the baseline
+was not the untouched document"**, rather than `revealed: false, "nothing appeared on focus"`. That is the
+distinction the section asked for: a `false` that could be told apart from `false FROM HERE`. The probe no
+longer asserts the absence it cannot see.
+
+**What this leaves open, precisely.** The probe's answer on a real-page path is right when the window is the
+walk's start and refuses when it is not; **why one capture in two began from a terminal on a11y-worker-3 is
+not established** (two captures, one worker each, no repeat on that worker). It is a worker-side start
+condition, not a `probeFocusReveal` defect, and it is recorded on #2478 for `product-manager` to rule on
+rather than filed here.
 
 ## 44. THE "TITLE" THREE CRITERIA COMPARE IS THE LAST THING NVDA SAID, WHICH ON a LIVE-REGION PAGE IS NOT THE TITLE
 
@@ -3254,3 +3308,29 @@ and treats **the first real refresh as the measurement**. What is and is not kno
 
 **What closes it:** the first natural refresh (due after 2026-10-03T18:47Z) with N instances live, read from
 `reviewer-refreshes`, beside the wake ledger. Record it here, and then choose the bound and the count from it.
+
+## 50. THE COMPILE CACHE MOVED OFF `/tmp` FOR SHIPPED UNITS AND ONE HOST DOTFILE, and a session already running still writes the old place — HOST FACT, nothing in the repo verifies the dotfile (#2458)
+
+**The writer, measured 2026-09-25 by worker-15 with one command at a time under a private `TMPDIR`** (only that
+command's writes are counted): `tsc`, `eslint`, `rstest` and `changeset` each call `module.enableCompileCache()`
+with no directory, and Node then writes `<os.tmpdir()>/node-compile-cache`. `npm run lint` left 895 files,
+`eslint --version` 194 (entries, directories included), `rstest --version` 28, `changeset --version` 14,
+`tsc --version` 4, `node -e 1` and a `tsx` one-liner no file at all. The row's first reading ("not a launcher") was right about launchers and blind to these four, which
+write on load. **One file copied to two directories made two entries** (measured with a two-file fixture), so the
+key includes the path and every checkout multiplies it: that is the mechanism behind 141,353 inodes, **inferred**
+from that fixture and not counted on the outage's own directory: it was rebuilt after the reboot and held 2,330
+files when read.
+
+**What was done.** Every shipped `.service` carries `Environment=NODE_COMPILE_CACHE=%h/.cache/node-compile-cache`,
+pinned by `host-units.test.ts` (`compileCacheDrift`, with a negative control). And the agent account's `.zshenv`
+exports the same value for every session shell; **that file is on the host and outside this tree, so nothing here
+verifies it and a fresh host would not have it.** Re-run `zsh -c 'echo $NODE_COMPILE_CACHE'` to read it.
+
+**What is NOT done.**
+- **A session whose shell started before the `.zshenv` line still writes `/tmp/node-compile-cache`** until it is
+  restarted, and the directory that exists there now was not removed (a cache, safe to delete, and not this row's
+  to do to other sessions' live work).
+- **`host:check` does not read the dotfile.** A session started without it regresses silently; the tell is a new
+  `/tmp/node-compile-cache` after a session has run `npm run lint`.
+- **The cache directory is unbounded** under the home too, and has no sweep: it costs the same inodes on a
+  persistent disk, where nothing ages it out. A per-checkout key is why it grows with the number of worktrees.

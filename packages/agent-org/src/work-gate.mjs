@@ -68,7 +68,7 @@ import { poolDiagnosis, refusalPoolLine } from "./api-pool.mjs";
 // Both are leaf-shaped: `auto-arm-sweep.mjs` imports only `node:*`, `cli-flags.mjs` (already here) and
 // `pr-hold-state.mjs` (no imports at all), so the gate keeps the property its own header states.
 import { armedFromApi, openPullRequestsQueryArgs } from "./auto-arm-sweep.mjs";
-import { armabilityOf } from "./pr-hold-state.mjs";
+import { armabilityOf, holdersOf, HOLD_PREFIX } from "./pr-hold-state.mjs";
 import { REPO } from "../../../scripts/repo-identity.mjs";
 // #2356: A RED `main` WAKES A FIXER. Imports only `node:*`, `parent-recheck-summary.mjs` and the repo identity,
 // so the gate keeps the property its own header states -- it runs before any `npm ci` or build.
@@ -302,6 +302,11 @@ export function readPrs(run = defaultRun) {
 export const GH_READS = Object.freeze({
   unconditional: ["pr list", "issue list --label ready", "issue list --label backlog",
     "issue list --label chairman-blocked", "issue list (all open: answer/blocked labels)",
+    // #2202: TWO SMALL CALLS, because a closed row still owing an answer is invisible to the open read above
+    // and `gh` cannot filter a label PREFIX. The first lists the repo's `answer:` label names, the second
+    // asks for the closed rows carrying any of them -- exact, so no window a row can fall out of silently.
+    "label list --search answer: (readClosedAnswerRows)",
+    "issue list --state closed --search label:<answer labels> (readClosedAnswerRows -- answer-owed on a closed row)",
     // #2356: ONE REST CALL on the core pool -- the newest runs of `trunk.yml` on `main` (readTrunkRed).
     "api actions/workflows/trunk.yml/runs (readTrunkRed -- trunk-red)"],
   conditionalOnEmptyShelf: "issue list --label epic (readEpics)",
@@ -973,6 +978,39 @@ export function readOpenRows(run = defaultRun) {
 }
 
 /**
+ * #2202: THE CLOSED ROWS THAT STILL OWE AN ANSWER -- the half of `answer-owed` that `readOpenRows` cannot see.
+ *
+ * `answer:<session>` is the org's only machine-readable "a named session still owes an answer here", and
+ * `readOpenRows` is `--state open`, so a merge that closed the row ended the wake and nothing said it had
+ * stopped. Measured 2026-09-22: #1936, #1970 and #2034, each labelled 5m23s to 14m45s before the merge that
+ * closed it, none of the three questions ever answered. The close path now KEEPS the label
+ * (`labelsToStrip`) and says so; this is what keeps acting on it.
+ *
+ * TWO CALLS, AND BOTH ARE EXACT. `gh` matches one whole label name, and this is a PREFIX over one name per
+ * session, so the repo's own `answer:` labels are listed first and the closed rows carrying any of them
+ * are asked for by name (`label:"a","b"` is GitHub's OR). A window over the newest closed rows would be
+ * one call, but a question older than the window would fall out of it -- the silent-void defect again,
+ * one level down -- so this pays the second call to have no such edge.
+ *
+ * @param {(args: string[]) => string} [run]
+ * @returns {any[] | null} `null` when refused, never `[]` -- "could not ask" is not "nobody owes anything"
+ */
+export function readClosedAnswerRows(run = defaultRun) {
+  try {
+    const labels = JSON.parse(run(["label", "list", "--search", ANSWER_PREFIX, "--limit", "100",
+      "--json", "name"]));
+    if (!Array.isArray(labels)) return null;
+    const names = labels.map((l) => l?.name).filter((n) => typeof n === "string" && n.startsWith(ANSWER_PREFIX));
+    if (names.length === 0) return [];
+    const parsed = JSON.parse(run(["issue", "list", "--state", "closed", "--limit", "100",
+      "--search", `label:${names.map((n) => `"${n}"`).join(",")}`, "--json", "number,title,labels,state"]));
+    return Array.isArray(parsed) ? withAnswerLabel(parsed) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The milestone the fleet batch is scoped to. Matches `fleet-gated-nightly.mjs`'s own constant, which is
  * where #914's bar is written down.
  */
@@ -1201,9 +1239,36 @@ export function hostDriftOrders(drift) {
  */
 const HOST_DRIFT_SESSION = "orchestrator";
 
+/**
+ * #2202: `readClosedAnswerRows` with its refusal SAID. Every other reader here degrades to `[]` silently, and
+ * that is the one shape this row exists to end for this question -- an answer owed that stopped waking a
+ * session with nothing saying it had -- so a refused read is a line, not an empty list.
+ * @returns {any[]}
+ */
+function closedAnswerRows() {
+  const rows = readClosedAnswerRows();
+  if (rows === null) {
+    process.stderr.write("NOTE: could not read the closed rows that still owe an answer -- a question on a row "
+      + "a merge already closed is NOT being chased this tick (#2202).\n");
+  }
+  return rows ?? [];
+}
+
 /** The rows that owe someone an answer. @param {any[]} rows */
 export function withAnswerLabel(rows) {
   return (rows ?? []).filter((r) => labelsOf(r).some((/** @type {string} */ n) => n.startsWith(ANSWER_PREFIX)));
+}
+
+/**
+ * EVERY place an `answer:<session>` label can sit, as the one list `decide` takes (#2492). Three reads, one
+ * input: the open rows, the open pull requests the gate already holds (`gh issue list` never returns a PR,
+ * which is why a label on #2376 woke nobody), and the closed rows still owing (#2202). Kept as one named
+ * function so a fourth place is one line here, and a test can call it rather than read `main`'s text.
+ *
+ * @param {{ openRows: any[], openPrs: any[], closedRows: any[] }} reads
+ */
+export function rowsOwingAnswers({ openRows, openPrs, closedRows }) {
+  return [...withAnswerLabel(openRows), ...withAnswerLabel(openPrs), ...closedRows];
 }
 
 /**
@@ -1356,6 +1421,18 @@ export function answersOwed(rows) {
 }
 
 /**
+ * Whether `row` is a pull request as `readPrs` returns one. `gh issue list` never returns `isDraft` or
+ * `headRefOid` and `gh pr list --json` always does, so the shape says which list it came from without a
+ * tag every caller would have to remember to set. A PR from `readPrs` carries no `state` either -- it reads
+ * as open, which is what `--state open` made it.
+ *
+ * @param {any} row
+ */
+function isPullRequest(row) {
+  return typeof row?.isDraft === "boolean" || typeof row?.headRefOid === "string";
+}
+
+/**
  * One order PER ROW that owes an answer, keyed on the row.
  *
  * PER ROW FOR #1799's REASON, applied before it could bite: each row carries a DIFFERENT question, so a
@@ -1369,21 +1446,30 @@ export function answersOwed(rows) {
  * next", a standing question deserving the 2h TTL. This names a question SOMEONE ELSE IS BLOCKED ON, so
  * it takes the 20-minute wake cadence -- 6.5 hours is what the absence of any cadence already cost.
  *
+ * A PULL REQUEST IS ONE OF THE `rows` (#2492). `gh issue list` does not return pull requests, so a label
+ * set on a PR was read by nothing (#2376 carried `answer:worker-tooling` and `answer:ceo` and the wake
+ * ledger held no `answer-owed` entry for it). `main` now hands this `readPrs`'s open PRs beside the rows.
+ * GitHub numbers issues and pull requests in ONE namespace, so `row-<n>` still names exactly one thing and
+ * the key needs no second spelling; only the WORDS change, so the reader looks where the question is.
+ *
  * @param {any[]} rows
  */
 export function answerOrders(rows) {
   const orders = [];
   for (const [session, owed] of answersOwed(rows)) {
     for (const row of owed.slice(0, MAX_ROW_ORDERS_PER_TICK)) {
+      const subject = isPullRequest(row) ? "pull request" : "row";
       orders.push({
         session,
         cause: "answer-owed",
         subject: `row-${row.number}`,
         discriminator: String(row.number),
-        prompt: `#${row.number} IS WAITING ON AN ANSWER FROM YOU. Another session asked you something `
-          + "there and cannot move until you reply -- read that row's most recent comments for the "
-          + "question.\n"
-          + `ANSWER ON THE ROW, then remove its \`${ANSWER_PREFIX}${session}\` label: taking the label `
+        prompt: `#${row.number} ${isPullRequest(row) ? "IS A PULL REQUEST " : "IS "}WAITING ON AN ANSWER FROM YOU. `
+          + `Another session asked you something there and cannot move until you reply -- read that ${subject}'s `
+          + "most recent comments for the question.\n"
+          + (row.state === "CLOSED" ? "THE ROW IS CLOSED: a merge closed it while your answer was still owed, "
+            + "and closing did not answer it (#2202). A closed row takes a comment, so answer there.\n" : "")
+          + `ANSWER ON THE ${subject.toUpperCase()}, then remove its \`${ANSWER_PREFIX}${session}\` label: taking the label `
           + "off IS the act of answering, and it is the only thing that stops this being asked again.\n"
           + "\"I cannot answer this\" is an answer -- say so, say who can, and re-label it to them. "
           + "What is not an answer is silence: on 2026-09-20 a question sat unread for 6.5 hours while "
@@ -2760,6 +2846,44 @@ export function reviewBlockedOrders(blocked) {
 }
 
 /**
+ * The two jobs a `hold:` label turns red, and nothing else does: `deliberateRefusals` refuses a held pull
+ * request on purpose (`merge-guard.mjs --ci-gate`, "IS HELD by ..."), and `gate` is red only because it
+ * `needs` it. Named here rather than read off the job so the gate stays a script that runs before any build.
+ */
+export const HOLD_RED_JOBS = ["deliberateRefusals", "gate"];
+
+/**
+ * PURE. Is this pull request red ONLY because its addressee holds it?
+ *
+ * A HOLD IS AN ANSWER (#2400), and it was read as an unanswered question. #2376 carried
+ * `hold:product-manager` on purpose until a Windows run was recorded; the hold made `deliberateRefusals` red and
+ * `gate` with it, and the order that asks `product-manager` to fix the cause was delivered 35 times to the very
+ * session that had placed the hold and answered "nothing to fix" each time. `MAX_DELIVERIES` then labelled the PR
+ * `needs:chairman`, and clearing the label did not hold: the order was still emitted, so the count stayed at the
+ * cap and the breaker re-added it (`escalateStuck` reads only what `deliver` sees, so an order never emitted can
+ * never escalate -- which is why the fix is here and not in `wake.mjs`).
+ *
+ * TWO KEYS, AND BOTH MUST HOLD. (1) Every settled-red job on the head is one of `HOLD_RED_JOBS`. It reads
+ * `head`, not the blocking set: with `gate` the only required check the blocking set is `[gate]` whatever else is
+ * red, so a real `ts / run` failure would have read as the hold's own. (2) The hold is the ADDRESSEE's own
+ * (`hold:<session>`): a hold by somebody else is not an answer from the session being asked, so the order still
+ * goes. THE EXEMPTION ENDS WITH EITHER KEY: remove the hold or let a third job go red and the order is emitted
+ * again, and the run of deliveries it earned while suppressed starts from nothing (`endedRuns` writes `RESET` for
+ * the key that stopped being emitted).
+ *
+ * WHAT IT CANNOT SEE: `deliberateRefusals` also carries #549's `Closes` comparison, and a rollup names the JOB, not
+ * the step. A held PR whose body ALSO declares the wrong `Closes` is red for two reasons and silent about one of
+ * them until the hold is released, when the refusal reappears with nothing else red.
+ *
+ * @param {any} pr @param {any[]} onHead every check on the head, narrowed @param {string} session the addressee
+ */
+function redOnlyFromHoldOf(pr, onHead, session) {
+  if (!holdersOf(labelsOf(pr)).includes(`${HOLD_PREFIX}${session}`)) return false;
+  const red = onHead.filter((c) => checksSettledGreen([c]) === false);
+  return red.length > 0 && red.every((c) => HOLD_RED_JOBS.includes(String(c?.name ?? c?.context)));
+}
+
+/**
  * A pull request whose checks have SETTLED RED, and nobody is fixing it.
  *
  * THE THIRD BLIND SPOT, and the one where work actually dies. Found 2026-09-17 by the chairman looking at
@@ -2791,6 +2915,7 @@ function failingChecksOrder(pr, required = null) {
   // ITS OWN SESSION FIRST. Falling back to `product-manager` rather than dropping the order: an unlabelled
   // red PR is still a stalled PR, and the queue's first reader can find out whose it is.
   const session = sessionOf(pr) ?? "product-manager";
+  if (redOnlyFromHoldOf(pr, onHead, session)) return null;
   return {
     session,
     cause: "pr-checks-failing",
@@ -4456,7 +4581,8 @@ function main() {
   const decided = decide({ prs: withCommitChains(openPrs), readyRows: rows, promotableRows: promotableRows ?? [],
     chairmanBlocked: chairmanBlocked ?? [], prFiles, drain, required,
     epics: epicsWhenShelfEmpty(rows),
-    answerOwed: withAnswerLabel(allOpen), openRows: allOpen,
+    answerOwed: rowsOwingAnswers({ openRows: allOpen, openPrs, closedRows: closedAnswerRows() }),
+    openRows: allOpen,
     // #2110: CONDITIONAL, and the condition is answered for free from the list already in hand --
     // `readOpenRows` fetched the labels, so "is anything claimed at all" costs no call. A quiet org with
     // nothing in progress pays nothing; a busy one pays exactly one, whatever the size of the queue.

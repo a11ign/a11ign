@@ -70,9 +70,9 @@ import { REPO } from "../../../scripts/repo-identity.mjs";
 import { READY_LABEL, WAS_READY_LABEL } from "./ready-label-audit.mjs";
 import { gitCommonDir, appendJsonl } from "./merge-guard.mjs";
 import { withBoardSnapshot, PROJECT_OWNER, PROJECT_NUMBER } from "./board-snapshot.mjs";
-import { runnerReason, laneReason, drainReason } from "./row-claim/runner-rule.mjs";
-import { activeDrain, sparePathsFrom, ledgerPathFrom } from "./wake.mjs";
-import { inBuildReason, lookupHeldRows } from "./row-claim/own-pr-health-rule.mjs";
+import { runnerReason, laneReason, drainReason, oneRowReason } from "./row-claim/runner-rule.mjs";
+import { activeDrain, sparePathsFrom, ledgerPathFrom, isSpareRole, readSpareRegistry } from "./wake.mjs";
+import { inBuildReason, lookupHeldRows, lookupOtherHeldIssues } from "./row-claim/own-pr-health-rule.mjs";
 import { resolveBlockedByOverride, blockedByExceptionNote } from "./row-claim/blocked-by-rule.mjs";
 import { blockedByEdgeReason, lookupBlockedByEdge } from "./row-claim/blocked-by-edge-rule.mjs";
 import { fileOverlapReason, lookupMyRegionFiles, lookupOpenPrFiles } from "./row-claim/file-overlap-rule.mjs";
@@ -731,35 +731,86 @@ export function failureReport(error) {
 }
 
 /**
- * #749: writes the claim's labels, split from `writeRowLabels` for the same reason
+ * #2151: THE WHOLE LABEL LIST a claim leaves the row carrying, computed from `labels` as read immediately
+ * before the write: everything it already holds stays, `ready` goes, and each of `add` joins unless the
+ * row has it. Pure.
+ *
+ * KEEPING what is there is what makes the `dispatched -> started` resume safe as a SET: the row already
+ * holds `in-progress`, `session:<me>` and `was-ready` (its `ready` went at the dispatch), so they are
+ * passed through rather than re-added, and a `was-ready` marker the resume would not recompute survives.
+ * @param {readonly string[]} labels
+ * @param {readonly string[]} add
+ * @returns {string[]}
+ */
+export function labelSetForClaim(labels, add) {
+  const kept = labels.filter((l) => l !== READY_LABEL);
+  return [...kept, ...add.filter((l) => !kept.includes(l))];
+}
+
+/**
+ * #2151: `PUT /repos/<repo>/issues/<n>/labels` -- GitHub's "Set labels for an issue" -- as `gh api`
+ * arguments: the whole list in ONE request, so there is no add half and no remove half to come apart.
+ * `row-file.mjs`'s `labelSetArgs` builds the identical request for the promote act (#2111) and cannot be
+ * imported from here (it imports this module and runs an act on load); it is outside this row's Region, so
+ * folding the two into one function is left to whoever next touches that file.
+ * @param {number} issueNumber
+ * @param {readonly string[]} labels
+ * @returns {string[]}
+ */
+export function claimLabelSetArgs(issueNumber, labels) {
+  return ["api", "--method", "PUT", `repos/${REPO}/issues/${issueNumber}/labels`,
+    ...labels.flatMap((label) => ["-f", `labels[]=${label}`])];
+}
+
+/**
+ * #749, then #2151: writes the claim's labels, split from `writeRowLabels` for the same reason
  * `postBlockedByNoteIfAny` above is (a called function's own lines are not the caller's).
  *
- * The label must EXIST before `gh` can add it (see `ensureLabelsExist`'s own header), and the ADD and the
- * REMOVE are now two SEPARATE calls, in that order, rather than one combined edit -- #677's own
- * reproduction proved a combined call is not atomic (its `--remove-label ready` applied while every
- * `--add-label` did not), so "leaves the row's labels exactly as it found them on ANY failure" can only be
- * honoured by making the removal wait until the additions are KNOWN to have succeeded: `run` throws on a
- * non-zero exit (`defaultRun`'s own `execFileSync`), so a failed ADD call never reaches the REMOVE below --
- * the row keeps `ready` (worse than a clean claim, but recoverable and visible) rather than losing it while
- * gaining nothing.
+ * THE WRITE IS ONE `PUT`, NOT AN ADD FOLLOWED BY A REMOVAL. #749 split the two because #677 measured one
+ * `gh issue edit` half-applying (its `--remove-label ready` landed while every `--add-label` did not), and
+ * ordering the removal last kept a failure recoverable -- but it left a window in which the row carried
+ * `ready` beside `in-progress`, PERMANENTLY if the second call never ran, which `ready-label-audit`'s
+ * `handClaims` reads as a claim made outside this mechanism. A set replacement has no window: the row's
+ * labels are exactly the list below or, if the request failed, untouched.
+ *
+ * WHAT A SET COSTS THAT A DELTA DID NOT, and the answer: it carries every OTHER label the row holds, so a
+ * label added by somebody else between the read it was computed from and the write is ERASED, not merely
+ * outraced -- and when that label is ANOTHER SESSION'S CLAIM it would erase the very record the after-the-fact
+ * race check below needs to find. So the list is computed from a read taken HERE, one request before the
+ * write and not the several lookups earlier that `writeRowLabels` read `before` at, and a claim by anyone
+ * else in that fresh read is REFUSED rather than written over. GitHub offers no compare-and-set on labels,
+ * so the window narrows and never closes; what remains is the `completeClaim` re-read, unchanged, which
+ * still backs off a claim that lost a race in it. A resume is answered by `decideClaim`, which proceeds on
+ * this session's own claim, and by {@link labelSetForClaim}, which keeps what it holds.
+ *
+ * The label must EXIST before it is named (see `ensureLabelsExist`'s own header), and that too happens
+ * before the read, so the read stays as close to the write as it can.
  *
  * #987: NO `branch:`/`worktree:` LABEL IS BUILT HERE ANY MORE -- see `CLAIM_RECORD_MARKER`'s own header
  * for why (GitHub's 50-character label-name cap made the documented `--worktree=<path>` usage impossible
  * for any path outside `/private/tmp`). The two facts are written as a claim COMMENT instead, by
  * `writeRowLabels` after it knows it won the race.
  * @param {number} issueNumber
- * @param {{ run: typeof defaultRun, sessionLabel: string, extraLabels: string[], wasReady: boolean,
- *   landed: string[] }} args `landed` gains each write once it has succeeded (#1399)
+ * @param {{ run: typeof defaultRun, mySession: string, extraLabels: string[], landed: string[] }} args
+ *   `landed` gains the write once it has succeeded (#1399)
+ * @returns {{ refusal: string | null }} a refusal means NOTHING was written
  */
-function applyClaimLabels(issueNumber, { run, sessionLabel, extraLabels, wasReady, landed }) {
-  const labelsToAdd = [CLAIM_LABEL, sessionLabel, ...extraLabels,
-    ...(wasReady ? [WAS_READY_LABEL] : [])];
-  ensureLabelsExist(labelsToAdd, { run });
-  run("gh", ["issue", "edit", String(issueNumber), "--repo", REPO,
-    ...labelsToAdd.flatMap((l) => ["--add-label", l])]);
-  landed.push(`added labels ${labelsToAdd.join(", ")}`);
-  run("gh", ["issue", "edit", String(issueNumber), "--repo", REPO, "--remove-label", READY_LABEL]);
-  landed.push(`removed label ${READY_LABEL}`);
+function applyClaimLabels(issueNumber, { run, mySession, extraLabels, landed }) {
+  const claimLabels = [CLAIM_LABEL, `session:${mySession}`, ...extraLabels];
+  ensureLabelsExist([...claimLabels, WAS_READY_LABEL], { run });
+  const fresh = fetchLabels(issueNumber, { run });
+  const decision = decideClaim(fresh.labels, mySession);
+  if (!decision.proceed) {
+    return { refusal: `${decision.reason} -- as read immediately before the label write, which a claim that `
+      + "landed since the first read would otherwise have been erased by. Nothing was written." };
+  }
+  // #449: `ready` is seen ONLY here, so the marker `declineRow` restores it from is decided here, on the
+  // read the write is computed from. A resume finds `ready` already gone and adds nothing.
+  const wasReady = fresh.labels.includes(READY_LABEL);
+  const labels = labelSetForClaim(fresh.labels, wasReady ? [...claimLabels, WAS_READY_LABEL] : claimLabels);
+  run("gh", claimLabelSetArgs(issueNumber, labels));
+  landed.push(`set the row's labels to ${labels.join(", ")} (\`${READY_LABEL}\` removed in the same write)`);
+  return { refusal: null };
 }
 
 /**
@@ -768,13 +819,17 @@ function applyClaimLabels(issueNumber, { run, sessionLabel, extraLabels, wasRead
  * @param {string[]} extraLabels labels written alongside `in-progress` + `session:<name>` -- `[]` for a
  *   dispatch, `[STARTED_LABEL]` for a claim/start
  * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus, branch?: string,
- *           worktree?: string, blockedBy?: string, drained?: readonly string[] }} deps
+ *           worktree?: string, blockedBy?: string, drained?: readonly string[],
+ *           instance?: { spare: boolean, rows: readonly number[] } }} deps
  *   `drained` (#2324) is the roles the drain holds back now -- see {@link drainedNow}. ABSENT MEANS NONE, so a
- *   caller that does not say is not refused for a fact it never asked about; the CLI is what asks.
+ *   caller that does not say is not refused for a fact it never asked about; the CLI is what asks. `instance`
+ *   (#2407) is what the asking session's instance holds or has held -- see {@link instanceNow}, and the same
+ *   convention: absent is a standing engineer with no rows.
  * @returns {{ claimed: true, statusMoved: true } | { claimed: true, statusMoved: false, notOnBoard: boolean, statusReason: string } | { claimed: false, reason: string }}
  */
 function writeRowLabels(issueNumber, mySession, extraLabels,
-  { run = defaultRun, moveStatus = moveProjectStatus, branch, worktree, blockedBy, drained = [] } = {}) {
+  { run = defaultRun, moveStatus = moveProjectStatus, branch, worktree, blockedBy, drained = [],
+    instance = { spare: false, rows: [] } } = {}) {
   const before = fetchLabels(issueNumber, { run });
   const decision = decideClaim(before.labels, mySession);
   if (!decision.proceed) return { claimed: false, reason: decision.reason };
@@ -818,6 +873,9 @@ function writeRowLabels(issueNumber, mySession, extraLabels,
     // #2324: A NEW ROW, which is the only kind a drained role is refused -- resuming its own is not one.
     const drain = drainReason(mySession, drained);
     if (drain) return { claimed: false, reason: drain };
+    // #2407: ONE INSTANCE, ONE ROW -- the same "new row only" placement, for a spare that holds or has held another.
+    const oneRow = oneRowReason(mySession, issueNumber, instance);
+    if (oneRow) return { claimed: false, reason: oneRow };
     const ineligible = sessionEligibilityReason(issueNumber, mySession, { run });
     if (ineligible) {
       const eligibility = eligibilityWithBlockedBy({ issueNumber, mySession, ineligible, blockedBy },
@@ -828,18 +886,13 @@ function writeRowLabels(issueNumber, mySession, extraLabels,
   }
 
   const sessionLabel = `session:${mySession}`;
-  // #449: RECORD, IN THE SAME EDIT, THAT THIS ROW WAS `ready` BEFORE THE CLAIM -- `declineRow`'s only way
-  // to know whether releasing this row should restore `ready`, since removing it below is the one place
-  // that fact is ever seen. A resumed claim (dispatched -> started, `ready` already gone) computes false
-  // here and adds nothing, harmlessly -- the marker this row's own earlier dispatch already wrote stays
-  // exactly where it is.
-  const wasReady = before.labels.includes(READY_LABEL);
   /** @type {string[]} */
   const landed = [];
   // #1399: FROM THE FIRST WRITE ON, A FAILURE IS A PARTIAL WRITE, never `COULD NOT DETERMINE` -- see
   // `LANDED_WRITE_EXIT`. The checks above wrote nothing, so a throw from them still propagates as it did.
   return withLandedWrites(issueNumber, landed, () => {
-    applyClaimLabels(issueNumber, { run, sessionLabel, extraLabels, wasReady, landed });
+    const { refusal } = applyClaimLabels(issueNumber, { run, mySession, extraLabels, landed });
+    if (refusal) return { claimed: false, reason: refusal };
     return completeClaim(issueNumber,
       { run, moveStatus, mySession, sessionLabel, extraLabels, blockedByNote, branch, worktree, landed });
   });
@@ -969,7 +1022,8 @@ export function dispatchRow(issueNumber, mySession, deps = {}) {
  * @param {number} issueNumber
  * @param {string} mySession
  * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus, branch?: string,
- *           worktree?: string, blockedBy?: string, drained?: readonly string[] }} [deps]
+ *           worktree?: string, blockedBy?: string, drained?: readonly string[],
+ *           instance?: { spare: boolean, rows: readonly number[] } }} [deps]
  * @returns {{ claimed: true, statusMoved: true } | { claimed: true, statusMoved: false, notOnBoard: boolean, statusReason: string } | { claimed: false, reason: string }}
  */
 export function claimRow(issueNumber, mySession, deps = {}) {
@@ -1683,7 +1737,7 @@ function claimLineFor(mode, issueNumber, mySession, { branch, worktree }) {
  */
 function claimOrDispatch(mode, issueNumber, mySession, { branch, worktree, blockedBy }) {
   if (mode === "dispatch") return dispatchRow(issueNumber, mySession);
-  const claimDeps = { blockedBy, drained: drainedNow() };
+  const claimDeps = { blockedBy, drained: drainedNow(), instance: instanceNow(mySession, issueNumber) };
   if (branch && worktree) return claimWithWorktree(issueNumber, mySession, { branch, worktree, claimDeps });
   return claimRow(issueNumber, mySession, claimDeps);
 }
@@ -1706,6 +1760,35 @@ function drainedNow() {
     process.stderr.write(`row-claim: could not read the drain (${String(/** @type {any} */ (error)?.message ?? error)
       .split("\n")[0]}) -- claiming as though it were lifted (#2324).\n`);
     return [];
+  }
+}
+
+/**
+ * #2407: what the asking session's INSTANCE holds or has held, for {@link oneRowReason} -- read here, at the CLI, as
+ * {@link drainedNow} is, so the rule takes a fact and not a host's files.
+ *
+ * ONLY A SPARE IS ASKED ABOUT: the mark is the roster's (`isSpareRole`), so a standing engineer costs no lookup and is
+ * never refused. The rows are the registry beside the wake ledger (every row a tick has seen this instance hold, which
+ * outlives the row's `session:` label) plus the open rows labelled with the session right now (which a tick may not
+ * have observed yet). FAILS OPEN AND SAYS SO, like the drain: a claim guard that stops every claim when a file or the
+ * API is unreadable gets bypassed and then never consulted, and a leak this misses is exactly what the ledger's
+ * failed-cycle line records.
+ * @param {string} mySession @param {number} issueNumber
+ * @returns {{ spare: boolean, rows: number[] }}
+ */
+function instanceNow(mySession, issueNumber) {
+  try {
+    if (!isSpareRole(mySession)) return { spare: false, rows: [] };
+    const registry = readSpareRegistry(sparePathsFrom(ledgerPathFrom([])).registry);
+    const labelled = lookupOtherHeldIssues(mySession, issueNumber);
+    if (labelled === null) {
+      process.stderr.write(`row-claim: could not read the rows ${mySession} holds -- using only the registry (#2407).\n`);
+    }
+    return { spare: true, rows: [...(registry[mySession]?.rows ?? []), ...(labelled ?? [])] };
+  } catch (error) {
+    process.stderr.write(`row-claim: could not read the instance's rows (${String(/** @type {any} */ (error)?.message ?? error)
+      .split("\n")[0]}) -- claiming as though it held none (#2407).\n`);
+    return { spare: false, rows: [] };
   }
 }
 
