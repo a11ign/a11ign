@@ -39,6 +39,7 @@ entry names what is missing, what it would cost, and what would tell you it is f
 - [§49](#49-reviewer-auth-failure-is-detected-from-text-nobody-has-seen-render-and-the-refresh-race-is-unmeasured-open-by-design-2401) REVIEWER AUTH FAILURE IS DETECTED FROM TEXT NOBODY HAS SEEN RENDER, and the refresh race is UNMEASURED — OPEN, by design (#2401)
 - [§51](#51-a-run-cannot-get-past-mfa-sso-or-a-captcha-and-nothing-in-the-tool-detects-the-third-out-of-v1-by-ruling-2275-2262) A RUN CANNOT GET PAST MFA, SSO OR A CAPTCHA, AND NOTHING IN THE TOOL DETECTS THE THIRD — OUT OF v1, by ruling (#2275, #2262)
 - [§52](#52-a-claim-that-does-not-move-is-read-from-one-fast-week-and-the-interrupted-pane-needle-was-never-seen-render-open-by-design-2470) A CLAIM THAT DOES NOT MOVE IS READ FROM ONE FAST WEEK, AND THE INTERRUPTED-PANE NEEDLE WAS NEVER SEEN RENDER — OPEN, by design (#2470)
+- [§53](#53-the-413-status-heads-are-at-the-limit-of-their-input-and-their-false-positives-and-misses-are-accepted-by-enumeration-accepted-by-ceo-2026-09-25-2258-2527) THE 4.1.3 STATUS HEADS ARE AT THE LIMIT OF THEIR INPUT, AND THEIR FALSE POSITIVES AND MISSES ARE ACCEPTED BY ENUMERATION — ACCEPTED by ceo, 2026-09-25 (#2258, #2527)
 <!-- known-gaps-index:end -->
 
 ## The order these should be done in
@@ -3419,3 +3420,68 @@ The gate now nudges a claim nothing has moved on for **N = 120 minutes** and rel
   shape: uncommitted, unpushed) is offered at once and the respawn starts in the tree.
 - **A claim with no claim record (a dispatch, or a claim that named neither branch nor worktree) is not evaluated**, and the merged-PR release sees
   the newest 100 merged pull requests only.
+
+## 53. THE `4.1.3` STATUS HEADS ARE AT THE LIMIT OF THEIR INPUT, AND THEIR FALSE POSITIVES AND MISSES ARE ACCEPTED BY ENUMERATION — ACCEPTED by ceo, 2026-09-25 (#2258, #2527)
+
+**"4.1.3 status is model-triaged" is not "4.1.3 status is validated".** The two trained heads under `4.1.3` — `4.1.3:status-progress` and
+`4.1.3:status-waiting` — miss real positives and flag a control that does nothing, and `ceo` ruled on #2258 (2026-09-25) that this is a
+documented limit, not a defect awaiting a fix. Their recall is a limit of the design. `4.1.3:form-activation-silent`, the third head, is NOT
+part of this: it read 0 false positives and 0 misses on the same acceptance report, and stays at that bar.
+
+**The reading (taken by `orchestrator`, quoted here and not re-measured).** `runs/model-candidate/acceptance-report.json` on the lab, written
+2026-09-25T12:31:20Z, `candidate`, acceptance at `75f02738b73e`; `4.1.3` population positive 46, clean 826, excluded 0. **TP 28, FP 4, FN 18, each
+counted over two repeats** — so four false-positive records are TWO cases and eighteen misses are NINE. It is a reading at a moment on one
+retrain: re-derive it before quoting it, and read it per head, never as one `4.1.3` figure.
+
+**Why it cannot be trained away.** The control the page activates changes nothing visible and announces nothing, and that is input-identical to a
+true positive. `acceptance-b3-icon-print/good` and `acceptance-status-waiting-stock/bad` are the same shape in every model-facing field
+(`formChanges` one `taskButton` entry with `after` empty, `stateChanges` empty, the same transcript ending), and the 30 document features read
+identically across the cases. What differs is the control's NAME and the `task` text, and `task` may not decide a criterion
+(`docs/local-model.md:28`). ADR 0021 said this of `form-activation-silent` on 2026-08-24 — *"silence has two causes"*, and *"no amount of corpus or
+model work should be spent trying"* — and this is that sentence measured on two more heads: #2489 raised the icon-labelled hard negatives from 3 to
+33, which lowered the false positives' `status-progress` score by about 0.015 while the head's cut moved up by 0.016, and the misses rose from 10 to 18.
+
+**THE ACCEPTED FALSE-POSITIVE SET (2):**
+- `acceptance-b3-icon-print/good` — `4.1.3:status-progress` 0.950 against a cut of 0.8744
+- `acceptance-b3-icon-profile/good` — `4.1.3:status-progress` 0.965 against a cut of 0.8744
+
+These are ACCEPTED with the cause: the activated control changes nothing visible and announces nothing, which is input-identical to the positives (ADR 0021).
+**Any other false positive under either status head reopens #2258.** The false-positive bar is 0 everywhere else, and this is not a general relaxation.
+
+**THE ACCEPTED-MISS SET (9):**
+- `acceptance-b3-status-waiting-badge/bad` — `status-waiting` 0.9017 against 0.9201
+- `acceptance-b3-status-waiting-plot/bad` — `status-waiting` 0.9026 against 0.9201
+- `acceptance-status-waiting-stock/bad` — `status-waiting` 0.8877 against 0.9201
+- `acceptance-b3-status-waiting-market/bad` — `status-waiting` 0.8192 against 0.9201
+- `acceptance-status-waiting-postage/bad` — `status-waiting` 0.5367 against 0.9201
+- `acceptance-b3-status-progress-taxi/bad` — `status-progress` 0.8584 against 0.8744
+- `acceptance-b3-status-progress-market/bad` — `status-progress` 0.7932 against 0.8744
+- `acceptance-status-progress-booking/bad` — `status-progress` 0.7695 against 0.8744
+- `acceptance-b3-status-progress-plot/bad` — `status-progress` 0.6809 against 0.8744
+
+**No numeric "near-miss" margin is set, and that is the ruling, not an omission.** The gaps run from 0.016 to 0.384, and a margin drawn across them
+would be invented and then pinned. The misses are accepted BY ENUMERATION as the recall limit of heads whose input is identical to a negative's, so a case outside the set is a new reading, not a covered one.
+`known-gaps-file-facts.test.ts` pins both sets by reading this section, and refuses a case id anywhere in it that is in neither list.
+
+**What it costs a finding: nothing asserted.** A model finding is `cantTell`, never asserted (`findingsFromScores` sets no `mapping`, and an absent
+`mapping` is `secondary`), so the README's "0 criteria asserted wrongly" is untouched by a false positive here. What a false positive costs is a human
+glancing at a moment where a control announced nothing and nothing visible changed; what a miss costs is a status page the triage layer did not flag.
+**Inferred, not measured:** the rise from 10 to 18 misses is the same conflict paid in recall, because the heads are handed near-identical inputs with opposite labels.
+
+**Option (ii) — take `4.1.3` status to the rules layer — is the only route that removes the false positive, and it is a PRICED OPTION, NOT QUEUED.**
+It is the capture change ADR 0021 already priced:
+- a before-and-after census on a `taskButton` (today `postSubmitNames`, the tree census, is written only by the `submit` probe, so every `taskButton` record reads `absent`);
+- a protocol bump, a recapture and a fleet window;
+- and it changes what `4.1.3` may ASSERT, which `asserting-subtypes.test.ts` pins as a list and `CLAUDE.md` states as a count (4 of the rules-owned subtypes), and which `ceo` rules.
+
+`ceo` did not order it: nothing on the row shows the referral noise costs anyone enough to pay that. **What would change that** is a reader
+of the findings who is measurably misled or slowed by these referrals.
+
+**What was REFUSED, and why** (`ceo`, 2026-09-25):
+- **Lifting the tree-feature ban** for one derived signal. The ban (`docs/local-model.md:28`) is the two-layer thesis, a tree-derived boolean is still the tree, and ADR 0015 records what a scorer does with a shortcut it is handed: it learns to veto. It would also spend a protocol bump and a fleet window on a feature the design bars.
+- **An encoder change.** An encoder cannot recover a fact absent from its input. The only separation left is lexical, on the control's name ("Print" against "Show progress"), which is memorising the corpus's wording and not reading evidence — worse than the false positive.
+- **A census as an applicability gate.** The `4.1.3` entry in `EVIDENCE_CHANNEL` (`packages/judge/src/local-judge.ts`) is a disjunction, and the resolved-`formChanges` disjunct already passes the icon pages; narrowing it to a non-empty `after` would also strike `form-activation-silent`'s true positives, whose `after` is empty by construction. **Read from source, the gate was not run on these pages.**
+- **More dose, retrain or corpus work on the status heads** on #2258.
+
+**NOT MEASURED:** what these referrals cost a reader, and whether the 10-to-18 rise is spread or dose (one retrain each, and the same dataset reproduces
+the same candidate, so a repeat would read a spread of zero). **What closes it:** option (ii), built and gated as its own rows. Nobody is doing that.
