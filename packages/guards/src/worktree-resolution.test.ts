@@ -223,7 +223,7 @@ test("#2218 THE CALLER: `assert-glob-not-empty --run` refuses in a mis-wired tre
   withScratch((base) => {
     const tree = checkout(base, "wt-caller");
     for (const rel of ["packages/guards/src/assert-glob-not-empty.mjs", "packages/guards/src/worktree-resolution.mjs",
-      "scripts/npm-cli-executable.mjs"]) {
+      "packages/guards/src/test-memory-cap.mjs", "scripts/npm-cli-executable.mjs"]) {
       mkdirSync(join(tree, rel, ".."), { recursive: true });
       copyFileSync(join(REPO, rel), join(tree, rel));
     }
