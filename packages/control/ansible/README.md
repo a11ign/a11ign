@@ -17,6 +17,8 @@ ansible-playbook collect-logs.yml               # every worker's logs, into runs
 ansible-playbook wake.yml                       # power the fleet on (magic packet + wait for /health)
 ansible-playbook sleep.yml                      # power it down, REFUSING any box mid-capture
 
+ansible-playbook auth-leak-check.yml -l a11y-worker-3   # ADR 0038's leak check, ONE box, restored after (#2399)
+
 python3 check-modules.py                        # do the module ARGUMENTS exist? syntax-check cannot tell
 ```
 
@@ -173,6 +175,68 @@ Three prerequisites, and only two are automated:
 3. **Fast Startup must be off**, or many boards never truly reach S5 and never wake.
    `a11y_power_timeouts` turns hibernation off, which disables Fast Startup as a side effect. That is a
    real dependency between two modules, not a coincidence — do not "tidy" the hibernation setting.
+
+## The leak check: one worker, a fake credential, and the box put back (#2399)
+
+ADR 0038, Constraint 4 asks a question only a real screen reader on a real desktop can answer: **does NVDA speak text
+inserted through the browser protocol's `Input.insertText`?** Its typed-character default is ON, so if it does, the
+design's first defence (the login is not in the transcript to start with) does not hold and the scrub is the only one.
+`auth-leak-check.yml` reads that on ONE box, from the control plane (the only machine holding the fleet key):
+
+```bash
+cd packages/control/ansible                        # in the control plane's checkout
+ansible-playbook auth-leak-check.yml -l a11y-worker-3
+ansible-playbook auth-leak-check.yml -l a11y-worker-3 -e leak_rehearse_exit=2   # walk the restore, capture nothing
+```
+
+It refuses a capturing worker, stops `a11ysrv`, and runs `scripts/auth-leak-check.mjs` four times from a one-shot task in
+the interactive session, against a leak worker it starts with `FAKE_USER`/`FAKE_SECRET` in that process's environment:
+the real run (`login-quiet --stage written`, exit 0), control 1 (`login-echo --stage raw`, EXACTLY 1), control 2
+(`login-echo --stage written`, exit 0 with a redaction count of at least 1), and the **central reading**
+(`login-quiet --stage raw`: exit 1 means NVDA speaks inserted text, and it goes to `ceo` at once). The restore is the
+play's own `always`, so it runs on every exit path: the one-shot task is removed, the script and the transcript are
+deleted after both values are counted in them and in `server.log` (`grep -c`, and a non-zero count fails the play),
+the leak worker is killed, `a11ysrv` is started, and the play then waits for the worker to be **ready**, not merely
+answering. The assertions on the four readings come AFTER that, so a bad reading cannot leave the box out of service.
+
+Three things the playbook does that look like choices and are not:
+
+- **It does not use `tasks/run-interactive.yml`.** That file registers its task `run_level: highest`, which provisioning
+  needs. `a11ysrv` is `limited` because `nvda_noUIAccess.exe` cannot read elevated windows, and an elevated worker
+  captures nothing, silently: `login-quiet` would read clean because nothing was said. The one-shot task here is the same
+  pattern at the worker's own run level.
+- **The fake values are in a script file, never on a command line.** A PowerShell transcript's header records the host
+  application's full command line, so a value in the task's arguments would fail the `grep -c` by construction. They are
+  the ADR's public canaries; a real credential never goes near this file.
+- **`-e leak_rehearse_exit=N` is the dry read of the restore path.** The script exits `N` right after `a11ysrv` is stopped,
+  so the restore runs against the real box for exit 1 and exit 2. Both were walked on `a11y-worker-3` on 2026-09-25:
+  each restored the worker on the code it served before (`ca705aa378d70828`), with the task removed, the files deleted
+  and no `node` process or persisted variable left behind.
+
+**Measured by the leak check (#2399, 2026-09-25, `a11y-worker-3`, repo head `ed6e887df`, worker code `e19f726ecd7d245e`,
+node v24.20.0, `ok=26 failed=0`).** The four readings, from one run of `auth-leak-check.yml` (10:09:09Z to 10:13:08Z):
+
+| reading | fixture / stage | exit | examined | redactions |
+|---|---|---|---|---|
+| real | `login-quiet --stage written` | 0 (`CLEAN`) | 1 file, 64 announcements | 0 |
+| control 1 | `login-echo --stage raw` | 1 (`LEAK: FAKE_USER (contiguous, raw)`) | 1 file, 75 announcements | 0 |
+| control 2 | `login-echo --stage written` | 0 | 1 file, 75 announcements | 2 |
+| **central** | **`login-quiet --stage raw`** | **0 (`CLEAN`)** | 1 file, 64 announcements | 0 |
+
+**The central reading is exit `0`: on this run NVDA did not speak the text inserted through `Input.insertText`, so ADR
+0038's first defence held.** The two controls are what make that `0` mean something: control 1 exiting exactly `1` shows
+the detector can see a leak in the raw stage, and control 2's two redactions show the scrub removes it. `grep -c` for
+either value read `0` in the transcript and `0` in `server.log`, and the restore left the worker serving the code it
+served before, ready, with the fleet CONSISTENT. **What this is not:** one run, one box, one fixture, 64 announcements,
+NVDA at its typed-character default (ON, as read on that box). It is a measurement of that page on that box, not a proof
+over other pages or other boxes' NVDA settings.
+
+Why it is the SECOND run: the first (2026-09-25, box checkout `4c7010c20`, worker code `ca705aa378d70828`) took no
+reading, because every authenticated capture failed inside the worker with `HTTP 500: fetch failed` (12 of 12 over three
+runs), from `connect ECONNREFUSED 127.0.0.1:9222` in `pageSocketUrl` (`packages/nvda-worker/src/auth-flow.mjs`): Edge
+listens about half a second after it is spawned and the driver asked for `/json/list` once, straight away. The unit
+tests drove a fake browser that was already listening, so none could see it. #2475 made the driver wait for its port;
+this run is on the code that has that wait.
 
 ## Driving the LAB, not just the workers
 
