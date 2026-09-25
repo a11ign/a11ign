@@ -147,6 +147,44 @@ const FLEET_LAB_PATTERNS = /** @type {[RegExp, string][]} */ ([
   [ON_THE_LAB, "names work done ON the lab, which only `orchestrator` reaches"],
 ]);
 
+// #2175: THE INVOCATION PATTERNS -- everything a declared No does NOT silence. The five NAMED patterns name a
+// THING a test double can also name (`systemctl` in "given a fake `systemctl`"); these name a COMMAND, and
+// `fleet:status` in an Acceptance is somebody running it whatever the row's answer says (#1912's ground).
+const INVOCATION_PATTERNS = FLEET_LAB_PATTERNS.filter(([pattern]) => !NAMED_NOT_INVOKED.has(pattern));
+const NAMED_PATTERNS = FLEET_LAB_PATTERNS.filter(([pattern]) => NAMED_NOT_INVOKED.has(pattern));
+
+// #2175: THE TEMPLATE'S OWN QUESTION (`.github/ISSUE_TEMPLATE/backlog-row.yml`, id `fleet`), which every
+// row answers and nothing read. Matched by `extractLabeledSection`, so the heading's `?` and any level of
+// `#` are handled where the rest of this module already handles them.
+const FLEET_QUESTION = "Does the acceptance need the fleet or the lab";
+
+// NAMED, NOT INFERRED -- the answer is the FIRST WORD, from a short list somebody chose. Measured 2026-09-25
+// over the 400 most recent rows (151 carry the section): `No`/`Neither` and `Yes`/`Both` are the
+// unambiguous ones, `Partly` and free prose (`The lab only`, `It needs the corpus ...`) are not, and a
+// reader that guessed at prose would be the deriver's own defect (#1241) moved one section along. The
+// lookahead keeps `Nobody`, `Not applicable` and `No-op` from reading as No.
+const ANSWER_END = "(?=$|[\\s.,:;!\u2014\u2013])";
+const DECLARED_NO = new RegExp(`^(?:no|neither)${ANSWER_END}`, "i");
+const DECLARED_YES = new RegExp(`^(?:yes|both)${ANSWER_END}`, "i");
+
+const DECLARED_YES_REASON = `is declared by the row itself ("${FLEET_QUESTION}?" answers Yes) to need the fleet or the lab`;
+
+/**
+ * #2175: THE ROW'S OWN ANSWER to the template's "Does the acceptance need the fleet or the lab?" -- `"no"`,
+ * `"yes"`, or `null` for a body that has no such section OR whose answer is not an unambiguous No/Yes
+ * (`Partly`, prose, empty). **`null` means UNDECLARED, and undeclared rows derive exactly as they did
+ * before this existed**: absence and "could not read it" are never promoted to an answer.
+ * @param {string} body a row body @returns {"no" | "yes" | null}
+ */
+export function declaredFleetAnswer(body) {
+  if (typeof body !== "string") return null;
+  const section = extractLabeledSection(body, FLEET_QUESTION);
+  if (section === null) return null;
+  const answer = section.replace(/^[\s*_`]+/, "");
+  if (DECLARED_NO.test(answer)) return "no";
+  return DECLARED_YES.test(answer) ? "yes" : null;
+}
+
 /**
  * #1241: DOES THIS ROW'S ACCEPTANCE NAME A FLEET OR LAB COMMAND? The lane derivation asks; nothing else
  * could answer it.
@@ -173,10 +211,23 @@ export function fleetOrLabAcceptance(body) {
   //
   // Running a command and CLASSIFYING a row are different questions over the same text: `pr-open` needs
   // the runnable lines, this needs everything the section says it will take.
+  const declared = declaredFleetAnswer(body);
   const section = extractLabeledSection(body, "Acceptance");
-  if (section === null) return null;
+  // #2175: DECLARATION FIRST, PATTERN SECOND. A No silences the five NAMED patterns and nothing else; a Yes
+  // routes with no pattern at all. Rows that say neither derive from the patterns alone, as before.
+  const patterns = declared === "no" ? INVOCATION_PATTERNS : FLEET_LAB_PATTERNS;
+  const matched = section === null ? null : patternReason(section, patterns);
+  return matched ?? (declared === "yes" ? DECLARED_YES_REASON : null);
+}
+
+/**
+ * The reason of the first of `patterns` that matches `section`: a NAMED pattern is read against
+ * `namedPatternText` (#1912, #1988), an invocation against the whole span.
+ * @param {string} section @param {readonly [RegExp, string][]} patterns @returns {string | null}
+ */
+function patternReason(section, patterns) {
   const named = namedPatternText(section);
-  for (const [pattern, reason] of FLEET_LAB_PATTERNS) {
+  for (const [pattern, reason] of patterns) {
     if (pattern.test(NAMED_NOT_INVOKED.has(pattern) ? named : section)) return reason;
   }
   return null;
@@ -210,10 +261,41 @@ function namedPatternText(section) {
 export function untrimmedFleetMention(body) {
   const section = extractLabeledSection(body, "Acceptance");
   if (section === null || fleetOrLabAcceptance(body) !== null) return null;
+  // #2175: under a declared No the DECLARATION decided, and `declarationDisagreement` says so. Naming a
+  // trim here would send the filer to the wrong fix -- a numbered clause is not a bullet.
+  if (declaredFleetAnswer(body) === "no") return null;
   const hit = FLEET_LAB_PATTERNS.find(([pattern]) => NAMED_NOT_INVOKED.has(pattern) && pattern.test(section));
   if (!hit) return null;
   const survivesDisclaimerTrim = hit[0].test(withoutScopeDisclaimer(section));
   return { reason: hit[1], form: survivesDisclaimerTrim ? "bullet" : "scope disclaimer" };
+}
+
+/**
+ * #2175: WHERE THE ROW'S ANSWER AND THE PATTERNS DISAGREE, and which one won. The finding is the
+ * disagreement, and before this it was resolved silently in the pattern's favour.
+ *
+ * Three shapes, and an agreement is `null`: a No that silenced a NAMED pattern (`routed: false`, and the
+ * pattern that lost is named); a No that an INVOCATION overrode (`routed: true`, and the pattern that won
+ * is named); a Yes that no pattern backed (`routed: true`, `reason: null`). A row that declares nothing has
+ * nothing to disagree with -- that is `untrimmedFleetMention`'s territory.
+ * @param {string} body a row body
+ * @returns {{ declared: "no" | "yes", routed: boolean, reason: string | null } | null}
+ */
+export function declarationDisagreement(body) {
+  const declared = declaredFleetAnswer(body);
+  if (declared === null) return null;
+  const section = extractLabeledSection(body, "Acceptance");
+  if (declared === "yes") {
+    return section !== null && patternReason(section, FLEET_LAB_PATTERNS) !== null
+      ? null : { declared, routed: true, reason: null };
+  }
+  if (section === null) return null;
+  const invocation = patternReason(section, INVOCATION_PATTERNS);
+  if (invocation !== null) return { declared, routed: true, reason: invocation };
+  // The RAW span, not `namedPatternText`: under a No the declaration decided, so a mention the bullet or
+  // disclaimer trim would have swallowed anyway is still worth naming rather than passing over.
+  const silenced = NAMED_PATTERNS.find(([pattern]) => pattern.test(section));
+  return silenced ? { declared, routed: false, reason: silenced[1] } : null;
 }
 
 /**
@@ -302,12 +384,19 @@ function endsLazyBlock(line, afterBlank) {
   return afterBlank || /^(\d+[.)]\s|#)/.test(line);
 }
 
+// #2473: `check-signals` is the only entry spelled like a FILE STEM, and `-` is a word boundary, so the bare
+// word also refused any test FILE whose name merely begins with it (`check-signals-pipe.test.ts`, whose
+// import closure never reaches runs/). The gate is the npm script (`training:check-signals`, with an
+// optional `:complete` suffix) or `check-signals.mjs`: the name NOT continued by `-`, `.` or a path
+// separator. `.mjs` is the one `.` continuation that IS the gate.
+const CHECK_SIGNALS_GATE = /\bcheck-signals(?:\.mjs\b|(?![-.\w/]))/;
+
 // `runs/` is gitignored -- a GitHub runner never has a corpus, so these read nothing and report cleanly.
 // CLAUDE.md: "A GATE THAT READS runs/ IS NOT YOURS TO REPORT."
 const CORPUS_PATTERNS = /** @type {[RegExp, string][]} */ ([
   [/\brules:gate\b/, "reads runs/, which is gitignored and absent in CI"],
   [/\brules:coverage\b/, "reads runs/, which is gitignored and absent in CI"],
-  [/\bcheck-signals\b/, "reads runs/, which is gitignored and absent in CI"],
+  [CHECK_SIGNALS_GATE, "reads runs/, which is gitignored and absent in CI"],
   [/\bcorpus:starvation\b/, "reads runs/, which is gitignored and absent in CI"],
   [/\bscorer:shortcuts\b/, "reads runs/, which is gitignored and absent in CI"],
 ]);
@@ -1459,7 +1548,8 @@ function commandPathTokens(command) {
 
 /**
  * EVERY PATH A ROW'S ACCEPTANCE NAMES THAT NEITHER EXISTS ON DISK NOR IS DECLARED IN ITS OWN `## Region`
- * -- #1943, and the Region half is what makes this a guard rather than a wall.
+ * -- #1943, and the Region half is what makes this a guard rather than a wall -- PLUS THE ONES THE REGION
+ * EXCUSES ON THE STRENGTH OF A COPY, #2192.
  *
  * A row legitimately names files it will CREATE; that is most rows. What separates those from a typo is
  * already this repository's own discipline, so this asks it rather than inventing a second one: a file
@@ -1468,13 +1558,26 @@ function commandPathTokens(command) {
  * section, this refuses ONE (#20, `board-summary-origin.test.ts`, against the real
  * `board-summary-check.test.ts`) -- a guard, not a wall.
  *
+ * #2192: A FILER WRITES THE PATH ONCE AND COPIES IT INTO BOTH SECTIONS, so a wrong path is vouched for by
+ * its own copy and the Region arm above is silent on the one shape a filer cannot see in their own body
+ * (#2068 named `packages/agent-org/src/acceptance-commands.test.ts`, which never existed, twice). What
+ * gives it away is the BASENAME: it is very nearly unique in this tree, so an absent, Region-excused path
+ * whose basename a tracked file already bears elsewhere is most likely the right file in the wrong
+ * directory. Such a path is returned WITH `twins`, the tracked files it may have meant. A row really
+ * creating a second file of that name says so with a `New-file: <path>` line (`declaredNewFiles`).
+ * Ambiguity is not guessed at: every tracked file with the basename is listed.
+ *
  * THE REGION IS READ ONLY WHEN SOMETHING IS ABSENT, and that ordering is deliberate rather than an
  * optimisation: `declaredRegionFiles` spawns git for the tree's root files, and the overwhelmingly common
- * case (every path exists) must not pay for it or depend on it.
+ * case (every path exists) must not pay for it or depend on it. The tracked-file list is read on the same
+ * terms, only for a path the Region excused.
  *
  * @param {string} body a row body
- * @param {{ exists?: (path: string) => boolean, trackedDirs?: string[], regionEntries?: string[] }} [deps]
- * @returns {{ path: string, command: string }[]} each absent path with the command that named it
+ * @param {{ exists?: (path: string) => boolean, trackedDirs?: string[], regionEntries?: string[], trackedFiles?: string[] }} [deps]
+ *   `trackedFiles` is the tree's tracked paths; a test passes its own so the twin lookup can be checked
+ *   without the repository it runs in
+ * @returns {{ path: string, command: string, twins?: string[] }[]} each absent path with the command that
+ *   named it, and `twins` when it is absent only in the sense that a same-named file lives elsewhere
  */
 export function unresolvedAcceptancePaths(body, deps = {}) {
   const { exists = existsSync, trackedDirs, regionEntries } = deps;
@@ -1489,22 +1592,74 @@ export function unresolvedAcceptancePaths(body, deps = {}) {
   }
   if (absent.length === 0) return [];
   const region = regionEntries ?? declaredRegionFiles(body) ?? [];
-  return absent.filter(({ path }) => !region.some((entry) => regionCovers(entry, path)));
+  const declaredNew = declaredNewFiles(body);
+  return absent.flatMap((hit) => {
+    if (!region.some((entry) => regionCovers(entry, hit.path))) return [hit];
+    if (declaredNew.includes(hit.path)) return [];
+    const twins = trackedTwinsOf(hit.path, deps.trackedFiles ?? trackedFiles());
+    return twins.length > 0 ? [{ ...hit, twins }] : [];
+  });
+}
+
+// `git ls-files` once per process, like `trackedTopLevelDirs` in `region-paths.mjs` -- and, like that one,
+// read only when a check needs it. Kept here rather than exported from there: #2192's Region is this file.
+/** @type {string[] | null} */
+let trackedFilesCache = null;
+function trackedFiles() {
+  trackedFilesCache ??= execFileSync("git", ["ls-files"], { encoding: "utf8", env: sandboxGitEnv() })
+    .split("\n").filter(Boolean);
+  return trackedFilesCache;
+}
+
+/**
+ * Tracked files OTHER than `path` that bear its basename -- the BASENAME and not the directory, because
+ * the directory is exactly what a filer misremembers. Sorted, so the refusal is stable.
+ * @param {string} path @param {string[]} tracked
+ */
+function trackedTwinsOf(path, tracked) {
+  const name = basename(path);
+  return tracked.filter((file) => file !== path && basename(file) === name).sort();
+}
+
+// `New-file: <path>` on a line of its own, the same declared-and-parsed shape as `Hand-run:` above. Global,
+// because a row may create several; the path is the first token, so a reason may follow it.
+const NEW_FILE_PATTERN = /^[^\S\r\n]*(?:\*\*|__)?New-file:[^\S\r\n]*(?:\*\*|__)?[^\S\r\n]*`?([^\s`]+)`?[^\r\n]*$/gim;
+
+/**
+ * THE PATHS A ROW SAYS IT WILL CREATE ON PURPOSE, though a tracked file already bears the basename (#2192).
+ * The genuine case is real -- 5 of 642 tracked `*.test.ts` basenames occur more than once -- and a check
+ * with no way through it would be a wall, the shape #741 ruled against.
+ * @param {string} body
+ * @returns {string[]}
+ */
+export function declaredNewFiles(body) {
+  return [...body.matchAll(NEW_FILE_PATTERN)].map((match) => match[1]);
 }
 
 /**
  * The refusal `row-file` prints, or `null` when every path resolves. NAMES THE PATH AND BOTH WAYS OUT:
  * #741's ruling is that a refusal stating no way forward is not a refusal a filer can follow, and here
- * there are exactly two, because the rule itself has exactly two arms.
+ * there are exactly two, because the rule itself has exactly two arms -- for the Region-vouched shape
+ * (#2192) they are the same two arms with different wording, so each half names both.
  * @param {string} body @param {string} tool the CLI to name in the refusal
- * @param {{ exists?: (path: string) => boolean, trackedDirs?: string[], regionEntries?: string[] }} [deps]
+ * @param {{ exists?: (path: string) => boolean, trackedDirs?: string[], regionEntries?: string[], trackedFiles?: string[] }} [deps]
  * @returns {string | null}
  */
 export function acceptancePathsReason(body, tool, deps = {}) {
   const unresolved = unresolvedAcceptancePaths(body, deps);
   if (unresolved.length === 0) return null;
-  const named = unresolved.map(({ path, command }) => `\`${path}\` (named by \`${command}\`)`).join("; ");
-  return `${tool}: REFUSING -- the Acceptance names ${unresolved.length} path(s) that neither exist in `
+  const halves = [
+    absentPathsRefusal(unresolved.filter((hit) => !hit.twins), tool),
+    vouchedPathsRefusal(unresolved.filter((hit) => hit.twins), tool),
+  ];
+  return halves.filter(Boolean).join("\n");
+}
+
+/** @param {{ path: string, command: string }[]} absent @param {string} tool */
+function absentPathsRefusal(absent, tool) {
+  if (absent.length === 0) return null;
+  const named = absent.map(({ path, command }) => `\`${path}\` (named by \`${command}\`)`).join("; ");
+  return `${tool}: REFUSING -- the Acceptance names ${absent.length} path(s) that neither exist in `
     + `this checkout nor appear in this row's \`## Region\`: ${named}. There are two ways to satisfy `
     + "this and one of them is right: FIX THE SPELLING, if the file already exists under another name -- "
     + "or DECLARE IT IN THE `## Region`, if this row is going to create it, which is how a row reserves a "
@@ -1513,6 +1668,22 @@ export function acceptancePathsReason(body, tool, deps = {}) {
     + "does not merge -- and by then the fix costs a rewrite by somebody with less context than you have "
     + "now. Globs, paths outside the tree's tracked top-level directories, and names with no file "
     + "extension are not checked here, so a path missing from this list was not confirmed to exist.";
+}
+
+/** @param {{ path: string, command: string, twins?: string[] }[]} vouched @param {string} tool */
+function vouchedPathsRefusal(vouched, tool) {
+  if (vouched.length === 0) return null;
+  const named = vouched.map(({ path, command, twins = [] }) =>
+    `\`${path}\` (named by \`${command}\`; a tracked file already has that name: `
+    + `${twins.map((twin) => `\`${twin}\``).join(", ")})`).join("; ");
+  return `${tool}: REFUSING -- the Acceptance names ${vouched.length} path(s) that do not exist in this `
+    + "checkout and are excused only by this row's own `## Region`, while a tracked file of the same name "
+    + `lives elsewhere: ${named}. A path written once and copied into both sections is vouched for by its `
+    + "own copy, so the Region cannot tell a file about to be created from a directory misremembered. "
+    + "There are two ways to satisfy this and one of them is right: FIX THE SPELLING in BOTH sections, if "
+    + "the tracked file named above is the one you meant -- or DECLARE THE INTENT with a `New-file: <path>` "
+    + "line in the body, if this row really is creating a second file of that name, which is a real case "
+    + "and stays allowed once said. Every tracked file with the name is listed rather than one picked.";
 }
 
 /**

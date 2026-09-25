@@ -28,6 +28,8 @@ import {
   endsInOperator,
   handRunDeclaration, handRunAcceptanceReason, handRunEvidence,
   testFilesAmong, mutationRecordReport, changedFilesOfThisPullRequest, measuredSectionReport,
+  acceptancePathsReason, declaredNewFiles, unresolvedAcceptancePaths,
+  declaredFleetAnswer,
 } from "../../../agent-org/src/acceptance-commands.mjs";
 import { withGitSandbox, sandboxGitEnv } from "../../../../scripts/test-support/git-sandbox.ts";
 
@@ -116,6 +118,29 @@ test("classifyCommand: THE #353 CORPUS BAN -- every runs/-reading gate is refuse
   for (const command of cases) {
     const result = classifyCommand(command);
     assert.equal(result.verdict, "refused", `expected ${command} to be refused`);
+  }
+});
+
+test("classifyCommand: #2473 the check-signals GATE stays refused in every spelling that runs it", () => {
+  // The positive control for the runnable case below: the anchored pattern must still bite the gate.
+  for (const command of [
+    "npm run check-signals",
+    "npm run check-signals -- --require-complete",
+    "npm run training:check-signals:complete",
+    "node packages/lab/src/training/check-signals.mjs",
+    "node packages/lab/src/training/check-signals.mjs --require-complete",
+  ]) {
+    assert.equal(classifyCommand(command).verdict, "refused", `expected ${command} to be refused`);
+  }
+});
+
+test("classifyCommand: #2473 a test FILE whose name merely begins `check-signals-` is runnable -- `-` is a "
+  + "word boundary, so the bare word refused it as \"reads runs/\" though its closure never reaches runs/", () => {
+  for (const command of [
+    "npx tsx --test packages/lab/src/training/check-signals-pipe.test.ts",
+    "npx tsx --test packages/lab/src/training/check-signals.test.ts",
+  ]) {
+    assert.deepEqual(classifyCommand(command), { verdict: "runnable" }, `expected ${command} to be runnable`);
   }
 });
 
@@ -3236,4 +3261,149 @@ test("#2308: the CLI reads the verdict -- a malformed section exits 1 and prints
   assert.equal(bad.status, 1);
   const good = run(`Closes #1\n\nAcceptance: none \u2014 nothing to run\n\n${measuredBody("$ git ls-files | wc -l\n412")}`);
   assert.match(good.stdout, /MEASURED: RECORDED/);
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// #2192: A `## Region` COPY OF A WRONG ACCEPTANCE PATH VOUCHES FOR IT. Everything is injected -- `exists`,
+// `regionEntries`, `trackedDirs`, `trackedFiles` -- so the rule is checked without the repository it runs in;
+// the last test in the block reads the real tree, because the row's own defect was on a real path.
+// ---------------------------------------------------------------------------------------------------------
+
+const TYPO = "packages/agent-org/src/acceptance-commands.test.ts";
+const REAL_TWIN = "packages/lab/src/packaging/acceptance-commands.test.ts";
+
+/** A row whose Region and Acceptance BOTH carry `path` -- the copy-paste shape the row is about. */
+function copiedIntoBoth(path: string, extra = "") {
+  return `## Region\n\n${FENCE}\n${path}\n${FENCE}\n\n## Acceptance\n\n${FENCE}bash\nnpx tsx --test ${path}\n${FENCE}\n${extra}`;
+}
+const NOTHING_EXISTS = { exists: () => false, trackedDirs: ["packages"], regionEntries: [TYPO] };
+
+test("#2192: an absent path the Region excuses is REFUSED when a tracked file bears its basename, and the refusal NAMES that file", () => {
+  const twins = [REAL_TWIN, "packages/guards/src/unrelated.mjs"];
+  const reason = acceptancePathsReason(copiedIntoBoth(TYPO), "row-file", { ...NOTHING_EXISTS, trackedFiles: twins });
+  assert.ok(reason, "the copy in the Region must not vouch for a path a tracked file of the same name contradicts");
+  assert.ok(reason.includes(REAL_TWIN), "the refusal must name the tracked candidate, not describe it");
+  assert.ok(!reason.includes("unrelated.mjs"), "and only the files that bear the name");
+  assert.match(reason, /FIX THE SPELLING/, "arm one");
+  assert.match(reason, /`New-file: <path>`/, "arm two: the way through for a genuine second file of that name");
+  assert.match(reason, /^row-file: /);
+});
+
+test("#2192 NEGATIVE CONTROL: a Region-excused absent path whose basename NO tracked file bears still files", () => {
+  // A fix that refuses every Region-excused absent path passes the positive test above and fails this one.
+  const tracked = [REAL_TWIN, "packages/guards/src/unrelated.mjs"];
+  assert.equal(acceptancePathsReason(copiedIntoBoth("packages/agent-org/src/brand-new-file.test.ts"), "row-file",
+    { ...NOTHING_EXISTS, regionEntries: ["packages/agent-org/src/brand-new-file.test.ts"], trackedFiles: tracked }), null);
+});
+
+test("#2192: the twin is found by BASENAME, never by directory -- a neighbour in the same directory is no twin", () => {
+  // MUTATION TARGET. Match on the absent path's DIRECTORY instead and this control fires while the
+  // different-directory refusal above goes quiet: the misremembered thing is the directory itself.
+  const sameDirectoryOtherName = ["packages/agent-org/src/some-other-module.test.ts"];
+  assert.equal(acceptancePathsReason(copiedIntoBoth(TYPO), "row-file",
+    { ...NOTHING_EXISTS, trackedFiles: sameDirectoryOtherName }), null);
+});
+
+test("#2192: `New-file: <path>` declares the intent, and only for the path it names", () => {
+  const tracked = [REAL_TWIN];
+  const declared = copiedIntoBoth(TYPO, `\nNew-file: ${TYPO}\n`);
+  assert.equal(acceptancePathsReason(declared, "row-file", { ...NOTHING_EXISTS, trackedFiles: tracked }), null,
+    "a row really creating a second file of that name says so and files");
+  const wrongPath = copiedIntoBoth(TYPO, "\nNew-file: packages/somewhere/else.test.ts\n");
+  assert.ok(acceptancePathsReason(wrongPath, "row-file", { ...NOTHING_EXISTS, trackedFiles: tracked }),
+    "a declaration for ANOTHER path excuses nothing here");
+});
+
+test("#2192: `declaredNewFiles` reads the plain, bold, backticked and reasoned forms, and every line", () => {
+  assert.deepEqual(declaredNewFiles("New-file: a/b.ts"), ["a/b.ts"]);
+  assert.deepEqual(declaredNewFiles("**New-file:** `a/b.ts`"), ["a/b.ts"]);
+  assert.deepEqual(declaredNewFiles("New-file: a/b.ts -- a second reader beside the first"), ["a/b.ts"]);
+  assert.deepEqual(declaredNewFiles("x\nNew-file: a/b.ts\n\nNew-file: c/d.ts\n"), ["a/b.ts", "c/d.ts"]);
+  assert.deepEqual(declaredNewFiles("a prose mention of New-file: a/b.ts mid-sentence\nNew-file:\n"), [],
+    "a bare label, or one that does not open its line, declares nothing");
+});
+
+test("#2192: several tracked twins are ALL named -- ambiguity is not guessed at", () => {
+  const both = ["packages/a/x.test.ts", "packages/b/x.test.ts"];
+  const hits = unresolvedAcceptancePaths(copiedIntoBoth("packages/c/x.test.ts"),
+    { ...NOTHING_EXISTS, regionEntries: ["packages/c/x.test.ts"], trackedFiles: both });
+  assert.deepEqual(hits.map((hit) => hit.twins), [both]);
+});
+
+test("#2192: a path the Region does NOT cover keeps its original refusal, and the two halves can appear together", () => {
+  const body = `## Region\n\n${FENCE}\n${TYPO}\n${FENCE}\n\n## Acceptance\n\n${FENCE}bash\n`
+    + `npx tsx --test ${TYPO} packages/agent-org/src/typo-not-declared.test.ts\n${FENCE}\n`;
+  const reason = acceptancePathsReason(body, "row-file", { ...NOTHING_EXISTS, trackedFiles: [REAL_TWIN] })!;
+  assert.match(reason, /neither exist in this checkout nor appear in this row's `## Region`: `packages\/agent-org\/src\/typo-not-declared\.test\.ts`/);
+  assert.match(reason, /excused only by this row's own `## Region`/);
+});
+
+test("#2192: a path that EXISTS is never refused for having a twin", () => {
+  assert.equal(acceptancePathsReason(copiedIntoBoth(TYPO), "row-file",
+    { ...NOTHING_EXISTS, exists: () => true, trackedFiles: [REAL_TWIN] }), null);
+});
+
+test("#2192: on the REAL tree, #2068's own body is refused and names the real test file", () => {
+  assert.ok(existsSync(REAL_FILE), "this test reads the real tree with repo-relative paths, so it runs from the repository root");
+  assert.ok(!existsSync(TYPO), "the typo is only a control while the file is genuinely absent");
+  const reason = acceptancePathsReason(copiedIntoBoth(TYPO), "row-file", { regionEntries: [TYPO] });
+  assert.ok(reason?.includes(REAL_TWIN));
+});
+
+/**
+ * #2175: THE ROW'S OWN ANSWER TO "Does the acceptance need the fleet or the lab?" IS READ, AND ONLY WHEN IT
+ * IS UNAMBIGUOUS.
+ *
+ * The forms below are the ones the filed population uses -- measured 2026-09-25 over the 400 most recent
+ * rows (151 carry the section): the template's own three dropdown lines, a bold-led `**No.**`, and the
+ * `**Neither.**` / `**Both**` / `The lab only` prose the template does not offer. NAMED, not inferred: the
+ * first word decides, from a short list somebody chose, because a reader that guesses at prose is the
+ * lane deriver's own defect (#1241) moved one section along.
+ */
+const FLEET_HEADING = "## Does the acceptance need the fleet or the lab?\n\n";
+
+test("#2175: a leading No/Neither reads as no, and a leading Yes/Both reads as yes, in every form the population uses", () => {
+  const declared = {
+    "No — completable offline, start now": "no",
+    "**No.** Everything is driven through injected seams.": "no",
+    "No. One source file and its test, both offline.": "no",
+    "**Neither.** The change is to the evaluator and its unit tests.": "no",
+    "Yes — cannot start until the orchestrator frees a worker": "yes",
+    "**Yes: one guest.** orchestrator's to run.": "yes",
+    "**Both, and in that order.** Clause 1 needs a CAPTURE.": "yes",
+    "no": "no",
+  } as const;
+  for (const [answer, expected] of Object.entries(declared)) {
+    assert.equal(declaredFleetAnswer(`${FLEET_HEADING}${answer}\n`), expected, answer);
+  }
+});
+
+test("#2175: anything that is not an unambiguous No or Yes is UNDECLARED, never guessed at", () => {
+  // The positive control for every null below is the previous test: the same reader, over the same
+  // heading, answers `no` and `yes` for the forms that ARE unambiguous.
+  const undeclared = [
+    "Partly — offline step given above, fleet step named as what remains",
+    "The lab only -- `training:generate` touches no worker.",
+    "**It needs the corpus and the scorer, not a Windows worker.**",
+    "Reading which fields are affected does not (this row's evidence is offline).",
+    "Not applicable.",
+    "Nobody reaches a worker from this row.",
+    "No-op on the fleet, real on the lab.",
+    "None.",
+    "",
+  ];
+  for (const answer of undeclared) {
+    assert.equal(declaredFleetAnswer(`${FLEET_HEADING}${answer}\n`), null, JSON.stringify(answer));
+  }
+});
+
+test("#2175: the answer is read from ITS section only -- a body without the section, or with the answer under another heading, is undeclared", () => {
+  assert.equal(declaredFleetAnswer("## Acceptance\n\n```\nnpx rstest run\n```\n"), null, "no section at all");
+  assert.equal(declaredFleetAnswer(`${FLEET_HEADING}## Open-check\n\nNo.\n`), null,
+    "an empty section is not answered by the `No.` under the NEXT heading");
+  assert.equal(declaredFleetAnswer("## Acceptance\n\nNo. This is the Acceptance and not the question.\n"), null,
+    "a `No.` elsewhere in the body is not the declaration");
+  assert.equal(declaredFleetAnswer("## Does the acceptance need the fleet or the lab\n\nYes.\n"), "yes",
+    "and the heading without its question mark is still the heading -- the control for the nulls above");
+  assert.equal(declaredFleetAnswer(undefined as unknown as string), null, "an absent body is undeclared, never a crash");
 });

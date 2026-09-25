@@ -1518,6 +1518,7 @@ something this row silently decided either way.
 - `/compact` at 50–70% context fill, before auto-compact; quality degrades past 70%.
 - `/clear` between unrelated topics; a fresh window beats stale history.
 - Batch related requests into one message; every round-trip re-sends the whole config stack.
+- **Clauses trimmed from the loaded file under #2223 to fit the scratchpad section in the 20,000 B budget.** The opening read "These load with CLAUDE.md in every session. They are habits, not gates; the org clock on #912 reads whether they are followed." The opening also carried "One topic per file (#2092);" and "`prefix-budget.test.ts` prints it", and the Web-research bullet read "so pages stay in its context and only the digest reaches yours". The bullets above still carry the rest in full: "quality degrades past 70%", "every round-trip re-sends the whole config stack", the trigger for revisiting a model choice ("two `ceo` rulings in a week reversed as WRONG, not stale, justify raising that cause's effort or model via #1952"), and the list of what `haiku` gathers, including "directory walks". The rule itself, in each case, stays loaded.
 
 ## Web research — the 2.9 million tokens that produced the rule
 
@@ -1582,6 +1583,34 @@ something this row silently decided either way.
   *A record, not an instruction:* from 2026-09-12 until that ruling, a free engineer reviewed settled
   drafts unasked, because every verdict from 14:02Z that day was engineer-to-engineer and a draft could
   wait thirty minutes between wake-ups for the clock to name someone.
+
+## The scratchpad is shared
+
+*The rule is in [`.claude/rules/agent-practices.md`](../.claude/rules/agent-practices.md); this is the incident behind it (#2223, filed by `orchestrator`). It was written into the loaded file as a new section, never moved out of one, so there is no earlier heading to quote. **The cause was restated on 2026-09-25 by `ceo`:** the row was filed reading the outage as a full 16 GB `tmpfs`, and the host has since been rebuilt, so "the scratchpad is RAM" is no longer true and is not in the loaded rule.*
+
+- **What a session meets, and why it is the defect: a full scratchpad does not say so.** Commands return `Exit code 1` with no
+  output, or fail with `ENOSPC`; shell builtins still succeed, so the shell looks alive; a redirection CREATES the file and it is
+  0 bytes, which reads as "the command printed nothing" and not as "the filesystem refused the write". **The full disk is
+  ordinary; steps like these are indistinguishable from a command that legitimately produced nothing**, so a session will conclude
+  a grep found no matches, a job produced no artefact or a directory is empty.
+- **The corrected cause (`ceo` and `product-manager`, 2026-09-25): INODE exhaustion, 1,048,576 of 1,048,576 inodes used at 73% of
+  bytes.** That is why `df -h` looked healthy while every Bash call failed with `ENOSPC`. Test-fixture leaks from `mkdtemp`, not
+  scratchpads, held most of the inodes (#2163 watches free bytes and inodes; #2457 is the tests that never remove their
+  directory). **That is why the second rule says the scratchpad is counted in inodes as well as bytes**, and swept at one day.
+- **Measured on the agent host, 2026-09-23T19:2x-19:3xZ, the earlier reading:** `df -h /tmp` read `tmpfs 16G 13G 3.1G 80%` and
+  `du -sh /tmp/claude-1000` 9.7 GB (`/` had 52 GB free). It was then a `tmpfs`; the chairman has since moved `/tmp` to the root
+  filesystem and set the age rule to one day, and the host was rebooted at about 07:3xZ on 2026-09-25.
+- **Consumer one, 3.7 GB: a completed task's captured stdout that contained its own text.** A command read the task-output
+  directory while its own stdout was being captured into that same directory, so it quoted itself until the file was
+  3,688,951,808 bytes. Its head was the JSONL of a sibling output and its tail its own filename followed by
+  `[exited with code 0]`. `orchestrator` removed it as completed and provably self-referential, and `/tmp` went from 13 GB / 80% to
+  8.7 GB / 58% in one unlink. **That is why the first rule says never capture output into a directory you are also reading.**
+- **Consumer two, 3.5 GB: a Python venv holding the CUDA and torch wheels** (`libcublasLt`, `libtriton`, `libcufft`, `libnccl`,
+  `libcudnn`) under one session's scratchpad, left untouched because that session had live processes. **That is why the second rule
+  names virtualenvs, wheels, weights and fetched corpora:** the scratchpad is one pool for every session, and a gigabyte there is
+  a gigabyte nobody else has.
+- **What is NOT in this rule:** the host change (moving `/tmp` off `tmpfs`, the one-day age rule) was made by the chairman and is
+  recorded on #2223 rather than claimed here; the file-count half of the habit is #2457 and the free-space watch is #2163.
 
 ## The API budget — `gh api rate_limit` is a broken gauge
 
@@ -2023,11 +2052,35 @@ evidence, and with what would reopen it.
 *The rule is in [`CLAUDE.md`](../CLAUDE.md); these are its numbers, and each is a reading at a moment.*
 
 This paragraph used to say the trained scorer "assesses the judgment-based WCAG failures" — it does not
-assess them in the sense of concluding anything. Measured 2026-09-14 on the 41 conformant real pages of the calibration
-set at the shipped floor (run 2f9c51aa): **0 criteria asserted wrongly, 422 referred.** One count first read as wrong
-was a publisher-declared exception the corpus lacked (#1610). The product-path figure before it, the last one published,
-2026-08-24 on 18 conformant real pages, is superseded: re-derived at today's code on the 17 of those pages still in
-the corpus, 0 asserted wrongly, 180 referred (#1612).
+assess them in the sense of concluding anything. Measured 2026-09-24 on the 40 conformant real pages of the calibration
+set at the shipped floor 0.6557, captures taken that day at capture protocol 21 (sweep `a11y-job-sweep` at
+`592785c3b8bf`, recorded in `docs/board/reported/gates/sweep-protocol-21-2212.json`): **0 criteria asserted wrongly,
+395 referred.** The headline did not move. The claim says "re-measured at protocol 21" and no more: the two readings
+differ in the capture protocol, ten days of page drift and one moved Ofgem url, and the row cannot separate them, so
+the fall from 422 to 395 and from 41 pages to 40 carry no asserted cause (#2212, #2340).
+
+**The 40 is not the 41 minus one page.** Three pages left the conformant-at-floor set (`gla.ac.uk/undergraduate/degrees/`,
+`data.southwark.gov.uk/data-catalog-explorer/`, and Ofgem's price-cap page at its moved url) and two joined it
+(`gov.uk/vehicle-tax`, `gov.scot/about/`), net −1; the per-page lists are in
+`sweep-compare-protocol-18-vs-21-2212.json`. The −27 in referrals is attributable by page (membership −15, pages that
+stayed −12) and not by cause.
+
+**OPEN reading, not in README (#2412 read it, 2026-09-24):** GLA fell 0.8037 → 0.6241 (−0.18) and Southwark 0.7665 →
+0.5069 (−0.26), further than ten days of drift explains. The orchestrator opened both stored captures (#2412,
+2026-09-24T22:46Z). **Southwark's fall is a capture artefact, not a page result:** NVDA read a `cmd.exe` window, the
+transcript is `["blank","blank"]`, and the page's own DOM census matches protocol 18, so 0.5069 with 0 referred is what
+the scorer says about two blank lines. That capture was scored as one of the 49 calibration pages (#2433 is the row to
+refuse such a capture). **GLA is not attributable** between "the page changed" and "the capture's state": the whole
+difference is a ten-line consent-dialog prologue, and whether it moves the score is untested (#2434). The claim still
+does not say why the set fell. The `rules:real-pages` reading of the moved Ofgem capture was made by the orchestrator
+(#2212, 2026-09-24T13:05Z) and is NOT a recorded gate: the new url reads `["2.4.3"]` against the baseline's `["2.4.3"]`,
+unchanged by the re-key.
+
+**Superseded readings.** 2026-09-14, captures at protocol 18, run `2f9c51aa`, 41 conformant real pages: 0 asserted
+wrongly, 422 referred — superseded by the 2026-09-24 reading above. The product-path figure before that, the last one
+published, 2026-08-24 on 18 conformant real pages, is superseded: re-derived at today's code on the 17 of those pages
+still in the corpus, 0 asserted wrongly, 180 referred (#1612). One count first read as wrong was a publisher-declared
+exception the corpus lacked (#1610).
 README's claim block carries the current statement.
 
 ## axe-core beside the screen-reader layer
@@ -2210,7 +2263,8 @@ directory it works in. [What moved →](docs/operational-lessons.md#the-nested-c
 a11y-witness drives a **real screen reader (NVDA)** through real navigation, **alongside** axe-core (the
 rule/visual layer) rather than instead of it. See `README.md`, `PLAN.md`, `docs/adr/`.
 
-Measured 2026-09-14 on the calibration set: **0 criteria asserted wrongly, 422 referred** — a reading at
+Measured 2026-09-14 on the calibration set: **0 criteria asserted wrongly, 422 referred** (superseded 2026-09-24: 395
+referred at protocol 21, see the section above) — a reading at
 a moment, so re-derive before quoting. README's claim block carries the current statement.
 
 
@@ -2354,3 +2408,42 @@ refuses; the tick log names the check and the row stays offered. B2 is not asked
 Both fail open on a lookup that cannot ask, as the claim's do, and say so. **The bound on the pool is the dependency
 graph, and it is only as good as the edges in it:** a row that needs the worker fleet and carries no edge to it gets
 an instance that cannot finish, so a missing edge is a defect in the row (`product-manager`'s to fix).
+
+## A merged PR's close voids `answer:<session>`, and nothing said the wake had stopped (#2202)
+
+**A closed row wearing a live `answer:<session>` label means a named session still owes an answer there, and
+closing did not answer it.** `answer:<session>` is the org's only machine-readable "a session still owes an answer
+here". `readOpenRows` is `--state open`, so the instant a merge closed the row it left the population `answer-owed`
+reads, the 20-minute cadence stopped, and nothing anywhere said it had. That reads identically to having been
+answered.
+
+**Measured 2026-09-23T18:02Z by `product-manager`, off GitHub's own timestamps** -- three rows, all 2026-09-22, each
+labelled before a merged PR closed it, none of the three questions ever answered, all three still labelled 19-24 hours
+later:
+
+| row | `answer:` added | closed by | gap | question |
+|---|---|---|---|---|
+| #1936 | 18:04:09Z `answer:orchestrator` | PR #1944 merged 18:09:32Z | 5m23s | a lab read on the hollow-archive byte guard, asked "before merge" |
+| #1970 | 19:37:09Z `answer:product-manager` | PR #1975 merged 19:46:33Z | 9m24s | two follow-ups `ceo` assigned to `product-manager` |
+| #2034 | 23:05:54Z `answer:product-manager` | PR #2039 merged 23:20:39Z | 14m45s | re-prompt `reviewer` on draft #2039 |
+
+**The close was not the defect and is not prevented.** `Closes #N` often closes the row natively before the sweep
+runs, so the close stands. What changed is that it stopped being silent:
+
+- **`closurePlan` returns `owed: [{ number, session }]`**, across `close` and `already`, so the report is a return
+  value a test calls rather than a printed line. A `skip` row (reopened after the merge) is open again and is not in
+  it; an ordinary row is not either.
+- **`labelsToStrip` keeps `answer:*`, deliberately.** `was-ready` is kept because it is a record; `answer:*` is kept
+  because it is a live debt, and stripping it would end the wake and erase the question in one act. **So a closed row
+  wearing an `answer:` label is not `audit` debris** -- the DEBRIS finding is about claim labels, which are stripped.
+- **The closing comment says so** (`owedNote`), and the job log names every owed row, including one GitHub closed
+  first.
+- **The gate keeps waking the session.** `readClosedAnswerRows` lists the repo's own `answer:` labels, then asks for
+  the closed rows carrying any of them; `decide` takes them beside the open ones, and the prompt says the row is
+  closed and takes a comment. **Two calls, both exact, and the count moved `GH_READS.unconditional` from 6 to 8.** A
+  window over the newest closed rows would have been one call, but a question older than the window would fall out of
+  it silently -- the same defect one level down. A refused read prints a `NOTE:` on stderr rather than an empty list.
+
+**Not covered here:** `close-rows-sweep.mjs`'s own close loop (outside this row's Region) does not post the closing
+comment. It strips through the same `labelsToStrip`, so the label survives and the gate still reaches the session; only
+the note on the row is missing on that path.
