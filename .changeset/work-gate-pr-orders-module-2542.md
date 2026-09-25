@@ -1,0 +1,5 @@
+---
+"@a11ign/agent-org": patch
+---
+
+**The pull-request orders moved out of `work-gate.mjs` into `work-gate/pr-orders.mjs`, behaviour unchanged (#2542).** `work-gate.mjs` and `wake.mjs` are edited by 86 of 417 merges and B4 serialises every one of them, so a fix to an existing order now names the module, not the 5,200-line file. `draftOrder`, `failingChecksOrder`, `settledVerdictOrder`, `requiredWhenRed`, `redOnlyFromHoldOf` and the builders for `pr-green-unarmed`, `pr-review-blocked`, `pr-merge-conflict` and `awaiting-evidence-stale` moved with the helpers only they use (724 lines); `work-gate.mjs` re-exports every name they exported, so no caller changes. The registries (`CAUSES`, `decide`) stay in the entry point and this does not reduce collisions on them. The move is proved by a 241,920-case differential over `decide` before and after (0 differences, every moved cause emitted), and `work-gate-split-b4.test.ts` is the B4 positive control: two Regions that both name the module collide.
