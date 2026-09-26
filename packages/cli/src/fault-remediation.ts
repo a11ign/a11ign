@@ -43,7 +43,7 @@ const ADR = "docs/adr/0038-authenticated-capture.md";
 /**
  * ADR 0038's named errors (`auth/auth-faults.ts`): the ways an authenticated run is refused or fails. They are
  * CLIENT-SIDE like the two doubts, raised by this CLI before or after a worker answers, and each carries the
- * what / try / see shape the worker's codes do (ADR 0028). Kept in their own const so the ten are visibly one
+ * what / try / see shape the worker's codes do (ADR 0028). Kept in their own const so the eleven are visibly one
  * population; `fault-remediation.test.ts` reads the code list from `auth-faults.ts` and asserts both ways.
  */
 const AUTH_REMEDIATION: Record<AuthFault, FaultRemediation> = {
@@ -120,6 +120,16 @@ const AUTH_REMEDIATION: Record<AuthFault, FaultRemediation> = {
     tryThis: "run the authenticated capture from a private repository, or with the CLI on a machine of your own, "
       + "where nothing is published unless you publish it.",
     whereToLook: `${ADR}, "The Action's pull-request comment", amendment 3.`,
+  },
+  "auth-session-lost": {
+    what: "the login succeeded, and the page the run then asked for showed the login form again: every field the "
+      + "login fills was on it. The session did not hold, or the page bounced to the login wall, so no page was "
+      + "examined as the product.",
+    tryThis: "run again; if it repeats, check that the test account may hold a session (a site that allows one "
+      + "session per account ends it when another login starts, and that is not measured here), that the "
+      + "requested URL is reachable when signed in, and that the login form is not inside an iframe. Do not use "
+      + "a capture of this page: it describes the sign-in wall.",
+    whereToLook: `${ADR}, Constraint 1, "A session that does not hold is auth-session-lost".`,
   },
 };
 

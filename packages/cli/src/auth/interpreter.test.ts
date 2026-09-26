@@ -36,8 +36,10 @@ const LOGIN: FlowStep[] = [
 ];
 
 /** A tiny site: a login form, a dashboard, an off-origin identity provider, a form with a password-type PIN. */
-function fakeBrowser(options: { password?: string; redirectOnSignIn?: string; driftAfterClick?: boolean } = {}) {
+function fakeBrowser(options: { password?: string; redirectOnSignIn?: string; driftAfterClick?: boolean; requestedPageShows?: "login-form" | "login-redirect" | "change-password" } = {}) {
   const password = options.password ?? FAKE_SECRET;
+  /** A same-origin redirect: the requested page sends a session that did not hold to `/login`. */
+  const redirected = (url: string) => (url === URL_UNDER_TEST && options.requestedPageShows === "login-redirect" ? `${ORIGIN}/login` : url);
   let page = "about:blank";
   let origin = "null";
   /** After the Sign-in click the page will move off-origin on its own, but only AFTER the next origin check: a late redirect. */
@@ -51,6 +53,8 @@ function fakeBrowser(options: { password?: string; redirectOnSignIn?: string; dr
       return { id: String(next), role, name, backendId: next, ignored: false, ...extra };
     };
     if (page.endsWith("/login")) return [node("textbox", "Email address"), node("textbox", "Password"), node("button", "Sign in"), node("heading", "Sign in")];
+    if (page.endsWith("/orders") && options.requestedPageShows === "login-form") return [node("textbox", "Email address"), node("textbox", "Password"), node("button", "Sign in"), node("heading", "Sign in")];
+    if (page.endsWith("/orders") && options.requestedPageShows === "change-password") return [node("heading", "Change password"), node("textbox", "Password"), node("button", "Save")];
     if (page.endsWith("/dashboard") || page.endsWith("/orders")) return [node("heading", "Dashboard"), node("link", "Sign out")];
     if (page.endsWith("/twins")) {
       const billing = node("group", "Billing");
@@ -64,7 +68,7 @@ function fakeBrowser(options: { password?: string; redirectOnSignIn?: string; dr
   };
   const named = (handle: number) => nodes().find((n) => n.backendId === handle)!;
   const driver: AuthDriver & { purge(origin: string): Promise<void> } = {
-    navigate: async (url) => { page = url; origin = new URL(url).origin; return { ok: !url.endsWith("/down") }; },
+    navigate: async (url) => { page = redirected(url); origin = new URL(url).origin; return { ok: !url.endsWith("/down") }; },
     origin: async () => {
       const answer = origin;
       if (drifting) { drifting = false; page = "https://idp.example.test/authorize"; origin = "https://idp.example.test"; }
@@ -185,6 +189,33 @@ test("a heading on ANOTHER SITE does not satisfy an expect: a late off-origin re
   // identity provider's "Dashboard" heading satisfies the expect, and the run is reported signed in.
   const outcome = await both({ browser: { driftAfterClick: true } });
   failsAs(outcome, "auth-login-failed", "left-origin");
+});
+
+test("after a successful login the requested URL serves the login form: auth-session-lost, in place or by redirect, in both", async () => {
+  for (const requestedPageShows of ["login-form", "login-redirect"] as const) {
+    const outcome = await both({ browser: { requestedPageShows } });
+    failsAs(outcome, "auth-session-lost");
+    assert.match((outcome as { message: string }).message, /"Email address", "Password"/, requestedPageShows);
+    assert.ok(!(outcome as { message: string }).message.includes("expect-not-met"), "it is not a login failure");
+  }
+});
+
+test("after a successful login the requested URL serves the app: no fault, authApplied is marked, in both", async () => {
+  const outcome = await both({});
+  assert.ok(outcome.ok);
+  if (outcome.ok) assert.equal(outcome.events[outcome.events.length - 1].startsWith("authApplied"), true);
+});
+
+test("ONE control named like ONE login field is not the login wall: a change-password page is no fault, in both", async () => {
+  const outcome = await both({ browser: { requestedPageShows: "change-password" } });
+  assert.ok(outcome.ok, "a lone Password box is not the login form");
+});
+
+test("a login that fills nothing has no form to recognise: the wall check never fires, in both", async () => {
+  // `[].every(...)` is true, so an empty fill list would call EVERY page the login wall. The plan has no fill, and the
+  // requested page is the login form, and the run must still be reported signed in.
+  const outcome = await both({ login: [{ goto: "/dashboard" }, expectDashboard], browser: { requestedPageShows: "login-form" } });
+  assert.ok(outcome.ok);
 });
 
 test("a literal into a password-type input is auth-literal-secret and is never typed, in both", async () => {

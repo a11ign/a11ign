@@ -9,7 +9,9 @@
  * The first eight are the row's list (#2359, clause 6). Two are added by the ADR's own text: `auth-credential-
  * too-short` (amendment 2: a value under the floor refuses the run) and `auth-refused-public-repository`
  * (amendment 3: an authenticated run on a repository that is not private is refused whole, which replaces the
- * `auth-refused-public-comment` of the ADR's first draft — the reasons are in the ADR beside the amendment).
+ * `auth-refused-public-comment` of the ADR's first draft — the reasons are in the ADR beside the amendment). The
+ * eleventh, `auth-session-lost`, is a FAULT and not a fourth `LoginFailureReason`: the login SUCCEEDED, and the page
+ * it then loaded was the login form (#2563).
  */
 export const AUTH_FAULTS = [
   "auth-refused-remote-worker",
@@ -22,6 +24,7 @@ export const AUTH_FAULTS = [
   "auth-literal-secret",
   "auth-credential-too-short",
   "auth-refused-public-repository",
+  "auth-session-lost",
 ] as const;
 
 export type AuthFault = (typeof AUTH_FAULTS)[number];
