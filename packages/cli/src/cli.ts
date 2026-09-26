@@ -30,7 +30,7 @@ import { reportLines, type Report } from "./report.js";
 import {
   formatFaultMessage, formatAuthFaultMessage, formatDoubtMessage, formatEarlyContainmentNotice,
 } from "./fault-remediation.js";
-import { isAuthFault } from "./auth/auth-faults.js";
+import { AuthError, isAuthFault } from "./auth/auth-faults.js";
 import { refuseAuthOnRemoteWorker, requireAuthApplied, type AuthRequest } from "./auth/refusals.js";
 import { ruleLayerSignIn } from "./auth/rule-layer.js";
 import { pressedByThisRun, resolveAuthentication } from "./auth/resolve.js";
@@ -63,8 +63,9 @@ import { relative, resolve as resolvePath } from "node:path";
 import { parseFormsConfig, refuseIfWrongOrigin, FormsConfigError } from "./forms/config.js";
 import { submissionPlan, formCoverage } from "./forms/coverage.js";
 import { draftFormsConfig } from "./forms/draft.js";
-import { PageListError, multiPageJson, refuseMalformedUrls, resolveMaxPages, resolvePageList, rollUpLines,
-  runPageList, surfaceFromEnv } from "./multi-page.js";
+import { MAX_CAPTURE_ATTEMPTS, PageListError, captureCount, loginReport, minimumLogins, multiPageJson, newLoginTally,
+  refuseMalformedUrls, resolveMaxPages, resolvePageList, rollUpLines, runPageList, surfaceFromEnv,
+  type LoginTally } from "./multi-page.js";
 
 interface Args {
   /**
@@ -127,6 +128,8 @@ interface Args {
   /** SET BY `withAuthentication`, never by `parseArgs`: the resolved login, and the values the run must keep out of its output. */
   auth?: AuthRequest;
   scrubSet?: ScrubSet;
+  /** SET BY `withAuthentication` beside `auth`: where each login this run performs is counted, so the run can report them. */
+  logins?: LoginTally;
   /** Draft a forms config from what the screen reader announces on this page, and print it. */
   emitFormConfig: boolean;
   /** Say what WOULD be submitted, and submit nothing. */
@@ -330,8 +333,6 @@ export interface CaptureResponse {
    */
   authApplied?: boolean;
 }
-
-const MAX_CAPTURE_ATTEMPTS = 3;
 
 /**
  * Where the shadow scorer lives — same shape as `local-judge.ts`'s `scorerPaths()`, and for the same
@@ -546,7 +547,7 @@ async function runPages(args: Args): Promise<void> {
   const states = await configuredStates(args);
   const pages = await runPageList({
     urls: args.urls,
-    captures: args.urls.length * Math.max(1, states.length),
+    captures: captureCount({ pages: args.urls.length, states: states.length }),
     maxPages,
     surface: surfaceFromEnv(process.env),
     say: (line) => process.stderr.write(`${line}\n`),
@@ -559,8 +560,11 @@ async function runPages(args: Args): Promise<void> {
     },
     capturePage: (url, lease) => capturePageStates({ args, url, worker: lease.worker, states }),
   });
-  if (args.json) printAsJson(multiPageJson(pages));
-  else for (const line of rollUpLines(pages)) console.log(line);
+  // Only an authenticated run has logins to report; the floor is the one the run stated before it started.
+  const logins = args.logins && loginReport({ tally: args.logins, minimum: minimumLogins({
+    captures: captureCount({ pages: args.urls.length, states: states.length }), axe: args.axe }) });
+  if (args.json) printAsJson(multiPageJson(pages, logins));
+  else for (const line of rollUpLines(pages, logins)) console.log(line);
   // A page that could not be captured is a failed run even though the other pages were reported.
   if (pages.some((page) => page.status === "failed")) process.exitCode = 1;
 }
@@ -595,13 +599,21 @@ async function withAuthentication(args: Args): Promise<Args> {
   const resolved = await resolveAuthentication({
     args, urls: args.urls, task: args.task, axe: args.axe, env: process.env, isPdf: looksLikePdfUrl,
     readText: (path) => readFile(path, "utf8"),
+    countCaptures: async () => captureCount({ pages: args.urls.length, states: (await formStateCount(args)) }),
   });
   if (resolved === null) return args;
   // On the Action a notice is a workflow command, and it goes to STDERR: this step's stdout IS the JSON result, and a
   // `::notice::` line there would both corrupt it and go unread. Elsewhere it is a plain line.
   const onAction = process.env.GITHUB_ACTIONS === "true";
   for (const line of resolved.notices) process.stderr.write(onAction ? `::notice::${line}\n` : `${line}\n`);
-  return { ...args, ...resolved.overrides, auth: resolved.auth, scrubSet: resolved.scrubSet };
+  return { ...args, ...resolved.overrides, auth: resolved.auth, scrubSet: resolved.scrubSet, logins: newLoginTally() };
+}
+
+/** How many form states a forms config names, said quietly: `configuredStates` prints coverage lines and this runs first. */
+async function formStateCount(args: Args): Promise<number> {
+  if (!args.formsConfig) return 0;
+  const config = parseFormsConfig(await readFile(args.formsConfig, "utf8"), args.formsConfig);
+  return config.forms.reduce((total, form) => total + form.states.length, 0);
 }
 
 async function main(): Promise<void> {
@@ -737,7 +749,7 @@ async function recaptureUntilItReadsThePage(
   title: string,
   options: { url: string; task: string; worker: string; probeForms: boolean; probeFocus: boolean;
     probeNavigation: boolean; probeFocusContext: boolean; probeFocusReveal: boolean;
-    formState?: FormStateRequest; auth?: AuthRequest },
+    formState?: FormStateRequest; auth?: AuthRequest; logins?: LoginTally },
 ): Promise<CaptureResponse> {
   let cap = first;
   const { url, ...captureOptions } = options;
@@ -757,24 +769,26 @@ async function recaptureUntilItReadsThePage(
  */
 export async function captureAndScan(
   { url, task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, probeFocusReveal,
-    wantAxe, axeResults, formState, auth }: {
+    wantAxe, axeResults, formState, auth, logins }: {
     url: string; task: string; worker: string; probeForms: boolean; probeFocus: boolean;
     probeNavigation: boolean; probeFocusContext: boolean; probeFocusReveal: boolean; wantAxe: boolean;
-    axeResults: string | null; formState?: FormStateRequest; auth?: AuthRequest;
+    axeResults: string | null; formState?: FormStateRequest; auth?: AuthRequest; logins?: LoginTally;
   },
+  { scan, isAvailable }: { scan?: typeof scanWithAxe; isAvailable?: () => Promise<boolean> } = {},
 ): Promise<{ cap: CaptureResponse; axe: Awaited<ReturnType<typeof pageContext>> }> {
   // FIRST, before the rule layer's browser can launch: the two layers start together below, so a refusal raised
   // only inside `captureViaWorker` would come after axe had already begun loading the page.
   refuseAuthOnRemoteWorker({ worker, auth });
-  const ruleLayer = await chooseRuleLayer({ wantAxe, axeResults });
+  const ruleLayer = await chooseRuleLayer({ wantAxe, axeResults }, isAvailable);
   process.stderr.write(`Scanning ${url} (${ruleLayer === "none" ? "" : "rule-based axe-core + "}real screen reader) ...\n`);
   // Layer 1 (rule-based, local) and capture (lived-experience, remote worker)
   // load the same URL independently, so run them concurrently. axe failure is
   // non-fatal: we still report the lived-experience layer.
   const [firstCap, axe] = await Promise.all([
     captureViaWorker(url,
-      { task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, probeFocusReveal, formState, auth }),
-    pageContext(url, ruleLayer, axeResults, { auth }),
+      { task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, probeFocusReveal, formState, auth,
+        logins }),
+    pageContext(url, ruleLayer, axeResults, { auth, logins, scan }),
   ]);
   // `null` when the rule layer did not run, so "unchecked" can never be mistaken for "clean". Both
   // output paths must use THIS, not `axe.findings`: the human report already did
@@ -789,7 +803,7 @@ export async function captureAndScan(
   // the worker can be racy, so NVDA sometimes reads chrome instead of the page.
   const cap = await recaptureUntilItReadsThePage(firstCap, axe.title,
     { url, task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, probeFocusReveal, formState,
-      auth });
+      auth, logins });
   return { cap, axe };
 }
 
@@ -872,11 +886,11 @@ export function reportWitnessArtifact(path: string | null): void {
 
 async function runWitness(
   { url, task, worker, json, debug, probeForms, probeFocus, probeNavigation, probeFocusContext,
-    probeFocusReveal, emitFormConfig, formState, axe: wantAxe, axeResults, keep, sink, auth, scrubSet }: RunOptions,
+    probeFocusReveal, emitFormConfig, formState, axe: wantAxe, axeResults, keep, sink, auth, scrubSet, logins }: RunOptions,
 ): Promise<void> {
   const { cap, axe } = keepCredentialsOut(await captureAndScan(
     { url, task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, probeFocusReveal,
-      wantAxe, axeResults, formState, auth }), scrubSet);
+      wantAxe, axeResults, formState, auth, logins }), scrubSet);
   const artifactPath = keep ? writeWitnessArtifact(cap, task) : null;
   const ruleFindings = axe.findings;
   // A draft needs the ANNOUNCEMENTS and nothing downstream of them, so it returns before the judge runs.
@@ -1187,7 +1201,7 @@ const titleWithoutTheRuleLayer = (url: string, auth: AuthRequest | undefined): P
 
 export async function pageContext(
   url: string, layer: RuleLayer, axeResults: string | null,
-  { auth, scan = scanWithAxe }: { auth?: AuthRequest; scan?: typeof scanWithAxe } = {},
+  { auth, scan = scanWithAxe, logins }: { auth?: AuthRequest; scan?: typeof scanWithAxe; logins?: LoginTally } = {},
 ): Promise<{ findings: AxeFinding[] | null; title: string; coverage: RuleLayerCoverage;
   browserChannel: AxeBrowserChannel | null }> {
   if (layer === "import" && axeResults) {
@@ -1201,6 +1215,7 @@ export async function pageContext(
     return { findings: null, title: await titleWithoutTheRuleLayer(url, auth), coverage: {}, browserChannel: null };
   }
   // An authenticated run signs in FOR ITSELF in this layer's own browser (ADR 0038): it never receives the worker's session.
+  if (auth && logins) logins.ruleLayerScans += 1;
   return scan(url, auth ? { signIn: ruleLayerSignIn({ plan: auth, url }) } : {}).then((result) => {
     // WHICH BROWSER ANSWERED, reported rather than assumed — see `launchBrowser`. The Action skips the
     // bundled download deliberately, so seeing "msedge" there is the fallback working as designed, not a
@@ -1249,6 +1264,8 @@ export type CaptureRequest =
      * flags reachable. Refused for a remote worker before anything is sent (`refuseAuthOnRemoteWorker`).
      */
     auth?: AuthRequest;
+    /** Counts the login this call performs; never sent to the worker. */
+    logins?: LoginTally;
   };
 
 /**
@@ -1312,6 +1329,18 @@ export function describeWorkerError(status: number, body: unknown): string {
 }
 
 /**
+ * A worker's answer that is not a capture, as the error to throw. A fault the worker names as an AUTHENTICATION fault
+ * (`auth-login-failed`) is thrown as an `AuthError` carrying the code, because the caller that must stop repeating a
+ * wrong password (`runPageList`) decides on the code and never on a sentence. Its message is the worker's own, without
+ * `describeWorkerError`'s wrapper: the top-level handler adds the code and the what / try / see block once.
+ */
+function workerFailure(status: number, body: unknown): Error {
+  const { fault, error } = (body && typeof body === "object" ? body : {}) as { fault?: unknown; error?: unknown };
+  if (!isAuthFault(fault)) return new Error(describeWorkerError(status, body));
+  return new AuthError(fault, typeof error === "string" ? error : `the worker reported ${fault}`);
+}
+
+/**
  * A fresh `onProgress` callback per capture, so the notice fires at most ONCE — #426's second half. The
  * plumbing already existed and was unused for this caller (`captureTolerantly` has always accepted
  * `onProgress` and polled `/progress` while a capture is in flight; this was the one caller that never
@@ -1354,10 +1383,12 @@ export function earlyContainmentWatcher(): (progress: object) => void {
 export async function captureViaWorker(
   url: string,
   { task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, probeFocusReveal,
-    formState, auth }: CaptureRequest,
+    formState, auth, logins }: CaptureRequest,
 ): Promise<CaptureResponse> {
   // BEFORE the body is built, so a remote worker is never sent anything that carries a login.
   refuseAuthOnRemoteWorker({ worker, auth });
+  // Counted here, where the worker is asked to log in, so a re-capture and each form state count as what they are.
+  if (auth && logins) logins.workerAttempts += 1;
   let res: { status: number; ok: boolean; text: string; json: unknown };
   try {
     res = await captureTolerantly({
@@ -1381,7 +1412,7 @@ export async function captureViaWorker(
     );
   }
   if (!res.ok) {
-    throw new Error(describeWorkerError(res.status, res.json));
+    throw workerFailure(res.status, res.json);
   }
   // An older worker ignores `auth` and captures the login page: only its own acknowledgement rules that out.
   requireAuthApplied({ response: res.json, auth });

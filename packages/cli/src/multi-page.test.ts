@@ -13,17 +13,23 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { stripComments } from "@a11ign/evidence/source-text";
 
-import { parseArgs } from "./cli.js";
+import { captureAndScan, parseArgs } from "./cli.js";
+import { AuthError } from "./auth/auth-faults.js";
+import type { AuthRequest } from "./auth/refusals.js";
+import { resolveAuthentication } from "./auth/resolve.js";
 import {
-  CEILING_CAP_MINUTES, CEILING_PAGES, COST_DOC, DEFAULT_CAP_MINUTES, DEFAULT_MAX_PAGES, PageListError,
-  countLine, multiPageJson, refuseAboveCap, resolveMaxPages, resolvePageList, rollUpLines, runPageList,
-  splitUrlList, worstMinutes, type PageEntry,
+  CEILING_CAP_MINUTES, CEILING_PAGES, COST_DOC, DEFAULT_CAP_MINUTES, DEFAULT_MAX_PAGES, MAX_LOGINS, PageListError,
+  captureCount, countLine, loginReport, loginsPerformed, minimumLogins, multiPageJson, newLoginTally, refuseAboveCap,
+  refuseAboveLoginCap, resolveMaxPages, resolvePageList, rollUpLines, runPageList, splitUrlList, worstMinutes,
+  type PageEntry,
 } from "./multi-page.js";
 import {
   isMultiPage, multiPageExitCode, multiPageLogLines, pageOutcome, pageTripsFailOn, renderMultiSummary,
@@ -364,4 +370,147 @@ test("no crawl: the count is the number of URLs supplied, and nothing reads a si
   for (const crawler of [/sitemap/i, /\bcrawl/i, /<a\b|href/i, /fetch\(/, /--follow/]) {
     assert.doesNotMatch(source, crawler, `multi-page.ts must not ${crawler}: a crawl is LATER, and only as a proposal`);
   }
+});
+
+// ---- #2562: a list behind a login states its cost, REPORTS it, is bounded, and stops on a failed login -----------------------
+
+const FLOWS_YML = `
+version: 1
+origin: https://app.example.test
+flows:
+  login:
+    steps:
+      - goto: /login
+      - fill: { field: "Email address", from-env: APP_USER }
+      - fill: { field: "Password", from-env: APP_PASSWORD }
+      - press: "Sign in"
+      - expect: { heading: "Dashboard" }
+`;
+const APP_PAGES = ["orders", "invoices", "settings"].map((name) => `https://app.example.test/${name}`);
+const LOGIN_ENV = { APP_USER: "canaryuser6d3f2a", APP_PASSWORD: "canarysecretb81c94" };
+
+test("COMPOSITION: a 3-URL list and a login flow resolve through parseArgs and resolveAuthentication, and the notice is for THREE pages", async () => {
+  const args = parseArgs(["--urls", APP_PAGES.join(" "), "--flows", "flows.yml", "--login-flow", "login"]);
+  assert.deepEqual(args.urls, APP_PAGES);
+  const before = process.env.JUDGE_BACKEND;
+  process.env.JUDGE_BACKEND = "local";
+  try {
+    const resolved = await resolveAuthentication({
+      args, urls: args.urls, task: args.task, axe: true, env: LOGIN_ENV, isPdf: () => false,
+      readText: async () => FLOWS_YML, countCaptures: async () => captureCount({ pages: args.urls.length, states: 0 }),
+    });
+    assert.match(resolved?.notices[1] ?? "", /will perform at least 6 logins \(a minimum: one per capture, and one per capture for the rule layer\)/);
+  } finally { if (before === undefined) delete process.env.JUDGE_BACKEND; else process.env.JUDGE_BACKEND = before; }
+});
+
+const AUTH_PLAN: AuthRequest = { login: [{ goto: "/login" }, { expect: { kind: "heading", name: "Dashboard", timeoutSeconds: 10 } }] };
+const CAPTURE_OPTIONS = { task: "read", probeForms: false, probeFocus: false, probeNavigation: false,
+  probeFocusContext: false, probeFocusReveal: false, wantAxe: true, axeResults: null, auth: AUTH_PLAN };
+
+/** A loopback worker whose answer for each request is chosen by the request's index for that url (0 = the first ask). */
+async function workerAnswering(answer: (url: string, nth: number) => string[]) {
+  const asked = new Map<string, number>();
+  const server: Server = createServer((req, res) => {
+    let raw = "";
+    req.on("data", (chunk) => { raw += chunk; });
+    req.on("end", () => {
+      const { url } = JSON.parse(raw || "{}") as { url?: string };
+      if (!url) { res.writeHead(200); return void res.end(JSON.stringify({ ok: true, ready: true })); }
+      const nth = asked.get(url) ?? 0;
+      asked.set(url, nth + 1);
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ url, transcript: answer(url, nth), authApplied: true }));
+    });
+  });
+  await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+  return { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+    close: () => new Promise<void>((done) => { server.close(() => done()); server.closeAllConnections(); }) };
+}
+
+test("THE RUN REPORTS THE LOGINS IT PERFORMED: 3 pages, axe on, one page re-captured once = 7 (4 worker attempts + 3 rule-layer scans), against a stated floor of 6", async () => {
+  // The rule layer says the page is titled "Orders"; the second page's FIRST capture never reads it, so it is repeated once.
+  const worker = await workerAnswering((url, nth) => (url.endsWith("/invoices") && nth === 0 ? ["Sign in"] : ["Orders, heading level 1"]));
+  const tally = newLoginTally();
+  const scan = async () => ({ findings: [], title: "Orders", coverage: {}, browserChannel: "chromium" as const });
+  const realWrite = process.stderr.write.bind(process.stderr);
+  process.stderr.write = (() => true) as never;
+  try {
+    const entries = await runPageList({
+      urls: APP_PAGES, captures: captureCount({ pages: 3, states: 0 }), maxPages: DEFAULT_MAX_PAGES, surface: "cli", say: () => undefined,
+      lease: async () => ({ release: async () => undefined }),
+      capturePage: async (url) => [await captureAndScan({ ...CAPTURE_OPTIONS, url, worker: worker.url, logins: tally },
+        { scan: scan as never, isAvailable: async () => true })],
+    });
+    process.stderr.write = realWrite;
+    assert.deepEqual(entries.map((entry) => entry.status), ["captured", "captured", "captured"]);
+    assert.deepEqual(tally, { workerAttempts: 4, ruleLayerScans: 3 });
+    assert.equal(loginsPerformed(tally), 7);
+    const minimum = minimumLogins({ captures: 3, axe: true });
+    assert.equal(minimum, 6, "the floor is the pages-x-2 sentence, stated as a minimum");
+    const report = loginReport({ tally, minimum });
+    assert.deepEqual(report, { performed: 7, workerAttempts: 4, ruleLayerScans: 3, minimum: 6 });
+    assert.deepEqual(multiPageJson(entries, report).logins, report, "in --json");
+    assert.ok(rollUpLines(entries, report).some((line) => line === "Logins: 7 performed (4 capture attempts, 3 rule-layer scans); the minimum stated before the run was 6."), "in the roll-up");
+  } finally { process.stderr.write = realWrite; await worker.close(); }
+});
+
+test("a run with no authentication reports no logins: the JSON and the roll-up are byte-identical to before", () => {
+  const entries: PageEntry[] = [{ url: "https://a.example/", status: "captured", results: [] }];
+  assert.deepEqual(multiPageJson(entries), { multiPage: true, pages: entries });
+  assert.ok(!("logins" in multiPageJson(entries)));
+  assert.deepEqual(rollUpLines(entries), ["Pages: 1 requested; 1 captured, 0 FAILED.", "  1. https://a.example/ -- captured"]);
+});
+
+test("the lockout guard, in the shape of refuseAboveCap: names the constant, the count and the remedy; the default run is admitted and the ceiling run is not", () => {
+  refuseAboveLoginCap({ captures: DEFAULT_MAX_PAGES, axe: true });
+  assert.throws(() => refuseAboveLoginCap({ captures: CEILING_PAGES, axe: true }), (error: Error) => {
+    assert.ok(error instanceof PageListError);
+    assert.match(error.message, /at least 50 logins/);
+    assert.match(error.message, new RegExp(`MAX_LOGINS is ${MAX_LOGINS}`));
+    assert.match(error.message, /5 x \(3 capture attempts \+ 1 rule-layer scan\)/);
+    assert.match(error.message, /Nothing was captured, and no worker was leased\./);
+    return true;
+  });
+});
+
+/** A stubbed run whose capture of `failing` throws `error`, recording every login a capture makes on a shared tally. */
+function loginRun(urls: string[], failing: { url: string; error: Error }) {
+  const loginsMade: string[] = [];
+  const run = () => runPageList({
+    urls, captures: urls.length, maxPages: DEFAULT_MAX_PAGES, surface: "cli", say: () => undefined,
+    lease: async () => ({ release: async () => undefined }),
+    capturePage: async (url) => {
+      loginsMade.push(url);
+      if (url === failing.url) throw failing.error;
+      return [{ url }];
+    },
+  });
+  return { loginsMade, run };
+}
+
+test("A FAILED LOGIN STOPS THE LIST: the failing page makes its logins, pages 2 and 3 make NONE and are recorded not attempted, naming the fault", async () => {
+  const { loginsMade, run } = loginRun(pages(3), { url: pages(3)[0], error: new AuthError("auth-login-failed", "the login did not complete (expect-not-met)") });
+  const entries = await run();
+  assert.deepEqual(loginsMade, [pages(3)[0]], "the capture (and so the login) was called for page 1 only");
+  assert.deepEqual(entries.map((entry) => [entry.status, entry.fault, entry.notAttempted]),
+    [["failed", "auth-login-failed", undefined], ["failed", "auth-login-failed", true], ["failed", "auth-login-failed", true]]);
+  const lines = rollUpLines(entries);
+  assert.equal(lines[0], "Pages: 3 requested; 0 captured, 1 FAILED, 2 NOT ATTEMPTED.");
+  assert.match(lines[2], /NOT ATTEMPTED: .*page-1 failed with auth-login-failed, so no further login was made/);
+});
+
+test("the stop is for a fault on a LATER page too: page 2 fails auth, page 3 is not attempted, page 1 keeps its capture", async () => {
+  const { loginsMade, run } = loginRun(pages(3), { url: pages(3)[1], error: new AuthError("auth-credential-in-artifact", "a value survived redaction") });
+  const entries = await run();
+  assert.deepEqual(loginsMade, [pages(3)[0], pages(3)[1]]);
+  assert.deepEqual(entries.map((entry) => entry.status), ["captured", "failed", "failed"]);
+  assert.deepEqual(entries.map((entry) => entry.notAttempted), [undefined, undefined, true]);
+});
+
+test("POSITIVE CONTROL: a capture timeout, a plain Error with no auth fault, STILL continues to the next page", async () => {
+  const { loginsMade, run } = loginRun(pages(3), { url: pages(3)[0], error: new Error("the capture ran out of time (fault: hard-timeout)") });
+  const entries = await run();
+  assert.deepEqual(loginsMade, pages(3), "all three pages were tried");
+  assert.deepEqual(entries.map((entry) => entry.status), ["failed", "captured", "captured"]);
+  assert.ok(entries.every((entry) => entry.notAttempted === undefined && entry.fault === undefined));
 });

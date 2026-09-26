@@ -10,9 +10,10 @@ import { FlowsError } from "./flows.js";
 import { ScrubError } from "./scrub.js";
 import { AuthError } from "./auth-faults.js";
 import {
-  PRESSING_OFF_NOTICE, loginCount, loginNotice, pressedByThisRun, repositoryPrivacy, resolveAuthentication, type ResolveRequest,
+  PRESSING_OFF_NOTICE, loginNotice, pressedByThisRun, repositoryPrivacy, resolveAuthentication, type ResolveRequest,
 } from "./resolve.js";
 import { parseArgs } from "../cli.js";
+import { DEFAULT_MAX_PAGES, MAX_CAPTURE_ATTEMPTS, MAX_LOGINS, CEILING_PAGES, PageListError, minimumLogins, worstCaseLogins } from "../multi-page.js";
 
 const ORIGIN = "https://app.example.test";
 const FAKE_USER = "canaryuser6d3f2a";
@@ -42,6 +43,7 @@ const request = (over: Over = {}): ResolveRequest => ({
   urls: [`${ORIGIN}/orders`],
   task: "Read and understand this page",
   axe: true,
+  countCaptures: async () => 1,
   env: ENV,
   readText: async (path) => { if (path === "flows.yml") return FLOWS; throw new Error(`no such file ${path}`); },
   isPdf: (url) => url.endsWith(".pdf"),
@@ -68,17 +70,53 @@ test("a valid request resolves: the login's steps, a scrub set, the probes turne
   assert.deepEqual(resolved.scrubSet.credentials.map((c) => c.name).sort(), ["APP_PASSWORD", "APP_USER"]);
   assert.deepEqual(resolved.overrides, { probeForms: false, probeNavigation: false });
   assert.equal(resolved.notices[0], PRESSING_OFF_NOTICE);
-  assert.match(resolved.notices[1], /will perform 2 logins \(one per capture, and one per page for the rule layer/);
+  assert.match(resolved.notices[1], /will perform at least 2 logins \(a minimum: one per capture, and one per capture for the rule layer\)/);
   assert.equal(resolved.notices.length, 2, "no judge notice for the local backend");
   assert.ok(!JSON.stringify(resolved.notices).includes(FAKE_USER) && !JSON.stringify(resolved.notices).includes(FAKE_SECRET));
 });
 
-test("the login count is per capture, plus one per page for the rule layer, and says so", () => {
-  assert.equal(loginCount({ pages: 1, axe: true }), 2);
-  assert.equal(loginCount({ pages: 1, axe: false }), 1);
-  assert.equal(loginCount({ pages: 3, axe: true }), 6);
-  assert.match(loginNotice({ pages: 1, axe: false }), /will perform 1 login \(one per capture; more if a capture has to be repeated\)/);
-  assert.match(loginNotice({ pages: 2, axe: true }), /dedicated test account/);
+test("the pre-run notice states a MINIMUM and says so, and names what a repeated capture can raise it to", () => {
+  const notice = loginNotice({ captures: 3, axe: true });
+  assert.match(notice, /will perform at least 6 logins \(a minimum: one per capture, and one per capture for the rule layer\)/);
+  assert.match(notice, /can reach 12; the run reports how many it performed/, `3 captures x (${MAX_CAPTURE_ATTEMPTS} attempts + 1 scan)`);
+  assert.match(loginNotice({ captures: 1, axe: false }), /at least 1 login \(a minimum: one per capture\)\. .*can reach 3;/);
+  assert.match(loginNotice({ captures: 2, axe: true }), /dedicated test account/);
+});
+
+test("the floor and the worst case are arithmetic on captures, not pages: form states count", () => {
+  assert.equal(minimumLogins({ captures: 3, axe: true }), 6);
+  assert.equal(minimumLogins({ captures: 3, axe: false }), 3);
+  assert.equal(worstCaseLogins({ captures: 5, axe: true }), 20);
+  assert.equal(worstCaseLogins({ captures: 5, axe: false }), 15);
+});
+
+test("LOCKOUT GUARD: the default 5-page run is ADMITTED (floor 10, worst case 20); a run at the page ceiling is REFUSED (floor 50), before any capture", async () => {
+  const pages = (count: number) => Array.from({ length: count }, (_, i) => `${ORIGIN}/page-${i + 1}`);
+  const resolveFor = (count: number, axe = true, captures = count) => withJudge("local",
+    () => resolveAuthentication(request({ urls: pages(count), axe, countCaptures: async () => captures })));
+  assert.equal(MAX_LOGINS, DEFAULT_MAX_PAGES * (MAX_CAPTURE_ATTEMPTS + 1), "the constant is the default run's worst case, derived");
+  assert.equal(worstCaseLogins({ captures: DEFAULT_MAX_PAGES, axe: true }), MAX_LOGINS);
+  const admitted = await resolveFor(DEFAULT_MAX_PAGES);
+  assert.match(admitted?.notices[1] ?? "", /at least 10 logins/, "the admitted default run states its floor: 10");
+  await refusedAs(resolveFor(CEILING_PAGES), (e) => e instanceof PageListError && /at least 50 logins/.test(e.message)
+    && /MAX_LOGINS is 20/.test(e.message) && /There is no override/.test(e.message) && /Nothing was captured, and no worker was leased/.test(e.message), "the ceiling run");
+  // The edge, both sides: floor 20 is at the bound and admitted, floor 22 is past it and refused.
+  assert.ok(await resolveFor(10));
+  await refusedAs(resolveFor(11), (e) => e instanceof PageListError && /at least 22 logins/.test(e.message), "one capture past the bound");
+  // Without the rule layer the floor halves, and the refusal stops naming --no-axe as a remedy it already took.
+  assert.ok(await resolveFor(20, false));
+  await refusedAs(resolveFor(21, false), (e) => e instanceof PageListError && /at least 21 logins/.test(e.message) && !/--no-axe/.test(e.message), "no rule layer");
+});
+
+test("LOCKOUT GUARD counts CAPTURES: ONE url with twelve form states is refused, though it is one page", async () => {
+  await refusedAs(withJudge("local", () => resolveAuthentication(request({ countCaptures: async () => 12 }))),
+    (e) => e instanceof PageListError && /at least 24 logins/.test(e.message), "one page, twelve states");
+});
+
+test("a run that asks for no authentication never counts its captures: nothing is read for it", async () => {
+  let counted = 0;
+  await resolveAuthentication(request({ args: { flows: null, loginFlow: null }, countCaptures: async () => { counted += 1; return 99; } }));
+  assert.equal(counted, 0);
 });
 
 test("--flows without --login-flow, or the reverse, is refused; the override alone is refused", async () => {

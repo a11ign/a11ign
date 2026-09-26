@@ -168,7 +168,7 @@ test("an authenticated request turns automatic pressing OFF on the wire, whateve
       assert.equal(sent.auth.login.length, 5);
       assert.ok(!JSON.stringify(sent).includes(FAKE_USER) && !JSON.stringify(sent).includes(FAKE_SECRET), "the request carries the variable NAMES and no value");
       assert.match(ran.err, /automatic pressing and link-following are off; this run will press only what your flows and forms config name\./);
-      assert.match(ran.err, /this run will perform 1 login \(one per capture; more if a capture has to be repeated\)/);
+      assert.match(ran.err, /this run will perform at least 1 login \(a minimum: one per capture\)\. .*can reach 3;/);
     } finally { await worker.close(); }
   });
 });
@@ -215,6 +215,75 @@ test("a run that asks for no authentication is unchanged: no flows, no notices, 
       assert.ok(artifact.includes(FAKE_USER), "with no login there is nothing to scrub: a page that says a string keeps saying it");
       const sent = worker.requests[0] as Record<string, unknown>;
       assert.ok(!("auth" in sent), "no auth field on an ordinary request");
+    } finally { await worker.close(); }
+  });
+});
+
+// ---- A LIST OF PAGES BEHIND A LOGIN (#2562): composition, the login report, and the stop on a failed login -------------------
+//
+// `--urls` and `--login-flow` compose (nothing pinned it). This row does NOT build ADR 0038's per-entry `flow:` / `auth: none`
+// list: `--urls` is a whitespace-split string with no per-entry keys, so there is nothing to refuse and no entry to exempt.
+
+const LIST = [`${ORIGIN}/orders`, `${ORIGIN}/invoices`, `${ORIGIN}/settings`];
+const authList = (w: Workspace, worker: string, extra: string[] = []) =>
+  ["--urls", LIST.join(" "), "--worker", worker, "--flows", w.flows, "--login-flow", "login", "--no-axe", "--json", ...extra];
+const loginRequests = (requests: Array<Record<string, unknown>>) => requests.filter((request) => request.auth !== undefined);
+
+test("A LIST + A LOGIN FLOW COMPOSE: three pages are three captures, each carrying the login, and the notice states the floor for THREE", { timeout: 120_000 }, async () => {
+  await cleanly(async (w) => {
+    const worker = await fakeWorker((body) => ({ status: 200, body: { ...okResponse(CLEAN).body, url: body.url } }));
+    try {
+      const ran = await witness(w, authList(w, worker.url));
+      assert.deepEqual(worker.requests.map((request) => request.url), LIST, "every page went to the worker, in order");
+      assert.equal(loginRequests(worker.requests).length, 3, "and every one of them carried the login");
+      assert.match(ran.err, /this run will perform at least 3 logins \(a minimum: one per capture\)/, ran.err);
+    } finally { await worker.close(); }
+  });
+});
+
+test("A FAILED LOGIN STOPS THE LIST: page 1 fails auth-login-failed, the worker is asked ONCE, pages 2 and 3 are NOT ATTEMPTED and name the fault", { timeout: 120_000 }, async () => {
+  await cleanly(async (w) => {
+    const worker = await fakeWorker(() => ({ status: 500, body: { error: "the login did not complete (expect-not-met) at expect: heading \"Dashboard\"", fault: "auth-login-failed" } }));
+    try {
+      const ran = await witness(w, authList(w, worker.url));
+      assert.equal(worker.requests.length, 1, `exactly the logins of page 1 and none for pages 2 and 3\n${ran.err}`);
+      const result = JSON.parse(ran.out) as { pages: Array<{ url: string; status: string; fault?: string; notAttempted?: true; error?: string }>; logins: { performed: number } };
+      assert.deepEqual(result.pages.map((page) => [page.url, page.status, page.fault, page.notAttempted]),
+        [[LIST[0], "failed", "auth-login-failed", undefined], [LIST[1], "failed", "auth-login-failed", true], [LIST[2], "failed", "auth-login-failed", true]]);
+      assert.match(result.pages[1].error ?? "", /orders failed with auth-login-failed, so no further login was made/);
+      assert.equal(result.logins.performed, 1, "the run REPORTS the one login it made");
+      assert.equal(ran.code, 1, "a page that could not be captured is a failed run");
+    } finally { await worker.close(); }
+  });
+});
+
+test("POSITIVE CONTROL: a capture failure that is NOT an authentication fault still continues to the next page, so the stop is not a blanket abort", { timeout: 120_000 }, async () => {
+  await cleanly(async (w) => {
+    const worker = await fakeWorker((body) => body.url === LIST[0]
+      ? { status: 500, body: { error: "the capture ran out of time", fault: "hard-timeout" } }
+      : { status: 200, body: { ...okResponse(CLEAN).body, url: body.url } });
+    try {
+      const ran = await witness(w, authList(w, worker.url));
+      assert.deepEqual(worker.requests.map((request) => request.url), LIST, `pages 2 and 3 were still tried\n${ran.err}`);
+      const result = JSON.parse(ran.out) as { pages: Array<{ notAttempted?: true; fault?: string }>; logins: { performed: number } };
+      assert.deepEqual(result.pages.map((page) => page.notAttempted), [undefined, undefined, undefined]);
+      assert.equal(result.pages[0].fault, undefined, "a timeout is no authentication fault");
+      assert.equal(result.logins.performed, 3);
+    } finally { await worker.close(); }
+  });
+});
+
+test("THE LOCKOUT GUARD refuses a 25-page authenticated list at the CLI: exit 2, the number named, and the worker never asked", { timeout: 120_000 }, async () => {
+  await cleanly(async (w) => {
+    const worker = await fakeWorker(() => okResponse(CLEAN));
+    try {
+      const many = Array.from({ length: 25 }, (_, i) => `${ORIGIN}/page-${i + 1}`).join(" ");
+      const ran = await witness(w, ["--urls", many, "--max-pages", "25", "--worker", worker.url, "--flows", w.flows, "--login-flow", "login", "--json"]);
+      assert.equal(ran.code, 2, ran.err);
+      assert.match(ran.err, /it needs at least 50 logins/);
+      assert.match(ran.err, /MAX_LOGINS is 20/);
+      assert.equal(worker.requests.length, 0);
+      assert.equal(ran.out, "");
     } finally { await worker.close(); }
   });
 });

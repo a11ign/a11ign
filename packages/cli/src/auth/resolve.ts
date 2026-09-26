@@ -23,6 +23,7 @@
 import { FlowsError, parseFlowsFile, refuseIfWrongOrigin, resolveLoginFlow } from "./flows.js";
 import { assertCredentialsPresent, type AuthPlan } from "./interpreter.js";
 import { judgeBackendDecision, refuseAuthOnPublicRepository, type AuthRequest } from "./refusals.js";
+import { MAX_CAPTURE_ATTEMPTS, minimumLogins, refuseAboveLoginCap, worstCaseLogins } from "../multi-page.js";
 import { buildScrubSet, refuseIfAnArgumentCarriesAValue, type ScrubSet } from "./scrub.js";
 
 export interface AuthArguments {
@@ -35,8 +36,13 @@ export interface ResolveRequest {
   args: AuthArguments;
   urls: readonly string[];
   task: string;
-  /** Is the rule layer going to run (each page then logs in a second time)? */
+  /** Is the rule layer going to run (each capture then logs in a second time)? */
   axe: boolean;
+  /**
+   * Captures the run will make (pages times form states), asked only once authentication is known to be wanted: counting
+   * them reads the forms config, which a run that logs in to nothing has no need to do early.
+   */
+  countCaptures: () => Promise<number>;
   env: Readonly<Record<string, string | undefined>>;
   readText: (path: string) => Promise<string>;
   isPdf: (url: string) => boolean;
@@ -84,15 +90,19 @@ function pressedByFormState(formState: PressedFormState | undefined): string[] {
   return [...toggled.map((entry) => entry.field), formState.submit];
 }
 
-/** One login per capture for the screen-reader layer, plus one per page for the rule layer. Stated, because it is real requests with a real account. */
-export function loginCount({ pages, axe }: { pages: number; axe: boolean }): number {
-  return pages * (axe ? 2 : 1);
-}
-
-export function loginNotice({ pages, axe }: { pages: number; axe: boolean }): string {
-  const count = loginCount({ pages, axe });
-  return `authenticated run: this run will perform ${count} login${count === 1 ? "" : "s"} (one per capture`
-    + `${axe ? ", and one per page for the rule layer" : ""}; more if a capture has to be repeated). `
+/**
+ * What a run states BEFORE it starts, and it is a FLOOR, said as one: a login per capture for the screen reader and,
+ * with the rule layer on, one per capture for that layer, which signs in for itself. A capture repeated because it did
+ * not read the page (`MAX_CAPTURE_ATTEMPTS`) logs in again, so the run can reach `worstCaseLogins`; the run reports
+ * the number it PERFORMED afterwards (`multi-page.ts`). "Pages x 2" is the floor of a run with no form states and no
+ * repeats, not a count of anything, and this notice used to state it as one.
+ */
+export function loginNotice({ captures, axe }: { captures: number; axe: boolean }): string {
+  const floor = minimumLogins({ captures, axe });
+  const worst = worstCaseLogins({ captures, axe });
+  return `authenticated run: this run will perform at least ${floor} login${floor === 1 ? "" : "s"} (a minimum: one per capture`
+    + `${axe ? ", and one per capture for the rule layer" : ""}). A capture that has to be repeated logs in again, `
+    + `up to ${MAX_CAPTURE_ATTEMPTS} attempts each, so it can reach ${worst}; the run reports how many it performed. `
     + "Use a dedicated test account: a login is a real request to a real account.";
 }
 
@@ -157,6 +167,10 @@ export async function resolveAuthentication(request: ResolveRequest): Promise<Re
     refuseIfWrongOrigin(file, url);
   }
   const plan = planFrom(login.steps);
+  const captures = await request.countCaptures();
+  // Before anything is leased or captured, beside the other refusals: a run that asks a real account for more logins than
+  // the bound is refused whole (PageListError, exit 2), and a single URL with many form states is caught here too.
+  refuseAboveLoginCap({ captures, axe: request.axe });
   assertCredentialsPresent(plan, env);
   const names = [...new Set(login.steps.flatMap((step) => ("fill" in step && step.fill.fromEnv !== undefined ? [step.fill.fromEnv] : [])))];
   const scrubSet = buildScrubSet(names.map((name) => ({ name, value: env[name] as string })));
@@ -165,7 +179,7 @@ export async function resolveAuthentication(request: ResolveRequest): Promise<Re
   return {
     auth: plan,
     scrubSet,
-    notices: [PRESSING_OFF_NOTICE, loginNotice({ pages: urls.length, axe: request.axe }), ...(judgeNotice ? [judgeNotice] : [])],
+    notices: [PRESSING_OFF_NOTICE, loginNotice({ captures, axe: request.axe }), ...(judgeNotice ? [judgeNotice] : [])],
     overrides: { probeForms: false, probeNavigation: false },
   };
 }
