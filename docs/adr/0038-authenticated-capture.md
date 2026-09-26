@@ -202,6 +202,97 @@ Three notes, each a decision.
   from it. The Action adds `::add-mask::` for the URL-encoded and base64 forms of every `from-env` value at
   the start of the step, and the masks do not apply to files, which is why Constraint 4's command exists.
 
+## Amendment 7 (#2566): mechanism 2, storage state, decided before it is built
+
+**Status: DECIDED, and only half built.** `ceo`'s row 4 (#928, 2026-09-25) ruled that a person signs in by hand once, in their
+own browser, and the run loads that state, ending in `auth-state-expired` when it no longer holds. The ruled text left six
+places open, where the shipped code and the done-when disagree or are silent. **Each is answered here, in a sentence with its
+basis, before any code, so that the reviewer reads the decision and not the diff.** The build is two pull requests (the row's
+item 7): the containment first (choices 4 and 5's writing half, and the guard that the tool writes no state), then the loading
+(choices 1, 2, 3 and the wire). **Nothing below is reachable until the second merges: no flag exists, and `--auth-state` is
+still an unknown argument.** Measured 2026-09-26 at `fc4a23121`: `git grep 'storageState|--auth-state|Network.setCookie'` over
+the package sources, tests excluded, prints nothing.
+
+1. **Which steps run under `--auth-state`: the login flow's steps are skipped except its final `expect:`, and the flow's
+   `flow:`/`upTo:` steps still run.** The state stands in for the sign-in, so `goto /login`, `fill` and `press` are never
+   executed: against a valid state the login page has redirected away, and a `fill` on it would end `unbindable-field`, a
+   failure of the mechanism and not of the page. The final `expect:` is what the ruling says decides the state is good, so it
+   runs, **on the page the run requested**, after the state is loaded. Two consequences are stated and not hidden. **First,
+   the `expect:` must hold on every page the run requests**, because each capture loads the state afresh and asks it of the
+   requested URL. A flow written for form login whose `expect` is `heading "Dashboard"` reads a valid state on `/settings` as
+   expired; the remedy names the fix (a control every signed-in page carries, such as "Sign out"). This is the price of
+   keeping the ruled signal instead of inventing a second one. **Second, a post-condition that holds on a login wall would
+   read an expired state as good;** the existing `auth-session-lost` check (every field the login fills is on the page) still
+   runs afterwards and still catches that case. Basis: read from `interpreter.ts` `signIn` (login steps, flow steps, then the
+   requested page) and `landedOnLoginForm`; not run against a real site.
+2. **`auth-state-expired` is a new fault, raised ONLY on a state run.** On a state run, the `expect:` not being met, or the
+   page having left the pinned origin at that step (an expired single-sign-on session redirects to the identity provider,
+   which on the form path is `left-origin`), ends `auth-state-expired` with the same sentence from both interpreters. **A
+   CAPTCHA widget on the page still ends `auth-challenge-detected`**, since that names a different cause. The form-login path
+   keeps `expect-not-met` and `left-origin` **unchanged**, and a wrong password is `auth-login-failed` as today. The fault is a
+   fault and not a fourth `LoginFailureReason`, for the reason `auth-session-lost` gives: the login did not fail, there was
+   none. Basis: `auth-faults.ts` and `refusals.test.ts`'s `AUTH_FAULT_COUNT` (12 today, 13 with the fault, moved by the second pull request).
+3. **How a state is loaded, in each layer, and what it does not carry.** The state file is Playwright's (`cookies[]` and
+   `origins[].localStorage[]`, read from `playwright-core` 1.61.1's own type declarations). Both interpreters load it the same
+   way over the browser protocol, so one parity table holds them equal: `Network.setCookies` for the cookies whose domain
+   matches the pinned origin's host, then a navigation to the requested page (`localStorage` needs a document on the
+   origin), then the pinned origin's `localStorage` entries through a FIXED function handed the entries as data (nothing in
+   the file is ever spliced into script text), then the page is loaded again. **Cookies for other hosts and `localStorage`
+   for other origins are not loaded**, and the count skipped is disclosed: a state file made in a browser holds every
+   site's sessions, and loading them would put a session for a site the run never named into a browser on a shared machine.
+   **`sessionStorage` is not in the file** (Playwright's own guidance: it "is not persisted"; the type has no field for it),
+   and **IndexedDB is in it only if the person asked for it and is not loaded here**. A site that keeps its session in
+   either is one a state cannot carry: the run ends `auth-state-expired`, and its remedy says why that may be so and offers
+   the form login. The rule layer's Playwright page takes the state through the same protocol calls and not through
+   `storageState:`, so there is one implementation of the loading to keep equal and not two.
+4. **What "the state's contents are in the scrub set" means.** Every cookie value and every `localStorage` value the run
+   LOADED joins the scrub set, in the four forms `leak-detector.ts` knows, and **a `localStorage` value that parses as JSON
+   contributes each string leaf of it as well**, because a page echoes a token and never the JSON object that held it. The
+   names are positional and never the file's own: `state cookie 3`, `state localStorage 5` (a storage key can itself carry an
+   identifier, and a hit names a place and never a value). **A value shorter than `MIN_SCRUBBED_LENGTH` is SKIPPED, and the
+   run says how many: it does not refuse.** This differs from a `from-env` value on purpose. A login variable is one the
+   person chose to be at least eight characters; a real state file holds dozens of values that are `1`, `true`, `en` or
+   `dark`, and refusing the run for them would make every state unusable, while the floor's own reasons (amendment 2) say
+   hiding them rewrites the page's words and cannot be proven. **The skip is not silent** (the run prints "N values in the
+   state are shorter than 8 characters and are not scrubbed") **and it is the state's honest limit**: a session token shorter
+   than eight characters would echo unhidden and unproven, which no real session identifier is. **One more exclusion, also
+   counted:** a state value that is a substring of the run's own URLs or task is not scrubbed, because those arguments are
+   the caller's and are already public to the run (a `localStorage` value `dashboard` would otherwise refuse every URL
+   containing `/dashboard`); the argument refusal of `refuseIfAnArgumentCarriesAValue` stays for every other value. Basis:
+   `scrub.ts` `buildScrubSet`, which refuses below the floor and so cannot take a state as it stands.
+5. **The wire.** The CLI sends the worker a PATH and nothing else: `auth.state: { path }`, a string, absolute, on the worker's
+   own machine (Constraint 1's own words: "never a value, never a cookie, never a file's contents"). The worker reads and
+   validates the file itself, so a request cannot make it load a value the CLI did not show it, and **a file that is not valid
+   JSON, or is the wrong shape, is refused naming the path and the reason and never quoting the file** (a parser's message
+   quotes a fragment of the text it choked on). `validateAuthRequest`'s key list gains `state`; a worker that predates it
+   refuses the unknown key, which is what fails closed. **A remote worker still refuses any authentication**
+   (Constraint 1, and Constraint 6's MFA and SSO stay out of v1: a state is how a person who has signed in through SSO by
+   hand gets a run past it, and the tool still never signs in through a provider). `--auth-state` without `--flows` and
+   `--login-flow` beside it is refused as `--login-flow` alone is, since the `expect:` that decides the state lives in the flow.
+6. **The Action.** `auth-state:` is an input and names a path. On a runner the file has to exist there, so the workflow
+   author's own step decodes it from a secret into `$RUNNER_TEMP`, and `docs/github-action.md` says exactly that with an
+   example. **The Action does not write the file and has no way to,** by construction and by test (below); GitHub masks the
+   secret's exact value in logs and nothing derived from it, and the decoded file's contents are not a secret to GitHub, so
+   the Action masks nothing for a state and the containment (choice 4) is the only defence, which the docs say in those words.
+
+**The tool writes no state file, and that is a test and not a promise.** `Constraint 2`'s "no command that would write one"
+becomes an enumeration: every file-writing call under `packages/cli/src/auth/` (tests excluded) and in the worker's
+`auth-flow.mjs` and `capture-auth.mjs` is listed against an allowlist of ONE (`leak-check.ts`, which writes its own scrubbed
+output into a temp directory it was handed), and a scratch module that writes a state is caught by the same scan, so the guard
+demonstrably can fail.
+
+**The two controls, restated for a state, and which is which.** The ADR's "positive control 1 and 2" (Constraint 4's command)
+are the raw stage exiting exactly `1` against the echoing fixture, and the written stage exiting `0` with a redaction count of
+at least one. `auth-leak-detector.test.ts` reuses the words for different controls (the spelled-out transcript and the
+one-character run). For a state, **control 1 is `examineRaw` over a transcript that echoes a state cookie's value, exit `1`,
+and control 2 is `examineWritten` over the same transcript with the state's credentials, exit `0` and at least one
+redaction**, pinned in `leak-check.test.ts`.
+
+**What this amendment does not claim.** No real reading exists: the state made by hand, loaded on row 1's runner, reaching the
+signed-in page, and then the same state after the session is ended, is the row's item 6 and is a hand-run on a private
+repository with NVDA. **Until it is posted, every statement above about how a real site behaves is read from code and types,
+not measured against one, and the expiry reading is fixture-only.**
+
 ## Constraint 4: the transcript and the evidence JSON are PROVEN not to contain the credential
 
 > **A screen reader announces what is typed.** The capture transcript and the evidence JSON must be proven **not to
