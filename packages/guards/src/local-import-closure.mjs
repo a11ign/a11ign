@@ -62,7 +62,12 @@ export function stripComments(text) {
   // line count -- which is the property `closureRequirementMessage` needs and the reason this module does
   // not use `@a11ign/evidence/source-text`'s tokenizer. `pre-install-import-graph.test.ts:82-89` already
   // names this file and ships this exact line as the fix.
-  return text.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, (m) => m.replace(/[^\n]/g, " "));
+  //
+  // BLANKED PER RUN OF NON-NEWLINES, NOT PER CHARACTER (#2546). `m.replace(/[^\n]/g, " ")` called the engine once for every
+  // character of every comment; the whole-suite closure walk strips the same ~700 files' comments once per entry, and
+  // this was 80s of its 156s. `/[^\n]+/` blanks the same characters and keeps every newline, so the output is
+  // byte-identical (measured over 3,000 sampled sources, 3,000 equal) at a sixth of the cost.
+  return text.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, (m) => m.replace(/[^\n]+/g, (run) => " ".repeat(run.length)));
 }
 
 /**
