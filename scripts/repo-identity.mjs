@@ -19,7 +19,15 @@
 // own copy; every other reference is a literal (a `package.json` field, a workflow string, prose) that
 // cannot import anything, and `repo-identity-consolidated.test.ts` pins each one against these constants
 // instead.
-export const REPO = "a11ign/a11ign";
+//
+// #2616 (child 3a of #69): `REPO` IS NOW READ FROM `.agent-org/project.json` through `agent-org`'s one reader, and the reader
+// REFUSES a missing or malformed declaration rather than answering `a11ign/a11ign` (a fallback here would make the tool's
+// "project-agnostic" claim decorative). Nothing that imports this file changed: the value is a11ign's own, and every
+// importer still sees a string. The declaration's `code[0]` is the repository `gh`/git resolve.
+import { homeProjectDeclaration } from "../packages/agent-org/src/project-config.mjs";
+
+const PROJECT = homeProjectDeclaration();
+export const REPO = PROJECT.repo;
 export const REPO_URL = `https://github.com/${REPO}`;
 export const REPO_GIT_URL = `${REPO_URL}.git`;
 
@@ -53,6 +61,16 @@ export const REPO_GIT_URL = `${REPO_URL}.git`;
 // metadata field nobody automatically visits, a hyperlink a reader consciously clicks and can recover
 // from), PRODUCT_REPO is correct. See `repo-identity-consolidated.test.ts`'s own header for the full
 // reasoning and worked examples.
+//
+// PRODUCT_REPO STAYS A LITERAL (#2616), deliberately: it is the product's NAME, which the declaration does not carry --
+// the declaration says where the TOOL resolves. Computing both from one field would merge the two meanings this comment
+// exists to keep apart, and the day the project's repository moves they would be the constants that must differ.
 export const PRODUCT_REPO = "a11ign/a11ign";
 export const PRODUCT_REPO_URL = `https://github.com/${PRODUCT_REPO}`;
 export const PRODUCT_GIT_URL = `${PRODUCT_REPO_URL}.git`;
+
+// #2616: THE THIRD MEANING, beside REPO and PRODUCT_REPO -- the project's TRACKERS (its boards) and its CODE repositories,
+// each a list of `{key, repo}` (a tracker also `{board}`). Both hold one entry, `a11ign/a11ign`, until #2612's layer
+// repositories exist. Nothing here reads more than the first entry yet: enumerating them is 3b and 3c.
+export const TRACKERS = PROJECT.tracker;
+export const CODE_REPOSITORIES = PROJECT.code;
