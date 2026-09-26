@@ -442,8 +442,9 @@ verdict is captured in their words. **The next phase's axis is SaaS depth: produ
 Authenticated capture (#2359) is built; MFA, SSO and CAPTCHA are still out, per `docs/known-gaps.md` §51.
 
 **The phase has a milestone (2026-09-26, `ceo`, on the chairman's ask): `v2 — SaaS depth`.** Its rows are #2557 and
-#2561–#2566 and #2568; "Road to version one" is closed, empty. #69 (the split) and #20 (the daily board report) are
-not on the SaaS-depth axis and sit in `Out of release`.
+#2561–#2566 and #2568. **The chairman then directed the repository split (#69) to start in parallel, as the remainder of
+version one,** so "Road to version one" stays open for #69 and its children only; #20 (the daily board report) sits in
+`Out of release`.
 
 | | blocker | whose | state |
 |---|---|---|---|
