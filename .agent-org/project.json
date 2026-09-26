@@ -8,5 +8,10 @@
   ],
   "code": [
     { "key": "", "repo": "a11ign/a11ign" }
+  ],
+  "_leakPatterns": "What a11ign's public prose must never carry, ON TOP OF the two the tool holds itself (a private LAN IPv4 address, a named SSH key file). Each `pattern` is a regular expression's SOURCE. #1875: the control plane's GitHub token file sits beside the fleet key and is guarded for the same reason -- where a credential sits on a real box is somebody's infrastructure written down. ADR 0013: the retired `pct exec` container-hop idiom. #2658 (child 3g of #69) split these two out of packages/lab/src/packaging/leak-patterns.mjs, which the product keeps.",
+  "leakPatterns": [
+    { "name": "a named credential file on a fleet host", "pattern": "\\.config/a11y-witness/[\\w.-]+" },
+    { "name": "a live pct exec container-hop command", "pattern": "\\bpct exec \\d" }
   ]
 }
