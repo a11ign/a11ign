@@ -10,13 +10,18 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  challengeVendor as workerChallengeVendor,
   controlsNamed as workerControlsNamed,
   expectationMet as workerExpectationMet,
+  FRAME_SOURCES_EXPRESSION as WORKER_FRAME_SOURCES_EXPRESSION,
   requiredEnvNames as workerRequiredEnvNames,
   signIn as workerSignIn,
   validateAuthRequest,
 } from "../../../nvda-worker/src/auth-flow.mjs";
-import { signIn as cliSignIn, controlsNamed, expectationMet, requiredEnvNames, type AuthDriver, type AuthPlan, type AxNode } from "./interpreter.js";
+import {
+  challengeVendor, controlsNamed, expectationMet, FRAME_SOURCES_EXPRESSION, requiredEnvNames, signIn as cliSignIn,
+  type AuthDriver, type AuthPlan, type AxNode,
+} from "./interpreter.js";
 import type { FlowStep } from "./flows.js";
 
 const ORIGIN = "https://app.example.test";
@@ -35,8 +40,41 @@ const LOGIN: FlowStep[] = [
   expectDashboard,
 ];
 
+/**
+ * The iframe `src`s the vendors' widgets are served from, SHAPED as the route measured returns them (`frameSources()`: the
+ * `src` of each iframe the main document renders). **These are vendor-SHAPED, not a widget served from the vendor's origin:**
+ * no request is made to any of these hosts. The hosts are the ones each vendor's Content-Security-Policy page documents.
+ */
+const WIDGET_SOURCES = {
+  recaptcha: "https://www.google.com/recaptcha/api2/anchor?ar=1&k=6LcSITEKEY&co=aHR0cHM6Ly9hcHAuZXhhbXBsZS50ZXN0OjQ0Mw..&size=normal",
+  hcaptcha: "https://newassets.hcaptcha.com/captcha/v1/0a1b2c3/static/hcaptcha.html#frame=checkbox&id=0abc&host=app.example.test",
+  turnstile: "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/if/ov2/av0/rcv/0abc/0x4AAAAAAA/light/fbE/new/normal/auto/",
+} as const;
+
+type FakeOptions = {
+  password?: string; redirectOnSignIn?: string; driftAfterClick?: boolean;
+  requestedPageShows?: "login-form" | "login-redirect" | "change-password";
+  /** The right password is accepted and a verification-code prompt is shown instead of the app (an MFA challenge). */
+  codePromptAfterPassword?: boolean;
+  /** The `src` of every iframe each page RENDERS; `elsewhere` is every other page (`/twins`, `/down`). A page not named has none. */
+  frames?: { login?: string[]; dashboard?: string[]; elsewhere?: string[] };
+  /** The login page's text mentions a CAPTCHA (a cookie-policy table) but renders no widget. */
+  loginPageSays?: "captcha-in-text";
+  /** A challenge interstitial stands where the login form should be: nothing on it can be bound. */
+  interstitialAtLogin?: boolean;
+  frameReadFails?: boolean;
+};
+
+/** The login page: the form, or a challenge interstitial in its place, or the form with a cookie-policy table that only SAYS captcha. */
+function loginPage(options: FakeOptions, node: (role: string, name: string) => AxNode): AxNode[] {
+  if (options.interstitialAtLogin) return [node("heading", "Just a moment...")];
+  const form = [node("textbox", "Email address"), node("textbox", "Password"), node("button", "Sign in"), node("heading", "Sign in")];
+  if (options.loginPageSays !== "captcha-in-text") return form;
+  return [...form, node("StaticText", "Google re CAPTCHA"), node("StaticText", "Description of GRECAPTCHA set by Google")];
+}
+
 /** A tiny site: a login form, a dashboard, an off-origin identity provider, a verification-code prompt, a form with a password-type PIN. */
-function fakeBrowser(options: { password?: string; redirectOnSignIn?: string; driftAfterClick?: boolean; codePromptAfterPassword?: boolean; requestedPageShows?: "login-form" | "login-redirect" | "change-password" } = {}) {
+function fakeBrowser(options: FakeOptions = {}) {
   const password = options.password ?? FAKE_SECRET;
   /** A same-origin redirect: the requested page sends a session that did not hold to `/login`. */
   const redirected = (url: string) => (url === URL_UNDER_TEST && options.requestedPageShows === "login-redirect" ? `${ORIGIN}/login` : url);
@@ -52,7 +90,7 @@ function fakeBrowser(options: { password?: string; redirectOnSignIn?: string; dr
       next += 1;
       return { id: String(next), role, name, backendId: next, ignored: false, ...extra };
     };
-    if (page.endsWith("/login")) return [node("textbox", "Email address"), node("textbox", "Password"), node("button", "Sign in"), node("heading", "Sign in")];
+    if (page.endsWith("/login")) return loginPage(options, node);
     if (page.endsWith("/orders") && options.requestedPageShows === "login-form") return [node("textbox", "Email address"), node("textbox", "Password"), node("button", "Sign in"), node("heading", "Sign in")];
     if (page.endsWith("/orders") && options.requestedPageShows === "change-password") return [node("heading", "Change password"), node("textbox", "Password"), node("button", "Save")];
     if (page.endsWith("/dashboard") || page.endsWith("/orders")) return [node("heading", "Dashboard"), node("link", "Sign out")];
@@ -76,6 +114,11 @@ function fakeBrowser(options: { password?: string; redirectOnSignIn?: string; dr
       return answer;
     },
     axNodes: async () => nodes(),
+    frameSources: async () => {
+      if (options.frameReadFails) throw new Error("Execution context was destroyed");
+      if (page.endsWith("/login")) return options.frames?.login ?? [];
+      return (page.endsWith("/dashboard") ? options.frames?.dashboard : options.frames?.elsewhere) ?? [];
+    },
     inputType: async (handle) => (["PIN", "Password"].includes(named(handle).name) ? "password" : "text"),
     fill: async (handle, text) => { typed.push({ field: named(handle).name, text }); },
     choose: async (_handle, option) => option === "United Kingdom",
@@ -98,7 +141,7 @@ function fakeBrowser(options: { password?: string; redirectOnSignIn?: string; dr
 type Outcome = { ok: true; typed: unknown; clicks: string[]; events: string[] } | { ok: false; fault: unknown; reason: unknown; message: string };
 
 /** Run one scenario through one implementation and reduce it to what must be the SAME in both. */
-async function through(implementation: "cli" | "worker", scenario: { login?: FlowStep[]; flow?: FlowStep[]; upTo?: number; browser?: Parameters<typeof fakeBrowser>[0]; env?: Record<string, string | undefined> }): Promise<Outcome> {
+async function through(implementation: "cli" | "worker", scenario: { login?: FlowStep[]; flow?: FlowStep[]; upTo?: number; browser?: FakeOptions; env?: Record<string, string | undefined> }): Promise<Outcome> {
   const browser = fakeBrowser(scenario.browser);
   const events: string[] = [];
   const marks: unknown[] = [];
@@ -209,6 +252,94 @@ test("a heading on ANOTHER SITE does not satisfy an expect: a late off-origin re
   // identity provider's "Dashboard" heading satisfies the expect, and the run is reported signed in.
   const outcome = await both({ browser: { driftAfterClick: true } });
   failsAs(outcome, "auth-login-failed", "left-origin");
+});
+
+// A CAPTCHA IS NAMED, NEVER ANSWERED (#2564). The check runs only where a step ALREADY failed, so each scenario below is
+// one of: a failure a widget explains (three vendors, two ways to fail), or a case that must NOT be explained as one.
+const CHALLENGE_VENDORS = [["recaptcha", "reCAPTCHA"], ["hcaptcha", "hCaptcha"], ["turnstile", "Cloudflare Turnstile"]] as const;
+
+test("a login that stops at a widget fails as auth-challenge-detected, naming the vendor and the step, for each vendor, in both", async () => {
+  for (const [key, vendor] of CHALLENGE_VENDORS) {
+    const outcome = await both({ browser: { password: "not accepted while the widget is unsolved", frames: { login: [WIDGET_SOURCES[key]] } } });
+    failsAs(outcome, "auth-challenge-detected");
+    const message = (outcome as { message: string }).message;
+    assert.match(message, new RegExp(`login step 5 \\(expect\\).*${vendor}`, "s"), key);
+    assert.match(message, /never answers one/, `${key}: the sentence says it names and does not solve`);
+    assert.match(message, /expect-not-met: no heading "Dashboard"/, `${key}: the reason the step failed is kept`);
+  }
+});
+
+test("a challenge that replaces the login form (nothing to bind) is auth-challenge-detected, not unbindable-field, in both", async () => {
+  const outcome = await both({ browser: { interstitialAtLogin: true, frames: { login: [WIDGET_SOURCES.turnstile] } } });
+  failsAs(outcome, "auth-challenge-detected");
+  assert.match((outcome as { message: string }).message, /login step 2 \(fill\).*Cloudflare Turnstile.*unbindable-field: no control is named "Email address"/s);
+});
+
+test("POSITIVE CONTROL: a page with no widget keeps the shipped failure, auth-login-failed / expect-not-met, in both", async () => {
+  failsAs(await both({ browser: { password: "something else" } }), "auth-login-failed", "expect-not-met");
+  failsAs(await both({ browser: { interstitialAtLogin: true } }), "auth-login-failed", "unbindable-field");
+});
+
+test("POSITIVE CONTROL: a page that only SAYS captcha in its text is not a challenge, in both", async () => {
+  // The real shape is a cookie-policy table ("Google re CAPTCHA ... Description of GRECAPTCHA set by Google",
+  // packages/evidence/src/fixtures-exhausted-887.json): the words are there and no widget is.
+  failsAs(await both({ browser: { password: "something else", loginPageSays: "captcha-in-text" } }), "auth-login-failed", "expect-not-met");
+});
+
+test("POSITIVE CONTROL: a widget on a page whose expect: IS met does not trip, and the run is applied, in both", async () => {
+  // A dashboard carrying a reCAPTCHA v3 badge, or an invisible Turnstile, passes. Detection explains a failure and never makes one.
+  const outcome = await both({ browser: { frames: { login: [WIDGET_SOURCES.recaptcha], dashboard: [WIDGET_SOURCES.recaptcha, WIDGET_SOURCES.turnstile] } } });
+  assert.ok(outcome.ok, "the widget must not turn a met expect: into a failure");
+  if (outcome.ok) assert.equal(outcome.events[outcome.events.length - 1].startsWith("authApplied"), true);
+});
+
+test("a frame the check cannot match falls through to the shipped failure: a vendor it does not know, or a frame with no src, in both", async () => {
+  // The limit is a test and not a hope. `recaptcha.net`, Arkose and a site's own challenge are not named.
+  for (const source of ["https://www.recaptcha.net/recaptcha/api2/anchor?k=x", "https://client-api.arkoselabs.com/fc/gc/", "https://app.example.test/challenge", ""]) {
+    failsAs(await both({ browser: { password: "something else", frames: { login: [source] } } }), "auth-login-failed", "expect-not-met");
+  }
+});
+
+test("only a step that failed for lack of a control is explained: an ambiguous control or an unloadable goto keeps its own reason, in both", async () => {
+  const widget = { frames: { login: [WIDGET_SOURCES.hcaptcha], elsewhere: [WIDGET_SOURCES.hcaptcha] } };
+  const flow = (fill: Extract<FlowStep, { fill: unknown }>["fill"]): FlowStep[] => [{ goto: "/twins" }, { fill }];
+  failsAs(await both({ flow: flow({ field: "Address", value: "1 High St" }), browser: widget }), "auth-login-failed", "unbindable-field");
+  failsAs(await both({ login: [{ goto: "/login" }, { goto: "/down" }, expectDashboard], browser: widget }), "auth-login-failed", "expect-not-met");
+});
+
+test("a frame list that cannot be read leaves the original failure standing and says why it could not look, in both", async () => {
+  const outcome = await both({ browser: { password: "something else", frameReadFails: true } });
+  failsAs(outcome, "auth-login-failed", "expect-not-met");
+  assert.match((outcome as { message: string }).message, /no heading "Dashboard".*frames could not be read to check for a CAPTCHA: Execution context was destroyed/s);
+});
+
+test("the frame read keeps a frame only if it is RENDERED, and the two copies of the expression are one string", () => {
+  assert.equal(WORKER_FRAME_SOURCES_EXPRESSION, FRAME_SOURCES_EXPRESSION, "the worker's copy and the CLI's have drifted");
+  const frame = (src: string, rects: number, visibility = "visible") => ({ src, getClientRects: () => ({ length: rects }), visibility });
+  const read = (frames: unknown[]) => new Function("document", "getComputedStyle", `return ${FRAME_SOURCES_EXPRESSION};`)(
+    { querySelectorAll: (selector: string) => { assert.equal(selector, "iframe"); return frames; } },
+    (element: { visibility: string }) => ({ visibility: element.visibility }),
+  );
+  assert.deepEqual(read([frame("https://a.test/shown", 1), frame("https://a.test/display-none", 0), frame("https://a.test/hidden", 1, "hidden")]),
+    ["https://a.test/shown"], "a frame with no client rects (display: none) or visibility: hidden is not a challenge in front of the user");
+});
+
+test("THE HELPERS, through both: challengeVendor names the same vendor for every source, worker and CLI", () => {
+  const sources: string[][] = [
+    [], [""], ["not a url"], [WIDGET_SOURCES.recaptcha], [WIDGET_SOURCES.hcaptcha], [WIDGET_SOURCES.turnstile],
+    ["https://recaptcha.google.com/recaptcha/api2/bframe?k=x"], ["https://hcaptcha.com/1/api.js"], ["https://js.hcaptcha.com/x"],
+    ["http://www.google.com/recaptcha/api2/anchor"], ["https://www.google.com/maps/embed?pb=x"], ["https://www.google.com/"],
+    ["https://evilhcaptcha.com/x"], ["https://hcaptcha.com.evil.test/x"], ["https://challenges.cloudflare.com.evil.test/x"],
+    ["https://www.recaptcha.net/recaptcha/api2/anchor"], ["https://WWW.GOOGLE.COM/recaptcha/api2/anchor"],
+    [WIDGET_SOURCES.turnstile, WIDGET_SOURCES.hcaptcha],
+  ];
+  for (const list of sources) {
+    assert.equal(workerChallengeVendor(list), challengeVendor(list), `challengeVendor disagrees for ${JSON.stringify(list)}`);
+  }
+  const answers = new Set(sources.map((list) => challengeVendor(list)));
+  assert.deepEqual([...answers].sort(), [undefined, "Cloudflare Turnstile", "hCaptcha", "reCAPTCHA"].sort(), "the table must cover every vendor and a miss");
+  assert.equal(challengeVendor(["https://www.google.com/maps/embed?pb=x"]), undefined, "google.com is not reCAPTCHA off the /recaptcha/ path");
+  assert.equal(challengeVendor(["https://hcaptcha.com.evil.test/x"]), undefined, "a host that merely starts with a vendor's name is not the vendor");
 });
 
 test("after a successful login the requested URL serves the login form: auth-session-lost, in place or by redirect, in both", async () => {
