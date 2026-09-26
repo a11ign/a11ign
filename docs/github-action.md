@@ -498,6 +498,8 @@ is an input mapped into the step's `env:`, never into `run:` text.
 
 `npm run auth:leak-check` is the check for whether a credential reaches a file, with a positive control. It has been read once against a real NVDA (2026-09-25, #2399: exit `0`, with a working positive control), and the first defence held on that page; **the redaction and the per-character refusal remain the defence to rely on**, and one reading is not a promise about yours. See the ADR for its three invocations and what each must exit.
 
+`npm run auth:artifact-scan -- --path <file or directory> --user-env <VAR> --secret-env <VAR>` is the check for a REAL run's output, which `auth:leak-check` cannot be: that command reads only the `.json` it wrote itself from a fixture, so a credential in the markdown summary, a saved PR comment or a job log would read as clean because it was never looked at. This one scans every text file under the path, whatever its extension, with the same detector and the same exit codes (`0` clean, `1` a leak, `2` could not examine), and prints how much it examined before it says clean. An empty directory, or one holding only binary files, is exit `2`; a binary file is named as skipped and is not searched. **It covers only what it is pointed at:** a credential that reached a channel you did not point it at (a log you did not save, a comment you did not fetch, an upload step of your own) is not covered, and neither is one inside a skipped file.
+
 ## Outputs
 
 | Output | Use |
