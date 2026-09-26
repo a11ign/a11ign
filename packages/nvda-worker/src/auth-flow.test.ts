@@ -146,6 +146,8 @@ type Ax = { id: string; role: string; name: string; parentId?: string; backendId
 
 type FakeOptions = {
   password?: string; redirectOnSignIn?: string; driftAfterClick?: boolean; requestedPageShows?: "login-form" | "login-redirect" | "change-password";
+  /** The right password is accepted and a verification-code prompt is shown instead of the app (an MFA challenge). */
+  codePromptAfterPassword?: boolean;
   /** The `src` of every iframe each page RENDERS; a page not named has none. */
   frames?: { login?: string[]; dashboard?: string[] };
   /** A challenge interstitial stands where the login form should be: nothing on it can be bound. */
@@ -162,7 +164,7 @@ function loginPage(options: FakeOptions, node: (role: string, name: string) => A
   return [...form, node("StaticText", "Google re CAPTCHA"), node("StaticText", "Description of GRECAPTCHA set by Google")];
 }
 
-/** A tiny site: a login form, a dashboard, an off-origin identity provider, and a form with a password-type PIN. */
+/** A tiny site: a login form, a dashboard, an off-origin identity provider, a verification-code prompt, and a form with a password-type PIN. */
 function fakeBrowser(options: FakeOptions = {}) {
   const password = options.password ?? FAKE_SECRET;
   /** A same-origin redirect: the requested page sends a session that did not hold to `/login`. */
@@ -196,6 +198,7 @@ function fakeBrowser(options: FakeOptions = {}) {
       return [group, other, node("textbox", "Address", { parentId: group.id }), node("textbox", "Address", { parentId: other.id })];
     }
     if (page.endsWith("/pin")) return [node("textbox", "PIN")];
+    if (page.endsWith("/verify")) return [node("heading", "Verify your identity"), node("textbox", "Verification code"), node("button", "Verify")];
     if (page.endsWith("/authorize")) return [node("heading", "Dashboard")]; // the identity provider has a heading of the same name
     if (page.endsWith("/prefs")) return [node("checkbox", "Remember me"), node("combobox", "Country")];
     return [];
@@ -226,7 +229,7 @@ function fakeBrowser(options: FakeOptions = {}) {
         const typedPassword = typed.filter((t) => t.field === "Password").pop()?.text;
         if (options.driftAfterClick) { drifting = true; return; }
         if (options.redirectOnSignIn) { page = `${options.redirectOnSignIn}/authorize`; origin = options.redirectOnSignIn; return; }
-        if (typedPassword === password) page = `${ORIGIN}/dashboard`;
+        if (typedPassword === password) page = `${ORIGIN}/${options.codePromptAfterPassword ? "verify" : "dashboard"}`;
       },
       purge: async () => { typed.length = 0; },
       close: async () => undefined,
@@ -281,6 +284,22 @@ test("a wrong password is auth-login-failed expect-not-met, names the step, and 
   const { outcome, marks } = run(fakeBrowser({ password: "something else" }), { login: LOGIN });
   await failsWith(outcome, "expect-not-met", /login step 5 \(expect\).*no heading "Dashboard"/);
   assert.ok(!marks.some((m) => m.event === "authApplied"));
+});
+
+test("a code prompt after the right password is auth-login-failed expect-not-met, and reads exactly like a wrong password", async () => {
+  // THE POINT (known-gaps §51): the tool cannot tell an MFA challenge from a wrong password. The site accepted the password
+  // and asked for a code instead of showing the app, and the run reports what it reports for a wrong one: the same fault,
+  // the same reason and the same sentence, which names the `expect:` that was not met and never the page it saw instead.
+  const message = async (browser: ReturnType<typeof fakeBrowser>) => {
+    const { outcome, marks } = run(browser, { login: LOGIN });
+    const error = await outcome.then(() => null, (e: Error) => e);
+    assert.ok(!marks.some((m) => m.event === "authApplied"));
+    return error!.message;
+  };
+  const prompted = fakeBrowser({ codePromptAfterPassword: true });
+  await failsWith(run(prompted, { login: LOGIN }).outcome, "expect-not-met", /login step 5 \(expect\).*no heading "Dashboard"/);
+  assert.equal(await message(fakeBrowser({ codePromptAfterPassword: true })), await message(fakeBrowser({ password: "something else" })),
+    "the message tells a code prompt from a wrong password, and known-gaps §51 says the tool cannot");
 });
 
 /**
@@ -385,6 +404,14 @@ test("two controls with one name are unbindable until within: or nth: says which
 test("a redirect off the origin after a press is left-origin, and SSO is named", async () => {
   await failsWith(run(fakeBrowser({ redirectOnSignIn: "https://idp.example.test" }), { login: LOGIN }).outcome,
     "left-origin", /idp\.example\.test.*SSO.*dedicated test account/s);
+});
+
+test("CONTROL: a redirect that stays on the SAME origin is not left-origin — the reading is about the origin, not the redirect", async () => {
+  // The same press, the same `/authorize` page with the same "Dashboard" heading as the identity provider above. Only the
+  // origin differs, so it is the only thing that can make one of them `left-origin` and this one a signed-in run.
+  const { outcome, marks } = run(fakeBrowser({ redirectOnSignIn: ORIGIN }), { login: LOGIN });
+  await outcome;
+  assert.ok(marks.some((m) => m.event === "authApplied"));
 });
 
 test("a heading on ANOTHER SITE does not satisfy an expect: a late off-origin redirect is left-origin", async () => {
