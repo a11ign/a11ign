@@ -539,7 +539,7 @@ and `localStorage` for other origins in the file are not loaded**, and are neith
 
 **What ends it: `auth-state-expired`.** If the `expect:` is not met, or the page went to another origin (an expired
 single-sign-on session redirects to the identity provider), the run ends with `auth-state-expired` and nothing is captured.
-**Three things to check when a state that was fresh a minute ago reads as expired:**
+**Three things to check when a state you have just saved reads as expired:**
 
 1. **The `expect:` must hold on EVERY page the run requests.** Each capture loads the state afresh and asks the flow's
    final `expect:` of the requested URL. A flow written for a form login whose `expect:` is `heading "Dashboard"` reads a
