@@ -28,7 +28,7 @@ const REQUEST: Omit<CaptureRequest, "worker"> = {
 };
 
 const HTTP_OK = 200;
-const AUTH_FAULT_COUNT = 11; // the row's eight, plus amendment 2's and amendment 3's, plus #2563's auth-session-lost
+const AUTH_FAULT_COUNT = 12; // the row's eight, plus amendment 2's and amendment 3's, plus #2563's auth-session-lost and #2564's auth-challenge-detected
 
 /** A test that waits longer than this has found a hang, and must say so rather than wait. */
 const DEADLINE_MS = 8_000;

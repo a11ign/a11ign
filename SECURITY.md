@@ -128,7 +128,9 @@ readable in process listings and shell history, and an Action input is interpola
 
 **What does not exist.** MFA, SSO and CAPTCHA (**use a dedicated test account without MFA or SSO**); saved storage
 state; attaching to a browser you have signed in. A login that reaches an identity provider ends in `auth-login-failed`
-(`left-origin`) and never in a capture.
+(`left-origin`) and never in a capture. **A login step that fails on a page showing a reCAPTCHA, hCaptcha or Turnstile
+widget ends in `auth-challenge-detected`:** the run names the challenge and never answers it, and solving one is refused by
+design.
 
 **What an authenticated run presses — and only this.** A login makes the buttons real, so an authenticated run turns
 `probe-forms` and `probe-navigation` **off, whatever you set**, and presses **only what its own files name**: the

@@ -131,6 +131,16 @@ const AUTH_REMEDIATION: Record<AuthFault, FaultRemediation> = {
       + "a capture of this page: it describes the sign-in wall.",
     whereToLook: `${ADR}, Constraint 1, "A session that does not hold is auth-session-lost".`,
   },
+  "auth-challenge-detected": {
+    what: "a login step failed, and a CAPTCHA widget (reCAPTCHA, hCaptcha or Cloudflare Turnstile) is on the page that "
+      + "failed it. A CAPTCHA is there to stop automated sign-ins, so this run names it and never answers one: it "
+      + "does not click it, wait it out or work around it.",
+    tryThis: "use a dedicated test account without MFA, or one your site exempts from the challenge (an allow-list "
+      + "for the runner's address, or a staging environment with the challenge switched off), and run again. "
+      + "This is read from the page's iframes only where a step already failed, so a widget on a page that passed "
+      + "does not trigger it; if the step failed for another reason and the page merely carries a widget, fix that step.",
+    whereToLook: `${ADR}, Constraint 6, and docs/known-gaps.md, "A CAPTCHA is detected only where a login step failed".`,
+  },
 };
 
 export const FAULT_REMEDIATION: Record<string, FaultRemediation> = {

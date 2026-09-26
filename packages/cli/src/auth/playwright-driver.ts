@@ -17,7 +17,7 @@
  */
 import type { Page } from "playwright";
 
-import type { AuthDriver, AxNode } from "./interpreter.js";
+import { FRAME_SOURCES_EXPRESSION, type AuthDriver, type AxNode } from "./interpreter.js";
 
 type Send = (method: string, params?: object) => Promise<any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -77,6 +77,7 @@ export async function openPlaywrightDriver(page: Page): Promise<AuthDriver> {
       const { nodes } = await send("Accessibility.getFullAXTree");
       return (nodes as RawAxNode[]).map(axNodeOf);
     },
+    frameSources: async () => (await page.evaluate(FRAME_SOURCES_EXPRESSION)) as string[],
     inputType: (handle) => callOn(handle, "function () { return this.type === undefined ? '' : String(this.type); }"),
     async fill(handle, text) {
       await send("DOM.focus", { backendNodeId: handle });
