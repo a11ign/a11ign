@@ -63,7 +63,7 @@ import { relative, resolve as resolvePath } from "node:path";
 import { parseFormsConfig, refuseIfWrongOrigin, FormsConfigError } from "./forms/config.js";
 import { submissionPlan, formCoverage } from "./forms/coverage.js";
 import { draftFormsConfig } from "./forms/draft.js";
-import { MAX_CAPTURE_ATTEMPTS, PageListError, captureCount, loginReport, minimumLogins, multiPageJson, newLoginTally,
+import { MAX_CAPTURE_ATTEMPTS, PageListError, captureCount, loginReport, minimumLogins, multiPageJson, newLoginTally, runSingleUrl,
   refuseMalformedUrls, resolveMaxPages, resolvePageList, rollUpLines, runPageList, surfaceFromEnv,
   type LoginTally } from "./multi-page.js";
 
@@ -604,10 +604,12 @@ async function withAuthentication(args: Args): Promise<Args> {
   if (resolved === null) return args;
   // On the Action a notice is a workflow command, and it goes to STDERR: this step's stdout IS the JSON result, and a
   // `::notice::` line there would both corrupt it and go unread. Elsewhere it is a plain line.
-  const onAction = process.env.GITHUB_ACTIONS === "true";
-  for (const line of resolved.notices) process.stderr.write(onAction ? `::notice::${line}\n` : `${line}\n`);
+  for (const line of resolved.notices) process.stderr.write(`${noticeLine(line)}\n`);
   return { ...args, ...resolved.overrides, auth: resolved.auth, scrubSet: resolved.scrubSet, logins: newLoginTally() };
 }
+
+/** A line for the reader of the run's log: a workflow command on the Action, where a plain line would go unread. */
+const noticeLine = (line: string): string => (process.env.GITHUB_ACTIONS === "true" ? `::notice::${line}` : line);
 
 /** How many form states a forms config names, said quietly: `configuredStates` prints coverage lines and this runs first. */
 async function formStateCount(args: Args): Promise<number> {
@@ -629,19 +631,20 @@ async function main(): Promise<void> {
   // whole module exists to prevent.
   try {
     const states = await configuredStates(args);
-    if (states.length === 0) {
-      await runWitness({ ...args, worker: lease.worker });
-    } else {
-      // ONE RUN PER STATE, through the ordinary pipeline. Reusing `runWitness` rather than building a
-      // second reporting path is deliberate: a configured run and an unconfigured one must produce
-      // evidence and a report of the same shape, or every consumer downstream needs to know which it is
-      // holding — which is the fact-stated-twice defect with a report attached.
-      for (const [index, formState] of states.entries()) {
-        process.stderr.write(`\n=== form state ${index + 1}/${states.length}: `
-          + `"${formState.state}" via "${formState.submit}" ===\n`);
-        await runWitness({ ...args, worker: lease.worker, formState });
-      }
-    }
+    // ONE RUN PER STATE, through the ordinary pipeline. Reusing `runWitness` rather than building a
+    // second reporting path is deliberate: a configured run and an unconfigured one must produce
+    // evidence and a report of the same shape, or every consumer downstream needs to know which it is
+    // holding — which is the fact-stated-twice defect with a report attached.
+    await runSingleUrl({
+      states, tally: args.logins, axe: args.axe, emit: printAsJson, say: (line) => process.stderr.write(`${noticeLine(line)}\n`),
+      capture: ({ formState, index, sink }) => {
+        if (formState) {
+          process.stderr.write(`\n=== form state ${index + 1}/${states.length}: `
+            + `"${formState.state}" via "${formState.submit}" ===\n`);
+        }
+        return runWitness({ ...args, worker: lease.worker, formState, sink });
+      },
+    });
   } finally {
     await lease.release();
   }
