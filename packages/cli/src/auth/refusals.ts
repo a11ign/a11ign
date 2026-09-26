@@ -26,6 +26,12 @@ export interface AuthRequest {
   readonly flow?: readonly FlowStep[];
   /** How many of `flow`'s steps to replay: the index of the `capture:` point, or the flow's length. */
   readonly upTo?: number;
+  /**
+   * A saved storage state to load INSTEAD of performing the login (`--auth-state`, ADR 0038 amendment 7, choice 5): **a PATH and
+   * nothing else**, absolute, on the machine that drives the browser. Never a value, never a cookie, never the file's contents;
+   * the worker reads and validates the file itself, so a request cannot make it load a value the CLI did not show it.
+   */
+  readonly state?: { readonly path: string };
 }
 
 /** Undefined means the run asked for no authentication, and every function below is then a no-op. */

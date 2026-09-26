@@ -28,7 +28,7 @@ const REQUEST: Omit<CaptureRequest, "worker"> = {
 };
 
 const HTTP_OK = 200;
-const AUTH_FAULT_COUNT = 12; // the row's eight, plus amendment 2's and amendment 3's, plus #2563's auth-session-lost and #2564's auth-challenge-detected
+const AUTH_FAULT_COUNT = 13; // the row's eight, plus amendment 2's and amendment 3's, plus #2563's auth-session-lost, #2564's auth-challenge-detected and amendment 7's auth-state-expired
 
 /** A test that waits longer than this has found a hang, and must say so rather than wait. */
 const DEADLINE_MS = 8_000;
@@ -160,6 +160,34 @@ test("a response WITH authApplied: true is the report, and the request carried t
     assert.deepEqual(cap.transcript, ["Dashboard, heading level 1"]);
     assert.deepEqual((worker.received[0] as { auth: unknown }).auth, AUTH);
   } finally { await worker.close(); }
+});
+
+const STATE_PATH = "/home/runner/work/_temp/a11y-state.json";
+const STATE_AUTH: AuthRequest = { ...AUTH, state: { path: STATE_PATH } };
+
+test("A SAVED STATE crosses the wire as a PATH and nothing else, and the request holds no value from the file (amendment 7, choice 5)", async () => {
+  const worker = await listener("127.0.0.1", { transcript: ["Dashboard, heading level 1"], authApplied: true });
+  try {
+    await captureViaWorker("https://app.example.test/", { ...REQUEST, worker: worker.url, auth: STATE_AUTH });
+    const sent = (worker.received[0] as { auth: { state: unknown } }).auth;
+    assert.deepEqual(sent.state, { path: STATE_PATH });
+    assert.deepEqual(Object.keys(sent.state as object), ["path"]);
+  } finally { await worker.close(); }
+});
+
+test("A SAVED STATE does not lift the remote-worker refusal: authentication by state is still authentication, and nothing is sent", async () => {
+  const remote = await listener("0.0.0.0");
+  try {
+    const outcome = await settle(() => captureViaWorker("https://app.example.test/", { ...REQUEST, worker: remote.url, auth: STATE_AUTH }));
+    const reason = rejectedWith(outcome);
+    assert.ok(reason instanceof AuthError && reason.fault === "auth-refused-remote-worker", String(reason));
+    assert.deepEqual(remote.received, []);
+  } finally { await remote.close(); }
+});
+
+test("A SAVED STATE run still needs authApplied: true: a worker that predates `state` refuses the unknown key or answers without it, and no report is made", () => {
+  assert.throws(() => requireAuthApplied({ response: { transcript: ["Sign in"] }, auth: STATE_AUTH }), (e: Error) => e instanceof AuthError && e.fault === "auth-not-applied");
+  requireAuthApplied({ response: { transcript: [], authApplied: true }, auth: STATE_AUTH });
 });
 
 test("a run that asked for no authentication is not held to the acknowledgement", async () => {

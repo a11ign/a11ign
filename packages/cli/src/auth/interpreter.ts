@@ -5,7 +5,9 @@
  * worker's Edge would leave axe examining the login wall and reporting on it as the product. **This runs the same flow
  * in that browser, from the same environment, on the same machine, and never receives a session from the worker:**
  * exporting the worker's session would be clause 1's channel in the other direction, and there is deliberately no
- * parameter here through which a cookie could arrive.
+ * parameter here through which a cookie could arrive FROM THE WORKER. **The one thing that carries cookies in is a saved
+ * storage state the PERSON made (`signIn`'s `state`, ADR 0038 amendment 7): read from their own file by this process, loaded
+ * over the same protocol calls the worker makes, and never sent anywhere.**
  *
  * It is a PORT of `packages/nvda-worker/src/auth-flow.mjs`'s interpreter, function for function and in the same
  * order, and the two are held equal by `interpreter.test.ts`, which drives one table of scenarios through both
@@ -18,6 +20,7 @@
  */
 import { AuthError, type LoginFailureReason } from "./auth-faults.js";
 import { assertLiteralIsNotSecret, type FlowStep } from "./flows.js";
+import type { StateCookie, StateEntries } from "./scrub.js";
 
 /** How long a control may take to appear before it is `unbindable-field`. A bound, never a sleep. */
 export const BIND_TIMEOUT_MS = 10_000;
@@ -48,14 +51,23 @@ export interface AuthDriver {
   choose(handle: number, option: string): Promise<boolean>;
   isChecked(handle: number): Promise<boolean>;
   click(handle: number): Promise<void>;
+  /** `Network.setCookies`, for a saved state's cookies. Before any navigation, so the first request carries them. */
+  setCookies(cookies: readonly StateCookie[]): Promise<void>;
+  /** The current document's `localStorage`, set by `SET_LOCAL_STORAGE_FUNCTION` handed the entries as DATA. */
+  setLocalStorage(entries: readonly { name: string; value: string }[]): Promise<void>;
   close(): Promise<void>;
 }
 
-/** The login, then the flow replayed to a capture point. */
+/**
+ * The login, then the flow replayed to a capture point. **`state` marks a run that loads a saved storage state instead of
+ * logging in** (`--auth-state`): its `path` is the whole of what crosses the wire, and the login's steps are then skipped
+ * except its final `expect:`.
+ */
 export interface AuthPlan {
   readonly login: readonly FlowStep[];
   readonly flow?: readonly FlowStep[];
   readonly upTo?: number;
+  readonly state?: { readonly path: string };
 }
 
 export type Environment = Readonly<Record<string, string | undefined>>;
@@ -64,10 +76,15 @@ export type Mark = (event: string, detail: Record<string, unknown>) => void;
 /** `auth-login-failed`, carrying its reason: the step, the verb, and never a value. */
 export class LoginFailedError extends AuthError {
   readonly reason: LoginFailureReason;
-  constructor(reason: LoginFailureReason, where: string, detail: string) {
-    super("auth-login-failed", `the login did not complete (${reason}) at ${where}: ${detail}`);
+  readonly where: string;
+  /** The fact, without the advice: a saved-state run states the same fact and gives different advice. */
+  readonly detail: string;
+  constructor(reason: LoginFailureReason, where: string, detail: string, advice?: string) {
+    super("auth-login-failed", `the login did not complete (${reason}) at ${where}: ${detail}${advice ? `. ${advice}` : ""}`);
     this.name = "LoginFailedError";
     this.reason = reason;
+    this.where = where;
+    this.detail = detail;
   }
 }
 
@@ -151,7 +168,9 @@ export function readCredential(name: string, env: Environment): string {
 /** Every environment-variable NAME a plan reads, so a missing one is found before any browser opens. */
 export function requiredEnvNames(plan: AuthPlan): string[] {
   const flow = (plan.flow ?? []).slice(0, plan.upTo ?? plan.flow?.length ?? 0);
-  const names = [...plan.login, ...flow].flatMap((step) => ("fill" in step && step.fill.fromEnv !== undefined ? [step.fill.fromEnv] : []));
+  // A state run never executes the login's steps (only its final `expect:`), so it reads none of the login's variables.
+  const steps = plan.state === undefined ? [...plan.login, ...flow] : flow;
+  const names = steps.flatMap((step) => ("fill" in step && step.fill.fromEnv !== undefined ? [step.fill.fromEnv] : []));
   return [...new Set(names)];
 }
 
@@ -259,8 +278,8 @@ async function assertNotShownLoginWall(driver: AuthDriver, login: readonly FlowS
 async function assertStillOnOrigin(driver: AuthDriver, origin: string, where: string): Promise<void> {
   const now = await currentOrigin(driver);
   if (now !== origin) {
-    throw new LoginFailedError("left-origin", where, `the page is on ${now}, not ${origin}. A redirect to an identity provider is SSO, `
-      + "which v1 does not do: use a dedicated test account without MFA or SSO.");
+    throw new LoginFailedError("left-origin", where, `the page is on ${now}, not ${origin}`,
+      "A redirect to an identity provider is SSO, which v1 does not do: use a dedicated test account without MFA or SSO.");
   }
 }
 
@@ -321,33 +340,103 @@ function nameForMark(step: FlowStep): string | undefined {
   return typeof body === "string" ? undefined : body.field ?? body.control ?? body.name;
 }
 
+/** One step, numbered as a person counts: marked by verb and accessible name only, with the origin re-checked after any step that can move the page. */
+async function runNumbered(step: FlowStep, index: number, run: RunContext): Promise<void> {
+  const verb = verbOf(step);
+  const where = `${run.phase} step ${index} (${verb})`;
+  if (verb === "capture") return; // a capture point is where the caller stops; it acts on nothing
+  run.mark("authStep", { phase: run.phase, index, verb, name: nameForMark(step) });
+  await runStep(step, run, where);
+  if (verb !== "expect") await assertStillOnOrigin(run.driver, run.origin, where);
+}
+
 /** Run steps in order, marking each by verb and accessible name only, and re-checking the origin after every step that can move the page. */
 export async function runSteps(run: RunContext): Promise<void> {
-  for (const [index, step] of run.steps.entries()) {
-    const verb = verbOf(step);
-    const where = `${run.phase} step ${index + 1} (${verb})`;
-    if (verb === "capture") continue; // a capture point is where the caller stops; it acts on nothing
-    run.mark("authStep", { phase: run.phase, index: index + 1, verb, name: nameForMark(step) });
-    await runStep(step, run, where);
-    if (verb !== "expect") await assertStillOnOrigin(run.driver, run.origin, where);
+  for (const [index, step] of run.steps.entries()) await runNumbered(step, index + 1, run);
+}
+
+/**
+ * The fixed function a saved state's `localStorage` is set by (ADR 0038, amendment 7, choice 3), handed the entries as DATA
+ * (`Runtime.callFunctionOn`'s `arguments`): nothing in the file is ever spliced into script text. The worker's copy is pinned
+ * equal by `interpreter.test.ts`.
+ */
+export const SET_LOCAL_STORAGE_FUNCTION = `function (entries) {
+  for (const entry of entries) localStorage.setItem(entry.name, entry.value);
+}`;
+
+/**
+ * A state cookie as `Network.setCookies` takes it. `path` defaults to `/` (a cookie needs one and a hand-edited file may omit
+ * it); a session cookie's `expires` of `-1` is left off, as Playwright's own loader does. The worker's copy is pinned equal
+ * by `interpreter.test.ts`.
+ */
+export function cookieParam(cookie: StateCookie): Record<string, unknown> {
+  return {
+    name: cookie.name, value: cookie.value, domain: cookie.domain, path: cookie.path ?? "/",
+    ...(typeof cookie.expires === "number" && cookie.expires > 0 ? { expires: cookie.expires } : {}),
+    ...(cookie.httpOnly === undefined ? {} : { httpOnly: cookie.httpOnly }),
+    ...(cookie.secure === undefined ? {} : { secure: cookie.secure }),
+    ...(cookie.sameSite === undefined ? {} : { sameSite: cookie.sameSite }),
+  };
+}
+
+/** The saved state, in the browser: cookies first (the first request carries them), then the requested page, the origin's `localStorage`, and a reload. */
+async function loadState(state: StateEntries, { url, driver, mark }: { url: string; driver: AuthDriver; mark: Mark }): Promise<void> {
+  const load = async (): Promise<void> => {
+    const loaded = await driver.navigate(url);
+    if (!loaded.ok) throw new LoginFailedError("expect-not-met", "loading the saved state", `${url} could not be loaded (${loaded.error ?? "no reason given"})`);
+  };
+  await driver.setCookies(state.cookies);
+  await load(); // `localStorage` needs a document on the origin to be set on
+  await driver.setLocalStorage(state.localStorage);
+  await load(); // and the page must read it, which it did not at its first load
+  mark("authStateLoaded", { cookies: state.cookies.length, localStorage: state.localStorage.length });
+}
+
+/**
+ * A saved state that did not sign the run in: the login's final `expect:` was not met on the requested page, or the page is
+ * not on the pinned origin (an expired single-sign-on session redirects to the identity provider). **The same fact the form
+ * login reports as `expect-not-met` or `left-origin`, with different advice**, because there was no login to fail.
+ */
+function stateExpired(error: LoginFailedError): AuthError {
+  return new AuthError("auth-state-expired", `the saved state did not sign the run in (${error.where}): ${error.detail}`);
+}
+
+/**
+ * The state stands in for the sign-in: it is loaded, and then the login's FINAL step (its `expect:`, which the flows rules
+ * guarantee is last) runs on the page the run requested. The login's other steps never run: against a valid state the login
+ * page has redirected away, and a `fill` on it would end `unbindable-field`, a failure of the mechanism and not of the page.
+ * A CAPTCHA widget on the page still ends `auth-challenge-detected`, since that names a different cause.
+ */
+async function signInFromState(state: StateEntries, run: RunContext, url: string): Promise<void> {
+  await loadState(state, { url, driver: run.driver, mark: run.mark });
+  try {
+    await runNumbered(run.steps[run.steps.length - 1], run.steps.length, run);
+  } catch (error) {
+    if (error instanceof LoginFailedError && (error.reason === "expect-not-met" || error.reason === "left-origin")) throw stateExpired(error);
+    throw error;
   }
 }
 
 /**
  * The whole sign-in: the login, then the flow to its capture point, then the requested page. Returns only once the
  * requested page has loaded on the pinned origin; anything less throws, so "signed in" is never claimed early.
+ *
+ * **With `state` (and `plan.state` naming its file) the saved state signs in instead of the login's steps**: `signInFromState`.
  */
 export async function signIn(
-  { plan, url, driver, env, mark, bindTimeoutMs = BIND_TIMEOUT_MS }:
-  { plan: AuthPlan; url: string; driver: AuthDriver; env: Environment; mark: Mark; bindTimeoutMs?: number },
+  { plan, url, driver, env, mark, bindTimeoutMs = BIND_TIMEOUT_MS, state }:
+  { plan: AuthPlan; url: string; driver: AuthDriver; env: Environment; mark: Mark; bindTimeoutMs?: number; state?: StateEntries },
 ): Promise<void> {
+  if ((plan.state === undefined) !== (state === undefined)) throw new Error("a plan that names a saved state needs its entries, and entries need a plan that names one");
   const origin = new URL(url).origin;
   const flow = (plan.flow ?? []).slice(0, plan.upTo ?? plan.flow?.length ?? 0);
-  await runSteps({ steps: plan.login, origin, driver, env, mark, phase: "login", bindTimeoutMs });
-  await runSteps({ steps: flow, origin, driver, env, mark, phase: "flow", bindTimeoutMs });
+  const run = (steps: readonly FlowStep[], phase: RunContext["phase"]): RunContext => ({ steps, origin, driver, env, mark, phase, bindTimeoutMs });
+  if (state === undefined) await runSteps(run(plan.login, "login"));
+  else await signInFromState(state, run(plan.login, "login"), url);
+  await runSteps(run(flow, "flow"));
   const landed = await driver.navigate(url);
   if (!landed.ok) throw new LoginFailedError("expect-not-met", "the requested page", `${url} could not be loaded after the login (${landed.error ?? "no reason given"})`);
   await assertStillOnOrigin(driver, origin, "the requested page");
   await assertNotShownLoginWall(driver, plan.login);
-  mark("authApplied", { steps: plan.login.length + flow.length });
+  mark("authApplied", { steps: (state === undefined ? plan.login.length : 1) + flow.length });
 }

@@ -9,8 +9,11 @@
 // "can the rule layer run here" probe, so the skip is the same decision the product makes.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { pageContext } from "../cli.js";
 import { AuthError } from "./auth-faults.js";
@@ -28,7 +31,9 @@ const SKIP = CAN_RUN ? undefined : "no browser can be launched for the rule laye
 const html = (title: string, body: string) => `<!doctype html><html lang="en"><head><title>${title}</title></head><body><main>${body}</main></body></html>`;
 
 // An <img> with no alt: axe's `image-alt`. It exists ONLY on the page behind the login.
-const DASHBOARD = html("Orders", `<h1>Dashboard</h1><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">`);
+// A `theme` entry in localStorage (which only a saved state carries in) is shown in the title, so a test can see it was read.
+const DASHBOARD = html("Orders", `<h1>Dashboard</h1><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">
+  <script>const theme = localStorage.getItem("theme"); if (theme) document.title = "Orders (" + theme + ")";</script>`);
 const LOGIN_WALL = html("Sign in", `<h1>Sign in</h1><form method="post" action="/login"><label>Email address <input name="user"></label>
   <label>Password <input name="password" type="password"></label><button type="submit">Sign in</button></form>`);
 
@@ -164,4 +169,42 @@ test("with no auth the rule layer is exactly what it was: the scan gets no signI
   assert.deepEqual(received, {}, "an unauthenticated scan is called with no options at all");
   await pageContext("http://127.0.0.1:1/x", "run", null, { auth: { login: LOGIN }, scan: spy as never });
   assert.equal(typeof (received as { signIn?: unknown }).signIn, "function");
+});
+
+// ---- ADR 0038, amendment 7: the rule layer loads a saved storage state through the same protocol calls the worker makes ------
+
+/** A storage state for the fake site: the session cookie it accepts (`session=ok`), or one it does not. */
+const stateFor = (origin: string, session: string) => JSON.stringify({
+  cookies: [{ name: "session", value: session, domain: new URL(origin).hostname, path: "/", httpOnly: true }],
+  origins: [{ origin, localStorage: [{ name: "theme", value: "high-contrast-dark" }] }],
+});
+
+test("WITH a saved state, axe scans the page BEHIND the login with NO form login: the login page is never asked for", { skip: SKIP, timeout: 90_000 }, async () => {
+  const web = await site();
+  try {
+    const url = `${web.origin}/orders`;
+    const plan: AuthRequest = { login: LOGIN, state: { path: "/state/saved.json" } };
+    // No variables: a state run reads none of the login's, which the empty env would refuse if it did.
+    const result = await scanWithAxe(url, { signIn: ruleLayerSignIn({ plan, url, env: {}, readText: async () => stateFor(web.origin, "ok") }) });
+    assert.equal(result.title, "Orders (high-contrast-dark)", "the page read the localStorage entry the state carried in");
+    assert.ok(JSON.stringify(result.findings).includes("image-alt"), "the violation that exists only behind the login is found");
+    assert.deepEqual(web.posted, [], "no form login was performed");
+  } finally { await web.close(); }
+});
+
+test("an EXPIRED saved state in the rule layer is an ERROR (auth-state-expired), never a scan of the login wall or 'unchecked'", { skip: SKIP, timeout: 90_000 }, async () => {
+  const web = await site();
+  const dir = mkdtempSync(join(tmpdir(), "a11y-witness-rule-layer-state-"));
+  try {
+    const path = join(dir, "state.json");
+    writeFileSync(path, stateFor(web.origin, "ended-session-value"));
+    const short = [...LOGIN.slice(0, 4), { expect: { kind: "heading" as const, name: "Dashboard", timeoutSeconds: 0.5 } }];
+    await assert.rejects(pageContext(`${web.origin}/orders`, "run", null, { auth: { login: short, state: { path } } }),
+      (e: Error & { fault?: string }) => e.fault === "auth-state-expired" && !e.message.includes("ended-session-value"));
+    // CONTROL: the same file with the cookie the site accepts is a scan of the signed-in page, through the same call.
+    writeFileSync(path, stateFor(web.origin, "ok"));
+    const context = await pageContext(`${web.origin}/orders`, "run", null, { auth: { login: short, state: { path } } });
+    assert.equal(context.title, "Orders (high-contrast-dark)");
+    assert.deepEqual(web.posted, [], "neither run performed a form login");
+  } finally { rmSync(dir, { recursive: true, force: true }); await web.close(); }
 });

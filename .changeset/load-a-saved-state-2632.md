@@ -1,0 +1,6 @@
+---
+"a11ign": minor
+"@a11ign/nvda-worker": patch
+---
+
+**You can now load a saved sign-in instead of performing one (#2632, #2566, ADR 0038 amendment 7).** `--auth-state <file>` (the Action's `auth-state:`, beside `flows` and `login-flow`) loads a Playwright storage state you saved by signing in by hand, in place of the login: the cookies and `localStorage` for the run's own origin go in through the same browser-protocol calls in the screen reader's browser and in the rule layer's, the login flow's final `expect:` is asked of the page the run requested, and a state that no longer holds ends the run with `auth-state-expired` and captures nothing. A single-sign-on session that has expired ends the same way, and a CAPTCHA on the page is still `auth-challenge-detected`. The worker is sent a path and nothing else and reads the file itself; every value the state loaded is hidden from what the run writes and prints, and values under 8 characters and values you gave the run yourself are counted and said, not hidden. The tool never writes the file. `sessionStorage` is not in a state file and IndexedDB is not loaded, so a site that keeps its session there cannot be carried. Not yet measured against a real site. See SECURITY.md and docs/github-action.md, "Logging in with a saved state".

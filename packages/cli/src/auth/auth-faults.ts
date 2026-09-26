@@ -13,7 +13,9 @@
  * eleventh, `auth-session-lost`, is a FAULT and not a fourth `LoginFailureReason`: the login SUCCEEDED, and the page
  * it then loaded was the login form (#2563). The twelfth, `auth-challenge-detected`, is a FAULT too and not a fourth
  * `LoginFailureReason`: a step failed and a CAPTCHA widget is on the page that failed it (#2564). It NAMES the
- * challenge and never answers one.
+ * challenge and never answers one. The thirteenth, `auth-state-expired`, is a FAULT for the reason `auth-session-lost` gives: the
+ * login did not fail, there was none. It is raised ONLY on a run that loaded a saved storage state (`--auth-state`), when the
+ * page that state was meant to sign in is not the signed-in page (ADR 0038, amendment 7, choice 2).
  */
 export const AUTH_FAULTS = [
   "auth-refused-remote-worker",
@@ -28,6 +30,7 @@ export const AUTH_FAULTS = [
   "auth-refused-public-repository",
   "auth-session-lost",
   "auth-challenge-detected",
+  "auth-state-expired",
 ] as const;
 
 export type AuthFault = (typeof AUTH_FAULTS)[number];

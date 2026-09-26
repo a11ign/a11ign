@@ -164,6 +164,17 @@ inputs:
       proves you are signed in), and it takes `from-env:` values only.
     required: false
     default: ""
+  auth-state:
+    description: >-
+      The path to a Playwright storage state a person saved by signing in by hand, loaded INSTEAD of performing the login
+      (ADR 0038, amendment 7). Give it with `flows` and `login-flow`: the login flow's final `expect:` is what decides the
+      state still signs in, and it must hold on EVERY page the run requests. The file has to exist on the runner, so your own
+      step decodes it from a secret into `$RUNNER_TEMP` first; **this action never writes the file and has no way to**.
+      GitHub masks the secret's exact value and nothing derived from it, and the decoded file's contents are not a secret to
+      GitHub, so the containment inside the run is the only defence. A state that no longer holds ends the run as
+      `auth-state-expired`. See docs/github-action.md, "Logging in with a saved state".
+    required: false
+    default: ""
   send-authenticated-transcript-to-judge-vendor:
     description: >-
       `"true"` to let an authenticated run send its transcript to a non-local judge backend. Off by default and REFUSED
@@ -289,13 +300,14 @@ runs:
       env:
         FLOWS: ${{ inputs.flows }}
         LOGIN_FLOW: ${{ inputs.login-flow }}
+        AUTH_STATE: ${{ inputs.auth-state }}
         SEND_TRANSCRIPT: ${{ inputs.send-authenticated-transcript-to-judge-vendor }}
         JUDGE_BACKEND: ${{ inputs.judge-backend }}
         REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
       run: |
-        [ -z "$FLOWS$LOGIN_FLOW" ] && exit 0
+        [ -z "$FLOWS$LOGIN_FLOW$AUTH_STATE" ] && exit 0
         if [ -z "$FLOWS" ] || [ -z "$LOGIN_FLOW" ]; then
-          echo "::error::Give both flows and login-flow, or neither: a login flow is a named flow in a flows file." >&2
+          echo "::error::Give both flows and login-flow, or neither: a login flow is a named flow in a flows file. auth-state needs both beside it, since the flow's final expect: is what decides a saved state still signs in." >&2
           exit 1
         fi
         # `private` must be exactly true. False, absent and empty all refuse: "could not tell" is not permission to
@@ -563,6 +575,7 @@ runs:
         A11Y_WORKER: http://127.0.0.1:8765
         FLOWS: ${{ inputs.flows }}
         LOGIN_FLOW: ${{ inputs.login-flow }}
+        AUTH_STATE: ${{ inputs.auth-state }}
         SEND_TRANSCRIPT: ${{ inputs.send-authenticated-transcript-to-judge-vendor }}
         JUDGE_BACKEND: ${{ inputs.judge-backend }}
         ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
@@ -579,7 +592,13 @@ runs:
         flows_path=""
         if [ -n "$FLOWS" ]; then
           case "$FLOWS" in /*|[A-Za-z]:*) flows_path="$FLOWS" ;; *) flows_path="$GITHUB_WORKSPACE/$FLOWS" ;; esac
-          npx tsx packages/cli/src/action/auth-masks.ts --flows "$flows_path" --login-flow "$LOGIN_FLOW"
+          # A saved state signs in INSTEAD of the login (ADR 0038, amendment 7): no login variable is read, so there is no
+          # value to mask, and the decoded state file is not a secret to GitHub. The containment inside the run is the defence.
+          [ -n "$AUTH_STATE" ] || npx tsx packages/cli/src/action/auth-masks.ts --flows "$flows_path" --login-flow "$LOGIN_FLOW"
+        fi
+        state_path=""
+        if [ -n "$AUTH_STATE" ]; then
+          case "$AUTH_STATE" in /*|[A-Za-z]:*) state_path="$AUTH_STATE" ;; *) state_path="$GITHUB_WORKSPACE/$AUTH_STATE" ;; esac
         fi
         node packages/nvda-worker/src/server.mjs \
           > "$RUNNER_TEMP/worker.log" 2> "$RUNNER_TEMP/worker.err" &
@@ -635,6 +654,7 @@ runs:
         # environment variable the CLI reads. `probe-forms` and `probe-navigation` may still be "true" above (their defaults
         # cannot be told from a choice); the CLI turns both off for an authenticated run and says so.
         [ -n "$flows_path" ] && args+=(--flows "$flows_path" --login-flow "$LOGIN_FLOW")
+        [ -n "$state_path" ] && args+=(--auth-state "$state_path")
         [ "$SEND_TRANSCRIPT" = "true" ] && args+=(--send-authenticated-transcript-to-judge-vendor)
         [ "${{ inputs.axe }}" = "true" ] || args+=(--no-axe)
         # stdout is the JSON result; the CLI's diagnostics go to stderr and stay in the log.
