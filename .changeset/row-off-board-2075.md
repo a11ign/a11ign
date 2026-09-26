@@ -1,0 +1,7 @@
+---
+"@a11ign/agent-org": patch
+---
+
+**A row that never reached Project 1 now wakes `product-manager` (#2075).** `row-file` is the only path that boards a row and nothing requires it: 9 of 50 open rows were off the board on 2026-09-23 (two `ready`, so claimable on the label and invisible in every Status view), and 28 of the 121 rows filed since 2026-09-22T00:00Z never reached it. `ready-label-audit` had the right question and asked it once a day into a nightly that is red by design, so #1889 sat absent twenty hours after it was printed. The gate now asks it: the new `row-off-board` cause (a JUDGMENT cause, FINISH so a drain does not withhold it) fires when an open row has no Project 1 item, **keyed on the SET of absent row numbers**, so it re-fires when the set changes and goes quiet when it empties.
+
+**It reads each issue's own `projectItems`, never the board listing**, because `gh project item-list` lagged about four minutes behind an add (#2075 and #2076 were absent from it and present on the issue), which would have woken `product-manager` for rows `row-file` had just boarded correctly. One GraphQL call per 100 open rows. A row younger than 5 minutes is not reported (`row-file` takes about 9 seconds from create to label in the one timeline read; the margin is chosen, not derived). A refused read emits nothing and says so on stderr. It does not board the row: the Status is a judgment.
