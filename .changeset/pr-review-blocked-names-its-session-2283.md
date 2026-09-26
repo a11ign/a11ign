@@ -1,0 +1,5 @@
+---
+"@a11ign/agent-org": patch
+---
+
+**`pr-review-blocked` routes a PR that carries a `session:` label to that session instead of to `product-manager` (#2283).** `ceo`'s #2001 principle, applied to the one remaining cause where the gate already holds the label: an order whose subject has a machine-readable owner goes to the owner. A labelled `AWAITING_REVIEW` PR is ordered to its session (it was opened ready and never entered the reviewer lane; its reviewer is `reviewer-<n>`), and a labelled `REFUSED` one is rework for its session, with the refusing review's commit compared against `headRefOid` as the order's first fact (`reviews[].commit.oid`, already on the PR list). Each per-PR order is keyed `<session>/pr-review-blocked/pr-<n>/<CODE>`, on the state and never the head, so a push during a rework does not re-fire it. An UNLABELLED PR, and any `UNRECOGNISED` decision (a value of GitHub's the gate has never seen, which the author cannot fix), still make the one set order to `product-manager`, which no longer lists a labelled PR.
