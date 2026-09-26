@@ -17,7 +17,7 @@
  */
 import type { Page } from "playwright";
 
-import { FRAME_SOURCES_EXPRESSION, type AuthDriver, type AxNode } from "./interpreter.js";
+import { cookieParam, FRAME_SOURCES_EXPRESSION, SET_LOCAL_STORAGE_FUNCTION, type AuthDriver, type AxNode } from "./interpreter.js";
 
 type Send = (method: string, params?: object) => Promise<any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -87,6 +87,15 @@ export async function openPlaywrightDriver(page: Page): Promise<AuthDriver> {
     choose: (handle, option) => callOn(handle, CHOOSE_FUNCTION, [option]),
     isChecked: (handle) => callOn(handle, "function () { return Boolean(this.checked) || this.getAttribute('aria-checked') === 'true'; }"),
     click: async (handle) => { await callOn(handle, "function () { this.click(); }"); },
+    // A saved state goes in over the protocol calls the worker makes and not through Playwright's `storageState:`, so there is
+    // one implementation of the loading to keep equal and not two (ADR 0038, amendment 7, choice 3).
+    setCookies: async (cookies) => { await send("Network.setCookies", { cookies: cookies.map(cookieParam) }); },
+    async setLocalStorage(entries) {
+      const { result } = await send("Runtime.evaluate", { expression: "globalThis" });
+      await send("Runtime.callFunctionOn", {
+        objectId: result.objectId, functionDeclaration: SET_LOCAL_STORAGE_FUNCTION, arguments: [{ value: entries }], returnByValue: true,
+      });
+    },
     close: async () => { await (session as unknown as { detach(): Promise<void> }).detach(); },
   };
 }

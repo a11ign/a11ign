@@ -121,6 +121,13 @@ interface Args {
   flows: string | null;
   loginFlow: string | null;
   /**
+   * `--auth-state <file>`: a Playwright storage state the person saved by signing in by hand, loaded INSTEAD of performing the
+   * login (ADR 0038, amendment 7). It needs `--flows` and `--login-flow` beside it, since the login flow's final `expect:` is
+   * what decides the state is still good. A path and nothing else is ever sent to a worker; a state that no longer holds ends
+   * the run as `auth-state-expired`.
+   */
+  authState: string | null;
+  /**
    * `--send-authenticated-transcript-to-judge-vendor`: the ONE override of clause 5. An ARGUMENT and never read from the
    * environment, so a variable left in a shared runner cannot turn it on for a job that never named it.
    */
@@ -159,7 +166,7 @@ const USAGE =
   + "[--worker http://host:port] " +
   "[--after restore|stop|pause|leave] [--json] [--debug] [--probe-forms] [--no-probe-focus] "
   + "[--no-probe-navigation] [--no-probe-focus-context] "
-  + "[--forms <file>] [--flows <file> --login-flow <name> [--send-authenticated-transcript-to-judge-vendor]] "
+  + "[--forms <file>] [--flows <file> --login-flow <name> [--auth-state <file>] [--send-authenticated-transcript-to-judge-vendor]] "
   + "[--emit-form-config] [--plan] "
   + "[--no-axe] [--axe-results <file>] [--no-keep]";
 
@@ -213,6 +220,7 @@ function defaultArgs(): Args {
     formsConfig: null,
     flows: null,
     loginFlow: null,
+    authState: null,
     sendAuthenticatedTranscriptToJudgeVendor: false,
     emitFormConfig: false,
     plan: false,
@@ -258,6 +266,7 @@ const LIST_FLAGS: Readonly<Record<string, (args: Args, value: string | undefined
   "--max-pages": (a, value) => { a.maxPages = value ?? a.maxPages; },
   "--flows": (a, value) => { a.flows = value ?? a.flows; },
   "--login-flow": (a, value) => { a.loginFlow = value ?? a.loginFlow; },
+  "--auth-state": (a, value) => { a.authState = value ?? a.authState; },
 });
 
 /**

@@ -186,15 +186,30 @@ export function refuseIfAnArgumentCarriesAValue(
 // A saved storage state as a source of values to hide (ADR 0038, amendment 7, choice 4).
 // ---------------------------------------------------------------------------------------------------------------
 
-/** The part of a Playwright storage state the containment reads: names and values, nothing about how they are loaded. */
+/**
+ * One cookie of a Playwright storage state. The attributes after `domain` are what LOADING needs (`Network.setCookies`) and
+ * the containment never reads; each is optional because the file is the person's and a hand-edited one may omit them.
+ */
+export interface StateCookie {
+  readonly name: string;
+  readonly value: string;
+  readonly domain: string;
+  readonly path?: string;
+  readonly expires?: number;
+  readonly httpOnly?: boolean;
+  readonly secure?: boolean;
+  readonly sameSite?: "Strict" | "Lax" | "None";
+}
+
+/** The part of a Playwright storage state a run reads: what to hide, and what to load. */
 export interface StorageState {
-  readonly cookies: readonly { name: string; value: string; domain: string }[];
+  readonly cookies: readonly StateCookie[];
   readonly origins: readonly { origin: string; localStorage: readonly { name: string; value: string }[] }[];
 }
 
 /** What the run loads for ONE origin, each entry carrying its 1-based place in the file (the only name a message may use). */
 export interface StateEntries {
-  cookies: { place: number; name: string; value: string; domain: string }[];
+  cookies: (StateCookie & { place: number })[];
   localStorage: { place: number; name: string; value: string }[];
 }
 
@@ -219,7 +234,7 @@ export function stateEntriesFor(state: StorageState, origin: string): StateEntri
   const host = new URL(origin).hostname;
   return {
     cookies: state.cookies.flatMap((cookie, index) =>
-      cookieCoversHost(cookie.domain, host) ? [{ place: index + 1, name: cookie.name, value: cookie.value, domain: cookie.domain }] : []),
+      cookieCoversHost(cookie.domain, host) ? [{ ...cookie, place: index + 1 }] : []),
     localStorage: state.origins.filter((entry) => entry.origin === origin)
       .flatMap((entry) => entry.localStorage.map((item, index) => ({ place: index + 1, name: item.name, value: item.value }))),
   };

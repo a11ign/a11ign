@@ -176,6 +176,19 @@ test("CHOICE 3/4: only the pinned origin's cookies and localStorage are selected
   assert.deepEqual(stateEntriesFor(STATE, "https://notexample.test").cookies, []);
 });
 
+test("CHOICE 3: a selected cookie keeps the attributes loading needs (path, expiry, secure, httpOnly, sameSite) and its place in the file", () => {
+  const full: StorageState = {
+    cookies: [
+      { name: "other", value: "x".repeat(9), domain: "other.example.org" },
+      { name: "sid", value: SESSION_COOKIE, domain: "app.example.test", path: "/app", expires: 1900000000, httpOnly: true, secure: true, sameSite: "Lax" },
+    ],
+    origins: [],
+  };
+  assert.deepEqual(stateEntriesFor(full, APP).cookies, [
+    { name: "sid", value: SESSION_COOKIE, domain: "app.example.test", path: "/app", expires: 1900000000, httpOnly: true, secure: true, sameSite: "Lax", place: 2 },
+  ]);
+});
+
 test("CHOICE 4: the state's values are hidden, named by PLACE and never by the file's own key, and a value inside JSON counts", () => {
   const found = credentialsFromState(STATE, { origin: APP, publicText: [] });
   assert.ok(found.credentials.every(({ name }) => /^state (cookie|localStorage) \d+$/.test(name)), "no key, no value in a name");
