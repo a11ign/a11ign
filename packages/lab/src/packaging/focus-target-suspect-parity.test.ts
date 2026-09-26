@@ -4,7 +4,7 @@
  *
  * `censusTargetIsSuspect` (`packages/evidence/src/verify.ts`) decides whether a CDP target's `targetMatch`/
  * `candidates` pair is trustworthy enough to vouch for a census. `focusTargetIsSuspect`
- * (`capture-pure.mjs`) is the identical judgement, needed because the F55 focus-event detector reads the
+ * (the worker's `capture-pure.mjs`) is the identical judgement, needed because the F55 focus-event detector reads the
  * SAME `pageTarget()` machinery and, until 2026-09-06, checked none of it — a mistargeted capture correctly
  * suppressed a census finding while still reporting a real-looking 2.4.7 finding computed from the wrong
  * document. See `focusEventVerdict`'s own comment for the full seam this closed.
@@ -19,10 +19,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { focusTargetIsSuspect } from "./capture-pure.mjs";
-// The SOURCE, by relative path, never `@a11ign/evidence` — that specifier resolves to `dist`, and a
+// The worker half BY PACKAGE NAME (#2612): `@a11ign/nvda-worker/capture-pure` resolves to its source in either
+// layout, so this test no longer names the layer's directory. It lives in `lab` because `evidence` is Apache-2.0
+// and may not import an AGPL package (`licence-boundary.test.ts`), and `lab` already declares the worker.
+import { focusTargetIsSuspect } from "@a11ign/nvda-worker/capture-pure";
+// The evidence half, the SOURCE by relative path, never `@a11ign/evidence` — that specifier resolves to `dist`, and a
 // test whose whole job is to catch drift between two files must not be reading a compiled snapshot of one.
-import { censusTargetIsSuspect } from "../../evidence/src/verify.js";
+import { censusTargetIsSuspect } from "../../../evidence/src/verify.js";
 
 /**
  * One table, both predicates. Each case names WHY it is or is not suspect, because "suspect" and "not

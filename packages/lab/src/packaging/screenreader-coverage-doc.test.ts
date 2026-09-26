@@ -29,17 +29,26 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { PROBE_FLAGS } from "./capture-pure.mjs";
+import { PROBE_FLAGS } from "@a11ign/nvda-worker/capture-pure";
+
+/**
+ * A file of the worker's source, found THROUGH THE PACKAGE NAME (#2612): `./package.json` is exported, so the
+ * package directory resolves the same in this checkout and in an install, and no path names where the layer lives.
+ */
+const workerSource = (file: string) =>
+  join(dirname(createRequire(import.meta.url).resolve("@a11ign/nvda-worker/package.json")), "src", file);
 
 const MAP = readFileSync(
-  fileURLToPath(new URL("../../../docs/screenreader-coverage.md", import.meta.url)), "utf8");
+  fileURLToPath(new URL("../../../../docs/screenreader-coverage.md", import.meta.url)), "utf8");
 
 test("every probe this worker can run is named in the map that bounds our claims", () => {
   // VACUITY GUARD. If `PROBE_FLAGS` were ever empty or unreadable, every assertion below would pass
   // having compared nothing — which is precisely the failure this document exists to prevent, one level up.
-  assert.ok(PROBE_FLAGS.length >= 8, `expected the probe flags, found ${PROBE_FLAGS.length}`);
+  assert.ok(PROBE_FLAGS.length >= 8, "the probe flags are missing or truncated");
   assert.ok(MAP.length > 2000, "the coverage map is missing or truncated");
 
   for (const flag of PROBE_FLAGS) {
@@ -64,13 +73,13 @@ test("the map claims no probe that does not exist, which is the other direction"
   // refers to SOMETHING, not that the document only ever discusses the wire.
   const source = [
     "capture-probes.mjs", "capture-pure.mjs", "capture-setup.mjs", "capture-core.mjs",
-  ].map((f) => readFileSync(fileURLToPath(new URL(`./${f}`, import.meta.url)), "utf8")).join("\n");
+  ].map((f) => readFileSync(workerSource(f), "utf8")).join("\n");
 
   const implemented = (name: string) =>
     PROBE_FLAGS.includes(name) || new RegExp(`(function|const)\\s+${name}\\b`).test(source);
 
   const claimed = new Set([...MAP.matchAll(/\bprobe[A-Z][A-Za-z]*\b/g)].map((m) => m[0]));
-  assert.ok(claimed.size >= 8, `found ${claimed.size} probe names in the map; the regex has drifted`);
+  assert.ok(claimed.size >= 8, "too few probe names found in the map; the regex has drifted");
   for (const name of claimed) {
     assert.ok(implemented(name),
       `docs/screenreader-coverage.md names \`${name}\`, which is neither a wire flag nor a function in the `
