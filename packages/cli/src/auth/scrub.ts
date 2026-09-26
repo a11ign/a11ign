@@ -181,3 +181,116 @@ export function refuseIfAnArgumentCarriesAValue(
     + "its task, and the server would log that URL, so a run given a credential in either is refused before anything is "
     + "captured. Remove the value from the URL or the task; the login flow supplies it.");
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// A saved storage state as a source of values to hide (ADR 0038, amendment 7, choice 4).
+// ---------------------------------------------------------------------------------------------------------------
+
+/** The part of a Playwright storage state the containment reads: names and values, nothing about how they are loaded. */
+export interface StorageState {
+  readonly cookies: readonly { name: string; value: string; domain: string }[];
+  readonly origins: readonly { origin: string; localStorage: readonly { name: string; value: string }[] }[];
+}
+
+/** What the run loads for ONE origin, each entry carrying its 1-based place in the file (the only name a message may use). */
+export interface StateEntries {
+  cookies: { place: number; name: string; value: string; domain: string }[];
+  localStorage: { place: number; name: string; value: string }[];
+}
+
+/**
+ * A cookie is sent to `host` when it is host-only and equal, or a domain cookie (leading dot) and `host` is that domain or
+ * a subdomain of it (RFC 6265 section 5.1.3). Anything looser would load a session for a host the run never named.
+ */
+function cookieCoversHost(domain: string, host: string): boolean {
+  const wanted = domain.toLowerCase();
+  const here = host.toLowerCase();
+  if (!wanted.startsWith(".")) return wanted === here;
+  return here === wanted.slice(1) || here.endsWith(wanted);
+}
+
+/**
+ * The entries of a state that belong to `origin`: the cookies whose domain covers its host, and its own `localStorage`.
+ * **The one selection, and both the loading and the scrub set are built from it**, so what is loaded into the browser and
+ * what is hidden from the output cannot drift apart; a state made in a browser holds every site's sessions, and the rest are
+ * neither loaded nor read.
+ */
+export function stateEntriesFor(state: StorageState, origin: string): StateEntries {
+  const host = new URL(origin).hostname;
+  return {
+    cookies: state.cookies.flatMap((cookie, index) =>
+      cookieCoversHost(cookie.domain, host) ? [{ place: index + 1, name: cookie.name, value: cookie.value, domain: cookie.domain }] : []),
+    localStorage: state.origins.filter((entry) => entry.origin === origin)
+      .flatMap((entry) => entry.localStorage.map((item, index) => ({ place: index + 1, name: item.name, value: item.value }))),
+  };
+}
+
+/** Every string inside a parsed JSON value: a page echoes a token and never the object that held it. */
+function stringLeaves(value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) return value.flatMap(stringLeaves);
+  if (typeof value === "object" && value !== null) return Object.values(value).flatMap(stringLeaves);
+  return [];
+}
+
+function parsedLeaves(text: string): string[] {
+  try {
+    return stringLeaves(JSON.parse(text) as unknown);
+  } catch (error) {
+    void error; // not JSON is the ordinary case for a cookie or a storage value: the whole value is what there is to hide
+    return [];
+  }
+}
+
+/** The values one entry contributes: itself, the strings inside it when it is JSON, and its decoded form when that differs. */
+function valuesOf(text: string): string[] {
+  let decoded = text;
+  try {
+    decoded = decodeURIComponent(text);
+  } catch (error) {
+    void error; // a stray percent sign is not an encoding, and the raw value is already in the list
+  }
+  return [...new Set([text, decoded, ...parsedLeaves(text), ...parsedLeaves(decoded)])];
+}
+
+export interface StateCredentials {
+  credentials: Credential[];
+  /** Values below `MIN_SCRUBBED_LENGTH`: not hidden, and said so. */
+  skippedShort: number;
+  /** Values that are text the run was itself handed (its URLs or task): not hidden, and said so. */
+  skippedPublic: number;
+}
+
+/**
+ * The values of a state that the run must keep out of everything it writes and prints, named by place and never by the
+ * file's own key. **A value below the floor is SKIPPED and COUNTED, not refused**, unlike a `from-env` value: a real state
+ * holds many values such as `1`, `true` and `dark`, and refusing the run for them would make every state unusable (the
+ * reasons the floor exists, amendment 2, are reasons not to hide them). **A value that is a substring of the run's URLs or
+ * task is skipped and counted too**: those are the caller's own arguments, already public to the run, and hiding a
+ * `localStorage` value of `dashboard` would otherwise refuse every URL that contains `/dashboard`.
+ */
+export function credentialsFromState(state: StorageState, request: { origin: string; publicText: readonly string[] }): StateCredentials {
+  const entries = stateEntriesFor(state, request.origin);
+  const named = [
+    ...entries.cookies.flatMap((cookie) => valuesOf(cookie.value).map((value) => ({ name: `state cookie ${cookie.place}`, value }))),
+    ...entries.localStorage.flatMap((item) => valuesOf(item.value).map((value) => ({ name: `state localStorage ${item.place}`, value }))),
+  ];
+  const result: StateCredentials = { credentials: [], skippedShort: 0, skippedPublic: 0 };
+  for (const candidate of named) {
+    if (codePoints(candidate.value) < MIN_SCRUBBED_LENGTH) result.skippedShort += 1;
+    else if (request.publicText.some((text) => text.includes(candidate.value))) result.skippedPublic += 1;
+    else result.credentials.push(candidate);
+  }
+  return result;
+}
+
+/** What a state run says about the values it did not hide. Empty when it skipped none: there is then nothing to disclose. */
+export function stateScrubNotices({ skippedShort, skippedPublic }: StateCredentials): string[] {
+  const values = (count: number): string => `${count} value${count === 1 ? "" : "s"}`;
+  return [
+    ...(skippedShort > 0 ? [`${values(skippedShort)} in your saved state ${skippedShort === 1 ? "is" : "are"} shorter than ${MIN_SCRUBBED_LENGTH} characters `
+      + "and not hidden from the output: a value that short is an ordinary word on most pages, and hiding it would rewrite the page."] : []),
+    ...(skippedPublic > 0 ? [`${values(skippedPublic)} in your saved state ${skippedPublic === 1 ? "appears" : "appear"} in your URLs or task and ${skippedPublic === 1 ? "is" : "are"} not hidden from the output: `
+      + "you supplied that text yourself."] : []),
+  ];
+}
