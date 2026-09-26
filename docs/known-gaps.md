@@ -3462,8 +3462,13 @@ above are pinned by tests, and both tests are of a page written to behave that w
   CI**. The real-browser reading is a dev-host one.
 
 **NOT MEASURED:** that a real identity provider produces `left-origin` on a real run, or that a real MFA prompt (a real
-one-time-code page, an authenticator push, a redirect with a state parameter) fails a real `expect:`. The one authenticated
-capture on record (#2399, `a11y-worker-3`) was a fixture page, and so is every reading above. **What closes it:** one login
+one-time-code page, an authenticator push, a redirect with a state parameter) fails a real `expect:`. The authenticated
+captures behind every reading above were fixture pages (#2399, `a11y-worker-3`). **One full Action run against a page that
+is not a fixture now exists (#2561, 2026-09-26, run 36226049347 in the private `a11ign/auth-capture-check`, `windows-2022`,
+real NVDA): a plain form login to `the-internet.herokuapp.com`, which exited 0, wrote no credential to its report, summary,
+PR comment or log, and did not exercise any of the gaps in this section.** That target prints its own demo credentials on
+the login page, so the clean scan proves the redaction and not that the tool never sees a credential; it has no MFA, SSO
+or CAPTCHA. **What closes it:** one login
 against a site that redirects to an identity provider and one against a code prompt, on a test account, each read for the
 fault it ends in. Nobody is doing that; the first outsider run whose sign-in is SSO is the natural one.
 
