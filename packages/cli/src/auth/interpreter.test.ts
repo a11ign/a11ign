@@ -17,7 +17,7 @@ import {
   requiredEnvNames as workerRequiredEnvNames,
   signIn as workerSignIn,
   validateAuthRequest,
-} from "../../../nvda-worker/src/auth-flow.mjs";
+} from "@a11ign/nvda-worker/auth-flow";
 import {
   challengeVendor, controlsNamed, expectationMet, FRAME_SOURCES_EXPRESSION, requiredEnvNames, signIn as cliSignIn,
   type AuthDriver, type AuthPlan, type AxNode,

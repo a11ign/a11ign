@@ -2,12 +2,12 @@
  * Every fault code the worker can report must have remediation text here, or a stranger meeting
  * `(fault: screen-reader-mute)` learns nothing from it — see this file's own header for the incident.
  *
- * DISCOVERS the fault codes from `packages/nvda-worker/src/capture-faults.mjs`'s `FAULT`, by RELATIVE
- * PATH to its source, never a package import — `@a11ign/nvda-worker` is deliberately not a
- * dependency of this package (see `fault-remediation.ts`'s header), and even if it were, importing the
- * PUBLISHED package would resolve to a `dist` that could be stale relative to this worktree's source
- * (docs/backlog.md, issue #28's exact shape) — a relative import into `../../nvda-worker/src/` reads the
- * same source tree this checkout is testing, regardless of any package's build state.
+ * DISCOVERS the fault codes from `@a11ign/nvda-worker/capture-faults`'s `FAULT`, BY PACKAGE NAME (#2613): a relative
+ * `../../nvda-worker/src/` import was true in this tree and nowhere else, and the layer is to leave for its own repository.
+ * `@a11ign/nvda-worker` is still deliberately not a RUNTIME dependency of this package (see `fault-remediation.ts`'s header);
+ * a TEST names it because the fault codes are an agreement between the two. The package's `exports` map points at `src/`, not
+ * a `dist`, so the name reads the same source this checkout is testing whatever any package's build state (docs/backlog.md,
+ * issue #28's shape, the reason this once used a relative path).
  *
  * PLUS the one JUDGE-layer fault code (#81), read the same way but from Python source text rather than
  * imported (this package cannot `import` Python) — `score.py`'s `FAULT = "..."` class attribute, pulled
@@ -25,7 +25,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { FAULT } from "../../nvda-worker/src/capture-faults.mjs";
+import { FAULT } from "@a11ign/nvda-worker/capture-faults";
 import { AUTH_FAULTS } from "./auth/auth-faults.js";
 import {
   FAULT_REMEDIATION, remediationFor, formatFaultMessage, formatDoubtMessage, formatEarlyContainmentNotice,
