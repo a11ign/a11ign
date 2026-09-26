@@ -11,6 +11,8 @@
  * CHOSEN. They are a reading at a moment: re-derive them there before quoting them.
  */
 
+import { isAuthFault, type AuthFault } from "./auth/auth-faults.js";
+
 export const COST_DOC = "docs/capture-cost.md";
 
 /** The default cap, in captures. CHOSEN (`ceo`'s lower bound; Lighthouse CI's default), not derived. */
@@ -20,6 +22,23 @@ export const CEILING_PAGES = 25;
 /** The same two caps in runner-minutes, as `capture-cost.md` states them (CHOSEN round-ups of 43 and 208). */
 export const DEFAULT_CAP_MINUTES = 45;
 export const CEILING_CAP_MINUTES = 210;
+
+/**
+ * Captures a page may take before its capture is accepted: the first, and up to two re-captures while the transcript
+ * does not read the page (`recaptureUntilItReadsThePage`). EVERY one of them logs in again, so it is a login multiplier.
+ */
+export const MAX_CAPTURE_ATTEMPTS = 3;
+
+/**
+ * The most logins one authenticated run may need AT LEAST (its floor, `minimumLogins`), and it is ARITHMETIC, not a
+ * taste: the worst case the DEFAULT run can reach, `DEFAULT_MAX_PAGES` pages, each `MAX_CAPTURE_ATTEMPTS` capture
+ * attempts plus one rule-layer scan = 5 x (3 + 1) = 20. The default run is the largest one the project has costed
+ * and admitted, so a run whose FLOOR already exceeds the default run's CEILING is asking a real account for more
+ * logins than anything this tool has vouched for. The default run (floor 10, worst case 20) passes; a run at the page
+ * ceiling (25 pages, floor 50) does not. Not a page cap: it counts logins, and a run with form states makes more
+ * of them per page.
+ */
+export const MAX_LOGINS = DEFAULT_MAX_PAGES * (MAX_CAPTURE_ATTEMPTS + 1);
 
 /** Seconds, from `capture-cost.md`: a typical capture is CHOSEN between the measured medians; the worst is the max observed. */
 const TYPICAL_CAPTURE_SECONDS = 340;
@@ -148,6 +167,53 @@ export function refuseAboveCap({ captures, cap, surface }: { captures: number; c
     + `${overrideHint({ captures, surface })} Nothing was captured, and no worker was leased. Source: ${COST_DOC}.`);
 }
 
+/** Captures a run makes: each page times the form states it runs, at least one per page. */
+export const captureCount = ({ pages, states }: { pages: number; states: number }): number => pages * Math.max(1, states);
+
+/**
+ * The FEWEST logins a run can make: one per capture for the screen reader, and one per capture for the rule layer,
+ * which signs in for itself in its own browser (ADR 0038). It is a floor and never a count -- see `LoginTally`.
+ */
+export const minimumLogins = ({ captures, axe }: { captures: number; axe: boolean }): number => captures * (axe ? 2 : 1);
+
+/** The most logins a run can make when every capture is repeated as often as it may be. */
+export const worstCaseLogins = ({ captures, axe }: { captures: number; axe: boolean }): number =>
+  captures * (MAX_CAPTURE_ATTEMPTS + (axe ? 1 : 0));
+
+/**
+ * The logins a run PERFORMED, counted at the two places a login is dispatched (`captureViaWorker` and the rule
+ * layer's scan) and not derived from the page count, which a repeated capture makes wrong. An ATTEMPT is counted when
+ * it is sent: a login that failed was still a real request against a real account.
+ */
+export interface LoginTally {
+  /** One per call that asked the worker to log in, re-captures included. */
+  workerAttempts: number;
+  /** One per rule-layer scan that signed in. */
+  ruleLayerScans: number;
+}
+
+export const newLoginTally = (): LoginTally => ({ workerAttempts: 0, ruleLayerScans: 0 });
+export const loginsPerformed = (tally: LoginTally): number => tally.workerAttempts + tally.ruleLayerScans;
+
+/**
+ * REFUSE an authenticated run whose FLOOR passes `MAX_LOGINS`, BEFORE any lease or capture, naming the constant, the
+ * count and what can be done. The shape of `refuseAboveCap`, with one difference it says out loud: there is NO
+ * override, because raising a lockout bound on the command line is the failure it exists to stop, and a new flag
+ * would reach the Action's inputs. The remedies are fewer captures per run or `--no-axe`, which halves the floor.
+ */
+export function refuseAboveLoginCap({ captures, axe }: { captures: number; axe: boolean }): void {
+  const floor = minimumLogins({ captures, axe });
+  if (floor <= MAX_LOGINS) return;
+  throw new PageListError(
+    `Refusing an authenticated run of ${pluralCaptures(captures)}: it needs at least ${floor} logins `
+    + `(one per capture${axe ? " and one per capture for the rule layer" : ""}), and MAX_LOGINS is ${MAX_LOGINS}. `
+    + `${MAX_LOGINS} is what the default ${DEFAULT_MAX_PAGES}-page run can reach at worst `
+    + `(${DEFAULT_MAX_PAGES} x (${MAX_CAPTURE_ATTEMPTS} capture attempts + 1 rule-layer scan)). `
+    + `Every login is a real request to a real account and an account locks after too many. There is no override: `
+    + `split the list across runs${axe ? ", or pass --no-axe, which halves the floor" : ""}. `
+    + "Nothing was captured, and no worker was leased.");
+}
+
 /** One entry per URL, in the order supplied: the page's own outcome and, in JSON mode, the page's own results. */
 export interface PageEntry {
   url: string;
@@ -156,20 +222,44 @@ export interface PageEntry {
   results: unknown[];
   /** Why the capture failed; present only when `status` is `"failed"`. */
   error?: string;
+  /** The authentication fault that failed this page, or that stopped the list before it was tried. */
+  fault?: AuthFault;
+  /**
+   * Set on a page the run never tried because an earlier page hit an authentication fault. It is still `"failed"`, so
+   * every reader that treats `failed` as "not measured" (the Action's summary) keeps doing so.
+   */
+  notAttempted?: true;
 }
 
 /** The machine-readable result of a run over several pages. A list of ONE never uses it: it prints as a single URL does. */
-export function multiPageJson(pages: readonly PageEntry[]): { multiPage: true; pages: readonly PageEntry[] } {
-  return { multiPage: true, pages };
+export function multiPageJson(pages: readonly PageEntry[], logins?: LoginReport): {
+  multiPage: true; pages: readonly PageEntry[]; logins?: LoginReport } {
+  return { multiPage: true, pages, ...(logins ? { logins } : {}) };
+}
+
+/** What an authenticated run reports about its own logins: the count it performed and the floor it stated up front. */
+export interface LoginReport { performed: number; workerAttempts: number; ruleLayerScans: number; minimum: number }
+
+export function loginReport({ tally, minimum }: { tally: LoginTally; minimum: number }): LoginReport {
+  return { performed: loginsPerformed(tally), ...tally, minimum };
+}
+
+export function loginLine(report: LoginReport): string {
+  return `Logins: ${report.performed} performed (${report.workerAttempts} capture attempts, `
+    + `${report.ruleLayerScans} rule-layer scans); the minimum stated before the run was ${report.minimum}.`;
 }
 
 /** The CLI's closing roll-up: which pages were captured and which FAILED, so no failure hides among the reports. */
-export function rollUpLines(pages: readonly PageEntry[]): string[] {
-  const failed = pages.filter((page) => page.status === "failed");
+export function rollUpLines(pages: readonly PageEntry[], logins?: LoginReport): string[] {
+  const skipped = pages.filter((page) => page.notAttempted);
+  const failed = pages.filter((page) => page.status === "failed" && !page.notAttempted);
+  const notAttempted = skipped.length > 0 ? `, ${skipped.length} NOT ATTEMPTED` : "";
   return [
-    `Pages: ${pages.length} requested; ${pages.length - failed.length} captured, ${failed.length} FAILED.`,
+    `Pages: ${pages.length} requested; ${pages.length - failed.length - skipped.length} captured, `
+      + `${failed.length} FAILED${notAttempted}.`,
     ...pages.map((page, index) => `  ${index + 1}. ${page.url} -- `
-      + (page.status === "failed" ? `FAILED: ${page.error}` : "captured")),
+      + (page.notAttempted ? `NOT ATTEMPTED: ${page.error}` : page.status === "failed" ? `FAILED: ${page.error}` : "captured")),
+    ...(logins ? [loginLine(logins)] : []),
   ];
 }
 
@@ -190,6 +280,10 @@ export interface PageListRun<Lease extends { release(): Promise<void> }> {
  *
  * A page that fails is recorded as failed and the next page still runs: one dead page must not cost the other
  * nine their captures, and must never be reported as clean. The lease is released whether or not any page did.
+ *
+ * ONE KIND OF FAILURE STOPS THE LIST: an authentication fault. Every later page would log in again with the same
+ * credentials, and a wrong password retried on each is how an account is locked. Those pages are recorded
+ * `notAttempted`, naming the fault, and no login is made for them.
  */
 export async function runPageList<Lease extends { release(): Promise<void> }>(
   run: PageListRun<Lease>,
@@ -200,6 +294,8 @@ export async function runPageList<Lease extends { release(): Promise<void> }>(
   const pages: PageEntry[] = [];
   try {
     for (const [index, url] of run.urls.entries()) {
+      const stop = pages.find((page) => page.fault !== undefined);
+      if (stop) { pages.push(notAttempted(url, stop)); continue; }
       run.say(`\n=== page ${index + 1}/${run.urls.length}: ${url} ===`);
       pages.push(await capturedEntry(run, url, lease));
     }
@@ -207,6 +303,12 @@ export async function runPageList<Lease extends { release(): Promise<void> }>(
     await lease.release();
   }
   return pages;
+}
+
+function notAttempted(url: string, stoppedBy: PageEntry): PageEntry {
+  const fault = stoppedBy.fault as AuthFault;
+  return { url, status: "failed", results: [], fault, notAttempted: true,
+    error: `${stoppedBy.url} failed with ${fault}, so no further login was made` };
 }
 
 async function capturedEntry<Lease extends { release(): Promise<void> }>(
@@ -217,6 +319,7 @@ async function capturedEntry<Lease extends { release(): Promise<void> }>(
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     run.say(`Page FAILED: ${url}\n${reason}`);
-    return { url, status: "failed", results: [], error: reason };
+    const fault = (error as { fault?: unknown } | null)?.fault;
+    return { url, status: "failed", results: [], error: reason, ...(isAuthFault(fault) ? { fault } : {}) };
   }
 }
