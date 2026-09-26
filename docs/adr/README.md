@@ -51,6 +51,7 @@ you which arguments have already been tried.
 | [0037](./0037-a-partial-examination-is-reported-with-its-bounds.md) | A partial examination is REPORTED with its bounds, not withheld and not rounded up | accepted |
 | [0038](./0038-authenticated-capture.md) | A run is authenticated by a login the machine that drives the browser performs, and no credential crosses the worker's channel | accepted 2026-09-24, with the amendments of #2275 — a design until #2359's seventh pull request makes the flags reachable |
 | [0039](./0039-the-split-is-mostly-org-machinery.md) | The split is mostly org machinery: ten items measured, sized and given a row body before any of it is built | proposed 2026-09-26 (#2614, child 2 of #69) — records `ceo`'s rulings as decided; files and moves nothing |
+| [0040](./0040-agent-org-is-a-standalone-project-agnostic-tool.md) | `agent-org` is a standalone, project-agnostic tool and a11ign is the first project it is configured for: nine decisions measured, and the eight child rows confirmed or amended, before any extraction | proposed 2026-09-26 (#2615, child 2 of #69) — supersedes 0039's "agent-org and the rows stay" paragraph; files and moves nothing |
 
 ## If you read only one
 
