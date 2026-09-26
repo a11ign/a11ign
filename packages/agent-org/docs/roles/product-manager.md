@@ -67,6 +67,11 @@ Three things, and they are all one thing seen from different distances.
 - **`ceo`** — the date, and anything that changes what the product CLAIMS. Loosening the
   zero-false-positives discipline, or unblocking a release by writing a sentence rather than by producing
   evidence, is a product decision and goes up.
+- **The chairman, by `needs:chairman` only when the row passes the test in
+  [`ceo.md`](ceo.md#who-it-talks-to)** (what only the chairman can physically do, or a choice `ceo`
+  cannot make; the wording is kept there, not copied). A future product line is `parked`, not
+  `needs:chairman`; a row a session could not clear goes to `ceo`. A machinery-set `needs:chairman` that
+  fails the test is cleared here with the reason on the row (#2637, #2623).
 
 ## Formal warning, 2026-09-08 (ceo)
 
