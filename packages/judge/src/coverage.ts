@@ -62,7 +62,14 @@ export const SCORED_CRITERIA = [
   // THE CRITERION IS NOT UNCOVERED. `RULE_CRITERIA` below still carries 3.3.2 — the rule reports an
   // unnamed field under both 3.3.2 and 4.1.2 since ADR 0017 — so `assessedCriteria()`, which is the UNION,
   // is unchanged for it. This list answers "is there a head"; that one answers "who decides".
+  //
+  // v20, 2026-09-26 (#2591): 1.3.5 and 1.4.2 IN. The retrain wrote both into `training-report.json` as
+  // `modelHead: false` entries — every subtype declared so in `rule-ownership.json`, so no head is fitted
+  // and the rules decide alone — the SAME shape 2.4.7 has had since v19. The list equals the report's own
+  // criteria, not "criteria with a fitted head", and the parity test held the promotion to that: the weights
+  // landed without this line and `main` went red. `RULE_CRITERIA` still says who decides; nothing widens.
   "2.4.4", "2.4.6", "1.4.13", "2.4.7", "3.2.1", "3.2.2", "3.3.1", "3.3.3", "4.1.2", "4.1.3",
+  "1.3.5", "1.4.2",
 ] as const;
 
 /**
