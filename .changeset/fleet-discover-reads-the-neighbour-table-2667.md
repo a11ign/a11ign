@@ -1,0 +1,5 @@
+---
+"@a11ign/control": patch
+---
+
+**`fleet:discover` and `--enroll` read a box's MAC from `ip neigh` where `arp` is absent, and say so when neither can be run (#2667).** `macOf` ran only `arp -n` and swallowed any failure, and `arp` (net-tools) is installed neither on the control plane nor on the dev host, so every MAC read as null: `macsAgree` treats an absent MAC as agreement, so a WRONG declared MAC still printed `OK`, and `--enroll` wrote "ARP had none for this address" for a MAC the table held. `lookupMac` now asks `ip neigh show <ip>` first and falls back to `arp -n` only where `ip` cannot be run (macOS, single-digit octets still padded); a tool that could not be run is told apart from one that ran and found no entry. An `OK` whose declared MAC was not compared prints `MAC NOT COMPARED, matched on address only` with the reason, the summary warns when neither tool could be run, and the `# NO mac` comment names the missing tools (or says the neighbour table had no entry) instead of blaming ARP. `macsAgree`'s rule is unchanged.
