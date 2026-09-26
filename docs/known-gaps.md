@@ -3387,7 +3387,9 @@ this commit, not against the ADR's prose.**
 **What a run does, measured by reading `packages/cli/src/auth/`, not by running a login against an identity provider:**
 
 - **The login is a form login and nothing else.** It types into controls by accessible name in a closed vocabulary, on
-  ONE pinned `origin:`. There is no one-time-code step, no way to wait for a person, no storage-state import and no
+  ONE pinned `origin:`. There is no one-time-code step, no way to wait for a person, no storage-state import (**mechanism 2 is
+  DECIDED in ADR 0038's amendment 7, #2566, and only its containment is built: `credentialsFromState` in `scrub.ts` and the
+  test that the tool writes no state file; there is still no `--auth-state` flag**) and no
   attach to a browser somebody has signed in (mechanism 3 is the one route ADR 0038 says handles MFA or SSO, and it
   is **not built**: interactive, CLI-only, a spike first).
 - **SSO ends the run, by name.** A login that sends the browser to another origin, such as an identity provider,
