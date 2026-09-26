@@ -9,6 +9,21 @@
   "code": [
     { "key": "", "repo": "a11ign/a11ign" }
   ],
+  "_units": "The unit files this project installs from the tool's own templates are named `<prefix><name>`; the project's OWN units (its corpus and fleet clocks) live in `.agent-org/units/` and `own` lists them, which is the project's half of the partition `host-units.mjs` records the tool's half of. `boardReportWorkflow` is the workflow the tool's board-report unit dispatches on the first tracker's repository (#2620, child 3f of #69; ADR 0040, decision 9).",
+  "units": {
+    "prefix": "a11ign-",
+    "boardReportWorkflow": "board-report.yml",
+    "own": [
+      "a11ign-corpus-release-nightly.service",
+      "a11ign-corpus-release-nightly.timer",
+      "a11ign-corpus-snapshot.service",
+      "a11ign-corpus-snapshot.timer",
+      "a11ign-fleet-watch.service",
+      "a11ign-fleet-watch.timer",
+      "a11ign-lab-watch.service",
+      "a11ign-lab-watch.timer"
+    ]
+  },
   "_leakPatterns": "What a11ign's public prose must never carry, ON TOP OF the two the tool holds itself (a private LAN IPv4 address, a named SSH key file). Each `pattern` is a regular expression's SOURCE. #1875: the control plane's GitHub token file sits beside the fleet key and is guarded for the same reason -- where a credential sits on a real box is somebody's infrastructure written down. ADR 0013: the retired `pct exec` container-hop idiom. #2658 (child 3g of #69) split these two out of packages/lab/src/packaging/leak-patterns.mjs, which the product keeps.",
   "leakPatterns": [
     { "name": "a named credential file on a fleet host", "pattern": "\\.config/a11y-witness/[\\w.-]+" },
