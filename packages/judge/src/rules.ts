@@ -787,12 +787,6 @@ type FocusLossVerdict =
   | { kind: "unpairable" }
   | { kind: "clear" };
 
-/** Is the focusout at index 0 immediately followed by a focusin for the SAME id (the reversed-pair shape)? */
-function isReversedPair(log: FocusLogEvent[]): boolean {
-  const next = log[1];
-  return next?.type === "focusin" && next.id === log[0].id;
-}
-
 /**
  * `log[i]` is a `focusout`; when the event before it is the `initial` focusin of THE SAME control (the install
  * found it already holding focus), decide it here, else return `null` for the ordinary path. Focus left a
@@ -815,43 +809,23 @@ function initialHoldLossVerdict(log: FocusLogEvent[], i: number): FocusLossVerdi
  */
 export function focusLossVerdict(log: FocusLogEvent[], i: number): FocusLossVerdict {
   const event = log[i];
-  // AN ORPHAN AT INDEX 0 IS UNPAIRABLE, NOT EVIDENCE -- brought back 2026-09-06 (issue #62), by
-  // MEASUREMENT rather than reasoned back into existence. The `i === 0` exception was deleted the same
-  // day on the premise that `installFocusEventListenerBeforeFirstFocus` (`capture-core.mjs`) makes
-  // `log[0]` always a real, listener-witnessed focusin -- true of a FRESH capture, and not yet true of
-  // the captures already on disk: `rules:real-pages` produced 80 findings at exactly this position.
+  // NO POSITION IS SPECIAL: an orphaned focusout at index 0 is judged like an orphan anywhere else.
   //
-  // Read individually rather than trusted from the count: the nhs.uk cookie-banner shape kept as a
-  // regression fixture in `rules.test.ts` (`log[0]` a bare focusout, immediately followed by a real
-  // focusin on the very next control WITHIN THE SAME MILLISECOND) is the identical signature the nine
-  // genuine corpus positives show one index later, where a preceding `focusin` proves the listener really
-  // was watching. At index 0 there is no preceding event to prove that either way -- "the page stripped
-  // focus with nowhere to go" and "the listener started after this element already held it" produce the
-  // same three fields (`type`, `id`, `atMs`), and no amount of looking at the log alone tells them apart.
+  // This function used to return `unpairable` for it (brought back 2026-09-06, issue #62, by MEASUREMENT),
+  // because at index 0 "the page stripped focus with nowhere to go" and "the listener started after this
+  // element already held it" wrote the same three fields, and 37 conformant pages carried that shape.
+  // Protocol 22 (#2587) closed the second half from the capture side: the install records what ALREADY held
+  // focus as an `initial: true` focusin, so a bare focusout at `log[0]` is no longer something a listener
+  // that started late can produce. Measured at protocol 22 (#2550, `orchestrator`, 2026-09-26): 0 of 98
+  // real-page captures with a log open on a focusout, beside 9 `initial` entries. The exception was deleted
+  // on that reading, not on reasoning (#2602). The ambiguity that remains is the `initial` entry's own,
+  // and `initialHoldLossVerdict` decides it below.
   //
-  // So this is UNPAIRABLE: neither a finding (the ambiguity is real, and asserting through it repeats the
-  // 37-false-positive mistake §42 was written to fix) nor silently "clear" (the page is not thereby
-  // vindicated -- `addFocusEventFindings` treats this identically to `"clear"` in that neither adds a
-  // finding, and this type exists so the two can never again be merged into one bare `null` the way this
-  // function's own prior revision did). Half 2 -- the listener recording `document.activeElement` as the
-  // log's own first entry, so `i === 0` stops being a special position -- closes this from the capture
-  // side and is explicitly NOT this function's fix. It LANDED at protocol 22 (#2587, `initial: true`); THIS
-  // BRANCH STAYS, because captures at protocol 21 and below are still on disk and still open on a bare
-  // focusout. Deleting it waits for the protocol-22 reading (#2587 done-when 6).
-  //
-  // ONE EXCEPTION, VERIFIED AGAINST TWO SEPARATE REAL MECHANISMS BEFORE BEING CARVED OUT: a focusout at
-  // index 0 immediately followed by a focusin for the SAME id (`focus-event-order.test.ts`'s REVERSED
-  // fixture) is decidable with no prior context at all. UI Events can dispatch a synchronous same-tick
-  // `.blur()` from inside a `focus` handler BEFORE the browser's own `focusin` for that identical receipt
-  // completes, so the pair describes one control's own out-of-order receipt-then-loss -- it does not
-  // depend on whether the listener was already watching, unlike the different-id case just above, which
-  // is `case-matrix.mjs`'s own `focus-removed-on-receipt-*` mechanism (an `onfocus` handler that calls
-  // `.focus()` on a LATER field): verified against that family's real captured `order.bad` log, per its
-  // own construction comment, which shows exactly an orphaned focusout for the skipped field followed
-  // immediately by a real focusin on the NEXT field -- the identical shape a real page's ambiguous index-0
-  // orphan produces, and the reason position (having prior context), not "what follows", is what actually
-  // separates the two for a DIFFERENT id.
-  if (i === 0 && !isReversedPair(log)) return { kind: "unpairable" };
+  // A same-id REVERSED pair at index 0 (`focusout(X)` then `focusin(X)`, `focus-event-order.test.ts`) never
+  // needed the exception's protection and never reached it: UI Events can dispatch a synchronous `.blur()`
+  // from a `focus` handler BEFORE the browser's own `focusin` for that receipt completes, so the pair is one
+  // control's own out-of-order receipt-then-loss, decidable with no prior context. It reads as an orphan
+  // (no completed receipt) and is a finding, as it was before this deletion.
   const prior = log[i - 1];
   // AN `initial` FOCUSIN IS A HOLD THE LISTENER FOUND, NOT ONE IT WITNESSED ARRIVE (#2587): its `atMs` is the
   // install moment, so `event.atMs - prior.atMs` below would MANUFACTURE a "held Nms" F55 out of the
