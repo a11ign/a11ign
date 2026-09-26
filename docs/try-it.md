@@ -179,10 +179,10 @@ gh repo view OWNER/REPO --json isPrivate --jq .isPrivate     # must print true
 
 Make a **dedicated account** on a staging copy of the app, with **no MFA**. Its username and its password must each be **at least 8 characters and not an ordinary word** (`a11y-audit-7f3c`, not `admin` or `test`): a shorter value is refused (`auth-credential-too-short`), because hiding it from the output would rewrite your page's own words.
 
-Put both values in the repository's secrets. The names are yours; the flows file and the workflow below must use the same two:
+Put both values in the repository's secrets. The names are yours; the flows file and the workflow below must use the same two. **Eight characters is enough** (`at least 8`), and a secret's value can never be read back, so `gh secret list --repo OWNER/REPO` tells you a name exists and not what it holds: if you are not sure a secret is right, set it again.
 
 ```bash
-gh secret set APP_TEST_USER --repo OWNER/REPO         # prompts for the value
+gh secret set APP_TEST_USER --repo OWNER/REPO         # prompts for the value; setting a name that exists replaces it
 gh secret set APP_TEST_PASSWORD --repo OWNER/REPO
 ```
 
@@ -204,8 +204,8 @@ flows:
 ```
 
 - **`from-env:` is the only way a login fills a value.** A literal password is refused (`auth-literal-secret`); the variable's name is what the flow holds, and the value arrives from the secret.
-- **A control is named by what a screen reader announces, exactly, and never by selector.** Copy the name from your browser's accessibility inspector (in Chrome or Edge, developer tools, Accessibility, the *Name* of the field or button), not from the visible text: a button drawn as an icon plus a word can have a name that begins with a character you cannot see, and a flow that says only the word will not find it. **A control the flow cannot find by name ends the run with `auth-login-failed` (`unbindable-field`), and that is also a real 4.1.2 failure of your login form:** a screen-reader user cannot address it either.
-- **The last step must be an `expect:`, and it decides whether the login worked.** Choose something **only the signed-in page shows**: a heading of the landing page, or the *Sign out* button. **A weak one passes for the wrong reason**, so before you commit, open the login page signed out and confirm the text you chose is not on it (nor in an error message it shows for a wrong password, nor in a header every page carries). `heading:`, `control:` and `text:` are the three forms.
+- **A control is named by what a screen reader announces, and never by selector.** The match is exact: it is case-sensitive, and runs of spaces count as one, with none at either end. A text field's name is normally its label's words (`Email address`); a button's is its text. Where you are unsure, copy the name from your browser's accessibility inspector (in Chrome or Edge, developer tools, Accessibility, the *Name* of the field or button), not from the visible text: **a button drawn as an icon plus a word can have a name that begins with a character you cannot see**, and a flow that says only the word will not find it. Write such a character as a YAML escape inside double quotes. On `the-internet.herokuapp.com/login` the button is `"\uF090 Login"`, where `\uF090` is an icon-font glyph. If the run ends in `unbindable-field`, its log names the name it looked for; if you have no browser to read the real one, that is where to start. **A control the flow cannot find by name ends the run with `auth-login-failed` (`unbindable-field`), and that is also a real 4.1.2 failure of your login form:** a screen-reader user cannot address it either.
+- **The last step must be an `expect:`, and it decides whether the login worked.** Choose something **only the signed-in page shows**: the heading of the page you land on after signing in, or the *Sign out* button. **A weak one passes for the wrong reason.** To choose it, sign in once yourself in a browser and read the landing page's heading or a button on it. Then open the login page signed out and confirm what you chose is not on it, nor in the error it shows for a wrong password, nor in a header every page carries. `heading:` and `control:` match a heading or control of exactly that name; `text:` matches any announced text that *contains* yours, which makes it the easiest to get wrong.
 
 ### 4. The workflow
 
@@ -229,7 +229,7 @@ jobs:
           APP_TEST_USER: ${{ secrets.APP_TEST_USER }}
           APP_TEST_PASSWORD: ${{ secrets.APP_TEST_PASSWORD }}
         with:
-          url: https://staging.example.com/orders
+          url: https://staging.example.com/orders   # the page to examine, once signed in: not the login page
           task: Review my recent orders
           flows: .github/a11y-flows.yml
           login-flow: login
@@ -253,7 +253,7 @@ jobs:
 
 ### 6. Run it, and find the output
 
-Push the two files on a new branch and open a pull request into your default branch. **The workflow runs from the pull request's own branch, so your default branch is not touched to test it.** (A `workflow_dispatch` trigger, by contrast, reads the workflow from the default branch, so it only works once the file has been merged.) Follow the run in the Actions tab, or `gh run watch`.
+Push the two files on a new branch and open a pull request into your default branch (`git switch -c a11ign-auth`, `git add .github`, `git commit`, `git push -u origin a11ign-auth`, then `gh pr create --fill`). **The workflow runs from the pull request's own branch, so your default branch is not touched to test it.** (A `workflow_dispatch` trigger, by contrast, reads the workflow from the default branch, so it only works once the file has been merged.) Follow the run in the Actions tab, or `gh run watch`.
 
 **The result lands in four places, and on a private repository every one of them is visible to whoever can read the repository:**
 
@@ -264,7 +264,7 @@ Push the two files on a new branch and open a pull request into your default bra
 | the `a11ign-result` artifact | the report and the full result (`gh run download <run-id> --repo OWNER/REPO --name a11ign-result`) |
 | the job log | the last line is the count (`a11ign: N finding(s)`), and a named fault is printed here |
 
-Every value from your login is replaced with `‹credential›` in the report, the summary and the result file, and the report says how many announcements it changed. A green run is one whose Action step exits 0; **the report lists what the run pressed**, by control name, so check it is only what your flows file named.
+Every value from your login is replaced with `‹credential›` in the report, the summary and the result file, and the report says how many announcements it changed. A green run is one whose Action step exits 0 and whose job conclusion is `success` (`gh run view <run-id> --repo OWNER/REPO`). **The report has a section, *What this run pressed*, that lists every control pressed by name**: check it holds only what your flows file named.
 
 ### 7. When it ends in a named fault
 
