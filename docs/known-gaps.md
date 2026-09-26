@@ -3399,9 +3399,29 @@ this commit, not against the ADR's prose.**
   only the signed-in page shows.** The tool cannot check that it does: a weak one (a heading the login wall also has)
   reports the challenge page as the application. The ADR's wording, "a login that stops at a challenge fails its
   `expect:`", is true of a well-chosen `expect:` and is not something the tool guarantees.
-- **A CAPTCHA is not detected at all.** Nothing in the code names one. A CAPTCHA before the login's `expect:` fails it like
-  any other wall, with no word saying a CAPTCHA was the cause. **One appearing after the login, mid-run, reads like a
-  broken page**, which ADR 0038 Constraint 6 records as this repo's most expensive recurring shape (ADR 0024).
+- **A CAPTCHA is detected only where a login step already failed, and is named and never answered (#2564).** When a step
+  of the login or of a `flow:` fails (a control that cannot be bound, an `expect:` not met) and the page that failed it
+  RENDERS an iframe served from a reCAPTCHA, hCaptcha or Cloudflare Turnstile host, the run ends in
+  **`auth-challenge-detected`**, whose remedy is the dedicated test account below. **It reads the `src` of the iframes the
+  main document renders** (a fixed page-side read added to both drivers), because the accessibility tree cannot answer:
+  *measured 2026-09-26* in Chromium, an `Iframe` node carries only the frame's `title`, which none of the three vendors
+  documents, while the hosts a widget is served from are documented (each vendor's Content-Security-Policy page, cited in
+  `challengeVendor`). **Nothing solves one:** nothing clicks a widget, waits it out or works round it, and a solver is
+  refused by design.
+  - **What is NOT detected.** (1) **The page the run asked for, after the login, and the capture proper.** A challenge
+    interstitial there has no failed step to explain, and the NVDA capture and the axe page have no hook; `ceo` did not
+    order either (#2564, 2026-09-25) and will not price one before a second outsider's run says whether a challenge was
+    there. (2) **A challenge on a step that PASSED.** Detection never turns a success into a failure: a dashboard carrying a
+    reCAPTCHA v3 badge or an invisible Turnstile passes its `expect:` and keeps passing. (3) **A vendor or a shape not
+    named:** `recaptcha.net`, Arkose, GeeTest, Friendly Captcha, a challenge a site serves from its own origin, and a widget
+    inside a shadow root or another frame (the read is the main document's `iframe` elements). (4) **A frame that is not
+    rendered** (`display: none`, `visibility: hidden`), on purpose: reCAPTCHA parks a hidden challenge frame on every page
+    carrying a widget.
+  - **The false-trip choice.** A reCAPTCHA v3 badge renders an iframe from the same host as the v2 checkbox, and a
+    non-interactive or invisible Turnstile renders one with no challenge, so **the two cannot be told apart from here**. The
+    check therefore runs only after a step has failed, and the residual risk is a page whose failing step was unrelated and
+    which also carries a badge: it is reported as the challenge, with the step's own reason in the same sentence. An
+    ambiguous control (`within:`/`nth:` needed) and a `goto` that cannot load are never explained as a challenge.
 
 **The route, in the ruling's words: use a dedicated test account without MFA, and on staging.** It is the advice
 BrowserStack and LambdaTest give, and `SECURITY.md` and the `auth-login-failed` remedy repeat it. It is a way round the
