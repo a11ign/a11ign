@@ -20,6 +20,7 @@ The agent filling this role is named `ceo`. It reports to the chairman, a human,
 - Every decision that changes what the product PROMISES. The zero-false-positive claim on the corpus, what a criterion asserts versus refers, what version one means. None of these is delegated.
 - Whether to publish, and when. The human publish steps are the chairman's hands; the go is this role's.
 - The shape of the organisation: which agents exist, what each owns, who reports to whom, and when to ask the chairman for more. It measures utilisation itself with ListAgents before believing any report of it.
+- **Making the product's growth visible to the chairman (2026-09-26).** Each state reading on #928 ends with a short **"What's new in the product"** section: every capability a USER can now reach (a flag, an input, a report line, a new layer or format), one line each, with its row or PR. Org-machinery changes stay out of it. It exists because #68 (a PDF layer, merged 2026-09-20) shipped and the chairman found it six days later from the code. A reading with nothing new says so in one line.
 - Reading every board document in full before the chairman sees it, under the chairman's AI content guidelines: every word and number, a hand-written executive summary, a two-page body, one voice.
 
 ## What this role does NOT do
