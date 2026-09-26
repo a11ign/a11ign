@@ -811,15 +811,13 @@ test("TRUE POSITIVE FIRST: an ORPHANED focusout -- no matching focusin ever reco
     "a focus-event read is evidence the mechanism is absent, not a read of a visible indicator");
 });
 
-test("the SAME orphaned control across two laps of a ring still reports as ONE finding, not two", () => {
-  // The real 27-event log wraps the ring twice. CORRECTED (#811): this test's own comment used to credit
-  // `add()`'s dedup for the count of 1, and that is not what happens -- checked directly, id 1's FIRST
-  // orphaned focusout sits at index 0 of this log, which `focusLossVerdict`'s own `i === 0` rule reads as
-  // `"unpairable"` (no prior event proves the listener was watching), not `"finding"`. It never reaches
-  // `add()` at all. The SECOND occurrence, at index 5, is the only real candidate here, so the count of 1
-  // reflects one real finding-candidate, not two candidates collapsed into one. #811's fix (below) folds
-  // `atMs` into the evidence precisely so that IF this log had produced two genuine candidates, both
-  // would have survived -- see "#811: two genuinely distinct focusout events on the same control...".
+test("the SAME orphaned control across two laps of a ring reports once PER LAP: two findings, distinct by atMs", () => {
+  // The real 27-event log wraps the ring twice. HISTORY: this test asserted ONE finding, and its comment
+  // was corrected once (#811) to say why -- id 1's FIRST orphaned focusout sits at index 0, which
+  // `focusLossVerdict` then read as `"unpairable"`, so it never reached `add()`. #2602 deleted that
+  // exception (protocol 22 records what already held focus, so a bare focusout at `log[0]` is no longer
+  // something the capture produces), and the first lap is now an ordinary orphan. Two laps, two genuine
+  // events 9484ms apart: `atMs` is in the evidence (#811), so `add()`'s dedup keeps both.
   const log = [
     { type: "focusout", id: 1, name: "Delivery instructions", atMs: 5098 },
     { type: "focusin", id: 2, name: "Daytime telephone", atMs: 5098 },
@@ -829,9 +827,12 @@ test("the SAME orphaned control across two laps of a ring still reports as ONE f
     { type: "focusout", id: 1, name: "Delivery instructions", atMs: 14582 },
     { type: "focusin", id: 2, name: "Daytime telephone", atMs: 14583 },
   ];
-  assert.deepEqual(focusLossVerdict(log, 0), { kind: "unpairable" },
-    "the first occurrence never becomes a finding -- it is not dedup silencing it");
-  assert.equal(focusFindings(log).length, 1);
+  assert.equal(focusLossVerdict(log, 0).kind, "finding", "the first lap is an orphan like any other");
+  assert.equal(focusLossVerdict(log, 5).kind, "finding");
+  assert.deepEqual(focusFindings(log).map((f) => f.evidence), [
+    "Delivery instructions (id 1, at 5098ms): focus was never fully received before it was removed",
+    "Delivery instructions (id 1, at 14582ms): focus was never fully received before it was removed",
+  ]);
 });
 
 test("#811: two genuinely distinct focusout events on the same control, close together, both survive -- "
@@ -987,8 +988,8 @@ test("more than one control can exhibit F55 in the same capture, and both are re
   assert.deepEqual(found.map((f) => f.evidence.split(" (")[0]), ["Coupon", "Gift card"]);
 });
 
-test("THE LOG'S FIRST EVENT IS UNPAIRABLE, not F55 and not a clean page -- reversed again, by measurement", () => {
-  // THIS TEST HAS NOW ASSERTED THREE ANSWERS, and the history is the useful part (issue #62).
+test("THE LOG'S FIRST EVENT IS NO LONGER SPECIAL: a bare focusout at index 0 is F55 like any other -- reversed a fourth time, by the protocol-22 reading", () => {
+  // THIS TEST HAS NOW ASSERTED FOUR ANSWERS, and the history is the useful part (issue #62).
   //
   // ORIGINALLY (before 2026-09-06) it read "a lone focusout with nothing preceding it at all is still
   // F55 -- it is orphaned by definition", correctly for a genuine orphan, but blind to the ambiguity below.
@@ -1000,37 +1001,57 @@ test("THE LOG'S FIRST EVENT IS UNPAIRABLE, not F55 and not a clean page -- rever
   // `installFocusEventListenerBeforeFirstFocus` (`capture-core.mjs`) makes `log[0]` always a real
   // listener-witnessed focusin -- true of a FRESH capture only. Issue #62 measured the captures already on
   // disk: `rules:real-pages` produced 80 findings at exactly this position, so the premise had not landed
-  // for the evidence this rule is actually scored against.
+  // for the evidence this rule is actually scored against, and it became UNPAIRABLE.
   //
-  // NOW: UNPAIRABLE. Neither "F55" (asserting through a real ambiguity repeats the 37-false-positive
-  // mistake) nor "clear" (the page is not thereby vindicated -- there may be a real strip here that the
-  // evidence simply cannot distinguish from the capture-side gap). `focusLossVerdict`'s own return type
-  // keeps this a THIRD, distinct value rather than a `null` shared with genuine clearance.
+  // NOW (#2602) it is "F55 like any other" again, reversed a FOURTH time by MEASUREMENT and not by
+  // reasoning: protocol 22 (#2587) records what already held focus as an `initial: true` focusin, and
+  // #2550's reading of the protocol-22 real-page captures found `focusout`-first in 0 of 98 with a log,
+  // beside 9 `initial` entries. The premise the third answer lacked has landed for the evidence in use.
+  //
+  // WHAT THIS COSTS, said where the history is told: a STORED capture at protocol 21 or below that opens on
+  // a bare focusout now yields a `secondary` 2.4.7 finding where it yielded silence. `RuleInput` carries no
+  // capture protocol, so the rule cannot tell such a capture apart.
   const log: { type: string; id: number; name: string; atMs: number }[] =
     [{ type: "focusout", id: 0, name: "Whatever held focus when the listener installed", atMs: 5 }];
-  assert.deepEqual(focusLossVerdict(log, 0), { kind: "unpairable" });
-  assert.equal(focusFindings(log).length, 0,
-    "an orphan at index 0 must not be reported as F55 -- the ambiguity is real, not resolved");
+  assert.deepEqual(focusLossVerdict(log, 0), { kind: "finding",
+    evidence: "Whatever held focus when the listener installed (id 0, at 5ms): "
+      + "focus was never fully received before it was removed" });
+  assert.equal(focusFindings(log).length, 1);
+  assert.equal(focusFindings(log)[0].mapping, "secondary",
+    "an inferred F55 is a referral, so a stored pre-22 capture reaching this branch yields cantTell, not violated");
 });
 
-test("PRE-FIX REAL-PAGE SHAPE (nhs.uk): kept as a regression fixture, and it is UNPAIRABLE, not a finding", () => {
+test("#2602: the same-id REVERSED pair at index 0 is a finding, byte-identical to what it was before the index-0 exception was deleted", () => {
+  // `focus-event-order.test.ts`'s mechanism: a synchronous `.blur()` from a `focus` handler runs before the
+  // browser's own `focusin` completes, so `focusout(X)` reaches the log ahead of `focusin(X)`. The deleted
+  // branch carved this shape OUT of its own exception, so the deletion must not move it. The expected
+  // values below were read off the ORIGINAL `rules.ts` (`git show 2f0c77d5b:packages/judge/src/rules.ts`) before the edit.
+  const evidence = "A (id 0, at 5ms): focus was never fully received before it was removed";
+  const reversed = [
+    { type: "focusout", id: 0, name: "A", atMs: 5 },
+    { type: "focusin", id: 0, name: "A", atMs: 5 },
+  ];
+  assert.deepEqual(focusLossVerdict(reversed, 0), { kind: "finding", evidence });
+  assert.deepEqual(focusFindings(reversed).map((f) => f.evidence), [evidence]);
+  // A reversed pair one index later was never special, and is the same finding.
+  const later = [{ type: "focusin", id: 9, name: "O", atMs: 1 }, ...reversed];
+  assert.deepEqual(focusLossVerdict(later, 1), { kind: "finding", evidence });
+});
+
+test("PRE-PROTOCOL-22 REAL-PAGE SHAPE (nhs.uk): kept as a regression fixture, and it is now a FINDING (#2602)", () => {
   // www.nhs.uk/service-search/find-a-gp, verbatim from its stored log (first five events). This is one of
-  // the 80 real-page findings issue #62 closes, and the reason the `i === 0` exception existed at all --
-  // kept here, unmodified, as the regression fixture `not-working.md` §22 names.
+  // the 80 real-page findings issue #62 closed, and the reason the `i === 0` exception existed until #2602.
   //
   // THE SAME SIGNATURE THE NINE GENUINE POSITIVES SHOW ONE INDEX LATER: `id 0`'s bare focusout at `atMs:
   // 3171` is followed, within the SAME MILLISECOND (3171), by a real focusin on `id 1` -- exactly the
   // "Tab had already moved on" shape `focus-removed-on-receipt-order.bad`'s own fixture shows at index 2.
-  // The only difference is the missing preceding event, which is what makes index 0 unpairable rather
-  // than a third, unrelated shape.
   //
-  // NOT A FINDING, AND NOT A CLAIM THAT NHS.UK IS CLEAN. This log is evidence of the OLD capture-side bug
-  // (the listener starting after `id 0` already held focus), and the rule cannot tell that apart from a
-  // genuine strip -- nothing in a `focusin`/`focusout` log records when the LISTENER itself started. A
-  // fresh capture of this same page, once half 2 lands, will not produce this shape any more (`id 0`'s own
-  // gain will be in the log), so this fixture is not a claim about what nhs.uk looks like today -- it is a
-  // permanent record of what the old bug's evidence looked like, kept so nobody has to re-derive it by
-  // re-reading a stale capture.
+  // THIS LOG IS EVIDENCE OF THE OLD CAPTURE-SIDE BUG (the listener starting after `id 0` already held
+  // focus), and nothing in a `focusin`/`focusout` log records when the LISTENER started. It used to be
+  // unpairable for that reason. Protocol 22 records the element that already held focus as `initial: true`,
+  // so a capture taken now cannot produce this shape, and the exception was deleted (#2602). What is left
+  // is the cost of deleting it: a STORED capture at protocol 21 or below with this shape now reads as a
+  // finding. This fixture is kept as the permanent record of that shape, and pins that cost.
   const log = [
     { type: "focusout", id: 0, name: "A", atMs: 3171 },
     { type: "focusin", id: 1, name: "nhsuk-cookie-banner__link_accept_analytics", atMs: 3171 },
@@ -1038,18 +1059,20 @@ test("PRE-FIX REAL-PAGE SHAPE (nhs.uk): kept as a regression fixture, and it is 
     { type: "focusin", id: 2, name: "nhsuk-cookie-banner__link_accept", atMs: 4663 },
     { type: "focusout", id: 2, name: "nhsuk-cookie-banner__link_accept", atMs: 5298 },
   ];
-  assert.deepEqual(focusLossVerdict(log, 0), { kind: "unpairable" });
-  assert.equal(focusFindings(log).length, 0,
-    "the pre-fix shape must not be reported as F55 -- the fix is that a fresh capture cannot produce this "
-    + "shape any more, not that this exact log is safe to assert through");
+  assert.deepEqual(focusLossVerdict(log, 0), { kind: "finding",
+    evidence: "A (id 0, at 3171ms): focus was never fully received before it was removed" });
+  assert.equal(focusFindings(log).length, 1,
+    "the one orphan at index 0; the two completed receipts after it (1.5s and 0.6s) are ordinary Tab transitions");
 });
 
 test("focusLossVerdict: unpairable, clear and finding are three distinct values, never collapsed to one null", () => {
   // The direct proof that "we could not ask" (unpairable) and "we asked and it was fine" (clear) cannot
   // be silently merged -- the exact defect class this criterion's own history keeps producing one layer
   // in from where it was last fixed (`docs/known-gaps.md` §42, then again here for issue #62).
-  const orphanAtZero = [{ type: "focusout", id: 0, name: "X", atMs: 5 }];
-  assert.deepEqual(focusLossVerdict(orphanAtZero, 0), { kind: "unpairable" });
+  // Unpairable is now produced only by an `initial` hold (#2587), no longer by a position (#2602).
+  const initialThenLoss = [{ type: "focusin", id: 0, name: "X", atMs: 0, initial: true },
+    { type: "focusout", id: 0, name: "X", atMs: 5 }];
+  assert.deepEqual(focusLossVerdict(initialThenLoss, 1), { kind: "unpairable" });
 
   const ordinaryTab = [
     { type: "focusin", id: 0, name: "First name", atMs: 1 },
