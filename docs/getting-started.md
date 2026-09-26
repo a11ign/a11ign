@@ -28,6 +28,8 @@ Rationale in [`adr/0001-capture-architecture.md`](./adr/0001-capture-architectur
 
 So: set up the control plane, get a worker, run it.
 
+**Scanning a PDF needs none of the worker set up below.** Once step 1 has installed the repository, a URL whose path ends in `.pdf` (any case; a `?query` or `#fragment` after it does not hide it) is routed to the PDF layer before any worker is leased: `npm run witness -- https://example.com/report.pdf` scans the document's accessibility tag tree with no worker, no browser and no NVDA, and reports `pdf:` findings (`pdf-untagged`, `pdf-missing-lang`, `pdf-figure-no-alt`) in a *PDF layer* section, the `pdf` field under `--json`. **It does not run a screen reader over the document:** it reads the tag tree, not what a screen reader would announce.
+
 ## 1. Install the control plane
 
 ```bash

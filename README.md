@@ -249,6 +249,8 @@ You keep your own axe, at your own version, on your own schedule; we consume its
 
 Running it is one command; getting value out of it is a few habits.
 
+**A PDF is scanned for its tag tree, and needs no worker, no browser and no NVDA.** Give it a URL whose path ends in `.pdf` (any case; a `?query` or `#fragment` after it does not hide it), for example `npm run witness -- https://example.com/report.pdf`, and it reads the document's own accessibility tag tree instead of driving a screen reader. It reports `pdf:` findings — a section headed *PDF layer* in the report, the `pdf` field under `--json` — for an untagged document (`pdf-untagged`, 1.3.1), a missing document language (`pdf-missing-lang`, 3.1.1) and a figure with no alternative text (`pdf-figure-no-alt`, 1.1.1). **It does not run a screen reader over the document:** it reads the structure a screen reader would be given, not what one would announce, so the report says the screen-reader layer is not applicable. A PDF that cannot be fetched or read is reported as not run, never as clean.
+
 **`task` is optional. It names a button for the probe to press, by a word from that button's label; it is a label for your report; and it does NOT change the analysis.** Leave it unset and the default, "Read and understand this page", is used.
 
 Set it when a button on the page should be pressed: a button whose announced name shares a meaningful word with the task is activated under `probe-forms`, and what NVDA says next is recorded as evidence. That word match is also what keeps "show only bags" off *Delete account*. The `Task:` line in the report echoes what you gave it and is not a finding.
