@@ -204,14 +204,15 @@ Three notes, each a decision.
 
 ## Amendment 7 (#2566): mechanism 2, storage state, decided before it is built
 
-**Status: DECIDED, and only half built.** `ceo`'s row 4 (#928, 2026-09-25) ruled that a person signs in by hand once, in their
+**Status: DECIDED, and BUILT: the containment by #2631 and the loading by #2632.** `ceo`'s row 4 (#928, 2026-09-25) ruled that a person signs in by hand once, in their
 own browser, and the run loads that state, ending in `auth-state-expired` when it no longer holds. The ruled text left six
 places open, where the shipped code and the done-when disagree or are silent. **Each is answered here, in a sentence with its
 basis, before any code, so that the reviewer reads the decision and not the diff.** The build is two pull requests (the row's
 item 7): the containment first (choices 4 and 5's writing half, and the guard that the tool writes no state), then the loading
-(choices 1, 2, 3 and the wire). **Nothing below is reachable until the second merges: no flag exists, and `--auth-state` is
-still an unknown argument.** Measured 2026-09-26 at `fc4a23121`: `git grep 'storageState|--auth-state|Network.setCookie'` over
-the package sources, tests excluded, prints nothing.
+(choices 1, 2, 3 and the wire). **Until the second merged nothing below was reachable:** measured 2026-09-26 at `fc4a23121`, `git grep
+'storageState|--auth-state|Network.setCookie'` over the package sources, tests excluded, printed nothing. `--auth-state`,
+the wire's `auth.state` and the Action's `auth-state:` now exist, and what each choice says is what they do; where the build
+differs from the sentence, the difference is named below.
 
 1. **Which steps run under `--auth-state`: the login flow's steps are skipped except its final `expect:`, and the flow's
    `flow:`/`upTo:` steps still run.** The state stands in for the sign-in, so `goto /login`, `fill` and `press` are never
@@ -292,6 +293,27 @@ redaction**, pinned in `leak-check.test.ts`.
 signed-in page, and then the same state after the session is ended, is the row's item 6 and is a hand-run on a private
 repository with NVDA. **Until it is posted, every statement above about how a real site behaves is read from code and types,
 not measured against one, and the expiry reading is fixture-only.**
+
+**Where the build (#2632) says more than the choices above, or reads differently.** Each is a decision the sentences left open, taken at
+the smallest reading, and none changes a choice.
+
+- **Cookie attributes are loaded, not only name, value and domain** (choice 3 named the selection and not the call): `path` (default
+  `/`), `expires` (a session cookie's `-1` is left off, as Playwright does), `httpOnly`, `secure` and `sameSite` go to
+  `Network.setCookies`, because a cookie loaded without its `path` or `secure` is a different cookie. `Network.setCookies`
+  refuses a call in which one cookie is invalid, so one bad cookie ends the run rather than being skipped: **not measured on a real
+  browser beyond the local fixture.**
+- **The `localStorage` step and the reload always run**, even for a state with no `localStorage` entries, so the two layers make
+  the same calls in the same order and one table can compare them.
+- **The file is read more than once**, and the reads are not one snapshot: the CLI reads it while resolving arguments (to build the
+  scrub set), the rule layer reads it for each scan, and the worker reads it for each capture. A file replaced while a run is in
+  flight can load a value the scrub set never saw; the containment's own per-character and echo checks are then the defence.
+- **A page that will not load at all while loading the state** ends as the form login's `expect-not-met` (at "loading the saved
+  state"), not as `auth-state-expired`: nothing was learned about the state.
+- **A state file the rule layer cannot read at scan time** (removed after resolution) is not an `AuthError`, so the rule layer reads
+  as unchecked (`findings: null`), never clean (ADR 0020), rather than ending the run.
+- **The refusal sentence for a state that did not hold is the same fact the form login states** (`the page is on X, not Y`, `no
+  heading "Dashboard" appeared within 10 s`) **without the form login's advice**, which is wrong for a state: a redirect to an
+  identity provider is what an expired single-sign-on session does, and the remedy is `FAULT_REMEDIATION`'s.
 
 ## Constraint 4: the transcript and the evidence JSON are PROVEN not to contain the credential
 

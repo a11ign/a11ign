@@ -502,6 +502,66 @@ is an input mapped into the step's `env:`, never into `run:` text.
 
 `npm run auth:artifact-scan -- --path <file or directory> --user-env <VAR> --secret-env <VAR>` is the check for a REAL run's output, which `auth:leak-check` cannot be: that command reads only the `.json` it wrote itself from a fixture, so a credential in the markdown summary, a saved PR comment or a job log would read as clean because it was never looked at. This one scans every text file under the path, whatever its extension, with the same detector and the same exit codes (`0` clean, `1` a leak, `2` could not examine), and prints how much it examined before it says clean. An empty directory, or one holding only binary files, is exit `2`; a binary file is named as skipped and is not searched. **It covers only what it is pointed at:** a credential that reached a channel you did not point it at (a log you did not save, a comment you did not fetch, an upload step of your own) is not covered, and neither is one inside a skipped file.
 
+### Logging in with a saved state: `auth-state`
+
+A site that signs you in through single sign-on, a CAPTCHA or a code cannot be logged in by a form flow, and the tool will
+not sign in through a provider for you ([ADR 0038](adr/0038-authenticated-capture.md), Constraint 6). What it can do is load a
+**storage state you saved by signing in by hand, once, in your own browser** (Playwright's file: `cookies[]` and
+`origins[].localStorage[]`), and use it in place of the login. `auth-state:` is the path to that file, given beside `flows`
+and `login-flow`.
+
+**The Action does not write the file and has no way to** (the tool writes no state file anywhere, and a test enumerates every
+file-writing call to prove it). The file has to exist on the runner, so **your own step decodes it from a secret into
+`$RUNNER_TEMP`** before the Action runs:
+
+```yaml
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decode the saved state          # YOUR step: the Action never writes this file
+        shell: bash
+        env:
+          APP_STATE_B64: ${{ secrets.APP_STATE_B64 }}   # base64 of the file you saved by hand
+        run: printf '%s' "$APP_STATE_B64" | base64 --decode > "$RUNNER_TEMP/a11y-state.json"
+      - uses: a11ign/a11ign@<a full commit SHA>
+        with:
+          url: https://staging.example.com/orders
+          task: Review my recent orders
+          flows: .github/a11y-flows.yml
+          login-flow: login                    # its LAST step, the expect:, decides the state is still good
+          auth-state: ${{ runner.temp }}/a11y-state.json
+```
+
+**What it does.** The login flow's steps are skipped except its final `expect:`, which runs on the page the run requested once
+the state is loaded; the flow's `flow:` steps still run, and `auth-session-lost` still runs after. Nothing about your login
+variables is read, so this run needs none. The state is loaded the same way in the screen reader's browser and in the rule
+layer's: the cookies for the run's own origin, the page, that origin's `localStorage`, and a reload. **Cookies for other hosts
+and `localStorage` for other origins in the file are not loaded**, and are neither read nor printed.
+
+**What ends it: `auth-state-expired`.** If the `expect:` is not met, or the page went to another origin (an expired
+single-sign-on session redirects to the identity provider), the run ends with `auth-state-expired` and nothing is captured.
+**Three things to check when a state that was fresh a minute ago reads as expired:**
+
+1. **The `expect:` must hold on EVERY page the run requests.** Each capture loads the state afresh and asks the flow's
+   final `expect:` of the requested URL. A flow written for a form login whose `expect:` is `heading "Dashboard"` reads a
+   valid state on `/settings` as expired. Name a control every signed-in page carries, such as `Sign out`.
+2. **`sessionStorage` is not in the file** (Playwright's own guidance: it "is not persisted"), and **IndexedDB is in it only
+   if you asked for it and is not loaded here**. A site that keeps its session in either is one a state cannot carry.
+3. **A `expect:` that holds on the login wall too would read an expired state as good.** `auth-session-lost` (every field the
+   login fills is on the page) still runs afterwards and catches that case.
+
+**What protects the state, in the tool's own words: only the tool.** GitHub masks the secret's exact value and nothing derived
+from it, and **the decoded file's contents are not a secret to GitHub**, so the Action masks nothing for a state. What stands
+between the file and your log is the run's own containment: every cookie and `localStorage` value it loaded is replaced with
+`‹credential›` in everything it writes and prints, a value inside a JSON `localStorage` entry counts too, and a value that
+survives ends the run with `auth-credential-in-artifact`. **Values shorter than 8 characters (`1`, `true`, `dark`) and values
+that are text you passed the run yourself (your URLs and task) are not hidden, and the run says how many.** A repository that
+is not private is refused, as for a login. The run sends the worker a path and nothing else, and a worker that is not on the
+runner refuses. Delete the file when the job ends if the runner is not thrown away.
+
+**Not measured against a real site.** Every statement here about how a site behaves under a loaded state is read from code and
+types and exercised over fake and local browsers; a state made by hand, loaded on a private repository with NVDA, and then
+the same state after the session is ended, is owed (#2566, item 6) and is not yet a reading.
+
 ## Outputs
 
 | Output | Use |
