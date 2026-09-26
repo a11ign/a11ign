@@ -440,6 +440,8 @@ To test a page BEHIND a login, give the Action a flows file and the name of the 
 ([ADR 0038](adr/0038-authenticated-capture.md)). **Read [SECURITY.md](../SECURITY.md#it-can-log-in-to-the-page-it-examines-and-then-it-holds-a-credential--2026-09-24-adr-0038)
 first: the run holds a credential, and this section is only how to use it.**
 
+**Starting from nothing? [`docs/try-it.md`](./try-it.md#behind-a-login-an-authenticated-run-on-a-private-repository) is the path in order, from a login-walled app to a green run; this section is the reference for its mechanism.**
+
 ```yaml
 # .github/workflows/a11y.yml — the repository MUST be private (see below)
 on: pull_request
@@ -448,7 +450,7 @@ jobs:
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
-      - uses: a11ign/a11ign@v1
+      - uses: a11ign/a11ign@c77c1ba0f65e94e0cef4fcdb8d3f3c7ac1be87fa   # a full commit SHA: no tag yet contains the login flow
         env:                                   # the credential enters HERE, from GitHub Secrets, and nowhere else
           APP_TEST_USER: ${{ secrets.APP_TEST_USER }}
           APP_TEST_PASSWORD: ${{ secrets.APP_TEST_PASSWORD }}

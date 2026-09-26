@@ -255,7 +255,7 @@ jobs:
 
 ### 6. Run it, and find the output
 
-Push the two files on a new branch and open a pull request into your default branch, or into any other branch: `on: pull_request` fires for a pull request into any base, and the file is read from the pull request itself (`git switch -c a11ign-auth`, `git add .github`, `git commit`, `git push -u origin a11ign-auth`, then `gh pr create --fill`). **The workflow runs from the pull request's own branch, so your default branch is not touched to test it.** (A `workflow_dispatch` trigger, by contrast, reads the workflow from the default branch, so it only works once the file has been merged.) Follow the run in the Actions tab, or `gh run watch`; the run can take several seconds to appear after the pull request opens.
+Push the two files on a new branch and open a pull request into your default branch, or into any other branch: `on: pull_request` fires for a pull request into any base, and the file is read from the pull request itself (`git switch -c a11ign-auth`, `git add .github`, `git commit`, `git push -u origin a11ign-auth`, then `gh pr create --fill`). **The workflow runs from the pull request's own branch, so your default branch is not touched to test it.** (A `workflow_dispatch` trigger, by contrast, reads the workflow from the default branch, so it only works once the file has been merged.) Follow the run in the Actions tab, or `gh run watch`; the run may not be listed the moment the pull request opens, so look again.
 
 **The result lands in four places, and on a private repository every one of them is visible to whoever can read the repository:**
 
