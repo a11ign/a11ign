@@ -65,6 +65,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node packages/guards/src/piped-exit-status-guard.mjs` — detect a piped command whose exit status was read from the wrong side of the pipe
 - `node packages/guards/src/test-memory-cap.mjs` — run a test runner under a per-process memory cap (systemd-run MemoryMax) and say what the cap did
 - `node packages/guards/src/tree-wide-guards.mjs` — every tracked *.test.ts file that DECLARES ITSELF a TREE-WIDE GUARD by importing and calling
+- `node scripts/auth-artifact-scan.mjs` — prove no credential is in what a REAL run produced -- scans every text file under a path (markdown, comment, log, JSON, whatever the extension) for the values of two environment variables. Exit 0 clean, 1 a leak, 2 could not examine.
 - `node scripts/auth-leak-check.mjs` — prove a login's credential never reaches what a run writes (ADR 0038) -- drives a real capture on THIS machine's worker with a fake credential, then searches for it. Exit 0 clean, 1 a leak, 2 could not examine.
 - `node scripts/build-packages.mjs` — run tsc --build across every package under packages/ in dependency order
 - `node scripts/changeset-untracked-check.mjs` — refuse with the RIGHT message when the tree carries an untracked changeset
@@ -92,6 +93,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/release-reuses-verdict.mjs` — does the release job need to run coverage itself, or can it reuse nightly's verdict for this sha
 - `node scripts/run.mjs` — the one-line dispatcher: run a named command from commands.mjs, or --list every command declared
 - `node scripts/select-changed-tests.mjs` — pick only the test files that reference a changed file, narrower than package scoping
+- `node scripts/split-baseline.mjs` — split-baseline -- the two readings the package split is claimed to improve (test selection, tokens per call), taken before anything moves
 - `node scripts/spotlight-exclude.mjs` — stop Spotlight indexing every git worktree on this machine
 - `node scripts/stale-dist-diagnosis.mjs` — augment a resolution failure naming a missing export or module with a stale-dist diagnosis
 - `node scripts/test-changed.mjs` — run only the tests a change can reach -- the local half of CI's scoped selection
