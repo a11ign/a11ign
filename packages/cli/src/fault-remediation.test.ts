@@ -49,7 +49,7 @@ function captureDoubtCodes(): string[] {
   return match ? [...match[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]) : [];
 }
 
-// PLUS ADR 0038's ten named errors: client-side like the doubts, listed by `auth/auth-faults.ts` as a runtime array
+// PLUS ADR 0038's eleven named errors: client-side like the doubts, listed by `auth/auth-faults.ts` as a runtime array
 // (so no scrape is needed), and read from there rather than re-typed, so a code added there without an entry fails.
 const KNOWN_FAULTS: string[] = [...Object.values(FAULT), ...judgeLayerFaultCodes(), ...captureDoubtCodes(), ...AUTH_FAULTS];
 
