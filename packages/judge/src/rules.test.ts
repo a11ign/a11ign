@@ -1065,6 +1065,57 @@ test("focusLossVerdict: unpairable, clear and finding are three distinct values,
     { kind: "finding", evidence: "Promo code (id 0, at 853ms): focus held 2ms" });
 });
 
+// #2587 (protocol 22): the install records what ALREADY held focus as the log's first entry, `initial: true`.
+// Its `atMs` is the INSTALL moment, so a `heldMs < FOCUS_SCRIPT_WINDOW_MS` test against it would manufacture
+// an F55 from the capture's own timing. The four fixtures below share one shape and differ in ONE thing
+// each, so each mutation of the `initial` check turns exactly the fixtures that depend on it red.
+const initialHold = { type: "focusin", id: 0, name: "Accept cookies", atMs: 0, initial: true };
+
+test("#2587 (a): an initial focusin, its focusout, then a landing on a DIFFERENT control in the window is not a finding", () => {
+  const log = [initialHold,
+    { type: "focusout", id: 0, name: "Accept cookies", atMs: 10 },
+    { type: "focusin", id: 1, name: "Search", atMs: 12 }];
+  assert.deepEqual(focusLossVerdict(log, 1), { kind: "clear" });
+  assert.equal(focusFindings(log).length, 0);
+});
+
+test("#2587 (a2): the same, but the landing is OUTSIDE the window -- unpairable, where an unflagged focusin would be a 10ms F55", () => {
+  // (a) alone cannot tell the `initial` check from its absence: a landing inside the window clears either way.
+  // This is the fixture that goes red when the check is dropped, because the hold time (10ms, read off the
+  // install moment) would then be believed and nothing would redirect it.
+  const log = [initialHold,
+    { type: "focusout", id: 0, name: "Accept cookies", atMs: 10 },
+    { type: "focusin", id: 1, name: "Search", atMs: 90 }];
+  assert.deepEqual(focusLossVerdict(log, 1), { kind: "unpairable" });
+  assert.equal(focusFindings(log).length, 0);
+});
+
+test("#2587 (b): an initial focusin, its focusout, then no landing is UNPAIRABLE -- never a finding, never 'clear'", () => {
+  const log = [initialHold, { type: "focusout", id: 0, name: "Accept cookies", atMs: 10 }];
+  assert.deepEqual(focusLossVerdict(log, 1), { kind: "unpairable" },
+    "focus left a control whose arrival nobody witnessed: silence, but not a vindication of the page");
+  assert.equal(focusFindings(log).length, 0);
+});
+
+test("#2587 (c): a NON-initial focusin/focusout pair in the window still asserts exactly as before", () => {
+  const pair = (initial: boolean) => [
+    { type: "focusin", id: 0, name: "Promo code", atMs: 0, ...(initial ? { initial } : {}) },
+    { type: "focusout", id: 0, name: "Promo code", atMs: 10 }];
+  assert.deepEqual(focusLossVerdict(pair(false), 1),
+    { kind: "finding", evidence: "Promo code (id 0, at 10ms): focus held 10ms" });
+  assert.equal(focusFindings(pair(false)).length, 1);
+  // The pair differs from the unpairable one above by the flag alone, so the flag is what decides.
+  assert.deepEqual(focusLossVerdict(pair(true), 1), { kind: "unpairable" });
+});
+
+test("#2587 (c2): an initial entry on one control does not exempt a witnessed pair on ANOTHER", () => {
+  const log = [initialHold,
+    { type: "focusin", id: 1, name: "Promo code", atMs: 900 },
+    { type: "focusout", id: 1, name: "Promo code", atMs: 905 }];
+  assert.equal(focusLossVerdict(log, 2).kind, "finding");
+  assert.equal(focusFindings(log).length, 1);
+});
+
 test("CORPUS POSITIVE SHAPE: the same orphan one index later IS F55, so the fix cannot go deaf", () => {
   // focus-removed-on-receipt-order.bad, verbatim from its stored log (first four events), and the pairing
   // with the test above is the whole point: the two differ ONLY in whether a focusin precedes them. This

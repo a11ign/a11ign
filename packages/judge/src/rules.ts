@@ -769,7 +769,11 @@ function focusLandedOnADifferentControl(
  * "cannot say", never "no findings". Only a real `checked: true` reading is examined, and even then a
  * cleared or empty log is a real zero, not an absence.
  */
-type FocusLogEvent = { type: string; id: number; name: string; atMs: number };
+type FocusLogEvent = {
+  type: string; id: number; name: string; atMs: number;
+  /** Protocol 22 (#2587): the install recorded what ALREADY held focus. Its `atMs` is the install moment. */
+  initial?: boolean;
+};
 
 /**
  * The three things a `focusout` can mean, kept as a discriminated union rather than collapsed into
@@ -782,6 +786,27 @@ type FocusLossVerdict =
   | { kind: "finding"; evidence: string }
   | { kind: "unpairable" }
   | { kind: "clear" };
+
+/** Is the focusout at index 0 immediately followed by a focusin for the SAME id (the reversed-pair shape)? */
+function isReversedPair(log: FocusLogEvent[]): boolean {
+  const next = log[1];
+  return next?.type === "focusin" && next.id === log[0].id;
+}
+
+/**
+ * `log[i]` is a `focusout`; when the event before it is the `initial` focusin of THE SAME control (the install
+ * found it already holding focus), decide it here, else return `null` for the ordinary path. Focus left a
+ * control we never saw ARRIVE, so there is no hold time to read and no F55 to assert from one: landing on
+ * a different real control on the same tick is `clear`, and anything else is `unpairable` -- the honest word
+ * for "focus left a control whose arrival nobody witnessed", silence that is not a vindication.
+ */
+function initialHoldLossVerdict(log: FocusLogEvent[], i: number): FocusLossVerdict | null {
+  const event = log[i];
+  const prior = log[i - 1];
+  if (!(prior?.type === "focusin" && prior.id === event.id && prior.initial)) return null;
+  return focusLandedOnADifferentControl(event.id, event.atMs, log[i + 1])
+    ? { kind: "clear" } : { kind: "unpairable" };
+}
 
 /**
  * Is `log[i]` (already known to be a `focusout`) a genuine F55, unpairable, or genuinely clear?
@@ -810,7 +835,9 @@ export function focusLossVerdict(log: FocusLogEvent[], i: number): FocusLossVerd
   // finding, and this type exists so the two can never again be merged into one bare `null` the way this
   // function's own prior revision did). Half 2 -- the listener recording `document.activeElement` as the
   // log's own first entry, so `i === 0` stops being a special position -- closes this from the capture
-  // side and is explicitly NOT this function's fix; see the comment above `addFocusEventFindings`.
+  // side and is explicitly NOT this function's fix. It LANDED at protocol 22 (#2587, `initial: true`); THIS
+  // BRANCH STAYS, because captures at protocol 21 and below are still on disk and still open on a bare
+  // focusout. Deleting it waits for the protocol-22 reading (#2587 done-when 6).
   //
   // ONE EXCEPTION, VERIFIED AGAINST TWO SEPARATE REAL MECHANISMS BEFORE BEING CARVED OUT: a focusout at
   // index 0 immediately followed by a focusin for the SAME id (`focus-event-order.test.ts`'s REVERSED
@@ -824,12 +851,13 @@ export function focusLossVerdict(log: FocusLogEvent[], i: number): FocusLossVerd
   // immediately by a real focusin on the NEXT field -- the identical shape a real page's ambiguous index-0
   // orphan produces, and the reason position (having prior context), not "what follows", is what actually
   // separates the two for a DIFFERENT id.
-  if (i === 0) {
-    const next = log[i + 1];
-    const sameControlReversed = next?.type === "focusin" && next.id === event.id;
-    if (!sameControlReversed) return { kind: "unpairable" };
-  }
+  if (i === 0 && !isReversedPair(log)) return { kind: "unpairable" };
   const prior = log[i - 1];
+  // AN `initial` FOCUSIN IS A HOLD THE LISTENER FOUND, NOT ONE IT WITNESSED ARRIVE (#2587): its `atMs` is the
+  // install moment, so `event.atMs - prior.atMs` below would MANUFACTURE a "held Nms" F55 out of the
+  // capture's own timing. It is decided by `initialHoldLossVerdict` and never reaches the hold-time read.
+  const initialHold = initialHoldLossVerdict(log, i);
+  if (initialHold) return initialHold;
   const completedReceipt = prior?.type === "focusin" && prior.id === event.id;
   const heldMs = completedReceipt ? event.atMs - prior.atMs : null;
   if (completedReceipt && heldMs !== null && heldMs >= FOCUS_SCRIPT_WINDOW_MS) return { kind: "clear" }; // an ordinary Tab transition
