@@ -4,7 +4,7 @@
 
 **Proposed, 2026-09-26.** Row #2615, child 2 of #69. It moves no code and files no row: the appendix holds, for each of
 the eight children already filed (#2616 to #2623), the Region, Acceptance and Done-when **confirmed or amended against
-the decisions below**, plus two rows the decisions found were missing, so `product-manager` promotes from the appendix and
+the decisions below**, plus two rows the decisions found were missing and the nine MOVE rows (one per target repository and one per npm rename, each naming its chairman step or saying it has none), so `product-manager` promotes from the appendix and
 nobody re-derives them.
 
 **Decided by the chairman and `ceo`, RECORDED here and not reopened** (#69, 2026-09-26): `agent-org` leaves
@@ -15,7 +15,7 @@ protection, required review and merge queue on the free plan exactly as `a11ign/
 `agent-org-sandbox` repository is created**, and a fixture project inside `agent-org`'s own tests proves the boundary
 (#69, 07:20Z); the leak scan and the LAN-IP refusal apply from the FIRST commit of every public repository (#69, 07:20Z);
 a11ign's product rows stay on `a11ign/a11ign` while `agent-org`'s own development rows live in ITS repository, so the
-machinery reads MORE THAN ONE board (#69, 06:58Z; the earlier "one tracker" ruling is withdrawn). Also recorded, from
+machinery reads MORE THAN ONE board (#69, 06:58Z; the earlier "one tracker" ruling is withdrawn). Also recorded: **the WHOLE split is version one** (#2615, `ceo`, 08:45Z, on the chairman's ruling), and, from
 #69 at 07:53Z and 08:01Z: `pdf` stays and goes to its own repository, now `a11ign/documents`; `cli`, `judge`, `scorer`
 and `evidence` stay together in `a11ign/a11ign` for now; the three asks (a), (b) and (c) below are the chairman's.
 
@@ -29,7 +29,7 @@ command with its real output beneath it. Three things a reader must know before 
   `git grep` here excludes this document, whose own text would otherwise be counted; four readings need a small script,
   printed under "The reading scripts" at the end, saved under the name the command uses and run from the repository
   root. The readings that begin `gh api`, `ls ~/.cache/a11ign` or `cut … wake-ledger` are **live state** of GitHub and of
-  the agent host, taken 08:54Z on 2026-09-26 by `a11ign-ai-workers`, and are marked *live*; a later reader gets a
+  the agent host, taken 09:09Z on 2026-09-26 by `a11ign-ai-workers`, and are marked *live*; a later reader gets a
   different answer and that is not a defect.
 - **Measured and inferred are different claims and are labelled.** *Measured* means the command above produced it;
   *inferred* is reading code without running it; *external knowledge* is GitHub behaviour recalled, not exercised, and is
@@ -94,14 +94,16 @@ names** (decision 1, surface 2), which is why the label row is larger than it wa
 8. **A fixture project inside the tool's tests exercises all four surfaces and five two-repository cases, and cannot prove
    GitHub's side of any of them.** (RULED; the limit is written down.)
 9. **Of `packages/agent-org/host`'s 17 entries, 8 are the tool's, 8 are the project's and 1 is host data.**
-10. **The three asks of #69, 07:53Z, are answered in their own section:** the trigger for splitting `evidence` is 28 days
+10. **The timeline and critical path, ruled version one as a whole:** `agent-org` out in 3 to 5 days and the whole split in 6 to 16, LOW confidence, every duration citing a reading or the word UNMEASURED; the shadow window is 1,440 ticks (48 hours), chosen, and the readings do not separate it from 24; `documents`' first publish is on the next `a11ign` release's critical path.
+11. **The three asks of #69, 07:53Z:** the trigger for splitting `evidence` is 28 days
     without a protocol bump and under 10 commits a week; report wording DOES live in `evidence`, and moving its six display
     glosses to `cli` is one additive row that changes the text of a contract sentence; `scorer` stays until that trigger
     fires. And **`@a11ign/documents` has never been published, so its move is a FIRST PUBLISH on the critical path of the
     next `a11ign` release.**
-11. **This ADR files nothing and starts nothing.** It changes no code, and creates no repository.
 
-## The nine decisions
+**This ADR files nothing and starts nothing.** It changes no code, and creates no repository.
+
+## The eleven decisions
 
 Each gives its readings, what assumes what, a size a reader can recheck, the decision with its cost and what was rejected,
 an owner, and what it depends on.
@@ -259,9 +261,9 @@ packages/agent-org/src/review-attribution.mjs:100:  return `reviewer-${Number(pr
 $ cut -f2- ~/.cache/a11ign/wake-ledger | sed -E 's/[0-9]+/N/g' | sort | uniq -c | sort -rn | head -6
     472 RESET	engineers/ready-row-unclaimed/N
     316 engineers/ready-row-unclaimed/N
-    222 RESET	product-manager/ready-queue-empty/N
-    144 engineers/ready-row-unclaimed/N	worker-N
-    121 RESET	product-manager/answer-owed/row-N
+    224 RESET	product-manager/ready-queue-empty/N
+    145 engineers/ready-row-unclaimed/N	worker-N
+    122 RESET	product-manager/answer-owed/row-N
     103 product-manager/ready-queue-empty/N
 ```
 
@@ -439,7 +441,7 @@ packages/guards/src/tooling-roots.mjs:23:export const TOOLING_ROOTS = Object.fre
 
 ```
 $ echo "guards: $(git log --no-merges --since=2026-08-26 --format=%h -- packages/guards | wc -l)  agent-org: $(git log --no-merges --since=2026-08-26 --format=%h -- packages/agent-org | wc -l)  both: $(comm -12 <(git log --no-merges --since=2026-08-26 --format=%H -- packages/guards | sort) <(git log --no-merges --since=2026-08-26 --format=%H -- packages/agent-org | sort) | wc -l)"
-guards: 24  agent-org: 309  both: 5
+guards: 24  agent-org: 310  both: 5
 ```
 
 ```
@@ -452,7 +454,7 @@ $ git grep -lE '(from|import\().*agent-org/(src|host)' -- packages/lab | sed 's#
 
 ```
 $ git grep -l 'agent-org' -- packages/lab | wc -l
-170
+171
 ```
 
 ```
@@ -710,7 +712,7 @@ $ git grep -hE "^\s*(import|export) .* from ['\"][^./]" -- packages/agent-org/sr
 
 ```
 $ git log --no-merges --format='%ae' -- packages/agent-org | sort | uniq -c | sort -rn
-    173 github-actions[bot]@users.noreply.github.com
+    174 github-actions[bot]@users.noreply.github.com
     107 46429371+DanBeckDev@users.noreply.github.com
       7 noreply@anthropic.com
       6 ai-workers@a11ign.dev
@@ -723,7 +725,7 @@ $ git log --no-merges --format='%ae' -- packages/agent-org | sort | uniq -c | so
 
 ```
 $ git log --no-merges --format=%B -- packages/agent-org | grep -i '^Co-authored-by' | sed 's/ *<.*//' | sort | uniq -c | sort -rn
-    155 Co-Authored-By: Claude Sonnet 5
+    156 Co-Authored-By: Claude Sonnet 5
     153 Co-Authored-By: Claude Opus 5 (1M context)
 ```
 
@@ -890,11 +892,153 @@ the tool would then name a11ign's lab.
 
 **Depends on:** decision 3.
 
-## The three asks of #69 (07:53Z), and the documents layer
+### DECISION 10 — Timeline and critical path: the whole split is version one, and every duration says what it stands on
 
-**The chairman's rulings, recorded, and three asks OF this ADR.**
+**RULED (#2615, `ceo`, 2026-09-26 08:45Z, on the chairman's ruling; recorded, not reopened):** "Road to version one" closes when the WHOLE split is done: `agent-org`, `screenreader-worker` (`nvda-worker` with `nvda-speech`), `screenreader-fleet`, `lab`, `control` and `documents` (`pdf`), each published package with its npm rename and its trusted-publisher re-bind (`documents` is a FIRST publish). `cli`, `judge`, `scorer` and `evidence` stay in `a11ign/a11ign`. **No move row has run yet, so every duration for one below is an estimate and says so.**
 
-### ASK (a) — a trigger for splitting `evidence` out, and the read-only-mirror option
+**Readings.** (*live* GitHub and host reads, taken at the time stated at the top; the scripts are printed at the end. They are numbered because the durations below cite them as `[reading N]`.)
+
+```
+$ bash edges.sh
+#2612 blocked by: #2610
+#2613 blocked by: #2612
+#2615 blocked by: #2614
+#2616 blocked by: #2615
+#2617 blocked by: #2616
+#2618 blocked by: #2616
+#2619 blocked by: #2616
+#2620 blocked by: #2616
+#2621 blocked by: #2618 #2616
+#2622 blocked by: #2621 #2620 #2619 #2618 #2617
+#2623 blocked by: #2622
+```
+
+```
+$ bash region-overlaps.sh
+#2616 Region: 4 paths
+#2617 Region: 10 paths
+#2618 Region: 4 paths
+#2619 Region: 5 paths
+#2620 Region: 5 paths
+#2621 Region: 5 paths
+#2622 Region: 2 paths
+#2623 Region: 2 paths
+-- files shared by two filed Regions
+#2616 & #2620: packages/agent-org/src/board-snapshot-scope.mjs 
+#2618 & #2621: packages/agent-org/src/wake.mjs packages/agent-org/src/work-gate.mjs 
+```
+
+```
+$ bash cycle.sh
+#2610 2026-09-26T06:58:57Z -> 2026-09-26T07:55:22Z
+#2614 2026-09-26T07:06:13Z -> 2026-09-26T08:23:11Z
+merged PRs: 200  median 39 min  p90 111 min  max 1250 min
+```
+
+```
+$ bash ledger-causes.sh
+last 24h: 23 distinct causes fired
+last 48h: 23 distinct causes fired
+last 168h: 26 distinct causes fired
+```
+
+```
+$ gh pr list --state open --limit 100 --json number,files --jq '[.[]|select(any(.files[]?; .path|startswith("packages/nvda-worker/src")))|"#\(.number)"]|join(" ")'
+```
+
+```
+$ gh issue list --milestone 'Road to version one' --state open --limit 200 --json number,labels --jq '{open: length, backlog: ([.[]|select(any(.labels[]; .name=="backlog"))]|length)}'
+{"backlog":9,"open":11}
+```
+
+```
+$ grep -E '^(WorkingDirectory|ExecStartPre|ExecStart)=' packages/agent-org/host/a11ign-work-tick.service; grep -E '^(OnBootSec|OnUnitActiveSec)=' packages/agent-org/host/a11ign-work-tick.timer
+WorkingDirectory=/home/agent/repos/a11y-witness
+ExecStartPre=-/usr/bin/npm run primary:update
+ExecStart=/usr/bin/node packages/agent-org/src/work-tick.mjs
+OnBootSec=2min
+OnUnitActiveSec=2min
+```
+
+```
+$ for n in nvda-worker worker-fleet pdf; do echo "$n: $(git grep -l "@a11ign/$n\b" -- . ':!*.md' ':!docs' ':!package-lock.json' ':!pnpm-lock.yaml' | wc -l) files name it, $(git ls-files packages/$n | wc -l) files in the package"; done; git grep -lE 'trusted|provenance|id-token' -- .github/workflows
+nvda-worker: 61 files name it, 124 files in the package
+worker-fleet: 168 files name it, 107 files in the package
+pdf: 26 files name it, 7 files in the package
+.github/workflows/auto-arm.yml
+.github/workflows/release.yml
+.github/workflows/reusable-acceptance.yml
+```
+
+**(a) What gates what, read and not remembered.** The native `blockedBy` edges as filed (reading 1): 3a waits on this row; 3b, 3c, 3d and 3f wait on 3a; **3e waits on 3c and 3a; 4 waits on all five of 3b to 3f; 5 waits on 4.** The Regions as filed (reading 2) share only two files: `board-snapshot-scope.mjs` (3a and 3f) and `wake.mjs` with `work-gate.mjs` (3c and 3e), which is why 3e follows 3c. **The filed edges understate the plan, because they were read from Regions that decision 1 shows too small:** with 3g (which repoints 69 files, 33 of them 3d's) and 3d's real 43 files (10 shared with 3b and 3c), the edges become, **and `product-manager` adds them:** 3g on 3a; 3b, 3c and 3f on 3g; 3d on 3b, 3c and 3f; 3e on 3d (it already follows 3c); 4 on 3e; 5 on 4. The move rows wait on 5 (below).
+
+**(b) The sets that run in parallel.** After 3a: 3g alone. After 3g: **3b, 3c and 3f together** (three rows, disjoint Regions), then 3d, then 3e, so `agent-org`'s critical path is **3a, 3g, 3c, 3d, 3e, 4, the shadow window, 5: seven rows and a window.** W (report wording) and the two npm renames are independent of the chain except that R2 (worker-fleet) waits for 3g, because 16 of the tool's import lines name `@a11ign/worker-fleet` (decision 7). After 5: **the three layer chains run in parallel**: R1 then M1 (`screenreader-worker`), R2 then M2 (`screenreader-fleet`), M5 then M6 (`documents` then `cli`'s dependency); then M3 (`lab`) and M4 (`control`) together, because `lab` holds 182 of the 231 guards and they reach into everything (`ceo`, 08:45Z, from child 0's baseline). **Why the move rows wait for 5 is a ruling and an inference, not a reading:** a layer repository's pull requests must be visible to the gate (3c), and the machinery should be extracted once, not twice.
+
+**(c) Ranges, each with what it stands on and what it does NOT know.**
+
+**`agent-org` out: 3 to 5 days.**
+
+**Stands on:** seven chain rows and a window (b). A path row is priced at **3 to 8 hours** (an ASSUMPTION anchored by the two split rows that ran, 57 and 77 minutes filing to close, both documents-only and smaller than 3c, and by PR open-to-merge, median 39 and p90 111 minutes over the newest 200 merged: reading 3). Seven rows at 3 to 8 hours is 21 to 56 hours; a p90 review-and-merge wait per row adds about 13; the 48-hour window adds 48: **82 to 117 hours, 3.4 to 4.9 days** (arithmetic over the labelled inputs, not a measurement).
+
+**Does not know:** how long a 43-file row (3d) or a gate-file row (3c) takes, since none has run; how often a row goes back for review; whether a clear window is needed on the files 3g repoints (69 files, so B4 will refuse a claim on any of them while 3g is open); merge-queue delay at load (the p90 above is from a quiet day, the max was 1,250 minutes).
+
+**Whole split: 6 to 16 days, LOW confidence.**
+
+**Stands on:** the `agent-org` range, then the longest layer chain **R1, M1, M3** at 1 to 3 days per move row (an ASSUMPTION: a history rewrite, a public repository's protection read back behaviourally, the first release from it), plus the chairman's two steps on that chain (R1 and M1) at 0 to 2 days each. **3 to 5, plus 3 to 7 for the chain, plus 0 to 4 for the two chairman steps = 6 to 16.**
+
+**Does not know:** any move row's real duration; **the chairman's turnaround** on an npm re-bind or the first publish; **whether the window #69 requires on the package is clear: one open pull request touches `packages/nvda-worker/src` today (reading 5), and a claimed SaaS row holds Regions that never appear as a pull request**; hosted-runner loss (`ceo` names it); and whether 3d's 43 files or 3e's 33 moved files land cleanly.
+
+**Milestone distance today:** "Road to version one" holds 12 open rows, 11 of them `backlog` (reading 6); the filed rows plus the eleven new ones the appendix lists (3g, W and nine move rows) are the honest distance, which is why the move rows are filed under it.
+
+**Shadow window: 1,440 ticks (48 hours at the two-minute period, reading 7), CHOSEN not measured.** It is the one duration no row-cycle time predicts. **The measurement does not discriminate between 24 and 48 hours: 23 distinct gate causes fired in the last 24 hours and the same 23 in the last 48, against 26 in seven days (reading 4)**, so 24 hours (720 ticks) covers exactly what 48 does today and `ceo` may shorten it without contradicting this reading; 48 is chosen to include two passes of the scheduled nightly work (*inferred*), and decision 5's rule stands that the diff record NAMES any cause of the 26 that did not fire in the window (three, on this reading) and why.
+
+**Durations, each with its measured input or the word UNMEASURED:**
+
+- **DURATION split rows that ran (#2610, #2614), filing to close:** 57 and 77 minutes [reading 3].
+- **DURATION pull request open to merge:** median 39 minutes, p90 111 minutes, max 1,250 minutes over the newest 200 merged [reading 3].
+- **DURATION gate tick period:** 2 minutes [reading 7].
+- **DURATION distinct causes fired in a window:** 23 in 24 hours, 23 in 48 hours, 26 in 7 days [reading 4].
+- **DURATION shadow window:** 1,440 ticks (48 hours), CHOSEN; the coverage it buys is [reading 4].
+- **DURATION a path row (3a to 3g, 4, 5):** 3 to 8 hours each, an ASSUMPTION, UNMEASURED (no path row has run).
+- **DURATION `agent-org` out:** 3 to 5 days, ARITHMETIC over the two lines above, UNMEASURED as a whole.
+- **DURATION a move row (R1, R2, M0 to M6):** 1 to 3 days each, UNMEASURED (no move row has run; sizes are in [reading 8]).
+- **DURATION a chairman step:** 0 to 2 days, UNMEASURED.
+- **DURATION whole split:** 6 to 16 days, LOW confidence, UNMEASURED as a whole.
+
+**UNMEASURED, listed:** every move-row duration (R1, R2, M0 to M6); a path row's duration for a row the size of 3c or 3d; the chairman's turnaround on an npm re-bind and on the first publish; the merge-queue delay at load; the reviewer's latency on a 69-file pull request; whether the window on `packages/nvda-worker/src` is clear when M1 is claimed; and the shadow window's sufficiency (it is chosen). **Sizes that ARE measured** (reading 8): renaming `nvda-worker` touches 61 files by name, `worker-fleet` 168, `pdf` 7 in the package and 26 by name; the workflow files that publish are `release.yml`, `auto-arm.yml` and `reusable-acceptance.yml`, and **`release.yml`'s filename is what a trusted publisher is bound to**, so each new repository's release workflow filename is part of its move row.
+
+**`documents`' first publish is on the critical path of the next `a11ign` release.** `@a11ign/pdf` has never been published, so there is no old package to rename or re-bind, and the published `a11ign@0.1.0` does not depend on it while `packages/cli/package.json:25` does:
+
+```
+$ grep -n '"@a11ign/pdf"' packages/cli/package.json; timeout 30 npm view @a11ign/pdf version 2>&1 | head -2; timeout 30 npm view a11ign@0.1.0 dependencies 2>&1 | head -8; git log --no-merges --since=2026-09-10 --format=%h -- packages/pdf | wc -l
+25:    "@a11ign/pdf": "0.0.0",
+npm ERR! code E404
+npm ERR! 404 Not Found - GET https://registry.npmjs.org/@a11ign%2fpdf - Not found
+{
+  '@a11ign/evidence': '0.1.0',
+  '@a11ign/judge': '0.1.0',
+  '@a11ign/scorer': '0.1.0',
+  '@a11ign/worker-fleet': '0.1.0',
+  yaml: '^2.9.0'
+}
+1
+```
+
+So the next `a11ign` release cannot be installed until `@a11ign/documents` is on the registry, and the order is `ceo`'s: move `pdf` (M5), publish `0.1.0` from `a11ign/documents`, then `cli` depends on it by version range (M6), and only then can `a11ign` release again. **The empty repositories:** `agent-org`, `screenreader-worker`, `screenreader-fleet`, `lab`, `control` and `documents` all exist, empty and public; **this ADR renames or deletes none of them**, decision 4 places `guards` with the product so it needs none, and `lab` and `control` are in the version-one ruling and exist as placeholders: this ADR renames neither, and what stays in the product from `lab` (the guards it needs) is decision 4's.
+
+**Decision:** The plan is the chain in (b), the ranges in (c) and the 1,440-tick window, **and the milestone's open count is its distance**: on merge `product-manager` files the eleven new rows (3g, W, R1, R2 and M0 to M6) under "Road to version one", each blocked by a native edge, and revises the ranges from the first path row that closes. Cost: the timeline is dominated by inputs this ADR cannot measure, and it says so rather than narrowing the range. Rejected: (a) one figure per range, which would be an assumption dressed as a reading; (b) starting the move rows before 5, which extracts the machinery twice; (c) a window of 24 hours, which is not contradicted by the reading and is `ceo`'s to choose.
+
+**Owner:** `product-manager` for the rows and edges; engineer for each row.
+
+**Depends on:** decisions 1 to 9.
+
+### DECISION 11 — The three asks of #69 (07:53Z): a trigger for `evidence`, the report-wording check, and `scorer`'s placement
+
+**Recorded from the chairman's rulings (#69, 07:53Z, 08:01Z); the asks are his and the answers are the ADR's.** Readings are under each part.
+
+**Decision:** three answers, each below: **a trigger with a number and a unit** (28 consecutive days), **the pasted report-wording check** (it lives in `evidence`; moving it is not free), and **`scorer`'s placement** (it stays until the trigger fires, then leaves first, into its own repository).
+
+#### (a) — a trigger for splitting `evidence` out, and the read-only-mirror option
 
 **Readings.**
 
@@ -936,8 +1080,8 @@ its file), and it rose from 15 to 22 in 21 days, **eight values, the longest gap
 six packages declare it. The chairman's reading (the volatile package is the most depended-on) holds on these numbers, with
 the correction that the volatile NUMBER lives in the worker.
 
-**Decision:** **The trigger is the conjunction of two commands and it is not met today:** `CAPTURE_PROTOCOL_VERSION` unchanged
-for **28 consecutive days** (4.7 times the longest gap above; today's reading is `0` days, the last bump being 2026-09-26),
+**Trigger:** **28 consecutive days, and it is the conjunction of two commands and it is not met today:** `CAPTURE_PROTOCOL_VERSION` unchanged
+for those 28 days (4.7 times the longest gap above; today's reading is `0` days, the last bump being 2026-09-26),
 **and fewer than 10 non-merge commits a week to `packages/evidence/src` in each of those four weeks** (below every one of the
 last five weeks). **The numbers are CHOSEN, not measured**; what is measured is the history they are set against. `product-manager`
 reads the two commands at each release and files the split row when both hold; **no gate cause is added** (a cause touches
@@ -949,7 +1093,7 @@ before the trigger fires.** Cost of the mirror when taken: a workflow, a push cr
 PRs disabled (the Kubernetes staging pattern, *external knowledge*). Rejected: (a) split now — the ruling's own reason
 (every bump becomes a coordinated multi-repository release); (b) a trigger on calendar time alone — churn also has to fall.
 
-### ASK (b) — does report wording live in `evidence`?
+#### (b) — does report wording live in `evidence`?
 
 **Readings.**
 
@@ -1003,14 +1147,14 @@ assignments**, the two prose fields of the `ConformanceRequirement` contract; 65
 `limitation`** (`… (silent -- no new speech arrived…)`), the sentence `cli` prints verbatim (`report.ts`, `action/summary.ts`,
 the only two consumers) and three recorded result fixtures carry. **So the chairman's "no split cost" is half right:** the
 coupling is real (a wording round costs an `evidence` change and, split, a cross-repository release), **but moving the six
-glosses to `cli` changes the text of a contract field.** **Decision:** file ONE row (W, appendix): `evidence` reports each
+glosses to `cli` changes the text of a contract field.** **Wording:** file ONE row (W, appendix): `evidence` reports each
 stop as data (type and stop code, already in `SweepOutcome`), `cli` owns the six glosses and composes the clause, and
 `limitation` keeps its sentence for one release; the 22 prose assignments are classified by that row and are NOT moved
 (they are the contract's own statements of what a run established and did not, ADR 0037). Cost: an additive contract change and a text change to one
 sentence. Rejected: (a) move all 28 strings — the 22 are the contract's statements, not wording; (b) leave it until the split —
 each wording round then costs a cross-repository release.
 
-### ASK (c) — `scorer`'s placement
+#### (c) — `scorer`'s placement
 
 **Reading.**
 
@@ -1026,7 +1170,7 @@ packages/cli packages/judge packages/lab packages/scorer
       3 scripts
 ```
 
-**Decision:** **`scorer` stays in `a11ign/a11ign` until the ASK (a) trigger fires, then it is the FIRST to leave, into its OWN
+**Placement:** **`scorer` stays in `a11ign/a11ign` until the decision 11 (a) trigger fires, then it is the FIRST to leave, into its OWN
 repository, `a11ign/screenreader-scorer`, NOT into `screenreader-worker`.** Measured: its only in-repo dependency is
 `evidence`, so it cannot leave before `evidence` is stable (the Stable Dependencies Principle the chairman cited); 31 `lab`
 files, and three each in `cli` and `control`, import it, so the trigger row is a large one. ADR 0036 places it in the
@@ -1035,39 +1179,14 @@ artifacts (ADR 0032) on a training cadence, not the capture cadence of the worke
 Rejected: (a) with `screenreader-worker` — two toolchains and two release cadences in one repository; (b) now — it would
 depend on an unstable `evidence`.
 
-### The documents layer, and the placeholder repositories
+**Owner:** `product-manager` (reads the trigger at each release and files W); engineer (W).
 
-**Reading.**
-
-```
-$ grep -n '"@a11ign/pdf"' packages/cli/package.json; timeout 30 npm view @a11ign/pdf version 2>&1 | head -2; timeout 30 npm view a11ign@0.1.0 dependencies 2>&1 | head -8; git log --no-merges --since=2026-09-10 --format=%h -- packages/pdf | wc -l
-25:    "@a11ign/pdf": "0.0.0",
-npm ERR! code E404
-npm ERR! 404 Not Found - GET https://registry.npmjs.org/@a11ign%2fpdf - Not found
-{
-  '@a11ign/evidence': '0.1.0',
-  '@a11ign/judge': '0.1.0',
-  '@a11ign/scorer': '0.1.0',
-  '@a11ign/worker-fleet': '0.1.0',
-  yaml: '^2.9.0'
-}
-1
-```
-
-**`@a11ign/pdf` has never been published (E404, live), and `packages/cli/package.json:25` depends on it as workspace `0.0.0`, while
-the published `a11ign@0.1.0` does not list it (its dependencies are `evidence`, `judge`, `scorer`, `worker-fleet`, `yaml`).** So the
-next `a11ign` release cannot be installed until `@a11ign/documents` (the layer's new name) is on the registry, **and the move of
-`pdf` is a FIRST PUBLISH, not a re-bind, and sits on the critical path of the next `a11ign` release.** The order is `ceo`'s:
-move `pdf`, publish `0.1.0` from `a11ign/documents`, then `cli` depends on it by version range. `pdf` is the quietest package
-(one non-merge commit since 2026-09-10, last reading). **The empty repositories:** `agent-org`, `screenreader-worker`,
-`screenreader-fleet`, `lab`, `control` and `documents` all exist, empty and public. **This ADR renames or deletes NONE of them.**
-Decision 4 leaves `lab` as it is (it loses tests, not identity), `guards` is placed with the product so needs no repository, and
-`lab` and `control` are placeholders **this ADR does not rule** (the row says they are not created until ruled; they exist).
+**Depends on:** decision 4 (which packages stay together).
 
 ## The sum
 
-**Sum:** the work is **10 rows**: the eight filed (3a to 3f, 4, 5), **3g** (cut the nine outward edges, 69 files), and **W**
-(report wording, 4 files). **The order the measurements set:** 3a first (the reader), then 3g (it repoints imports in 69 files,
+**Sum:** the extraction of `agent-org` is **10 rows**: the eight filed (3a to 3f, 4, 5), **3g** (cut the nine outward edges, 69 files), and **W**
+(report wording, 4 files); **the rest of the split is 9 MOVE rows** (R1, R2, M0 to M6, decision 10), so **19 rows in all, 11 of them not yet filed**, and the milestone's open count is the distance. **The order the measurements set:** 3a first (the reader), then 3g (it repoints imports in 69 files,
 so nothing else may be editing them); **then 3b, 3c and 3f in parallel** (their Regions are disjoint: `row-claim/`,
 `work-gate`/`wake`, and the host files); **then 3d**, which is 43 files and shares 10 with 3b and 3c and `host-units.mjs` with 3f;
 **then 3e**, which edits the same gate files and moves 33 role files; then 4 and 5. W is independent and can run at any time.
@@ -1079,7 +1198,7 @@ word); 3e **moves 33 files** and repoints 37, and **one gate cause, not many, is
 
 ## Consequences (including the ones the chairman will not like)
 
-1. **The extraction is 10 rows and longer than the epic's 8.** 3g and W were not filed; 3d is roughly ten times its filed size;
+1. **The extraction is 10 rows and longer than the epic's 8, and the whole split is 19.** 3g and W were not filed; 3d is roughly ten times its filed size;
    the chain is serial in three places (3a, 3g, then 3d, 3e). The measured overlap (10 of 43 files shared with 3b and 3c) is why
    it cannot be shortened by starting them together.
 2. **936 lines are duplicated in seven files, with no cross-repository pin**, and `cli-flags` has changed 9 times. The falsifier
@@ -1095,7 +1214,7 @@ word); 3e **moves 33 files** and repoints 37, and **one gate cause, not many, is
    the stronger proof and is not ruled.
 8. **The fourth surface is not the whole a11ign residue:** eleven source files mention the fleet or corpus at least eight times
    and are unclassified (decision 9); the rows classify them, and a file that is a11ign's by what it does stays a11ign's.
-9. **The wording move is not free** (ASK (b)): a contract text changes.
+9. **The wording move is not free** (decision 11 (b)): a contract text changes.
 
 ## Alternatives rejected
 
@@ -1128,10 +1247,10 @@ word); 3e **moves 33 files** and repoints 37, and **one gate cause, not many, is
 6. **The relicensing check, re-run at the extraction commit, finds an import into an AGPL file, or an author outside the org's
    accounts**: decision 7.
 7. **`reviewDecision` on the smoke PR reads empty**: the requirement does not bite, and no real PR merges (decision 6).
-8. **Both conditions of ASK (a) hold and the split row is not filed**, or **either is met and a bump follows within the week**: the
+8. **Both conditions of decision 11 (a) hold and the split row is not filed**, or **either is met and a bump follows within the week**: the
    trigger's numbers are wrong.
 
-## Appendix: the eight children confirmed or amended, and the two rows the decisions found
+## Appendix: the eight children confirmed or amended, the two rows the decisions found, and the nine MOVE rows
 
 **How to read this.** Each entry names the row, gives a **Verdict** (CONFIRMED, or AMENDED with what changed and the decision
 that changed it), and then holds the row's `## Region`, `## Acceptance` and `## Done-when` **as they should read once amended**, in
@@ -1140,7 +1259,7 @@ the output of the command in the row, taken at `46b59abf0`, and **the claimant r
 reading at a moment). Every Acceptance command below is the shape the filed rows use (`npx rstest run --config
 scripts/rstest/rstest.config.mjs --include <file>`); a NEW test file is named and is created by its row. **The order is 3a, 3g, then
 3b, 3c and 3f in parallel, then 3d, then 3e, then 4, then 5; W is independent.** Native `blocked-by` edges to add:
-3g on 3a; 3b, 3c and 3f on 3g; 3d on 3b, 3c and 3f; 3e on 3d; 4 on 3e; 5 on 4.
+3g on 3a; 3b, 3c and 3f on 3g; 3d on 3b, 3c and 3f; 3e on 3d; 4 on 3e; 5 on 4. **The MOVE rows follow 5** (each names its own blockers and its **Chairman step**, or says none, which `product-manager` copies into the row's first paragraph and `needs:chairman` where a step is the chairman's): R1 and R2 (the npm renames) then M1 and M2 (the two layers), M5 then M6 (`documents`, then `cli`), M3 and M4 (`lab`, `control`), M0 (the removal). Every move row is filed under "Road to version one" and blocked by a native edge, so the milestone's open count is the distance to version one (decision 10).
 
 ### CHILD 3a (#2616): the configuration seam
 
@@ -1753,7 +1872,7 @@ and the licence check over a fixture tree still declaring `AGPL-3.0-or-later` is
 
 ### NEW ROW W (ready to file): the six sweep-stop glosses live in `cli`
 
-**Verdict: NEW.** ASK (b) found that report wording lives in `evidence`; the six glosses are the part that is display and not contract. Independent of the chain.
+**Verdict: NEW.** decision 11 (b) found that report wording lives in `evidence`; the six glosses are the part that is display and not contract. Independent of the chain.
 
 ````markdown
 ## What it is
@@ -1794,9 +1913,286 @@ without its text is caught); `evidence`'s `limitation` for that run names the st
 No.
 ````
 
+### MOVE ROW R1 (NEW, ready to file): rename `@a11ign/nvda-worker` to `@a11ign/screenreader-worker` on the registry
+
+**Verdict: NEW.** ADR 0036 named `@a11ign/screenreader-worker` and was never carried out on the registry (`ceo`, #69, 07:06Z); npm cannot rename, so this publishes the new name and deprecates the old. It lands BEFORE M1, so the trusted-publisher binding is made once against the final name. Blocked by: 5.
+
+**Chairman step:** the new name is a FIRST PUBLISH, so a trusted publisher for `@a11ign/screenreader-worker` must be configured on npmjs.com (an owner action with 2FA) or a bootstrap token used for the first release; `product-manager` names the options from npm's own documentation on the row (*external knowledge*, not verified here).
+
+````markdown
+## Region
+
+```
+packages/nvda-worker/package.json
+packages/nvda-worker/README.md
+.changeset/rename-nvda-worker-to-screenreader-worker.md
+packages/lab/src/packaging/package-rename-nvda-worker.test.ts
+```
+
+Plus every non-document file that names `@a11ign/nvda-worker`: **61 files at `46b59abf0`** (`r-names`, decision 10), which `product-manager` pastes into the Region at promotion from `git grep -l '@a11ign/nvda-worker\b' -- . ':!*.md' ':!docs' ':!package-lock.json' ':!pnpm-lock.yaml'`.
+
+## Acceptance
+
+```bash
+npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/package-rename-nvda-worker.test.ts
+```
+
+**The test must show:** the package's `name` is `@a11ign/screenreader-worker`; no file outside a deprecation note and the changeset names `@a11ign/nvda-worker`; every workspace importer resolves the new name. **Positive control:** the test's walk finds the old name in a fixture file and REFUSES it.
+
+## Done-when
+
+1. The pull request is merged with a changeset that publishes the new name; `npm run typecheck` and `npm test` pass.
+2. The row states its chairman step (first publish of a new name) and who performed it.
+3. After the first release the old name carries a deprecation pointing at the new (`npm view` pasted).
+````
+
+### MOVE ROW R2 (NEW, ready to file): rename `@a11ign/worker-fleet` to `@a11ign/screenreader-fleet`
+
+**Verdict: NEW.** As R1. **168 files name it** (`r-names`), 16 of them the tool's own import lines, so it waits for 3g. Blocked by: 3g, 5.
+
+**Chairman step:** the same first-publish step as R1, for `@a11ign/screenreader-fleet`.
+
+````markdown
+## Region
+
+```
+packages/worker-fleet/package.json
+packages/worker-fleet/README.md
+.changeset/rename-worker-fleet-to-screenreader-fleet.md
+packages/lab/src/packaging/package-rename-worker-fleet.test.ts
+```
+
+Plus the 168 non-document files that name `@a11ign/worker-fleet` at `46b59abf0`, pasted at promotion from the command in R1 with the name changed.
+
+## Acceptance
+
+```bash
+npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/package-rename-worker-fleet.test.ts
+```
+
+**The test must show:** the package's `name` is `@a11ign/screenreader-fleet`; no file outside a deprecation note and the changeset names the old name; every importer resolves the new one. **Positive control:** a fixture file naming the old name is REFUSED.
+
+## Done-when
+
+1. Merged with a changeset publishing the new name; `npm run typecheck` and `npm test` pass.
+2. The row states its chairman step and who performed it.
+3. After the first release the old name is deprecated pointing at the new.
+````
+
+### MOVE ROW M0 (NEW, ready to file): remove the monorepo copy of `agent-org`
+
+**Verdict: NEW.** Child 5 leaves the old path wired and its timer disabled (decision 5); this is the separate removal, filed only after the clean cut-over tick, so a rollback is one edit until it merges. Blocked by: 5.
+
+**Chairman step:** none.
+
+````markdown
+## Region
+
+```
+packages/agent-org/
+packages/lab/src/packaging/agent-org-monorepo-copy-removed.test.ts
+```
+
+## Acceptance
+
+```bash
+npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/agent-org-monorepo-copy-removed.test.ts
+```
+
+**The test must show:** no tracked path under `packages/agent-org/`; no unit file of the tool's own in this repository; the a11ign declaration and `host.json` point at the installed tool. **Positive control:** a fixture tree still holding one file under the old path is REFUSED naming it.
+
+## Done-when
+
+1. The directory is gone and the suites that pinned it are updated, with their derived count pins moved in the same pull request.
+2. `host:check` reports the old timer absent and the new one present; the reading is pasted.
+3. The row records the clean cut-over tick it waited for.
+````
+
+### MOVE ROW M1 (NEW, ready to file): move `nvda-worker` and `nvda-speech` to `a11ign/screenreader-worker`
+
+**Verdict: NEW.** The first layer, on 0039's rulings and this ADR's decisions 2 to 7. Blocked by: R1, 5, #2612, #2613, and a clear window on `packages/nvda-worker/src` and `packages/nvda-speech/` (B4 read at claim time; one pull request touches the former today, decision 10).
+
+**Chairman step:** re-bind the npm trusted publisher of `@a11ign/screenreader-worker` to `a11ign/screenreader-worker` and its release workflow's filename, before the first release from there (an owner action with 2FA).
+
+````markdown
+## Region
+
+```
+packages/nvda-worker/
+packages/nvda-speech/
+packages/lab/src/packaging/screenreader-worker-extraction.test.ts
+```
+
+PROVISIONAL: the tests that leave with the layer are #2613's set; `product-manager` adds them by amendment.
+
+## Acceptance
+
+```bash
+npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/screenreader-worker-extraction.test.ts
+```
+
+**The test must show:** the layer-edge guard (#2612) finds no edge in either direction; the licence test divides three ways as ADR 0039 finding 1 says; the new repository's first commit carries its `LICENSE`, the leak scan is clean at it, and its ruleset and protection are read back behaviourally in decision 6's order. **Positive control:** a fixture package with one relative import across the boundary is REFUSED naming both ends.
+
+## Done-when
+
+1. The history of both packages is in `a11ign/screenreader-worker`, verified by a commit count and the first and last commit of a sampled file.
+2. The chairman step is done and read back (the first release from the new repository publishes), or the row says it is not yet and stays open.
+3. `bots` is downgraded from `admin` to `write` and the requirement read back, saying which instrument.
+````
+
+### MOVE ROW M2 (NEW, ready to file): move `worker-fleet` to `a11ign/screenreader-fleet`
+
+**Verdict: NEW.** As M1, for the fleet layer. Blocked by: R2, 5, and M1 (the fleet imports the worker).
+
+**Chairman step:** re-bind the trusted publisher of `@a11ign/screenreader-fleet` to `a11ign/screenreader-fleet` and its release workflow's filename.
+
+````markdown
+## Region
+
+```
+packages/worker-fleet/
+packages/lab/src/packaging/screenreader-fleet-extraction.test.ts
+```
+
+PROVISIONAL, as M1.
+
+## Acceptance
+
+```bash
+npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/screenreader-fleet-extraction.test.ts
+```
+
+**The test must show:** no edge in either direction across the boundary (its 12 `guards` imports and its dependency on the worker are by name); the first commit's licence and leak scan; protection read back. **Positive control:** a fixture with one relative import across the boundary is REFUSED.
+
+## Done-when
+
+1. History verified as in M1; the chairman step done and read back, or the row says not yet.
+2. `bots` downgraded and the requirement read back.
+````
+
+### MOVE ROW M3 (NEW, ready to file): move `lab` to `a11ign/lab`
+
+**Verdict: NEW.** `lab` is in the version-one ruling (`ceo`, 08:45Z) and its repository exists as a placeholder; the move follows the layers, because `lab` holds 182 of the 231 guards and they reach into everything (`ceo`). What STAYS in the product is decision 4's, and this row states it by count. Blocked by: M1, M2.
+
+**Chairman step:** none (unpublished; the token grants `lab`, `ceo` 07:40Z).
+
+````markdown
+## Region
+
+```
+packages/lab/
+packages/lab/src/packaging/lab-extraction.test.ts
+```
+
+PROVISIONAL and the widest after 5: what stays is the guards the product needs (decision 4).
+
+## Acceptance
+
+```bash
+npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/lab-extraction.test.ts
+```
+
+**The test must show:** no edge in either direction; the tree-wide guards still run on the product's tree and select nothing outside it; protection read back. **Positive control:** a fixture with one edge across the boundary is REFUSED.
+
+## Done-when
+
+1. History verified; protection read back; `bots` downgraded.
+2. The row states which guards stayed and which moved, by count.
+````
+
+### MOVE ROW M4 (NEW, ready to file): move `control` to `a11ign/control`
+
+**Verdict: NEW.** As M3, for the control plane (it reaches `worker-fleet` from 13 files). Blocked by: M2, M3.
+
+**Chairman step:** none.
+
+````markdown
+## Region
+
+```
+packages/control/
+packages/lab/src/packaging/control-extraction.test.ts
+```
+
+PROVISIONAL, as M3.
+
+## Acceptance
+
+```bash
+npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/control-extraction.test.ts
+```
+
+**The test must show:** no edge across the boundary other than by package name; protection read back. **Positive control:** a fixture with one relative import across the boundary is REFUSED.
+
+## Done-when
+
+1. History verified; protection read back; `bots` downgraded.
+2. The fleet's deploy and provision paths still resolve (read, not run: the resource ban applies).
+````
+
+### MOVE ROW M5 (NEW, ready to file): move `pdf` to `a11ign/documents` and publish `@a11ign/documents` 0.1.0
+
+**Verdict: NEW.** The layer is renamed the DOCUMENTS layer (`ceo`, #69 08:01Z). `@a11ign/pdf` was never published, so there is no old package to rename or re-bind: **this is a FIRST PUBLISH and is on the critical path of the next `a11ign` release** (decision 10). Blocked by: 5.
+
+**Chairman step:** BOTH: (1) add `a11ign/documents` to `A11IGN_BOT_TOKEN`'s repository access (`ceo` reported the grant by repository id survives the rename but cannot read the list, so it is NOT confirmed); (2) decide and perform the first-publish path on npmjs.com (a bootstrap token for the first release, or whatever npm permits for a package that does not exist yet: `product-manager` names the options from npm's documentation).
+
+````markdown
+## Region
+
+```
+packages/pdf/
+packages/lab/src/packaging/documents-extraction.test.ts
+```
+
+Plus the 26 files that name `@a11ign/pdf` by name at `46b59abf0` (`r-names`), pasted at promotion.
+
+## Acceptance
+
+```bash
+npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/documents-extraction.test.ts
+```
+
+**The test must show:** the package is named `@a11ign/documents`; nothing in `a11ign/a11ign` other than `cli` names `@a11ign/pdf`; no edge across the boundary (its only dependency is `pdf-lib`); the first commit's licence and leak scan. **Positive control:** a fixture naming the old name is REFUSED.
+
+## Done-when
+
+1. History verified; protection read back; `bots` downgraded.
+2. **Both chairman steps are done and read back:** the token reaches the repository (the first merge shows the arming path) and `npm view @a11ign/documents version` prints `0.1.0`, pasted.
+````
+
+### MOVE ROW M6 (NEW, ready to file): `cli` depends on `@a11ign/documents` by version range
+
+**Verdict: NEW.** After M5's publish, `cli` stops depending on the workspace `0.0.0` (`packages/cli/package.json:25`) and only then can `a11ign` release again. Blocked by: M5.
+
+**Chairman step:** none (the publish was M5's).
+
+````markdown
+## Region
+
+```
+packages/cli/package.json
+packages/cli/src/cli.ts
+packages/cli/src/report.ts
+packages/lab/src/packaging/cli-documents-dependency.test.ts
+```
+
+## Acceptance
+
+```bash
+npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/cli-documents-dependency.test.ts
+```
+
+**The test must show:** `cli` declares `@a11ign/documents` by a semver RANGE and not `0.0.0`; the two imports of `looksLikePdfUrl` and `scanPdfTagTree` resolve to it. **Positive control:** a fixture declaring the workspace `0.0.0` is REFUSED.
+
+## Done-when
+
+1. Merged; `npm run typecheck` and `npm test` pass; a changeset bumps `cli`.
+2. The next `a11ign` release installs (the registry-consumer gate's reading, pasted).
+````
+
 ## The reading scripts
 
-Four readings call a script; save each under the name the command uses and run it from the repository root. Their output is above.
+Several readings call a script; save each under the name the command uses and run it from the repository root. Their output is above.
 
 `outward.mjs` — the distinct files the tool imports from outside its own package (comment lines skipped, `@a11ign/<pkg>/<sub>` resolved to that package's `src`):
 
@@ -1907,4 +2303,57 @@ echo "-- protection"; gh api repos/a11ign/agent-org/branches/main/protection --j
 echo "-- teams"; gh api repos/a11ign/agent-org/teams --jq '[.[]|{slug,permission}]' 2>&1 | tail -2
 echo "-- same on a11ign"; gh api repos/a11ign/a11ign/rulesets --jq '[.[]|{id,name,enforcement}]' 2>&1 | tail -2
 gh api repos/a11ign/a11ign/rules/branches/main --jq '[.[].type]' 2>&1 | tail -1
+```
+
+`edges.sh` — the native `blockedBy` edges of the split rows as the gate reads them (*live*):
+
+```bash
+#!/usr/bin/env bash
+# Native blockedBy edges of the split rows, as the gate reads them (--json blockedBy).
+for n in 2612 2613 2615 2616 2617 2618 2619 2620 2621 2622 2623; do
+  echo "#$n blocked by: $(gh issue view $n --json blockedBy --jq '[.blockedBy.nodes[]|"#\(.number)"]|join(" ")')"
+done
+```
+
+`region-overlaps.sh` — each filed child row's Region and the files two Regions share (*live*):
+
+```bash
+#!/usr/bin/env bash
+# For each filed child row, the files of its Region (first fenced block under "## Region"), then the files two rows share.
+export LC_ALL=C
+D=$(mktemp -d)
+for n in 2616 2617 2618 2619 2620 2621 2622 2623; do
+  gh issue view $n --json body --jq .body | awk '/^## Region/{r=1;next} r&&/^```/{c++; if(c==2)exit; next} r&&c==1&&NF' | sort -u > "$D/$n"
+  echo "#$n Region: $(wc -l < "$D/$n") paths"
+done
+echo "-- files shared by two filed Regions"
+for a in 2616 2617 2618 2619 2620 2621 2622; do for b in 2617 2618 2619 2620 2621 2622 2623; do
+  [ "$a" -lt "$b" ] || continue
+  s=$(comm -12 "$D/$a" "$D/$b" | tr '\n' ' '); [ -n "$s" ] && echo "#$a & #$b: $s"
+done; done
+rm -rf "$D"
+```
+
+`cycle.sh` — filing-to-close of the two split rows that ran, and PR open-to-merge over the newest 200 merged (*live*):
+
+```bash
+#!/usr/bin/env bash
+# Filing-to-close minutes for the two split rows that ran, and PR open-to-merge over the newest 200 merged PRs.
+for n in 2610 2614; do
+  gh issue view $n --json createdAt,closedAt --jq '"#'$n' \(.createdAt) -> \(.closedAt)"'
+done
+gh pr list --state merged --limit 200 --json createdAt,mergedAt --jq '.[]|((.mergedAt|fromdate)-(.createdAt|fromdate))/60|floor' | sort -n | awk '{a[NR]=$1} END{printf "merged PRs: %d  median %d min  p90 %d min  max %d min\n",NR,a[int((NR+1)/2)],a[int(NR*0.9)],a[NR]}'
+```
+
+`ledger-causes.sh` — the distinct gate causes that fired in the live ledger in the last 24 h, 48 h and 7 days (*live*, host state):
+
+```bash
+#!/usr/bin/env bash
+# Distinct gate causes that fired in the live wake ledger inside the last 24 h, 48 h and 7 days (first column is epoch ms).
+now=$(date +%s)000
+for h in 24 48 168; do
+  cut=$(( now - h*3600*1000 ))
+  n=$(awk -F'\t' -v c=$cut '$1+0>=c && $1!="RESET" {split($2,p,"/"); if (p[2]!="") print p[2]}' ~/.cache/a11ign/wake-ledger | sort -u | wc -l)
+  echo "last ${h}h: $n distinct causes fired"
+done
 ```
