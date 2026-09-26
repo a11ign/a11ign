@@ -11,7 +11,9 @@
  * (amendment 3: an authenticated run on a repository that is not private is refused whole, which replaces the
  * `auth-refused-public-comment` of the ADR's first draft — the reasons are in the ADR beside the amendment). The
  * eleventh, `auth-session-lost`, is a FAULT and not a fourth `LoginFailureReason`: the login SUCCEEDED, and the page
- * it then loaded was the login form (#2563).
+ * it then loaded was the login form (#2563). The twelfth, `auth-challenge-detected`, is a FAULT too and not a fourth
+ * `LoginFailureReason`: a step failed and a CAPTCHA widget is on the page that failed it (#2564). It NAMES the
+ * challenge and never answers one.
  */
 export const AUTH_FAULTS = [
   "auth-refused-remote-worker",
@@ -25,6 +27,7 @@ export const AUTH_FAULTS = [
   "auth-credential-too-short",
   "auth-refused-public-repository",
   "auth-session-lost",
+  "auth-challenge-detected",
 ] as const;
 
 export type AuthFault = (typeof AUTH_FAULTS)[number];

@@ -353,7 +353,14 @@ for the same reason it already exists, which is to fail before NVDA is installed
   `origin:` (below); a redirect to an identity provider is a `left-origin` `auth-login-failed`, and a login
   that stops at a challenge fails its `expect:`. A CAPTCHA appearing mid-run reads like a broken page, which
   ADR 0024 already records as this repo's most expensive recurring shape, so the error's remedy names the
-  dedicated test account.
+  dedicated test account. **Since #2564 a CAPTCHA is NAMED, as `auth-challenge-detected`, a fault of its own and not a
+  fourth `auth-login-failed` reason** (the twelfth of the ADR's named errors): when a step of the login or of a `flow:`
+  has already failed (a control that cannot be bound, an `expect:` not met) and the page that failed it renders an iframe
+  served from a reCAPTCHA, hCaptcha or Turnstile host, both interpreters end the run with that fault and the same sentence.
+  **It explains a failure and never makes one**: a page that passed its `expect:` passes with a widget on it. **It never
+  answers one**: nothing clicks, waits out or works round a challenge, and solving one is refused by design (it defeats a
+  site's anti-abuse control). The requested page after the login and the capture proper are not covered, as `ceo` ruled;
+  the known-gaps entry (§51) lists what is and is not detected.
 - **Mechanism 3 is the only route through them**, for interactive use, and is a spike (Constraint 3).
 
 The evidence is the digests': every hosted tool that supports login excludes or leaves undocumented OTP, SMS,
