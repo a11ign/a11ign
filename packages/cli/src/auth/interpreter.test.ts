@@ -12,17 +12,25 @@ import assert from "node:assert/strict";
 import {
   challengeVendor as workerChallengeVendor,
   controlsNamed as workerControlsNamed,
+  cookieParam as workerCookieParam,
   expectationMet as workerExpectationMet,
   FRAME_SOURCES_EXPRESSION as WORKER_FRAME_SOURCES_EXPRESSION,
+  loadStateEntries as workerLoadStateEntries,
   requiredEnvNames as workerRequiredEnvNames,
+  SET_LOCAL_STORAGE_FUNCTION as WORKER_SET_LOCAL_STORAGE_FUNCTION,
   signIn as workerSignIn,
+  stateEntriesFor as workerStateEntriesFor,
+  stateShapeProblem as workerStateShapeProblem,
   validateAuthRequest,
+  withLoadedState,
 } from "../../../nvda-worker/src/auth-flow.mjs";
 import {
-  challengeVendor, controlsNamed, expectationMet, FRAME_SOURCES_EXPRESSION, requiredEnvNames, signIn as cliSignIn,
-  type AuthDriver, type AuthPlan, type AxNode,
+  challengeVendor, controlsNamed, cookieParam, expectationMet, FRAME_SOURCES_EXPRESSION, requiredEnvNames, SET_LOCAL_STORAGE_FUNCTION,
+  signIn as cliSignIn, type AuthDriver, type AuthPlan, type AxNode,
 } from "./interpreter.js";
 import type { FlowStep } from "./flows.js";
+import { stateEntriesFor, type StateCookie, type StorageState } from "./scrub.js";
+import { parseStorageState, stateShapeProblem } from "./state-file.js";
 
 const ORIGIN = "https://app.example.test";
 const URL_UNDER_TEST = `${ORIGIN}/orders`;
@@ -63,7 +71,31 @@ type FakeOptions = {
   /** A challenge interstitial stands where the login form should be: nothing on it can be bound. */
   interstitialAtLogin?: boolean;
   frameReadFails?: boolean;
+  /** The requested page is behind a session: without the `sid` cookie (and, if asked, the `token` in `localStorage`) it is the login wall, or an off-origin identity provider. */
+  sessionRequired?: "login-wall" | "idp";
+  storageRequired?: boolean;
 };
+
+/** What a saved state carries. NONE of these values may appear in a mark or an error message. */
+const STATE_SESSION = "sessionvalue-4f9a1c07";
+const STATE_TOKEN = "tokenvalue-7be2d915";
+const OTHER_SITE_COOKIE = "othersitecookie-1122aa";
+const OTHER_SITE_STORAGE = "othersitestorage-3344bb";
+const STATE_PATH = "/state/saved.json";
+const STATE: StorageState = {
+  cookies: [
+    { name: "sid", value: STATE_SESSION, domain: "app.example.test", path: "/", httpOnly: true, secure: true, sameSite: "Lax" },
+    { name: "theme", value: "dark", domain: "app.example.test" },
+    { name: "other", value: OTHER_SITE_COOKIE, domain: "other.example.org" },
+  ],
+  origins: [
+    { origin: ORIGIN, localStorage: [{ name: "token", value: STATE_TOKEN }] },
+    { origin: "https://other.example.org", localStorage: [{ name: "token", value: OTHER_SITE_STORAGE }] },
+  ],
+};
+/** The same file after the session ended: the cookie is still there and no longer names a live session. */
+const STALE_STATE: StorageState = { ...STATE, cookies: [{ ...STATE.cookies[0], value: "endedsession-00000000" }, ...STATE.cookies.slice(1)] };
+const STATE_VALUES = [STATE_SESSION, STATE_TOKEN, OTHER_SITE_COOKIE, OTHER_SITE_STORAGE, "endedsession-00000000"];
 
 /** The login page: the form, or a challenge interstitial in its place, or the form with a cookie-policy table that only SAYS captcha. */
 function loginPage(options: FakeOptions, node: (role: string, name: string) => AxNode): AxNode[] {
@@ -71,6 +103,26 @@ function loginPage(options: FakeOptions, node: (role: string, name: string) => A
   const form = [node("textbox", "Email address"), node("textbox", "Password"), node("button", "Sign in"), node("heading", "Sign in")];
   if (options.loginPageSays !== "captcha-in-text") return form;
   return [...form, node("StaticText", "Google re CAPTCHA"), node("StaticText", "Description of GRECAPTCHA set by Google")];
+}
+
+/** What a saved state loads INTO: the cookie jar and `localStorage` a page later reads, logged as they are set. */
+function fakeSession(options: FakeOptions, log: string[]) {
+  const jar: StateCookie[] = [];
+  const storage = new Map<string, string>();
+  return {
+    holdsSession: () => jar.some((c) => c.name === "sid" && c.value === STATE_SESSION) && (!options.storageRequired || storage.get("token") === STATE_TOKEN),
+    setCookies: async (cookies: readonly StateCookie[]) => { log.push(`setCookies:${cookies.map((c) => c.name).join(",")}`); jar.push(...cookies); },
+    setLocalStorage: async (entries: readonly { name: string; value: string }[]) => {
+      log.push(`setLocalStorage:${entries.map((e) => e.name).join(",")}`);
+      for (const e of entries) storage.set(e.name, e.value);
+    },
+    loaded: () => ({ cookies: jar.map((c) => c.name), storage: [...storage.keys()] }),
+    /** Where the requested page sends a browser that holds no session, or undefined when it may in. */
+    bounce(url: string): { page: string; origin: string } | undefined {
+      if (!options.sessionRequired || url !== URL_UNDER_TEST || this.holdsSession()) return undefined;
+      return options.sessionRequired === "idp" ? { page: "https://idp.example.test/authorize", origin: "https://idp.example.test" } : { page: `${ORIGIN}/login`, origin: ORIGIN };
+    },
+  };
 }
 
 /** A tiny site: a login form, a dashboard, an off-origin identity provider, a verification-code prompt, a form with a password-type PIN. */
@@ -84,6 +136,9 @@ function fakeBrowser(options: FakeOptions = {}) {
   let drifting = false;
   const typed: Array<{ field: string; text: string }> = [];
   const clicks: string[] = [];
+  /** Every call that reaches the browser about the page or the state, in order: what the parity test compares beyond the outcome. */
+  const log: string[] = [];
+  const session = fakeSession(options, log);
   const nodes = (): AxNode[] => {
     let next = 0;
     const node = (role: string, name: string, extra: Partial<AxNode> = {}): AxNode => {
@@ -107,7 +162,12 @@ function fakeBrowser(options: FakeOptions = {}) {
   };
   const named = (handle: number) => nodes().find((n) => n.backendId === handle)!;
   const driver: AuthDriver & { purge(origin: string): Promise<void> } = {
-    navigate: async (url) => { page = redirected(url); origin = new URL(url).origin; return { ok: !url.endsWith("/down") }; },
+    navigate: async (url) => {
+      log.push(`navigate:${url.slice(ORIGIN.length)}`);
+      const bounced = session.bounce(url);
+      if (bounced) { page = bounced.page; origin = bounced.origin; return { ok: true }; }
+      page = redirected(url); origin = new URL(url).origin; return { ok: !url.endsWith("/down") };
+    },
     origin: async () => {
       const answer = origin;
       if (drifting) { drifting = false; page = "https://idp.example.test/authorize"; origin = "https://idp.example.test"; }
@@ -132,35 +192,41 @@ function fakeBrowser(options: FakeOptions = {}) {
       if (typed.filter((t) => t.field === "Password").pop()?.text !== password) return;
       page = options.codePromptAfterPassword ? `${ORIGIN}/verify` : `${ORIGIN}/dashboard`;
     },
+    setCookies: session.setCookies,
+    setLocalStorage: session.setLocalStorage,
     purge: async () => undefined,
     close: async () => undefined,
   };
-  return { typed, clicks, driver };
+  return { typed, clicks, driver, log, loaded: session.loaded };
 }
 
-type Outcome = { ok: true; typed: unknown; clicks: string[]; events: string[] } | { ok: false; fault: unknown; reason: unknown; message: string };
+type Outcome = { log: string[]; loaded: unknown } & (
+  { ok: true; typed: unknown; clicks: string[]; events: string[] } | { ok: false; fault: unknown; reason: unknown; message: string });
 
 /** Run one scenario through one implementation and reduce it to what must be the SAME in both. */
-async function through(implementation: "cli" | "worker", scenario: { login?: FlowStep[]; flow?: FlowStep[]; upTo?: number; browser?: FakeOptions; env?: Record<string, string | undefined> }): Promise<Outcome> {
+async function through(implementation: "cli" | "worker", scenario: { login?: FlowStep[]; flow?: FlowStep[]; upTo?: number; browser?: FakeOptions; env?: Record<string, string | undefined>; state?: StorageState }): Promise<Outcome> {
   const browser = fakeBrowser(scenario.browser);
   const events: string[] = [];
   const marks: unknown[] = [];
   const mark = (event: string, detail: Record<string, unknown>) => { events.push(`${event}:${JSON.stringify(detail.name ?? detail.steps ?? "")}`); marks.push({ event, detail }); };
   const env = scenario.env ?? ENV;
+  const secrets = [FAKE_USER, FAKE_SECRET, ...STATE_VALUES];
+  const wire = { login: scenario.login ?? LOGIN, flow: scenario.flow, upTo: scenario.upTo, ...(scenario.state ? { state: { path: STATE_PATH } } : {}) };
+  const seen = { log: browser.log, loaded: browser.loaded };
   try {
     if (implementation === "cli") {
-      const plan: AuthPlan = { login: scenario.login ?? LOGIN, flow: scenario.flow, upTo: scenario.upTo };
-      await cliSignIn({ plan, url: URL_UNDER_TEST, driver: browser.driver, env, mark, bindTimeoutMs: BIND_MS });
+      const state = scenario.state ? stateEntriesFor(scenario.state, ORIGIN) : undefined;
+      await cliSignIn({ plan: wire as AuthPlan, url: URL_UNDER_TEST, driver: browser.driver, env, mark, bindTimeoutMs: BIND_MS, state });
     } else {
-      const plan = validateAuthRequest({ login: scenario.login ?? LOGIN, flow: scenario.flow, upTo: scenario.upTo }, URL_UNDER_TEST);
+      const plan = withLoadedState(validateAuthRequest(wire, URL_UNDER_TEST), URL_UNDER_TEST, () => JSON.stringify(scenario.state));
       await workerSignIn({ plan, url: URL_UNDER_TEST, driver: browser.driver as never, env, mark, bindTimeoutMs: BIND_MS });
     }
-    assert.ok(!JSON.stringify(marks).includes(FAKE_USER) && !JSON.stringify(marks).includes(FAKE_SECRET), `${implementation}: a mark carried a value`);
-    return { ok: true, typed: browser.typed, clicks: browser.clicks, events };
+    assert.ok(!secrets.some((secret) => JSON.stringify(marks).includes(secret)), `${implementation}: a mark carried a value`);
+    return { ok: true, typed: browser.typed, clicks: browser.clicks, events, log: seen.log, loaded: seen.loaded() };
   } catch (error) {
     const e = error as Error & { fault?: string; code?: string; reason?: string };
-    assert.ok(!e.message.includes(FAKE_USER) && !e.message.includes(FAKE_SECRET), `${implementation}: an error carried a value`);
-    return { ok: false, fault: e.fault ?? e.code, reason: e.reason, message: e.message };
+    assert.ok(!secrets.some((secret) => e.message.includes(secret)), `${implementation}: an error carried a value`);
+    return { ok: false, fault: e.fault ?? e.code, reason: e.reason, message: e.message, log: seen.log, loaded: seen.loaded() };
   }
 }
 
@@ -168,6 +234,8 @@ async function through(implementation: "cli" | "worker", scenario: { login?: Flo
 async function both(scenario: Parameters<typeof through>[1]): Promise<Outcome> {
   const [cli, worker] = [await through("cli", scenario), await through("worker", scenario)];
   assert.equal(cli.ok, worker.ok, `the two interpreters disagree: cli ${JSON.stringify(cli)} vs worker ${JSON.stringify(worker)}`);
+  assert.deepEqual(cli.log, worker.log, "the two interpreters drove the browser differently (page loads and state calls, in order)");
+  assert.deepEqual(cli.loaded, worker.loaded, "the two interpreters loaded different state into the browser");
   if (cli.ok && worker.ok) {
     assert.deepEqual(cli.typed, worker.typed, "typed values differ");
     assert.deepEqual(cli.clicks, worker.clicks, "clicks differ");
@@ -400,6 +468,157 @@ test("a missing credential is auth-credential-missing in both, naming the variab
   assert.match(String((outcome as { message: string }).message), /APP_PASSWORD/);
 });
 
+// ---- ADR 0038, amendment 7: a saved storage state signs in INSTEAD of the login -------------------------------------------
+
+const SESSION_SITE: FakeOptions = { sessionRequired: "login-wall", storageRequired: true };
+const LOGIN_PAGE_URL_PART = "/login";
+
+test("STATE: a valid saved state reaches the signed-in page with NO form login: the login's goto, fill and press never run, in both", async () => {
+  // No variables at all: a state run reads none of the login's, and would end auth-credential-missing if it did.
+  const outcome = await both({ state: STATE, browser: SESSION_SITE, env: {} });
+  assert.ok(outcome.ok, JSON.stringify(outcome));
+  if (!outcome.ok) return;
+  assert.deepEqual(outcome.typed, [], "a fill ran");
+  assert.deepEqual(outcome.clicks, [], "a press ran");
+  assert.equal(outcome.log.filter((entry) => entry.includes(LOGIN_PAGE_URL_PART)).length, 0, `the login page was loaded: ${outcome.log}`);
+  // Cookies first, then the requested page, then localStorage, then a reload, then (after the expect) the requested page once more.
+  assert.deepEqual(outcome.log, ["setCookies:sid,theme", "navigate:/orders", "setLocalStorage:token", "navigate:/orders", "navigate:/orders"]);
+  assert.deepEqual(outcome.events, ['authStateLoaded:""', 'authStep:"Dashboard"', 'authApplied:1']);
+});
+
+test("STATE: only the pinned origin's cookies and localStorage reach the browser, in both", async () => {
+  const outcome = await both({ state: STATE, browser: SESSION_SITE, env: {} });
+  assert.deepEqual(outcome.loaded, { cookies: ["sid", "theme"], storage: ["token"] }, "another site's cookie or storage was loaded");
+});
+
+test("STATE: an EXPIRED state ends auth-state-expired, not a capture of the login wall, in both — and the same page on a form login is still expect-not-met", async () => {
+  const outcome = await both({ state: STALE_STATE, browser: SESSION_SITE, env: {} });
+  failsAs(outcome, "auth-state-expired");
+  assert.match((outcome as { message: string }).message, /login step 5 \(expect\).*no heading "Dashboard" appeared within 1 s/);
+  // POSITIVE CONTROL: the login wall a form login meets when it does not get in keeps its shipped reading.
+  failsAs(await both({ browser: { password: "wrong-password-value" } }), "auth-login-failed", "expect-not-met");
+  // ...and a wrong password on a state run's twin is unchanged too: the form path never says expired.
+  const wrong = await both({ browser: { password: "wrong-password-value", sessionRequired: "login-wall" } });
+  assert.notEqual((wrong as { fault?: unknown }).fault, "auth-state-expired");
+});
+
+test("STATE: an expired single-sign-on session (the page is off the pinned origin) ends auth-state-expired, naming the origin and not advising a test account, in both", async () => {
+  // The identity provider's page carries a heading named like the dashboard's, so the expect: IS met, on the wrong site.
+  const outcome = await both({ state: STALE_STATE, browser: { ...SESSION_SITE, sessionRequired: "idp" }, env: {} });
+  failsAs(outcome, "auth-state-expired");
+  const { message } = outcome as { message: string };
+  assert.match(message, /the page is on https:\/\/idp\.example\.test, not https:\/\/app\.example\.test/);
+  assert.doesNotMatch(message, /use a dedicated test account/, "the form login's advice is wrong for a saved state");
+  // CONTROL: the form login's own left-origin keeps its sentence, advice and all.
+  const form = await both({ browser: { redirectOnSignIn: "https://idp.example.test" } });
+  failsAs(form, "auth-login-failed", "left-origin");
+  assert.match((form as { message: string }).message, /use a dedicated test account/);
+});
+
+test("STATE: a CAPTCHA widget on the expired page is still auth-challenge-detected, in both", async () => {
+  const outcome = await both({ state: STALE_STATE, env: {}, browser: { ...SESSION_SITE, frames: { login: [WIDGET_SOURCES.recaptcha] } } });
+  failsAs(outcome, "auth-challenge-detected");
+});
+
+test("STATE: localStorage is set BEFORE the reload: a state that carries the cookie and not the token is expired on a site that needs both, in both", async () => {
+  const cookieOnly: StorageState = { ...STATE, origins: [] };
+  failsAs(await both({ state: cookieOnly, browser: SESSION_SITE, env: {} }), "auth-state-expired");
+  // CONTROL: the same site, the same cookie, when it does not need the token.
+  const outcome = await both({ state: cookieOnly, browser: { sessionRequired: "login-wall" }, env: {} });
+  assert.ok(outcome.ok, JSON.stringify(outcome));
+});
+
+test("STATE: auth-session-lost still runs after: an expect that holds on the login wall does not read an expired state as good, in both", async () => {
+  const expectsSignInButton: FlowStep = { expect: { kind: "control", name: "Sign in", timeoutSeconds: 1 } };
+  const outcome = await both({ login: [...LOGIN.slice(0, -1), expectsSignInButton], state: STALE_STATE, browser: SESSION_SITE, env: {} });
+  failsAs(outcome, "auth-session-lost");
+});
+
+test("STATE: the flow's steps still run after the state is loaded, and its clicks are the flow's alone, in both", async () => {
+  const outcome = await both({
+    state: STATE, browser: SESSION_SITE, env: {}, flow: [{ goto: "/prefs" }, { check: { field: "Remember me", checked: true } }],
+  });
+  assert.ok(outcome.ok, JSON.stringify(outcome));
+  if (outcome.ok) {
+    assert.deepEqual(outcome.clicks, ["Remember me"]);
+    assert.ok(outcome.log.includes("navigate:/prefs"));
+  }
+});
+
+test("STATE: a plan that names a state and is handed no entries (or the reverse) refuses, in both", async () => {
+  const plan = { login: LOGIN, state: { path: STATE_PATH } };
+  const browser = fakeBrowser();
+  await assert.rejects(cliSignIn({ plan, url: URL_UNDER_TEST, driver: browser.driver, env: {}, mark: () => undefined }), /needs its entries/);
+  await assert.rejects(cliSignIn({ plan: { login: LOGIN }, url: URL_UNDER_TEST, driver: browser.driver, env: {}, mark: () => undefined, state: stateEntriesFor(STATE, ORIGIN) }), /needs its entries/);
+  await assert.rejects(workerSignIn({ plan: validateAuthRequest(plan, URL_UNDER_TEST), url: URL_UNDER_TEST, driver: browser.driver as never, env: {}, mark: () => undefined }), /needs its entries/);
+});
+
+/** State files the two layers must read alike, most of them wrong in one way. Each names where it is wrong and none carries a value in its refusal. */
+const STATE_FILES: Array<{ label: string; text: string; problem: RegExp | null }> = [
+  { label: "a valid state", text: JSON.stringify(STATE), problem: null },
+  { label: "an empty state", text: JSON.stringify({ cookies: [], origins: [] }), problem: null },
+  { label: "text that is not JSON", text: `sid=${STATE_SESSION}; theme=dark`, problem: /is not valid JSON/ },
+  { label: "a list", text: JSON.stringify([STATE]), problem: /the top level must be an object/ },
+  { label: "no cookies list", text: JSON.stringify({ origins: [] }), problem: /no "cookies" list/ },
+  { label: "no origins list", text: JSON.stringify({ cookies: [] }), problem: /no "origins" list/ },
+  { label: "a cookie with no value", text: JSON.stringify({ cookies: [{ name: STATE_SESSION, domain: "a.test" }], origins: [] }), problem: /cookies\[1\] has no string "value"/ },
+  { label: "a cookie with an empty domain", text: JSON.stringify({ cookies: [STATE.cookies[1], { ...STATE.cookies[0], domain: "" }], origins: [] }), problem: /cookies\[2\] has an empty "domain"/ },
+  { label: "a cookie with a bad sameSite", text: JSON.stringify({ cookies: [{ ...STATE.cookies[0], sameSite: STATE_SESSION }], origins: [] }), problem: /cookies\[1\] has a "sameSite" that is not Strict, Lax or None/ },
+  { label: "a cookie whose expires is a string", text: JSON.stringify({ cookies: [{ ...STATE.cookies[0], expires: STATE_SESSION }], origins: [] }), problem: /cookies\[1\] has an "expires" that is not a number/ },
+  { label: "an origin with no localStorage list", text: JSON.stringify({ cookies: [], origins: [{ origin: ORIGIN }] }), problem: /origins\[1\] has no "localStorage" list/ },
+  { label: "a storage item with a numeric value", text: JSON.stringify({ cookies: [], origins: [{ origin: ORIGIN, localStorage: [{ name: "a", value: "b" }, { name: STATE_TOKEN, value: 7 }] }] }), problem: /origins\[1\]\.localStorage\[2\] is not an object with a string "name" and a string "value"/ },
+];
+
+test("STATE FILES, through both: the same files are accepted and refused, with the same reason, and no refusal quotes the file", () => {
+  for (const { label, text, problem } of STATE_FILES) {
+    let cli: string | undefined;
+    let worker: string | undefined;
+    try { parseStorageState(text, STATE_PATH); } catch (error) { cli = (error as Error).message; }
+    try { workerLoadStateEntries(STATE_PATH, URL_UNDER_TEST, () => text); } catch (error) { worker = (error as Error).message; }
+    if (problem === null) {
+      assert.equal(cli, undefined, `${label}: the CLI refused a good file`);
+      assert.equal(worker, undefined, `${label}: the worker refused a good file`);
+      continue;
+    }
+    assert.ok(cli !== undefined && worker !== undefined, `${label}: refused by cli=${cli !== undefined}, worker=${worker !== undefined}`);
+    assert.match(cli, problem, label);
+    assert.equal(cli.replace(/ \(rule: [\w-]+\)$/, ""), worker, `${label}: the person reads a different sentence depending on which layer read the file`);
+    assert.ok(cli.includes(STATE_PATH), `${label}: the path is what a refusal names`);
+    for (const value of [STATE_SESSION, STATE_TOKEN, "sid=", "theme=dark"]) assert.ok(!cli.includes(value) && !worker.includes(value), `${label}: a refusal quoted the file`);
+  }
+  // The table is not vacuous on either side: some files pass and most refuse.
+  assert.ok(STATE_FILES.some(({ problem }) => problem === null) && STATE_FILES.filter(({ problem }) => problem !== null).length >= 8);
+  // The shape check the two share agrees on parsed values too.
+  for (const { text, problem } of STATE_FILES.filter(({ text: t }) => t.startsWith("{") || t.startsWith("["))) {
+    assert.equal(workerStateShapeProblem(JSON.parse(text)), stateShapeProblem(JSON.parse(text)));
+    assert.equal(stateShapeProblem(JSON.parse(text)) === undefined, problem === null);
+  }
+});
+
+test("STATE FILES: a file that cannot be read is refused naming the path and the reason, in both", () => {
+  const unreadable = () => { throw new Error(`ENOENT: no such file or directory, open '${STATE_PATH}'`); };
+  assert.throws(() => workerLoadStateEntries(STATE_PATH, URL_UNDER_TEST, unreadable), /the state file \/state\/saved\.json could not be read \(ENOENT/);
+});
+
+test("THE STATE HELPERS, through both: stateEntriesFor, cookieParam and the localStorage function agree", () => {
+  const origins = [ORIGIN, "https://sub.app.example.test", "https://other.example.org", "https://notexample.test"];
+  const sample: StorageState = { ...STATE, cookies: [...STATE.cookies, { name: "wide", value: "widecookievalue-9", domain: ".example.test" }] };
+  for (const origin of origins) assert.deepEqual(workerStateEntriesFor(sample, origin), stateEntriesFor(sample, origin), `stateEntriesFor disagrees for ${origin}`);
+  assert.deepEqual(stateEntriesFor(sample, ORIGIN).cookies.map((c) => c.name), ["sid", "theme", "wide"], "the table selects something");
+  const cookies: StateCookie[] = [
+    ...sample.cookies,
+    { name: "session", value: "v-123456789", domain: "app.example.test", expires: -1 },
+    { name: "persistent", value: "v-123456789", domain: "app.example.test", expires: 1900000000, secure: false, httpOnly: false },
+  ];
+  for (const cookie of cookies) assert.deepEqual(workerCookieParam(cookie), cookieParam(cookie), `cookieParam disagrees for ${cookie.name}`);
+  assert.equal(cookieParam(cookies[cookies.length - 2]).expires, undefined, "a session cookie (-1) carries no expiry");
+  assert.equal(cookieParam(cookies[cookies.length - 1]).expires, 1900000000);
+  assert.equal(cookieParam({ name: "n", value: "v", domain: "a.test" }).path, "/", "a cookie with no path gets one");
+  assert.equal(WORKER_SET_LOCAL_STORAGE_FUNCTION, SET_LOCAL_STORAGE_FUNCTION, "the two copies of the fixed function are one string");
+  // The function takes the entries as an ARGUMENT, so nothing from a file is ever in the text that runs.
+  assert.ok(!SET_LOCAL_STORAGE_FUNCTION.includes(STATE_TOKEN));
+});
+
 const NODES: AxNode[] = [
   { id: "1", role: "group", name: "Billing", ignored: false },
   { id: "2", role: "textbox", name: "  Address\n line ", parentId: "1", backendId: 2, ignored: false },
@@ -465,12 +684,14 @@ test("THE HELPERS, through both: expectationMet agrees on every expectation, wor
 });
 
 test("THE HELPERS, through both: requiredEnvNames finds the same variables, and stops at the capture point in both", () => {
-  const plans: Array<{ login: FlowStep[]; flow?: FlowStep[]; upTo?: number }> = [
+  const plans: Array<{ login: FlowStep[]; flow?: FlowStep[]; upTo?: number; state?: { path: string } }> = [
     { login: LOGIN },
     { login: LOGIN, flow: [{ fill: { field: "PIN", fromEnv: "APP_PIN" } }], upTo: 0 },
     { login: LOGIN, flow: [{ fill: { field: "PIN", fromEnv: "APP_PIN" } }], upTo: 1 },
     { login: LOGIN, flow: [{ fill: { field: "PIN", fromEnv: "APP_PIN" } }, { fill: { field: "Note", value: "literal" } }, { fill: { field: "Two", fromEnv: "APP_PIN" } }] },
     { login: [...LOGIN.slice(0, -1), { fill: { field: "Again", fromEnv: "APP_USER" } }, LOGIN[LOGIN.length - 1]] },
+    { login: LOGIN, state: { path: STATE_PATH } },
+    { login: LOGIN, flow: [{ fill: { field: "PIN", fromEnv: "APP_PIN" } }], upTo: 1, state: { path: STATE_PATH } },
   ];
   for (const plan of plans) {
     const workerPlan = validateAuthRequest(plan, URL_UNDER_TEST);
@@ -478,4 +699,7 @@ test("THE HELPERS, through both: requiredEnvNames finds the same variables, and 
   }
   assert.deepEqual(requiredEnvNames({ login: LOGIN, flow: [{ fill: { field: "PIN", fromEnv: "APP_PIN" } }], upTo: 0 }).sort(), ["APP_PASSWORD", "APP_USER"]);
   assert.deepEqual(requiredEnvNames({ login: LOGIN, flow: [{ fill: { field: "PIN", fromEnv: "APP_PIN" } }], upTo: 1 }).sort(), ["APP_PASSWORD", "APP_PIN", "APP_USER"]);
+  // A state run performs no login, so it reads none of the login's variables, but still reads the flow's.
+  assert.deepEqual(requiredEnvNames({ login: LOGIN, state: { path: STATE_PATH } }), []);
+  assert.deepEqual(requiredEnvNames({ login: LOGIN, flow: [{ fill: { field: "PIN", fromEnv: "APP_PIN" } }], upTo: 1, state: { path: STATE_PATH } }), ["APP_PIN"]);
 });
