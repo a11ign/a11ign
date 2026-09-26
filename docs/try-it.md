@@ -330,6 +330,8 @@ firewall or a different local setup will say something else.
 `npm run doctor` reports what this machine has and what each gap needs. It is read-only — it never starts
 or stops anything — so it is safe to run before you have decided anything.
 
+**One target needs none of that: a PDF.** Point the CLI at a URL whose path ends in `.pdf` (any case; a `?query` or `#fragment` after it does not hide it) — `npm run witness -- https://example.com/report.pdf` — and it scans the document's accessibility tag tree, with no worker, no browser and no NVDA, so it runs on the Mac or Linux box that got `ECONNREFUSED` above. What comes back is `pdf:` findings, in a *PDF layer* section (the `pdf` field under `--json`): `pdf-untagged`, `pdf-missing-lang` and `pdf-figure-no-alt`. **It does not run a screen reader over the document:** it reads the tag tree, the structure a screen reader would be handed, and does not say what one would announce.
+
 **`--probe-forms` is off here and on in the Action, and that is deliberate.** The CLI can be pointed at any
 URL, and pressing *Send* on somebody else's production site is not a review. A workflow runs against your
 own app, where submitting is intended.
