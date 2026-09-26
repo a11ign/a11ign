@@ -1614,6 +1614,10 @@ The mechanism inside NVDA. Six captures per condition shows a direction, not a q
 one page shape, on one NVDA and one guidepup — both pinned in the cache key, so the number travels with
 the evidence it was measured on rather than being a claim about screen readers in general.
 
+**Ruled 2026-09-25 (`ceo`, #928 comment 5840564703): NO** — a 4.1.3 finding on a checkbox does not carry "polite
+reaches about a third of users": n=6 on one page shape, one NVDA and one guidepup, and findings are `cantTell`
+triage. The advice stays here with its bound. Repeats over more than one page shape would change this; none is queued.
+
 
 ---
 
@@ -1656,6 +1660,9 @@ Not a rule — three other things, and they are the reason it was still correct 
 **Recorded before writing the rule rather than after.** A rule built on the assumption that silence means
 failure would have passed `rules:gate` on this corpus — where the case declares the language — and fired
 on every conformant monolingual page in the real-page set. That is `2.4.3` going deaf, run in reverse.
+
+**Ruled 2026-09-25 (`ceo`, #928 comment 5840564703): agreed, do not ask now.** The screen-reader layer can confirm
+a marking and cannot detect its absence; the rule is a DOM join with axe, and no reader is asking for it.
 
 
 ---
@@ -2689,6 +2696,10 @@ Not "later", and not "when someone has time". Close it only when all three hold:
 **What this costs while it stays open:** F55 on a control focused at load is undetectable, and reads as a
 page with no focus activity. The size is unmeasured — it needs a corpus query nobody has run, and the
 honest statement is that nobody knows how many real pages autofocus a control that a script then strips.
+
+**Ruled 2026-09-25 (`ceo`, #928 comment 5840564703): ACCEPT the autofocus bound permanently, condition unchanged.**
+The three-part condition above stays the only way to close it and is not sized now; no protocol bump is made for
+this, but if one is made for another reason, that condition is the checklist.
 
 ## 43. 1.4.13's PROBE FINDS THE PANEL ONLY FROM ONE STARTING POSITION, and the corpus path happens to start there
 
