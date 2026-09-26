@@ -184,7 +184,8 @@ Put both values in the repository's secrets. The names are yours; the flows file
 ```bash
 gh secret set APP_TEST_USER --repo OWNER/REPO         # prompts for the value; setting a name that exists replaces it
 gh secret set APP_TEST_PASSWORD --repo OWNER/REPO
-# with no terminal to prompt on, pass the value on stdin instead:  printf '%s' "$VALUE" | gh secret set APP_TEST_USER --repo OWNER/REPO
+# with no terminal to prompt on, pass the value on stdin instead (single quotes, so a shell does not read a `!` in it):
+#   printf '%s' 'the-value' | gh secret set APP_TEST_USER --repo OWNER/REPO
 ```
 
 ### 3. The flows file
@@ -265,7 +266,7 @@ Push the two files on a new branch and open a pull request into your default bra
 | the `a11ign-result` artifact | the report and the full result (`gh run download <run-id> --repo OWNER/REPO --name a11ign-result`) |
 | the job log | the last line is the count (`a11ign: N finding(s)`), and a named fault is printed here |
 
-Every value from your login is replaced with `‹credential›` in the report, the summary and the result file, and the report says how many announcements it changed. A green run is one whose Action step exits 0 and whose job conclusion is `success` (`gh run view <run-id> --repo OWNER/REPO`). **The report has a section, *What this run pressed*, that lists every control pressed by name**: check it holds only what your flows file named.
+Every value from your login is replaced with `‹credential›` in the report, the summary and the result file, and the report says how many announcements it changed. **A green run says the run reached and read your page, not that the page is fine.** `0 finding(s)` is a count of what was judged, and the report says what was not: a page unlike the ones the trained scorer was validated on is reported as *not scored*, which is unchecked and never clean. Read the report's *Not determined* line and its criteria before you read the count. A green run is one whose Action step exits 0 and whose job conclusion is `success` (`gh run view <run-id> --repo OWNER/REPO`). **The report has a section, *What this run pressed*, that lists every control pressed by name**: check it holds only what your flows file named.
 
 ### 7. When it ends in a named fault
 
