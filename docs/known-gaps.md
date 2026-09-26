@@ -3437,10 +3437,35 @@ mechanism that handles MFA or SSO, and it is for interactive use (ruling, clause
 403 (snippets only); Accessibility Insights authentication has no authoritative source. axe DevTools Pro's limits and
 cypress-axe have no primary source either (ADR 0038's own unverified list).
 
-**NOT MEASURED:** that a real identity provider produces `left-origin` on a real run, or that a real MFA prompt fails a
-real `expect:`. The one authenticated capture on record (#2399, `a11y-worker-3`) was a fixture page. **What closes it:**
-one login against a site that redirects to an identity provider and one against a code prompt, on a test account, each
-read for the fault it ends in. Nobody is doing that; the first outsider run whose sign-in is SSO is the natural one.
+**MEASURED, ON FIXTURES (#2565, 2026-09-26), NOT AGAINST A REAL IDENTITY PROVIDER AND NOT A REAL MFA PROMPT.** Both readings
+above are pinned by tests, and both tests are of a page written to behave that way:
+
+- **SSO is `left-origin`, read twice on a fake browser and once on a real Chromium.** `interpreter.test.ts` (through BOTH
+  interpreters) and `auth-flow.test.ts` (the worker's own copy of the fake browser) send the browser to
+  `https://idp.example.test` after the Sign-in press and assert the (fault, reason) pair `auth-login-failed` /
+  `left-origin` and that the message names SSO and the dedicated test account; a late redirect, after the origin check, is
+  pinned by the "heading on ANOTHER SITE" test in each. `auth-flow-cdp.test.ts` drives a real Chromium against two loopback
+  origins (`/leave` redirects to the second) and asserts `left-origin`, **on the reason alone, not the fault**.
+  **The boundary has a control:** a redirect to the site's OWN `/authorize`, the same page and heading as the fake provider,
+  signs in, so the reading is about the origin and not about any redirect.
+- **A code prompt is `expect-not-met`, and reads exactly like a wrong password.** The fake site now accepts the password and
+  shows "Verify your identity" with a "Verification code" field instead of the app; the login's final `expect:` heading
+  "Dashboard" is not met and the run ends `auth-login-failed` / `expect-not-met`, in both interpreters. **The message is
+  identical, character for character, to a wrong password's:** it names the `expect:` that was not met and nothing about the
+  page that appeared, so **the tool cannot tell an MFA challenge from a wrong password, and the test asserts that
+  sameness rather than hiding it.** It fails only because the fixture's `expect:` is a heading the code prompt lacks; the
+  paragraph above about a weak `expect:` is unchanged.
+- **Which of these run where.** The fake-browser tests need no browser and run wherever the suite does. The real-Chromium
+  ones in `auth-flow-cdp.test.ts` skip with a reason when Chromium will not start: on the host this was written on **5 of 9
+  skipped**, and none of `ci.yml`, `capture-regression.yml` or `action-smoke.yml` installs a browser or sets
+  `A11Y_TEST_CHROMIUM`, so by the workflow files (read, not observed in a CI log) **the real-Chromium redirect is not run in
+  CI**. The real-browser reading is a dev-host one.
+
+**NOT MEASURED:** that a real identity provider produces `left-origin` on a real run, or that a real MFA prompt (a real
+one-time-code page, an authenticator push, a redirect with a state parameter) fails a real `expect:`. The one authenticated
+capture on record (#2399, `a11y-worker-3`) was a fixture page, and so is every reading above. **What closes it:** one login
+against a site that redirects to an identity provider and one against a code prompt, on a test account, each read for the
+fault it ends in. Nobody is doing that; the first outsider run whose sign-in is SSO is the natural one.
 
 ## 52. A CLAIM THAT DOES NOT MOVE IS READ FROM ONE FAST WEEK, AND THE INTERRUPTED-PANE NEEDLE WAS NEVER SEEN RENDER — OPEN, by design (#2470)
 
