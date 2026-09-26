@@ -149,6 +149,145 @@ is stated below.
 
 **A run that does not finish looks nothing like a slow one.** Rehearsal 5's run 34799670660 (same commit, page and task as a run that had just succeeded) started its Action step and never completed it: the job ended after 50 m 01 s with GitHub's own annotation, "The hosted runner lost communication with the server" — not a11ign's. It left no log (`gh run view --log` answered "log not found"), no artifact, and a diagnostic step added with `if: always()` never ran either. **This says nothing about why**, or how often — that count is its own row ([#1520](https://github.com/a11ign/a11ign/issues/1520), still being measured: 1 lost of 12 runs so far whose Action step ran past 60 s). **What to do:** re-run the same commit. A single lost run like this one is evidence about GitHub's infrastructure that day, not about your page.
 
+## Behind a login: an authenticated run on a private repository
+
+**Use this if the page you want examined is only reachable after you sign in.** It is the same Action as above
+with three additions: a private repository, a test account whose credentials live in GitHub Secrets, and a small
+*flows file* that says how to sign in. The reference for each is [`docs/github-action.md`](./github-action.md#logging-in-flows-and-login-flow);
+this section is the order to do them in. Read [SECURITY.md](../SECURITY.md#it-can-log-in-to-the-page-it-examines-and-then-it-holds-a-credential--2026-09-24-adr-0038) once first: the run holds a credential.
+
+### What this path does not cover
+
+Decide this before you spend anything, because each of these ends the path rather than slowing it:
+
+- **A site whose only sign-in is SSO, MFA, SMS or an emailed code, or that puts a CAPTCHA in front of the login, is out of scope.** SMS codes, emailed codes and push approvals are a documented gap, and TOTP (an authenticator-app code) is deferred. **If the site has a way to make a test account without them** (a staging environment with MFA off, a role your admin exempts, a separate username and password login next to the SSO button), use that. If it has none, this path cannot reach your page today: say so rather than working around it.
+- **A CAPTCHA is never solved.** A login step that fails on a page showing a reCAPTCHA, hCaptcha or Turnstile widget ends the run with `auth-challenge-detected`, which names the challenge and stops.
+- **Attaching to your own signed-in browser is not built.** Neither is loading a saved sign-in state (`--auth-state`, [#2566](https://github.com/a11ign/a11ign/issues/2566)), which is the route through SSO and MFA and is named here as a way through only once it has merged. It has not.
+- **Only what your flows file names is pressed.** `probe-forms` and `probe-navigation` are switched off for a run that logs in, whatever you set.
+
+### 1. The repository must be private
+
+**A run that logs in on a repository that is not private is refused before NVDA is installed** (`auth-refused-public-repository`). The reason is where the output goes: the pull-request comment, the job log, the artifact and the job summary all carry text from behind your login, and on a public repository anyone can read every one of them. Check yours:
+
+```bash
+gh repo view OWNER/REPO --json isPrivate --jq .isPrivate     # must print true
+```
+
+**On a private repository those same four places are visible to everyone who can read the repository**, so keep the test account's data to things that group may see.
+
+### 2. A test account, and the secrets
+
+Make a **dedicated account** on a staging copy of the app, with **no MFA**. Its username and its password must each be **at least 8 characters and not an ordinary word** (`a11y-audit-7f3c`, not `admin` or `test`): a shorter value is refused (`auth-credential-too-short`), because hiding it from the output would rewrite your page's own words.
+
+Put both values in the repository's secrets. The names are yours; the flows file and the workflow below must use the same two. **Eight characters is enough** (`at least 8`), and a secret's value can never be read back, so `gh secret list --repo OWNER/REPO` tells you a name exists and not what it holds: if you are not sure a secret is right, set it again.
+
+```bash
+gh secret set APP_TEST_USER --repo OWNER/REPO         # prompts for the value; setting a name that exists replaces it
+gh secret set APP_TEST_PASSWORD --repo OWNER/REPO
+# with no terminal to prompt on, pass the value on stdin instead (single quotes, so a shell does not read a `!` in it):
+#   printf '%s' 'the-value' | gh secret set APP_TEST_USER --repo OWNER/REPO
+```
+
+### 3. The flows file
+
+Save this as `.github/a11y-flows.yml` (any path inside the repository works; the workflow names it). It says how to sign in, in a closed vocabulary of steps: `goto`, `fill`, `choose`, `check`, `press`, `expect` and `capture`. There is no script step and no sleep.
+
+```yaml
+version: 1
+origin: https://staging.example.com            # every goto is resolved against it; leaving it fails the run
+flows:
+  login:
+    steps:
+      - goto: /login
+      - fill: { field: "Email address", from-env: APP_TEST_USER }
+      - fill: { field: "Password",      from-env: APP_TEST_PASSWORD }
+      - press: "Sign in"
+      - expect: { heading: "Dashboard" }       # REQUIRED as the last step of a login flow
+```
+
+- **`from-env:` is the only way a login fills a value.** A literal password is refused (`auth-literal-secret`); the variable's name is what the flow holds, and the value arrives from the secret.
+- **A control is named by what a screen reader announces, and never by selector.** The match is exact: it is case-sensitive, and runs of spaces count as one, with none at either end. A text field's name is normally its label's words (`Email address`); a button's is its text. Where you are unsure, copy the name from your browser's accessibility inspector (in Chrome or Edge, developer tools, Accessibility, the *Name* of the field or button), not from the visible text: **a button drawn as an icon plus a word can have a name that begins with a character you cannot see**, and a flow that says only the word will not find it. Write such a character as a YAML escape inside double quotes. On `the-internet.herokuapp.com/login` the button is `"\uF090 Login"`, where `\uF090` is an icon-font glyph. **If you have no browser**, the labels in the page's HTML are the best guess, and they are right for a plain labelled field; they are wrong for a control named by an icon or an `aria-label`. Take the guess, run it, and if the run ends in `unbindable-field` its log names the name it looked for: correct that one and run again. That costs a run (section 5) for each miss, which is the price of not looking in a browser. **A control the flow cannot find by name ends the run with `auth-login-failed` (`unbindable-field`), and that is also a real 4.1.2 failure of your login form:** a screen-reader user cannot address it either.
+- **The last step must be an `expect:`, and it decides whether the login worked.** Choose something **only the signed-in page shows**: the heading of the page you land on after signing in, or the *Sign out* button. **A weak one passes for the wrong reason.** To choose it, sign in once yourself in a browser and read the landing page's heading or a button on it. If you cannot sign in by hand, read the landing page's HTML: its heading's visible words are the best guess, and a heading that starts with an icon glyph will not match until the glyph is in the name, so a run ending in `expect-not-met` (`no heading "…" appeared`) means correct it. Then open the login page signed out and confirm what you chose is not on it, nor in the error it shows for a wrong password, nor in a header every page carries. `heading:` and `control:` match a heading or control of exactly that name; `text:` matches any announced text that *contains* yours, which makes it the easiest to get wrong.
+
+### 4. The workflow
+
+Save it as `.github/workflows/a11ign-authenticated.yml`:
+
+```yaml
+name: a11ign-authenticated
+on: pull_request
+jobs:
+  a11ign:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: a11ign/a11ign@c77c1ba0f65e94e0cef4fcdb8d3f3c7ac1be87fa
+        id: a11ign
+        env:                                     # the credential enters HERE, on the step that calls the Action
+          APP_TEST_USER: ${{ secrets.APP_TEST_USER }}
+          APP_TEST_PASSWORD: ${{ secrets.APP_TEST_PASSWORD }}
+        with:
+          url: https://staging.example.com/orders   # the page to examine, once signed in: not the login page
+          task: Review my recent orders
+          flows: .github/a11y-flows.yml
+          login-flow: login
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.a11ign.outputs.result-json != ''
+        with:
+          name: a11ign-result
+          path: |
+            ${{ steps.a11ign.outputs.result-json }}
+            ${{ steps.a11ign.outputs.summary-md }}
+```
+
+- **Pin the Action to a full 40-character commit SHA, as above.** The `v0.1.0` tag the fastest route uses predates the login flow, so it would ignore `flows` and `login-flow` and examine your login page as though it were the product. No later tag exists yet.
+- **The secrets go in `env:` on the step that calls the Action**, never in `with:`: an input is interpolated into shell text, and an environment variable is not. Give `flows` and `login-flow` together or neither.
+- **A pull request from a fork gets no secrets**, so it ends in `auth-credential-missing`. Run it from a branch of the repository itself.
+- **`task` is a label for the report and a hint about what a visitor is doing.** For a run that logs in it does not choose what is pressed; your flows file does.
+
+### 5. Before you start it: what it will cost you
+
+**The run states the number in its log before it does anything: `authenticated run: this run will perform at least N logins`.** N is a minimum. There is one login per capture and one more per capture for the rule layer (axe-core), so a single URL is at least 2, and a capture that has to be repeated logs in again, up to three attempts each. Every login is a real request to a real account, and **repeated logins can trip a lockout or bot detection on your site**: tell whoever runs the staging environment, and use an account that being locked out of costs nothing. A page list whose minimum passes 20 logins is refused before any worker starts, with no override (split the list, or set `axe: false`); a failed login stops the list rather than trying again for every page. The full cost table is in [`docs/github-action.md`](./github-action.md#logging-in-flows-and-login-flow).
+
+### 6. Run it, and find the output
+
+Push the two files on a new branch and open a pull request into your default branch, or into any other branch: `on: pull_request` fires for a pull request into any base, and the file is read from the pull request itself (`git switch -c a11ign-auth`, `git add .github`, `git commit`, `git push -u origin a11ign-auth`, then `gh pr create --fill`). **The workflow runs from the pull request's own branch, so your default branch is not touched to test it.** (A `workflow_dispatch` trigger, by contrast, reads the workflow from the default branch, so it only works once the file has been merged.) Follow the run in the Actions tab, or `gh run watch`; the run may not be listed the moment the pull request opens, so look again.
+
+**The result lands in four places, and on a private repository every one of them is visible to whoever can read the repository:**
+
+| where | what |
+|---|---|
+| the pull-request comment | the rendered report, updated in place on each push |
+| the job summary | the same report, on the run's page in a browser |
+| the `a11ign-result` artifact | the report and the full result (`gh run download <run-id> --repo OWNER/REPO --name a11ign-result`) |
+| the job log | the last line is the count (`a11ign: N finding(s)`), and a named fault is printed here |
+
+Every value from your login is replaced with `‹credential›` in the report, the summary and the result file, and the report says how many announcements it changed. **A green run says the run reached and read your page, not that the page is fine.** `0 finding(s)` is a count of what was judged, and the report says what was not: a page unlike the ones the trained scorer was validated on is reported as *not scored*, which is unchecked and never clean. Read the report's *Not determined* line and its criteria before you read the count. A green run is one whose Action step exits 0 and whose job conclusion is `success` (`gh run view <run-id> --repo OWNER/REPO`). **The report has a section, *What this run pressed*, that lists every control pressed by name**: check it holds only what your flows file named.
+
+### 7. When it ends in a named fault
+
+Each fault is a sentence in the log's last lines with `(fault: <code>)` after it. What each means, and what to do:
+
+| fault | what it means | what to do |
+|---|---|---|
+| `auth-refused-public-repository` | the repository is not private | section 1; nothing was installed or examined |
+| `auth-credential-missing` | a variable the flow reads with `from-env:` is empty on the runner | the secret is not set, is named differently from the flows file, is not under `env:` on the Action's step, or the run is from a fork |
+| `auth-credential-too-short` | a username or password is under 8 characters | a distinctive test account (section 2) |
+| `auth-literal-secret` | a `fill:` in a flow carries `value:` for a password | use `from-env:` |
+| `auth-login-failed`, reason `unbindable-field` | the flow names a control the page does not expose by that accessible name | copy the name from the accessibility inspector, glyphs included; if the control truly has no name, that is a finding about your login form |
+| `auth-login-failed`, reason `expect-not-met` | the login ran and the page after it was not the one your `expect:` names | wrong password, an account that needs MFA or a password change, or an `expect:` that is not what the signed-in page shows |
+| `auth-login-failed`, reason `left-origin` | the login went to another site | an identity provider: SSO, which this path does not cover |
+| `auth-session-lost` | the login worked and the page then asked for showed the login form again | run again; then check the account may hold a session and the URL is reachable when signed in |
+| `auth-challenge-detected` | a step failed on a page with a CAPTCHA widget | an account or environment your site exempts from the challenge |
+| `auth-refused-judge-backend` | `judge-backend` names a vendor that would receive a transcript of a page behind a login | leave it at its default, `local` |
+| `auth-credential-in-artifact` | a value from your login survived redaction in what the run was about to write | **do not use the output**; report it with the variable names and no values |
+
+A run that fails outside these (for example a runner that never becomes ready) is not a fault of the login: re-run the same commit.
+
 ## The other route: run it from the repository
 
 **Use this if your app is not on GitHub, or you want to see the output before you commit a workflow file.**
