@@ -433,7 +433,13 @@ inferred:** a plain statement of whether the output was worth their time, and wh
 reading of it on 2026-09-24 was a public page). B1 is closed because the chairman owns B1 ("Whose call: Yours"),
 not because those two are met, and a later outsider's plain statement, if it comes, is welcome and would be added
 here. What the feedback started, each as its own row: `task:` honesty #2268 (closed), a list of URLs #2272
-(closed), authenticated capture #2359 (in progress; ADR 0038). Full record: #2262.
+(closed), authenticated capture #2359 (built, closed; ADR 0038). Full record: #2262.
+
+**Recorded 2026-09-25 (#928, D1 and D2): version one DECLARED 2026-09-25 by the chairman,** on the record as it
+stands above: the outsider's "worth their time" and whether the app was theirs stay NOT
+STATED. The SECOND outsider's run is the first measurement of the next phase, and its "was it worth your time"
+verdict is captured in their words. **The next phase's axis is SaaS depth: products behind a login.**
+Authenticated capture (#2359) is built; MFA, SSO and CAPTCHA are still out, per `docs/known-gaps.md` §51.
 
 | | blocker | whose | state |
 |---|---|---|---|
@@ -650,9 +656,12 @@ calibration would need. The script says so in its own output.
 
 ### B5. ~~The name, and publishing~~ — CLOSED 2026-09-19
 
-**Why it blocks.** Parked deliberately — the packages are unpublished because the name is undecided. A
-general release needs a name, a registry presence, and the licence/attribution story checked once under
-that name.
+**Why it blocked (history, kept).** It was parked deliberately — the packages were unpublished because the name
+was undecided. A general release needs a name, a registry presence, and the licence/attribution story checked
+once under that name.
+
+**What closed it (2026-09-19).** The org transfer to `a11ign/a11ign` settled the name, and `a11ign@0.1.0` and
+five `@a11ign/*` packages are live on npm. Full record: #63.
 
 **Whose call.** Yours.
 
