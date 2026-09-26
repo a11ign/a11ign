@@ -29,7 +29,7 @@ command with its real output beneath it. Three things a reader must know before 
   `git grep` here excludes this document, whose own text would otherwise be counted; four readings need a small script,
   printed under "The reading scripts" at the end, saved under the name the command uses and run from the repository
   root. The readings that begin `gh api`, `ls ~/.cache/a11ign` or `cut … wake-ledger` are **live state** of GitHub and of
-  the agent host, taken 09:09Z on 2026-09-26 by `a11ign-ai-workers`, and are marked *live*; a later reader gets a
+  the agent host, taken 09:13Z on 2026-09-26 by `a11ign-ai-workers`, and are marked *live*; a later reader gets a
   different answer and that is not a defect.
 - **Measured and inferred are different claims and are labelled.** *Measured* means the command above produced it;
   *inferred* is reading code without running it; *external knowledge* is GitHub behaviour recalled, not exercised, and is
@@ -259,10 +259,10 @@ packages/agent-org/src/review-attribution.mjs:100:  return `reviewer-${Number(pr
 
 ```
 $ cut -f2- ~/.cache/a11ign/wake-ledger | sed -E 's/[0-9]+/N/g' | sort | uniq -c | sort -rn | head -6
-    472 RESET	engineers/ready-row-unclaimed/N
+    474 RESET	engineers/ready-row-unclaimed/N
     316 engineers/ready-row-unclaimed/N
     224 RESET	product-manager/ready-queue-empty/N
-    145 engineers/ready-row-unclaimed/N	worker-N
+    146 engineers/ready-row-unclaimed/N	worker-N
     122 RESET	product-manager/answer-owed/row-N
     103 product-manager/ready-queue-empty/N
 ```
@@ -441,7 +441,7 @@ packages/guards/src/tooling-roots.mjs:23:export const TOOLING_ROOTS = Object.fre
 
 ```
 $ echo "guards: $(git log --no-merges --since=2026-08-26 --format=%h -- packages/guards | wc -l)  agent-org: $(git log --no-merges --since=2026-08-26 --format=%h -- packages/agent-org | wc -l)  both: $(comm -12 <(git log --no-merges --since=2026-08-26 --format=%H -- packages/guards | sort) <(git log --no-merges --since=2026-08-26 --format=%H -- packages/agent-org | sort) | wc -l)"
-guards: 24  agent-org: 310  both: 5
+guards: 24  agent-org: 309  both: 5
 ```
 
 ```
@@ -454,7 +454,7 @@ $ git grep -lE '(from|import\().*agent-org/(src|host)' -- packages/lab | sed 's#
 
 ```
 $ git grep -l 'agent-org' -- packages/lab | wc -l
-171
+170
 ```
 
 ```
@@ -712,7 +712,7 @@ $ git grep -hE "^\s*(import|export) .* from ['\"][^./]" -- packages/agent-org/sr
 
 ```
 $ git log --no-merges --format='%ae' -- packages/agent-org | sort | uniq -c | sort -rn
-    174 github-actions[bot]@users.noreply.github.com
+    173 github-actions[bot]@users.noreply.github.com
     107 46429371+DanBeckDev@users.noreply.github.com
       7 noreply@anthropic.com
       6 ai-workers@a11ign.dev
@@ -725,7 +725,7 @@ $ git log --no-merges --format='%ae' -- packages/agent-org | sort | uniq -c | so
 
 ```
 $ git log --no-merges --format=%B -- packages/agent-org | grep -i '^Co-authored-by' | sed 's/ *<.*//' | sort | uniq -c | sort -rn
-    156 Co-Authored-By: Claude Sonnet 5
+    155 Co-Authored-By: Claude Sonnet 5
     153 Co-Authored-By: Claude Opus 5 (1M context)
 ```
 
@@ -2267,7 +2267,7 @@ console.log([...out].sort().join("\n"));
 #!/usr/bin/env bash
 # Per-module consumer counts for packages/guards/src: files under packages/agent-org vs files everywhere else.
 export LC_ALL=C
-cd /home/agent/repos/wt-2615 || exit 1
+cd "$(git rev-parse --show-toplevel)" || exit 1
 printf "%-28s %5s %9s %6s\n" module lines agent-org others
 for f in packages/guards/src/*.mjs; do
   m=$(basename "$f" .mjs)
@@ -2283,7 +2283,7 @@ done
 ```bash
 #!/usr/bin/env bash
 export LC_ALL=C
-cd /home/agent/repos/wt-2615
+cd "$(git rev-parse --show-toplevel)"
 for f in packages/worker-fleet/src/cli-flags.mjs packages/guards/src/git-env.mjs scripts/repo-identity.mjs packages/lab/src/packaging/leak-patterns.mjs packages/guards/src/changed-files.mjs packages/guards/src/local-import-closure.mjs packages/guards/src/worktree-resolution.mjs scripts/npm-cli-executable.mjs scripts/product-home.mjs; do
   printf "%-56s %4s lines %3s commits %3s importers-outside-agent-org\n" "$f" "$(wc -l < $f)" "$(git log --no-merges --oneline -- $f | wc -l)" "$(git grep -lE "$(basename $f .mjs)(\\.mjs)?[\"']" -- . ':!packages/agent-org' ':!*.md' ':!docs' | wc -l)"
 done
