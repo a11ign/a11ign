@@ -302,7 +302,7 @@ $ git grep -n -E 'actions/checkout|pnpm install|npm run build|^        run: node
 **Readings.**
 
 ```
-$ git grep -l 'branches/main/protection\|rulesets\|A11Y_CHECK_BRANCH_PROTECTION\|A11Y_CHECK_MAIN_RULESET\|merge-queue-main' | wc -l
+$ git grep -l 'branches/main/protection\|rulesets\|A11Y_CHECK_BRANCH_PROTECTION\|A11Y_CHECK_MAIN_RULESET\|merge-queue-main' -- . ':!docs/adr/0039-*' | wc -l
 25
 ```
 
@@ -436,7 +436,7 @@ a11ign admin=false push=true;corpus-backups admin=false push=true;auth-capture-c
 ```
 
 ```
-$ echo "bots-team refs: $(git grep -nwi bots | wc -l)"; git grep -c 'A11IGN_BOT_TOKEN' -- .github/workflows; git grep -n 'REPO=a11ign/a11ign\|"a11ign/a11ign"\|worker_repo_url:' -- packages/agent-org packages/control/ansible/roles ':!*.test.ts' | cut -c1-110
+$ echo "bots-team refs: $(git grep -nwi bots -- . ':!docs/adr/0039-*' | wc -l)"; git grep -c 'A11IGN_BOT_TOKEN' -- .github/workflows; git grep -n 'REPO=a11ign/a11ign\|"a11ign/a11ign"\|worker_repo_url:' -- packages/agent-org packages/control/ansible/roles ':!*.test.ts' | cut -c1-110
 bots-team refs: 0
 .github/workflows/auto-arm.yml:17
 .github/workflows/nightly.yml:10
@@ -494,6 +494,8 @@ $ node --input-type=module -e 'import{readFileSync as r}from"node:fs";const s=aw
 server.mjs selected=9 guards=230 afterScope=214 of=729 {"agent-org":9,"cli":2,"control":11,"judge":8,"lab":181,"nvda-worker":3,"scorer":1,"worker-fleet":15}
 capture-pure.mjs selected=55 guards=230 afterScope=214 of=729 {"agent-org":9,"cli":2,"control":11,"judge":8,"lab":181,"nvda-worker":3,"scorer":1,"worker-fleet":15}
 ```
+
+*The selector counts every test file in the tree: **729 at `c77c1ba0f`**, and 730 once this ADR's own `split-machinery-adr.test.ts` is committed beside it. The next reading likewise: 731 at `c77c1ba0f`, 732 with it.*
 
 ```
 $ echo "changesets=$(ls .changeset/*.md | wc -l) testFiles=$(git ls-files '*.test.*' | wc -l) nvdaWorkerTests=$(git ls-files 'packages/nvda-worker/*.test.*' | wc -l) mergeGroupWorkflows=$(git grep -l 'merge_group:' -- .github/workflows | wc -l) privatePkgs=$(git grep -l '"private": true' -- 'packages/*/package.json' | wc -l)/$(git ls-files 'packages/*/package.json' | wc -l)"
@@ -827,6 +829,22 @@ the "fleet checkout" that can go first is row 6a only.** **Then 7 and 5**, small
 layer repository takes its first push, then 2, 3 and 4, then 8 and 9a and 10, and 6b to 6d once the layer holds code
 and the edges are closed.
 
+**Are the bodies fileable?** `row-file`'s own refusals, run over each appendix body: the Region and the Acceptance shape pass for all ten, and the only refusal is the Open-check, which is `product-manager`'s to add from a fresh read at the filing commit (a pasted transcript, which the ladder will not accept from a document). Row 1's Region is the directory `packages/agent-org/src/`, which `row-file` itself warns reserves **108 files**, so B4 keeps items 2, 3 and 4 out of flight beside it.
+
+```
+$ node -e 'import("./packages/agent-org/src/row-file.mjs").then(m=>{const app=require("fs").readFileSync("docs/adr/0039-the-split-is-mostly-org-machinery.md","utf8").split("## Appendix")[1];for(const [,n,b] of app.matchAll(/^### ROW (\d+)\n\n````markdown\n([\s\S]*?)\n````/gm))console.log("ROW",n,"region:",m.regionRefusalReason(b)??"ok","acceptance-shape:",m.acceptanceShapeRefusal(b)??"ok","filing:",(m.fileRefusalReason(b)??"ok").slice(0,45))})'
+ROW 1 region: ok acceptance-shape: ok filing: row-file: REFUSING to file -- missing Open-ch
+ROW 2 region: ok acceptance-shape: ok filing: row-file: REFUSING to file -- missing Open-ch
+ROW 3 region: ok acceptance-shape: ok filing: row-file: REFUSING to file -- missing Open-ch
+ROW 4 region: ok acceptance-shape: ok filing: row-file: REFUSING to file -- missing Open-ch
+ROW 5 region: ok acceptance-shape: ok filing: row-file: REFUSING to file -- missing Open-ch
+ROW 6 region: ok acceptance-shape: ok filing: row-file: REFUSING to file -- missing Open-ch
+ROW 7 region: ok acceptance-shape: ok filing: row-file: REFUSING to file -- missing Open-ch
+ROW 8 region: ok acceptance-shape: ok filing: row-file: REFUSING to file -- missing Open-ch
+ROW 9 region: ok acceptance-shape: ok filing: row-file: REFUSING to file -- missing Open-ch
+ROW 10 region: ok acceptance-shape: ok filing: row-file: REFUSING to file -- missing Open-ch
+```
+
 ## Consequences (including the ones the chairman will not like)
 
 - **It is 20 rows and a fixed order, before one line moves, and three of them wait on a person with admin on
@@ -1063,7 +1081,8 @@ docs/new-code-repository.md (new)
 ```bash
 npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/layer-repository-protection.test.ts
 ```
-Fleet: No. The live read is opt-in (`A11Y_CHECK_MAIN_RULESET=1`) and is not part of this command, as in `branch-protection.test.ts`.
+
+The live read is opt-in (`A11Y_CHECK_MAIN_RULESET=1`) and is not part of this command, as in `branch-protection.test.ts`.
 
 ## Done-when
 1. `docs/code-repositories.json` carries, per repository, owner/name, default branch and required check name, and `branch-protection.test.ts` reads it and contains no `a11ign/a11ign` literal on a non-comment line (`grep -v '^[0-9]*: *\(\*\|//\)'` returns none).
@@ -1136,7 +1155,6 @@ Child of #69. The accounts reach every repository through the `gh` wrapper and t
 ```
 packages/agent-org/host/repository-access.json (new)
 packages/lab/src/packaging/layer-repository-access.test.ts (new)
-packages/agent-org/src/host-units.mjs
 docs/repository-access.md (new)
 ```
 
@@ -1144,12 +1162,13 @@ docs/repository-access.md (new)
 ```bash
 npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/layer-repository-access.test.ts
 ```
-Fleet: No. The live `collaborators` read is opt-in and read-only (`A11Y_CHECK_REPO_ACCESS=1`) and is not part of this command.
+
+The live `collaborators` read is opt-in and read-only (`A11Y_CHECK_REPO_ACCESS=1`) and is not part of this command.
 
 ## Done-when
 1. `repository-access.json` lists every code repository with, per account (`DanBeckDev`, `a11ign-bot`, `a11ign-ai-workers`, `a11ign-ai-leads`, `a11ign-ci`, `Cemmaw`), the role it must hold; no agent account is `admin` anywhere.
 2. The test asserts the wrapper `packages/agent-org/host/gh` names no repository (with the positive control that it does name accounts) and that the list is non-empty.
-3. `host-units.mjs`'s "write, not admin" sentence and the declaration agree (one derives from the other, or the test pins both).
+3. `host-units.mjs`'s "write, not admin" sentence and the declaration agree: the test reads `host-units.mjs` AS TEXT and pins both, so this row does not edit it (a file in the Region whose import closure needs `history` would make `pr-open` refuse the test command).
 4. The opt-in live check reads `repos/<r>/collaborators` for each listed repository and reports each difference from the declaration by name; its output on `screenreader-worker` is posted on the row verbatim.
 5. `docs/repository-access.md` names the `bots` team, the level it must hold on a layer, and who may edit it.
 
@@ -1179,7 +1198,8 @@ packages/lab/src/packaging/workflow-count.test.ts
 ```bash
 npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/head-consumer-gate.test.ts
 ```
-Fleet: No.
+
+No fleet is needed (see `## Fleet`): `windows-2022` is a GitHub-hosted runner, as in #2519.
 
 ## Done-when
 1. `scripts/head-consumer-gate.mjs` decides, purely, which two repositories and refs to check out for a caller (core PR or layer PR) and returns CANNOT_TELL, never a pass, when either ref cannot be resolved; its test has a positive control that the layer list is non-empty.
@@ -1253,7 +1273,6 @@ No.
 packages/guards/src/layer-edges.mjs
 packages/guards/layer-edges.baseline.json
 packages/lab/src/packaging/layer-edges-movable.test.ts (new)
-packages/lab/src/packaging/fixtures/layer-movable/ (new)
 ```
 
 `layer-edges.mjs` and its baseline are created by #2612 (blocked-by); this row is filed blocked by #2612 and #2613 and the Region lists the files as they will exist.
