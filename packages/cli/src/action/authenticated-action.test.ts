@@ -107,13 +107,15 @@ test("the check runs BEFORE the runner is billed for setup: it precedes setup-no
 
 test("NO new input is interpolated into a step's shell text: they arrive through env, because these are inputs of an action that handles secrets", () => {
   for (const candidate of action.runs.steps) {
-    for (const name of ["inputs.flows", "inputs.login-flow", "inputs.send-authenticated-transcript-to-judge-vendor"]) {
+    for (const name of ["inputs.flows", "inputs.login-flow", "inputs.auth-state", "inputs.send-authenticated-transcript-to-judge-vendor"]) {
       assert.ok(!(candidate.run ?? "").includes(name), `${candidate.name}: ${name} is interpolated into run: text`);
     }
   }
   const capture = step("Capture and judge");
   assert.equal(capture.env?.FLOWS, "${{ inputs.flows }}");
   assert.equal(capture.env?.LOGIN_FLOW, "${{ inputs.login-flow }}");
+  assert.equal(capture.env?.AUTH_STATE, "${{ inputs.auth-state }}");
+  assert.equal(CHECK().env?.AUTH_STATE, "${{ inputs.auth-state }}");
 });
 
 test("the masks are added BEFORE the worker starts, so the worker's own log is covered; and the flows path is made absolute against the workspace", () => {
@@ -147,4 +149,56 @@ test("the override reaches the CLI only as an argument, and only when it is exac
   assert.equal(decision("", "a11y-flows.yml"), "--flows\n/ws/a11y-flows.yml\n--login-flow\nlogin\n");
   assert.equal(decision("false", "/abs/flows.yml"), "--flows\n/abs/flows.yml\n--login-flow\nlogin\n", "an absolute path is kept as it is");
   assert.equal(decision("yes", "a11y-flows.yml"), "--flows\n/ws/a11y-flows.yml\n--login-flow\nlogin\n", "only the exact string true is consent");
+});
+
+// ---- ADR 0038, amendment 7, choice 6: `auth-state:` names a path, and the Action writes nothing ------------------------------
+
+test("STATE: auth-state is an optional input, empty by default, that says the Action never writes the file and what protects it", () => {
+  const input = action.inputs["auth-state"];
+  assert.ok(input);
+  assert.equal(input.required, false);
+  assert.equal(input.default, "");
+  assert.match(input.description, /this action never writes the file and has no way to/);
+  assert.match(input.description, /\$RUNNER_TEMP/);
+  assert.match(input.description, /the containment inside the run is the only defence/);
+  assert.match(input.description, /auth-state-expired/);
+});
+
+test("STATE: auth-state without flows and login-flow is refused before setup, and beside both it passes", () => {
+  const alone = runCheck({ "auth-state": "/tmp/state.json" }, "true");
+  assert.equal(alone.code, 1);
+  assert.match(alone.err, /Give both flows and login-flow, or neither/);
+  assert.match(alone.err, /auth-state needs both beside it/);
+  assert.equal(runCheck({ flows: "f.yml", "auth-state": "/tmp/state.json" }, "true").code, 1);
+  assert.equal(runCheck({ flows: "f.yml", "login-flow": "login", "auth-state": "/tmp/state.json" }, "true").code, 0, "CONTROL: the whole set passes on a private repository");
+  // The public-repository refusal is keyed on visibility, so a saved state does not open it.
+  assert.equal(runCheck({ flows: "f.yml", "login-flow": "login", "auth-state": "/tmp/state.json" }, "false").code, 1);
+});
+
+test("STATE: the state path is made absolute against the workspace, passed as --auth-state only when given, and the masks are skipped for it", () => {
+  const script = step("Capture and judge").run as string;
+  const between = (from: string, to: string) => {
+    const start = script.indexOf(from);
+    const end = script.indexOf(to, start);
+    assert.ok(start >= 0 && end > start, `could not find the block from ${from}`);
+    return script.slice(start, end + to.length);
+  };
+  // The masks command is replaced by a line that says it ran, so "skipped" is observable.
+  const flowsBlock = between('flows_path=""', "\nfi\n").replace(/npx tsx [^\n]*/g, "echo MASKS-RAN");
+  const stateBlock = between('state_path=""', "\nfi\n");
+  const argLine = between('[ -n "$state_path" ] && args+=', '(--auth-state "$state_path")');
+  const run = (authState: string) => spawnSync("bash", ["-c", `
+    args=(); FLOWS=f.yml; LOGIN_FLOW=login; AUTH_STATE='${authState}'; GITHUB_WORKSPACE=/ws
+    ${flowsBlock}
+    ${stateBlock}
+    ${argLine}
+    printf '%s\n' "\${args[@]}"`], { encoding: "utf8" }).stdout.split("\n").filter((line) => line !== "" && line !== "MASKS-RAN");
+  assert.deepEqual(run("state.json"), ["--auth-state", "/ws/state.json"], "a relative path is made absolute against the workspace");
+  assert.deepEqual(run("/runner/temp/state.json"), ["--auth-state", "/runner/temp/state.json"], "an absolute path is kept");
+  assert.ok(!spawnSync("bash", ["-c", `FLOWS=f.yml; LOGIN_FLOW=login; AUTH_STATE=s.json; GITHUB_WORKSPACE=/ws; ${flowsBlock}`], { encoding: "utf8" }).stdout.includes("MASKS-RAN"), "a state run reads no login variable, so it masks none");
+  // CONTROL: the same script with no state runs the masks (a login run is unchanged) and passes no state argument.
+  assert.ok(spawnSync("bash", ["-c", `FLOWS=f.yml; LOGIN_FLOW=login; AUTH_STATE=''; GITHUB_WORKSPACE=/ws; ${flowsBlock}`], { encoding: "utf8" }).stdout.includes("MASKS-RAN"));
+  assert.deepEqual(run(""), [], "no input, no argument");
+  const flag = script.indexOf('args+=(--auth-state "$state_path")');
+  assert.ok(flag > script.indexOf('args+=(--flows "$flows_path"'), "the state argument follows the flows arguments");
 });
