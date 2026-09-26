@@ -280,3 +280,31 @@ are skipped and marked with the reason.
 v18 captures, it would be wrong data kept valid rather than merely a mixed corpus: `ceo`'s ruling for the bump on
 #1376. The recapture rides orchestrator's #914 fleet batch, and the deploy uses `--allow-protocol-change` there
 and nowhere else. The Action path never reads the capture cache, so rehearsal 3 is unaffected.
+
+## 21 → 22 (2026-09-26): the focus-event log records what already held focus
+
+`focusEvents.log` opened on whatever the page did NEXT, never on what already held focus when the
+listener attached. **#2550 read 100 protocol-21 real-page captures: 8 open on a `focusout`** (every one a
+`focusout id 0` then a `focusin id 1` on a DIFFERENT control; 7 of the 8 involve a cookie-consent widget; in
+6 the `focusin` follows within 1 ms). The log alone cannot separate "a consent widget held focus before the
+listener was watching" from `case-matrix.mjs`'s `focus-removed-on-receipt` shape, so 2.4.7's rule
+(`focusLossVerdict`, `packages/judge/src/rules.ts`) must call it `unpairable`, and any F55 among the 8 is
+silent (`known-gaps.md` §42, "half 2").
+
+**#2587 changes what a capture *records*.** The install (`INSTALL_FOCUS_EVENT_LOG_EXPRESSION`,
+`browser-session.mjs`) pushes `document.activeElement`, when it is not `body`/`documentElement`, as the log's
+first entry: `type: "focusin"`, an `id` from the same per-page map as every later event, its `name` through
+the same `nameOf`, and `initial: true`. Focus on the body pushes nothing, so that log is byte-identical to
+v21's. **`initial`'s `atMs` is the install moment, not the moment focus arrived**, so the rule reads no hold
+time off it: an `initial` focusin followed by its own `focusout` is `clear` when focus lands on a different
+control inside `FOCUS_SCRIPT_WINDOW_MS`, and `unpairable` otherwise.
+
+**Why it is a bump and not an additive field**, §42's own protocol-16 reason: two captures of one page must
+never disagree about whether the first event was witnessed, and the cache would keep serving v21 captures
+that open on a bare `focusout` beside v22 captures of the same kind of page that open on the control.
+
+**The cost is a real-page recapture, and it is `ceo`'s to see:** the claimant posts the count and the
+`Fleet-hold-until:` on #2587 and sets `answer:ceo`; nothing deploys before that answer, and the deploy uses
+`--allow-protocol-change`. **The `i === 0` carve-out in `rules.ts` stays** until `orchestrator`'s reading at
+protocol 22 (`npm run corpus:focus-log-first-event`) shows `focusout`-first at 0 with the `initial: true`
+count beside it.
