@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
-import { filesUnder } from "../../guards/src/files-under.mjs";
+import { filesUnder } from "../../../guards/src/files-under.mjs";
 
 /**
  * NO TEST MAY REACH GUIDEPUP — known-gaps §12, and this is its SECOND occurrence.
@@ -29,7 +29,7 @@ import { filesUnder } from "../../guards/src/files-under.mjs";
  * The remedy is `capture-pure.mjs` and `file-version.mjs`: the pure helpers live there, and the modules
  * that need a screen reader re-export them so their own callers are unchanged.
  */
-const ROOT = resolve(import.meta.dirname, "../../..");
+const ROOT = resolve(import.meta.dirname, "../../../..");
 const POISON = "@guidepup/guidepup";
 
 /**
