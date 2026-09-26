@@ -23,7 +23,7 @@ import {
   stateShapeProblem as workerStateShapeProblem,
   validateAuthRequest,
   withLoadedState,
-} from "../../../nvda-worker/src/auth-flow.mjs";
+} from "@a11ign/nvda-worker/auth-flow";
 import {
   challengeVendor, controlsNamed, cookieParam, expectationMet, FRAME_SOURCES_EXPRESSION, requiredEnvNames, SET_LOCAL_STORAGE_FUNCTION,
   signIn as cliSignIn, type AuthDriver, type AuthPlan, type AxNode,
