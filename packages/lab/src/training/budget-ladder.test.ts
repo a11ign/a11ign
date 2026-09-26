@@ -17,6 +17,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -28,8 +29,16 @@ import {
   readThroughDeadline,
   activationDeadline,
   WORST_CASE_STARTUP_MS,
-} from "./capture-pure.mjs";
-import { sourceFiles } from "../../worker-fleet/src/source-walk.mjs";
+} from "@a11ign/nvda-worker/capture-pure";
+import { sourceFiles } from "../../../worker-fleet/src/source-walk.mjs";
+
+/**
+ * A file of the worker's source, found THROUGH THE PACKAGE NAME (#2612): `./package.json` is exported, so the package
+ * directory resolves the same in this checkout and in an install, and no path names where the layer lives. This test
+ * lives in `lab` because the ladder's outermost rung, the host timeout, is `lab`'s, and it reads three packages.
+ */
+const workerSource = (file: string) =>
+  join(dirname(createRequire(import.meta.url).resolve("@a11ign/nvda-worker/package.json")), "src", file);
 
 /**
  * The host's per-capture timeout, READ from the file that owns it rather than copied here.
@@ -41,8 +50,7 @@ import { sourceFiles } from "../../worker-fleet/src/source-walk.mjs";
  */
 const HOST_TIMEOUT_MS = (() => {
   const here = dirname(fileURLToPath(import.meta.url));
-  const src = readFileSync(
-    join(here, "..", "..", "lab", "src", "training", "capture-screenreader-dataset.mjs"), "utf8");
+  const src = readFileSync(join(here, "capture-screenreader-dataset.mjs"), "utf8");
   const match = src.match(/DATASET_CAPTURE_TIMEOUT_MS\s*\|\|\s*(\d+)/);
   if (!match) throw new Error("could not read the host capture timeout — has that constant been renamed?");
   return Number(match[1]);
@@ -55,8 +63,7 @@ const HOST_TIMEOUT_MS = (() => {
  * changed the real one, which is the exact silent-drift failure this whole file exists to prevent.
  */
 const DESKTOP_PREPARE_MS = (() => {
-  const here = dirname(fileURLToPath(import.meta.url));
-  const src = readFileSync(join(here, "server.mjs"), "utf8");
+  const src = readFileSync(workerSource("server.mjs"), "utf8");
   const match = src.match(/DESKTOP_PREPARE_TIMEOUT_MS\s*=\s*([\d_]+)/);
   if (!match) throw new Error("could not read DESKTOP_PREPARE_TIMEOUT_MS — has that constant been renamed?");
   return Number(match[1].replace(/_/g, ""));
@@ -195,7 +202,7 @@ test("the shared capture client posts through requestJson — proved, not assume
   // once, and each one's own budget would read as though it applied.
   const here = dirname(fileURLToPath(import.meta.url));
   const src = readFileSync(
-    join(here, "..", "..", "worker-fleet", "src", "capture-client.mjs"), "utf8");
+    join(here, "..", "..", "..", "worker-fleet", "src", "capture-client.mjs"), "utf8");
   assert.match(src, /\brequestJson\(/, "captureTolerantly must send its POST through requestJson");
   assert.doesNotMatch(src, /\bfetch\(/,
     "a fetch here would put undici's 300 s headers cap back under every client that delegates to this one");
@@ -253,7 +260,7 @@ test("the shared client ceiling sits above the worker's hard timeout", () => {
   // Read from source, not imported, for the same reason the ladder above reads its host rung from source:
   // a hardcoded copy here would keep asserting the old number after somebody lowered the real one.
   const here = dirname(fileURLToPath(import.meta.url));
-  const src = readFileSync(join(here, "..", "..", "worker-fleet", "src", "worker-http.mjs"), "utf8");
+  const src = readFileSync(join(here, "..", "..", "..", "worker-fleet", "src", "worker-http.mjs"), "utf8");
   const declared = src.match(/CAPTURE_CLIENT_TIMEOUT_MS\s*=\s*([\d_]+)/);
   assert.ok(declared, "CAPTURE_CLIENT_TIMEOUT_MS is gone from worker-http.mjs — has it been renamed?");
   const ms = Number(declared[1].replace(/_/g, ""));
@@ -275,7 +282,7 @@ test("the shared client ceiling sits above the worker's hard timeout", () => {
  */
 test("the shared client ceiling covers desktop preparation PLUS the hard timeout, not the hard timeout alone", () => {
   const here = dirname(fileURLToPath(import.meta.url));
-  const clientSrc = readFileSync(join(here, "..", "..", "worker-fleet", "src", "worker-http.mjs"), "utf8");
+  const clientSrc = readFileSync(join(here, "..", "..", "..", "worker-fleet", "src", "worker-http.mjs"), "utf8");
   const declaredCeiling = clientSrc.match(/CAPTURE_CLIENT_TIMEOUT_MS\s*=\s*([\d_]+)/);
   assert.ok(declaredCeiling, "CAPTURE_CLIENT_TIMEOUT_MS is gone from worker-http.mjs — has it been renamed?");
   const ceilingMs = Number(declaredCeiling[1].replace(/_/g, ""));
