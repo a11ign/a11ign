@@ -35,8 +35,8 @@ const LOGIN: FlowStep[] = [
   expectDashboard,
 ];
 
-/** A tiny site: a login form, a dashboard, an off-origin identity provider, a form with a password-type PIN. */
-function fakeBrowser(options: { password?: string; redirectOnSignIn?: string; driftAfterClick?: boolean; requestedPageShows?: "login-form" | "login-redirect" | "change-password" } = {}) {
+/** A tiny site: a login form, a dashboard, an off-origin identity provider, a verification-code prompt, a form with a password-type PIN. */
+function fakeBrowser(options: { password?: string; redirectOnSignIn?: string; driftAfterClick?: boolean; codePromptAfterPassword?: boolean; requestedPageShows?: "login-form" | "login-redirect" | "change-password" } = {}) {
   const password = options.password ?? FAKE_SECRET;
   /** A same-origin redirect: the requested page sends a session that did not hold to `/login`. */
   const redirected = (url: string) => (url === URL_UNDER_TEST && options.requestedPageShows === "login-redirect" ? `${ORIGIN}/login` : url);
@@ -62,6 +62,7 @@ function fakeBrowser(options: { password?: string; redirectOnSignIn?: string; dr
       return [billing, shipping, node("textbox", "Address", { parentId: billing.id }), node("textbox", "Address", { parentId: shipping.id })];
     }
     if (page.endsWith("/pin")) return [node("textbox", "PIN")];
+    if (page.endsWith("/verify")) return [node("heading", "Verify your identity"), node("textbox", "Verification code"), node("button", "Verify")];
     if (page.endsWith("/authorize")) return [node("heading", "Dashboard")]; // the identity provider has a heading of the same name
     if (page.endsWith("/prefs")) return [node("checkbox", "Remember me"), node("combobox", "Country")];
     return [];
@@ -85,7 +86,8 @@ function fakeBrowser(options: { password?: string; redirectOnSignIn?: string; dr
       if (target.name !== "Sign in") return;
       if (options.driftAfterClick) { drifting = true; return; }
       if (options.redirectOnSignIn) { page = `${options.redirectOnSignIn}/authorize`; origin = options.redirectOnSignIn; return; }
-      if (typed.filter((t) => t.field === "Password").pop()?.text === password) page = `${ORIGIN}/dashboard`;
+      if (typed.filter((t) => t.field === "Password").pop()?.text !== password) return;
+      page = options.codePromptAfterPassword ? `${ORIGIN}/verify` : `${ORIGIN}/dashboard`;
     },
     purge: async () => undefined,
     close: async () => undefined,
@@ -162,6 +164,17 @@ test("a wrong password is expect-not-met, naming the step, in both", async () =>
   assert.match(String((outcome as { message: string }).message), /login step 5 \(expect\).*no heading "Dashboard"/);
 });
 
+test("a code prompt after the right password is expect-not-met, and reads exactly like a wrong password, in both", async () => {
+  // THE POINT (known-gaps §51): the tool cannot tell an MFA challenge from a wrong password. The site accepted the password
+  // and asked for a code instead of showing the app, and the run reports what it reports for a wrong one: the same fault, the
+  // same reason and the same sentence, which names the `expect:` that was not met and never the page it saw instead.
+  const prompted = await both({ browser: { codePromptAfterPassword: true } });
+  const wrong = await both({ browser: { password: "something else" } });
+  failsAs(prompted, "auth-login-failed", "expect-not-met");
+  assert.match(String((prompted as { message: string }).message), /login step 5 \(expect\).*no heading "Dashboard"/);
+  assert.equal((prompted as { message: string }).message, (wrong as { message: string }).message, "the message tells a code prompt from a wrong password, and known-gaps §51 says the tool cannot");
+});
+
 test("an unaddressable control is unbindable-field and says it is a 4.1.2 finding, in both", async () => {
   const outcome = await both({ login: [{ goto: "/login" }, { fill: { field: "E-mail", fromEnv: "APP_USER" } }, expectDashboard] });
   failsAs(outcome, "auth-login-failed", "unbindable-field");
@@ -182,6 +195,13 @@ test("a redirect off the origin after a press is left-origin, and SSO is named, 
   const outcome = await both({ browser: { redirectOnSignIn: "https://idp.example.test" } });
   failsAs(outcome, "auth-login-failed", "left-origin");
   assert.match(String((outcome as { message: string }).message), /idp\.example\.test.*SSO.*dedicated test account/s);
+});
+
+test("CONTROL: a redirect that stays on the SAME origin is not left-origin — the reading is about the origin, not the redirect, in both", async () => {
+  // The same press, the same `/authorize` page with the same "Dashboard" heading as the identity provider above. Only the
+  // origin differs, so it is the only thing that can make one of them `left-origin` and this one a signed-in run.
+  const outcome = await both({ browser: { redirectOnSignIn: ORIGIN } });
+  assert.ok(outcome.ok, JSON.stringify(outcome));
 });
 
 test("a heading on ANOTHER SITE does not satisfy an expect: a late off-origin redirect is left-origin, in both", async () => {
