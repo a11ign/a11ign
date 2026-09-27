@@ -56,7 +56,7 @@ date, updated to match: a workflow change is assigned per PR by a `Lane-exceptio
 and `ceo` reads the merged-PR list, the chairman's own view, every hour rather than trusting a table.
 
 ## What replaces it
-`docs/roles/README.md` and the memory directory; a successor resumes from the transcript first and from this file if resume fails. Its memory carries the corrections it has been given, and the successor reads them before its first message.
+`.agent-org/roles/README.md` and the memory directory; a successor resumes from the transcript first and from this file if resume fails. Its memory carries the corrections it has been given, and the successor reads them before its first message.
 
 ## WHO MAY AUTHORISE A `CLAUDE.md` EDIT — recorded 2026-09-06
 

@@ -57,7 +57,7 @@ own header for why a rebase can produce the identical shape without being strand
 
 
 The agent filling this role is named **`dispatcher`**. It reports to **`ceo`** directly — see the roster
-in `docs/roles/README.md`, corrected 2026-09-07 to agree with the hierarchy paragraph there rather than the
+in `.agent-org/roles/README.md`, corrected 2026-09-07 to agree with the hierarchy paragraph there rather than the
 stale `orchestrator` this line and that table used to both say.
 
 **This role owns the PIPELINE, not the merge step.** Workflows, trunk health, the Ready queue and briefing

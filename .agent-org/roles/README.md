@@ -97,7 +97,7 @@ claimable (#2403).
 `<agent-name>.md`** — the file predates this page and describes the ROLE (worker-loop orchestration)
 rather than the agent that once filled it, and it stays at that path deliberately: renaming it would
 rewrite history for a file whose own first line already named its own agent correctly. It is excluded from
-the table above now that the role is retired (`docs/roles/sessions.json`'s `retired` array) and from this
+the table above now that the role is retired (`.agent-org/roles/sessions.json`'s `retired` array) and from this
 row's own sweep, since a reference inside an already-retired role's file is a dead reference to another
 dead reference, not an active hazard. Every live role's file follows the `<agent-name>.md` convention this
 table uses; the discovery test below reads each file's OWN content for its name, role and reporter, never
@@ -138,21 +138,21 @@ it points at carries the real detail, because restating that detail here would b
 shape this repo's own guards exist to close.
 
 **`orchestrator`:**
-> You are `orchestrator`. Read `docs/roles/orchestrator.md` in full — your lane, what you drive alone
-> (fleet, lab, `runs/`), and what you escalate to `ceo`. Read `docs/roles/README.md` for the roster and the
+> You are `orchestrator`. Read `.agent-org/roles/orchestrator.md` in full — your lane, what you drive alone
+> (fleet, lab, `runs/`), and what you escalate to `ceo`. Read `.agent-org/roles/README.md` for the roster and the
 > bring-up order. Confirm you can reach the fleet and the lab, then tell `product-manager` you are up.
 
 **Each worker** (`worker-audit`, `worker-capture`, `worker-config`, `worker-contracts`, `worker-judge`):
-> You are `<name>`. Read `docs/roles/<name>.md` in full — your lane, your acceptance standard, and the
-> resource ban. Read `docs/roles/README.md` for the roster and where state lives. Claim your own row with
+> You are `<name>`. Read `.agent-org/roles/<name>.md` in full — your lane, your acceptance standard, and the
+> resource ban. Read `.agent-org/roles/README.md` for the roster and where state lives. Claim your own row with
 > `row-claim.mjs`; `work-gate.mjs`/`wake.mjs` wakes you with a unit already in your prompt when one is
 > ready, so there is nobody to message for your first one. Report a claim or a completion to
 > `product-manager`; do not pull from `docs/backlog-ready.md` yourself unless your own role file says
 > otherwise.
 
 **`ceo`:**
-> You are `ceo`. Read `docs/roles/ceo.md` in full — what rulings you make and what you deliberately do not
-> touch day to day. Read `docs/roles/README.md` for the roster. `orchestrator` reports utilisation and
+> You are `ceo`. Read `.agent-org/roles/ceo.md` in full — what rulings you make and what you deliberately do not
+> touch day to day. Read `.agent-org/roles/README.md` for the roster. `orchestrator` reports utilisation and
 > escalations to you; there is nothing to bring up on your side beyond being reachable.
 
 ## What state lives where
@@ -371,7 +371,7 @@ the drill has found a real gap, and that is the result, not a failure of the dri
 ```
 mkdir -p /tmp/a11y-reconstitution-drill && cd /tmp/a11y-reconstitution-drill
 git clone <this repo's GitHub URL> checkout && cd checkout
-cat docs/roles/README.md          # this page, from the fresh clone
+cat .agent-org/roles/README.md          # this page, from the fresh clone
 ```
 
 **If any step of the drill shells out to `git` itself, it must scrub `GIT_DIR`, `GIT_WORK_TREE` and

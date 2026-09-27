@@ -24,6 +24,10 @@
       "a11ign-lab-watch.timer"
     ]
   },
+  "_roles": "Where this project's role briefs live (ADR 0040, decision 1, surface 3; #2621, child 3e of #69), read by `packages/agent-org/src/project-roles.mjs`. The tool ships none of its own; `sessions.json` and every `<role>.md` are a11ign's, at `dir`.",
+  "roles": { "dir": ".agent-org/roles" },
+  "_causes": "The project's own addition to the gate's 30 tool causes (ADR 0040, decision 1, surface 3; #2621, child 3e of #69), read by `packages/agent-org/src/cause-declaration.mjs`'s `projectCauseDeclarations`. ABSENT reads as none -- a project with no fleet, lab or corpus declares no plugin and gets no fleet cause. `module` is resolved relative to this file's own directory (`.agent-org/`), and its file must export a `causeDeclarations` array built with `declareCause`.",
+  "causes": { "module": "plugins/causes.mjs" },
   "_leakPatterns": "What a11ign's public prose must never carry, ON TOP OF the two the tool holds itself (a private LAN IPv4 address, a named SSH key file). Each `pattern` is a regular expression's SOURCE. #1875: the control plane's GitHub token file sits beside the fleet key and is guarded for the same reason -- where a credential sits on a real box is somebody's infrastructure written down. ADR 0013: the retired `pct exec` container-hop idiom. #2658 (child 3g of #69) split these two out of packages/lab/src/packaging/leak-patterns.mjs, which the product keeps.",
   "leakPatterns": [
     { "name": "a named credential file on a fleet host", "pattern": "\\.config/a11y-witness/[\\w.-]+" },

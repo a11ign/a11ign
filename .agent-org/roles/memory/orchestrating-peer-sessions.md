@@ -9,7 +9,7 @@ Dan runs several Claude Code sessions on this repo at once and asks me to orches
 
 **The organisation as of 2026-09-06: a `ceo` sets direction, a `dispatcher` owns the worker loop, I own
 fleet, lab, `runs/`, gate diagnosis, cross-cutting review, and the CEO relationship. Five workers.**
-`docs/roles/worker-loop-orchestrator.md` is the role's own file.
+`.agent-org/roles/worker-loop-orchestrator.md` is the role's own file.
 
 ## Why the split, measured rather than felt
 

@@ -7,7 +7,7 @@ metadata:
 
 **REDACTED for the repo copy.** The original of this file names the Proxmox host's address, the exact SSH
 key filename, and the container topology behind it — material that materially aids reaching a live system,
-which this project's own convention (`SECURITY.md`, and `docs/roles/README.md`'s "Credentials" section)
+which this project's own convention (`SECURITY.md`, and `.agent-org/roles/README.md`'s "Credentials" section)
 draws the line at: describe a credential and its domain, never print what would let a reader reach it. The
 Mac holding the real file is the single point of failure this whole contingency plan is about; committing
 its contents to git would defeat the point of writing this plan.
@@ -28,7 +28,7 @@ What is safe to keep, because it is a workflow fact rather than a reachability f
   READING state; jobs go through the job runner.
 
 For the actual host address, key filename and container layout: ask whoever holds today's credentials
-(see `docs/roles/README.md`'s "Credentials" section) — this file deliberately does not say, and neither
+(see `.agent-org/roles/README.md`'s "Credentials" section) — this file deliberately does not say, and neither
 should its successor.
 
 See [[local-worker-vms-deprecated]].
