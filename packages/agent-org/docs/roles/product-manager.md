@@ -295,3 +295,21 @@ words would have found it, because the defect was that a number had been typed r
 **4. A finding that fits an existing epic goes on the epic as a checklist item**, not as a new row. The instance belongs on the class: a guard that works keeps finding instances, and one row each turns a working guard into tracker noise.
 
 **Every closure carries the sentence that closes it** — done, decided, superseded, folded, or measured-and-below-threshold. A closure nobody can write a true sentence for is one that should not be made, and reporting a number short is better than closing real work to reach it.
+
+## A row is filed sized to finish, ruled by the chairman via `ceo` 2026-09-27 (#2691, #928)
+
+**File a row to finish in about 60 calls or fewer, and split any row expected to run past ~100.** A
+smaller row is not a smaller *task* — it is fewer calls in one context before the work is done, the direct
+lever on context per call (#928, 2026-09-27: median 67 calls/session, p90 147, context running 52k at the
+first call to a median 183k at the last, max 447k; 47% of all engineer calls happen in sessions over 100
+calls).
+
+- **Estimate the call count at filing time**, weighing Region size, how many files it touches, and whether
+  a mutation check or a fleet/lab round-trip is implied — the same facts already read at filing time for
+  Region and Acceptance.
+- **A row that cannot reasonably be split smaller says so in its own body** — `docs/row-filing.md`'s own
+  discipline for a genuinely-empty section, *"a sentence, not a blank"*, applied here: a sentence naming
+  why the estimate is high, never a silent large row.
+- **`work-gate.mjs`'s `row-call-count-signal` names a claimed row past the ~100-call threshold on its
+  session's own live transcript** — a split CANDIDATE, never an automatic split. Read it, decide whether
+  the row is genuinely one unit, and split it if it is not; a row that is one unit says so.
