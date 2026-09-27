@@ -28,5 +28,37 @@
   "leakPatterns": [
     { "name": "a named credential file on a fleet host", "pattern": "\\.config/a11y-witness/[\\w.-]+" },
     { "name": "a live pct exec container-hop command", "pattern": "\\bpct exec \\d" }
-  ]
+  ],
+  "_vocabulary": "The row template's own words and the tool's shared-resource ban (ADR 0040, decision 1, surface 2; #2619, child 3d of #69), read by `packages/agent-org/src/project-vocabulary.mjs`. THE FOUR CLAIM-LIFECYCLE LABELS (`ready`, `was-ready`, `in-progress`, `started`) ARE DELIBERATELY NOT HERE: `claim-labels.mjs` is a pinned, import-free LEAF module (`ready-label-audit.test.ts`, #804) so nothing depending on it can form a cycle through `row-claim.mjs`'s rule-set graph, and `project-vocabulary.mjs` imports them from that one owner rather than stating the same four facts twice.",
+  "vocabulary": {
+    "labels": {
+      "backlog": "backlog",
+      "needsChairman": "needs:chairman",
+      "outOfRelease": "out-of-release",
+      "blocked": "blocked"
+    },
+    "prefixes": { "lane": "lane:", "session": "session:", "answer": "answer:" },
+    "milestones": { "roadToVersionOne": "Road to version one", "outOfRelease": "Out of release" },
+    "lanesFile": "docs/lane-ownership.json",
+    "templateFields": { "acceptance": "Acceptance", "closes": "Closes", "fleet": "Fleet" },
+    "fleetQuestion": "Does the acceptance need the fleet or the lab",
+    "_resources": "`FLEET_LAB_PATTERNS`, moved out of `acceptance-commands.mjs`: a project's shared-resource commands a GitHub runner's Acceptance may never invoke. `named: true` marks the five patterns matched against NAMED text only (a declared `No` silences them); the rest are invocations a declared `No` cannot silence.",
+    "resources": [
+      { "pattern": "\\bfleet:", "reason": "reaches the fleet -- a GitHub runner has no Windows worker", "named": false },
+      { "pattern": "\\blab:", "reason": "reaches the lab -- a GitHub runner has no Proxmox", "named": false },
+      { "pattern": "\\btraining:capture", "reason": "captures real evidence, which needs the fleet", "named": false },
+      { "pattern": "\\bworker:", "reason": "reaches a worker VM, which does not exist on a GitHub runner", "named": false },
+      { "pattern": "\\bevidence:check\\b", "reason": "compares live evidence against a real worker", "named": false },
+      { "pattern": "\\bgate:stability\\b", "reason": "captures canaries against a real worker", "named": false },
+      { "pattern": "\\bcapture:check\\b", "reason": "needs a real worker and NVDA", "named": false },
+      { "pattern": "\\bsystemctl\\b", "reason": "drives systemd on the control host, which only `orchestrator` reaches", "named": true },
+      { "pattern": "\\bsystemd\\b", "reason": "installs or reads a systemd unit on the control host", "named": true },
+      { "pattern": "\\bgh workflow run\\b", "reason": "dispatches a workflow from the control plane, not from a checkout", "named": false },
+      { "pattern": "\\bfleet:provision\\b", "reason": "provisions a real box", "named": false },
+      { "pattern": "\\bA11Y_PVE_KEY\\b|\\ba11y-pve\\b", "reason": "uses the Proxmox key, which lives on the control plane", "named": true },
+      { "pattern": "\\bcorpus-backup\\.mjs\\b|\\bcorpus:backup\\b", "reason": "writes or verifies the corpus backup, which runs on the lab", "named": false },
+      { "pattern": "\\bA11Y_CORPUS_REMOTE\\b", "reason": "writes or verifies the corpus backup, which runs on the lab", "named": true },
+      { "pattern": "\\bon the lab\\b", "reason": "names work done ON the lab, which only `orchestrator` reaches", "named": true }
+    ]
+  }
 }
