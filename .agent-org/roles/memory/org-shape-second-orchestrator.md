@@ -20,7 +20,7 @@ held together. Rule: *first-pass review composes; cross-cutting review does not.
 
 **Supporting mechanism:** `docs/backlog-ready.md`, pull not push: each row carries an acceptance command,
 bounding CLAUDE.md sections, the region owned, a branch name; claimed by pushing the branch name in; every
-row shown open by a command before listing. Role brief at `docs/roles/worker-loop-orchestrator.md`.
+row shown open by a command before listing. Role brief at `.agent-org/roles/worker-loop-orchestrator.md`.
 
 **Why no extra workers yet:** with a serial orchestrator more workers means more idle and more briefing
 load. Add workers only after the split, if the queue holds more than five rows.
@@ -35,7 +35,7 @@ See [[ceo-worker-utilisation]] and [[orchestrating-peer-sessions]].
 a Project on a11ign/a11ign; markdown files demoted to record), the release milestone with a
 recorded reason for every date move, and a daily board report generated from GitHub data. Reports to `ceo`.
 Never merges, never briefs workers, never touches fleet/lab/runs/. Contingency plan: role files for all
-eight agents in `docs/roles/`, memory into the repo, credentials to a secrets store, corpus snapshot
+eight agents in `.agent-org/roles/`, memory into the repo, credentials to a secrets store, corpus snapshot
 off-lab, Tailscale for a cloud control plane, and a monthly drill that recreates one agent from its role
 file on another machine.
 

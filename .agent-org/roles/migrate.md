@@ -1,6 +1,6 @@
 # Migrating this organisation to a new machine
 
-This is the runbook for the day this Mac is actually lost, or is deliberately retired. `docs/roles/README.md`
+This is the runbook for the day this Mac is actually lost, or is deliberately retired. `.agent-org/roles/README.md`
 answers "can the organisation be reconstituted from the repo alone" for the git-visible half; this file
 answers the harder question — what has to move BY HAND, in what order, and what must never be attempted
 while a capture is running.
@@ -35,7 +35,7 @@ correctly, and has no way to know a populated one exists elsewhere under the old
 ("I own fleet, lab, `runs/`..."), because the key is derived from the WORKING DIRECTORY, not from which
 agent identity a session was told to adopt. Any Claude Code session launched from the primary checkout's
 path — regardless of which role it was briefed into — reads and writes the same memory directory. This is
-why `docs/roles/memory/` (migrated separately, into the repo, see its own `MEMORY.md`) is the durable
+why `.agent-org/roles/memory/` (migrated separately, into the repo, see its own `MEMORY.md`) is the durable
 artefact and the live `~/.claude` directory is not: the repo copy survives a machine loss and a role
 reassignment; the live directory survives neither.
 
@@ -46,20 +46,20 @@ reassignment; the live directory survives neither.
    it).
 2. If the new machine's absolute path differs from the old Mac's (near-certain — different username at
    minimum), the live `~/.claude` memory does not follow automatically. Two options, and prefer the first:
-   - **Read `docs/roles/memory/` in the repo.** It is the durable, git-tracked snapshot as of the migration
+   - **Read `.agent-org/roles/memory/` in the repo.** It is the durable, git-tracked snapshot as of the migration
      that wrote it, and it needs no path-matching at all — this is the point of having migrated it.
    - **Copy the old machine's memory directory by hand**, from its exact old path to the new machine's
      `~/.claude/projects/<computed-key-for-the-new-checkout-path>/memory/`, if you specifically need memory
-     newer than the last `docs/roles/memory/` commit. Compute the new key the same way Claude Code does —
+     newer than the last `.agent-org/roles/memory/` commit. Compute the new key the same way Claude Code does —
      the absolute checkout path with `/` replaced by `-` — rather than guessing; a mismatched key silently
      produces an empty memory directory with no error.
 3. Do not delete the old machine's `~/.claude` directory until the new machine's agents have confirmed
-   they can read what they need — a memory directory, once gone, is gone; `docs/roles/memory/` is the only
+   they can read what they need — a memory directory, once gone, is gone; `.agent-org/roles/memory/` is the only
    copy of it that was ever committed anywhere.
 
 ## Bring-up order — RESUME FIRST
 
-`docs/roles/README.md`'s own bring-up order (`orchestrator` → `dispatcher` → workers, `ceo` and
+`.agent-org/roles/README.md`'s own bring-up order (`orchestrator` → `dispatcher` → workers, `ceo` and
 `product-manager` outside the sequence) is for standing the organisation up from **nothing** — a truly
 fresh clone with no prior session history. A migration is different: prior session history usually exists
 and resuming it is cheaper and more complete than re-deriving it from role files alone.
@@ -72,10 +72,10 @@ and resuming it is cheaper and more complete than re-deriving it from role files
    this session, context that never made it into any file. This is strictly more complete than a fresh
    start when it works.
 2. **If resume fails** (transcript not carried over, harness mismatch, corrupted state) **fall back to the
-   role file**, per `docs/roles/README.md`'s first-message table, PLUS `docs/roles/memory/MEMORY.md` — this
+   role file**, per `.agent-org/roles/README.md`'s first-message table, PLUS `.agent-org/roles/memory/MEMORY.md` — this
    is exactly what `packages/agent-org/src/reconstitution-drill.mjs` composes automatically; run it rather than
    re-assembling the message by hand.
-3. Bring up `orchestrator` before `dispatcher` before workers, matching `docs/roles/README.md`'s reasoning
+3. Bring up `orchestrator` before `dispatcher` before workers, matching `.agent-org/roles/README.md`'s reasoning
    — nothing else can be usefully briefed against real fleet/lab state until the driver exists, whether
    that agent was resumed or freshly started.
 
@@ -87,12 +87,12 @@ drill can safely rehearse without a second machine already in place.
 ## The board report job — the systemd variant
 
 **RESOLVED by `ceo`, reversing this file's own earlier position.** This section used to record a real
-disagreement between `docs/roles/README.md`'s table (launchd, deliberately, because a GitHub Actions
+disagreement between `.agent-org/roles/README.md`'s table (launchd, deliberately, because a GitHub Actions
 runner sees only `origin/main` and cannot catch a merged-but-unpushed hold) and
-`docs/roles/memory/org-shape-second-orchestrator.md`'s recorded board decision that the report moves to
+`.agent-org/roles/memory/org-shape-second-orchestrator.md`'s recorded board decision that the report moves to
 GitHub Actions once push-everything is enforced. `ceo` ruled for the second: **"push-everything means
 nothing is unpushed, so the runner sees everything"** — the runner's blind spot was the local-checkout
-gap, and that gap is what the push-per-commit rule closes. `docs/roles/README.md` carries the ruling and
+gap, and that gap is what the push-per-commit rule closes. `.agent-org/roles/README.md` carries the ruling and
 its reasoning now; this file no longer defers it.
 
 **What that means for THIS section.** A GitHub Actions runner needs no scheduler on any control-plane
@@ -147,7 +147,7 @@ systemctl list-timers a11ign-board-report.timer   # confirm the next scheduled r
 
 `Persistent=true` mirrors launchd's own catch-up behaviour (a missed run — machine off at 08:00 — fires
 once at next boot rather than being silently skipped), which is the same property
-`docs/roles/README.md`'s state table calls out for the existing job.
+`.agent-org/roles/README.md`'s state table calls out for the existing job.
 
 ## The freeze rule — never migrate during a capture
 
@@ -179,7 +179,7 @@ transcript before asking, and matching what `worker-tooling` had in fact just re
 **What was actually exercised, stated plainly because it is not what #65/#1792 assumed.** Those rows treat
 "a second machine matching the approved ACEMAGIC M1 spec" as the precondition, and read this session's own
 host (`agents`) as satisfying it. But `agents` is not an unused second machine — per
-`docs/roles/memory/agent-host-agents.md`, every org session (`ceo`, `orchestrator`, `product-manager`, the
+`.agent-org/roles/memory/agent-host-agents.md`, every org session (`ceo`, `orchestrator`, `product-manager`, the
 workers) already runs on it as of the 2026-09-13 cutover from the Mac. There is no genuinely distinct
 second machine or VM available today, so a literal cross-machine rehearsal could not be run.
 
@@ -201,7 +201,7 @@ different OS/user layout, or a second machine's own credential state. It stands 
 path-derived-key mechanism itself works; a genuinely separate second machine, when one exists, should still
 repeat step 4 rather than take this run as final.
 
-**This is the acceptance test for the "resume first" claim above, and per `docs/roles/README.md`'s own
+**This is the acceptance test for the "resume first" claim above, and per `.agent-org/roles/README.md`'s own
 rule for its sibling drill, an unexercised plan is not a verified one.** It originally needed a second
 machine (or a VM) that this unit did not have; run as above once that turned out not to be available
 either.
@@ -216,7 +216,7 @@ either.
    reconstructed in step 1.
 3. Attempt to resume the session from the copied transcript, using the harness's own resume mechanism.
 4. **Ask it a lane-specific question that only its own prior session history could answer** — not something
-   derivable from `docs/roles/worker-config.md` or `docs/roles/memory/` alone. For example: which specific
+   derivable from `.agent-org/roles/worker-config.md` or `.agent-org/roles/memory/` alone. For example: which specific
    unit it was mid-way through when the transcript was copied, or a correction a peer gave it earlier in
    that session that is not written into any committed file.
 5. If it answers correctly, **have it complete one real unit** end to end on the second machine — commit
