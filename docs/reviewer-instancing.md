@@ -200,7 +200,7 @@ one prompt, so the a/b difference is what each model chose to type, not a proper
 
 **Address.** A per-PR reviewer cannot take the PR number as `session:<name>` today. `session:<name>` is a
 routing address, not a process handle (#1951): `arm-pr`'s `LIVE_SESSIONS` is the `live` names in
-`packages/agent-org/docs/roles/sessions.json` and refuses a label outside it; `row-claim` counts B2 per
+`.agent-org/roles/sessions.json` and refuses a label outside it; `row-claim` counts B2 per
 address; `sessions.json` says to add no per-instance field. The two places that already know a reviewer by name
 are `wake.mjs`'s `route`, which matches a herdr workspace **label** (so a per-PR pane labelled
 `reviewer-<PR>` routes with no change), and `pr-review-verdict`'s `A11Y_REVIEWER_SESSION`, which records the

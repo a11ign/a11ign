@@ -1,13 +1,13 @@
 # worker-config's accumulated memory, migrated into the repo
 
 This is a snapshot of `worker-config`'s `~/.claude` memory directory as of 2026-09-06, moved here so it
-survives losing this Mac. See `docs/roles/migrate.md` for what moved, what did not, and why. **Every
+survives losing this Mac. See `.agent-org/roles/migrate.md` for what moved, what did not, and why. **Every
 entry below is a point-in-time observation, not live state** — a file path, a number or a claim about
 current behaviour may since have moved; verify against the code before treating one as fact.
 
 **One entry was redacted rather than moved verbatim**: [`nvda-worker-vm-access.md`](nvda-worker-vm-access.md)
 named a real host address, an SSH key filename and a container layout. The workflow fact survives; the
-reachability material does not — see that file's own note and `docs/roles/README.md`'s "Credentials"
+reachability material does not — see that file's own note and `.agent-org/roles/README.md`'s "Credentials"
 section for why.
 
 - [Fleet and control-plane access (redacted)](nvda-worker-vm-access.md) — two credential domains and that the lab takes SSH DIRECTLY; the address and key name are deliberately not here.

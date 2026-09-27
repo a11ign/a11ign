@@ -19,7 +19,7 @@ every *uncommitted* change in it and not only the mutation.
 **Why:** a11ign names that command in CLAUDE.md because it once destroyed release-eligible model
 weights. On 2026-09-06 I used it anyway — mid-mutation-check, the exact workflow the rule exists for —
 and destroyed two board-report fixes that were being waited on. Knowing the rule is what failed, so it is
-now written into `docs/roles/product-manager.md` at the step where it applies rather than left as
+now written into `.agent-org/roles/product-manager.md` at the step where it applies rather than left as
 something to recall.
 
 **How to apply:** copy aside before every mutation. And **when a guard passes under mutation, suspect the

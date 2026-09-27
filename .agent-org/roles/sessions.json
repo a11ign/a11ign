@@ -8,19 +8,19 @@
     {
       "name": "ceo",
       "role": "ceo",
-      "brief": "docs/roles/ceo.md",
+      "brief": ".agent-org/roles/ceo.md",
       "started": "2026-09-13T14:31:55Z"
     },
     {
       "name": "product-manager",
       "role": "product-manager",
-      "brief": "docs/roles/product-manager.md",
+      "brief": ".agent-org/roles/product-manager.md",
       "started": "2026-09-13T13:48:55Z"
     },
     {
       "name": "orchestrator",
       "role": "orchestrator",
-      "brief": "docs/roles/orchestrator.md",
+      "brief": ".agent-org/roles/orchestrator.md",
       "started": "2026-09-13T14:24:38Z"
     },
     {
@@ -28,7 +28,7 @@
       "role": "engineer",
       "spare": true,
       "family": { "prefix": "worker-", "from": 4 },
-      "brief": "docs/roles/engineer.md",
+      "brief": ".agent-org/roles/engineer.md",
       "started": "2026-09-24T09:42:00Z"
     }
   ],
