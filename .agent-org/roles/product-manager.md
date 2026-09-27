@@ -313,3 +313,9 @@ calls).
 - **`work-gate.mjs`'s `row-call-count-signal` names a claimed row past the ~100-call threshold on its
   session's own live transcript** — a split CANDIDATE, never an automatic split. Read it, decide whether
   the row is genuinely one unit, and split it if it is not; a row that is one unit says so.
+- **A "not split" verdict is POSTED, not just written in prose (#2721).** Nothing re-parses a comment's
+  English on every tick, so a "one unit, not split" verdict left in prose alone re-signals on the very next
+  call the held session makes. Post a comment on the row carrying the marker
+  `<!-- row-call-count-signal: split assessment -->` and the count named in the signal's prompt, in the
+  form `calls=<N>` (e.g. `calls=173`) — the row then stays exempt from this signal until its calls double
+  from that reading, and signals again once they do.
