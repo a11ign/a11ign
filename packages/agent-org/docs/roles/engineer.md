@@ -167,6 +167,13 @@ against a target of 120k, #928), so keep the large paste out rather than trimmin
 - **No raw `gh` JSON where a projection answers.** `gh issue view N --json labels --jq '[.labels[].name]|join(",")'`.
 - **Send exploratory reading to a subagent.** `Agent` with `model="haiku"` to gather, `sonnet` to digest
   (`.claude/rules/agent-practices.md`): "where is X called" is the case, and only its conclusion enters yours.
+- **Batch related small checks into one command rather than several.** Each extra call pays the whole
+  accumulated context again for a partial answer: late in a long session, a handful of separate
+  `grep`/`sed`/`cat` calls at ~0.6k of output each still cost ~150k of re-read apiece (#928, 2026-09-27 —
+  844 such calls measured across 25 sessions). One command that runs the same greps/reads (and small
+  `gh --jq` projections) and returns them together pays that re-read once — `npm run survey --` is that
+  command. Reach for this before a second `grep`, `sed`, `cat` or single-file `Read` in the same turn, not
+  after.
 
 ## Standing habits
 
