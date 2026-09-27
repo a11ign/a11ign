@@ -1,0 +1,5 @@
+---
+"@a11ign/nvda-worker": patch
+---
+
+**`/health` no longer runs `powershell.exe`, so the worker no longer goes deaf for 0.6 s (2.9 s on three boxes) every fifth second (#2673).** The environment block `/health` serves rebuilt behind a 5 s cache, and the rebuild ran `displayMode()` and `displayAdapter()` as two SYNCHRONOUS PowerShell calls, which block Node's event loop for their whole duration: on every route, not just `/health`. The two facts are now sampled by a timer (`display-sample.mjs`) with ASYNCHRONOUS PowerShell, so they are still re-read under a running worker and a change stays visible, and a request only reads the last sample. **The sample carries its age:** `environment.displaySampledMsAgo`, computed at read time (`null` before the first sample lands, when both fields read `"unknown"`). `displayMode` and `displayAdapter` keep their meaning and their `"unknown"` fallback; `/health`'s other fields and the capture cache key are unchanged. It is worker code, so it reaches the boxes with `fleet:deploy`.
