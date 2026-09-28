@@ -93,6 +93,11 @@ import { diskHeadroom, MIN_FREE_FRACTION } from "./disk-headroom.mjs";
 import { STALL_STATE_FILE, claimFactsFrom, readClaim, claimStalledOrders, nextStallState, readStallState,
   writeStallState, readHerdrRestart, gitRun, pathExists, statMtime, nudgeKey, nudgeDeliveredAt,
   claimRecordOf } from "./claim-stall.mjs";
+// #2747: WHETHER A CLAIM'S SESSION STILL EXISTS AT ALL -- a DIFFERENT question from "who is free" (line 26-29
+// above): that is routing, `wake.mjs`'s job, and stays out of this file. This is a fact the STALL reading needs
+// (a claim held by nobody is not a stall to be nudged), read the same seamed way `readHerdrRestart` already reads
+// `systemctl` from here -- injectable, and `null` (never a live herdr call) unless the caller gives no `agents`.
+import { readAgents } from "./herdr-agents.mjs";
 // #2542: THE PULL-REQUEST ORDERS -- the orders that ask a session to act on a pull request's state -- live in
 // `work-gate/pr-orders.mjs`, which imports the shared PR facts BACK from this file. The cycle is safe because
 // nothing there reads an import at load time (only inside a function), and this file stays the entry point:
@@ -319,11 +324,11 @@ export const GH_READS = Object.freeze({
   // seen only after the gate was down for longer, is missed, not guessed.
   conditionalOnClaimedBranches: "pr list --state merged --limit 100 --json number,headRefName,mergedAt"
     + " (readMergedPrs -- claim-stalled's merged release)",
-  // #2286: ONE CALL FOR EVERY BLOCKER, paid only when some unclaimed row has a cleared blocker to ask
-  // about. `gh`'s `blockedBy` nodes carry no closing time, and a per-blocker read would make the tick's
-  // cost a function of how many rows are waiting.
+  // #2286, WIDENED BY #2741: ONE CALL FOR EVERY BLOCKER, paid only when some unclaimed row OR some
+  // claimed one has a cleared blocker to ask about. `gh`'s `blockedBy` nodes carry no closing time, and a
+  // per-blocker read would make the tick's cost a function of how many rows are waiting.
   conditionalOnClearedRows: "issue list --state closed --limit 100 --json number,closedAt"
-    + " (readRecentlyClosed -- unclaimed-blocker-cleared's backoff)",
+    + " (readRecentlyClosed -- unclaimed-blocker-cleared's and blocker-cleared's backoff)",
   // #2356: FOUR MORE REST CALLS, paid ONLY by a tick that found `main` red -- the run's jobs, the recheck
   // job's annotations, `run view --log-failed` for the failing test names, and the merged PR's session.
   // A healthy `main` pays none of them; a red one is rare and short-lived by the ruling this cause serves.
@@ -1973,15 +1978,28 @@ function rowsWithOpenPr(openPrs) {
  * clearing and then abandoned is exactly the holder this cause must still reach. `prs` is the read
  * `draftOrder` already made, so the narrowing spends no call and does not touch `GH_READS`.
  *
+ * #2741: A CLEARING THAT DOES NOT RECUR BACKS OFF THE SAME WAY `unclaimedBlockerClearedOrders` DOES.
+ * `closings` says when each blocker closed, and the causeKey then carries `promotionAskWindow`'s suffix
+ * exactly as that function's does -- one ask at once, again at 6h and 24h, then every 72h for ever. A
+ * `Not-before:`/`answer:`/`blockedBy` cycle that changes nothing about the row does not reopen the first
+ * window: #1756 escalated twice in one day because the pre-#2741 key never changed and this is an ACTION
+ * cause, so answering `answer:ceo` correctly reset the counter and the twenty-minute expiry rebuilt the
+ * same six deliveries from zero. WITHOUT `closings` (`null`, or an old caller) every ask is the unstaged
+ * first one, which is the behaviour before this backoff existed and what a refused read must fall back to.
+ *
  * @param {any[]} rows every open row
  * @param {string} [today]
  * @param {number} [nowMs] the clock a timestamped hold is read against, injected so a test moves time
- * @param {any[]} [openPrs] `readPrs`'s open pull requests. OMITTED MEANS "NOT ASKED", and the cause then
- *   behaves exactly as before #2161: it fails toward telling the holder, never toward silence
+ * @param {{openPrs?: any[], closings?: Map<number, number> | null}} [reads] the two reads this cause takes
+ *   BEYOND `rows` itself, bundled so a 5th positional parameter does not join `nowMs` (`max-params`).
+ *   `openPrs` is `readPrs`'s open pull requests. OMITTED MEANS "NOT ASKED", and the cause then behaves
+ *   exactly as before #2161: it fails toward telling the holder, never toward silence.
+ *   `closings` is `readRecentlyClosed`'s map, or `null` for "not asked or refused" -- see this function's
+ *   own header for what that falls back to.
  * @returns {{session: string, cause: string, subject: string, discriminator: string,
  *            prompt: string, causeKey: string}[]}
  */
-export function blockerClearedOrders(rows, today = todayIso(), nowMs = Date.now(), openPrs = []) {
+export function blockerClearedOrders(rows, today = todayIso(), nowMs = Date.now(), { openPrs = [], closings = null } = {}) {
   const orders = [];
   const resumed = rowsWithOpenPr(openPrs);
   for (const row of rows ?? []) {
@@ -1993,6 +2011,8 @@ export function blockerClearedOrders(rows, today = todayIso(), nowMs = Date.now(
     // anything else, so passing here is what proves every number above is closed -- and it covers the
     // other conditions in the same breath, which is why `declaredBlockers` does not re-ask.
     if (fleetWaitingOn(row, today, nowMs)) continue;
+    const window = clearingAskWindow(cleared, nowMs, closings);
+    if (!window) continue;
     const key = cleared.join(".");
     orders.push({
       session,
@@ -2010,7 +2030,7 @@ export function blockerClearedOrders(rows, today = todayIso(), nowMs = Date.now(
         + `\`gh issue edit ${row.number} --add-blocked-by <n>\`, a \`Not-before: YYYY-MM-DD\` line, or `
         + `\`${ANSWER_PREFIX}<session>\` if you are waiting on somebody to decide. Each clears itself, `
         + "and each stops this being asked again.",
-      causeKey: `${session}/blocker-cleared/row-${subjectRef(row.repoKey, row.number)}/${key}`,
+      causeKey: `${session}/blocker-cleared/row-${subjectRef(row.repoKey, row.number)}/${key}${window.suffix}`,
     });
     if (orders.length >= MAX_ROW_ORDERS_PER_TICK) break;
   }
@@ -2089,6 +2109,17 @@ export function promotionAskWindow(age) {
  */
 function clearedAt(cleared, closings) {
   return Math.max(...cleared.map((n) => closings.get(n) ?? 0));
+}
+
+/**
+ * The backoff window a clearing is in, shared by `blockerClearedOrders` and `unclaimedBlockerClearedOrders`
+ * (#2741) so the "no `closings`, no backoff" fallback is written once rather than as two ternaries that
+ * could drift. `null` `closings` (not asked or refused) is the unstaged first ask, forever.
+ * @param {number[]} cleared @param {number} nowMs @param {Map<number, number> | null} closings
+ * @returns {{suffix: string} | null}
+ */
+function clearingAskWindow(cleared, nowMs, closings) {
+  return closings ? promotionAskWindow(nowMs - clearedAt(cleared, closings)) : { suffix: "" };
 }
 
 /** How many of the most recently closed rows `readRecentlyClosed` asks for: about two days of merges. */
@@ -2180,7 +2211,7 @@ export function readRecentlyClosed(run = defaultRun) {
 export function unclaimedBlockerClearedOrders(rows, today = todayIso(), { closings = null, now = Date.now() } = {}) {
   const orders = [];
   for (const { row, cleared } of unclaimedClearings(rows, today)) {
-    const window = closings ? promotionAskWindow(now - clearedAt(cleared, closings)) : { suffix: "" };
+    const window = clearingAskWindow(cleared, now, closings);
     if (window) orders.push(promotionOrder(row, cleared, window.suffix));
     if (orders.length >= MAX_ROW_ORDERS_PER_TICK) break;
   }
@@ -2580,8 +2611,12 @@ function declaredWait(row, holder) {
  * key, and the grace runs from the delivery it finds (`claimReading`). `ledger` is the seam for that read; an unreadable ledger reads as "not
  * delivered", which only DELAYS a release.
  *
+ * `agents` (#2747) is herdr's own workspace listing, read the same way `restartAt` is: the caller's reading when given, else a live one --
+ * and only when some row is claimed. `null` (herdr could not be asked) never releases a claim as "gone"; see `goneReading`'s own doc.
+ *
  * @param {{ rows: any[], claimedComments: any[] | null, openPrs: any[], mergedPrs: any[] | null,
  *   io?: import("./claim-stall.mjs").HostReads, repo?: string, now?: number, restartAt?: number | null,
+ *   agents?: {label: string, status: string}[] | null,
  *   stateDir?: string, log?: (line: string) => void, ledger?: () => string,
  *   read?: typeof readStallState, write?: typeof writeStallState }} args
  * @returns {import("./claim-stall.mjs").StallOrder[]}
@@ -2599,10 +2634,11 @@ export function claimStallTick({ io = { git: gitRun, exists: pathExists, mtime: 
 /**
  * `claimStallTick`'s body, with every default resolved by its caller. NEVER CALLED WITHOUT THE CATCH ABOVE: a throw here is the tick's to report.
  * @param {{ rows: any[], claimedComments: any[] | null, openPrs: any[], mergedPrs: any[] | null, restartAt?: number | null,
+ *   agents?: {label: string, status: string}[] | null,
  *   ledger?: () => string, io: import("./claim-stall.mjs").HostReads, repo: string, now: number, stateDir: string,
  *   log: (line: string) => void, read: typeof readStallState, write: typeof writeStallState }} args
  */
-function evaluateClaims({ rows, claimedComments, openPrs, mergedPrs, restartAt, ledger, io, repo, now, stateDir, log, read, write }) {
+function evaluateClaims({ rows, claimedComments, openPrs, mergedPrs, restartAt, agents, ledger, io, repo, now, stateDir, log, read, write }) {
   const held = rows.filter((r) => labelsOf(r).includes(CLAIM_LABEL));
   if (held.length > 0 && claimedComments === null) {
     log("claim-stall: the comments on the claimed rows could not be read -- NO claim was evaluated this tick.\n");
@@ -2612,7 +2648,8 @@ function evaluateClaims({ rows, claimedComments, openPrs, mergedPrs, restartAt, 
   const before = read(statePath);
   const byRow = new Map((claimedComments ?? []).map((r) => [Number(r?.number), r?.comments ?? []]));
   const readings = readClaims({ held, byRow, openPrs, mergedPrs, io, repo, now, before, log,
-    ledger: ledger ?? (() => ledgerText(`${stateDir}/wake-ledger`)), restart: restartFor(held, restartAt) });
+    ledger: ledger ?? (() => ledgerText(`${stateDir}/wake-ledger`)), restart: restartFor(held, restartAt),
+    agents: agentsFor(held, agents) });
   const after = nextStallState(before, readings, now);
   if (after !== before) write(statePath, after);
   return claimStalledOrders(readings, now);
@@ -2629,11 +2666,24 @@ function restartFor(held, given) {
 }
 
 /**
+ * The herdr workspace listing `goneReading` needs (#2747): the caller's reading when it has one, else a live `herdr
+ * workspace list` -- and only when some row is claimed, so a quiet org makes no herdr call either. Mirrors `restartFor`
+ * exactly, for the same testability reason this file's own header states about "who is free": a live default is a seam,
+ * never the only path, so the gate stays runnable from CI on a fixture alone.
+ * @param {any[]} held @param {{label: string, status: string}[] | null | undefined} given @returns {{label: string, status: string}[] | null}
+ */
+function agentsFor(held, given) {
+  if (given !== undefined) return given;
+  return held.length > 0 ? readAgents() : null;
+}
+
+/**
  * @param {{ held: any[], byRow: Map<number, any[]>, openPrs: any[], mergedPrs: any[] | null,
  *   io: import("./claim-stall.mjs").HostReads, repo: string, now: number, restart: number | null,
+ *   agents: {label: string, status: string}[] | null,
  *   before: import("./claim-stall.mjs").StallState, log: (line: string) => void, ledger: () => string }} ctx
  */
-function readClaims({ held, byRow, openPrs, mergedPrs, io, repo, now, restart, before, log, ledger }) {
+function readClaims({ held, byRow, openPrs, mergedPrs, io, repo, now, restart, agents, before, log, ledger }) {
   /** @type {{ facts: import("./claim-stall.mjs").ClaimFacts, reading: import("./claim-stall.mjs").Reading }[]} */
   const readings = [];
   for (const row of held) {
@@ -2649,13 +2699,17 @@ function readClaims({ held, byRow, openPrs, mergedPrs, io, repo, now, restart, b
       log(`claim-stall: ${facts.skip} -- not evaluated.\n`);
       continue;
     }
-    const remembered = before[facts.row];
-    const nudge = remembered?.session === session ? { nudgedAt: remembered.nudgedAt,
+    const remembered = before[facts.row]?.session === session ? before[facts.row] : undefined;
+    const nudge = remembered?.nudgedAt !== undefined ? { nudgedAt: remembered.nudgedAt,
       deliveredAt: nudgeDeliveredAt(ledger(), nudgeKey(session, facts.row, remembered.nudgedAt)) } : null;
-    const reading = readClaim(facts, { now, restartAt: restart, nudge });
+    const goneSince = remembered?.goneSince ?? null;
+    const reading = readClaim(facts, { now, restartAt: restart, nudge, agents, goneSince });
     // A HOLDER THAT HAS WORK AND A BLOCKER is the EXPECTED hold and is not said every tick; only a read that could not be made is.
     if (reading.kind === "holding" && reading.expected !== true) {
       log(`claim-stall: #${facts.row} (${session}) is HELD, not released: ${reading.why}.\n`);
+    }
+    if (reading.kind === "release" && reading.why === "gone") {
+      log(`claim-stall: #${facts.row} (${session}) is GONE from herdr's own listing -- releasing.\n`);
     }
     readings.push({ facts, reading });
   }
@@ -4546,7 +4600,7 @@ export function decide({ prs, readyRows, promotableRows = [], chairmanBlocked = 
   // closed is not waiting on a decision -- it is stopped on work it can resume this minute, with whatever
   // is queued behind that row stopped with it. Ahead of every cause that offers NEW work: a row already
   // claimed and now runnable beats a row nobody has picked up.
-  orders.push(...blockerClearedOrders(openRows, todayIso(), Date.now(), prs));
+  orders.push(...blockerClearedOrders(openRows, todayIso(), Date.now(), { openPrs: prs, closings })); // #2741 backoff
   // #2470/#2711: A CLAIM THAT DOES NOT MOVE, OR A BARE `answer:` LABEL ON IT -- both address the row's own holder, so both outrank every cause offering NEW work.
   orders.push(...stallOrdersOrNone(claimStalls), ...bareAnswerOrdersOrNone(bareAnswerLabels));
 
@@ -5139,15 +5193,33 @@ export function rowsOffBoardOrSay(log = (line) => process.stderr.write(line)) {
 }
 
 /**
- * The closing times `unclaimedBlockerClearedOrders` backs off on, read ONLY when some unclaimed row has a
- * cleared blocker to ask about. `openRows` is already in hand, so the condition costs no call, and a quiet
- * tracker pays nothing (`GH_READS.conditionalOnClearedRows`). `null` when there is nothing to ask about
- * OR the read was refused -- in both cases the caller's fallback is the unstaged first ask.
+ * A CLAIMED row `blockerClearedOrders` would ask about -- the same four conditions that function screens
+ * with EXCEPT `resumed`, which needs `openPrs` that this gate site does not carry (`main`/`trackerReadings`
+ * read `closings` before `code.prs` exists in a split-repo scope, #2618). Ignoring it makes this a
+ * SUPERSET of `blockerClearedOrders`' own population, never a narrower one: an already-resumed row pays
+ * for a `closings` read it turns out not to need, exactly as `unstaged first ask` already tolerates for a
+ * refused one.
+ *
+ * @param {any[]} rows @param {string} [today] @param {number} [nowMs]
+ * @returns {boolean}
+ */
+export function anyBlockerClearingCandidate(rows, today = todayIso(), nowMs = Date.now()) {
+  return (rows ?? []).some((row) => sessionOf(row) && labelsOf(row).includes(CLAIM_LABEL)
+    && declaredBlockers(row) !== null && !fleetWaitingOn(row, today, nowMs));
+}
+
+/**
+ * The closing times `blockerClearedOrders` and `unclaimedBlockerClearedOrders` back off on, read ONLY when
+ * some row -- claimed or not -- has a cleared blocker to ask about (#2286, widened by #2741). `openRows`
+ * is already in hand, so the condition costs no call, and a quiet tracker pays nothing
+ * (`GH_READS.conditionalOnClearedRows`). `null` when there is nothing to ask about OR the read was
+ * refused -- in both cases the caller's fallback is the unstaged first ask.
  *
  * @param {any[]} openRows
  */
 function closingsWhenRowsCleared(openRows) {
-  return unclaimedClearings(openRows).length > 0 ? readRecentlyClosed() : null;
+  return (unclaimedClearings(openRows).length > 0 || anyBlockerClearingCandidate(openRows))
+    ? readRecentlyClosed() : null;
 }
 
 // --- #2618 (child 3c of #69): EVERY REPOSITORY THE PROJECT DECLARES, NOT ONE ---------------------------------------------
