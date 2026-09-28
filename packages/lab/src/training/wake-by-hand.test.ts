@@ -96,7 +96,9 @@ test("named exactly, and nothing else: two workers in, two `wakeFleet` targets o
 // 1b. `survivingNamedWorkers` -- #2756 (the chairman, 2026-09-28): one named worker down must not
 //     refuse the whole run. Kept in THIS module (not `capture-screenreader-dataset.mjs`, which imports
 //     `dataset-paths.mjs` and would pull this test back into the corpus closure section 2's own comment
-//     warns about) so it stays reachable by the token-less acceptance job.
+//     warns about) so it stays reachable by the token-less acceptance job. #2760 extended the same
+//     question to `capture-real-pages.mjs`, the other multi-worker by-hand caller -- no new case here,
+//     since it exercises this same function through a different entry point.
 // ---------------------------------------------------------------------------------------------------
 
 test("wakeNamedWorkers reporting ok is passed straight through, no re-probe at all", async () => {
@@ -134,7 +136,6 @@ test("a single named worker, itself the one down: still refuses (one worker IS t
     (error: Error) => error.message === refusal,
   );
 });
-
 // ---------------------------------------------------------------------------------------------------
 // 2. EACH ENTRY calls it, before it dispatches -- read from source text, never imported.
 // ---------------------------------------------------------------------------------------------------

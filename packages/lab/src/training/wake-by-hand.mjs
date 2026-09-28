@@ -58,9 +58,14 @@ export async function wakeNamedWorkers(urls, wakeOptions = {}) {
  * imports `dataset-paths.mjs` (a `corpus` reader), so anything reached only through it is invisible to the
  * token-less acceptance job -- this file's own header already names that trap.
  *
- * `wakeNamedWorkers` stays untouched: it is shared by six other by-hand capture entries this row did not
- * individually audit, so its all-or-nothing contract for THOSE six is not this fix's business. This
- * function is called only by `capture-screenreader-dataset.mjs`'s own two named-pool branches.
+ * #2760 extended the same question to the other six by-hand callers: `capture-real-pages.mjs` is the only
+ * OTHER one whose named pool can be more than one worker (`configuredWorkers()`/the fleet, same as the
+ * dataset capture) and is wired to this function too; the remaining five each name exactly one worker via
+ * a single `--worker=`/positional flag, where the down worker and the whole run are the same thing and
+ * refusing is still correct (see the comment beside each of those five call sites).
+ *
+ * `wakeNamedWorkers` stays untouched: this is a second, narrower question asked only where more than one
+ * worker was named, not a change to the shared all-or-nothing contract itself.
  *
  * Re-probes every named worker's own `/health` directly once `wakeNamedWorkers` reports a failure --
  * whatever packet it could send has already been sent by the time it returns, so a worker still not
@@ -87,7 +92,7 @@ export async function survivingNamedWorkers(urls, wake, { probe = (url) => reque
   const survivors = urls.filter((_, i) => alive[i]);
   const dead = urls.filter((_, i) => !alive[i]);
   if (!survivors.length) throw new Error(wake.refusal);
-  console.log(`REPORTED, not blocking: ${dead.length} of ${urls.length} named worker(s) did not come up `
-    + `and are excluded from this run: ${dead.join(", ")}\n${wake.refusal}`);
+  process.stdout.write(`REPORTED, not blocking: ${dead.length} of ${urls.length} named worker(s) did not `
+    + `come up and are excluded from this run: ${dead.join(", ")}\n${wake.refusal}\n`);
   return survivors;
 }
