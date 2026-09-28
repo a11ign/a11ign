@@ -19,9 +19,9 @@
 // reachable there too) -- a hosted runner has `pip install git-filter-repo` and root, this fleet's workers
 // have neither. `main()` REFUSES up front, naming the gap, rather than failing opaquely mid-rewrite.
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, resolve, posix } from "node:path";
 import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
 import { refuseUnknownFlags, flagValue } from "../packages/agent-org/src/lib/cli-flags.mjs";
@@ -115,6 +115,41 @@ export function filterRepoArgs(rules) {
 }
 
 /**
+ * `--replace-text` rules (git filter-repo's literal blob-content substitutions) that repair each travelling
+ * file's relative import of agent-org's own source to match ITS OWN new depth -- `--path-rename` moves the
+ * FILE, it never rewrites what is WRITTEN inside it, so a test moved from
+ * `packages/lab/src/packaging/X.test.ts` to `src/packaging/X.test.ts` still contains the literal string
+ * that resolved to `packages/agent-org/src/Y.mjs` from its OLD location, which resolves outside the
+ * extracted tree entirely from the NEW one -- caught live by `outwardImportsOf` (run 36422620851,
+ * 2026-09-28: 238 of the 281 outward imports it found were exactly this). Grouped by DIRNAME, not assumed
+ * flat, so a travelling file that later gains a subdirectory under `packaging/` still gets its own correct
+ * depth rather than the one file this repo happens to have today.
+ * @param {string[]} labFiles repo-relative `packages/lab/src/packaging/...` paths
+ * @returns {{ old: string, replacement: string }[]}
+ */
+export function travellingImportRewrites(labFiles) {
+  const oldRoot = "packages/lab/src/packaging";
+  const newRoot = "src/packaging";
+  const dirnames = new Set(labFiles.map((file) => posix.dirname(file)));
+  return [...dirnames].map((oldDir) => {
+    const newDir = posix.join(newRoot, posix.relative(oldRoot, oldDir));
+    return {
+      old: `${posix.relative(oldDir, "packages/agent-org/src")}/`,
+      replacement: `${posix.relative(newDir, "src")}/`,
+    };
+  });
+}
+
+/** Renders `travellingImportRewrites`' pairs as a `git filter-repo --replace-text` file's content: one
+ * `old==>replacement` line per pair, LITERAL (never `regex:`), so no regex-metacharacter escaping is
+ * needed for the slashes and dots a path is made of.
+ * @param {{ old: string, replacement: string }[]} rewrites
+ */
+export function replaceTextFileContent(rewrites) {
+  return rewrites.map(({ old, replacement }) => `${old}==>${replacement}`).join("\n") + "\n";
+}
+
+/**
  * Every import in `root` (walked recursively, `.mjs`/`.ts`/`.js`) that resolves outside `root` itself --
  * the same walk `agent-org-outward-edges.test.ts` runs over the UN-renamed tree, re-rooted here to run over
  * what the REHEARSAL clone actually produced, so a rename that forgot to also fix an import is caught by the
@@ -190,8 +225,12 @@ if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.arg
   const labFiles = travellingLabTestFiles(source);
   console.error(`\n${labFiles.length} travelling packages/lab/src/packaging/ test file(s) (decision 4's re-run count).`);
   const rules = extractionPathRenames(labFiles);
-  console.error(`Running git filter-repo over ${rules.length} kept path(s) ...`);
-  execFileSync("git", ["filter-repo", "--force", ...filterRepoArgs(rules)],
+  const importRewrites = travellingImportRewrites(labFiles);
+  const replaceTextFile = join(mkdtempSync(join(tmpdir(), "agent-org-extraction-replace-text-")), "rules.txt");
+  writeFileSync(replaceTextFile, replaceTextFileContent(importRewrites));
+  console.error(`Running git filter-repo over ${rules.length} kept path(s), rewriting `
+    + `${importRewrites.length} travelling-import prefix(es) ...`);
+  execFileSync("git", ["filter-repo", "--force", "--replace-text", replaceTextFile, ...filterRepoArgs(rules)],
     { cwd: cloneInto, env: sandboxGitEnv(), stdio: "inherit" });
 
   const worktree = mkdtempSync(join(tmpdir(), "agent-org-extraction-rehearsal-tree-"));
