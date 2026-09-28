@@ -22,7 +22,10 @@ import {
   cyclesReport, readLedger, deliveryCounts, readLedgerDeliveries, readDeliveredHandoffs, recoverInterruptedWork, recoverableWork,
   queueHandoff, readHandoffs, handoffBatches, recentlyVoidedKeys, sessionMoved, VOIDED, keptClaimsPath, ledgerLine, thrashEscalationPrompt,
 } from "./wake.mjs";
-import { claimRecordComment, declineRow, claimWithWorktree, worktreeTargetReason, worktreeFlagsReason } from "./row-claim.mjs";
+import {
+  claimRecordComment, declineRow, claimWithWorktree, worktreeTargetReason, worktreeFlagsReason,
+  implicitAdoptSession, predecessorLivenessUnknown, predecessorGoneReading, recordPredecessorGone, adoptFor,
+} from "./row-claim.mjs";
 import { CLAIM_RECORD_MARKER } from "./claim-labels.mjs";
 import {
   CLAIM_STALLED, STALL_INTERVAL_MS, STALL_UNTOLD_RELEASE_MS, INTERRUPTED_SETTLE_MS, GONE_CONFIRM_MS, nudgeKey, nudgeDeliveredAt, claimRecordOf, commentMove, workAtRisk, fileMove, claimReading,
@@ -563,12 +566,16 @@ function releaseBoard(labels: string[] = ["in-progress", "session:worker-7", "st
 }
 const RECORD = [claimRecordComment({ session: "worker-7", branch: BRANCH, worktree: WT })];
 const NO_STATUS = () => ({ moved: true }) as const;
+// #2748: `declineRow`'s default `recordGone` writes a real file; every decline test but this row's own
+// stays on the no-token contract above by injecting this no-op instead.
+const NOOP_RECORD_GONE = () => {};
 
 test("#2470 (7a) a CLEAN tree with UNPUSHED commits keeps them across the release: `--keep-worktree` removes nothing", () => {
   const board = releaseBoard();
   const removed: string[] = [];
   const kept = declineRow(2416, "worker-7", { run: board.run as never, fetchComments: () => RECORD, moveStatus: NO_STATUS as never,
-    keepWorktree: true, removeWorktree: ((p: string) => { removed.push(p); return { removed: true }; }) as never });
+    keepWorktree: true, removeWorktree: ((p: string) => { removed.push(p); return { removed: true }; }) as never,
+    recordGone: NOOP_RECORD_GONE });
   assert.equal(kept.declined, true);
   assert.deepEqual(removed, [], "the recorded worktree is not removed, so the commits that live only there survive");
   assert.equal(board.calls.some((a) => a.includes("worktree") && a.includes("remove")), false, "and no `git worktree remove` ran at all");
@@ -590,7 +597,7 @@ test("#2470 (7a) a DIRTY tree is neither removed nor refused into a stuck claim"
   assert.equal(stuck.declined, false, "CONTROL: without the flag a dirty tree refuses the whole decline, so the claim can never be released");
   const board = releaseBoard();
   const freed = declineRow(2416, "worker-7", { run: board.run as never, fetchComments: () => RECORD, moveStatus: NO_STATUS as never,
-    keepWorktree: true, removeWorktree: dirty as never });
+    keepWorktree: true, removeWorktree: dirty as never, recordGone: NOOP_RECORD_GONE });
   assert.equal(freed.declined, true, "with it the release goes through and the labels come off");
   assert.ok(board.edits().length === 1);
 });
@@ -645,14 +652,142 @@ test("#2470 (7b) `--adopt` is refused without both --branch and --worktree, and 
   assert.equal(worktreeFlagsReason({}), null, "and a claim naming neither is unchanged");
 });
 
+// --- #2748: re-claiming a row under the SAME session name -- the ordinary claim command, not `--adopt=`,
+// hitting its own predecessor's stamped tree ------------------------------------------------------------
+
+test("#2748 `implicitAdoptSession` -- the ruling: fires ONLY for the claimant's own tree AND a CONFIRMED-gone predecessor", () => {
+  const rule = (over: { exists?: boolean; owner?: string | null; gone?: boolean | null } = {}) => implicitAdoptSession({
+    worktree: WT, mySession: "worker-2623",
+    exists: () => over.exists ?? true,
+    owner: () => (over.owner === undefined ? "worker-2623" : over.owner),
+    predecessorGone: () => (over.gone === undefined ? true : over.gone),
+  });
+  assert.equal(rule(), "worker-2623", "CONTROL: the claimant's own stamped tree, predecessor confirmed gone -- implicit adopt fires");
+  assert.equal(rule({ exists: false }), undefined, "no tree, nothing to adopt");
+  assert.equal(rule({ owner: "worker-9" }), undefined, "a DIFFERENT session's tree is never auto-adopted -- #1432 stays");
+  assert.equal(rule({ owner: null }), undefined, "an UNSTAMPED tree is never auto-adopted either");
+  assert.equal(rule({ gone: false }), undefined, "predecessor confirmed STILL ALIVE -- refuses (a genuine collision, not a stale stamp)");
+  assert.equal(rule({ gone: null }), undefined,
+    "Done-when 2: liveness CANNOT be confirmed (herdr read unavailable / #2747 not yet wired in) -- the refusal stays");
+});
+
+test("#2748 `predecessorLivenessUnknown` -- the pure stub answers \"cannot tell\", for tests and any caller with no ledger to read", () => {
+  assert.equal(predecessorLivenessUnknown(), null);
+  assert.equal(implicitAdoptSession({ worktree: WT, mySession: "worker-2623", exists: () => true, owner: () => "worker-2623",
+    predecessorGone: predecessorLivenessUnknown }), undefined, "a caller that never learns anything never fires the implicit adopt");
+});
+
+test("#2748 `predecessorGoneReading`/`recordPredecessorGone`: what actually makes production reachable, not #2747 -- reviewer-2754's blocker", () => {
+  const dir = mkdtempSync(join(tmpdir(), "a11y-2748-"));
+  const ledgerPath = join(dir, "wake-ledger");
+  try {
+    assert.equal(predecessorGoneReading("worker-2623", { ledgerPath }), null,
+      "CONTROL: nothing recorded yet -- cannot tell, same answer as the pure stub");
+    recordPredecessorGone("worker-2623", { ledgerPath });
+    assert.equal(predecessorGoneReading("worker-2623", { ledgerPath }), true,
+      "a decline that recorded it IS the confirmation -- now the ordinary claim can find it");
+    assert.equal(predecessorGoneReading("worker-9", { ledgerPath }), null,
+      "a DIFFERENT session's record answers nothing for this one -- still cannot tell");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("#2748 a `--keep-worktree` decline writes the record `adoptFor` reads back -- the real path, end to end, not a fake `predecessorGone`", () => {
+  const dir = mkdtempSync(join(tmpdir(), "a11y-2748-decline-"));
+  const ledgerPath = join(dir, "wake-ledger");
+  try {
+    const board = releaseBoard(["in-progress", "session:worker-2623", "started", "was-ready"]);
+    const declined = declineRow(2416, "worker-2623", {
+      run: board.run as never, moveStatus: NO_STATUS as never,
+      fetchComments: () => [claimRecordComment({ session: "worker-2623", branch: BRANCH, worktree: WT })],
+      keepWorktree: true, predecessorGone: true,
+      removeWorktree: (() => { throw new Error("must not be called with keepWorktree"); }) as never,
+      recordGone: (session: string) => recordPredecessorGone(session, { ledgerPath }),
+    });
+    assert.equal(declined.declined, true);
+    const adopt = implicitAdoptSession({ worktree: WT, mySession: "worker-2623", exists: () => true, owner: () => "worker-2623",
+      predecessorGone: (session: string) => predecessorGoneReading(session, { ledgerPath }) });
+    assert.equal(adopt, "worker-2623",
+      "the ordinary respawn's implicit adopt fires from the RECORD the manual decline actually wrote, not a test double");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("#2748 reviewer-2754's second verdict: a `--keep-worktree` decline WITHOUT `--predecessor-gone` never writes the record -- a live session's own release is not proof of death", () => {
+  const dir = mkdtempSync(join(tmpdir(), "a11y-2748-live-decline-"));
+  const ledgerPath = join(dir, "wake-ledger");
+  try {
+    const board = releaseBoard(["in-progress", "session:worker-2623", "started", "was-ready"]);
+    const declined = declineRow(2416, "worker-2623", {
+      run: board.run as never, moveStatus: NO_STATUS as never,
+      fetchComments: () => [claimRecordComment({ session: "worker-2623", branch: BRANCH, worktree: WT })],
+      keepWorktree: true, // no predecessorGone: true -- e.g. a still-running standing engineer releasing its own stalled claim
+      removeWorktree: (() => { throw new Error("must not be called with keepWorktree"); }) as never,
+      recordGone: (session: string) => recordPredecessorGone(session, { ledgerPath }),
+    });
+    assert.equal(declined.declined, true, "the release itself still lands -- only the attestation is withheld");
+    assert.equal(predecessorGoneReading("worker-2623", { ledgerPath }), null,
+      "CONFIRMED: nothing was recorded, so a same-name respawn cannot implicitly adopt a tree its still-live predecessor may still be using");
+    const adopt = implicitAdoptSession({ worktree: WT, mySession: "worker-2623", exists: () => true, owner: () => "worker-2623",
+      predecessorGone: (session: string) => predecessorGoneReading(session, { ledgerPath }) });
+    assert.equal(adopt, undefined, "the ordinary respawn's implicit adopt does NOT fire -- reviewer-2754's exact failure scenario, closed");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("#2748 reproduces the #2623 incident: a same-session-name reclaim of a stamped, gone predecessor's tree REUSES it -- and stays refused otherwise", () => {
+  const claimAs = (gone: boolean | null, claimed = true) => {
+    const stamped: [string, string][] = [];
+    const order: string[] = [];
+    const adopt = implicitAdoptSession({ worktree: WT, mySession: "worker-2623", exists: () => true, owner: () => "worker-2623",
+      predecessorGone: () => gone });
+    const result = claimWithWorktree(2416, "worker-2623", {
+      branch: BRANCH, worktree: WT, adopt,
+      run: ((cmd: string, args: string[]) => { order.push(`${cmd} ${args.join(" ")}`); return args.includes("symbolic-ref") ? `${BRANCH}\n` : ""; }) as never,
+      exists: () => true, owner: () => "worker-2623",
+      stamp: (w: string, sess: string) => { stamped.push([w, sess]); },
+      claim: (() => (claimed ? { claimed: true, statusMoved: true } : { claimed: false, reason: "B2 refused" })) as never,
+    });
+    return { result, stamped, order };
+  };
+  const reused = claimAs(true);
+  assert.equal(reused.result.claimed, true, "CONTROL: confirmed-gone predecessor -- the respawn's own claim succeeds");
+  assert.deepEqual(reused.stamped, [[WT, "worker-2623"]], "re-stamped to the new instance, same name");
+  assert.equal(reused.order.some((c) => /fetch|worktree add|worktree remove|branch -D/.test(c)), false,
+    "nothing created, nothing removed -- the tree and its uncommitted work are reused in place, exactly as #2470's `--adopt` does");
+
+  for (const gone of [false, null] as const) {
+    const refused = claimAs(gone);
+    assert.equal(refused.result.claimed, false, `liveness=${gone}: the ordinary #1432 refusal stays`);
+    assert.match((refused.result as { reason: string }).reason, /ALREADY EXISTS, stamped by `worker-2623`/,
+      "the incident's own refusal text -- unchanged when the predecessor is not CONFIRMED gone");
+  }
+});
+
+test("#2748 `adoptFor` (CLI wiring): an explicit `--adopt=` always wins, and the implicit ruling is asked ONLY for `claim` given both --branch and --worktree", () => {
+  const NOWHERE = "/home/agent/repos/does-not-exist-2748";
+  assert.equal(adoptFor("claim", "worker-2623", { adoptFlag: "worker-9", branch: BRANCH, worktree: NOWHERE }), "worker-9",
+    "an explicit flag is never overridden by the implicit ruling");
+  assert.equal(adoptFor("dispatch", "worker-2623", { branch: BRANCH, worktree: NOWHERE }), undefined,
+    "dispatch precedes any tree existing -- the implicit ruling is never asked");
+  assert.equal(adoptFor("claim", "worker-2623", { worktree: NOWHERE }), undefined, "no --branch -- never asked");
+  assert.equal(adoptFor("claim", "worker-2623", { branch: BRANCH }), undefined, "no --worktree -- never asked");
+  assert.equal(adoptFor("claim", "worker-2623", { branch: BRANCH, worktree: NOWHERE }), undefined,
+    "asked, but the tree does not exist on disk -- the real `existsSync` answers false, same as `implicitAdoptSession`'s own control");
+});
+
 test("#2470 (10) `decline --answer=<session>` releases to that session's `answer:` label, NOT to `ready`, and refuses to be a finding too", () => {
   const board = releaseBoard();
   const done = declineRow(2416, "worker-7", { run: board.run as never, fetchComments: () => RECORD, moveStatus: NO_STATUS as never,
-    keepWorktree: true, answer: "product-manager" });
+    keepWorktree: true, answer: "product-manager", recordGone: NOOP_RECORD_GONE });
   assert.equal(done.declined, true);
   assert.deepEqual(board.edits()[0].added, ["answer:product-manager"], "the row was `ready` before the claim, and is NOT returned to the pool: the work merged");
   const control = releaseBoard();
-  declineRow(2416, "worker-7", { run: control.run as never, fetchComments: () => RECORD, moveStatus: NO_STATUS as never, keepWorktree: true });
+  declineRow(2416, "worker-7", { run: control.run as never, fetchComments: () => RECORD, moveStatus: NO_STATUS as never, keepWorktree: true,
+    recordGone: NOOP_RECORD_GONE });
   assert.deepEqual(control.edits()[0].added, ["ready"], "CONTROL: the same release without --answer restores `ready`");
   const both = declineRow(2416, "worker-7", { run: releaseBoard().run as never, fetchComments: () => RECORD, blockedReason: "x", answer: "product-manager" });
   assert.equal(both.declined, false);
@@ -720,7 +855,8 @@ test("#2470 (4) a stalled release ENDS the spare's workspace, declines the claim
   const closeAt = r.runs.findIndex((a) => a.includes("close"));
   assert.deepEqual(r.runs[closeAt], ["--session", "org", "workspace", "close", "w0"], "the instance is ended so a fresh one takes the row");
   const decline = r.decline()!;
-  assert.deepEqual(decline.args.slice(1), ["decline", "2407", "--session=worker-7", "--keep-worktree"], "as the holder, and the tree is KEPT");
+  assert.deepEqual(decline.args.slice(1), ["decline", "2407", "--session=worker-7", "--keep-worktree", "--predecessor-gone"],
+    "as the holder, and the tree is KEPT; #2748: the workspace was actually CLOSED above, so the release may attest the predecessor gone");
   assert.match(decline.cwd, /\/role-worker-7$/, "from the holder's own launch worktree, which launchGate accepts");
   assert.ok(r.execs.findIndex((e) => e === decline) > -1 && closeAt > -1, "and the close came first, so nothing the instance does can race the read");
   assert.match(r.comment(), /Claim released by the gate \(#2470\).*`worker-7`.*nothing on this row moved for 250 minutes.*KEPT/s);
@@ -756,6 +892,8 @@ test("#2470 (6) a claim by a role that is NOT a spare is released and NEVER ende
   assert.equal(r.cycles.length, 0, "and no cycle line: it is not an instance's ending");
   assert.deepEqual(r.dropped, []);
   assert.ok(r.decline()!.args.includes("--session=worker-capture"), "only the CLAIM is released");
+  assert.equal(r.decline()!.args.includes("--predecessor-gone"), false,
+    "#2748 (reviewer-2754's second verdict): worker-capture's process was never closed, so this release must NOT attest it is gone");
   // THE CONTROL: the same request for a spare closes it.
   const spare = releaseHost({ agents: [{ label: "worker-capture", status: "working" }], world: { unpushed: 1 }, labels: holdsRow });
   performRelease({ ...STALL, session: "worker-capture" }, spare.deps);
@@ -799,7 +937,9 @@ test("#2747 a GONE release is NOT refused when the holder holds work -- unlike b
   const got = performRelease({ ...STALL, why: "gone", idleMinutes: null, nudgedAt: null }, r.deps);
   assert.equal(got.released, true, JSON.stringify(got));
   assert.equal(r.runs.some((a) => a.includes("close")), false, "already absent from herdr's own listing (that is the whole reason) -- nothing left to close");
-  assert.deepEqual(r.decline()!.args.slice(1), ["decline", "2407", "--session=worker-7", "--keep-worktree"], "dirty work is KEPT, exactly like a stalled release");
+  assert.deepEqual(r.decline()!.args.slice(1), ["decline", "2407", "--session=worker-7", "--keep-worktree", "--predecessor-gone"],
+    "dirty work is KEPT, exactly like a stalled release; #2748: herdr's own listing has no record of the session at all, which is "
+    + "the strongest of the two confirmed-gone readings, so the release may attest it");
   assert.match(r.comment(), /worker-7` no longer exists in herdr's own workspace listing \(#2747\), not merely quiet/);
 });
 
