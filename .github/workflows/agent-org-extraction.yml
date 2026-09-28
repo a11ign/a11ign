@@ -174,11 +174,11 @@ jobs:
       # exempt" -- printed below rather than left to be inferred.
       #
       # A FRESH, NON-BARE CLONE OF a11ign/agent-org -- never a reuse of /tmp/agent-org-extraction-push.
-      # That directory is `git clone --mirror`'d by the rehearsal script (bare, no work tree -- `git
-      # checkout -b` there fails with "this operation must be run in a work tree"), and its `origin`
-      # remote points at $GITHUB_WORKSPACE (this repo), not at a11ign/agent-org, since a mirror clone
-      # names its remote after where it cloned FROM. Step 2 pushed to agent-org by explicit URL, never as
-      # a remote, so there is no clone of agent-org to reuse here -- this step makes the only one.
+      # That directory is a bare mirror clone the rehearsal script makes (no work tree -- `git checkout
+      # -b` there fails with "this operation must be run in a work tree"), and its `origin` remote points
+      # at $GITHUB_WORKSPACE (this repo), not at a11ign/agent-org, since a mirror clone names its remote
+      # after wherever it was made FROM. Step 2 pushed to agent-org by explicit URL, never as a remote, so
+      # there is no existing clone of agent-org to reuse here -- this step makes the only one.
       # (Found by ceo's review of this PR, reproduced locally: both failure modes confirmed live.)
       - name: Step 4 -- open a docs-only smoke PR
         id: smoke
