@@ -8,8 +8,11 @@
  * suite already prove their neighbours without a real fleet (the resource ban bars a live run: #2656
  * ships this timer DISABLED for that reason too).
  */
+// no-token: gh -- nothing here spawns `gh`; the #2734 regression test below only reads/restores its own
+// process's `GH_TOKEN` to prove no code path in this file reads it anymore, and needs no real credential.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import {
   IDLE_THRESHOLD_MS, PROBE_TIMEOUT_MS, POLL_INTERVAL_MS,
   hasWakeableMac, probeIdle, advance, advanceShutdownRequested, autoOffDecision,
@@ -245,6 +248,20 @@ test("dispatchShutdown: runs ansible-playbook against sleep.yml, limited to the 
   assert.equal(result.status, 0);
 });
 
+// #2725 done-when 4: a REAL spawnSync (not a stub unconditionally returning {status: 0}), run against a
+// PATH that omits `ansible-playbook` -- exactly the live defect (systemd's default PATH lacked
+// `/root/.local/bin`, where `ansible-playbook` actually lives). Proves `dispatchShutdown` itself surfaces
+// the failure rather than discarding `spawnSync`'s own `error`, which is what let #2725 read as an
+// infinite silent retry instead of a visible one.
+test("dispatchShutdown: a REAL spawnSync against a PATH lacking ansible-playbook surfaces the failure", () => {
+  const run = ((command: string, args: readonly string[], options: { encoding?: string }) =>
+    spawnSync(command, args, { ...options, env: { PATH: "" }, encoding: "utf8" })
+  ) as unknown as typeof import("node:child_process").spawnSync;
+  const result = dispatchShutdown("a11y-worker-2", { run });
+  assert.notEqual(result.status, 0, "a missing ansible-playbook must never read as a successful dispatch");
+  assert.match(result.log, /ENOENT/, "the reason must be visible in the log, not swallowed");
+});
+
 // ---------------------------------------------------------------------------------------------------------
 // reportLine -- names a no-answer worker's own wait (done-when 7.4).
 // ---------------------------------------------------------------------------------------------------------
@@ -304,6 +321,31 @@ test("tick: --apply dispatches exactly the workers decided off, and stamps shutd
     { "a11y-worker-2": IDLE_THRESHOLD_MS });
 });
 
+test("tick: a failed dispatch is logged to stderr and does not stamp shutdownRequestedAt (done-when 2)", async () => {
+  let savedState: unknown = null;
+  const originalWrite = process.stderr.write.bind(process.stderr);
+  let stderrOutput = "";
+  process.stderr.write = ((chunk: string) => { stderrOutput += chunk; return true; }) as typeof process.stderr.write;
+  try {
+    await tick({
+      workers: WORKERS,
+      probe: async () => ({ outcome: "idle" }),
+      now: () => IDLE_THRESHOLD_MS,
+      statePath: "x.json",
+      read: alreadyIdleSince0,
+      write: (_p, data) => { savedState = JSON.parse(String(data)); },
+      apply: true,
+      dispatch: () => ({ status: null, log: "spawnSync ansible-playbook ENOENT" }),
+    });
+  } finally {
+    process.stderr.write = originalWrite;
+  }
+  assert.deepEqual((savedState as { shutdownRequestedAt: Record<string, number> }).shutdownRequestedAt, {},
+    "a dispatch that never reached sleep.yml must not be recorded as a requested shutdown");
+  assert.match(stderrOutput, /a11y-worker-2/, "the failure must name the worker");
+  assert.match(stderrOutput, /ENOENT/, "the failure reason must reach the log, not be discarded (#2725)");
+});
+
 test("tick: a worker still idle but under the threshold is kept, and never dispatched even under --apply", async () => {
   let dispatched = 0;
   const result = await tick({
@@ -330,6 +372,32 @@ test("tick: a worker with no MAC is never decided off, even idle past the thresh
     write: () => {},
   });
   assert.deepEqual(result.decisions[0].decision, { action: "keep", reason: "no-mac" });
+});
+
+test("tick: an unreadable GitHub cannot change the decision -- no seam left for it to reach (#2734)", async () => {
+  // No GH_TOKEN anywhere in this test's own environment: the old `readHoldState` (removed by #2737) would
+  // have read `holdUnreadable: true` under exactly this condition and forced `keep, hold-unreadable` for
+  // EVERY worker, per this file's former "An unreadable read is `keep` for EVERY worker" contract. `tick`'s
+  // deps above carry no hold-read dependency to inject in the first place -- `DecisionInput` has no
+  // `held`/`holdUnreadable` field -- so the decision below must come out exactly as every other idle-past-
+  // threshold case in this file, proving the removal rather than merely asserting intent.
+  const savedToken = process.env.GH_TOKEN;
+  delete process.env.GH_TOKEN;
+  try {
+    const result = await tick({
+      workers: WORKERS,
+      probe: async () => ({ outcome: "idle" }),
+      now: () => IDLE_THRESHOLD_MS,
+      statePath: "x.json",
+      read: alreadyIdleSince0,
+      write: () => {},
+    });
+    assert.deepEqual(result.decisions[0].decision, { action: "off", reason: "idle-five-minutes" },
+      "identical to the same probe, idleSince and MAC decided elsewhere in this file -- GH_TOKEN's "
+      + "absence must not turn this into `keep, hold-unreadable`, because nothing left reads it");
+  } finally {
+    if (savedToken === undefined) delete process.env.GH_TOKEN; else process.env.GH_TOKEN = savedToken;
+  }
 });
 
 // ---------------------------------------------------------------------------------------------------------
