@@ -3576,3 +3576,32 @@ of the findings who is measurably misled or slowed by these referrals.
 
 **NOT MEASURED:** what these referrals cost a reader, and whether the 10-to-18 rise is spread or dose (one retrain each, and the same dataset reproduces
 the same candidate, so a repeat would read a spread of zero). **What closes it:** option (ii), built and gated as its own rows. Nobody is doing that.
+
+## 54. THE THRASH-GUARD NEEDLE WAS NEVER SEEN RENDER — OPEN, by design (#2745)
+
+**`paneThrashed`'s needle (`THRASH_TEXT`, `claim-stall.mjs`) is read from the shipped Claude Code binary's own strings, not from a
+pane that actually thrashed.** #2743 established that a real thrash happened (worker-2623, 139 compactions, 5.4 hours, ~$95-125, stopped only
+by a human's manual interruption) but nobody captured what its pane showed at the moment the guard fired; #2745 asks for the gate to
+recognize that stop as a distinct signal rather than answering it with the same order it just sent, and the same "extend the pane-text
+mechanism, pin it with a fixture" shape that shipped `INTERRUPTED_TEXT`/`paneInterrupted` (#2470, see §52) without ever having seen a live
+interruption either — with one difference: that needle's literal was chosen by the engineer, and this one is Claude Code's own message, `strings
+-a` off the installed binary reading `autocompact_thrashing` back as the internal code name and the surrounding text as the message the pane
+prints when the "rapid refill breaker" ends a turn (context refilled to the limit within 3 turns of a compaction, 3 times in a row).
+
+**Three attempts to force a live one, 2026-09-28, all blocked the same way.** A throwaway herdr pane running `claude
+--dangerously-skip-permissions --autocompact 100000` against ten copies of a large file, prompted to read them repeatedly to force rapid context
+refill, was cut off before 3 compactions-in-a-row each time by an unrelated safety classifier flagging the mechanical repeated-read pattern as
+`[cyber]` — three prompt phrasings, same result. This is a constraint on the repro method, not evidence against the code path; the throwaway
+workspace, pane and scratch files were cleaned up rather than pushed through it.
+
+**What the binary DOES confirm, and what it cannot.** The string is real and is the message the pane will show; a real thrash's pane WAS seen
+once, live, during repro (a different one — an ordinary completed/errored turn, not a thrash), which is what caught that Claude Code prints its
+own completion footer (`✻ <verb> for <time> · done H:MM`) AFTER the message with a blank line before it, so `paneThrashed` strips the footer and
+matches on the paragraph, not the last line the way `paneInterrupted` does. What it cannot confirm: the message's exact wrapping across terminal
+columns, whether a herdr-captured pane renders it byte-for-byte the same as a raw terminal, and whether any Claude Code release changes the
+string's wording (the constant lives with a comment naming its extraction method, so an update is a `grep` away, not a rewrite).
+
+**What closes it:** the next real thrash, read once by hand off the live pane and pinned here against the fixture that already exists in
+`work-gate-claim-stalled.test.ts`. Until then this is a documented limit of the repro, not a defect awaiting a fix — the same posture #52 took
+for the interrupted-pane needle, and for the same reason: the alternative is shipping nothing and re-paying #2743's cost the next time the guard
+fires.
