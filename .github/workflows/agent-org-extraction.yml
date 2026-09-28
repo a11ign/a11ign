@@ -1,0 +1,209 @@
+# The one-time history-preserving push of `agent-org` into its own repository (ADR 0040 decision 6,
+# row #2623 -- "The split, child 5"). `ceo` ruled 2026-09-28T04:12:30Z (option "c") that this workflow
+# may be built and dispatched without further sign-off, coming back to `ceo` only if the rehearsal, the
+# leak scan, or the read-back turns up something real.
+#
+# `.github/workflows/` is `lane:ceo` (docs/lane-ownership.json) -- this file's own PR carries a
+# `Lane-exception: ceo` line naming that ruling, per the lane's documented exception format. It is
+# authored on a STANDALONE branch, not row #2623's, and declares `Closes: none` -- decision 6 (the
+# repository push) is independent of the row's own Done-when 5 (a separate 48-hour shadow-run cut-over,
+# owned by a sibling row, not yet built), so this file does not wait on it. `scripts/agent-org-extraction-
+# rehearsal.mjs`, alongside it in the same PR, is outside row #2623's own declared Region for the same
+# reason -- both were flagged to product-manager on the row rather than committed under it.
+#
+# THE SAME GUARDS release.yml USES, FOR THE SAME REASON: this is a one-shot, irreversible action on a
+# shared, public system (a real GitHub repository's history and branch protection), not a build.
+#   1. `workflow_dispatch` only -- no push, tag or schedule trigger.
+#   2. `dry-run` defaults to true. The default path REHEARSES ONLY: mirror-clones THIS repository into a
+#      disposable temp directory on the runner, runs `git filter-repo` there, verifies zero outward
+#      imports remain in the extracted tree, and scans the rewritten history for secrets. It makes NO
+#      write anywhere -- not to `a11ign/agent-org`, not to `a11ign/a11ign`, not to any fork.
+#   3. `confirm` must be typed exactly (`extract-agent-org-for-real`), never a checkbox.
+#   4. The real path needs `A11IGN_BOT_TOKEN`. The default `GITHUB_TOKEN` is scoped to THIS repository
+#      only -- it cannot push to, or administer branch protection or rulesets on, `a11ign/agent-org`, a
+#      different repository. Absent, the real path REFUSES rather than silently doing nothing or falling
+#      back to a token that cannot do the job -- contrast `auto-arm.yml`'s `arm` job, which has a safe
+#      same-repo fallback; there is none here, because there is nothing a same-repo token could do.
+#   5. Decision 6's steps 1-4 run as ONE job, in that order, with no step between 2 (the first push) and
+#      3 (branch protection + the ruleset) that could leave `agent-org`'s new `main` briefly
+#      unprotected -- the empty-repo window decision 6 exists to keep as short as possible.
+#
+# Steps 5 (downgrade the `bots` team from admin to write) and 6 (add the required status check `gate`)
+# are deliberately NOT here: decision 6 places them only after the first real PR's own `gate` job has
+# run once, an event this workflow cannot itself wait for without holding a runner idle across however
+# long a human review takes. They are a short, separate follow-up dispatch once that PR is green.
+name: agent-org extraction (ADR 0040 decision 6)
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: >-
+          Rehearse only (mirror-clone + filter-repo + outward-edge check + secret scan) -- writes
+          nothing anywhere. Leave true unless you are performing the real push.
+        type: boolean
+        default: true
+      confirm:
+        description: 'To push agent-org for real, type: extract-agent-org-for-real'
+        type: string
+        default: ''
+
+jobs:
+  rehearse:
+    name: Rehearse (mirror-clone, filter-repo, outward-edge check, secret scan -- zero writes)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Install git-filter-repo (needs pip + root neither of this org's interactive hosts have)
+        run: |
+          python3 -m pip install --user git-filter-repo
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - run: pnpm install --frozen-lockfile
+      - name: Run the extraction rehearsal
+        run: node scripts/agent-org-extraction-rehearsal.mjs --source="$GITHUB_WORKSPACE"
+
+  push:
+    name: Push agent-org for real (decision 6, steps 1-4)
+    needs: rehearse
+    if: inputs.dry-run == false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Refuse without confirm typed exactly
+        run: |
+          if [ "${{ inputs.confirm }}" != "extract-agent-org-for-real" ]; then
+            echo "::error::dry-run is false but confirm was not typed exactly. Nothing pushed."
+            exit 1
+          fi
+
+      - name: Refuse without A11IGN_BOT_TOKEN -- there is no safe fallback for this action
+        env:
+          A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
+        run: |
+          if [ -z "$A11IGN_BOT_TOKEN" ]; then
+            echo "::error::A11IGN_BOT_TOKEN is not set. The default GITHUB_TOKEN is scoped to this repository only and cannot push to, or administer, a different repository (a11ign/agent-org). See this file's header."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Install git-filter-repo
+        run: |
+          python3 -m pip install --user git-filter-repo
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - run: pnpm install --frozen-lockfile
+
+      # Re-rehearsed HERE, immediately before pushing, rather than trusting the sibling `rehearse` job's
+      # verdict: two jobs share a workflow but not a checkout state, and the tree about to be pushed must
+      # be the one just verified, not a same-named twin of it. `--clone-into` is a literal `/tmp` path
+      # (never `$RUNNER_TEMP`, whose value this script's own disposable-root check does not recognise) so
+      # the clone survives this step for the push step below to push from.
+      - name: Rehearse again, and keep the clone
+        run: |
+          node scripts/agent-org-extraction-rehearsal.mjs \
+            --source="$GITHUB_WORKSPACE" --clone-into=/tmp/agent-org-extraction-push
+
+      - name: Step 1 -- repo settings while empty
+        env:
+          GH_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
+        run: |
+          gh api --method PATCH repos/a11ign/agent-org \
+            -F allow_auto_merge=true -F delete_branch_on_merge=true
+
+      - name: Step 2 -- the first push (the one unprotected write)
+        env:
+          A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
+        run: |
+          git -C /tmp/agent-org-extraction-push push \
+            "https://x-access-token:${A11IGN_BOT_TOKEN}@github.com/a11ign/agent-org.git" --all
+
+      - name: Step 3a -- classic branch protection, immediately after the push
+        env:
+          GH_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
+        run: |
+          gh api --method PUT repos/a11ign/agent-org/branches/main/protection --input - <<'JSON'
+          {
+            "required_status_checks": null,
+            "enforce_admins": true,
+            "required_pull_request_reviews": {
+              "required_approving_review_count": 1,
+              "bypass_pull_request_allowances": { "users": [], "teams": [], "apps": [] }
+            },
+            "restrictions": null
+          }
+          JSON
+
+      - name: Step 3b -- the merge-queue-main ruleset, copied from a11ign/a11ign's ruleset 23681721
+        env:
+          GH_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
+        run: |
+          gh api --method POST repos/a11ign/agent-org/rulesets --input - <<'JSON'
+          {
+            "name": "merge-queue-main",
+            "target": "branch",
+            "enforcement": "active",
+            "conditions": { "ref_name": { "include": ["refs/heads/main"], "exclude": [] } },
+            "rules": [
+              { "type": "pull_request", "parameters": { "required_approving_review_count": 1 } },
+              { "type": "merge_queue" }
+            ]
+          }
+          JSON
+
+      # Step 4: a BEHAVIOURAL read-back, never a reading off the field
+      # (.claude/rules/main-review-requirement.md) -- `required_approving_review_count == 1` on the body
+      # above proves the setting is SET, not that it bites. `reviewDecision` on a real PR is the
+      # observable, and this token holds admin on the new repository (confirmed live 2026-09-28), so the
+      # instrument used is `branches/main/protection` with admin, the only one able to answer "nobody is
+      # exempt" -- printed below rather than left to be inferred.
+      - name: Step 4 -- open a docs-only smoke PR
+        id: smoke
+        env:
+          GH_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
+        run: |
+          cd /tmp/agent-org-extraction-push
+          git config user.email "a11ign-ai-workers@users.noreply.github.com"
+          git config user.name "a11ign-ai-workers"
+          git checkout -b smoke/branch-protection-read-back
+          printf '# Branch protection smoke check\n\nOpened by .github/workflows/agent-org-extraction.yml (ADR 0040 decision 6, step 4) to read `reviewDecision` back behaviourally after step 3 set branch protection and the merge-queue-main ruleset. Safe to close once read.\n' > EXTRACTION-SMOKE-CHECK.md
+          git add EXTRACTION-SMOKE-CHECK.md
+          git commit -m "decision 6 step 4: branch protection read-back smoke check"
+          git push origin smoke/branch-protection-read-back
+          PR_URL=$(gh pr create --repo a11ign/agent-org --base main \
+            --head smoke/branch-protection-read-back \
+            --title "Smoke check: branch protection read-back" \
+            --body "Decision 6 step 4. Closes: none -- a read-back probe, not a change.")
+          PR_NUMBER="${PR_URL##*/}"
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+
+      - name: Step 4 -- read reviewDecision back, retrying while GitHub evaluates it
+        env:
+          GH_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
+        run: |
+          PR_NUMBER="${{ steps.smoke.outputs.pr_number }}"
+          DECISION=""
+          for _ in 1 2 3 4 5 6 7 8 9 10; do
+            DECISION=$(gh pr view "$PR_NUMBER" --repo a11ign/agent-org --json reviewDecision --jq .reviewDecision)
+            [ -n "$DECISION" ] && break
+            sleep 3
+          done
+          echo "reviewDecision=$DECISION (instrument: branches/main/protection, read with repository admin)"
+          if [ "$DECISION" != "REVIEW_REQUIRED" ]; then
+            echo "::error::reviewDecision read '$DECISION', not REVIEW_REQUIRED, after step 3 set branch protection. The requirement is not biting -- do not treat step 3 as done. See main-review-requirement.md."
+            exit 1
+          fi
+          echo "Done-when 1 and 2 (row #2623): the token scope read (repository admin, confirmed live), and the push order (settings, the one unprotected write, protection immediately after, read back on PR #$PR_NUMBER) -- record both on the row from this run's log."
