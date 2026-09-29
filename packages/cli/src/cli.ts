@@ -37,9 +37,12 @@ import { pressedByThisRun, resolveAuthentication } from "./auth/resolve.js";
 import { redactionNotice, scrubArtifact, type ScrubSet } from "./auth/scrub.js";
 import { FlowsError } from "./auth/flows.js";
 import { leaseWorker, isAfterRun, type AfterRun, type WorkerLease } from "@a11ign/worker-fleet";
-import { CAPTURE_CLIENT_TIMEOUT_MS, requestJson } from "@a11ign/worker-fleet/worker-http";
+import { CAPTURE_CLIENT_TIMEOUT_MS } from "@a11ign/worker-fleet/worker-http";
 import { captureTolerantly } from "@a11ign/worker-fleet/capture-client";
-import { workerIsUsable } from "@a11ign/worker-fleet/health";
+import { refuseIfNothingListening } from "./worker-probe.js";
+
+// Re-exported: `docs/try-it.md` quotes its text, and `quoted-cli-output.test.ts` derives the quote from it.
+export { noWorkerMessage } from "./worker-probe.js";
 // `annotateCapture` is a VALUE (the shadow scorer calls it); the rest are types. Split rather than
 // combined into one `import {...}` so `import type` stays type-only and cannot pull evidence into a
 // runtime graph that does not need it.
@@ -453,9 +456,6 @@ function describeSource(source: WorkerLease["source"]): string {
   return "default";
 }
 
-/** How long the one-shot sanity probe waits for /health before concluding nobody is there. */
-const WORKER_PROBE_TIMEOUT_MS = 5_000;
-
 /**
  * A one-line reason a stranger can read, from whatever a socket-level failure actually threw.
  *
@@ -467,60 +467,6 @@ const WORKER_PROBE_TIMEOUT_MS = 5_000;
 export function errorReason(error: unknown): string {
   const nodeError = error as NodeJS.ErrnoException;
   return nodeError?.message || nodeError?.code || String(error);
-}
-
-/**
- * REFUSE FAST WHEN NOBODY CONFIGURED ANYTHING AND NOTHING IS LISTENING.
- *
- * `source: "default"` means the user set no `A11Y_WORKER`, declared no fleet, and has no local VM --
- * we GUESSED `http://localhost:8765` because the historical local-worker setup uses that address. If a
- * real worker is there, this guess is exactly right and must behave as it always has. If nothing is
- * there, `ECONNREFUSED` is a TRANSIENT network code (`transient-fault.mjs`), so `captureTolerantly`'s
- * lost-acceptance recovery -- correct for a real worker that dropped one socket -- reconciles for the
- * FULL `CAPTURE_CLIENT_TIMEOUT_MS` (620 s) against an address nothing has ever answered. Measured: a
- * first-time user with no worker sees "Scanning ..." and then silence for over ten minutes.
- *
- * The fix is not in the retry classification -- `ECONNREFUSED` really is transient for a worker that
- * might restart, and 620 s is the correct budget for one that legitimately dropped a socket
- * (architecture-audit.md §14.5). The fix is to ask, once, whether anyone is even there before
- * committing to that budget -- which this repo's own capture path could always have done and never did,
- * because nothing upstream of the retry loop knew the address had been GUESSED rather than GIVEN.
- *
- * A response of ANY kind -- 200, busy, not yet ready -- means something is listening at this address,
- * and the existing recovery machinery is exactly the right tool for whatever state it is in. Only a
- * connection that never completes (nothing listening, or a firewall dropping it silently) is refused
- * here; `workerIsUsable` is not the gate; that predicate answers "should I dispatch a capture to this
- * worker RIGHT NOW", not "does an answer exist at all", and conflating the two would refuse a real
- * worker that is merely busy or still warming up -- exactly the documented local-worker-on-8765 setup
- * this must not break.
- */
-/**
- * Exported as a pure builder, not just the throw site, because `docs/try-it.md` quotes this text
- * verbatim as "the most likely first result" -- `quoted-cli-output.test.ts` calls this function to
- * derive the expected quote rather than comparing two independently retyped literals.
- */
-export function noWorkerMessage({ worker, reason }: { worker: string; reason: string }): string {
-  return `No capture worker answered at ${worker} (nothing was configured, so this address was a guess).\n`
-    + `A screen reader is a Windows application, so nothing runs here without one. Set A11Y_WORKER to `
-    + `point at a worker you have, or see docs/getting-started.md to set one up (~20 minutes with a `
-    + `Windows machine already, or use the GitHub Action if you have none).\n(${reason})`;
-}
-
-async function refuseIfNothingListening(worker: string): Promise<void> {
-  let health: unknown;
-  try {
-    health = (await requestJson(`${worker}/health`, { timeoutMs: WORKER_PROBE_TIMEOUT_MS })).json;
-  } catch (error) {
-    throw new Error(noWorkerMessage({ worker, reason: errorReason(error) }), { cause: error });
-  }
-  // It answered, so something is really there -- proceed exactly as before this fix existed. A worker
-  // reporting busy or still warming up is NOT refused: `workerIsUsable` decides whether to DISPATCH a
-  // capture right now, which is a different question from whether anyone answered at all, and the
-  // existing retry machinery already handles "busy, try again" correctly. Surfaced only as a heads-up,
-  // because a user staring at a silent terminal deserves to know the wait has a reason.
-  if (!workerIsUsable(health as { busy?: boolean; ready?: boolean } | null | undefined)) {
-    process.stderr.write(`  (that worker answered but is not immediately ready -- waiting for it)\n`);
-  }
 }
 
 /** Where a page's machine-readable result goes: stdout for a lone page, a list's collector for one of several. */

@@ -132,7 +132,9 @@ test("the quiet fixture QUIET and the echo fixture ECHO: the fake worker's own v
 test("EXIT 2 is 'could not examine', never a pass: no worker, no variable, a bad flag, an empty capture, a worker that did not log in", { timeout: 120_000 }, async () => {
   const dead = await runScript(args("login-quiet", "written", "http://127.0.0.1:1"));
   assert.equal(dead.code, 2, dead.out + dead.err);
-  assert.match(dead.err, /Could not reach the capture worker/);
+  // Port 1 REFUSES, so the sentence says the machine is up and nothing listens; a silent worker would say "did not answer" (#2683).
+  assert.match(dead.err, /refused the connection/);
+  assert.doesNotMatch(dead.err, /\bdown\b/);
   const noVariable = await runScript(args("login-quiet", "written", "http://127.0.0.1:1"), { FAKE_USER });
   assert.equal(noVariable.code, 2);
   assert.match(noVariable.err, /FAKE_SECRET is not set/);
