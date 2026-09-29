@@ -28,24 +28,18 @@ import { buildScrubSet } from "../packages/cli/src/auth/scrub.ts";
 import { captureViaWorker } from "../packages/cli/src/cli.ts";
 import { isAuthFault } from "../packages/cli/src/auth/auth-faults.ts";
 import { formatAuthFaultMessage } from "../packages/cli/src/fault-remediation.ts";
-import { requestJson } from "@a11ign/worker-fleet/worker-http";
+import { workerProblem } from "./auth-leak-worker-probe.mjs";
 import { loginFlow, startFixtureSite } from "./auth-leak-fixtures.mjs";
 
 const EXIT_COULD_NOT_EXAMINE = 2;
-const HEALTH_TIMEOUT_MS = 8_000;
 
 /**
- * Fail fast when there is no worker to ask. `captureViaWorker` retries a refused connection for a whole capture's budget
- * (minutes), which is right for a fleet run and wrong for a person who mistyped a port.
+ * Stop, as a usage problem, when nothing answers `/health` (`workerProblem` says which of three things happened).
  * @param {string} worker
  */
 async function assertWorkerAnswers(worker) {
-  try {
-    await requestJson(`${worker}/health`, { timeoutMs: HEALTH_TIMEOUT_MS });
-  } catch (error) {
-    throw new LeakCheckUsageError(`Could not reach the capture worker at ${worker} (${error instanceof Error ? error.message : String(error)}). `
-      + "This command runs on the machine the worker runs on, with the worker started from a shell that exported the two variables.");
-  }
+  const problem = await workerProblem(worker);
+  if (problem) throw new LeakCheckUsageError(problem);
 }
 
 /** @param {string[]} argv @param {Record<string, string | undefined>} env @returns {Promise<number>} */
