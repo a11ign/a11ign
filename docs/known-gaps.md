@@ -3342,6 +3342,16 @@ and treats **the first real refresh as the measurement**. What is and is not kno
   re-points the tree and the order says so. Not measured live: that an instance reviews correctly from it, and that
   a teardown removes it on the host. A teardown that fails leaves the tree on DISK (not `/tmp`, #2163), so a leaked
   tree costs disk until someone removes it; the failure is reported, not retried.
+  **The "re-pointed on every push" clause did NOT hold for a LIVE instance (#2771, measured 2026-09-28 on `reviewer-2754`):**
+  its tree stayed at the first head while the pull request moved through two more, because `reviewerTarget` re-points only for
+  an order the tick generates, whose cause key names the head it was made at, so it is offered once. The re-prompt the routing
+  rule prescribes (`prompt:session`) was prose alone, and a verdict header naming the true head made a stale tree look fine.
+  **What was done:** every delivery to a `reviewer-<n>` -- a direct `prompt:session` to an idle one, and a tick order about its own
+  pull request under a non-reviewer cause -- now calls `prepareReviewCheckout` first (`repointedForReviewer`), and a refused
+  re-point sends the order WITH a warning that the tree may be stale. Pinned by `wake-review-recheckout.test.ts` with fakes.
+  **Still open, and pinned there as current behaviour:** a `prompt:session` sent while the reviewer is MID-TURN is queued, and the
+  tick REFUSES a queued order to a reviewer (`reviewerMismatch`: a handoff's key names no pull request), so it is never delivered
+  and nothing re-points; and the live host has not yet shown `reviewer-2754`'s tree reaching its head.
 - **The per-instance clean-verdict count** the role document keeps for the standing `reviewer` (`ceo` samples every
   fifth `convinced` per instance) **has no defined meaning for an instance that sees one pull request.** Instances
   start OFF the line until `ceo` rules how the count is kept.
