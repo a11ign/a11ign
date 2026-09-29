@@ -30,9 +30,12 @@ import { pathToFileURL } from "node:url";
 import { realpathSync, readFileSync, appendFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
-import { refuseUnknownFlags } from "../../worker-fleet/src/cli-flags.mjs";
+import { refuseUnknownFlags } from "./lib/cli-flags.mjs";
 import { clearBeforeOrder, isPerRowInstance, readAgents, WAKEABLE, queueHandoff, handoffQueuePath, ledgerPathFrom,
   handoffBacklog, readHandoffs, waitedFor, addressed } from "./wake.mjs";
+// #2619 (child 3d of #69): the `answer:` prefix these two advisory notes name, moved to the project's
+// declared vocabulary.
+import { ANSWER_PREFIX } from "./project-vocabulary.mjs";
 
 /**
  * `1` the order is LOST -- nothing holds it and nothing will retry it; `2` it was not delivered now and
@@ -165,18 +168,20 @@ export const PROMPT_REFUSED_PREFIX = "prompt refused: ";
 
 /**
  * Clear, then prompt -- the clear only for a standing seat ({@link clearBeforeOrder}; a per-row instance keeps its
- * context, #2483). Returns what to report, or `null` when the prompt landed.
+ * context, and may instead be `/compact`ed over threshold, #2483/#2688). Returns what to report, or `null`
+ * when the prompt landed.
  *
  * THE PROMPT IS {@link deliveredText}: clearing strips everything the session knew, so what it wakes to
  * must say who it is and who asked. `sender` is `null` (the default) for a caller that is not a known
  * session -- a systemd unit such as the nightly firing is named as unidentified, never guessed.
  *
  * @param {(args: string[]) => string} run @param {string} label @param {string} text
- * @param {{sender?: string | null, sleep?: (ms: number) => void}} [options] `sleep` is the clear's settle
- *   ({@link clearBeforeOrder}): real by default, injected only by a test that is not about the delay (#2546)
+ * @param {{sender?: string | null, sleep?: (ms: number) => void, contextRoot?: string}} [options] `sleep` is
+ *   the clear's settle ({@link clearBeforeOrder}): real by default, injected only by a test that is not about
+ *   the delay (#2546); `contextRoot` is the compact check's transcript root (#2688), same way
  */
-export function clearThenPrompt(run, label, text, { sender = null, sleep } = {}) {
-  const { sent, refusal: clearRefusal } = clearBeforeOrder(run, label, sleep);
+export function clearThenPrompt(run, label, text, { sender = null, sleep, contextRoot } = {}) {
+  const { sent, refusal: clearRefusal } = clearBeforeOrder(run, label, sleep, contextRoot);
   try {
     run(["--session", "org", "agent", "prompt", label, deliveredText(label, text, sender, { followUp: !sent })]);
   } catch (/** @type {any} */ err) {
@@ -276,7 +281,7 @@ export function queueDepthNote(label, path) {
   return `QUEUE DEPTH: this is order ${mine.waiting} waiting for "${label}", and the oldest has waited `
     + `${waitedFor(mine.oldestMs)}. A deep queue means that session is never between tasks, so it is not `
     + "reading its inbox -- if this order needs an answer, put it on the row where the org can see it "
-    + "(`answer:<session>`, a `blocked-by` edge, or the row body) rather than only here.\n";
+    + `(\`${ANSWER_PREFIX}<session>\`, a \`blocked-by\` edge, or the row body) rather than only here.\n`;
 }
 
 /**
@@ -382,7 +387,7 @@ export function parseStance(args) {
 export function stanceNote(stance) {
   if (stance === STANCE.DECISION) {
     return "DECLARED DECISION -- recorded on the queue entry, so the bundle header lists this order. "
-      + "Say in the text WHAT CLEARS IT: a row to label `answer:<session>`, or \"reply on #928\". Where a "
+      + `Say in the text WHAT CLEARS IT: a row to label \`${ANSWER_PREFIX}<session>\`, or "reply on #928". Where a `
       + "row exists, the label is the answer and this order only points at it.\n";
   }
   if (stance === STANCE.FYI) return "DECLARED FYI -- recorded: this order asks for no answer.\n";

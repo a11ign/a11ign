@@ -249,6 +249,35 @@ export function loginLine(report: LoginReport): string {
     + `${report.ruleLayerScans} rule-layer scans); the minimum stated before the run was ${report.minimum}.`;
 }
 
+/** One capture of a single URL: one form state (or none), and where its `--json` result goes. */
+export interface SingleUrlCapture<State> { formState?: State; index: number; sink: (json: object) => void }
+
+/**
+ * A run of ONE URL: one capture per configured form state (else one), and the logins it performed reported afterwards, in the
+ * shape a list reports them. The tally is cumulative across the states, so the report is made ONCE, after the last capture:
+ * in `--json` it rides the LAST result (each result is held back until the next one or the end, which is why the single-URL
+ * path prints no earlier than it did but one result later for a run with several states), and with no JSON result (the human
+ * report, a draft run, a run that threw) it is one line through `say`. It is made in `finally` because a run that logged in
+ * and then failed is the one whose lockout risk a reader most needs counted. An unauthenticated run has no tally and reports
+ * nothing.
+ */
+export async function runSingleUrl<State>({ states, tally, axe, capture, emit, say }: {
+  states: readonly State[]; tally?: LoginTally; axe: boolean;
+  capture: (one: SingleUrlCapture<State>) => Promise<void>;
+  emit: (json: object) => void; say: (line: string) => void;
+}): Promise<void> {
+  let held: object | undefined;
+  const sink = (json: object): void => { if (held) emit(held); held = json; };
+  try {
+    if (states.length === 0) await capture({ index: 0, sink });
+    for (const [index, formState] of states.entries()) await capture({ formState, index, sink });
+  } finally {
+    const report = tally && loginReport({ tally, minimum: minimumLogins({ captures: captureCount({ pages: 1, states: states.length }), axe }) });
+    if (held) emit(report ? { ...held, logins: report } : held);
+    else if (report) say(loginLine(report));
+  }
+}
+
 /** The CLI's closing roll-up: which pages were captured and which FAILED, so no failure hides among the reports. */
 export function rollUpLines(pages: readonly PageEntry[], logins?: LoginReport): string[] {
   const skipped = pages.filter((page) => page.notAttempted);

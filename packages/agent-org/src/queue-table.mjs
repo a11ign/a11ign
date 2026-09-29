@@ -39,10 +39,10 @@ import { loadavg } from "node:os";
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
-import { refuseUnknownFlags, flagValue } from "../../worker-fleet/src/cli-flags.mjs";
+import { refuseUnknownFlags, flagValue } from "./lib/cli-flags.mjs";
 import { behindByCount } from "./queue-stalled.mjs";
-import { REPO } from "../../../scripts/repo-identity.mjs";
-import { sandboxGitEnv } from "../../guards/src/git-env.mjs";
+import { REPO } from "./project-identity.mjs";
+import { sandboxGitEnv } from "./lib/git-env.mjs";
 import { newestPerName } from "./newest-check-run.mjs";
 import { holdersOf } from "./pr-hold-state.mjs";
 import { armedFromApi } from "./pr-armed-state.mjs";
@@ -432,7 +432,7 @@ export function openPRs({ run = gh } = {}) {
     // THE DRAFT FLAG COMES BACK ON THE SAME PAYLOAD, so reading it costs nothing -- the same reason
     // `holders` is read below. It was dropped here until #912's gate needed it: "every open pull request
     // that is a draft and has no verdict at its current head" is the reviewer's whole lane
-    // (packages/agent-org/docs/roles/reviewer.md), and with this field absent NO script in the tree could answer it, so the
+    // (.agent-org/roles/reviewer.md), and with this field absent NO script in the tree could answer it, so the
     // two reviewer sessions polled `gh pr list` on a clock to ask a question this payload already knew.
     // `?? null`, NOT `Boolean()`: absent must stay distinguishable from false, for the reason `prRow`
     // states where it carries this field on.

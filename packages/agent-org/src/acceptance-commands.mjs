@@ -69,14 +69,18 @@ import { pathToFileURL } from "node:url";
 import { existsSync, globSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, delimiter, join } from "node:path";
-import { refuseUnknownFlags } from "../../worker-fleet/src/cli-flags.mjs";
-import { sandboxGitEnv } from "../../guards/src/git-env.mjs";
-import { changedFiles } from "../../guards/src/changed-files.mjs";
-import { localImports, importedNamesFor, stripComments } from "../../guards/src/local-import-closure.mjs";
+import { refuseUnknownFlags } from "./lib/cli-flags.mjs";
+import { sandboxGitEnv } from "./lib/git-env.mjs";
+import { changedFiles } from "./lib/changed-files.mjs";
+import { localImports, importedNamesFor, stripComments } from "./lib/local-import-closure.mjs";
+// #2619 (child 3d of #69): the shared-resource ban and the template's field/question names -- a
+// project's own values, moved out of this file's `FLEET_LAB_PATTERNS`/`FLEET_QUESTION`.
+import { RESOURCES, FLEET_QUESTION, ACCEPTANCE_FIELD, CLOSES_FIELD } from "./project-vocabulary.mjs";
 
 /** @typedef {{ verdict: "runnable" } | { verdict: "refused", reason: string } | { verdict: "prose", reason: string }} Classification */
 /** @typedef {{ kind: "missing" } | { kind: "none", reason: string } | { kind: "commands", commands: string[] } | { kind: "duplicate", occurrences: { line: number, text: string }[] }} Section */
-/** @typedef {{ kind: "missing" } | { kind: "malformed", detail: string } | { kind: "none", reason: string } | { kind: "closes", numbers: number[] }} ClosesDeclaration */
+/** @typedef {{ repo: string | null, number: number }} ClosesReference one row a body names: `repo` is `owner/name`, or null for a bare `#N` (the PR's own repository's) */
+/** @typedef {{ kind: "missing" } | { kind: "malformed", detail: string } | { kind: "none", reason: string } | { kind: "closes", numbers: number[], references?: ClosesReference[] }} ClosesDeclaration */
 // #621: `corpus` is OPTIONAL, deliberately -- every existing capabilities literal in this file's own test
 // suite (`NO_HISTORY`, `WITH_HISTORY`) predates it and names only three keys. `unmetRequirements`'s own
 // rule already reads an absent key as unmet, never as satisfied by default, so making the field optional
@@ -87,17 +91,28 @@ import { localImports, importedNamesFor, stripComments } from "../../guards/src/
 // `npm run fleet:*` and its siblings -- the resource ban every worker/agent role file below `ceo` and
 // `orchestrator` carries, verbatim, elsewhere in this repo. A GitHub-hosted runner is not one of the
 // exceptions to it.
-// #1912: THESE NAME A THING, where every other pattern below names an INVOCATION. `fleet:status` in a
+// #1912: THE NAMED ENTRIES NAME A THING, where every other pattern names an INVOCATION. `fleet:status` in a
 // sentence is still somebody running `fleet:status`; `A11Y_PVE_KEY` in a sentence may be a unit test
 // asserting what happens when the key is ABSENT -- #1911's Acceptance was a plain rstest run whose bullet
 // said exactly that, and `row-file` routed it to `orchestrator`, the one session the row existed to spare.
 // `fleetOrLabAcceptance` reads these outside bullet prose only; see `withoutBulletProse`.
-const SYSTEMCTL = /\bsystemctl\b/;
-const SYSTEMD = /\bsystemd\b/;
-const PVE_KEY = /\bA11Y_PVE_KEY\b|\ba11y-pve\b/;
-const CORPUS_REMOTE = /\bA11Y_CORPUS_REMOTE\b/;
-const ON_THE_LAB = /\bon the lab\b/;
-const NAMED_NOT_INVOKED = new Set([SYSTEMCTL, SYSTEMD, PVE_KEY, CORPUS_REMOTE, ON_THE_LAB]);
+//
+// #2619 (child 3d of #69): THE VALUES ARE `RESOURCES`, a11ign's project declaration -- this file now
+// derives its two working lists from the `named` flag each entry carries, rather than choosing the patterns
+// itself. A second project's declaration can name a different resource ban, or none. `resourcePatternsFrom`
+// is EXPORTED, pure, and takes `resources` as a parameter rather than closing over `RESOURCES`, so a test
+// can show a fixture project's OWN list (an empty one included) derives its own two working lists, without
+// swapping the module's own import-time binding of `RESOURCES`.
+/** @param {readonly { pattern: RegExp, reason: string, named: boolean }[]} resources
+ * @returns {{ patterns: [RegExp, string][], namedNotInvoked: Set<RegExp> }} */
+export function resourcePatternsFrom(resources) {
+  return {
+    patterns: resources.map(({ pattern, reason }) => [pattern, reason]),
+    namedNotInvoked: new Set(resources.filter((resource) => resource.named).map((resource) => resource.pattern)),
+  };
+}
+
+const { patterns: FLEET_LAB_PATTERNS, namedNotInvoked: NAMED_NOT_INVOKED } = resourcePatternsFrom(RESOURCES);
 
 // #1988: A PARAGRAPH DECLARING THE WORK **OUT** IS NOT THE ROW DOING IT. `extractLabeledSection` runs to
 // the next `##` heading, so the Acceptance span swallows every bold-labelled paragraph after it --
@@ -114,49 +129,11 @@ const NAMED_NOT_INVOKED = new Set([SYSTEMCTL, SYSTEMD, PVE_KEY, CORPUS_REMOTE, O
 // `withoutBulletProse` derives a bullet item's extent from its marker.
 const SCOPE_DISCLAIMER = /^\s*\*\*not in scope\b/i;
 
-const FLEET_LAB_PATTERNS = /** @type {[RegExp, string][]} */ ([
-  [/\bfleet:/, "reaches the fleet -- a GitHub runner has no Windows worker"],
-  [/\blab:/, "reaches the lab -- a GitHub runner has no Proxmox"],
-  [/\btraining:capture/, "captures real evidence, which needs the fleet"],
-  [/\bworker:/, "reaches a worker VM, which does not exist on a GitHub runner"],
-  [/\bevidence:check\b/, "compares live evidence against a real worker"],
-  [/\bgate:stability\b/, "captures canaries against a real worker"],
-  [/\bcapture:check\b/, "needs a real worker and NVDA"],
-  // #1241, added after review: THE CONTROL PLANE IS ALSO NOBODY ELSE'S. The first version of this
-  // deriver cited #1042 and #1234 as the cases it closed and caught NEITHER -- both are `orchestrator`'s
-  // because the control plane is theirs, and neither acceptance names a `fleet:` or `lab:` command.
-  // A lane deriver answering null for a row that is not `lane:any` looks exactly like one answering null
-  // for a row that is, and it becomes the thing a reader trusts INSTEAD of the body.
-  //
-  // NAMED, never a glob: a list somebody chose is what makes routing on it safe.
-  [SYSTEMCTL, "drives systemd on the control host, which only `orchestrator` reaches"],
-  [SYSTEMD, "installs or reads a systemd unit on the control host"],
-  [/\bgh workflow run\b/, "dispatches a workflow from the control plane, not from a checkout"],
-  [/\bfleet:provision\b/, "provisions a real box"],
-  [PVE_KEY, "uses the Proxmox key, which lives on the control plane"],
-  // #1860: BARE `\bcorpus-backup\b` WAS WRONG -- it matched the SUBSTRING, so
-  // `packages/lab/src/packaging/corpus-backup.test.ts` (a unit test that only reads source text) refused
-  // itself the moment #1042's own fix added a file named after the thing it fixed. Every sibling pattern
-  // above matches an INVOCATION SHAPE (a colon-suffixed script name), never a bare word a filename could
-  // just as easily contain -- this is the one that didn't, and #1860 is the proof. `corpus-backup\.mjs`
-  // is the real script's filename (as actually spawned: `node packages/lab/scripts/corpus-backup.mjs`);
-  // `corpus:backup` is the npm script name (`npm run corpus:backup`, per package.json). Neither matches a
-  // `.test.ts` path.
-  [/\bcorpus-backup\.mjs\b|\bcorpus:backup\b/, "writes or verifies the corpus backup, which runs on the lab"],
-  [CORPUS_REMOTE, "writes or verifies the corpus backup, which runs on the lab"],
-  [ON_THE_LAB, "names work done ON the lab, which only `orchestrator` reaches"],
-]);
-
-// #2175: THE INVOCATION PATTERNS -- everything a declared No does NOT silence. The five NAMED patterns name a
-// THING a test double can also name (`systemctl` in "given a fake `systemctl`"); these name a COMMAND, and
+// #2175: THE INVOCATION PATTERNS -- everything a declared No does NOT silence. The NAMED entries name a
+// THING a test double can also name (`systemctl` in "given a fake `systemctl`"); the rest name a COMMAND, and
 // `fleet:status` in an Acceptance is somebody running it whatever the row's answer says (#1912's ground).
 const INVOCATION_PATTERNS = FLEET_LAB_PATTERNS.filter(([pattern]) => !NAMED_NOT_INVOKED.has(pattern));
 const NAMED_PATTERNS = FLEET_LAB_PATTERNS.filter(([pattern]) => NAMED_NOT_INVOKED.has(pattern));
-
-// #2175: THE TEMPLATE'S OWN QUESTION (`.github/ISSUE_TEMPLATE/backlog-row.yml`, id `fleet`), which every
-// row answers and nothing read. Matched by `extractLabeledSection`, so the heading's `?` and any level of
-// `#` are handled where the rest of this module already handles them.
-const FLEET_QUESTION = "Does the acceptance need the fleet or the lab";
 
 // NAMED, NOT INFERRED -- the answer is the FIRST WORD, from a short list somebody chose. Measured 2026-09-25
 // over the 400 most recent rows (151 carry the section): `No`/`Neither` and `Yes`/`Both` are the
@@ -212,7 +189,7 @@ export function fleetOrLabAcceptance(body) {
   // Running a command and CLASSIFYING a row are different questions over the same text: `pr-open` needs
   // the runnable lines, this needs everything the section says it will take.
   const declared = declaredFleetAnswer(body);
-  const section = extractLabeledSection(body, "Acceptance");
+  const section = extractLabeledSection(body, ACCEPTANCE_FIELD);
   // #2175: DECLARATION FIRST, PATTERN SECOND. A No silences the five NAMED patterns and nothing else; a Yes
   // routes with no pattern at all. Rows that say neither derive from the patterns alone, as before.
   const patterns = declared === "no" ? INVOCATION_PATTERNS : FLEET_LAB_PATTERNS;
@@ -259,7 +236,7 @@ function namedPatternText(section) {
  * @returns {{ reason: string, form: "bullet" | "scope disclaimer" } | null}
  */
 export function untrimmedFleetMention(body) {
-  const section = extractLabeledSection(body, "Acceptance");
+  const section = extractLabeledSection(body, ACCEPTANCE_FIELD);
   if (section === null || fleetOrLabAcceptance(body) !== null) return null;
   // #2175: under a declared No the DECLARATION decided, and `declarationDisagreement` says so. Naming a
   // trim here would send the filer to the wrong fix -- a numbered clause is not a bullet.
@@ -284,7 +261,7 @@ export function untrimmedFleetMention(body) {
 export function declarationDisagreement(body) {
   const declared = declaredFleetAnswer(body);
   if (declared === null) return null;
-  const section = extractLabeledSection(body, "Acceptance");
+  const section = extractLabeledSection(body, ACCEPTANCE_FIELD);
   if (declared === "yes") {
     return section !== null && patternReason(section, FLEET_LAB_PATTERNS) !== null
       ? null : { declared, routed: true, reason: null };
@@ -1975,6 +1952,51 @@ function testFilesRunBy(command) {
   return [...new Set([...scripts.flatMap((script) => suiteTestFiles(script)), ...named])];
 }
 
+// #2724: EVERY `npm run <script>` NAMED, whatever the script -- unlike `SUITE_COMMAND`, which only
+// recognises the four names in `SUITE_SCRIPTS`. `board:settle` matches this and not that: it names no
+// `*.test.ts` glob, so `testFilesRunBy` returns nothing for it and `unmetCommandClosureRequirements` never
+// walked its module at all. `g`/`matchAll` for the same reason #2207 gives `SUITE_COMMAND` a global flag: a
+// chain names more than one script.
+const NPM_RUN_SCRIPT = /(?:^|&&|\|\||;)\s*npm\s+run\s+([\w:-]+)(?![:\w-])/g;
+
+/**
+ * #2724: the ONE file `scriptBody` runs, when it is nothing but a bare `node <file>` invocation -- optional
+ * leading env assignments (the same shape `firstRealToken` already strips), optional trailing flags, but no
+ * `&&`/`||`/`|`/`;` of its own. `board:settle`'s body (`node packages/agent-org/src/settle-closed-rows.mjs`)
+ * is exactly this shape; a script that chains further commands, or does not invoke `node` at all, resolves
+ * to `null` -- this only ever ADDS a file to check, never guesses one where the shape is ambiguous.
+ * @param {string} scriptBody
+ * @returns {string | null}
+ */
+export function singleNodeInvocation(scriptBody) {
+  if (/&&|\|\||\||;/.test(scriptBody)) return null;
+  const tokens = scriptBody.trim().split(/\s+/).filter((token) => !ENV_ASSIGNMENT.test(token));
+  return tokens[0] === "node" && /\.[cm]?[jt]sx?$/.test(tokens[1] ?? "") ? tokens[1] : null;
+}
+
+/**
+ * #2724: every operational script's resolved entry file that `command` invokes via `npm run <script>` --
+ * the `SPAWNS_GH`-through-a-script-name population #621's closure walk could reach for a `.test.ts` entry
+ * but never for an arbitrary npm script name, because nothing before this asked `npm run <script>` what
+ * file it runs. `SUITE_SCRIPTS` is excluded: those name a `*.test.ts` glob, already walked by
+ * `testFilesRunBy`'s own suite-script branch, not a single module this function would resolve to one file.
+ * @param {string} command
+ * @returns {string[]}
+ */
+function operationalScriptEntries(command) {
+  let scripts;
+  try {
+    scripts = JSON.parse(readFileSync("package.json", "utf8")).scripts;
+  } catch {
+    return [];
+  }
+  const names = [...command.trim().matchAll(NPM_RUN_SCRIPT)].map((match) => match[1])
+    .filter((name) => !SUITE_SCRIPTS.includes(name));
+  return [...new Set(names)]
+    .map((name) => (typeof scripts[name] === "string" ? singleNodeInvocation(scripts[name]) : null))
+    .filter((entry) => entry !== null);
+}
+
 /** A file name a test runner is pointed at, whatever the runner: `x.test.ts`, `x.test.mjs`, `x.spec.tsx`. */
 const NAMED_TEST_FILE = /\.(?:test|spec)\.[cm]?[jt]sx?$/;
 
@@ -2044,6 +2066,10 @@ export function unmetCommandRequirements(command, capabilities) {
  * so it catches `board-style.test.ts` (no `// requires:` header at all) the same way it catches a file
  * that declared one honestly. Checked FIRST in `classifyCommand`, because a header that under-declares is
  * itself a refusal (#621's own framing): whatever the header says, the closure is what actually runs.
+ *
+ * #2724: `operationalScriptEntries` joins `testFilesRunBy` here, and ONLY here -- an operational script
+ * carries no `// requires:` header for `unmetCommandRequirements` to read, so widening that one too would
+ * add a population it can never say anything about.
  * @param {string} command
  * @param {JobCapabilities} capabilities
  * @returns {{ requirement: string, message: string }[]}
@@ -2051,7 +2077,7 @@ export function unmetCommandRequirements(command, capabilities) {
 export function unmetCommandClosureRequirements(command, capabilities) {
   /** @type {{ requirement: string, message: string }[]} */
   const out = [];
-  for (const fileArg of testFilesRunBy(command)) {
+  for (const fileArg of [...testFilesRunBy(command), ...operationalScriptEntries(command)]) {
     if (/[*?[{]/.test(fileArg) || !existsSync(fileArg)) continue;
     out.push(...unmetClosureRequirements(fileArg, capabilities));
     // SHORT-CIRCUIT ON THE FIRST, and only for the whole-suite case: `classifyCommand` prints one
@@ -2271,7 +2297,7 @@ export function testFileArgumentsResolve(command) {
 // about what a header looks like. #438 added "Refutation" here rather than inventing a second parser: a
 // bare `Refutation:` line has to end an in-progress `Acceptance:` block exactly the way `Mutation:`
 // already did, or the refutation commands would be silently swallowed as more acceptance commands.
-const SECTION_FIELD_NAMES = ["Acceptance", "Refutation", "Mutation"];
+const SECTION_FIELD_NAMES = [ACCEPTANCE_FIELD, "Refutation", "Mutation"];
 
 /**
  * #506: A MARKDOWN HEADING'S TRAILING TEXT IS A TITLE, NOT A COMMAND -- unless a colon follows the field
@@ -2408,7 +2434,7 @@ function extractSection(fieldName, body) {
  * @returns {Section}
  */
 export function extractAcceptanceSection(body) {
-  return extractSection("Acceptance", body);
+  return extractSection(ACCEPTANCE_FIELD, body);
 }
 
 /**
@@ -3071,14 +3097,26 @@ function runForReal(command) {
 // NEVER INFERS. Guessing the row from a branch name or a title would close the wrong issue the day the
 // guess is wrong, and a wrongly-closed row is worse than an open one -- it leaves work that looks done.
 // The declaration is the author's, in the body, or this reports MISSING/MALFORMED and the job fails.
-const CLOSES_NONE_PATTERN = /\bCloses:\s*none\b([^\n]*)/i;
-const CLOSES_LIST_PATTERN = /\bCloses:?\s*(#\d+(?:\s*(?:,|and)\s*#\d+)*)/i;
+const CLOSES_NONE_PATTERN = new RegExp(`\\b${CLOSES_FIELD}:\\s*none\\b([^\\n]*)`, "i");
+// #2617 (child 3b of #69): A ROW CAN BE NAMED ACROSS REPOSITORIES -- `Closes owner/repo#7`, the form a layer repository's
+// pull request uses for a row that lives in the project's tracker (ADR 0040, decision 2). Measured by RUNNING this parser on it
+// before the change: `Closes owner/repo#7` read MALFORMED, because the list pattern wanted `#` straight after the word, so a
+// layer PR could not have declared its row at all. The qualifier is `owner/name` exactly (the two halves `project-config.mjs`
+// accepts), and NOTHING ELSE is a qualifier: `owner#7`, `owner/#7`, `a/b/c#7` and `owner/repo#` are each still malformed.
+const REPO_QUALIFIER = "[A-Za-z0-9_.-]+\\/[A-Za-z0-9_.-]+";
+const CLOSES_REF = `(?:${REPO_QUALIFIER})?#\\d+`;
+const CLOSES_LIST_PATTERN = new RegExp(`\\b${CLOSES_FIELD}:?\\s*(${CLOSES_REF}(?:\\s*(?:,|and)\\s*${CLOSES_REF})*)`, "i");
+const CLOSES_REF_GLOBAL = new RegExp(`(?:(${REPO_QUALIFIER}))?#(\\d+)`, "g");
+// What follows a list the pattern stopped at: a `,`/`and` and then something with a `#` in it that the pattern could not read is a
+// reference that was TRIED and got wrong (`Closes #7, a11ign#8`). Reading the list up to it and dropping it would report a row
+// fewer than the author named, silently; prose after a comma (`Closes #7, and updates the docs`) has no `#` and is left alone.
+const CLOSES_UNREAD_TAIL = /^\s*(?:,|and)\s*([A-Za-z0-9_./-]*#\S*)/i;
 // #527: GLOBAL, because an author writing `Closes #510` on one line and `Closes #497` on another -- a
 // form GitHub itself accepts and closes both for -- is a SECOND, independent match of the same pattern,
 // not a continuation of the first. `CLOSES_LIST_PATTERN` stays singular (`.exec()` reads naturally as
 // "does this line have one"); this is the walk that must never stop after the first hit.
 const CLOSES_LIST_PATTERN_GLOBAL = new RegExp(CLOSES_LIST_PATTERN.source, `${CLOSES_LIST_PATTERN.flags}g`);
-const CLOSES_MENTIONED_PATTERN = /\bCloses\b/i;
+const CLOSES_MENTIONED_PATTERN = new RegExp(`\\b${CLOSES_FIELD}\\b`, "i");
 
 /**
  * Pure. Never infers a row from anything but the words the author wrote.
@@ -3107,9 +3145,16 @@ export function extractClosesDeclaration(body) {
   // never this regex), so the gate was silently under-reporting a fact GitHub and this file both see.
   const listMatches = [...text.matchAll(CLOSES_LIST_PATTERN_GLOBAL)];
   if (listMatches.length > 0) {
-    const numbers = listMatches.flatMap((match) =>
-      [...match[1].matchAll(/#(\d+)/g)].map((m) => Number(m[1])));
-    return { kind: "closes", numbers };
+    const unread = listMatches.map((match) => CLOSES_UNREAD_TAIL.exec(text.slice(match.index + match[0].length))?.[1]);
+    const first = unread.find((token) => token !== undefined);
+    if (first !== undefined) {
+      return { kind: "malformed", detail: `\`${first}\` is not a row reference: write \`#<number>\` or \`owner/repo#<number>\`` };
+    }
+    const references = listMatches.flatMap((match) =>
+      [...match[1].matchAll(CLOSES_REF_GLOBAL)].map((m) => ({ repo: m[1] ?? null, number: Number(m[2]) })));
+    const numbers = references.map((reference) => reference.number);
+    // A body that names only bare rows returns EXACTLY what it always did; `references` appears only when a repository was named.
+    return references.some((reference) => reference.repo !== null) ? { kind: "closes", numbers, references } : { kind: "closes", numbers };
   }
   if (CLOSES_MENTIONED_PATTERN.test(text)) {
     return { kind: "malformed",
@@ -3137,7 +3182,18 @@ export function closesDeclarationReport(body) {
   if (declaration.kind === "none") {
     return { ok: true, line: `CLOSES: NONE -> ${declaration.reason}` };
   }
-  return { ok: true, line: `CLOSES: #${declaration.numbers.join(", #")}` };
+  const named = (declaration.references ?? []).map((reference) => `${reference.repo ?? ""}#${reference.number}`);
+  return { ok: true, line: declaration.references ? `CLOSES: ${named.join(", ")}` : `CLOSES: #${declaration.numbers.join(", #")}` };
+}
+
+/**
+ * #2617: every row a `closes` declaration names, WITH the repository each lives in -- `repo` null for a bare `#N`, which is the pull
+ * request's OWN repository's. A declaration that never named a repository has no `references`, so they are built from `numbers`.
+ * @param {{ kind: "closes", numbers: number[], references?: ClosesReference[] }} declaration
+ * @returns {ClosesReference[]}
+ */
+export function closesReferences(declaration) {
+  return declaration.references ?? declaration.numbers.map((number) => ({ repo: null, number }));
 }
 
 // #2305: A PR THAT ADDS OR CHANGES A TEST MUST CARRY A `Mutation:` RECORD, or `Mutation: none -- <reason>`.

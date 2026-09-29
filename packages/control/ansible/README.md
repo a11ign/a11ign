@@ -57,6 +57,7 @@ The UTM VMs keep their own lifecycle through `worker-ctl.sh` and are **not** man
 |---|---|
 | `packages.yml` | Node (LTS resolved ONCE on the control plane, so a fleet cannot straddle a release), MinGit, the repo |
 | `account.yml` | the worker account, and credential-free auto-logon — including the `LimitBlankPasswordUse` assertion |
+| `powershell-native-image.yml` | the NGEN native image of PowerShell's engine, built only where `ngen display` says there is none (#2672) |
 | `policy.yml` | Edge, Windows Update, notifications, OneDrive, screensaver |
 | `firewall.yml` | the worker port, and the allow-app alert that would block the whole desktop |
 | `nvda.yml` | pnpm install, guidepup, NVDA, and the Speech Viewer |
@@ -351,13 +352,13 @@ separate, each domain's blast radius is bounded by what that one key can reach.
    a machine holding either private key is being retired, generate a FRESH keypair for its replacement and
    revoke the old public key from the fleet/host side — do not copy the private file. A copied private key
    is a second machine that can silently lose the "exactly one machine holds both" property ADR 0012 and
-   `packages/agent-org/docs/roles/README.md`'s "Credentials" section both rely on.
+   `.agent-org/roles/README.md`'s "Credentials" section both rely on.
 5. **Revoking access** is the mirror of step 2 or 3: remove the public key from
    `administrators_authorized_keys` (fleet) or the host's authorized-keys (lab), then re-provision the
    fleet side so the removal actually lands rather than sitting uncommitted.
 
 **What this section deliberately does not do.** It does not name a host, an IP, a filename or a fingerprint
-— see `packages/agent-org/docs/roles/README.md`'s "Credentials are the single point of failure" section for why: this project
+— see `.agent-org/roles/README.md`'s "Credentials are the single point of failure" section for why: this project
 treats a credential's existence and its domain as documentable, and its exact reachability material as the
 one thing that must survive only on the machine that holds it today.
 

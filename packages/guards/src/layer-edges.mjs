@@ -14,8 +14,16 @@
 // (`SINKS`), or, in a launcher or workflow, as a `packages/<pkg>` path token. A path that is DATA -- a Region
 // body handed to a parser, a fixture list a test checks a function against -- names a path without reading
 // it, and `region-paths.test.ts` and `owned-path-signoff.test.ts` are full of them. Comments do not count.
-// The cost of that rule is a LOWER BOUND: a path assigned to a `const` and read three lines later through
-// the variable is not seen. The baseline is a floor on the boundary, never a proof there is nothing under it.
+// A path in a `const` is followed to where it flows (#2643): a string `const` handed to a sink, a list or object
+// `const` (through `...spread`) walked by `for ... of` or by `.map`/`.filter`/`.forEach`/... into a sink, each judged
+// on the binding innermost at the read, so a `const` shadowed in an inner block is the inner value there. A `const`
+// only handed to a parser, an `includes` or a callback that reads nothing is data and is not an edge, and a
+// destructured loop takes the property it names, never every string in the list. Such an edge carries the lines of
+// its declaration and its read. WHAT IS STILL NOT SEEN, and so still a floor: a path handed to a function that reads it
+// on the caller's behalf (`pathToDriver(WORKER_INDEX)`, an imported `writeSitesIn(files)`), a value returned and read
+// elsewhere, and a path assembled by concatenation or across files. A file whose brackets do not balance is read
+// with no scopes at all, which is the old file-wide reading and never a wrong scope.
+// The baseline is a floor on the boundary, never a proof there is nothing under it.
 //
 // `stripComments` is `local-import-closure.mjs`'s, not a second one: two comment strippers over the same
 // tree is what drifts, and this one preserves offsets, which the message line numbers need.
@@ -70,10 +78,11 @@ const PLACEHOLDER = "\uE000";
 export const EDGE_KINDS = Object.freeze(["import", "path-literal", "launcher", "workflow", "config"]);
 const DISPOSITION = /^(?:by-name|travels|owned-by:#\d+)$/;
 
-/** @typedef {{ from: string, to: string, kind: string, direction: "in" | "out" }} Edge */
+/** @typedef {{ declaredLine: number, readLine: number }} Via */
+/** @typedef {{ from: string, to: string, kind: string, direction: "in" | "out", via?: Via }} Edge */
 /** @typedef {Edge & { disposition: string, reason: string }} BaselineEntry */
 /** @typedef {{ has(path: string): boolean }} PathIndex */
-/** @typedef {{ literal: string, kind: string }} Reach */
+/** @typedef {{ literal: string, kind: string, via?: Via }} Reach */
 
 /**
  * `packages/<name>/...` -> `name`; anything else (root, scripts, docs, .github) is not in a package.
@@ -164,17 +173,18 @@ function resolveSpecifier(spec, fromFile, index) {
 }
 
 /**
- * The string literals sitting DIRECTLY in the argument list of the call whose `(` is at `open`, in order,
- * with a template's `${...}` replaced by `PLACEHOLDER`. A bare identifier bound to a string literal counts
- * as that literal (`const WORKER_INDEX = "packages/..."; readFileSync(join(ROOT, WORKER_INDEX))`). Nested
- * calls are their own sinks and are not read here.
+ * The alternatives each DIRECT argument of the call whose `(` is at `open` can hold, in order: a string literal is one, a
+ * bare identifier is whatever the name is bound to AT THIS POSITION (`const WORKER_INDEX = "packages/..."`, or a loop
+ * variable over a list of paths), and `name.prop` is that property of a list of objects. An identifier bound to nothing
+ * known contributes nothing. A template's `${...}` is `PLACEHOLDER`. Nested calls are their own sinks and are not read here.
  * @param {string} src
  * @param {number} open
- * @param {Map<string, string>} bindings
+ * @param {Lookup} lookup
+ * @returns {Argument[]}
  */
-function literalsOfCall(src, open, bindings) {
-  /** @type {string[]} */
-  const literals = [];
+function argumentsOfCall(src, open, lookup) {
+  /** @type {Argument[]} */
+  const args = [];
   let depth = 0;
   const stop = Math.min(src.length, open + MAX_CALL_CHARS);
   for (let i = open; i < stop; i++) {
@@ -183,17 +193,20 @@ function literalsOfCall(src, open, bindings) {
     else if (c === ")" && --depth === 0) break;
     else if (c === '"' || c === "'" || c === "`") {
       const { text, end } = readQuoted(src, i, stop);
-      if (depth === 1) literals.push(text);
+      if (depth === 1) args.push({ options: [text] });
       i = end;
     } else if (startsIdentifier(src, i)) {
       const id = identifierAt(src, i);
-      const bound = bindings.get(id);
-      if (depth === 1 && bound !== undefined) literals.push(bound);
+      const binding = depth === 1 ? lookup(id, i) : undefined;
+      const options = optionsOf(binding, propertyAfter(src, i + id.length));
+      if (options.length > 0) args.push({ options, declaredAt: binding?.value.declaredAt });
       i += id.length - 1;
     }
   }
-  return literals;
+  return args;
 }
+
+/** @typedef {{ options: string[], declaredAt?: number }} Argument one direct argument: the paths it can hold, and where a `const` that supplied them was written */
 
 /** @param {string} src @param {number} i */
 const startsIdentifier = (src, i) =>
@@ -203,19 +216,290 @@ const startsIdentifier = (src, i) =>
 const identifierAt = (src, i) =>
   /^[\w$]+/.exec(src.slice(i, i + MAX_IDENTIFIER_CHARS))?.[0] ?? src[i];
 
+/** The `prop` of a `.prop` starting at `i`, or `undefined`. @param {string} src @param {number} i */
+const propertyAfter = (src, i) => (src[i] === "." ? /^[\w$]+/.exec(src.slice(i + 1, i + 1 + MAX_IDENTIFIER_CHARS))?.[0] : undefined);
+
 /**
- * `const NAME = "literal"` bindings in a file, so a path named once and read elsewhere is still seen at the read.
- * @param {string} src
- * @returns {Map<string, string>}
+ * What a binding hands a sink: all of it, or, for `name.prop` over a list of objects, only that property's strings.
+ * @param {Binding | undefined} binding
+ * @param {string | undefined} prop
+ * @returns {string[]}
  */
-function stringBindings(src) {
-  /** @type {Map<string, string>} */
-  const bindings = new Map();
-  for (const m of src.matchAll(/\b(?:const|let|var)\s+([\w$]+)\s*(?::[^=\n]+)?=\s*(?=['"`])/g)) {
-    const start = m.index + m[0].length;
-    bindings.set(m[1], readQuoted(src, start, Math.min(src.length, start + MAX_CALL_CHARS)).text);
+function optionsOf(binding, prop) {
+  if (binding === undefined) return [];
+  return prop !== undefined && binding.value.container ? binding.value.byProp.get(prop) ?? [] : binding.value.values;
+}
+
+// ---- WHERE A NAME'S VALUE COMES FROM (#2643). A path assigned to a `const` and read three lines later is an edge, and
+// so is one in a list that a loop or an array method walks into a read. Each name is bound over the SPAN in which it is
+// visible, and a read is judged on the binding that is innermost at the read -- a `const` shadowed by a different value in
+// an inner block is the inner value there and the outer one after the block ends.
+/** @typedef {{ values: string[], byProp: Map<string, string[]>, container: boolean, declaredAt?: number }} Bound `declaredAt`: the offset of the declaration (or list literal) the strings were written in */
+/** @typedef {{ name: string, from: number, to: number, value: Bound }} Binding */
+/** The 1-based line of offset `at`; comments are blanked in place, so it is the line in the file. @param {string} src @param {number} at */
+const lineAt = (src, at) => src.slice(0, at).split("\n").length;
+
+/** @typedef {{ close: Map<number, number>, open: Map<number, number> }} Pairs */
+/** @typedef {(name: string, at: number) => Binding | undefined} Lookup */
+/** @typedef {{ src: string, pairs: Pairs, lookup: Lookup }} Scope */
+/** @typedef {{ names: { name: string, key: string | null }[], from: number, to: number, over: Bound }} Iteration */
+
+const NOTHING = /** @type {Bound} */ ({ values: [], byProp: new Map(), container: false });
+const ARRAY_METHODS = "map|forEach|filter|flatMap|some|every|find|findIndex";
+
+/**
+ * Matching brackets, both ways. A file whose brackets do not balance (a regex literal holding a quote is enough) gets
+ * NO pairs, and every span then reaches the end of the file: the old file-wide reading, never a wrong scope.
+ * @param {string} src
+ * @returns {Pairs}
+ */
+function bracketPairs(src) {
+  /** @type {Pairs} */
+  const pairs = { close: new Map(), open: new Map() };
+  /** @type {number[]} */
+  const stack = [];
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (c === '"' || c === "'" || c === "`") i = readQuoted(src, i, src.length).end;
+    else if ("([{".includes(c)) stack.push(i);
+    else if (")]}".includes(c)) {
+      const opened = stack.pop();
+      if (opened === undefined) return { close: new Map(), open: new Map() };
+      pairs.close.set(opened, i);
+      pairs.open.set(i, opened);
+    }
   }
-  return bindings;
+  return stack.length === 0 ? pairs : { close: new Map(), open: new Map() };
+}
+
+/** Every string literal between `from` and `to`, however deep. @param {string} src @param {number} from @param {number} to */
+function stringsBetween(src, from, to) {
+  /** @type {string[]} */
+  const found = [];
+  for (let i = from; i < to; i++) {
+    if (src[i] !== '"' && src[i] !== "'" && src[i] !== "`") continue;
+    const { text, end } = readQuoted(src, i, to);
+    found.push(text);
+    i = end;
+  }
+  return found;
+}
+
+/**
+ * A list or object literal spanning `from`..`to`: every string in it, the strings each `key:` holds, and whatever a
+ * `...NAME` spread brings in.
+ * @param {Scope} scope
+ * @param {number} from
+ * @param {number} to
+ * @returns {Bound}
+ */
+function containerBetween({ src, pairs, lookup }, from, to) {
+  const values = stringsBetween(src, from, to);
+  /** @type {Map<string, string[]>} */
+  const byProp = new Map();
+  const text = src.slice(from, to);
+  /** @type {number | undefined} */
+  let spreadDeclaredAt;
+  for (const m of text.matchAll(/([\w$]+)\s*:\s*(?=["'`[])/g)) {
+    const at = from + m.index + m[0].length;
+    const held = src[at] === "[" ? stringsBetween(src, at, pairs.close.get(at) ?? to) : [readQuoted(src, at, to).text];
+    byProp.set(m[1], [...(byProp.get(m[1]) ?? []), ...held]);
+  }
+  for (const m of text.matchAll(/\.\.\.\s*([\w$]+)/g)) {
+    const spread = lookup(m[1], from)?.value;
+    if (spread === undefined) continue;
+    spreadDeclaredAt ??= spread.declaredAt;
+    values.push(...spread.values);
+    for (const [key, held] of spread.byProp) byProp.set(key, [...(byProp.get(key) ?? []), ...held]);
+  }
+  return { values, byProp, container: true, declaredAt: spreadDeclaredAt };
+}
+
+/** What follows `=`: a literal, a list or object literal (behind `Object.freeze(`/`new Set(`), or something opaque. */
+function valueAt(/** @type {Scope} */ scope, /** @type {number} */ from) {
+  const wrapped = /^(?:Object\.freeze|new\s+(?:Set|Map))\s*\(\s*/.exec(scope.src.slice(from, from + MAX_IDENTIFIER_CHARS));
+  const at = from + (wrapped?.[0].length ?? 0);
+  const c = scope.src[at];
+  if (c === '"' || c === "'" || c === "`") {
+    return /** @type {Bound} */ ({ values: [readQuoted(scope.src, at, Math.min(scope.src.length, at + MAX_CALL_CHARS)).text], byProp: new Map(), container: false });
+  }
+  const end = scope.pairs.close.get(at);
+  return (c === "[" || c === "{") && end !== undefined ? containerBetween(scope, at, end) : NOTHING;
+}
+
+/**
+ * The end of the expression starting at `from`: its first `,` `;` or unmatched closer at depth zero.
+ * @param {string} src
+ * @param {number} from
+ * @param {Pairs} pairs
+ */
+function expressionEnd(src, from, pairs) {
+  for (let i = from; i < src.length; i++) {
+    const c = src[i];
+    if (c === '"' || c === "'" || c === "`") i = readQuoted(src, i, src.length).end;
+    else if ("([{".includes(c)) i = pairs.close.get(i) ?? src.length;
+    else if (",;)]}".includes(c)) return i;
+  }
+  return src.length;
+}
+
+/** The span of a block or single statement whose body starts at the first non-space at or after `from`. */
+function bodyEnd(/** @type {string} */ src, /** @type {number} */ from, /** @type {Pairs} */ pairs) {
+  const at = from + (/^\s*/.exec(src.slice(from, from + MAX_CALL_CHARS))?.[0].length ?? 0);
+  return src[at] === "{" ? pairs.close.get(at) ?? src.length : expressionEnd(src, at, pairs);
+}
+
+/** `text` split at the commas that are not inside a bracket or a generic. @param {string} text */
+function splitTopLevel(text) {
+  /** @type {string[]} */
+  const parts = [];
+  let depth = 0;
+  let last = 0;
+  for (let i = 0; i < text.length; i++) {
+    if ("([{<".includes(text[i])) depth++;
+    else if (")]}>".includes(text[i]) && text[i - 1] !== "=") depth--;
+    else if (text[i] === "," && depth === 0) { parts.push(text.slice(last, i)); last = i + 1; }
+  }
+  return [...parts, text.slice(last)];
+}
+
+/**
+ * The names a parameter or loop pattern binds, each with the property of the iterated objects it takes: `{ file, expect: e }`
+ * gives file/file and e/expect, `rel` and `[a, b]` take the whole element (`key` null).
+ * @param {string} pattern
+ * @returns {{ name: string, key: string | null }[]}
+ */
+function namesOfPattern(pattern) {
+  const first = splitTopLevel(pattern.trim())[0].trim();
+  if (first.startsWith("{")) {
+    return first.slice(1).replace(/\}.*$/s, "").split(",").map((p) => p.split("=")[0].trim()).filter(Boolean)
+      .map((p) => { const [key, alias] = p.split(":").map((x) => x.trim()); return { name: alias ?? key, key }; });
+  }
+  if (first.startsWith("[")) return [...first.matchAll(/[\w$]+/g)].map((m) => ({ name: m[0], key: null }));
+  const ident = /^[\w$]+/.exec(first)?.[0];
+  return ident === undefined ? [] : [{ name: ident, key: null }];
+}
+
+/** Every parameter name of a parameter list, for the shadowing they do and none of the value. @param {string} params */
+const parameterNames = (params) => splitTopLevel(params).flatMap((p) => {
+  const declared = p.trim().replace(/^\.\.\./, "").split(/[=:](?![^{[]*[}\]])/)[0];
+  return /^[{[]/.test(declared) ? [...declared.matchAll(/[\w$]+/g)].map((m) => m[0]) : declared.replace(/\?$/, "").trim().match(/^[\w$]+$/) ?? [];
+});
+
+/** @returns {{ from: number, params: string, body: number }[]} the functions of a file: where their parameters start and where their bodies end */
+function functionSpans(/** @type {string} */ src, /** @type {Pairs} */ pairs) {
+  /** @type {{ from: number, params: string, body: number }[]} */
+  const spans = [];
+  for (const m of src.matchAll(/\bfunction\s*[\w$]*\s*\(/g)) {
+    const open = m.index + m[0].length - 1;
+    const close = pairs.close.get(open);
+    if (close !== undefined) spans.push({ from: open, params: src.slice(open + 1, close), body: bodyEnd(src, close + 1, pairs) });
+  }
+  for (const m of src.matchAll(/\)\s*(?::\s*[^=>{}()]+)?=>\s*/g)) {
+    const open = pairs.open.get(m.index);
+    if (open !== undefined) spans.push({ from: open, params: src.slice(open + 1, m.index), body: bodyEnd(src, m.index + m[0].length, pairs) });
+  }
+  for (const m of src.matchAll(/(?<![\w$.)])([\w$]+)\s*=>\s*/g)) {
+    spans.push({ from: m.index, params: m[1], body: bodyEnd(src, m.index + m[0].length, pairs) });
+  }
+  return spans;
+}
+
+/**
+ * The bindings of a file, and the lookup that answers "what does this name hold HERE". Declarations first, in order, so
+ * a spread finds what it spreads; then every function's parameters as opaque names (a parameter that shadows a path
+ * `const` is not that path); then the iteration variables, which take the strings of the list they walk.
+ * @param {string} src comment-stripped
+ * @returns {Lookup}
+ */
+function makeLookup(src) {
+  const pairs = bracketPairs(src);
+  /** @type {Map<string, Binding[]>} */
+  const byName = new Map();
+  /** @type {Lookup} */
+  const lookup = (name, at) => (byName.get(name) ?? []).filter((b) => b.from <= at && at <= b.to).at(-1);
+  const scope = { src, pairs, lookup };
+  /** @type {(binding: Binding) => void} */
+  const add = (binding) => {
+    const list = byName.get(binding.name) ?? [];
+    list.push(binding);
+    list.sort((a, b) => a.from - b.from);
+    byName.set(binding.name, list);
+  };
+  addDeclarations(scope, add);
+  for (const { from, params, body } of functionSpans(src, pairs)) {
+    for (const name of parameterNames(params)) add({ name, from, to: body, value: NOTHING });
+  }
+  for (const it of iterationsOf(scope)) {
+    for (const { name, key } of it.names) add({ name, from: it.from, to: it.to, value: valueFor(it.over, key) });
+  }
+  return lookup;
+}
+
+/** A value keeps the origin of the list it was spread from, and is otherwise written where it is. @param {Bound} value @param {number} at */
+const withOrigin = (value, at) => ({ ...value, declaredAt: value.declaredAt ?? at });
+
+/** @param {Bound} over @param {string | null} key */
+const valueFor = (over, key) => (key === null ? over : { values: over.byProp.get(key) ?? [], byProp: new Map(), container: false, declaredAt: over.declaredAt });
+
+/**
+ * `const|let|var NAME = ...` over the whole file, each visible to the end of the block it is written in.
+ * @param {Scope} scope
+ * @param {(binding: Binding) => void} add
+ */
+function addDeclarations(scope, add) {
+  const { src, pairs } = scope;
+  const blocks = [...pairs.close].filter(([open]) => src[open] === "{");
+  for (const m of src.matchAll(/\b(?:const|let|var)\s+([\w$]+)\s*(?::[^=\n]+)?=(?![=>])\s*/g)) {
+    const from = m.index + m[0].length;
+    const to = blocks.filter(([open, close]) => open < m.index && m.index < close).map(([, close]) => close).sort((a, b) => a - b)[0] ?? src.length;
+    add({ name: m[1], from: m.index, to, value: withOrigin(valueAt(scope, from), m.index) });
+  }
+}
+
+/**
+ * The loops and array-method callbacks in a file that walk a list: the names each binds, the span they are visible over,
+ * and what they walk. `for (const { file } of SITES) { ... }` and `[...A, ...B].map((rel) => ...)` are both this.
+ * @param {Scope} scope
+ * @returns {Iteration[]}
+ */
+function iterationsOf(scope) {
+  const { src, pairs } = scope;
+  /** @type {Iteration[]} */
+  const found = [];
+  for (const m of src.matchAll(/\bfor\s*\(\s*(?:const|let|var)\s+(\{[^}]*\}|\[[^\]]*\]|[\w$]+)\s+of\s+/g)) {
+    const open = m.index + m[0].indexOf("(");
+    const close = pairs.close.get(open);
+    if (close === undefined) continue;
+    found.push({ names: namesOfPattern(m[1]), from: open, to: bodyEnd(src, close + 1, pairs), over: walkedBy(scope, m.index + m[0].length, close) });
+  }
+  for (const m of src.matchAll(new RegExp(`\\.(?:${ARRAY_METHODS})\\s*\\(\\s*`, "g"))) {
+    const call = m.index + m[0].indexOf("(");
+    const callback = /^(?:\(([^()]*)\)|([\w$]+))\s*(?::[^=]+)?=>|^function\s*[\w$]*\s*\(([^()]*)\)/.exec(src.slice(m.index + m[0].length, m.index + m[0].length + MAX_CALL_CHARS));
+    const close = pairs.close.get(call);
+    if (callback && close !== undefined) {
+      found.push({ names: namesOfPattern(callback[1] ?? callback[2] ?? callback[3] ?? ""), from: m.index + m[0].length, to: close, over: receiverBefore(scope, m.index) });
+    }
+  }
+  return found.sort((a, b) => a.from - b.from);
+}
+
+/** What a `for ... of <expr>` walks: a list literal, or the first name in the expression (through `Object.entries(`/`.filter(`). */
+function walkedBy(/** @type {Scope} */ scope, /** @type {number} */ from, /** @type {number} */ close) {
+  const { src, pairs, lookup } = scope;
+  if (src[from] === "[") return withOrigin(containerBetween(scope, from, pairs.close.get(from) ?? close), from);
+  const named = /^(?:Object\.(?:entries|values)\(\s*)?([\w$]+)/.exec(src.slice(from, close));
+  return (named ? lookup(named[1], from)?.value : undefined) ?? NOTHING;
+}
+
+/** What an array method's receiver is: a list literal ending at the `.`, or a name. */
+function receiverBefore(/** @type {Scope} */ scope, /** @type {number} */ dot) {
+  const { src, pairs, lookup } = scope;
+  const end = src.slice(0, dot).trimEnd().length; // a chain may break the line before its `.map(`
+  const open = src[end - 1] === "]" ? pairs.open.get(end - 1) : undefined;
+  if (open !== undefined) return withOrigin(containerBetween(scope, open, end - 1), open);
+  const named = /(?<![\w$.])([\w$]+)$/.exec(src.slice(Math.max(0, end - MAX_IDENTIFIER_CHARS), end));
+  return (named ? lookup(named[1], end)?.value : undefined) ?? NOTHING;
 }
 
 /**
@@ -252,14 +536,23 @@ function skipInterpolation(src, open, stop) {
   return stop;
 }
 
+/** The most joined paths one call is expanded into: a list of forty paths joined with one more is forty candidates, never a thousand. */
+const MAX_CANDIDATES = 256;
+
 /**
- * The candidate paths one sink call makes: joined for `join`/`resolve` (its arguments ARE the segments), one each otherwise.
+ * The candidate paths one sink call makes: joined for `join`/`resolve` (its arguments ARE the segments, and an argument
+ * that can hold several paths makes one candidate each), one per alternative otherwise. Each keeps the offset of the
+ * `const` it came through, when it came through one.
  * @param {string} name
- * @param {string[]} literals
+ * @param {Argument[]} args
+ * @returns {{ literal: string, declaredAt?: number }[]}
  */
-function candidatesOfCall(name, literals) {
-  if (name === "join" || name === "resolve") return literals.length > 0 ? [literals.join("/")] : [];
-  return literals;
+function candidatesOfCall(name, args) {
+  if (name !== "join" && name !== "resolve") return args.flatMap(({ options, declaredAt }) => options.map((literal) => ({ literal, declaredAt })));
+  const declaredAt = args.find((a) => a.declaredAt !== undefined)?.declaredAt;
+  const joined = args.reduce((/** @type {string[]} */ paths, { options }) =>
+    (paths.length === 0 ? options : paths.flatMap((p) => options.map((o) => `${p}/${o}`))).slice(0, MAX_CANDIDATES), []);
+  return joined.map((literal) => ({ literal, declaredAt }));
 }
 
 /**
@@ -270,12 +563,13 @@ function candidatesOfCall(name, literals) {
 function flowingLiterals(src) {
   /** @type {Reach[]} */
   const flows = relativeSpecifiers(src).map((literal) => ({ literal, kind: "import" }));
-  const bindings = stringBindings(src);
+  const lookup = makeLookup(src);
   for (const m of src.matchAll(SINK_CALL)) {
     const open = m.index + m[0].length - 1;
     const name = /^\w+/.exec(m[0])?.[0] ?? "";
-    for (const literal of candidatesOfCall(name, literalsOfCall(src, open, bindings))) {
-      flows.push({ literal, kind: "path-literal" });
+    for (const { literal, declaredAt } of candidatesOfCall(name, argumentsOfCall(src, open, lookup))) {
+      const via = declaredAt === undefined ? undefined : { declaredLine: lineAt(src, declaredAt), readLine: lineAt(src, open) };
+      flows.push(via === undefined ? { literal, kind: "path-literal" } : { literal, kind: "path-literal", via });
     }
   }
   return flows;
@@ -356,12 +650,13 @@ function edgesOfFile(path, text, index, layers) {
   const fromPkg = packageOf(path);
   /** @type {Edge[]} */
   const edges = [];
-  for (const { literal, kind } of reachesOf(path, text)) {
+  for (const { literal, kind, via } of reachesOf(path, text)) {
     const to = targetOf({ literal, kind }, path, index);
     if (to === null) continue;
     const toPkg = packageOf(to);
     if (toPkg === fromPkg || !(layers.includes(fromPkg ?? "") || layers.includes(toPkg ?? ""))) continue;
-    edges.push({ from: path, to, kind, direction: layers.includes(fromPkg ?? "") ? "out" : "in" });
+    const direction = layers.includes(fromPkg ?? "") ? "out" : "in";
+    edges.push(via === undefined ? { from: path, to, kind, direction } : { from: path, to, kind, direction, via });
   }
   return edges;
 }
@@ -383,7 +678,7 @@ export function findEdges({ root, tracked, layers = LAYER_PACKAGES }) {
     if (!existsSync(abs)) continue;
     if (!isScanned(path, statSync(abs).size)) continue;
     for (const edge of edgesOfFile(path, readFileSync(abs, "utf8"), index, layers)) {
-      byKey.set(keyOf(edge), edge);
+      if (!byKey.has(keyOf(edge))) byKey.set(keyOf(edge), edge);
     }
   }
   return [...byKey.values()].sort((a, b) => keyOf(a).localeCompare(keyOf(b)));
@@ -433,11 +728,14 @@ function malformedReasons(entry) {
  */
 export function describeVerdict({ unlisted, stale, malformed }) {
   return [
-    ...unlisted.map((e) => `NEW EDGE ${e.direction}: ${e.from} -> ${e.to} (${e.kind}). Cut it, or add it to ${BASELINE_PATH} with a disposition and a reason.`),
+    ...unlisted.map((e) => `NEW EDGE ${e.direction}: ${e.from} -> ${e.to} (${e.kind}${carriedBy(e)}). Cut it, or add it to ${BASELINE_PATH} with a disposition and a reason.`),
     ...stale.map((e) => `STALE ENTRY: ${e.from} -> ${e.to} (${e.kind}, ${e.direction}) no longer exists. Remove it from ${BASELINE_PATH}.`),
     ...malformed.map((m) => `MALFORMED: ${m}`),
   ];
 }
+
+/** Where a `const`-carried path was written and where it is read, as the words a person needs to find both. @param {Edge} edge */
+const carriedBy = ({ via }) => (via === undefined ? "" : `, through a const declared at line ${via.declaredLine} and read at line ${via.readLine}`);
 
 /** Counts by disposition, for the closing comment on the row that cuts edges: how many the move still has to cut. */
 export function countByDisposition(/** @type {BaselineEntry[]} */ baseline) {

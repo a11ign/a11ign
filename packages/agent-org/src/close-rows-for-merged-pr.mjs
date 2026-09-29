@@ -86,7 +86,7 @@ import { pathToFileURL } from "node:url";
 // nothing else -- no `npm ci`, no build -- so the package specifier would resolve to a `dist/` that does
 // not exist there. #330 and #331 are what that circular bootstrap costs. `cli-flags.mjs` imports only
 // `node:path`, `node:fs` and `node:url`.
-import { refuseUnknownFlags } from "../../worker-fleet/src/cli-flags.mjs";
+import { refuseUnknownFlags } from "./lib/cli-flags.mjs";
 // #804: A LEAF IMPORT, safe under the identical no-`npm ci`/no-build constraint the rest of this header
 // names -- `claim-labels.mjs` imports nothing at all, so it cannot be part of a cycle. This replaced two
 // rounds of "duplicate the constant locally instead" (#754 for CLAIM_LABEL/STARTED_LABEL, #782 for
@@ -95,6 +95,7 @@ import { refuseUnknownFlags } from "../../worker-fleet/src/cli-flags.mjs";
 // shape this repo names as its own most expensive recurring defect -- three copies of four literals is
 // worse than the cycle either duplicate was solving. See claim-labels.mjs's own header for the full story.
 import { READY_LABEL, CLAIM_LABEL, STARTED_LABEL } from "./claim-labels.mjs";
+import { SESSION_PREFIX } from "./project-vocabulary.mjs";
 // #2202: `waiting-condition.mjs` imports NOTHING, so it is import-safe under this header's no-`npm ci`/no-build
 // constraint for the same reason `claim-labels.mjs` is: it cannot be part of a cycle.
 import { answersOwedBy, ANSWER_PREFIX } from "./waiting-condition.mjs";
@@ -105,7 +106,7 @@ import { answersOwedBy, ANSWER_PREFIX } from "./waiting-condition.mjs";
 // covered too. IMPORT-SAFE under this header's no-`npm ci`/no-build constraint: `leak-patterns.mjs`
 // imports nothing at all, so it cannot be part of a cycle -- the identical argument `claim-labels.mjs`
 // carries above.
-import { assertNoLeakInArgv } from "../../lab/src/packaging/leak-patterns.mjs";
+import { assertNoLeakInArgv } from "./lib/leak-patterns.mjs";
 
 export const EXIT = { DONE: 0, COULD_NOT_CLOSE: 1, CANNOT_ASK: 2, STATUS_NOT_MOVED: 3 };
 
@@ -219,7 +220,7 @@ export function closurePlan(issues, { prMergedAt = null } = {}) {
  */
 export function labelsToStrip(currentLabels) {
   return currentLabels.filter((label) => label === READY_LABEL || label === CLAIM_LABEL
-    || label === STARTED_LABEL || label.startsWith("session:"));
+    || label === STARTED_LABEL || label.startsWith(SESSION_PREFIX));
 }
 
 /**

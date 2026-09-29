@@ -24,19 +24,20 @@
 // It writes to stdout by default. `--post` publishes it as a comment on the board-report issue, so the
 // generating and the publishing are separate acts and a bad report can be seen before it is posted.
 import { execFileSync } from "node:child_process";
-import { sandboxGitEnv } from "../../guards/src/git-env.mjs";
-import { changedFiles } from "../../guards/src/changed-files.mjs";
+import { sandboxGitEnv } from "./lib/git-env.mjs";
+import { changedFiles } from "./lib/changed-files.mjs";
 import { readFileSync, existsSync, readdirSync} from "node:fs";
 import { fileURLToPath } from "node:url";
+import { OUT_OF_RELEASE_LABEL } from "./project-vocabulary.mjs";
 import path from "node:path";
-import { REPO } from "../../../scripts/repo-identity.mjs";
+import { REPO } from "./project-identity.mjs";
 // A LEAF module with no imports of its own (#804), so this cannot form a cycle -- the same property that
 // let `close-rows-for-merged-pr.mjs` import it under the no-`npm ci` constraint.
 import { READY_LABEL } from "./claim-labels.mjs";
 // The gate predicates live in `board-gates.mjs` (#429), a module with no process in it, so a test of the
 // selection runs where a test of this file cannot. Re-exported: no importer of this file changes.
 import { latestVerdictGate } from "./board-gates.mjs";
-import { assertNoLeakInArgv } from "../../lab/src/packaging/leak-patterns.mjs";
+import { assertNoLeakInArgv } from "./lib/leak-patterns.mjs";
 export { gateVerdicts, isConformanceGate, latestVerdictGate, worstVerdict } from "./board-gates.mjs";
 
 // RE-EXPORTED, not restated -- issue #92. Five other modules import `REPO` from here, so it stays exported
@@ -227,8 +228,12 @@ export const META_LABEL = "meta";
  * blocker count could not. Neither number was wrong; the page had no way to say why they differed. The
  * footnote beside the total now names how many rows are in this state, so the two reconcile BY
  * CONSTRUCTION rather than by a reader working it out. Ruled by `ceo` 2026-09-07; see issue #290.
+ *
+ * IMPORTED, NOT REDECLARED (#2619, child 3d of #69): the label is `project-vocabulary.mjs`'s field, and
+ * `ready-label-audit.mjs` in turn imports it from here so the fact stays in the one place this module
+ * already exposed it.
  */
-export const OUT_OF_RELEASE_LABEL = "out-of-release";
+export { OUT_OF_RELEASE_LABEL };
 
 /** @param {any[]} list */
 export function outOfRelease(list) {

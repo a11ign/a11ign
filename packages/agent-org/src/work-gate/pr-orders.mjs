@@ -18,10 +18,14 @@
 // `work-gate.mjs` re-exports every name this file exports that it exported before, so a caller of the gate
 // is unchanged. Imports below are relative and leaf-shaped, the property the gate's own header states.
 import { newestPerName } from "../newest-check-run.mjs";
-import { parityOwner } from "../review-attribution.mjs";
+import { reviewerSeat, subjectMention, subjectRef } from "../review-attribution.mjs";
 import { NO_VERDICT } from "../merge-guard/checks-rule.mjs";
 import { armabilityOf, holdersOf, HOLD_PREFIX } from "../pr-hold-state.mjs";
-import { REPO } from "../../../../scripts/repo-identity.mjs";
+import { REPO } from "../project-identity.mjs";
+// #2619 (child 3d of #69): the `session:` prefix and the `blocked` label, moved to the project's
+// declared vocabulary. (The `"ready"` action `kind` a few lines below is `gh pr ready`'s draft-status
+// flip -- a built-in GitHub PR field, not this project's `ready` row label -- so it stays a literal.)
+import { SESSION_PREFIX, BLOCKED_LABEL } from "../project-vocabulary.mjs";
 import { labelsOf, sessionOf, checksSettledGreen, conclusionOf, stillRunning, anyChecksRed, requiredCheckNames,
   blockingChecks, reviewableHead, verdictAmong, awaitingEvidence, AWAITING_EVIDENCE_LABEL,
   AWAITING_EVIDENCE_QUIET_HOURS, AWAITING_EVIDENCE_QUIET_MS, HOUR_MS, REVIEW_STATE } from "../work-gate.mjs";
@@ -94,9 +98,9 @@ export function mergeConflictOrders(conflicted) {
     return {
       session,
       cause: "pr-merge-conflict",
-      subject: `pr-${pr.number}`,
+      subject: `pr-${subjectRef(pr.repoKey, pr.number)}`,
       discriminator: head8,
-      prompt: `#${pr.number} at \`${head8}\` is green on every required check and NOT held, and it `
+      prompt: `${subjectMention(pr)} at \`${head8}\` is green on every required check and NOT held, and it `
         + "CONFLICTS with `main`: GitHub reports it cannot merge as it stands, whatever its review "
         + "decision or arming.\n"
         + `${owner ? "It carries your session label, so the rebase is yours." : "It names no session, so find whose it is."} `
@@ -104,7 +108,7 @@ export function mergeConflictOrders(conflicted) {
         + "DO NOT ARM IT: `gh pr merge --auto` exits non-zero for an unmergeable pull request, so "
         + "`arm-pr.mjs` cannot succeed here. Until this is resolved it is also holding every Ready row "
         + "that shares a file with it (B4) -- #2203 held six.",
-      causeKey: `${session}/pr-merge-conflict/pr-${pr.number}/${head8}`,
+      causeKey: `${session}/pr-merge-conflict/pr-${subjectRef(pr.repoKey, pr.number)}/${head8}`,
     };
   });
 }
@@ -141,19 +145,21 @@ export function mergeConflictOrders(conflicted) {
  * for a PR auto-arm never armed, and it is a queue act rather than the author's code work.
  *
  * @param {number[] | null} unarmed `null` when the queue read was refused -- no order, never a false all-clear
+ * @param {{ key: string, repo: string }} [scope] the repository these pull requests are in; the primary project's when omitted
  * @returns {{session: string, cause: string, subject: string, discriminator: string,
  *            prompt: string, causeKey: string}[]}
  */
-export function greenUnarmedOrders(unarmed) {
+export function greenUnarmedOrders(unarmed, scope = { key: "", repo: REPO }) {
   if (unarmed === null || unarmed.length === 0) return [];
-  const key = unarmed.join(".");
+  const refs = unarmed.map((n) => subjectRef(scope.key, n));
+  const key = refs.join(".");
   return [{
     session: "product-manager",
     cause: "pr-green-unarmed",
     subject: "pr-green-unarmed",
     discriminator: key,
     prompt: `${unarmed.length} pull request(s) are green on every required check, NOT held, and NOTHING `
-      + `HAS ARMED THEM: ${unarmed.map((n) => `#${n}`).join(", ")}.\n`
+      + `HAS ARMED THEM: ${unarmed.map((n) => subjectMention({ repoKey: scope.key, number: n })).join(", ")}.\n`
       + "This is the state a refused arming credential produces, and it is invisible everywhere else: "
       + "`queue-stalled.mjs` names armed PRs that cannot merge, and a green unarmed one is the mirror "
       + "nothing reported until #1969. It is read here with the HOST's identity, never the arming PAT, "
@@ -163,12 +169,12 @@ export function greenUnarmedOrders(unarmed) {
       + "`SCOPE` line saying whether the refusal is about that one PR or repository-wide, and names the "
       + "minute the pool returns.\n"
       + "REPOSITORY-WIDE: nothing will arm anything until that minute. Arm these by hand with "
-      + "`node packages/agent-org/src/arm-pr.mjs --pr=<n> --repo=" + REPO + "` under an identity whose "
+      + "`node packages/agent-org/src/arm-pr.mjs --pr=<n> --repo=" + scope.repo + "` under an identity whose "
       + "pool is alive -- the workflow's own documented exception for a PR auto-arm never armed -- and "
       + "say on #1969 that it recurred, with the window.\n"
       + "ONE PR ONLY: it is likelier that PR never got an arming event (opened while conflicting, or "
       + "reopened). Arming it is the same command.\n"
-      + "IF A PR HERE SHOULD NOT MERGE, the answer is a `hold:` label or a `session:` label on the PR "
+      + `IF A PR HERE SHOULD NOT MERGE, the answer is a \`hold:\` label or a \`${SESSION_PREFIX}\` label on the PR `
       + "itself -- both are read by the same predicate this order used, so it leaves this set at once. A "
       + "PR you merely skip stays in the set and this order returns unchanged.",
     causeKey: `product-manager/pr-green-unarmed/${key}`,
@@ -244,11 +250,11 @@ function ownedBy(/** @type {{code: string, session?: string | null}} */ b) {
 
 /**
  * The unlabelled set, and every UNRECOGNISED one: ONE order for `product-manager`, exactly as #2084 built it.
- * @param {{number: number, code: string, why: string}[]} blocked
+ * @param {{number: number, repoKey?: string, code: string, why: string}[]} blocked
  */
 function reviewBlockedSetOrder(blocked) {
   if (blocked.length === 0) return [];
-  const key = blocked.map((b) => `${b.number}:${b.code}`).join(".");
+  const key = blocked.map((b) => `${subjectRef(b.repoKey, b.number)}:${b.code}`).join(".");
   return [{
     session: "product-manager",
     cause: "pr-review-blocked",
@@ -256,7 +262,7 @@ function reviewBlockedSetOrder(blocked) {
     discriminator: key,
     prompt: `${blocked.length} pull request(s) are green on every required check and NOT held, and `
       + "GitHub's own `reviewDecision` is holding them:\n"
-      + blocked.map((b) => `  #${b.number}  ${b.code} -- ${b.why}`).join("\n") + "\n"
+      + blocked.map((b) => `  ${subjectMention(b)}  ${b.code} -- ${b.why}`).join("\n") + "\n"
       + "NO QUEUE READ IN THIS REPOSITORY TOUCHED THIS FIELD BEFORE #2084 -- only `row-claim`'s own "
       + "claim refusal -- which is why a pull request in this state read as healthy everywhere: #2049 "
       + "was green and armed and unmergeable for over seven hours, and no org read could say why.\n"
@@ -266,7 +272,7 @@ function reviewBlockedSetOrder(blocked) {
       + "`npm run prompt:session -- reviewer-<n> \"#<n> ...\"`. A `QUEUED` exit 2 is delivery; do not "
       + "retry it.\n"
       + "REFUSED is a reviewer's `CHANGES_REQUESTED`, and it does NOT clear by being pushed past. Decide "
-      + "whether it stands: rework belongs to the session on the PR's `session:` label, and a newer "
+      + `whether it stands: rework belongs to the session on the PR's \`${SESSION_PREFIX}\` label, and a newer `
       + "review is the only thing that lifts it.\n"
       + "A REFUSAL AT A HEAD THE AUTHOR HAS ALREADY FIXED IS THE #2084 SHAPE -- compare the review's "
       + "commit against `headRefOid` before routing rework nobody owes.\n"
@@ -279,7 +285,7 @@ function reviewBlockedSetOrder(blocked) {
 /**
  * One labelled pull request's order, to the session on its label. PER PULL REQUEST, where the set order is one
  * for the set: this is one author's one branch, and a set order would wake them about work that is not theirs.
- * @param {{number: number, code: string, session?: string | null, head?: string, refusedAt?: string | null}} b
+ * @param {{number: number, repoKey?: string, code: string, session?: string | null, head?: string, refusedAt?: string | null}} b
  */
 function ownedReviewBlockedOrder(b) {
   const session = String(b.session);
@@ -287,21 +293,21 @@ function ownedReviewBlockedOrder(b) {
   return {
     session,
     cause: "pr-review-blocked",
-    subject: `pr-${b.number}`,
+    subject: `pr-${subjectRef(b.repoKey, b.number)}`,
     discriminator: b.code,
     prompt: refused ? refusedPrompt(b) : awaitingReviewPrompt(b),
-    causeKey: `${session}/pr-review-blocked/pr-${b.number}/${b.code}`,
+    causeKey: `${session}/pr-review-blocked/pr-${subjectRef(b.repoKey, b.number)}/${b.code}`,
   };
 }
 
 /** @param {{number: number}} b */
 function awaitingReviewPrompt(b) {
-  return `#${b.number} is green on every required check and NOT held, and GitHub's own \`reviewDecision\` `
+  return `${subjectMention(b)} is green on every required check and NOT held, and GitHub's own \`reviewDecision\` `
     + "is REVIEW_REQUIRED: nobody has reviewed it, so it cannot merge.\n"
     + "It carries your session label, so chasing it is yours. You opened it ready and it never entered the "
-    + `reviewer lane. Its reviewer is \`reviewer-${b.number}\`; since #2176 \`draft-awaiting-verdict\` has `
+    + `reviewer lane. Its reviewer is \`${reviewerSeat(b)}\`; since #2176 \`draft-awaiting-verdict\` has `
     + "normally ordered it already (and started one, if none was live), so read the wake ledger before "
-    + `prompting: \`npm run prompt:session -- reviewer-${b.number} "#${b.number} ..."\`. A \`QUEUED\` exit 2 `
+    + `prompting: \`npm run prompt:session -- ${reviewerSeat(b)} "${subjectMention(b)} ..."\`. A \`QUEUED\` exit 2 `
     + "is delivery; do not retry it.\n"
     + "IF THIS PR SHOULD NOT MERGE YET, a `hold:` label removes it from this cause at once. One you merely "
     + "skip stays and this order returns unchanged.";
@@ -311,7 +317,7 @@ function awaitingReviewPrompt(b) {
  * THE FIRST FACT IS THE COMPARISON, and it decides what the rest means (#2084: #2049 sat seven hours on a
  * refusal posted at a head the author had already fixed). Three readings, and the third is not the first:
  * the refusal is at the current head, at an OLDER head, or the payload named no commit at all.
- * @param {{number: number, head?: string, refusedAt?: string | null}} b
+ * @param {{number: number, repo?: string, repoKey?: string, head?: string, refusedAt?: string | null}} b
  */
 function refusedPrompt(b) {
   const head = b.head ?? "";
@@ -319,17 +325,17 @@ function refusedPrompt(b) {
   let fact;
   if (!b.refusedAt || !head) {
     fact = "The payload names no commit for the refusing review, or no head: read it with "
-      + `\`gh api repos/${REPO}/pulls/${b.number}/reviews\` and compare its \`commit_id\` against \`headRefOid\` `
+      + `\`gh api repos/${b.repo ?? REPO}/pulls/${b.number}/reviews\` and compare its \`commit_id\` against \`headRefOid\` `
       + "before doing anything.";
   } else if (b.refusedAt === head) {
     fact = `The refusal was posted AT the current head \`${short(head)}\`: it is live and the rework is yours.`;
   } else {
     fact = `The refusal was posted at \`${short(b.refusedAt)}\` and the head is now \`${short(head)}\`: `
       + "you pushed after it, and the refusal STILL STANDS. A push does not clear it; only a newer review "
-      + `does, so ask \`reviewer-${b.number}\` for a fresh look at the head (\`npm run prompt:session -- `
-      + `reviewer-${b.number} "#${b.number} ..."\`; a QUEUED exit 2 is delivery, do not retry).`;
+      + `does, so ask \`${reviewerSeat(b)}\` for a fresh look at the head (\`npm run prompt:session -- `
+      + `${reviewerSeat(b)} "${subjectMention(b)} ..."\`; a QUEUED exit 2 is delivery, do not retry).`;
   }
-  return `#${b.number} is green on every required check and NOT held, and a reviewer's `
+  return `${subjectMention(b)} is green on every required check and NOT held, and a reviewer's `
     + "`CHANGES_REQUESTED` is holding it.\n"
     + `${fact}\n`
     + "It carries your session label, so the rework is yours. Read what the review names and fix that. "
@@ -414,10 +420,10 @@ function failingChecksOrder(pr, required = null, baseTip = null) {
   return {
     session,
     cause: "pr-checks-failing",
-    subject: `pr-${pr.number}`,
+    subject: `pr-${subjectRef(pr.repoKey, pr.number)}`,
     discriminator: head8,
     prompt: failingChecksPrompt({ pr, head8, blocking, baseTip }),
-    causeKey: `${session}/pr-checks-failing/pr-${pr.number}/${head8}`,
+    causeKey: `${session}/pr-checks-failing/pr-${subjectRef(pr.repoKey, pr.number)}/${head8}`,
   };
 }
 
@@ -435,7 +441,7 @@ function failingChecksOrder(pr, required = null, baseTip = null) {
  * @param {{pr: any, head8: string, blocking: any[], baseTip: {sha: string, date: string} | null}} facts
  */
 function failingChecksPrompt({ pr, head8, blocking, baseTip }) {
-  return `#${pr.number} at \`${head8}\` has FAILING checks and is blocked. `
+  return `${subjectMention(pr)} at \`${head8}\` has FAILING checks and is blocked. `
     + `${sessionOf(pr) ? "It carries your session label, so it is yours to fix." : "It names no session."} `
     + `${baseMovedSentence(failingRunStartedAt(blocking), baseTip)} `
     + "WHICH FIX is decided by what the failing assertion names, and this order does not choose: "
@@ -510,20 +516,20 @@ function notConvincedOrder(pr, found, { head8, keyHead8 }) {
   const session = owner ?? "product-manager";
   const from = found.by ? ` from ${found.by}` : "";
   const prompt = owner
-    ? `#${pr.number} at \`${head8}\` carries a NOT CONVINCED verdict${from} and it carries your session `
+    ? `${subjectMention(pr)} at \`${head8}\` carries a NOT CONVINCED verdict${from} and it carries your session `
       + "label, so the rework is yours. Read the verdict, fix what it names on that branch and push. If "
       + "you believe the verdict is wrong, that is a DISPUTE rather than rework: say so on the PR and "
       + "product-manager decides."
-    : `#${pr.number} at \`${head8}\` carries a NOT CONVINCED verdict${from} and nothing has moved since. `
+    : `${subjectMention(pr)} at \`${head8}\` carries a NOT CONVINCED verdict${from} and nothing has moved since. `
       + "Read the verdict, decide whether it stands, and route the rework to the session holding that "
       + "row -- or close the PR if the row was wrong.";
   return {
     session,
     cause: "verdict-not-convinced",
-    subject: `pr-${pr.number}`,
+    subject: `pr-${subjectRef(pr.repoKey, pr.number)}`,
     discriminator: keyHead8,
     prompt,
-    causeKey: `${session}/verdict-not-convinced/pr-${pr.number}/${keyHead8}`,
+    causeKey: `${session}/verdict-not-convinced/pr-${subjectRef(pr.repoKey, pr.number)}/${keyHead8}`,
   };
 }
 
@@ -576,7 +582,7 @@ function unreviewedConvincedOrder(pr, found, heads) {
   if (!armabilityOf({ labels: labelsOf(pr) }).arm) return null;
   if (approvedAtHead(pr, heads.all ?? []) !== false) return null;
   const { head8, keyHead8 } = heads;
-  const session = parityOwner(pr.number);
+  const session = reviewerSeat(pr);
   const authored = found.byIsAuthor === true
     ? " That comment is signed by the pull request's own author, so it is not a review of anything: "
       + "review the change first, and post the approval only if it stands."
@@ -584,16 +590,16 @@ function unreviewedConvincedOrder(pr, found, heads) {
   return {
     session,
     cause: "verdict-comment-unreviewed",
-    subject: `pr-${pr.number}`,
+    subject: `pr-${subjectRef(pr.repoKey, pr.number)}`,
     discriminator: keyHead8,
-    prompt: `Ready #${pr.number} at \`${head8}\` is green and carries a CONVINCED verdict`
+    prompt: `Ready ${subjectMention(pr)} at \`${head8}\` is green and carries a CONVINCED verdict`
       + `${found.by ? ` from ${found.by}` : ""} as a COMMENT, and no APPROVED review at that head -- `
       + "so GitHub's `reviewDecision` is not APPROVED and it cannot merge. The comment did not become a "
       + "review. Post the approving review with `pr-review-verdict` at the CURRENT head; its first line "
       + `must begin "**Review of #${pr.number} at " or the script refuses (after any comment was posted). `
       + "This is not a new review round: if your verdict stands, re-post it; do not re-read the diff."
       + authored,
-    causeKey: `${session}/verdict-comment-unreviewed/pr-${pr.number}/${keyHead8}`,
+    causeKey: `${session}/verdict-comment-unreviewed/pr-${subjectRef(pr.repoKey, pr.number)}/${keyHead8}`,
   };
 }
 
@@ -628,13 +634,13 @@ function settledVerdictOrder(pr, found, heads) {
     return {
       session: "product-manager",
       cause: "draft-convinced-not-ready",
-      subject: `pr-${pr.number}`,
+      subject: `pr-${subjectRef(pr.repoKey, pr.number)}`,
       discriminator: keyHead8,
-      prompt: `Draft #${pr.number} at \`${head8}\` is green and carries a CONVINCED verdict`
+      prompt: `Draft ${subjectMention(pr)} at \`${head8}\` is green and carries a CONVINCED verdict`
         + `${found.by ? ` from ${found.by}` : ""}, and is still a draft. Per agent-practices a product `
         + "PR is marked ready once the reviewer is convinced. Mark it ready for review, or say on the PR "
         + "why it must stay a draft -- an unexplained convinced draft is work nobody is finishing.",
-      causeKey: `product-manager/draft-convinced-not-ready/pr-${pr.number}/${keyHead8}`,
+      causeKey: `product-manager/draft-convinced-not-ready/pr-${subjectRef(pr.repoKey, pr.number)}/${keyHead8}`,
       // THE GATE ALREADY KNOWS THE ANSWER, SO IT DOES THIS ONE ITSELF (see `performActions`). Every
       // condition for a safe ready-flip has been checked by the time we are here: not red, still a
       // draft, checks SETTLED green, and a convinced verdict AT THIS HEAD. The order stays attached as
@@ -644,7 +650,7 @@ function settledVerdictOrder(pr, found, heads) {
       // opener named nobody (#1244) and refuses to guess, and a self-signed or unattributed verdict is
       // the one case where a human should look. Automating the attributed case and waking on the rest
       // keeps `ceo`'s one-in-five spot-check pointed at the verdicts that can actually be wrong.
-      ...(found.byIsAuthor === false ? { action: { kind: "ready", pr: Number(pr.number) } } : {}),
+      ...(found.byIsAuthor === false ? { action: { kind: "ready", pr: Number(pr.number), ...(pr.repo === undefined ? {} : { repo: pr.repo }) } } : {}),
     };
   }
   if (found.verdict === "convinced") return unreviewedConvincedOrder(pr, found, heads);
@@ -712,8 +718,8 @@ function awaitingVerdictPrompt(pr, { head8, keyHead8 }) {
   const moved = head8 === keyHead8 ? ""
     : ` The last commit its author pushed is \`${keyHead8}\`; every commit after it merges \`main\`, so review the `
       + "author's work and write your verdict at the head you actually read.";
-  return `${state} #${pr.number} at \`${head8}\` has settled green checks and no verdict at that head.${moved} `
-    + "Review it per packages/agent-org/docs/roles/reviewer.md and leave one comment carrying your verdict.";
+  return `${state} ${subjectMention(pr)} at \`${head8}\` has settled green checks and no verdict at that head.${moved} `
+    + "Review it per .agent-org/roles/reviewer.md and leave one comment carrying your verdict.";
 }
 
 /**
@@ -764,14 +770,14 @@ function draftOrder(pr, required = null, baseTip = null) {
   // herdr's, and `wake.mjs` starts the instance when none is live. The arithmetic lives in
   // `review-attribution.mjs`, beside the reader that checks whether a posted review obeyed it -- a
   // detector with its own copy would agree with a router that had drifted.
-  const session = parityOwner(pr.number);
+  const session = reviewerSeat(pr);
   return {
     session,
     cause: "draft-awaiting-verdict",
-    subject: `pr-${pr.number}`,
+    subject: `pr-${subjectRef(pr.repoKey, pr.number)}`,
     discriminator: heads.keyHead8,
     prompt: awaitingVerdictPrompt(pr, heads),
-    causeKey: `${session}/draft-awaiting-verdict/pr-${pr.number}/${heads.keyHead8}`,
+    causeKey: `${session}/draft-awaiting-verdict/pr-${subjectRef(pr.repoKey, pr.number)}/${heads.keyHead8}`,
   };
 }
 
@@ -805,8 +811,8 @@ export function awaitingEvidenceStaleOrders(prs, now = Date.now()) {
   const stale = prs.filter((pr) => awaitingEvidence(pr) && evidenceWaitUnexplained(pr, now))
     .sort((a, b) => Number(a.number) - Number(b.number));
   if (stale.length === 0) return [];
-  const key = stale.map((pr) => pr.number).join(".");
-  const lines = stale.map((pr) => `  #${pr.number}  carried \`${AWAITING_EVIDENCE_LABEL}\` for `
+  const key = stale.map((pr) => subjectRef(pr.repoKey, pr.number)).join(".");
+  const lines = stale.map((pr) => `  ${subjectMention(pr)}  carried \`${AWAITING_EVIDENCE_LABEL}\` for `
     + `${Math.floor((now - Date.parse(pr.awaitingSince)) / HOUR_MS)}h with no comment after it was applied`);
   return [{
     session: "product-manager",
@@ -820,7 +826,7 @@ export function awaitingEvidenceStaleOrders(prs, now = Date.now()) {
       + "(`gh pr edit <n> --remove-label awaiting-evidence`) -- removing it IS posting the evidence -- or the "
       + "author says on the PR what it waits on and who owns that run. If nobody owns it, the label is hiding a "
       + "stalled PR: route it to the row's owner, or to `orchestrator` when the run is a fleet or lab one. "
-      + "It is NOT `blocked`, which has no referent.",
+      + `It is NOT \`${BLOCKED_LABEL}\`, which has no referent.`,
     causeKey: `product-manager/awaiting-evidence-stale/${key}`,
   }];
 }

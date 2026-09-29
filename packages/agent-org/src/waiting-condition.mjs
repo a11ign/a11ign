@@ -42,6 +42,9 @@
 // was simply never told, so every OTHER question -- is this promotable, is this offerable, is this
 // reachable -- was answered as if the row were free.
 
+// #2619 (child 3d of #69): the `answer:` prefix, moved to the project's declared vocabulary.
+import { ANSWER_PREFIX } from "./project-vocabulary.mjs";
+
 /**
  * The label prefix that says which session owes an answer on a row.
  *
@@ -52,8 +55,12 @@
  * re-exports this name, so every existing importer is untouched.
  *
  * @see `answerOwedBy` for why the label, and not an assignee, is the mechanism.
+ *
+ * IMPORTED, NOT REDECLARED (#2619, child 3d of #69): `project-vocabulary.mjs`'s field, re-exported under
+ * this file's own established name so every existing importer -- `work-gate.mjs` included -- keeps
+ * working unchanged.
  */
-export const ANSWER_PREFIX = "answer:";
+export { ANSWER_PREFIX };
 
 /**
  * The session that owes an answer on this row, or `null`.
@@ -107,6 +114,40 @@ export function answersOwedBy(row) {
     if (session) sessions.push(session);
   }
   return sessions;
+}
+
+/**
+ * Whether an `answer:<session>` label was applied to this row with NOTHING that looks like an attempt to
+ * satisfy it -- no comment posted at or after the label's own timeline event. `null` when the label was
+ * never applied at all (#2711): the row's own evidence is `answer:ceo` labelled and removed from PR #2649
+ * TWICE with no comment either time, so the addressee had no way to tell a real question from a label
+ * added by habit or by mistake except by going and looking -- the exact cost this module exists to save
+ * every OTHER waiting condition from.
+ *
+ * THE TIMELINE, NOT `issues/{n}/events`: the events endpoint carries label churn only and never a
+ * `commented` entry, so it cannot answer "was anything posted after" -- #2711's own Open-check read the
+ * timeline for exactly that reason, and this reads the same shape.
+ *
+ * THE LAST `labeled` EVENT FOR THIS NAME, because a label removed and reapplied is a NEW wait: a comment
+ * that predates the current application answered a question that is no longer the one outstanding.
+ *
+ * PRESENCE, NOT CONTENT: this asks whether ANYTHING was posted, never what it says. Judging whether a
+ * comment "plausibly names a question" is exactly the reasoning #2711 exists to save a human from doing
+ * by hand on every bare label, so it is left to the reader the resulting wake reaches, not guessed at here.
+ *
+ * @param {{event?: string, label?: {name?: string}, created_at?: string}[] | null | undefined} timeline
+ * @param {string} session
+ * @returns {{labelledAt: string} | null}
+ */
+export function bareAnswerLabel(timeline, session) {
+  const name = `${ANSWER_PREFIX}${session}`;
+  const events = timeline ?? [];
+  const labelEvents = events.filter((e) => e?.event === "labeled" && e?.label?.name === name);
+  if (labelEvents.length === 0) return null;
+  const labelledAt = String(labelEvents[labelEvents.length - 1]?.created_at ?? "");
+  if (!labelledAt) return null;
+  const answered = events.some((e) => e?.event === "commented" && String(e?.created_at ?? "") >= labelledAt);
+  return answered ? null : { labelledAt };
 }
 
 /** The length of `YYYY-MM-DD` -- what tells a date-only `Not-before:` value from a timestamped one. */
@@ -290,15 +331,55 @@ export function waitingOn(row, today = todayIso(), nowMs = Date.now()) {
  * (reviewer, #1841). The direction of that error is what makes it a refusal here: a typo would silently
  * EXTEND a live sequence's window rather than failing open the way this function's own rule requires.
  *
+ * NARROWED TO NAMED WORKERS SINCE `ceo`'s #928 RULING (point 2), AND STILL PARSED HERE ONLY. The line may
+ * carry an optional trailing, comma-separated worker list -- `Fleet-hold-until: <timestamp>
+ * a11y-worker-2,a11y-worker-3` -- read by `fleetHoldWorkers` below, this function's own sibling. A line
+ * with no worker list is UNCHANGED: `fleetHoldUntil` still returns just the timestamp, and the row still
+ * holds the WHOLE FLEET, which is #928's own required back-compat for every row already carrying an
+ * unscoped field. The worker list is matched by THIS regex too (not left to a second, looser one), because
+ * a hold whose trailing text does not fit either shape must fail exactly as open as a bad timestamp does --
+ * see `fleetHoldWorkers`'s own comment for why a typo'd worker name is not read as "unscoped".
+ *
  * @param {string | null | undefined} body
  * @returns {string | null}
  */
 export function fleetHoldUntil(body) {
-  const m = /^[ \t]*#{0,6}[ \t]*Fleet-hold-until:[ \t]*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)[ \t]*$/im
-    .exec(String(body ?? ""));
+  const m = FLEET_HOLD_LINE.exec(String(body ?? ""));
   if (!m) return null;
   return roundTripsUtc(m[1]) ? m[1] : null;
 }
+
+/**
+ * The workers a `Fleet-hold-until:` line names, or `[]` when it names none -- `[]` MEANS "the whole
+ * fleet", the same default #928 requires of `fleetHoldUntil` itself, so a caller can treat an empty array
+ * and an absent list identically without a second branch.
+ *
+ * A TYPO'D WORKER NAME FAILS THE WHOLE LINE, NOT JUST THE SCOPE, because `FLEET_HOLD_LINE` matches the
+ * worker list or nothing at all -- there is no shape where the timestamp parses but a garbled worker list
+ * is silently dropped. That matches `fleetHoldUntil`'s own rule for a bad timestamp (a malformed field is
+ * not a hold; it fails OPEN) rather than inventing a second, looser failure mode for the half of the line
+ * this function reads: a hold that silently reverted to fleet-wide because of a typo would strand the rest
+ * of the fleet exactly the way #1839 was filed to stop.
+ *
+ * NO IMPORT OF THE WORKER-NAME PATTERN `fleet-playbook.mjs` OWNS (`LIMIT_PATTERN`'s atom): this package
+ * has no `node_modules` (ADR 0012) and this module is meant to stay a leaf other packages can pull in
+ * without dragging `control` along, so the same `a11y-worker-[0-9]{1,3}` shape is inlined here rather than
+ * shared. `fleet-playbook.test.ts` pins both against real worker names so the two cannot drift silently.
+ *
+ * @param {string | null | undefined} body
+ * @returns {string[]}
+ */
+export function fleetHoldWorkers(body) {
+  const m = FLEET_HOLD_LINE.exec(String(body ?? ""));
+  if (!m || !roundTripsUtc(m[1])) return [];
+  return m[2] ? m[2].split(",") : [];
+}
+
+/**
+ * `Fleet-hold-until:`'s own line, shared by `fleetHoldUntil` and `fleetHoldWorkers` so the two can never
+ * read a different timestamp, or agree on a match the other refuses, from the same body.
+ */
+const FLEET_HOLD_LINE = /^[ \t]*#{0,6}[ \t]*Fleet-hold-until:[ \t]*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)(?:[ \t]+(a11y-worker-[0-9]{1,3}(?:,a11y-worker-[0-9]{1,3})*))?[ \t]*$/im;
 
 /**
  * What a FLEET-GATED row is waiting on -- `waitingOn` plus the one condition only the fleet has.

@@ -6,23 +6,31 @@
 // time, on another row. A status check says "working" and is right; THE ROW is what had stalled. Nothing in the gate
 // read a claim going unmoved, and the one nudge that worked cost a `ceo` turn spent reading a pane.
 //
-// THIS FILE IS THE PURE HALF, AND A LEAF: it imports only `node:*`, the git-env scrubber and `claim-labels.mjs`, so
-// `work-gate.mjs` (which runs before any `npm ci`) and `wake.mjs` can both import it without one importing the other.
-// It DECIDES; the gate carries the decision as an order and `wake.mjs` performs the parts that need a pane.
+// THIS FILE IS THE PURE HALF, AND A LEAF: it imports only `node:*`, the git-env scrubber, `claim-labels.mjs` and the
+// shared `herdr-agents.mjs` leaf, so `work-gate.mjs` (which runs before any `npm ci`) and `wake.mjs` can both import
+// it without one importing the other. It DECIDES; the gate carries the decision as an order and `wake.mjs` performs
+// the parts that need a pane.
 //
-// FOUR THINGS LIVE HERE, EACH THE ANSWER TO ONE DONE-WHEN OF #2470:
+// FIVE THINGS LIVE HERE, EACH THE ANSWER TO ONE DONE-WHEN (#2470's, or #2747's):
 //   1. THE READING (`claimReading`): nudge, then release, on no progress on THE ROW for `STALL_INTERVAL_MS`.
-//   2. THE RELEASES THAT ARE NOT A STALL: a claim whose row is BLOCKED and whose holder holds nothing (8), and one whose
-//      pull request MERGED while the row stayed open (10). Same predicate for "holds nothing" as the stall's keep-work.
+//   2. THE RELEASES THAT ARE NOT A STALL: a claim whose row is BLOCKED and whose holder holds nothing (8), one whose
+//      pull request MERGED while the row stayed open (10), and one whose SESSION IS GONE (#2747, `goneReading`).
+//      Same predicate for "holds nothing" as the stall's keep-work.
 //   3. THE READINGS OF A HOST EVENT: the `herdr.service` restart (11) and an interrupted pane (9).
 //   4. THE STATE THE SECOND READING NEEDS: a released row carries no memory of the first nudge unless it is written
-//      down, and it is written down in `claim-stalls.json`, beside the wake ledger.
+//      down, and it is written down in `claim-stalls.json`, beside the wake ledger. The same file remembers when a
+//      holder was first found gone (#2747), so a transient partial listing cannot manufacture a release.
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync, mkdirSync, statSync, renameSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 // EVERY `git` SPAWN IN THIS REPO STRIPS `GIT_*` THROUGH ONE FUNCTION (`git-env.mjs`'s own header records the incident).
-import { sandboxGitEnv } from "../../guards/src/git-env.mjs";
+import { sandboxGitEnv } from "./lib/git-env.mjs";
 import { CLAIM_RECORD_MARKER } from "./claim-labels.mjs";
+import { ANSWER_PREFIX } from "./project-vocabulary.mjs";
+// #2747: THE SAME "IS THIS LISTING THE WHOLE ORG" CHECK `wake.mjs`'s REVIEWER TEARDOWN USES (#2465) -- a leaf, so
+// this file stays one. A listing that lacks `ceo`/`orchestrator` is a PARTIAL one and proves nothing about who else
+// it left out; a session absent from a COMPLETE listing is real evidence, not yet a verdict (see `goneReading`).
+import { listingIsComplete } from "./herdr-agents.mjs";
 
 const MINUTE_MS = 60_000;
 
@@ -74,6 +82,16 @@ export const STALL_UNTOLD_RELEASE_MS = 2 * STALL_INTERVAL_MS;
 export const INTERRUPTED_SETTLE_MS = 10 * MINUTE_MS;
 
 /**
+ * How long a claimed row's session must be ABSENT FROM A COMPLETE herdr LISTING before it is read as GONE, not merely
+ * quiet (#2747). CHOSEN, NOT MEASURED: a genuinely closed workspace never reappears, so a wait costs only the false
+ * case -- a listing that "dropped only some workspaces and happened to keep both [standing] panes"
+ * ({@link listingIsComplete}'s own caveat, taken from #2465's measured shape of that exact failure). Ten minutes is a
+ * handful of ticks (a tick is about two minutes), so ANY reappearance clears it before it matures, and it is still
+ * far short of {@link STALL_INTERVAL_MS} -- the point of #2747 is not waiting hours for a hand-run `row-claim decline`.
+ */
+export const GONE_CONFIRM_MS = 10 * MINUTE_MS;
+
+/**
  * The window before a `herdr.service` restart in which a delivery is presumed KILLED if its target made no move.
  *
  * MEASURED (2026-09-25, `worker-capture`, from the wake ledger itself): 1,352 cause deliveries that were
@@ -99,6 +117,32 @@ export const RESTART_STATE_FILE = "restart-resends.json";
  * either matched by it or is a defect to report.
  */
 export const INTERRUPTED_TEXT = "Interrupted · What should Claude do instead?";
+
+/**
+ * What Claude Code prints when its OWN autocompact "rapid refill breaker" trips: the context refilled to the limit
+ * within 3 turns of a compaction, 3 times in a row, so it stops the turn itself with this message instead of
+ * compacting a fourth time (#2743's incident: worker-2623, 139 compactions, 5.4 hours, to a human's manual
+ * interruption -- no code-level stop). EXTRACTED 2026-09-28 from the shipped binary itself
+ * (`strings ~/.local/share/claude/versions/<version> | grep -A1 autocompact_thrashing`, the literal `apiError` code
+ * and its message), not guessed. Anchored to the OPENING CLAUSE, not the full sentence: the message is long enough
+ * to WRAP across several terminal lines and a single full-sentence needle (as {@link INTERRUPTED_TEXT} uses) would
+ * never match any one of them. NOT SEEN LIVE: three attempts to force a real one (2026-09-28) were each cut off by
+ * an unrelated safety classifier flagging the rapid mechanical repeated-file-read pattern as `[cyber]` before
+ * compaction could thrash three times in a row; the needle is the shipped string and the first real thrash is
+ * either matched by it or is a defect to report.
+ */
+export const THRASH_TEXT = "Autocompact is thrashing:";
+
+/**
+ * Claude Code's own turn-completion footer (`✻ Cooked for 1m 28s · done 9:57`, `✻ Baked for 7s · done 9:56`, one of
+ * several whimsical verbs behind a spinner glyph that is not worth enumerating) -- printed ABOVE the input box after
+ * a turn the process itself ended normally, unlike an interrupted (killed) pane's, which has nothing after its last
+ * line because the process never got to print one. A thrash ends the turn the same way an ordinary completion does
+ * (Claude Code's own query loop `yield`s the message, logs it, then returns -- the same shape as any other in-band
+ * error), so THIS is what actually sits last above the box, not the message itself; `paneThrashed` must look past it.
+ * The stable part is `done H:MM`, observed live in this same session multiple times -- not the verb, which varies.
+ */
+const DONE_FOOTER = /\bdone \d{1,2}:\d{2}\b/;
 
 // --- THE CLAIM RECORD, READ -----------------------------------------------------------------------------------------
 
@@ -290,8 +334,9 @@ export function workAtRisk(io, { worktree, branch, repo }) {
  * @typedef {{ kind: "moving", lastMoveAt: number } | { kind: "pr-owned" } | { kind: "waiting", waiting: string }
  *   | { kind: "nudge", lastMoveAt: number, idleMs: number }
  *   | { kind: "nudged", nudgedAt: number, deliveredAt: number | null, lastMoveAt: number }
- *   | { kind: "release", why: "stalled" | "blocked" | "merged", lastMoveAt: number | null, idleMs: number | null,
- *       nudgedAt: number | null, edges?: number[], mergedPr?: number }
+ *   | { kind: "vacating", since: number }
+ *   | { kind: "release", why: "stalled" | "blocked" | "merged" | "gone", lastMoveAt: number | null, idleMs: number | null,
+ *       nudgedAt: number | null, edges?: number[], mergedPr?: number, since?: number }
  *   | { kind: "holding", why: string, expected?: boolean }} Reading
  */
 
@@ -315,8 +360,14 @@ function latest(times) {
  * THE CLOCK STARTS NO EARLIER THAN THE RESTART (11f): a session the outage silenced must not be nudged and then released
  * for a stall the gate itself caused and has not yet answered.
  *
+ * THE SESSION'S EXISTENCE IS CHECKED BEFORE EVERYTHING BELOW BLOCKEDBY/WAITING (#2747): a gone session will never act
+ * on a declared wait or a stale edge either, and #2623's own case (no open PR, no declared wait) is the ordinary shape
+ * a merely-quiet claim was mistaken for. It runs AFTER `mergedReading`, because a merged `Closes: none` PR is a more
+ * specific, positive outcome that deserves its own message even from a holder that has since closed its workspace.
+ *
  * @param {ClaimFacts} facts
- * @param {{ now: number, restartAt: number | null, nudge: { nudgedAt: number, deliveredAt: number | null } | null, intervalMs?: number }} ctx
+ * @param {{ now: number, restartAt: number | null, nudge: { nudgedAt: number, deliveredAt: number | null } | null,
+ *   agents?: {label: string, status: string}[] | null, goneSince?: number | null, intervalMs?: number }} ctx
  * @returns {Reading}
  */
 export function claimReading(facts, ctx) {
@@ -324,6 +375,8 @@ export function claimReading(facts, ctx) {
   if (facts.openPrs > 0) return { kind: "pr-owned" };
   const landed = mergedReading(facts);
   if (landed !== null) return landed;
+  const gone = goneReading(facts, ctx);
+  if (gone !== null) return gone;
   if (facts.blockedBy.length > 0) return blockedReading(facts);
   if (facts.waiting !== null) return { kind: "waiting", waiting: facts.waiting };
   const cheap = /** @type {number} */ (latest([facts.claimedAt, facts.comment, facts.commit, facts.push, ctx.restartAt]));
@@ -357,6 +410,39 @@ function mergedReading(facts) {
       why: `#${facts.mergedPr.number} merged, but ${work.state === "unknown" ? "the worktree could not be read" : `the holder still has ${work.dirty} dirty file(s) and ${work.unpushed} unpushed commit(s)`}` };
   }
   return { kind: "release", why: "merged", lastMoveAt: null, idleMs: null, nudgedAt: null, mergedPr: facts.mergedPr.number };
+}
+
+/**
+ * (#2747) A claim whose SESSION no longer exists in herdr's own listing -- not merely quiet, GONE: nobody is coming
+ * back to finish it, nudged or not (#2623: workspace closed by hand, row left `session:worker-2623` with nothing
+ * behind it, and nothing but the multi-hour stall clock would ever have caught it).
+ *
+ * `null` when nothing is learned this tick: herdr could not be asked (`ctx.agents` is `null`, NEVER read as gone from
+ * silence), the session IS listed (definitive -- presence is positive evidence even in a listing that is otherwise
+ * partial), or the listing is partial and nothing was seen before either (nothing to hold onto or advance).
+ *
+ * `vacating` is the interim, unreported state: first found absent from a COMPLETE listing, or still absent from one
+ * on a later tick, but not yet {@link GONE_CONFIRM_MS} since the FIRST such tick. `ctx.goneSince` carries that first
+ * tick forward (`nextStallState` writes it down, the same file the nudge memory lives in); a listing that is only
+ * PARTIAL neither starts this clock nor resets it -- {@link listingIsComplete}'s own doc says why one complete
+ * listing already needs a second to confirm a death, and this needs a wall-clock window of them for the same reason:
+ * a session seen even once in the meantime is not gone, and any tick it is seen resets the whole thing (`claimReading`
+ * never calls this when the session IS listed, so there is no reading here to carry a stale `since` forward).
+ *
+ * @param {ClaimFacts} facts @param {{ now: number, agents?: {label: string, status: string}[] | null, goneSince?: number | null }} ctx
+ * @returns {Reading | null}
+ */
+function goneReading(facts, ctx) {
+  const agents = ctx.agents ?? null;
+  if (agents === null) return null;
+  if (agents.some((a) => a.label === facts.session)) return null;
+  const goneSince = ctx.goneSince ?? null;
+  if (!listingIsComplete(agents)) return goneSince === null ? null : { kind: "vacating", since: goneSince };
+  const since = goneSince ?? ctx.now;
+  if (ctx.now - since >= GONE_CONFIRM_MS) {
+    return { kind: "release", why: "gone", lastMoveAt: null, idleMs: null, nudgedAt: null, since };
+  }
+  return { kind: "vacating", since };
 }
 
 /**
@@ -443,7 +529,7 @@ export function readClaim(facts, ctx) {
 
 // --- THE NUDGE MEMORY -----------------------------------------------------------------------------------------------
 
-/** @typedef {Record<string, { session: string, nudgedAt: number }>} StallState keyed by row number */
+/** @typedef {Record<string, { session: string, nudgedAt?: number, goneSince?: number }>} StallState keyed by row number, one memory or the other per row */
 
 /**
  * A JSON object kept in a file beside the wake ledger, or `{}`. A missing file is EMPTY and an unparseable one is empty too:
@@ -470,8 +556,10 @@ export function readStallState(path, read = readFileSync) {
 
 /**
  * The memory after this tick's readings: a NUDGE is recorded at `now`, a `nudged` row keeps its record (and so does a STALL release
- * that is not yet performed), and every other row -- moving, no longer claimed by that session -- loses it, so a row that stalls a second time is a first
- * reading again and not a release on the strength of last week's nudge.
+ * that is not yet performed), a `vacating` row (#2747) keeps the tick its session was FIRST found gone (and so does a GONE release
+ * that is not yet performed), and every other row -- moving, no longer claimed by that session, or a session that reappeared -- loses
+ * its memory, so a row that stalls (or vacates) a second time is a first reading again and not a release on the strength of last
+ * week's nudge (or an old absence a listing has since taken back).
  *
  * @param {StallState} before
  * @param {{ facts: ClaimFacts, reading: Reading }[]} readings @param {number} now
@@ -488,6 +576,10 @@ export function nextStallState(before, readings, now) {
     // forget the nudge and start a fresh two hours. Once performed the row is no longer claimed and the entry goes with it.
     else if (reading.kind === "release" && reading.why === "stalled" && reading.nudgedAt !== null) {
       after[facts.row] = { session: facts.session, nudgedAt: reading.nudgedAt };
+    } else if (reading.kind === "vacating") after[facts.row] = { session: facts.session, goneSince: reading.since };
+    // A GONE RELEASE THAT HAS NOT YET BEEN PERFORMED, same reasoning as the stalled one above.
+    else if (reading.kind === "release" && reading.why === "gone" && reading.since !== undefined) {
+      after[facts.row] = { session: facts.session, goneSince: reading.since };
     }
   }
   return JSON.stringify(after) === JSON.stringify(before) ? before : after;
@@ -517,7 +609,7 @@ export function writeStallState(path, state, writer = writeFileSync) {
 const minutes = (ms) => Math.round(ms / MINUTE_MS);
 
 /**
- * @typedef {{ row: number, session: string, why: "stalled" | "blocked" | "merged", branch: string | null,
+ * @typedef {{ row: number, session: string, why: "stalled" | "blocked" | "merged" | "gone", branch: string | null,
  *   worktree: string | null, idleMinutes: number | null, nudgedAt: number | null, edges?: number[],
  *   mergedPr?: number, answer?: string }} ReleaseRequest
  * @typedef {{ session: string, cause: string, subject: string, discriminator: string, prompt: string, causeKey: string,
@@ -543,7 +635,7 @@ function nudgeOrder(facts, nudgedAt, lastMoveAt) {
       + "and nobody had touched it for seven hours while its holder worked another row).\n"
       + "IF YOU ARE WORKING ON IT, SAY SO IN ONE COMMAND: commit what you have, push the branch, or comment on the row. Any "
       + "of the three is a move and resets the clock. IF YOU CANNOT, say what stops you in a FIELD, not a sentence "
-      + "(`answer:<session>` for a ruling, `gh issue edit <n> --add-blocked-by <m>` for a row you wait on, "
+      + `(\`${ANSWER_PREFIX}<session>\` for a ruling, \`gh issue edit <n> --add-blocked-by <m>\` for a row you wait on, `
       + "`Not-before:` for a date) -- each clears itself.\n"
       + `IF NOTHING MOVES FOR ${minutes(STALL_INTERVAL_MS)} MINUTES AFTER THIS REACHES YOU the claim is RELEASED (the row is offered to `
       + "the pool again, or comes to `product-manager` if it was not Ready before you took it). Your worktree and everything unpushed in it "
@@ -598,6 +690,7 @@ function releaseOrder(facts, reading) {
     ...(reading.mergedPr === undefined ? {} : { mergedPr: reading.mergedPr, answer: "product-manager" }) };
   const said = reading.why === "stalled" ? `nothing moved for ${release.idleMinutes} minutes and the nudge was not answered`
     : reading.why === "blocked" ? `blocked by ${(reading.edges ?? []).map((n) => `#${n}`).join(", ")} and the holder holds nothing`
+    : reading.why === "gone" ? `${facts.session} no longer exists in herdr's own listing`
     : `#${reading.mergedPr} merged and the row stayed open`;
   return {
     session: facts.session, cause: "claim-stalled", subject: `row-${facts.row}`, discriminator: `release-${reading.why}`,
@@ -665,6 +758,30 @@ export function paneInterrupted(text) {
   const content = rules.length >= 2 ? lines.slice(0, rules[rules.length - 2]) : lines;
   const last = [...content].reverse().find((l) => l.trim() !== "");
   return last !== undefined && last.includes(INTERRUPTED_TEXT);
+}
+
+/**
+ * Did this pane's LAST TURN end in the autocompact thrash guard? Above the input box exactly as {@link paneInterrupted}
+ * reads it, but over the last PARAGRAPH (the trailing run of non-empty lines), not the last line: {@link THRASH_TEXT}'s
+ * message wraps, so one line is not enough. A trailing {@link DONE_FOOTER} line is Claude Code's own completion chrome,
+ * never the message, and is dropped first so the paragraph it belongs to is not mistaken for the one before it.
+ *
+ * Anchored to the last paragraph for the same reason `paneInterrupted` anchors to the last line: a session merely
+ * DISCUSSING this string (this very row, read into its own pane) is not this turn's.
+ * @param {string | null | undefined} text @returns {boolean}
+ */
+export function paneThrashed(text) {
+  const lines = String(text ?? "").split("\n").map((l) => l.trimEnd());
+  const rules = lines.flatMap((l, i) => (INPUT_BOX_RULE.test(l.trim()) ? [i] : []));
+  const content = rules.length >= 2 ? lines.slice(0, rules[rules.length - 2]) : lines;
+  let end = content.length;
+  while (end > 0 && content[end - 1].trim() === "") end--;
+  if (end > 0 && DONE_FOOTER.test(content[end - 1])) end--;
+  while (end > 0 && content[end - 1].trim() === "") end--;
+  let start = end;
+  while (start > 0 && content[start - 1].trim() !== "") start--;
+  const paragraph = content.slice(start, end).join(" ");
+  return paragraph.includes(THRASH_TEXT);
 }
 
 /**

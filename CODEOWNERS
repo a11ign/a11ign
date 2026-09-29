@@ -10,12 +10,13 @@
 # is for the OTHER thing lane-ownership.json protects: trunk health and the merge queue, where the
 # question is not "did you name a fact" but "did the owner see this before it landed."
 #
-# ceo's GitHub login is `@DanBeckDev` -- ceo, product-manager and orchestrator all push as that account;
-# the three engineer sessions push as the shared `a11ign-ai-workers` account (2026-09-13). So naming
-# `@DanBeckDev` here does what "the other engineer must approve" was reaching for in #916's own text: an
-# engineer's PR touching the pipeline requests review from a DIFFERENT account than the one that opened
-# it, which a `ceo`/`DanBeckDev` PR touching its own lane cannot do (GitHub will not request a review from
-# a PR's own author) -- same shape as the retired check's `ceo/` branch exemption, not a new gap.
+# ceo's GitHub login is `@a11ign-ai-leads` (moved off `@DanBeckDev` by #2333, 2026-09-24) -- ceo,
+# product-manager and orchestrator all push as that account; the three engineer sessions push as the
+# shared `a11ign-ai-workers` account (2026-09-13). So naming `@a11ign-ai-leads` here does what "the other
+# engineer must approve" was reaching for in #916's own text: an engineer's PR touching the pipeline
+# requests review from a DIFFERENT account than the one that opened it, which a `ceo`/`a11ign-ai-leads` PR
+# touching its own lane cannot do (GitHub will not request a review from a PR's own author) -- same shape
+# as the retired check's `ceo/` branch exemption, not a new gap.
 #
 # `codeowners-lane-sync.test.ts` pins this file's entries against docs/lane-ownership.json's `paths` and
 # `except`, so the two cannot drift the way #939 found nine independent spellings of "what changed" could.
@@ -24,5 +25,5 @@
 # `except` says it is generated from README.md by scripts/generate-consumer-gate.mjs, so it is not the
 # pipeline's to own even though it lives in the pipeline's directory. CODEOWNERS applies the LAST matching
 # pattern for a given path, so the narrower line below overrides the directory line above it.
-/.github/workflows/ @DanBeckDev
+/.github/workflows/ @a11ign-ai-leads
 /.github/workflows/consumer-gate.yml

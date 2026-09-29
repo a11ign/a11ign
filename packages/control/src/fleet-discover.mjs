@@ -63,7 +63,17 @@ import { inventoryPathFor } from "./control-plane-fleet.mjs";
 refuseUnknownFlags(["--cidr=", "--port=", "--enroll", "--json"], { entry: import.meta.url, command: "npm run fleet:discover" });
 
 const DEFAULT_PORT = 8765;
-const PROBE_TIMEOUT_MS = 2_000;
+/**
+ * How long one `/health` probe waits. It is the wall-clock of a whole `scan`, because `scan` probes all 254
+ * addresses at once and any address that neither answers nor refuses (a powered-off or absent host drops the
+ * SYN) holds its probe to this deadline.
+ *
+ * 6 s, from a reading rather than a guess: `/health` took 2.85-2.93 s on three healthy workers and 0.6-0.75 s
+ * on twelve (`orchestrator`, #2664, 2026-09-26). The old 2 s called those three `ASLEEP?`, and that verdict
+ * (and "not enrolled" under `--enroll`) is one people act on, so a slow answer must not read as an absence.
+ * 6 s is about twice the slowest measured box; the price is a scan that can take 6 s instead of 2.
+ */
+export const PROBE_TIMEOUT_MS = 6_000;
 const LAST_HOST_IN_SUBNET = 254;
 
 /**
@@ -100,7 +110,11 @@ export function inventoryHosts(text) {
     }
     const host = line.match(/^\s*ansible_host\s*:\s*(\S+)\s*$/);
     if (host && current) current.host = host[1].replace(/^["']|["']$/g, "");
-    const mac = line.match(/^\s*mac\s*:\s*(\S*)\s*$/);
+    // #2700: unlike `host` above, a `mac:` line may carry a same-line `# ...` comment (five workers
+    // enrolled by #2654 are written that way) -- `(?:#.*)?` after the value tolerates it without
+    // swallowing it into the captured MAC, so long as it is set off by whitespace as every comment in
+    // this file is.
+    const mac = line.match(/^\s*mac\s*:\s*(\S*)\s*(?:#.*)?$/);
     if (mac && current) current.mac = normaliseMac(mac[1].replace(/^["']|["']$/g, ""));
   }
   // The filter guarantees `host`, and a filter cannot narrow -- so the cast states what the line above
@@ -129,16 +143,79 @@ export function normaliseMac(value) {
   return (hex.match(/.{2}/g) ?? []).join(":");
 }
 
-/** The MAC the host's ARP table has for an address, or null. Populated by having just talked to it. */
-export function macOf(/** @type {any} */ ip) {
+const LOOKUP_TIMEOUT_MS = 3000;
+
+/**
+ * One tool's answer to "what MAC is at this address?".
+ *
+ * `ran` is separate from `mac` because "the tool could not ask" and "the table has no entry" are different
+ * facts (#2667): `arp` is absent on the control plane and on this host, and an absent tool used to read as
+ * an empty table -- an unchecked MAC read OK, and an enrolment was written as "ARP had none" for a MAC the
+ * table held. An error carrying a numeric exit `status` means the tool RAN; one without (ENOENT, a
+ * timeout, EACCES) means it could not be asked.
+ *
+ * @param {string} tool @param {string[]} args @param {Function} run
+ * @returns {{ ran: boolean, output: string }}
+ */
+function askTool(tool, args, run) {
   try {
-    const out = execFileSync("arp", ["-n", ip], { encoding: "utf8", timeout: 3000 });
-    const found = out.match(/([0-9a-fA-F]{1,2}(?::[0-9a-fA-F]{1,2}){5})/);
-    // macOS prints single-digit octets ("0:1a:..."), which normaliseMac would reject; pad them.
-    return found ? normaliseMac(found[1].split(":").map((o) => o.padStart(2, "0")).join(":")) : null;
-  } catch {
-    return null;
+    return { ran: true, output: String(run(tool, args, { encoding: "utf8", timeout: LOOKUP_TIMEOUT_MS })) };
+  } catch (error) {
+    const ranAndFailed = typeof (/** @type {any} */ (error)?.status) === "number";
+    return { ran: ranAndFailed, output: "" };
   }
+}
+
+/** `ip neigh show <ip>` prints `<ip> dev eth0 lladdr aa:bb:cc:dd:ee:ff REACHABLE`; a FAILED entry has no lladdr. */
+function macFromIpNeigh(/** @type {string} */ output) {
+  return normaliseMac(output.match(/\blladdr\s+([0-9a-fA-F:]{11,17})/)?.[1]);
+}
+
+/** `arp -n <ip>`. macOS prints single-digit octets ("0:1a:..."), which normaliseMac would reject; pad them. */
+function macFromArp(/** @type {string} */ output) {
+  const found = output.match(/([0-9a-fA-F]{1,2}(?::[0-9a-fA-F]{1,2}){5})/);
+  return found ? normaliseMac(found[1].split(":").map((o) => o.padStart(2, "0")).join(":")) : null;
+}
+
+/**
+ * Ask the host's neighbour table for an address's MAC: `ip neigh` first (every Linux host here has it, and
+ * `arp` is in net-tools, which they do not), `arp -n` only where `ip` cannot be run (macOS). Populated by
+ * having just talked to the address.
+ *
+ * `missing` names every tool that could not be run, so a caller can say which one and tell a null from
+ * "the table has no entry" (`missing` empty, or a tool that ran) from "nobody could look" (`ran` false).
+ *
+ * @param {string} ip
+ * @param {Function} [run] injected for tests; defaults to `execFileSync`
+ * @returns {{ mac: string|null, ran: boolean, missing: string[] }}
+ */
+export function lookupMac(ip, run = execFileSync) {
+  /** @type {string[]} */
+  const missing = [];
+  const viaIp = askTool("ip", ["neigh", "show", ip], run);
+  if (viaIp.ran) return { mac: macFromIpNeigh(viaIp.output), ran: true, missing };
+  missing.push("ip");
+  const viaArp = askTool("arp", ["-n", ip], run);
+  if (viaArp.ran) return { mac: macFromArp(viaArp.output), ran: true, missing };
+  missing.push("arp");
+  return { mac: null, ran: false, missing };
+}
+
+/** The MAC the host's neighbour table has for an address, or null. See `lookupMac` for why null is ambiguous. */
+export function macOf(/** @type {any} */ ip, /** @type {Function} */ run = execFileSync) {
+  return lookupMac(ip, run).mac;
+}
+
+/**
+ * Why a MAC could not be compared, in a sentence -- or null when there is nothing to say.
+ *
+ * @param {{ mac: string|null, ran: boolean, missing: string[] } | undefined} lookup
+ */
+export function macNote(lookup) {
+  if (!lookup || lookup.mac) return null;
+  return lookup.ran
+    ? "the neighbour table has no entry for this address"
+    : `neither ${lookup.missing.map((t) => `\`${t}\``).join(" nor ")} could be run on this host`;
 }
 
 /** The /24 this host is on, e.g. "192.168.1". Guessing a subnet is worse than being told. */
@@ -153,20 +230,21 @@ export function localSubnet() {
   return null;
 }
 
-async function probe(/** @type {any} */ ip, /** @type {any} */ port) {
+async function probe(/** @type {any} */ ip, /** @type {any} */ port, /** @type {number} */ timeoutMs) {
   try {
-    const response = await requestJson(`http://${ip}:${port}/health`, { timeoutMs: PROBE_TIMEOUT_MS });
+    const response = await requestJson(`http://${ip}:${port}/health`, { timeoutMs });
     if (!response.ok || !response.json) return null;
-    return { ip, health: response.json, mac: macOf(ip) };
+    const lookup = lookupMac(ip);
+    return { ip, health: response.json, mac: lookup.mac, macLookup: lookup };
   } catch {
     return null;
   }
 }
 
-/** Everything answering /health on the subnet. */
-export async function scan(/** @type {any} */ subnet, port = DEFAULT_PORT) {
+/** Everything answering /health on the subnet. `timeoutMs` is injectable so a test can bound a scan cheaply. */
+export async function scan(/** @type {any} */ subnet, port = DEFAULT_PORT, { timeoutMs = PROBE_TIMEOUT_MS } = {}) {
   const addresses = Array.from({ length: LAST_HOST_IN_SUBNET }, (_, i) => `${subnet}.${i + 1}`);
-  const found = await Promise.all(addresses.map((ip) => probe(ip, port)));
+  const found = await Promise.all(addresses.map((ip) => probe(ip, port, timeoutMs)));
   // A cast rather than a predicate: `probe` answers null for an address that does not respond, and
   // the filter is what makes the declared return true. Stated once, where it is established.
   return /** @type {any[]} */ (found.filter((entry) => entry !== null));
@@ -176,7 +254,8 @@ export async function scan(/** @type {any} */ subnet, port = DEFAULT_PORT) {
  * Do two MACs contradict each other?
  *
  * Absent on either side means UNKNOWN, not different: an inventory entry with no `mac:` is normal, and
- * `macOf` returns null whenever ARP has no entry for an address it just talked to. Treating either as a
+ * `macOf` returns null whenever the neighbour table has no entry for an address it just talked to, or
+ * the tool to read it could not be run. Treating either as a
  * mismatch would report every un-enrolled box absent.
  *
  * @param {string|null|undefined} declared @param {string|null|undefined} discovered
@@ -193,7 +272,7 @@ function macsAgree(declared, discovered) {
  * matters, because the interesting cases are the ones that only occur when something has gone wrong.
  *
  * @param {Array<{name: string, host: string, mac: string|null}>} declared
- * @param {Array<{ip: string, mac: string|null, health: object}>} discovered
+ * @param {Array<{ip: string, mac: string|null, health: object, macLookup?: {mac: string|null, ran: boolean, missing: string[]}}>} discovered
  */
 export function reconcile(declared, discovered) {
   const findings = [];
@@ -223,7 +302,11 @@ export function reconcile(declared, discovered) {
     const atItsAddress = discovered.find((d) => d.ip === entry.host && macsAgree(entry.mac, d.mac));
     if (atItsAddress) {
       claimed.add(atItsAddress.ip);
-      findings.push({ state: "ok", name: entry.name, ip: entry.host, health: atItsAddress.health });
+      // `macCompared` is what makes a bare OK honest: macsAgree calls an absent MAC agreement, so without it
+      // an OK from a host that could not read MACs looks the same as one that checked (#2667).
+      const macCompared = Boolean(entry.mac && atItsAddress.mac);
+      findings.push({ state: "ok", name: entry.name, ip: entry.host, health: atItsAddress.health, macCompared,
+        macNote: entry.mac && !macCompared ? macNote(atItsAddress.macLookup) : null });
       continue;
     }
     // The case that cost us: nothing at the declared address, but a worker with this MAC elsewhere.
@@ -247,7 +330,7 @@ export function reconcile(declared, discovered) {
 
   for (const d of discovered) {
     if (claimed.has(d.ip)) continue;
-    findings.push({ state: "unknown", ip: d.ip, mac: d.mac, health: d.health });
+    findings.push({ state: "unknown", ip: d.ip, mac: d.mac, health: d.health, macLookup: d.macLookup });
   }
   return findings;
 }
@@ -286,9 +369,9 @@ export function nextWorkerName(existingNames) {
  */
 /**
  * @param {{ name: string, ip: string, mac?: string|null, health?: Record<string, any>|null,
- *           today: string }} entry
+ *           today: string, macLookup?: {mac: string|null, ran: boolean, missing: string[]} }} entry
  */
-export function enrolmentBlock({ name, ip, mac, health, today }) {
+export function enrolmentBlock({ name, ip, mac, health, today, macLookup }) {
   const env = health?.environment ?? {};
   const identity = `${env.screenReaderVersion ? `NVDA ${env.screenReaderVersion}` : "no NVDA reported"}, `
     + `${env.windowsVersion ?? "unknown OS"}/${env.architecture ?? "?"}`;
@@ -302,7 +385,10 @@ export function enrolmentBlock({ name, ip, mac, health, today }) {
     lines.push(`          mac: "${mac}"`);
     return lines.join("\n");
   }
-  lines.push("          # NO mac -- ARP had none for this address, so wake.yml will SKIP and NAME this box");
+  // Two different sentences (#2667): a table with no entry is a fact about the box; a tool that could not
+  // be run says nothing about it, and the MAC may well be sitting in the table.
+  const why = macNote(macLookup) ?? "the neighbour table has no entry for this address";
+  lines.push(`          # NO mac -- ${why}, so wake.yml will SKIP and NAME this box`);
   lines.push("          # rather than silently not wake it. Read it off the machine and add it here:");
   lines.push(`          #   ansible ${name} -m win_shell -a "(Get-NetAdapter -Physical | ? Status -eq Up).MacAddress"`);
   return lines.join("\n");
@@ -317,7 +403,7 @@ export function enrolmentBlock({ name, ip, mac, health, today }) {
  * file twice under two names, which is worse than the drift it was trying to fix.
  *
  * @param {string} text
- * @param {Array<{ip: string, mac: string|null, health: object}>} unknowns
+ * @param {Array<{ip: string, mac: string|null, health: object, macLookup?: {mac: string|null, ran: boolean, missing: string[]}}>} unknowns
  * @param {string} today
  * @param {Array<{name: string, mac: string|null}>} [alsoKnown] (#1684) hosts declared somewhere OTHER
  *        than `text` (the durable copy, when the write target `text` came from is the in-tree file and
@@ -339,7 +425,8 @@ export function enrol(text, unknowns, today, alsoKnown = []) {
       continue;
     }
     const name = nextWorkerName([...names, ...added.map((entry) => entry.name)]);
-    blocks.push(enrolmentBlock({ name, ip: worker.ip, mac: worker.mac, health: worker.health, today }));
+    blocks.push(enrolmentBlock({ name, ip: worker.ip, mac: worker.mac, health: worker.health, today,
+      macLookup: worker.macLookup }));
     added.push({ name, ip: worker.ip, mac: worker.mac });
     if (worker.mac) knownMacs.add(worker.mac);
   }
@@ -403,6 +490,7 @@ function render(/** @type {any} */ findings) {
   for (const f of findings) {
     if (f.state === "ok") {
       lines.push(`  OK       ${f.name.padEnd(16)} ${f.ip.padEnd(15)} ${describe(f.health)}`);
+      if (f.macNote) lines.push(`           MAC NOT COMPARED, matched on address only: ${f.macNote}`);
     } else if (f.state === "moved") {
       lines.push(`  MOVED    ${f.name.padEnd(16)} ${f.ip.padEnd(15)} -> now at ${f.foundAt}`);
       lines.push(`           ${" ".repeat(16)} ${" ".repeat(15)} ${describe(f.health)}`);
@@ -516,6 +604,10 @@ async function main() {
     ({ ...acc, [f.state]: (acc[f.state] ?? 0) + 1 }), {});
     process.stdout.write(`  ${declared.length} declared, ${discovered.length} answering — `
       + `${Object.entries(counts).map(([k, v]) => `${v} ${k}`).join(", ")}\n`);
+    const blind = discovered.find((d) => d.macLookup && !d.macLookup.ran);
+    if (blind) {
+      process.stdout.write(`  MACs NOT COMPARED: ${macNote(blind.macLookup)}, so every match above is on address only\n`);
+    }
   }
   const enrolled = process.argv.includes("--enroll")
     ? writeEnrolments(inventoryPath, /** @type {any[]} */ (findings.filter((f) => f.state === "unknown")), declared)

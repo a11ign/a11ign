@@ -30,7 +30,7 @@ import {
 } from "./wake.mjs";
 import { readReviewerRegistry, REVIEWER_REGISTRY_FILE } from "./work-gate.mjs";
 import { parityOwner } from "./review-attribution.mjs";
-import { sandboxGitEnv } from "../../guards/src/git-env.mjs";
+import { sandboxGitEnv } from "./lib/git-env.mjs";
 
 const agents = (spec: Record<string, string>) =>
   Object.entries(spec).map(([label, status]) => ({ label, status }));
@@ -521,7 +521,7 @@ function section(text: string, heading: RegExp): string {
 
 test("#2498 (3): `reviewer.md` pins the rule for a verdict whose Acceptance did not execute -- environmental is never "
   + "`not runnable`, and a `convinced` names the CI run it relies on or is `not convinced (environment)`", () => {
-  const doc = readFileSync(fileURLToPath(new URL("../docs/roles/reviewer.md", import.meta.url)), "utf8");
+  const doc = readFileSync(fileURLToPath(new URL("../../../.agent-org/roles/reviewer.md", import.meta.url)), "utf8");
   const rule = section(doc, /^## A verdict whose Acceptance did not execute/m).replace(/\s+/g, " ");
   assert.match(rule, /never says the Acceptance is "not runnable" for an ENVIRONMENTAL reason/);
   assert.match(rule, /A `convinced` verdict whose Acceptance did not execute names the CI run it relies on \(run id or job URL\) in the verdict line/);

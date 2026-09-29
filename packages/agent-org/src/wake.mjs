@@ -37,12 +37,20 @@ import { basename, dirname, join } from "node:path";
 import { createHash } from "node:crypto";
 // RELATIVE, not the package specifier -- this must run before any `npm ci`/build, the same constraint
 // `work-gate.mjs` and `org-watch.mjs` state at their own imports.
-import { refuseUnknownFlags, flagValue } from "../../worker-fleet/src/cli-flags.mjs";
+import { refuseUnknownFlags, flagValue } from "./lib/cli-flags.mjs";
 import { profileFor, agentArgs } from "./worker-profile.mjs";
-import { JUDGMENT_CAUSES, ANSWER_PREFIX, LAUNCH_PLACEHOLDER, REVIEWER_REGISTRY_FILE, readReviewerRegistry }
+import { JUDGMENT_CAUSES, ANSWER_PREFIX, LAUNCH_PLACEHOLDER, REVIEWER_REGISTRY_FILE, readReviewerRegistry, scopesOf }
   from "./work-gate.mjs";
-import { reviewerInstanceNumber } from "./review-attribution.mjs";
-import { REPO } from "../../../scripts/repo-identity.mjs";
+import { reviewerInstance, subjectMention } from "./review-attribution.mjs";
+// #2688: THE SAME INSTRUMENT #928's OFFLINE REPORT IS BUILT FROM, READ LIVE INSTEAD OF ONLY REPORTED --
+// no new metric, only this one read at delivery time.
+import { claudeTurns, transcriptFiles } from "./token-audit.mjs";
+import { homeProjectDeclaration } from "./project-config.mjs";
+import { REPO } from "./project-identity.mjs";
+import { roleBriefPath } from "./project-roles.mjs";
+// #2619 (child 3d of #69): `session:`/`ready` -- `answer:` already arrives via `work-gate.mjs`'s
+// re-export of `waiting-condition.mjs`'s own field, so it is not re-imported here.
+import { SESSION_PREFIX, READY_LABEL } from "./project-vocabulary.mjs";
 import { inBuildReason, isInBuild, unansweredRefusal, lookupHeldRows, lookupOtherHeldIssues }
   from "./row-claim/own-pr-health-rule.mjs";
 import { parseWorktreeList, isPrimaryWorktree, isWorkingTreeClean, mergeStatus, detachedMergeStatus }
@@ -58,14 +66,20 @@ import { lookupBlockedByEdge, blockedByEdgeReason } from "./row-claim/blocked-by
 import { fileOverlapReason, lookupMyRegionFiles, lookupOpenPrFiles } from "./row-claim/file-overlap-rule.mjs";
 // The scrubbing helper, RELATIVE like the imports above: a leaked GIT_DIR must not redirect the teardown's
 // `git worktree list` onto another repository (git-spawn-classification.test.ts).
-import { sandboxGitEnv } from "../../guards/src/git-env.mjs";
+import { sandboxGitEnv } from "./lib/git-env.mjs";
 // #2470: THIS FILE NOW SENDS A BODY TO GITHUB (the release comment), so it reaches the leak guard like every other tracker writer (#1053).
-import { assertNoLeakInArgv } from "../../lab/src/packaging/leak-patterns.mjs";
+import { assertNoLeakInArgv } from "./lib/leak-patterns.mjs";
 // #2470: THE PURE HALF OF A CLAIM THAT DOES NOT MOVE -- a leaf, so `work-gate.mjs` and this file both import it and neither imports the other's
 // half. What is performed here is the part that needs a pane, a process or a row: the release, the resume, the re-send.
 import { workAtRisk, gitRun, pathExists, statMtime, KEPT_CLAIMS_FILE, RESTART_STATE_FILE, RESTART_RESEND_WINDOW_MS,
-  readHerdrRestart, paneInterrupted, killedDeliveries, writeJsonObject, readJsonObject, INTERRUPTED_TEXT, INTERRUPTED_SETTLE_MS }
+  readHerdrRestart, paneInterrupted, paneThrashed, killedDeliveries, writeJsonObject, readJsonObject, INTERRUPTED_TEXT,
+  INTERRUPTED_SETTLE_MS, THRASH_TEXT }
   from "./claim-stall.mjs";
+// THE WORKSPACE LISTING, SHARED WITH THE LEAF (#2747): moved here from this file so `claim-stall.mjs` can read it
+// too, without importing this file (which already imports `claim-stall.mjs` and would cycle). Re-exported below so
+// every existing importer of `readAgents`/`listingIsComplete` from "./wake.mjs" is unchanged.
+import { readAgents, listingIsComplete } from "./herdr-agents.mjs";
+export { readAgents, listingIsComplete };
 
 /**
  * `0` QUIET nothing to deliver; `1` ATTENTION an order had nowhere to go; `2` CANNOT_ASK herdr did not
@@ -321,32 +335,7 @@ const guardedGh = (args) => {
   return defaultGh(args);
 };
 
-/**
- * Every workspace herdr knows, as `{ label, status }`, or `null` when herdr could not be asked.
- *
- * `null` and `[]` are different answers and must stay different: `[]` is "herdr answered, and the org has
- * no workspaces", which is a real and reportable state; `null` is "herdr did not answer", which must never
- * read as an empty org -- that would report every order as undeliverable and, worse, read as quiet.
- *
- * @param {(args: string[]) => string} [run]
- * @returns {{label: string, status: string}[] | null}
- */
-export function readAgents(run = defaultRun) {
-  let raw;
-  try {
-    raw = run(["--session", "org", "workspace", "list"]);
-  } catch {
-    return null;
-  }
-  try {
-    const parsed = JSON.parse(raw);
-    const workspaces = parsed?.result?.workspaces;
-    if (!Array.isArray(workspaces)) return null;
-    return workspaces.map((w) => ({ label: String(w.label ?? ""), status: String(w.agent_status ?? "unknown") }));
-  } catch {
-    return null;
-  }
-}
+/** `readAgents` moved to `./herdr-agents.mjs` (#2747); imported above and re-exported below. */
 
 /**
  * Which concrete session takes this order, or `null` when none can.
@@ -576,7 +565,7 @@ export const SPAWN_CAUSES = Object.freeze(["ready-row-unclaimed"]);
  * @param {string | URL} [path] the roster file; a parameter so a test can hand it a fixture
  * @returns {string[]}
  */
-export function engineerRoles(path = new URL("../docs/roles/sessions.json", import.meta.url)) {
+export function engineerRoles(path = roleBriefPath("sessions.json").absolute) {
   const { live } = /** @type {{ live: { name: string, role: string, family?: object }[] }} */ (
     JSON.parse(readFileSync(path, "utf8")));
   return live.filter((s) => s.role === "engineer" && s.family === undefined).map((s) => s.name);
@@ -945,7 +934,7 @@ export function reviewerEnvironment(session, override = {}, tree = reviewCheckou
  * @param {{session: string, cause?: string}} order
  */
 export function isReviewerOrder(order) {
-  return reviewerInstanceNumber(order.session) !== null && REVIEWER_CAUSES.includes(String(order.cause));
+  return reviewerInstance(order.session) !== null && REVIEWER_CAUSES.includes(String(order.cause));
 }
 
 /**
@@ -964,18 +953,29 @@ function hasNoAgent(agent) {
  * @param {{label: string}[]} agents @returns {string[]}
  */
 export function liveReviewers(agents) {
-  return agents.filter((a) => reviewerInstanceNumber(a.label) !== null).map((a) => a.label);
+  return agents.filter((a) => reviewerInstance(a.label) !== null).map((a) => a.label);
 }
 
 /**
- * The pull request an order is ABOUT, read from its cause key (`reviewer-<n>/<cause>/pr-<n>/<head>`), or `null`
- * when the key names none. The gate writes the number into the key of every order about a pull request, so this
+ * The pull request an order is ABOUT -- its repository's key and its number -- read from its cause key
+ * (`reviewer-<n>/<cause>/pr-<n>/<head>`, and `reviewer-<key>-<n>/<cause>/pr-<key>#<n>/<head>` for another repository), or
+ * `null` when the key names none. The gate writes the reference into the key of every order about a pull request, so this
  * reads the one fact an instance's exclusivity has to be judged on without asking GitHub.
+ * @param {{causeKey?: string}} order @returns {{ key: string, number: number } | null}
+ */
+export function orderPullRequestRef(order) {
+  const match = /(?:^|\/)pr-(?:([a-z0-9][a-z0-9-]*)#)?([1-9][0-9]*)(?:\/|$)/.exec(String(order.causeKey ?? ""));
+  return match === null ? null : { key: match[1] ?? "", number: Number(match[2]) };
+}
+
+/**
+ * The number of the PRIMARY project's pull request an order is about, or `null` -- including for an order about a pull
+ * request in another repository, whose bare number would name the wrong one. {@link orderPullRequestRef} says which.
  * @param {{causeKey?: string}} order @returns {number | null}
  */
 export function orderPullRequest(order) {
-  const match = /(?:^|\/)pr-([1-9][0-9]*)(?:\/|$)/.exec(String(order.causeKey ?? ""));
-  return match === null ? null : Number(match[1]);
+  const ref = orderPullRequestRef(order);
+  return ref === null || ref.key !== "" ? null : ref.number;
 }
 
 /**
@@ -984,18 +984,21 @@ export function orderPullRequest(order) {
  * none -- is refused even when the instance is idle and the only reviewer alive. FAIL CLOSED: an order whose key
  * names no pull request cannot be shown to be about this one.
  *
+ * THE REPOSITORY IS PART OF "THAT PULL REQUEST" (#2618): `reviewer-7` and `reviewer-agent-org-7` are two instances, and an
+ * order about PR 7 of the other repository is refused by each.
+ *
  * ASKED OF EVERY ROUTED TARGET, whatever the cause and whether the route was direct or a fallback, because the
  * guarantee is about the instance and not about the two causes that usually address it. A label that is not an
  * instance (an engineer, a standing session, the retired pane) answers `null`: this file does not judge them.
  * @param {{causeKey?: string}} order @param {string} label @returns {string | null}
  */
 export function reviewerMismatch(order, label) {
-  const owned = reviewerInstanceNumber(label);
+  const owned = reviewerInstance(label);
   if (owned === null) return null;
-  const pr = orderPullRequest(order);
-  if (pr === owned) return null;
-  return `"${label}" reviews PR #${owned} and nothing else, and this order is ${pr === null
-    ? "about no pull request" : `about PR #${pr}`} (${order.causeKey})`;
+  const pr = orderPullRequestRef(order);
+  if (pr !== null && pr.key === owned.key && pr.number === owned.number) return null;
+  return `"${label}" reviews PR ${subjectMention({ repoKey: owned.key, number: owned.number })} and nothing else, and this order is ${pr === null
+    ? "about no pull request" : `about PR ${subjectMention({ repoKey: pr.key, number: pr.number })}`} (${order.causeKey})`;
 }
 
 /**
@@ -1056,9 +1059,10 @@ export function reviewCheckoutPath(session, root = REVIEW_CHECKOUT_ROOT) {
  * The private ref pull request `pr`'s head is fetched into. NOT `FETCH_HEAD`: that file is shared by every session
  * that fetches in this checkout, and another fetch between ours and the read would hand the reviewer some other
  * pull request's commit.
- * @param {number} pr
+ * ANOTHER REPOSITORY'S pull request 7 is a different ref, so removing one instance's never deletes the other's (#2618).
+ * @param {number} pr @param {string} [key]
  */
-const reviewRef = (pr) => `refs/review/pr-${pr}`;
+const reviewRef = (pr, key = "") => (key === "" ? `refs/review/pr-${pr}` : `refs/review/${key}/pr-${pr}`);
 
 /**
  * @typedef {{git?: (cmd: string, args: string[], opts?: object) => string, exists?: (path: string) => boolean,
@@ -1163,15 +1167,15 @@ export function prepareReviewCheckout({ pr, session, git = defaultGit, exists = 
  * that outlives its pull request is the leak #2163 measured, and this row must not add instances of it.
  * A tree that is already gone is done, not an error.
  *
- * @param {{pr: number, session: string} & CheckoutDeps} args @returns {string | null}
+ * @param {{pr: number, session: string, key?: string} & CheckoutDeps} args @returns {string | null}
  */
-export function removeReviewCheckout({ pr, session, git = defaultGit, exists = existsSync,
+export function removeReviewCheckout({ pr, session, key = "", git = defaultGit, exists = existsSync,
   root = REVIEW_CHECKOUT_ROOT, repoRoot = REPO_ROOT }) {
   const path = reviewCheckoutPath(session, root);
   try {
     if (exists(path)) git("git", ["-C", repoRoot, "worktree", "remove", "--force", path]);
     if (exists(path)) return `${path} is still there after \`git worktree remove\``;
-    git("git", ["-C", repoRoot, "update-ref", "-d", reviewRef(pr)]);
+    git("git", ["-C", repoRoot, "update-ref", "-d", reviewRef(pr, key)]);
     return null;
   } catch (err) {
     return `could not remove ${path} (${firstLine(err)})`;
@@ -1232,6 +1236,21 @@ function spawnReviewer(order, agents, { run = defaultRun, env, cwd, registry }) 
  */
 
 /**
+ * WHY NO REVIEW CHECKOUT CAN BE MADE FOR THIS INSTANCE, or `null` when one can (#2618). A tree is made by fetching
+ * `refs/pull/<n>/head` from `origin` INTO THIS CHECKOUT, and this checkout's `origin` is the primary project's repository: for
+ * `reviewer-<key>-<n>` that fetch would put the primary's pull request `<n>` in front of a reviewer of another repository's --
+ * the wrong review, presented as the right one. Where another repository's clone lives is a host path, which is child 3f's
+ * (ADR 0040, decision 3), so until it exists the order is REFUSED, by name, and not sent.
+ * @param {string} session @returns {string | null}
+ */
+export function noReviewCheckoutFor(session) {
+  const instance = reviewerInstance(session);
+  if (instance === null || instance.key === "") return null;
+  return `no review checkout for "${session}": the tick's checkout serves repository \`${REPO}\` only, and where \`${instance.key}\`'s clone lives is a host path `
+    + "(ADR 0040, decision 3 -- child 3f); nothing is fetched and the order is not sent, because a tree of the WRONG repository's pull request would be reviewed as this one";
+}
+
+/**
  * WHERE A REVIEWER ORDER GOES, and what it carries: the instance for its pull request, started when none exists,
  * with its tree at the pull request's current head. NOTHING ELSE CAN RECEIVE IT -- no roster, no fallback, no
  * other instance (Done-when 8) -- so this asks {@link route} for the order's own session and for nothing more.
@@ -1249,6 +1268,8 @@ function spawnReviewer(order, agents, { run = defaultRun, env, cwd, registry }) 
 function reviewerTarget(order, live, deps) {
   const wrong = reviewerMismatch(order, order.session);
   if (wrong !== null) return { refusal: wrong };
+  const withoutTree = noReviewCheckoutFor(order.session);
+  if (withoutTree !== null) return { refusal: withoutTree };
   const routed = route(order.session, live, []);
   if ("refusal" in routed) {
     const may = spawnableReviewer(order, live, deps.registry?.());
@@ -1298,28 +1319,13 @@ export function registerReviewer(paths, session, now = Date.now()) {
  */
 export const REVIEWER_DEAD_AFTER_TICKS = 3;
 
-/** The two panes that are always running. A listing that shows neither of them is not a listing of the org. */
-const STANDING_PANES = Object.freeze(["ceo", "orchestrator"]);
-
 /**
  * @typedef {{spawnedAt: number, absentTicks?: number, absentNoted?: string}} ReviewerInstance
  * `absentTicks` counts complete listings that lacked it; `absentNoted` is the last thing written to the absences
  * ledger about it, so a state that does not change writes one line and not one per tick.
  */
 
-/**
- * IS THIS LISTING THE WHOLE ORG, as far as a listing can say so: it shows every standing pane. This is the test
- * that separates "herdr gave a complete list and this instance is not in it" from the partial list
- * {@link spawnableReviewer}'s refusal was written for, which reads EVERY instance as absent -- the standing panes
- * included. A listing missing `ceo` or `orchestrator` is missing things that exist, so what else it lacks is
- * unproven. WHAT IT DOES NOT PROVE: a listing that dropped only some workspaces and happened to keep both panes.
- * That is why one complete listing is never enough ({@link REVIEWER_DEAD_AFTER_TICKS}), and why an instance that
- * is LISTED even once starts the count again.
- * @param {{label: string}[]} agents
- */
-export function listingIsComplete(agents) {
-  return STANDING_PANES.every((pane) => agents.some((a) => a.label === pane));
-}
+/** `listingIsComplete` moved to `./herdr-agents.mjs` (#2747), which `claim-stall.mjs` needs too; imported above and re-exported below. */
 
 /**
  * What one tick's listing does to a registered reviewer whose pull request is still open: its next registry entry
@@ -1352,6 +1358,22 @@ export function observeOpenReviewer(entry, { listed, complete, agentless = false
 }
 
 /**
+ * The state of the pull request a reviewer instance reviews -- asked of ITS repository -- or `null`, saying so, when it could
+ * not be read (the instance is then left running: an unreadable state is never "closed").
+ * @param {string} session @param {{ key: string, number: number } | null} instance
+ * @param {{prState: (pr: number, key: string) => string | null, warn: (line: string) => void}} deps
+ * @returns {string | null}
+ */
+function reviewedPullRequestState(session, instance, deps) {
+  if (instance === null) return null;
+  const state = deps.prState(instance.number, instance.key);
+  if (state === null) {
+    deps.warn(`reviewer teardown: could not read PR ${subjectMention({ repoKey: instance.key, number: instance.number })}'s state -- leaving "${session}" running.`);
+  }
+  return state;
+}
+
+/**
  * END EVERY REVIEWER INSTANCE WHOSE PULL REQUEST HAS MERGED OR CLOSED, and write one ledger line for each ending.
  *
  * ONLY INSTANCES THIS PATH STARTED (the registry's keys), NEVER A WORKSPACE THAT MERELY LOOKS LIKE ONE: the two
@@ -1370,7 +1392,7 @@ export function observeOpenReviewer(entry, { listed, complete, agentless = false
  *
  * @param {{label: string, status: string}[]} agents
  * @param {{registry: Record<string, ReviewerInstance>, now: number, run: (args: string[]) => string,
- *   prState: (pr: number) => string | null, removeCheckout: (session: string, pr: number) => string | null,
+ *   prState: (pr: number, key: string) => string | null, removeCheckout: (session: string, pr: number, key: string) => string | null,
  *   record: (line: object) => void, warn: (line: string) => void, recordAbsence?: (line: object) => void}} deps
  * @returns {{ended: string[], cleared: string[], registry: Record<string, ReviewerInstance>}}
  */
@@ -1381,12 +1403,10 @@ export function endFinishedReviewers(agents, deps) {
   /** @type {string[]} */
   const cleared = [];
   for (const session of Object.keys(registry)) {
-    const pr = reviewerInstanceNumber(session);
-    const state = pr === null ? null : deps.prState(pr);
-    if (state === null) {
-      if (pr !== null) deps.warn(`reviewer teardown: could not read PR #${pr}'s state -- leaving "${session}" running.`);
-      continue;
-    }
+    const instance = reviewerInstance(session);
+    const pr = instance === null ? null : instance.number;
+    const state = reviewedPullRequestState(session, instance, deps);
+    if (state === null) continue;
     if (state === "open") {
       if (reconcileOpenReviewer({ session, pr: Number(pr), agents, registry }, deps)) cleared.push(session);
       continue;
@@ -1394,7 +1414,7 @@ export function endFinishedReviewers(agents, deps) {
     const agent = agents.find((a) => a.label === session);
     if (agent !== undefined && !WAKEABLE.includes(agent.status)) continue;
     if (agent !== undefined && !closeReviewer(session, deps)) continue;
-    const left = deps.removeCheckout(session, Number(pr));
+    const left = deps.removeCheckout(session, Number(pr), instance?.key ?? "");
     if (left !== null) {
       deps.warn(`reviewer teardown: "${session}" is finished but its checkout was not removed (${left}) -- retried next tick.`);
       continue;
@@ -1472,13 +1492,25 @@ function closeReviewer(session, deps) {
 }
 
 /**
- * `open`, `closed` (merged pulls are closed too) or `null` for anything GitHub would not say -- REST, so the
- * per-tick lookup spends the CORE pool and not the GRAPHQL one the gate already leans on.
- * @param {number} pr @returns {string | null}
+ * The code repository a KEY names in the project's declaration, or `null` for a key it does not declare -- which the caller
+ * reads as "cannot tell", never as the primary's repository.
+ * @param {string} key @returns {string | null}
  */
-function pullRequestState(pr) {
+export function codeRepositoryOf(key) {
+  return key === "" ? REPO : scopesOf([homeProjectDeclaration()]).find((scope) => scope.key === key)?.code?.repo ?? null;
+}
+
+/**
+ * `open`, `closed` (merged pulls are closed too) or `null` for anything GitHub would not say -- REST, so the
+ * per-tick lookup spends the CORE pool and not the GRAPHQL one the gate already leans on. A pull request of another
+ * repository is asked of THAT repository (`key`), and a key the declaration does not list is unreadable, not the primary's.
+ * @param {number} pr @param {string} [key] @returns {string | null}
+ */
+function pullRequestState(pr, key = "") {
   try {
-    const state = defaultGh(["api", `repos/${REPO}/pulls/${pr}`, "--jq", ".state"]).trim();
+    const repo = codeRepositoryOf(key);
+    if (repo === null) return null;
+    const state = defaultGh(["api", `repos/${repo}/pulls/${pr}`, "--jq", ".state"]).trim();
     return state === "open" || state === "closed" ? state : null;
   } catch {
     return null;
@@ -1501,7 +1533,7 @@ export function tearDownReviewers(agents, ledgerPath, say = (line) => process.st
     /** @param {string} path */
     const appendTo = (path) => (/** @type {object} */ line) => writeFileSync(path, `${JSON.stringify(line)}\n`, { flag: "a" });
     const { ended, cleared, registry } = endFinishedReviewers(agents, { registry: before, now: Date.now(),
-      run: defaultRun, prState: pullRequestState, removeCheckout: (session, pr) => removeReviewCheckout({ session, pr }),
+      run: defaultRun, prState: pullRequestState, removeCheckout: (session, pr, key) => removeReviewCheckout({ session, pr, key }),
       warn: (line) => say(`${line}\n`), record: appendTo(paths.endings), recordAbsence: appendTo(paths.absences) });
     writeFileSync(paths.registry, `${JSON.stringify(registry)}\n`);
     for (const session of ended) say(`ENDED ${session}: its pull request is no longer open\n`);
@@ -2213,8 +2245,8 @@ function settle(order, outcome, deps) {
 export function holderOf(ref, run = defaultGh) {
   try {
     const read = JSON.parse(run(["api", `repos/${REPO}/issues/${ref}`, "--jq", "{state, labels: [.labels[].name]}"]));
-    const sessions = /** @type {string[]} */ (read.labels).filter((l) => l.startsWith("session:"))
-      .map((l) => l.slice("session:".length)).sort();
+    const sessions = /** @type {string[]} */ (read.labels).filter((l) => l.startsWith(SESSION_PREFIX))
+      .map((l) => l.slice(SESSION_PREFIX.length)).sort();
     return { open: read.state === "open", sessions };
   } catch (err) {
     return /HTTP 404|Not Found/.test(String(/** @type {any} */ (err)?.stderr ?? /** @type {any} */ (err)?.message))
@@ -2500,7 +2532,7 @@ export function decisionHeader(take) {
   if (numbers.length === 0) {
     return `DECISIONS DECLARED: none of these ${take.length} orders. A sender that gave no flag is counted `
       + "as FYI, so this is what was DECLARED, not proof that nothing here asks -- an ask that belongs to "
-      + "a row is on that row's `answer:` label.";
+      + `a row is on that row's \`${ANSWER_PREFIX}\` label.`;
   }
   const listed = numbers.slice(0, MAX_LISTED_DECISIONS).map((n) => `ORDER ${n}`).join(", ");
   const more = numbers.length > MAX_LISTED_DECISIONS
@@ -2563,18 +2595,19 @@ function batchedOrder(take, held, now) {
  * @param {string[]} roster
  * @param {{run?: (args: string[]) => string, queuePath?: string, drop?: typeof dropHandoffs,
  *          now?: number, budget?: number, unavailable?: (label: string) => string | null,
- *          sleep?: (ms: number) => void}} [deps] `sleep` is `deliver`'s clear settle, passed straight through (#2546)
+ *          sleep?: (ms: number) => void, contextRoot?: string}} [deps] `sleep` is `deliver`'s clear settle,
+ *   passed straight through (#2546); `contextRoot` is `deliver`'s compact-check transcript root, the same way (#2688)
  * @returns {{sent: string[], refused: string[], ids: string[], busied: Set<string>}} `ids` is every
  *   order a delivery CARRIED, which is what the caller subtracts before calling anything still stale.
  */
 export function deliverHandoffs(handoffs, agents, roster,
   { run = defaultRun, queuePath, drop = dropHandoffs, now = Date.now(),
-    budget = HANDOFF_BATCH_BYTES, unavailable, sleep } = {}) {
+    budget = HANDOFF_BATCH_BYTES, unavailable, sleep, contextRoot } = {}) {
   const batches = handoffBatches(handoffs, { now, budget, roster });
   /** @type {string[]} */
   const landed = [];
   const { sent, refused } = deliver(batches, agents, roster,
-    { run, record: (key) => landed.push(key), unavailable, sleep });
+    { run, record: (key) => landed.push(key), unavailable, sleep, contextRoot });
   // THE BATCH IS WHAT WAS ACCEPTED; THE IDS ARE WHAT IT COVERED. `record` fires on the causeKey, because
   // that is the seam `deliver` offers, so the ids to retire come back through the batch that carried
   // them -- and a batch nobody accepted retires nothing, which is the assertion this whole queue is for.
@@ -2783,7 +2816,7 @@ function escalationFor(label) {
 }
 
 /** The one engineer brief, from the repository root: general lessons, the acceptance standard, the resource ban. */
-export const ENGINEER_BRIEF = "packages/agent-org/docs/roles/engineer.md";
+export const ENGINEER_BRIEF = roleBriefPath("engineer.md").relative;
 
 /**
  * The paragraph that tells an ENGINEER to read {@link ENGINEER_BRIEF}, or nothing for any other label.
@@ -2863,7 +2896,7 @@ export function addressed(order, label,
     + "COMPLETE, EVIDENCED ROW DRAFT (two incidents, commit hashes, timestamps) and asking permission "
     + "to file it -- when filing is the first line of its own brief. The row did not get filed.\n"
     + "IF IT IS GENUINELY NOT YOURS, that is not a question either: say what you would do, name who "
-    + "owns it, and route it -- `answer:<session>` on the row for a ruling, or the row itself for work. "
+    + `owns it, and route it -- \`${ANSWER_PREFIX}<session>\` on the row for a ruling, or the row itself for work. `
     + "Then end your turn. The gate will bring you back when something changes; waiting is never your "
     + "job, and polling a pull request for a verdict that has its own cause is a turn spent on a "
     + "question the tick already answers.";
@@ -3128,12 +3161,12 @@ export const RUN_IDLE_RESET_MS = 2 * JUDGMENT_TTL_MS;
  * the org's own "a named session owes an answer here": the `answer-owed` cause delivers it (`answerOrders`), removing
  * the label IS the act of answering, and `ESCALATION_LABEL` is set by nobody but this function.
  *
- * THE READER SEES AN OPEN ROW OR AN OPEN PULL REQUEST, and only those (`rowsOwingAnswers`: open issues, `readPrs`'s
- * open PRs, and closed ISSUES still owing). `gh issue edit` accepts a PR number for labels, so both subjects
- * `stuckRowOf` yields can be labelled. A MERGED pull request can be labelled and is read by nothing: `trunkRedOrders`
- * names the merged PR as its subject, so a red `main` nobody fixes lands its `answer:ceo` where `gh issue list` and
- * `gh pr list --state open` do not look. `needs:chairman` never reached that case either (`readChairmanBlocked` is
- * `issue list --state open`), so this is a gap kept, not made -- and it is `work-gate.mjs`'s to close.
+ * THE READER SEES EVERY PLACE THE LABEL CAN SIT (`rowsOwingAnswers`): open issues, `readPrs`'s open PRs, closed ISSUES still
+ * owing (#2202) and pull requests that are no longer open, merged or closed unmerged (#2641, `readClosedAnswerRows`).
+ * `gh issue edit` accepts a PR number for labels, so both subjects `stuckRowOf` yields can be labelled, and
+ * `trunkRedOrders` names the MERGED pull request as its subject: a red `main` nobody fixes lands its `answer:ceo` on a
+ * merged PR, which the reader now asks for by label name. Until #2641 that label was set and read by nothing;
+ * `needs:chairman` never reached that case either (`readChairmanBlocked` is `issue list --state open`).
  *
  * SUBJECT-DERIVED, because a causeKey is not a row. `row-1234` and `pr-1837` carry their number; a
  * subject like `chairman` or `ready-queue` names no row and cannot be labelled, so it is reported and
@@ -3269,6 +3302,68 @@ function sleepSync(ms) {
 const CLEAR_REFUSAL_EXCERPT = 80;
 
 /**
+ * `120,000` cache-read tokens on a per-row instance's own last turn (#2688, chairman via `ceo`,
+ * 2026-09-27) -- the `ceo`-chosen number the chairman's brief invited, and the done-when's own target: a
+ * mid-session compaction lands the running average under it for the calls that follow, not because it is
+ * a magic number.
+ *
+ * REVISIT FROM THE SAME MEASUREMENT THIS THRESHOLD'S OWN GUARD USES: move it down if a 120k-triggered
+ * compaction still leaves the post-rollout average over 120k (context keeps growing after a mid-session
+ * compact too, so one compaction per session may not be enough on the longest rows), and say so in the row
+ * that moves it, with the reading that justified it.
+ */
+export const COMPACT_THRESHOLD_TOKENS = 120_000;
+
+/**
+ * SUBMIT A COMMAND, SETTLE, RETURN -- the shape behind both `/clear` ({@link clearContext}) and `/compact`
+ * ({@link compactContext}), because the reason to wait is the same for either: neither moves the agent's
+ * status or its `state_change_seq`, so there is nothing to wait FOR but a bounded delay (see
+ * {@link clearContext}'s own comment for the measurement that set it).
+ * @param {(args: string[]) => string} run @param {string} label @param {string} command
+ * @param {(ms: number) => void} sleep
+ * @returns {string | null} a refusal to report, or `null` when the command landed
+ */
+function settleAfter(run, label, command, sleep) {
+  try {
+    // SUBMIT, SETTLE, THEN THE ORDER -- AND THE SETTLE IS A DELAY BECAUSE THERE IS NO SIGNAL.
+    //
+    // `agent prompt` SUBMITS text and returns without waiting for the agent to consume it. Sending the
+    // order straight after typed it into the same input the command was still sitting in, and `ceo`
+    // received one concatenated line:
+    //
+    //     Unknown command: /clearYou are `ceo`, an org session in this repository...
+    //
+    // TWO REPAIRS FAILED BEFORE THIS ONE, and each failed for its own reason:
+    //
+    //   `prompt --wait --until idle`   herdr's help: *"--wait first requires an observed state change
+    //                                  within 5000ms"*. A `/clear` to an already-`done` agent changes
+    //                                  nothing observable, so two of three live wakes returned
+    //                                  `agent_prompt_stalled`.
+    //   `agent wait --until idle`      an ALREADY-idle agent satisfies it instantly, before it has
+    //                                  consumed anything. Still mangled.
+    //
+    // `state_change_seq` does not move for `/clear` either -- measured, it sat at 6221 across one. Claude
+    // Code processes it without any transition herdr can see, and the same is true of `/compact` (#2688):
+    // there is nothing to wait FOR. A bounded delay is the honest mechanism, and calling it a delay rather
+    // than dressing it as a synchronisation primitive is the point: 2s and 5s both produced clean prompts
+    // on the live org, and 5s is the one with margin.
+    //
+    // The `agent wait` first is still worth its cost: it catches an agent that was mid-turn when the
+    // command arrived, where the delay alone would not be enough.
+    run(["--session", "org", "agent", "prompt", label, command]);
+    run(["--session", "org", "agent", "wait", label, "--until", "idle", "--until", "done",
+      "--timeout", String(CLEAR_TIMEOUT_MS)]);
+    sleep(CLEAR_SETTLE_MS);
+    return null;
+  } catch (err) {
+    // A REFUSED COMMAND IS NOT A REFUSED WAKE. The order still goes, on a context this command would have
+    // shrunk: expensive is strictly better than undelivered, and the refusal is reported rather than
+    // swallowed.
+    return `${label}: ${command} refused (${firstLine(err, CLEAR_REFUSAL_EXCERPT)})`;
+  }
+}
+
+/**
  * WHY EVERY DELIVERY CLEARS FIRST, and it is the largest single saving this system has made.
  *
  * A standing session's context only grows. Measured on the live org, 2026-09-18, within one session:
@@ -3309,72 +3404,107 @@ const CLEAR_REFUSAL_EXCERPT = 80;
  * order), the exact value, and ONE test with no injection that measures the real delay, so a default that quietly became
  * a no-op is caught there and not by a fast suite going green.
  *
+ * THE SUBMIT/SETTLE MECHANISM ITSELF IS {@link settleAfter}, shared with `/compact` ({@link compactContext},
+ * #2688): the incident that shaped it, and why the wait is a delay rather than a signal, are on that
+ * function rather than repeated here.
+ *
  * @param {(args: string[]) => string} run @param {string} label
  * @param {(ms: number) => void} [sleep] blocks for `ms`; real by default
  * @returns {string | null} a refusal to report, or `null` when the context was reset
  */
 export function clearContext(run, label, sleep = sleepSync) {
-  try {
-    // SUBMIT, SETTLE, THEN THE ORDER -- AND THE SETTLE IS A DELAY BECAUSE THERE IS NO SIGNAL.
-    //
-    // `agent prompt` SUBMITS text and returns without waiting for the agent to consume it. Sending the
-    // order straight after typed it into the same input the clear was still sitting in, and `ceo`
-    // received one concatenated line:
-    //
-    //     Unknown command: /clearYou are `ceo`, an org session in this repository...
-    //
-    // TWO REPAIRS FAILED BEFORE THIS ONE, and each failed for its own reason:
-    //
-    //   `prompt --wait --until idle`   herdr's help: *"--wait first requires an observed state change
-    //                                  within 5000ms"*. A `/clear` to an already-`done` agent changes
-    //                                  nothing observable, so two of three live wakes returned
-    //                                  `agent_prompt_stalled`.
-    //   `agent wait --until idle`      an ALREADY-idle agent satisfies it instantly, before it has
-    //                                  consumed anything. Still mangled.
-    //
-    // `state_change_seq` does not move for a clear either -- measured, it sat at 6221 across one. Claude
-    // Code processes `/clear` without any transition herdr can see, so there is nothing to wait FOR. A
-    // bounded delay is the honest mechanism, and calling it a delay rather than dressing it as a
-    // synchronisation primitive is the point: 2s and 5s both produced clean prompts on the live org,
-    // and 5s is the one with margin.
-    //
-    // The `agent wait` first is still worth its cost: it catches an agent that was mid-turn when the
-    // clear arrived, where the delay alone would not be enough.
-    run(["--session", "org", "agent", "prompt", label, "/clear"]);
-    run(["--session", "org", "agent", "wait", label, "--until", "idle", "--until", "done",
-      "--timeout", String(CLEAR_TIMEOUT_MS)]);
-    sleep(CLEAR_SETTLE_MS);
-    return null;
-  } catch (err) {
-    // A REFUSED CLEAR IS NOT A REFUSED WAKE. The order still goes, on a bloated context: expensive is
-    // strictly better than undelivered, and the refusal is reported rather than swallowed.
-    return `${label}: /clear refused (${firstLine(err, CLEAR_REFUSAL_EXCERPT)})`;
+  return settleAfter(run, label, "/clear", sleep);
+}
+
+/**
+ * `/compact` BEFORE AN OVER-THRESHOLD INSTANCE'S ORDER (#2688) -- the same submit/settle/order sequence as
+ * `clearContext`, and for the same reason: `/compact` returns to a prompt with no observable
+ * state-change signal either.
+ *
+ * NEVER FOR A STANDING SEAT, which is `/clear`ed to the floor at every delivery already and so has nothing
+ * to compact; only {@link clearBeforeOrder} calls this, and only past {@link isPerRowInstance}.
+ *
+ * COMPACTION KEEPS THE THREAD; A CLEAR DOES NOT. #2483 stands unchanged -- a per-row instance is still
+ * never `/clear`ed, because its one row is its whole life and a failing check on its own pull request is
+ * the same task, not an unrelated one. `/compact` summarises that same window rather than wiping it.
+ *
+ * @param {(args: string[]) => string} run @param {string} label
+ * @param {(ms: number) => void} [sleep] blocks for `ms`; real by default
+ * @returns {string | null} a refusal to report, or `null` when the command landed
+ */
+export function compactContext(run, label, sleep = sleepSync) {
+  return settleAfter(run, label, "/compact", sleep);
+}
+
+/**
+ * A PER-ROW INSTANCE'S OWN CONTEXT SIZE, RIGHT NOW (#2688) -- the live proxy #928's own offline report is
+ * built from, read live instead of only reported. `claudeTurns` and `transcriptFiles` are
+ * `token-audit.mjs`'s own readers; nothing here is a new metric, only this one read at delivery time.
+ *
+ * THE MOST RECENTLY WRITTEN TRANSCRIPT NAMING THIS SESSION WINS. More than one file can carry the session's
+ * name (a restarted process opens a fresh one), and only the newest describes the window the next order
+ * actually lands on.
+ *
+ * `null` IS "CANNOT TELL", NEVER ZERO: an instance whose transcript this cannot find or read is not
+ * assumed small, so it is never sent a `/compact` on that account.
+ *
+ * @param {string} label @param {string} [root] the instance's own transcripts; real `~/.claude/projects`
+ *   by default, injectable for a test
+ * @returns {number | null}
+ */
+export function instanceCacheRead(label, root = join(process.env.HOME ?? "", ".claude", "projects")) {
+  let tokens = null;
+  let newest = -Infinity;
+  for (const file of transcriptFiles(root)) {
+    let text;
+    try { text = readFileSync(file, "utf8"); } catch { continue; }
+    const last = claudeTurns(text).filter((t) => t.session === label).at(-1);
+    if (!last) continue;
+    const mtime = statMtime(file) ?? 0;
+    if (mtime > newest) { newest = mtime; tokens = last.cacheRead; }
   }
+  return tokens;
 }
 
 /**
  * IS THIS A SESSION WHOSE ONLY WORK IS ONE ROW (#2483) -- and so one that must never be cleared between orders.
  *
  * ONE PREDICATE, CALLING THE TWO READERS THAT ALREADY SAY SO, and no pattern of its own: {@link familyNumber} for
- * the roster's spare family (`worker-4` onward) and `reviewerInstanceNumber` for `reviewer-<n>`, which lives in
+ * the roster's spare family (`worker-4` onward) and `reviewerInstance` for `reviewer-<n>` and `reviewer-<key>-<n>`, which lives in
  * another module and also refuses the retired `reviewer-2`. `worker-capture`, `worker-tooling` and `worker-judge`
  * share the `worker-` prefix and answer `null` on both, so they stay standing seats and keep the clear.
  * @param {string} label
  */
 export function isPerRowInstance(label) {
-  return familyNumber(label) !== null || reviewerInstanceNumber(label) !== null;
+  return familyNumber(label) !== null || reviewerInstance(label) !== null;
 }
 
 /**
  * THE CLEAR BEFORE AN ORDER, FOR EVERY PATH THAT DELIVERS ONE (`deliver` here, `clearThenPrompt` in
  * `prompt-session.mjs`): sent to a standing seat, skipped for a per-row instance ({@link isPerRowInstance}).
  * Both callers go through it, because fixing one leaves the reviewer wiped by its own author.
+ *
+ * A PER-ROW INSTANCE MAY STILL BE `/compact`ED (#2688), never `/clear`ed: its own transcript's last turn
+ * is read for `cache_read_input_tokens` ({@link instanceCacheRead}) and, over
+ * {@link COMPACT_THRESHOLD_TOKENS}, sent `/compact` first ({@link compactContext}). Below the threshold, or
+ * when no transcript can be read for it ("cannot tell", never assumed small), nothing is sent -- exactly
+ * the #2483 behaviour this extends. `sent` still means "cleared", so a compacted instance reads the same
+ * as an untouched one to every caller that only asks whether to send the first-contact preamble.
+ *
  * @param {(args: string[]) => string} run @param {string} label
  * @param {(ms: number) => void} [sleep] `clearContext`'s settle, which is where the real default lives -- passed on as it came
- * @returns {{sent: boolean, refusal: string | null}} whether a clear was sent, and `clearContext`'s refusal
+ * @param {string} [contextRoot] {@link instanceCacheRead}'s transcript root, injectable for a test
+ * @returns {{sent: boolean, refusal: string | null}} whether a clear was sent, and `clearContext`'s
+ *   (or, for a compacted instance, `compactContext`'s) refusal
  */
-export function clearBeforeOrder(run, label, sleep) {
-  if (isPerRowInstance(label)) return { sent: false, refusal: null };
+export function clearBeforeOrder(run, label, sleep, contextRoot) {
+  if (isPerRowInstance(label)) {
+    const tokens = instanceCacheRead(label, contextRoot);
+    if (tokens !== null && tokens > COMPACT_THRESHOLD_TOKENS) {
+      return { sent: false, refusal: compactContext(run, label, sleep) };
+    }
+    return { sent: false, refusal: null };
+  }
   return { sent: true, refusal: clearContext(run, label, sleep) };
 }
 
@@ -3445,14 +3575,15 @@ function carriedOrder(order, target) {
 /**
  * The clear before an order (see {@link clearContext}), NOT for a session this tick started -- it has nothing to clear.
  * A refusal is reported into `refused` and the order still goes.
- * @param {{run: (args: string[]) => string, sleep?: (ms: number) => void}} herdr `run`, and the settle's seam ({@link clearContext})
+ * @param {{run: (args: string[]) => string, sleep?: (ms: number) => void, contextRoot?: string}} herdr `run`, the
+ *   settle's seam ({@link clearContext}), and {@link instanceCacheRead}'s transcript root (#2688)
  * @param {{label: string, profile?: object}} target
  * @param {string} causeKey @param {string[]} refused
  * @returns {boolean} true when an existing session was left uncleared because it is a per-row instance
  */
-function clearUnlessStarted({ run, sleep }, target, causeKey, refused) {
+function clearUnlessStarted({ run, sleep, contextRoot }, target, causeKey, refused) {
   if (target.profile) return false;
-  const clear = clearBeforeOrder(run, target.label, sleep);
+  const clear = clearBeforeOrder(run, target.label, sleep, contextRoot);
   if (clear.refusal) refused.push(`${causeKey}: ${clear.refusal} -- delivered anyway`);
   return !clear.sent;
 }
@@ -3461,12 +3592,12 @@ function clearUnlessStarted({ run, sleep }, target, causeKey, refused) {
  * The clear before an order, or NONE for a resume (#2470): its whole point is the context the session still has, and a clear would wipe
  * exactly what the interrupted turn had built. Same return as {@link clearUnlessStarted}: whether the session was left uncleared.
  * @param {{ causeKey: string, resume?: boolean }} order
- * @param {{ run: (args: string[]) => string, sleep?: (ms: number) => void, target: { label: string, profile?: object },
- *   refused: string[] }} ctx
+ * @param {{ run: (args: string[]) => string, sleep?: (ms: number) => void, contextRoot?: string,
+ *   target: { label: string, profile?: object }, refused: string[] }} ctx
  * @returns {boolean}
  */
-function clearedFirst(order, { run, sleep, target, refused }) {
-  return order.resume === true || clearUnlessStarted({ run, sleep }, target, order.causeKey, refused);
+function clearedFirst(order, { run, sleep, contextRoot, target, refused }) {
+  return order.resume === true || clearUnlessStarted({ run, sleep, contextRoot }, target, order.causeKey, refused);
 }
 
 /**
@@ -3490,14 +3621,27 @@ function whyUnavailable(target, unavailable) {
 }
 
 /**
+ * A capped cause (#2685): work-gate marked it `outageNow` when this run shares its reason with every other
+ * one marked the same way -- GitHub itself refusing reads, not this row's own trouble -- so it is named
+ * separately from `stuck`, which `finishTick` hands to `escalateStuck` one row at a time. Handing an
+ * outage-marked cause to `escalateStuck` too would label as many rows `answer:ceo` as there are causes.
+ * @param {{stuck: string[], outaged: string[]}} into @param {{causeKey: string, outageNow?: boolean}} order @param {number} already
+ */
+function recordCapped({ stuck, outaged }, order, already) {
+  if (order.outageNow) outaged.push(order.causeKey);
+  else stuck.push(`${order.causeKey}: delivered ${already} times and the cause is still true`);
+}
+
+/**
  * Deliver each order, and say what happened to every one of them.
  *
  * REPORTS BEFORE IT RECORDS. An order is written to the ledger only once herdr has accepted it, so a crash
  * between the two re-wakes rather than losing the wake. Re-waking is visible and costs one turn; losing one
  * is invisible and costs however long until someone notices -- the 2026-09-08 shape.
  *
- * @param {{session: string, causeKey: string, prompt: string, cause?: string, title?: string, resume?: boolean}[]} orders
- *   `resume` (#2470) sends the prompt WITHOUT the `/clear` a standing seat is otherwise given first
+ * @param {{session: string, causeKey: string, prompt: string, cause?: string, title?: string, resume?: boolean, outageNow?: boolean}[]} orders
+ *   `resume` (#2470) sends the prompt WITHOUT the `/clear` a standing seat is otherwise given first; `outageNow`
+ *   (#2685) is `work-gate.mjs`'s reading that GitHub itself refused several of THIS TICK's own reads together
  * @param {{label: string, status: string}[]} agents
  * @param {string[]} roster
  * @param {{run?: (args: string[]) => string, record?: (key: string, recipient?: string, noClear?: boolean) => void,
@@ -3505,8 +3649,9 @@ function whyUnavailable(target, unavailable) {
  *          env?: Record<string, string>, registerSpawn?: (role: string) => void, drained?: readonly string[],
  *          claimable?: (order: {causeKey: string}) => string | null, claimer?: SpawnClaimer,
  *          memory?: () => string | null, launch?: LaunchFacts, unavailable?: (label: string) => string | null,
- *          sleep?: (ms: number) => void} & Partial<ReviewerDeps>} [deps]
+ *          sleep?: (ms: number) => void, contextRoot?: string} & Partial<ReviewerDeps>} [deps]
  *   `sleep` is the clear's settle ({@link clearContext}): real by default, injected only by a test that is not about the delay (#2546);
+ *   `contextRoot` is {@link instanceCacheRead}'s transcript root (#2688), real `~/.claude/projects` by default, injected only by a test;
  *   `unavailable` says why a session cannot ANSWER now (`unavailableReason`), and an order to one is refused with that
  *   reason and neither sent nor recorded (#2256); `registerReviewer` is told of every reviewer instance this tick starts (#2401), for the auth detector;
  *   `checkout` and `registry` are the reviewer path's seams (its git, its filesystem, what it has started);
@@ -3516,14 +3661,20 @@ function whyUnavailable(target, unavailable) {
  *   `claimer` claims the row for a spawn before its pane opens ({@link spawnClaimer}); `memory` is the hold
  *   for a host short of memory, asked before either kind of NEW process (#2508); `launch` is what `addressed`
  *   asks about a standing session's worktree
- * @returns {{sent: string[], refused: string[], stuck: string[]}}
+ * @returns {{sent: string[], refused: string[], stuck: string[], outaged: string[]}}
+ *   `outaged` (#2685) is `stuck`'s OWN shape -- capped at `MAX_DELIVERIES`, not retried -- for a causeKey work-gate
+ *   marked `outageNow`: several of THIS TICK's own reads were refused together, so several causes reaching the cap
+ *   in the same run share ONE reason and must not each reach `escalateStuck` as if they were N unrelated stuck rows.
  */
 export function deliver(orders, agents, roster,
   { run = defaultRun, record, counts, ineligibleReason, env, registerSpawn, drained, claimable, claimer, memory,
-    launch, reviewerEnv, registerReviewer, checkout, registry, unavailable, sleep } = {}) {
+    launch, reviewerEnv, registerReviewer, checkout, registry, unavailable, sleep, contextRoot } = {}) {
   const sent = [];
   const refused = [];
+  /** @type {string[]} */
   const stuck = [];
+  /** @type {string[]} */
+  const outaged = [];
   const live = agents.map((a) => ({ ...a }));
   let spawned = 0;
   for (const order of orders) {
@@ -3532,7 +3683,7 @@ export function deliver(orders, agents, roster,
     // busy. Naming it and stopping is the only answer that reaches a person.
     const already = counts?.get(order.causeKey) ?? 0;
     if (already >= MAX_DELIVERIES) {
-      stuck.push(`${order.causeKey}: delivered ${already} times and the cause is still true`);
+      recordCapped({ stuck, outaged }, order, already);
       continue;
     }
     const target = targetFor(order, live, roster, { run, spawned, ineligibleReason, env, registerSpawn, drained,
@@ -3560,7 +3711,7 @@ export function deliver(orders, agents, roster,
     // window is its one row.
     // A RESUME IS NEVER PRECEDED BY A CLEAR (#2470): its whole point is the context the session still has. Sent to a standing seat it
     // would wipe exactly what the interrupted turn had built, and the ledger says so with the same `no-clear` mark an instance's carries.
-    const noClear = clearedFirst(order, { run, sleep, target, refused });
+    const noClear = clearedFirst(order, { run, sleep, contextRoot, target, refused });
     try {
       run(["--session", "org", "agent", "prompt", target.label,
         addressed(carriedOrder(order, target), target.label,
@@ -3591,7 +3742,7 @@ export function deliver(orders, agents, roster,
       ? `${target.label} <- ${order.causeKey} (STARTED ${target.profile.model}/${target.profile.effort})`
       : `${target.label} <- ${order.causeKey}${noClear ? NO_CLEAR_NOTE : ""}`);
   }
-  return { sent, refused, stuck };
+  return { sent, refused, stuck, outaged };
 }
 
 // --- #2323: A SPAWNED INSTANCE ENDS WHEN ITS ROW DOES, AND EVERY ENDING IS A LEDGER LINE ---
@@ -3627,7 +3778,7 @@ export function spawnEnvironment(override = {}) {
  * @param {string | URL} [path] the roster file; a parameter so a test can hand it a fixture
  * @returns {string[]}
  */
-export function spareRoles(path = new URL("../docs/roles/sessions.json", import.meta.url)) {
+export function spareRoles(path = roleBriefPath("sessions.json").absolute) {
   return spareEntries(path).addresses;
 }
 
@@ -3655,7 +3806,7 @@ function spareEntries(path) {
  * @param {string | URL} [path] the roster file; a parameter so a test can hand it a fixture
  * @returns {string[]}
  */
-export function spareInstances(agents, path = new URL("../docs/roles/sessions.json", import.meta.url)) {
+export function spareInstances(agents, path = roleBriefPath("sessions.json").absolute) {
   const { addresses, families } = spareEntries(path);
   const labels = agents.map((a) => a.label);
   return [...new Set([...addresses, ...labels.filter((l) => familyNumber(l, families) !== null)])];
@@ -3670,7 +3821,7 @@ export function spareInstances(agents, path = new URL("../docs/roles/sessions.js
  * @param {string | URL} [path] the roster file; a parameter so a test can hand it a fixture
  * @returns {boolean}
  */
-export function isSpareRole(label, path = new URL("../docs/roles/sessions.json", import.meta.url)) {
+export function isSpareRole(label, path = roleBriefPath("sessions.json").absolute) {
   const { addresses, families } = spareEntries(path);
   return addresses.includes(label) || familyNumber(label, families) !== null;
 }
@@ -3717,10 +3868,10 @@ export function spareDecision({ status, instance, held, now, claimBoundMs = SPAR
 /**
  * @typedef {{ path: string, clean: boolean | "unknown", merge: "merged" | "not-merged" | "unknown" }} SpareWorktree
  * @typedef {{ role: string, row: number | null, at: number, clean: boolean, why: string, rows?: number[],
- *   released?: "stalled" | "blocked" | "merged" }} SpareCycle
+ *   released?: "stalled" | "blocked" | "merged" | "gone" }} SpareCycle
  *   `rows` is EVERY row the instance held, oldest first (#2407), and its ABSENCE is what marks a legacy line: one
- *   written before the field existed, which {@link consecutiveClean} counts for nothing. `released` (#2470) marks a line the GATE
- *   wrote when it took a claim back from a stalled, blocked or merged holder: see {@link isReleaseLine}
+ *   written before the field existed, which {@link consecutiveClean} counts for nothing. `released` (#2470, #2747)
+ *   marks a line the GATE wrote when it took a claim back from a stalled, blocked, merged or gone holder: see {@link isReleaseLine}
  */
 
 /**
@@ -3745,7 +3896,7 @@ export function cycleVerdict({ role, rows, held, worktrees }) {
   for (const row of rows) {
     if (row.state !== "CLOSED") problems.push(`#${row.number} is ${row.state.toLowerCase()}, not closed`);
   }
-  if (held.length > 0) problems.push(`session:${role} still labels ${held.map((n) => `#${n}`).join(", ")}`);
+  if (held.length > 0) problems.push(`${SESSION_PREFIX}${role} still labels ${held.map((n) => `#${n}`).join(", ")}`);
   for (const tree of worktrees) {
     if (tree.clean === "unknown" || tree.merge === "unknown") problems.push(`${tree.path} could not be read`);
     else if (tree.clean === false) problems.push(`${tree.path} has uncommitted changes`);
@@ -3840,7 +3991,7 @@ export function sparePathsFrom(/** @type {string} */ ledgerPath) {
 // #1950's 20 clean cycles build at full throughput. `sessions.json`'s `drain` mark is the fact, and it lifts
 // itself: see {@link drainInForce}.
 
-const SESSIONS_FILE = new URL("../docs/roles/sessions.json", import.meta.url);
+const SESSIONS_FILE = roleBriefPath("sessions.json").absolute;
 
 /** What `route`'s refusal calls a drained engineer -- short enough to sit in a `seen` list beside a status. */
 export const DRAINED_SEEN = "drained (#2324)";
@@ -4481,7 +4632,9 @@ export function keptClaimsPath(ledgerPath) {
  * pushed is not kept -- there is nothing to lose, and leaving an empty one would only refuse the respawn's own claim.
  *
  * A BLOCKED or MERGED release is REFUSED when the holder now holds work: those two are decided on "the holder holds nothing", and it
- * may have started something since the gate looked. A STALLED release keeps whatever it finds -- unreadable included.
+ * may have started something since the gate looked. A STALLED release keeps whatever it finds -- unreadable included -- and so does a
+ * GONE one (#2747): a session confirmed absent from herdr's own listing is not coming back to finish anything it holds, so there is no
+ * "since the gate looked" to be fair to.
  *
  * @param {ReleaseRequest} request @param {ReleaseDeps} deps
  * @returns {{ keep: boolean, work: ReturnType<typeof workAtRisk>, onOrigin: boolean, restored?: boolean } | { refusal: string }}
@@ -4491,11 +4644,11 @@ function releasePlan(request, deps) {
   const repo = deps.host.primary;
   const holds = stillHolds(request, deps);
   if (holds !== true) {
-    return { refusal: holds === false ? `\`session:${request.session}\` is no longer on #${request.row} -- a stale order, nothing to release`
+    return { refusal: holds === false ? `\`${SESSION_PREFIX}${request.session}\` is no longer on #${request.row} -- a stale order, nothing to release`
       : `could not read #${request.row}'s labels -- not released, retried next tick` };
   }
   const work = workAtRisk(deps.io, { worktree: request.worktree, branch: request.branch, repo });
-  if (request.why !== "stalled" && work.state !== "none") {
+  if (request.why !== "stalled" && request.why !== "gone" && work.state !== "none") {
     return { refusal: `the holder now holds work (${work.state}: ${work.dirty} dirty, ${work.unpushed} unpushed) -- not released` };
   }
   const onOrigin = request.branch !== null
@@ -4513,7 +4666,7 @@ function releasePlan(request, deps) {
 function stillHolds(request, deps) {
   try {
     const labels = JSON.parse(deps.gh(["issue", "view", String(request.row), "--repo", REPO, "--json", "labels"]))?.labels;
-    return Array.isArray(labels) && labels.some((/** @type {any} */ l) => l?.name === `session:${request.session}`);
+    return Array.isArray(labels) && labels.some((/** @type {any} */ l) => l?.name === `${SESSION_PREFIX}${request.session}`);
   } catch {
     return null;
   }
@@ -4545,6 +4698,7 @@ function releaseHeadline(request) {
   if (request.why === "blocked") {
     return `this row carries an open \`blockedBy\` edge on ${(request.edges ?? []).map((n) => `#${n}`).join(", ")} and the holder holds nothing built`;
   }
+  if (request.why === "gone") return `\`${request.session}\` no longer exists in herdr's own workspace listing (#2747), not merely quiet`;
   return `nothing on this row moved for ${request.idleMinutes} minutes (no commit, push, pull request, changed file or row comment) and the nudge was not answered`;
 }
 
@@ -4559,9 +4713,9 @@ function releaseComment(request, plan) {
       + `${plan.work.unpushed} commit(s) not on any remote): the next instance for this row starts in it and continues, and nothing was removed.`
     : "Nothing was left on this host worth keeping, so no worktree was kept.";
   const next = request.why === "merged"
-    ? `\`answer:${request.answer}\` is set: whether the row is finished, or needs re-scoping, is theirs to rule. If more work is needed a fresh \`worker-<row>\` is started.`
+    ? `\`${ANSWER_PREFIX}${request.answer}\` is set: whether the row is finished, or needs re-scoping, is theirs to rule. If more work is needed a fresh \`worker-<row>\` is started.`
     : plan.restored === false
-      ? "The row was NOT `ready` before it was claimed, so it is NOT back in the pool: `product-manager` promotes it again when it should be taken."
+      ? `The row was NOT \`${READY_LABEL}\` before it was claimed, so it is NOT back in the pool: \`product-manager\` promotes it again when it should be taken.`
       : plan.onOrigin
       ? "The row is back in the pool, BUT its branch is on `origin` with no pull request, so #2031's `row-branch-unshipped` holds it for `product-manager` "
         + "to read first (open the PR, delete the branch, or rename it); the kept worktree waits, and the respawn adopts it once the row is offered."
@@ -4615,25 +4769,32 @@ function recordReleaseCycle(request, deps, kept) {
  * leaves a claimed row and no process, which the gate emits again next tick (the stall persists) and this finds `absent`, so the retry
  * closes nothing and declines. The cycle line is written LAST, once, only when the claim actually came off.
  *
+ * #2748 (reviewer-2754's second verdict): `--predecessor-gone` rides on the decline ONLY when `closeHolder` actually closed the
+ * workspace or found it already absent -- never for `"kept"` (#2470 (6)'s standing engineer, whose process is deliberately left
+ * running). A stalled release that never confirmed death must not let a later same-session claim adopt a tree still in use.
+ *
  * @param {ReleaseRequest} request @param {ReleaseDeps} deps
  * @returns {{ released: boolean, why: string }}
  */
 export function performRelease(request, deps) {
   const plan = releasePlan(request, deps);
   if ("refusal" in plan) return { released: false, why: plan.refusal };
-  if (closeHolder(request.session, deps) === "failed") {
+  const closed = closeHolder(request.session, deps);
+  if (closed === "failed") {
     return { released: false, why: `${request.session}'s workspace could not be closed -- nothing was changed` };
   }
+  const confirmedGone = closed === "closed" || closed === "absent";
   const launch = launchWorktree(request.session, { exec: deps.exec, exists: deps.host.exists,
     worktreesDir: deps.host.worktreesDir, primary: deps.host.primary });
   if ("refusal" in launch) return { released: false, why: `no launch worktree for ${request.session} (${launch.refusal})` };
   const ran = deps.exec("node", [ROW_CLAIM, "decline", String(request.row), `--session=${request.session}`,
-    ...(plan.keep ? ["--keep-worktree"] : []), ...(request.answer === undefined ? [] : [`--answer=${request.answer}`])],
+    ...(plan.keep ? ["--keep-worktree"] : []), ...(plan.keep && confirmedGone ? ["--predecessor-gone"] : []),
+    ...(request.answer === undefined ? [] : [`--answer=${request.answer}`])],
   { cwd: launch.dir, env: deps.env });
   if (!(/^DECLINED/m.test(ran.output) && CLAIM_LANDED.includes(Number(ran.status)))) {
     return { released: false, why: `decline of #${request.row} as ${request.session} did not land (${verdictLine(ran.output)})` };
   }
-  settleRelease(request, { ...plan, restored: /restored to `ready`/.test(ran.output) }, deps);
+  settleRelease(request, { ...plan, restored: new RegExp(`restored to \`${READY_LABEL}\``).test(ran.output) }, deps);
   recordReleaseCycle(request, deps, plan.keep);
   return { released: true, why: `#${request.row} (${request.session}, ${request.why}): ${plan.keep
     ? `worktree KEPT at ${request.worktree}` : "nothing kept"}` };
@@ -4821,20 +4982,23 @@ export function sessionMoved(timestamps) {
 }
 
 /**
- * What the tick recovers, decided from facts: the sessions whose pane reads `Interrupted`, and the deliveries a restart (or an interruption
- * with no restart in view) killed -- inside {@link RESTART_RESEND_WINDOW_MS} before it, to a target that made no move before it.
+ * What the tick recovers, decided from facts: the sessions whose pane reads `Interrupted`, the sessions whose pane reads the
+ * autocompact thrash guard (#2745), and the deliveries a restart (or an interruption with no restart in view) killed -- inside
+ * {@link RESTART_RESEND_WINDOW_MS} before it, to a target that made no move before it.
  *
  * A RESTART IS ACTED ON ONCE (`actedRestart`): the re-send is itself a delivery stamped AFTER the restart, so the window excludes it, and
  * the record of the last restart acted on keeps a second tick from re-deriving the same set. An INTERRUPTED pane with no restart in view
  * treats NOW as the moment of the interruption (its real time is unknown), and a session already re-sent inside one wake window is not
- * sent to again, so a pane that stays interrupted is not resent to on every tick.
+ * sent to again, so a pane that stays interrupted is not resent to on every tick. A THRASHED session shares the same idempotency (`quiet`,
+ * `resentAt`) so a pane that stays on the thrash message is not escalated again on every tick, but it never joins `killed`: nothing
+ * delivered to it was killed, its own turn ended on its own.
  *
  * @template {{ session: string, at: number }} D
  * @param {{ now: number, restartAt: number | null, actedRestart: number | null, agents: { label: string, status: string }[],
  *   paneText: (label: string) => string | null, lastActive: (label: string) => number | null, deliveries: () => D[],
  *   moved: (session: string, from: number, to: number) => boolean, resentAt: Record<string, number> }} facts
  *   `deliveries` is a thunk: it reads two ledgers, and is called only when a restart is fresh or a pane is interrupted
- * @returns {{ interrupted: string[], killed: D[], restartActed: number | null }}
+ * @returns {{ interrupted: string[], thrashed: string[], killed: D[], restartActed: number | null }}
  */
 export function recoverableWork({ now, restartAt, actedRestart, agents, paneText, lastActive, deliveries, moved, resentAt }) {
   const recent = restartAt !== null && restartAt > (actedRestart ?? 0) && now - restartAt <= RESTART_ACT_HORIZON_MS;
@@ -4842,14 +5006,18 @@ export function recoverableWork({ now, restartAt, actedRestart, agents, paneText
   // SETTLED: Claude Code prints the same sentence when a PERSON presses Esc, and a person who stopped a session is about to type. A pane is resumed
   // only once its session has been SILENT for `INTERRUPTED_SETTLE_MS`, and a session whose last activity cannot be established is left alone.
   const settled = (/** @type {string} */ label) => { const at = lastActive(label); return at !== null && now - at >= INTERRUPTED_SETTLE_MS; };
-  const interrupted = agents.filter((a) => WAKEABLE.includes(a.status) && paneInterrupted(paneText(a.label)) && !quiet(a.label) && settled(a.label))
-    .map((a) => a.label);
-  // THE LEDGERS ARE READ ONLY WHEN THERE IS SOMETHING TO RECOVER: the common tick has neither a fresh restart nor an interrupted pane.
-  if (!recent && interrupted.length === 0) return { interrupted, killed: [], restartActed: null };
+  // ONE PANE READ PER WAKEABLE, SETTLED, NOT-RECENTLY-RESENT-TO SESSION -- shared between the interrupted and the thrashed check, so
+  // adding the second reading does not double `herdr`'s per-session cost.
+  const wakeable = agents.filter((a) => WAKEABLE.includes(a.status) && !quiet(a.label) && settled(a.label));
+  const texts = new Map(wakeable.map((a) => /** @type {[string, string | null]} */ ([a.label, paneText(a.label)])));
+  const interrupted = wakeable.filter((a) => paneInterrupted(texts.get(a.label))).map((a) => a.label);
+  const thrashed = wakeable.filter((a) => paneThrashed(texts.get(a.label))).map((a) => a.label);
+  // THE LEDGERS ARE READ ONLY WHEN THERE IS SOMETHING TO RECOVER: the common tick has neither a fresh restart nor an interrupted or thrashed pane.
+  if (!recent && interrupted.length === 0 && thrashed.length === 0) return { interrupted, thrashed, killed: [], restartActed: null };
   const all = deliveries();
   const byRestart = recent ? killedDeliveries({ deliveries: all, at: /** @type {number} */ (restartAt), until: now, moved }) : [];
   const byPane = killedDeliveries({ deliveries: all.filter((d) => interrupted.includes(d.session)), at: now, moved });
-  return { interrupted, killed: [...new Set([...byRestart, ...byPane])], restartActed: recent ? restartAt : null };
+  return { interrupted, thrashed, killed: [...new Set([...byRestart, ...byPane])], restartActed: recent ? restartAt : null };
 }
 
 /**
@@ -4865,6 +5033,28 @@ export function resumePrompt() {
     + "OTHERWISE RESUME WHERE YOU LEFT OFF. This is a plain prompt and NOTHING WAS CLEARED: your context is intact. THE ROW IS THE STATE: re-read the "
     + "row you hold and its pull request, run `git status` and `git log origin/main..HEAD` in your worktree, then continue what you were "
     + "doing. If it is already finished, say so on the row and stop.";
+}
+
+/**
+ * The order a THRASHED session's own pane does NOT get, and `product-manager` gets instead -- THIS IS #2745's FIX. Before it, whatever
+ * next had something to say to a thrashed session said the SAME THING it always says, because nothing distinguished "finished a turn"
+ * from "the turn ended because Claude Code's own autocompact guard gave up on it" (#2743: worker-2623, 139 compactions, 5.4 hours, to a
+ * human's manual interruption -- no code-level stop). A plain resume (`resumePrompt`'s own shape) would very likely do exactly that
+ * again: whatever filled its context is still there, unread, and "continue where you left off" reopens it. So the thrashed session gets
+ * NOTHING here -- no resume, no order -- and the decision goes to `product-manager`, the routing rule's own reader for a report that
+ * needs one (`.claude/rules/org-routing-and-timers.md`).
+ * @param {string} label @returns {string}
+ */
+export function thrashEscalationPrompt(label) {
+  return `\`${label}\`'S PANE ENDED ITS LAST TURN IN CLAUDE CODE'S OWN AUTOCOMPACT THRASH GUARD, NOT AN ORDINARY FINISH: its last `
+    + `output reads \`${THRASH_TEXT}\` -- context refilled to the limit within 3 turns of a compaction, 3 times in a row, so Claude `
+    + "Code stopped the turn itself rather than compact a fourth time. `herdr` reports this pane exactly as it reports any other "
+    + "finished turn (`idle`/`done`), so nothing else in the org would have told you.\n"
+    + `${label} WAS NOT RESUMED: whatever filled its context is still there, unread, and "continue where you left off" would very `
+    + "likely refill it and trip the same guard again -- the defect this exists to stop, not repeat.\n"
+    + "READ ITS ROW AND ITS WORKTREE FIRST, then pick one: RELEASE the claim so a fresh instance starts clean in the same worktree "
+    + `(nothing built is lost); or, if it should keep the context it has, prompt it explicitly with \`npm run prompt:session -- `
+    + `${label} "/clear, then re-read the row and continue"\` rather than a bare resume.`;
 }
 
 /**
@@ -4910,7 +5100,7 @@ export function recoverInterruptedWork({ agents, ledgerPath, now = Date.now(), r
     const queuePath = handoffQueuePath(ledgerPath);
     const found = recoverableWork({ now, agents, actedRestart: state.restartAt ?? null, restartAt, moved, lastActive,
       paneText: paneReader(run), resentAt: state.resent ?? {}, deliveries: () => deliveriesOf(ledgerPath, queuePath) });
-    if (found.killed.length === 0 && found.interrupted.length === 0 && found.restartActed === null) return [];
+    if (found.killed.length === 0 && found.interrupted.length === 0 && found.thrashed.length === 0 && found.restartActed === null) return [];
     const lines = actOnKilledWork({ found, now, ledgerPath, queuePath });
     writeJsonObject(statePath, { restartAt: found.restartActed ?? state.restartAt ?? null, resent: resentAfter(state.resent ?? {}, found, now) });
     for (const line of lines) log(`${line}\n`);
@@ -4949,6 +5139,7 @@ function resentAfter(before, found, now) {
   const resent = Object.fromEntries(Object.entries(before).filter(([, at]) => now - Number(at) < RESTART_RESEND_WINDOW_MS));
   for (const d of found.killed) resent[d.session] = now;
   for (const label of found.interrupted) resent[label] = now;
+  for (const label of found.thrashed) resent[label] = now;
   return resent;
 }
 
@@ -4983,6 +5174,12 @@ function actOnKilledWork({ found, now, ledgerPath, queuePath }) {
   for (const label of found.interrupted) {
     queueHandoff(queuePath, { session: label, prompt: resumePrompt(), now, resume: true });
     lines.push(`RESUMING ${label}: its pane's last line reads Interrupted`);
+  }
+  // #2745: NOT A RESUME. A thrashed session is not told to continue -- see `thrashEscalationPrompt`'s own header for why -- and the
+  // decision goes to `product-manager` instead, once per thrash episode (idempotent through the same `resentAt`/`quiet` as `interrupted`).
+  for (const label of found.thrashed) {
+    queueHandoff(queuePath, { session: "product-manager", prompt: thrashEscalationPrompt(label), now });
+    lines.push(`ESCALATING ${label} to product-manager: its last turn ended in the autocompact thrash guard`);
   }
   return lines;
 }
@@ -5167,11 +5364,11 @@ function claimerFor(spares, ledgerPath, hostLayout) {
  * The tick's report and exit, after everything was delivered: the breaker's alarm for a cause offered `MAX_DELIVERIES` times and still true,
  * and the list of orders that had nowhere to go. THE BREAKER'S ALARM: printing `STUCK` and stopping is what let two of `ceo`'s causes go silent for
  * over half an hour with every session idle -- see `escalateStuck`.
- * @param {{ handed: ReturnType<typeof deliverHandoffs>, sent: string[], gateRefused: string[], stuck: string[], ledgerPath: string,
- *   unavailable: (label: string) => string | null }} outcome
+ * @param {{ handed: ReturnType<typeof deliverHandoffs>, sent: string[], gateRefused: string[], stuck: string[],
+ *   outaged: string[], ledgerPath: string, unavailable: (label: string) => string | null }} outcome
  * @returns {never}
  */
-function finishTick({ handed, sent, gateRefused, stuck, ledgerPath, unavailable }) {
+function finishTick({ handed, sent, gateRefused, stuck, outaged, ledgerPath, unavailable }) {
   const refused = [...handed.refused, ...gateRefused];
   for (const line of [...handed.sent, ...sent]) process.stdout.write(`WOKE ${line}\n`);
   for (const line of stuck) process.stderr.write(`STUCK ${line}\n`);
@@ -5180,6 +5377,16 @@ function finishTick({ handed, sent, gateRefused, stuck, ledgerPath, unavailable 
     process.stderr.write(`${stuck.length} cause(s) have been offered ${MAX_DELIVERIES}+ times and are `
       + "still true. They are NOT being retried: something about the row, the prompt or the session is "
       + "wrong, and another delivery would only make the log busier.\n");
+    process.exit(EXIT.ATTENTION);
+  }
+  if (outaged.length > 0) {
+    // #2685: ONE OUTAGE, REPORTED ONCE, NEVER HANDED TO `escalateStuck` -- which would otherwise label as
+    // many rows `answer:ceo` as there are causes, blaming each one for what is really GitHub's reads
+    // failing this run. Not retried either, for `MAX_DELIVERIES`' own reason: the run ends and offers
+    // them fresh once the cause stops being emitted, or the reads succeed and the causeKey changes.
+    process.stderr.write(`OUTAGE: ${outaged.length} cause(s) reached the delivery cap while this tick's `
+      + `own GitHub reads were refused -- ONE shared outage, not ${outaged.length} stuck rows: `
+      + `${outaged.join(", ")}.\n`);
     process.exit(EXIT.ATTENTION);
   }
   if (refused.length > 0) {
@@ -5255,13 +5462,13 @@ function main() {
 
   const spares = sparePathsFrom(ledgerPath);
   const drained = drainNow(spares.cycles);
-  const { sent, refused: gateRefused, stuck } = deliver(todo, free, roster, { record, unavailable,
+  const { sent, refused: gateRefused, stuck, outaged } = deliver(todo, free, roster, { record, unavailable,
     counts: deliveryCounts(ledgerPath), ineligibleReason: poolEngineerReason(poolEligibility(spares, drained), unavailable),
     registerSpawn: (role) => registerSpawn(spares, role), drained, claimable: spawnClaimability(),
     memory: spawnMemoryGate(), claimer: claimerFor(spares, ledgerPath, hostLayout), launch: hostLayout,
     registerReviewer: (session) => registerReviewer(reviewerPathsFrom(ledgerPath), session),
     registry: () => readReviewerRegistry(reviewerPathsFrom(ledgerPath).registry) });
-  finishTick({ handed, sent, gateRefused: [...gateRefused, ...releasesNotDone], stuck, ledgerPath, unavailable });
+  finishTick({ handed, sent, gateRefused: [...gateRefused, ...releasesNotDone], stuck, outaged, ledgerPath, unavailable });
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) main();

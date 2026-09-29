@@ -24,7 +24,7 @@ import { execFileSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { sandboxGitEnv } from "../../guards/src/git-env.mjs";
+import { sandboxGitEnv } from "./lib/git-env.mjs";
 
 /** @type {string[] | null} */
 let topLevelCache = null;
@@ -100,7 +100,7 @@ export function pathInProse() {
  */
 export function directoryReservations(body, countUnder = trackedFilesUnder) {
   return (declaredRegionFiles(body) ?? [])
-    .filter((entry) => entry.endsWith("/"))
+    .filter((entry) => entry.endsWith("/") && splitRegionEntry(entry).key === "") // #2617: another repository's tree is not counted here
     .map((entry) => ({ entry, files: countUnder(entry) }));
 }
 
@@ -125,7 +125,7 @@ export function directoryReservations(body, countUnder = trackedFilesUnder) {
  */
 export function slashlessDirectoryEntries(body, isDirectory = namesTrackedDirectory) {
   return (declaredRegionFiles(body) ?? []).filter(
-    (entry) => !entry.endsWith("/") && isDirectory(entry),
+    (entry) => !entry.endsWith("/") && splitRegionEntry(entry).key === "" && isDirectory(entry),
   );
 }
 
@@ -397,6 +397,28 @@ export function declaresNoCommit(body) {
 }
 
 /**
+ * #2707: A BARE ROOT-LEVEL FILE WITH NEITHER A DOT NOR A SLASH -- `CODEOWNERS`, `LICENSE`.
+ * `ROOT_FILE_CANDIDATE` requires a dot-extension, so a name with none never matches it; `FENCED_PATH_ITEM`
+ * requires a `/`, so a single top-level word inside a fence never matches that either. Fenced or not, a
+ * name like this fell through both.
+ *
+ * STANDALONE, the same discipline `DIRECTORY_ITEM` and `FENCED_PATH_ITEM` carry: the WHOLE LINE, bar a
+ * list bullet or backticks -- so "the fix touches CODEOWNERS" is prose, not a declaration. Deliberately
+ * NOT split on `,`/`and`/`or` the way `DIRECTORY_ITEM` is: a directory's trailing `/` keeps a sentence like
+ * "under `docs/`, and `scripts/` for the helper" from isolating either name, but a bare word has no such
+ * marker -- "CODEOWNERS and the lane sync test" would split into exactly `CODEOWNERS` plus prose, and
+ * anchoring alone cannot tell that apart from a real one-line declaration. One name per line is what #2707
+ * itself asks for; a comma- or `and`-joined list of bare names is not a shape this rule takes on.
+ *
+ * ANCHORED TO THE TREE, `ROOT_FILE_CANDIDATE`'s own discipline: matching this shape is not enough, the
+ * name must be one of `known`'s real root files, so an invented or misspelled bare word (`FOOBAR`)
+ * declares nothing and this cannot turn a Region's ordinary single-word line into a false declaration.
+ * No dot in the character class -- a dotted root file is `ROOT_FILE_CANDIDATE`'s to declare, not this
+ * one's, so the two rules never compete over the same name.
+ */
+const BARE_ROOT_ITEM = /^(?:[-*+]\s+)?`?([A-Za-z0-9][A-Za-z0-9_-]*)`?$/;
+
+/**
  * #941: a STANDALONE directory item -- a whole line, or a whole item of a list on one line (split at `,`,
  * `;`, `and`, `or`), that is exactly one path ending in `/`, bar a list bullet or backticks. `PATH_IN_PROSE`
  * needs a file extension, so `packages/control/ansible/` never matched it and vanished: on 2026-09-11, 14 of
@@ -412,7 +434,7 @@ export function declaresNoCommit(body) {
  * `examples/`, `data/` and `.claude/skills/` as `[]` -- #941's own defect for three of the eight roots
  * the tree tracks (worker-judge's review of #945). `region-paths.test.ts` checks every tracked root.
  */
-const DIRECTORY_ITEM = /^(?:[-*+]\s+)?`?((?:[A-Za-z0-9_.-]+\/)+)`?$/;
+const DIRECTORY_ITEM = /^(?:[-*+]\s+)?`?((?:[a-z0-9][a-z0-9-]*:)?(?:[A-Za-z0-9_.-]+\/)+)`?$/;
 
 /**
  * #999: A FENCED LINE UNDER `## Region` IS A DECLARATION, NOT PROSE TO PATTERN-MATCH.
@@ -446,7 +468,10 @@ const DIRECTORY_ITEM = /^(?:[-*+]\s+)?`?((?:[A-Za-z0-9_.-]+\/)+)`?$/;
  * exactly the new files a Region exists to reserve.
  */
 const FENCE_LINE = /^\s*(?:```|~~~)/;
-const FENCED_PATH_ITEM = /^(?:[-*+]\s+)?`?([A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+)`?$/;
+// #2617: AN ITEM MAY NAME ANOTHER REPOSITORY OF THE PROJECT, `nvda-worker:src/x.ts` -- the prefix is that repository's declared KEY (ADR
+// 0040, decision 2; `project-config.mjs`'s `code[].key`). A bare path is the project's FIRST repository's, so every Region written before
+// this row reads exactly as it did. The prefixed form needs a `/` or a `.` after the colon, so a fenced line like `npm:test` is not a path.
+const FENCED_PATH_ITEM = /^(?:[-*+]\s+)?`?((?:[a-z0-9][a-z0-9-]*:(?=[^:]*[/.])[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*|[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+))`?$/;
 
 /**
  * Every path declared by a line inside a fenced block of `section`. Lines outside a fence are left to the
@@ -465,7 +490,7 @@ function fencedPaths(section) {
   return out;
 }
 /** `.` and `..` name no directory in the tree: `../x/` is outside it and `./` is all of it. */
-const isTreePath = (/** @type {string} */ path) => !path.split("/").some((segment) => segment === "." || segment === "..");
+const isTreePath = (/** @type {string} */ entry) => !splitRegionEntry(entry).path.split("/").some((segment) => segment === "." || segment === "..");
 const LIST_SEPARATOR = /[,;]|\band\b|\bor\b/;
 
 /**
@@ -476,6 +501,30 @@ const LIST_SEPARATOR = /[,;]|\band\b|\bor\b/;
  */
 export function regionCovers(entry, file) {
   return entry.endsWith("/") ? file.startsWith(entry) : entry === file;
+}
+
+const REGION_KEY_PREFIX = /^([a-z0-9][a-z0-9-]*):(?=[^:]*[/.])/;
+
+/**
+ * #2617: A Region entry as `{ key, path }` -- `key` the declared repository key it is prefixed with, `""` for a bare path, which
+ * belongs to the project's first repository (the empty key, ADR 0040 decision 2). PURE, and the one place the prefix is read.
+ * @param {string} entry
+ * @returns {{ key: string, path: string }}
+ */
+export function splitRegionEntry(entry) {
+  const key = REGION_KEY_PREFIX.exec(entry)?.[1];
+  return key === undefined ? { key: "", path: entry } : { key, path: entry.slice(key.length + 1) };
+}
+
+/**
+ * #2617: does this Region entry cover `file` of the repository whose key is `repoKey`? The entry's own key must be that repository's
+ * -- `nvda-worker:src/x.ts` covers nothing in the first repository even when a file there has the same path -- and then it is
+ * {@link regionCovers}, so the directory rule is not stated twice.
+ * @param {string} entry @param {string} repoKey @param {string} file
+ */
+export function regionCoversIn(entry, repoKey, file) {
+  const { key, path } = splitRegionEntry(entry);
+  return key === repoKey && regionCovers(path, file);
 }
 
 /**
@@ -494,6 +543,9 @@ export function regionCovers(entry, file) {
  *
  * #999: and so is a standalone path on a line inside a FENCED block, extension or no extension -- see
  * `FENCED_PATH_ITEM`. That is how `scripts/git-hooks/pre-push` declares; prose still needs an extension.
+ *
+ * #2707: and so is a bare root-level file with neither a dot nor a slash (`CODEOWNERS`, `LICENSE`), fenced
+ * or not -- see `BARE_ROOT_ITEM`, anchored to `known` the same way `ROOT_FILE_CANDIDATE` is.
  * @param {string} body
  * @param {{ rootFiles?: Set<string> }} [options] the tree's root files; defaults to `origin/main`'s, and a test
  *   passes its own so the rule can be checked without the repository it runs in
@@ -505,12 +557,19 @@ export function declaredRegionFiles(body, { rootFiles: known = rootFilesOnMain()
   // #975: root-level files, which have no prefix for `PATH_IN_PROSE` to match. Anchored to the tree: a
   // candidate declares only when `origin/main` has a file of that name at the root.
   const roots = [...section.matchAll(ROOT_FILE_CANDIDATE)].map((m) => m[1]).filter((name) => known.has(name));
-  const directories = section.split(/\r\n|\r|\n/)
-    .flatMap((line) => line.split(LIST_SEPARATOR))
+  const lineItems = section.split(/\r\n|\r|\n/).flatMap((line) => line.split(LIST_SEPARATOR));
+  const directories = lineItems
     .map((item) => DIRECTORY_ITEM.exec(item.trim())?.[1])
     .filter((path) => path !== undefined)
     .filter(isTreePath);
-  return [...new Set([...regionPathsFromBody(section), ...directories, ...roots, ...fencedPaths(section)])];
+  // #2707: a bare root file has neither a dot for `ROOT_FILE_CANDIDATE` nor a slash for `FENCED_PATH_ITEM`,
+  // fenced or not -- so it is read as a standalone WHOLE LINE (see `BARE_ROOT_ITEM` on why not a list item
+  // too), then anchored to `known` the same way `ROOT_FILE_CANDIDATE` is.
+  const bareRoots = section.split(/\r\n|\r|\n/)
+    .map((line) => BARE_ROOT_ITEM.exec(line.trim())?.[1])
+    .filter((name) => name !== undefined)
+    .filter((name) => known.has(name));
+  return [...new Set([...regionPathsFromBody(section), ...directories, ...roots, ...bareRoots, ...fencedPaths(section)])];
 }
 
 /**

@@ -16,7 +16,7 @@
 // A MISSING FIELD IS REFUSED BY NAME, never folded into one generic "template incomplete" message -- the
 // same reason `owned-path-signoff.mjs` (#603) names each unstated fact rather than saying "sign-off
 // missing": a reader fixing the row needs to know WHICH of the three to add, not that something is wrong.
-import { REPO } from "../../../../scripts/repo-identity.mjs";
+import { REPO } from "../project-identity.mjs";
 import { gh, lookup } from "../merge-guard/lookups.mjs";
 import { hasTemplateField } from "../region-paths.mjs";
 import { extractAcceptanceSection, runsTheWholeSuite } from "../acceptance-commands.mjs";
@@ -107,13 +107,14 @@ export function templateFieldsReason(body, issueNumber) {
  * answering a DIFFERENT `--json` request the same way) is "asked the wrong question", not "asked and the
  * row has nothing". Collapsing the two via `parsed.body ?? ""` would read the second as the first and
  * refuse every claim.
+ * #2617: `repo` is the TRACKER the row lives in, as the project's declaration names it (default the first).
  * @param {number} issueNumber
- * @param {{ run?: (args: string[]) => string }} [deps]
+ * @param {{ run?: (args: string[]) => string, repo?: string }} [deps]
  * @returns {string | null}
  */
-export function lookupIssueBody(issueNumber, { run = gh } = {}) {
+export function lookupIssueBody(issueNumber, { run = gh, repo = REPO } = {}) {
   return lookup(() => {
-    const raw = run(["issue", "view", String(issueNumber), "--repo", REPO, "--json", "body"]);
+    const raw = run(["issue", "view", String(issueNumber), "--repo", repo, "--json", "body"]);
     /** @type {{ body?: string }} */
     const parsed = JSON.parse(raw);
     if (!("body" in parsed)) throw new Error("response carried no body field");

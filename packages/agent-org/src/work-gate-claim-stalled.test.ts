@@ -20,16 +20,19 @@ import { profileFor } from "./worker-profile.mjs";
 import {
   WAKE_TTL_MS, MAX_DELIVERIES, performRelease, spawnClaimer, spawnedPrompt, deliver, consecutiveClean, drainInForce, isReleaseLine,
   cyclesReport, readLedger, deliveryCounts, readLedgerDeliveries, readDeliveredHandoffs, recoverInterruptedWork, recoverableWork,
-  queueHandoff, readHandoffs, handoffBatches, recentlyVoidedKeys, sessionMoved, VOIDED, keptClaimsPath, ledgerLine,
+  queueHandoff, readHandoffs, handoffBatches, recentlyVoidedKeys, sessionMoved, VOIDED, keptClaimsPath, ledgerLine, thrashEscalationPrompt,
 } from "./wake.mjs";
-import { claimRecordComment, declineRow, claimWithWorktree, worktreeTargetReason, worktreeFlagsReason } from "./row-claim.mjs";
+import {
+  claimRecordComment, declineRow, claimWithWorktree, worktreeTargetReason, worktreeFlagsReason,
+  implicitAdoptSession, predecessorLivenessUnknown, predecessorGoneReading, recordPredecessorGone, adoptFor,
+} from "./row-claim.mjs";
 import { CLAIM_RECORD_MARKER } from "./claim-labels.mjs";
 import {
-  CLAIM_STALLED, STALL_INTERVAL_MS, STALL_UNTOLD_RELEASE_MS, INTERRUPTED_SETTLE_MS, nudgeKey, nudgeDeliveredAt, claimRecordOf, commentMove, workAtRisk, fileMove, claimReading,
-  claimFactsFrom, readClaim, nextStallState, claimStalledOrders, paneInterrupted, killedDeliveries, readHerdrRestart,
-  RESTART_RESEND_WINDOW_MS, INTERRUPTED_TEXT, gitRun, gitInvocation, newestOwnCommit, statMtime, pathExists,
+  CLAIM_STALLED, STALL_INTERVAL_MS, STALL_UNTOLD_RELEASE_MS, INTERRUPTED_SETTLE_MS, GONE_CONFIRM_MS, nudgeKey, nudgeDeliveredAt, claimRecordOf, commentMove, workAtRisk, fileMove, claimReading,
+  claimFactsFrom, readClaim, nextStallState, claimStalledOrders, paneInterrupted, paneThrashed, killedDeliveries, readHerdrRestart,
+  RESTART_RESEND_WINDOW_MS, INTERRUPTED_TEXT, THRASH_TEXT, gitRun, gitInvocation, newestOwnCommit, statMtime, pathExists,
 } from "./claim-stall.mjs";
-import { sandboxGitEnv } from "../../guards/src/git-env.mjs";
+import { sandboxGitEnv } from "./lib/git-env.mjs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -45,7 +48,7 @@ const REPO = "/home/agent/repos/a11y-witness";
 const WT = "/home/agent/repos/wt-2407";
 
 type Comment = { body: string; createdAt: string; author: { login: string } };
-type Release = { row: number; session: string; why: string; edges?: number[]; answer?: string; mergedPr?: number };
+type Release = { row: number; session: string; why: string; idleMinutes?: number | null; edges?: number[]; answer?: string; mergedPr?: number };
 type Order = { session: string; cause: string; causeKey: string; prompt: string; release?: Release; resume?: boolean };
 type Facts = Parameters<typeof claimReading>[0];
 type Stalls = NonNullable<Parameters<typeof decide>[0]["claimStalls"]>;
@@ -100,15 +103,20 @@ function host(w: World = {}, ref = NOW) {
 const nudgeDelivered = (nudgedAt: number, deliveredAt: number, session = "worker-7") =>
   ledgerLine(deliveredAt, nudgeKey(session, 2407, nudgedAt));
 
+type Agent = { label: string; status: string };
+
 /** A whole tick over one claimed row, with the nudge memory in a map that survives between calls. */
 function tickWith(world: World, comments: Comment[], { rows = [row(2407)], memory = {} as Record<string, unknown>, prs = [] as object[],
-  merged = null as object[] | null, restartAt = null as number | null, now = NOW, blockedBy = [] as number[], ledger = "" } = {}) {
+  merged = null as object[] | null, restartAt = null as number | null, now = NOW, blockedBy = [] as number[], ledger = "",
+  // `null` by default, same as `restartAt`: the gate is asked about the row's SESSION only when a test gives a listing,
+  // never against the real `herdr` on whatever host runs the suite (`agentsFor`'s own doc says why -- CI must not depend on it).
+  agents = null as Agent[] | null } = {}) {
   const h = host(world, now);
   const log: string[] = [];
   const claimed = rows.map((r) => (r.number === 2407 && blockedBy.length > 0
     ? { ...r, blockedBy: { nodes: blockedBy.map((n) => ({ number: n, state: "OPEN" })) } } : r));
   const orders = claimStallTick({ rows: claimed, claimedComments: claimed.map((r) => ({ number: r.number, comments })), openPrs: prs,
-    mergedPrs: merged, io: h.io, repo: REPO, now, restartAt, stateDir: "/state", ledger: () => ledger,
+    mergedPrs: merged, io: h.io, repo: REPO, now, restartAt, agents, stateDir: "/state", ledger: () => ledger,
     log: (l: string) => log.push(l), read: () => JSON.parse(JSON.stringify(memory)), write: (_p: string, s: object) => {
       for (const k of Object.keys(memory)) delete memory[k];
       Object.assign(memory, s);
@@ -415,6 +423,64 @@ test("#2470 (10) POSITIVE CONTROLS: a second open PR, unpushed work, a PR merged
   assert.equal(tickWith({}, [claim(600)], { merged }).orders.filter((o) => o.release).length, 1, "control: the same fixture, clean, IS released");
 });
 
+// --- Done-when 1 & 3 (#2747): the session's EXISTENCE, read from herdr's own listing, as a fact the gate needs ---------------------------
+
+const CEO_ORCH = [{ label: "ceo", status: "idle" }, { label: "orchestrator", status: "idle" }];
+/** A COMPLETE listing (both standing panes) that does NOT carry `worker-7`: the #2747 fixture -- a closed workspace. */
+const GONE_LISTING = [...CEO_ORCH];
+/** The same listing, `worker-7` present: the ordinary case, unaffected. */
+const PRESENT_LISTING = [...CEO_ORCH, { label: "worker-7", status: "working" }];
+/** A PARTIAL listing (missing `orchestrator`): proves nothing about who else it left out (#2465). */
+const PARTIAL_LISTING = [{ label: "ceo", status: "idle" }];
+
+test("#2747 a session PRESENT in the listing is read exactly as if herdr were never asked: the same nudge, at the same clock", () => {
+  const asked = tickWith({ commit: null }, [claim(N_MIN + 10)], { agents: PRESENT_LISTING });
+  const unasked = tickWith({ commit: null }, [claim(N_MIN + 10)], { agents: null });
+  assert.equal(asked.orders.length, 1);
+  assert.deepEqual(asked.orders[0].prompt, unasked.orders[0].prompt, "presence changes nothing about the ordinary reading");
+  assert.deepEqual(asked.memory, unasked.memory, "the memory this tick writes (the nudge, not a goneSince) is identical either way");
+});
+
+test("#2747 a session ABSENT from a COMPLETE listing, first tick: no order yet, but the tick IS a claimed row -- and remembers when it first saw this", () => {
+  const first = tickWith({}, [claim(20)], { agents: GONE_LISTING });
+  assert.deepEqual(first.orders, [], "not yet -- GONE_CONFIRM_MS has not elapsed since NOW, the first tick that noticed");
+  assert.deepEqual(first.memory[2407], { session: "worker-7", goneSince: NOW }, "the FIRST tick's own clock is what gets carried forward");
+});
+
+test("#2747 still absent on a LATER tick, inside the confirm window: no order, and the ORIGINAL goneSince is kept, not bumped to now", () => {
+  const memory = { 2407: { session: "worker-7", goneSince: ago(9) } };
+  const still = tickWith({}, [claim(20)], { agents: GONE_LISTING, memory, now: NOW });
+  assert.deepEqual(still.orders, [], "9 minutes of 10 (GONE_CONFIRM_MS)");
+  assert.deepEqual(still.memory[2407], { session: "worker-7", goneSince: ago(9) }, "unchanged: this is not a fresh sighting");
+});
+
+test(`#2747 the GONE_CONFIRM_MS boundary: just under is still waiting, at or over releases (GONE_CONFIRM_MS = ${GONE_CONFIRM_MS}ms)`, () => {
+  const justUnder = tickWith({}, [claim(20)], { agents: GONE_LISTING, memory: { 2407: { session: "worker-7", goneSince: NOW - GONE_CONFIRM_MS + 1 } } });
+  assert.deepEqual(justUnder.orders, [], "one millisecond short");
+  const atBoundary = tickWith({}, [claim(20)], { agents: GONE_LISTING, memory: { 2407: { session: "worker-7", goneSince: NOW - GONE_CONFIRM_MS } } });
+  assert.equal(atBoundary.orders.length, 1);
+  assert.equal(atBoundary.orders[0].release!.why, "gone");
+  assert.equal(atBoundary.orders[0].release!.idleMinutes, null, "gone is not a measure of idleness: there is no one to idle");
+  assert.match(atBoundary.orders[0].prompt, /RELEASE the claim on #2407 held by worker-7: worker-7 no longer exists in herdr's own listing/);
+});
+
+test("#2747 a PARTIAL listing neither STARTS the confirm clock nor RESETS it, and never confirms a release no matter how stale the memory is", () => {
+  const noMemoryYet = tickWith({}, [claim(20)], { agents: PARTIAL_LISTING });
+  assert.deepEqual(noMemoryYet.orders, [], "a plain moving row, same as an unasked herdr");
+  assert.equal(noMemoryYet.memory[2407], undefined, "a partial listing writes nothing -- there is nothing to hold onto yet");
+  const staleMemory = { 2407: { session: "worker-7", goneSince: ago(999) } };
+  const stillPartial = tickWith({}, [claim(20)], { agents: PARTIAL_LISTING, memory: staleMemory });
+  assert.deepEqual(stillPartial.orders, [], "999 minutes past GONE_CONFIRM_MS, and STILL not released: a partial listing cannot confirm anything");
+  assert.deepEqual(stillPartial.memory[2407], { session: "worker-7", goneSince: ago(999) }, "carried forward untouched, not reset to now either");
+});
+
+test("#2747 the session REAPPEARING clears the memory: a complete listing that shows it again is definitive, whatever the stale goneSince said", () => {
+  const memory = { 2407: { session: "worker-7", goneSince: ago(5) } };
+  const back = tickWith({ commit: null }, [claim(20)], { agents: PRESENT_LISTING, memory });
+  assert.deepEqual(back.orders, [], "an ordinary moving row again");
+  assert.equal(back.memory[2407], undefined, "the goneSince memory is dropped: a stall (or a fresh disappearance) is a first reading again");
+});
+
 // --- the reading, directly ---------------------------------------------------------------------------------------------------------
 
 test("#2470 claimReading is pure in its inputs: an UNDELIVERED `nudged` row keeps offering its key, a delivered one goes quiet", () => {
@@ -477,24 +543,39 @@ test("#2470 claimFactsFrom reports a row it cannot evaluate rather than throwing
 // release WITHOUT `keepWorktree` removes the clean tree and refuses over the dirty one, which is exactly what the row measured.
 
 /** A board fake for `declineRow`: the row's labels, and a recording `run`. */
+/**
+ * #2746: REACTIVE, not a fixed response -- `writeDeclineLabels` re-reads the row after its edit to verify
+ * the write landed, so a `view` fake that always answers the PRE-decline labels would fail that verify on
+ * every one of these releases, which is a real write followed by a real re-read on the live board.
+ */
 function releaseBoard(labels: string[] = ["in-progress", "session:worker-7", "started", "was-ready"]) {
   const calls: string[][] = [];
+  const board = { labels: [...labels] };
   const run = (_cmd: string, args: string[]) => {
     calls.push(args);
-    return args[1] === "view" ? JSON.stringify({ number: 2416, title: "A row", state: "OPEN", labels: labels.map((name) => ({ name })) }) : "";
+    if (args[1] === "edit") {
+      const changed = (flag: string) => args.flatMap((a, i) => (a === flag ? [args[i + 1]] : []));
+      board.labels = [...board.labels.filter((l) => !changed("--remove-label").includes(l)), ...changed("--add-label")];
+      return "";
+    }
+    return args[1] === "view" ? JSON.stringify({ number: 2416, title: "A row", state: "OPEN", labels: board.labels.map((name) => ({ name })) }) : "";
   };
   const edits = () => calls.filter((a) => a[1] === "edit").map((a) => ({
     removed: a.flatMap((x, i) => (x === "--remove-label" ? [a[i + 1]] : [])), added: a.flatMap((x, i) => (x === "--add-label" ? [a[i + 1]] : [])) }));
-  return { run, calls, edits };
+  return { run, calls, edits, board };
 }
 const RECORD = [claimRecordComment({ session: "worker-7", branch: BRANCH, worktree: WT })];
 const NO_STATUS = () => ({ moved: true }) as const;
+// #2748: `declineRow`'s default `recordGone` writes a real file; every decline test but this row's own
+// stays on the no-token contract above by injecting this no-op instead.
+const NOOP_RECORD_GONE = () => {};
 
 test("#2470 (7a) a CLEAN tree with UNPUSHED commits keeps them across the release: `--keep-worktree` removes nothing", () => {
   const board = releaseBoard();
   const removed: string[] = [];
   const kept = declineRow(2416, "worker-7", { run: board.run as never, fetchComments: () => RECORD, moveStatus: NO_STATUS as never,
-    keepWorktree: true, removeWorktree: ((p: string) => { removed.push(p); return { removed: true }; }) as never });
+    keepWorktree: true, removeWorktree: ((p: string) => { removed.push(p); return { removed: true }; }) as never,
+    recordGone: NOOP_RECORD_GONE });
   assert.equal(kept.declined, true);
   assert.deepEqual(removed, [], "the recorded worktree is not removed, so the commits that live only there survive");
   assert.equal(board.calls.some((a) => a.includes("worktree") && a.includes("remove")), false, "and no `git worktree remove` ran at all");
@@ -516,7 +597,7 @@ test("#2470 (7a) a DIRTY tree is neither removed nor refused into a stuck claim"
   assert.equal(stuck.declined, false, "CONTROL: without the flag a dirty tree refuses the whole decline, so the claim can never be released");
   const board = releaseBoard();
   const freed = declineRow(2416, "worker-7", { run: board.run as never, fetchComments: () => RECORD, moveStatus: NO_STATUS as never,
-    keepWorktree: true, removeWorktree: dirty as never });
+    keepWorktree: true, removeWorktree: dirty as never, recordGone: NOOP_RECORD_GONE });
   assert.equal(freed.declined, true, "with it the release goes through and the labels come off");
   assert.ok(board.edits().length === 1);
 });
@@ -571,14 +652,142 @@ test("#2470 (7b) `--adopt` is refused without both --branch and --worktree, and 
   assert.equal(worktreeFlagsReason({}), null, "and a claim naming neither is unchanged");
 });
 
+// --- #2748: re-claiming a row under the SAME session name -- the ordinary claim command, not `--adopt=`,
+// hitting its own predecessor's stamped tree ------------------------------------------------------------
+
+test("#2748 `implicitAdoptSession` -- the ruling: fires ONLY for the claimant's own tree AND a CONFIRMED-gone predecessor", () => {
+  const rule = (over: { exists?: boolean; owner?: string | null; gone?: boolean | null } = {}) => implicitAdoptSession({
+    worktree: WT, mySession: "worker-2623",
+    exists: () => over.exists ?? true,
+    owner: () => (over.owner === undefined ? "worker-2623" : over.owner),
+    predecessorGone: () => (over.gone === undefined ? true : over.gone),
+  });
+  assert.equal(rule(), "worker-2623", "CONTROL: the claimant's own stamped tree, predecessor confirmed gone -- implicit adopt fires");
+  assert.equal(rule({ exists: false }), undefined, "no tree, nothing to adopt");
+  assert.equal(rule({ owner: "worker-9" }), undefined, "a DIFFERENT session's tree is never auto-adopted -- #1432 stays");
+  assert.equal(rule({ owner: null }), undefined, "an UNSTAMPED tree is never auto-adopted either");
+  assert.equal(rule({ gone: false }), undefined, "predecessor confirmed STILL ALIVE -- refuses (a genuine collision, not a stale stamp)");
+  assert.equal(rule({ gone: null }), undefined,
+    "Done-when 2: liveness CANNOT be confirmed (herdr read unavailable / #2747 not yet wired in) -- the refusal stays");
+});
+
+test("#2748 `predecessorLivenessUnknown` -- the pure stub answers \"cannot tell\", for tests and any caller with no ledger to read", () => {
+  assert.equal(predecessorLivenessUnknown(), null);
+  assert.equal(implicitAdoptSession({ worktree: WT, mySession: "worker-2623", exists: () => true, owner: () => "worker-2623",
+    predecessorGone: predecessorLivenessUnknown }), undefined, "a caller that never learns anything never fires the implicit adopt");
+});
+
+test("#2748 `predecessorGoneReading`/`recordPredecessorGone`: what actually makes production reachable, not #2747 -- reviewer-2754's blocker", () => {
+  const dir = mkdtempSync(join(tmpdir(), "a11y-2748-"));
+  const ledgerPath = join(dir, "wake-ledger");
+  try {
+    assert.equal(predecessorGoneReading("worker-2623", { ledgerPath }), null,
+      "CONTROL: nothing recorded yet -- cannot tell, same answer as the pure stub");
+    recordPredecessorGone("worker-2623", { ledgerPath });
+    assert.equal(predecessorGoneReading("worker-2623", { ledgerPath }), true,
+      "a decline that recorded it IS the confirmation -- now the ordinary claim can find it");
+    assert.equal(predecessorGoneReading("worker-9", { ledgerPath }), null,
+      "a DIFFERENT session's record answers nothing for this one -- still cannot tell");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("#2748 a `--keep-worktree` decline writes the record `adoptFor` reads back -- the real path, end to end, not a fake `predecessorGone`", () => {
+  const dir = mkdtempSync(join(tmpdir(), "a11y-2748-decline-"));
+  const ledgerPath = join(dir, "wake-ledger");
+  try {
+    const board = releaseBoard(["in-progress", "session:worker-2623", "started", "was-ready"]);
+    const declined = declineRow(2416, "worker-2623", {
+      run: board.run as never, moveStatus: NO_STATUS as never,
+      fetchComments: () => [claimRecordComment({ session: "worker-2623", branch: BRANCH, worktree: WT })],
+      keepWorktree: true, predecessorGone: true,
+      removeWorktree: (() => { throw new Error("must not be called with keepWorktree"); }) as never,
+      recordGone: (session: string) => recordPredecessorGone(session, { ledgerPath }),
+    });
+    assert.equal(declined.declined, true);
+    const adopt = implicitAdoptSession({ worktree: WT, mySession: "worker-2623", exists: () => true, owner: () => "worker-2623",
+      predecessorGone: (session: string) => predecessorGoneReading(session, { ledgerPath }) });
+    assert.equal(adopt, "worker-2623",
+      "the ordinary respawn's implicit adopt fires from the RECORD the manual decline actually wrote, not a test double");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("#2748 reviewer-2754's second verdict: a `--keep-worktree` decline WITHOUT `--predecessor-gone` never writes the record -- a live session's own release is not proof of death", () => {
+  const dir = mkdtempSync(join(tmpdir(), "a11y-2748-live-decline-"));
+  const ledgerPath = join(dir, "wake-ledger");
+  try {
+    const board = releaseBoard(["in-progress", "session:worker-2623", "started", "was-ready"]);
+    const declined = declineRow(2416, "worker-2623", {
+      run: board.run as never, moveStatus: NO_STATUS as never,
+      fetchComments: () => [claimRecordComment({ session: "worker-2623", branch: BRANCH, worktree: WT })],
+      keepWorktree: true, // no predecessorGone: true -- e.g. a still-running standing engineer releasing its own stalled claim
+      removeWorktree: (() => { throw new Error("must not be called with keepWorktree"); }) as never,
+      recordGone: (session: string) => recordPredecessorGone(session, { ledgerPath }),
+    });
+    assert.equal(declined.declined, true, "the release itself still lands -- only the attestation is withheld");
+    assert.equal(predecessorGoneReading("worker-2623", { ledgerPath }), null,
+      "CONFIRMED: nothing was recorded, so a same-name respawn cannot implicitly adopt a tree its still-live predecessor may still be using");
+    const adopt = implicitAdoptSession({ worktree: WT, mySession: "worker-2623", exists: () => true, owner: () => "worker-2623",
+      predecessorGone: (session: string) => predecessorGoneReading(session, { ledgerPath }) });
+    assert.equal(adopt, undefined, "the ordinary respawn's implicit adopt does NOT fire -- reviewer-2754's exact failure scenario, closed");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("#2748 reproduces the #2623 incident: a same-session-name reclaim of a stamped, gone predecessor's tree REUSES it -- and stays refused otherwise", () => {
+  const claimAs = (gone: boolean | null, claimed = true) => {
+    const stamped: [string, string][] = [];
+    const order: string[] = [];
+    const adopt = implicitAdoptSession({ worktree: WT, mySession: "worker-2623", exists: () => true, owner: () => "worker-2623",
+      predecessorGone: () => gone });
+    const result = claimWithWorktree(2416, "worker-2623", {
+      branch: BRANCH, worktree: WT, adopt,
+      run: ((cmd: string, args: string[]) => { order.push(`${cmd} ${args.join(" ")}`); return args.includes("symbolic-ref") ? `${BRANCH}\n` : ""; }) as never,
+      exists: () => true, owner: () => "worker-2623",
+      stamp: (w: string, sess: string) => { stamped.push([w, sess]); },
+      claim: (() => (claimed ? { claimed: true, statusMoved: true } : { claimed: false, reason: "B2 refused" })) as never,
+    });
+    return { result, stamped, order };
+  };
+  const reused = claimAs(true);
+  assert.equal(reused.result.claimed, true, "CONTROL: confirmed-gone predecessor -- the respawn's own claim succeeds");
+  assert.deepEqual(reused.stamped, [[WT, "worker-2623"]], "re-stamped to the new instance, same name");
+  assert.equal(reused.order.some((c) => /fetch|worktree add|worktree remove|branch -D/.test(c)), false,
+    "nothing created, nothing removed -- the tree and its uncommitted work are reused in place, exactly as #2470's `--adopt` does");
+
+  for (const gone of [false, null] as const) {
+    const refused = claimAs(gone);
+    assert.equal(refused.result.claimed, false, `liveness=${gone}: the ordinary #1432 refusal stays`);
+    assert.match((refused.result as { reason: string }).reason, /ALREADY EXISTS, stamped by `worker-2623`/,
+      "the incident's own refusal text -- unchanged when the predecessor is not CONFIRMED gone");
+  }
+});
+
+test("#2748 `adoptFor` (CLI wiring): an explicit `--adopt=` always wins, and the implicit ruling is asked ONLY for `claim` given both --branch and --worktree", () => {
+  const NOWHERE = "/home/agent/repos/does-not-exist-2748";
+  assert.equal(adoptFor("claim", "worker-2623", { adoptFlag: "worker-9", branch: BRANCH, worktree: NOWHERE }), "worker-9",
+    "an explicit flag is never overridden by the implicit ruling");
+  assert.equal(adoptFor("dispatch", "worker-2623", { branch: BRANCH, worktree: NOWHERE }), undefined,
+    "dispatch precedes any tree existing -- the implicit ruling is never asked");
+  assert.equal(adoptFor("claim", "worker-2623", { worktree: NOWHERE }), undefined, "no --branch -- never asked");
+  assert.equal(adoptFor("claim", "worker-2623", { branch: BRANCH }), undefined, "no --worktree -- never asked");
+  assert.equal(adoptFor("claim", "worker-2623", { branch: BRANCH, worktree: NOWHERE }), undefined,
+    "asked, but the tree does not exist on disk -- the real `existsSync` answers false, same as `implicitAdoptSession`'s own control");
+});
+
 test("#2470 (10) `decline --answer=<session>` releases to that session's `answer:` label, NOT to `ready`, and refuses to be a finding too", () => {
   const board = releaseBoard();
   const done = declineRow(2416, "worker-7", { run: board.run as never, fetchComments: () => RECORD, moveStatus: NO_STATUS as never,
-    keepWorktree: true, answer: "product-manager" });
+    keepWorktree: true, answer: "product-manager", recordGone: NOOP_RECORD_GONE });
   assert.equal(done.declined, true);
   assert.deepEqual(board.edits()[0].added, ["answer:product-manager"], "the row was `ready` before the claim, and is NOT returned to the pool: the work merged");
   const control = releaseBoard();
-  declineRow(2416, "worker-7", { run: control.run as never, fetchComments: () => RECORD, moveStatus: NO_STATUS as never, keepWorktree: true });
+  declineRow(2416, "worker-7", { run: control.run as never, fetchComments: () => RECORD, moveStatus: NO_STATUS as never, keepWorktree: true,
+    recordGone: NOOP_RECORD_GONE });
   assert.deepEqual(control.edits()[0].added, ["ready"], "CONTROL: the same release without --answer restores `ready`");
   const both = declineRow(2416, "worker-7", { run: releaseBoard().run as never, fetchComments: () => RECORD, blockedReason: "x", answer: "product-manager" });
   assert.equal(both.declined, false);
@@ -646,7 +855,8 @@ test("#2470 (4) a stalled release ENDS the spare's workspace, declines the claim
   const closeAt = r.runs.findIndex((a) => a.includes("close"));
   assert.deepEqual(r.runs[closeAt], ["--session", "org", "workspace", "close", "w0"], "the instance is ended so a fresh one takes the row");
   const decline = r.decline()!;
-  assert.deepEqual(decline.args.slice(1), ["decline", "2407", "--session=worker-7", "--keep-worktree"], "as the holder, and the tree is KEPT");
+  assert.deepEqual(decline.args.slice(1), ["decline", "2407", "--session=worker-7", "--keep-worktree", "--predecessor-gone"],
+    "as the holder, and the tree is KEPT; #2748: the workspace was actually CLOSED above, so the release may attest the predecessor gone");
   assert.match(decline.cwd, /\/role-worker-7$/, "from the holder's own launch worktree, which launchGate accepts");
   assert.ok(r.execs.findIndex((e) => e === decline) > -1 && closeAt > -1, "and the close came first, so nothing the instance does can race the read");
   assert.match(r.comment(), /Claim released by the gate \(#2470\).*`worker-7`.*nothing on this row moved for 250 minutes.*KEPT/s);
@@ -682,6 +892,8 @@ test("#2470 (6) a claim by a role that is NOT a spare is released and NEVER ende
   assert.equal(r.cycles.length, 0, "and no cycle line: it is not an instance's ending");
   assert.deepEqual(r.dropped, []);
   assert.ok(r.decline()!.args.includes("--session=worker-capture"), "only the CLAIM is released");
+  assert.equal(r.decline()!.args.includes("--predecessor-gone"), false,
+    "#2748 (reviewer-2754's second verdict): worker-capture's process was never closed, so this release must NOT attest it is gone");
   // THE CONTROL: the same request for a spare closes it.
   const spare = releaseHost({ agents: [{ label: "worker-capture", status: "working" }], world: { unpushed: 1 }, labels: holdsRow });
   performRelease({ ...STALL, session: "worker-capture" }, spare.deps);
@@ -717,6 +929,18 @@ test("#2470 (8/10) a blocked or merged release is REFUSED, before any write, whe
   }
   const stalled = releaseHost({ world: dirty });
   assert.equal(performRelease(STALL, stalled.deps).released, true, "CONTROL: a STALLED release is the one that KEEPS what it finds");
+});
+
+test("#2747 a GONE release is NOT refused when the holder holds work -- unlike blocked/merged, it behaves exactly like stalled -- and its workspace is already absent so nothing is closed", () => {
+  const dirty: World = { dirty: [{ file: "a.mjs", ago: 1 }] };
+  const r = releaseHost({ world: dirty, agents: [] });
+  const got = performRelease({ ...STALL, why: "gone", idleMinutes: null, nudgedAt: null }, r.deps);
+  assert.equal(got.released, true, JSON.stringify(got));
+  assert.equal(r.runs.some((a) => a.includes("close")), false, "already absent from herdr's own listing (that is the whole reason) -- nothing left to close");
+  assert.deepEqual(r.decline()!.args.slice(1), ["decline", "2407", "--session=worker-7", "--keep-worktree", "--predecessor-gone"],
+    "dirty work is KEPT, exactly like a stalled release; #2748: herdr's own listing has no record of the session at all, which is "
+    + "the strongest of the two confirmed-gone readings, so the release may attest it");
+  assert.match(r.comment(), /worker-7` no longer exists in herdr's own workspace listing \(#2747\), not merely quiet/);
 });
 
 test("#2470 (10) a merged release sets the answer at the merge (`--answer`), says which PR merged, and ends the instance", () => {
@@ -891,6 +1115,69 @@ test("#2470 (9) a RESUME is never behind a `/clear`, even to a standing seat; th
   deliver([{ ...order, resume: true }], [{ label: "worker-capture", status: "idle" }], ["worker-capture"], { run });
   assert.equal(sent.some((a) => a.includes("/clear")), false, "the resume goes straight in: the context is what it is for");
   assert.equal(sent.filter((a) => a.includes("prompt")).length, 1);
+});
+
+// --- #2745: a Claude Code thrash-guard stop reaches the gate as a DISTINCT signal, and is never answered with the same order ----------------
+
+// THE MESSAGE WRAPS (it is long enough that a single-line needle, as `INTERRUPTED_TEXT` uses, would never match any one rendered line), so
+// the fixture is built the way Claude Code actually wraps it rather than as one line -- and `THRASH_TEXT` is only the opening clause.
+const THRASH_MESSAGE = [
+  "● Autocompact is thrashing: the context refilled to the limit within 3 turns of the previous compact, 3 times in a",
+  "  row. A file being read or a tool output is likely too large for the context window. Try reading in smaller",
+  "  chunks, or use /clear to start fresh.",
+].join("\n");
+
+test("#2745 (1,2) a pane whose last TURN ended in the thrash guard is read as thrashed; an ordinary idle pane is not", () => {
+  assert.equal(paneThrashed(pane(THRASH_MESSAGE, "✻ Baked for 7s · done 9:56")), true);
+  assert.equal(paneThrashed(pane("● Done.", "", "✻ Cooked for 1m 52s · done 15:56")), false, "CONTROL: a finished turn's pane");
+  assert.equal(paneThrashed(pane("※ recap: Goal: land draft PR #2497", "new task? /clear to save 142.9k tokens")), false, "CONTROL: an ordinary idle pane");
+  assert.equal(paneThrashed(pane(INTERRUPTED_LINE)), false, "CONTROL: an interrupted pane is not a thrashed one");
+  assert.equal(paneThrashed(null), false);
+  assert.equal(paneThrashed(""), false);
+});
+
+test("#2745 (2) the needle is anchored to the LAST paragraph, past Claude Code's own completion footer, not the last line", () => {
+  // NO FOOTER: a pane with no input box (or one whose process ended before printing its own footer) is read from its own last paragraph.
+  assert.equal(paneThrashed(THRASH_MESSAGE), true, "a pane with NO input box, and no footer, is read from its own last paragraph");
+  assert.equal(paneThrashed(`${THRASH_MESSAGE}\n\n`), true, "trailing blank lines are not the paragraph");
+  // A SESSION DISCUSSING THIS ROW (this very file, read into its own pane) is not resumed for it: the quotation is not the FINAL paragraph
+  // once real commentary follows it, exactly the shape `paneInterrupted`'s own equivalent test guards.
+  assert.equal(paneThrashed(pane(`● The row says \`${THRASH_TEXT}\` is what the guard prints`, "", "● Done.")), false, "a quotation earlier in the output");
+  // A DRAFT TYPED INTO THE BOX does not hide it: the last paragraph is read ABOVE the top rule, not from the bottom of the pane.
+  const typing = [THRASH_MESSAGE, "", BOX, "❯ some half-typed prompt", BOX, "  status"].join("\n");
+  assert.equal(paneThrashed(typing), true);
+});
+
+test("#2745 (3,4) a thrashed pane is NEVER answered with the same order it just got: it is not resumed, and `product-manager` is told instead", () => {
+  withState((dir) => {
+    const ledger = join(dir, "wake-ledger");
+    const agents = [{ label: "worker-2623", status: "idle" }, { label: "worker-7", status: "idle" }, { label: "worker-9", status: "idle" }];
+    const lines = recoverInterruptedWork({ agents, ledgerPath: ledger, now: NOW, restartAt: null, moved: () => true, lastActive: () => NOW - 30 * MIN, log: () => {},
+      run: herdrReading({ "worker-2623": pane(THRASH_MESSAGE, "✻ Baked for 5h 24m · done 07:46"), "worker-7": pane(INTERRUPTED_LINE), "worker-9": pane("● Done.") }) });
+    assert.deepEqual(lines.filter((l) => l.startsWith("ESCALATING")),
+      ["ESCALATING worker-2623 to product-manager: its last turn ended in the autocompact thrash guard"]);
+    assert.equal(lines.some((l) => l.includes("RESUMING worker-2623")), false, "NOT a resume: the defect this exists to stop, not repeat");
+    // worker-7's ordinary interrupted-pane handling is unaffected: both readings share one pane fetch per session (`texts`), not two.
+    assert.deepEqual(lines.filter((l) => l.startsWith("RESUMING")), ["RESUMING worker-7: its pane's last line reads Interrupted"]);
+
+    const queued = readHandoffs(join(dir, "prompt-session-handoffs"));
+    const escalation = queued.find((h) => h.session === "product-manager");
+    assert.ok(escalation !== undefined);
+    assert.equal((escalation as { resume?: boolean }).resume, undefined, "an order to `product-manager`, not a resume of `worker-2623`");
+    assert.match(escalation!.prompt, /worker-2623/);
+    assert.match(escalation!.prompt, new RegExp(THRASH_TEXT.replace(/[:.]/g, "\\$&")));
+    assert.match(escalation!.prompt, /NOT RESUMED/);
+    assert.equal(queued.some((h) => h.session === "worker-2623"), false, "worker-2623 itself gets nothing");
+    assert.equal(escalation!.prompt, thrashEscalationPrompt("worker-2623"));
+
+    // IDEMPOTENT, exactly like the interrupted-pane case: not escalated again inside a wake window, and is once it has passed.
+    const again = recoverInterruptedWork({ agents: [agents[0]], ledgerPath: ledger, now: NOW + 2 * MIN, restartAt: null, moved: () => true, lastActive: () => NOW - 30 * MIN, log: () => {},
+      run: herdrReading({ "worker-2623": pane(THRASH_MESSAGE, "✻ Baked for 5h 24m · done 07:46") }) });
+    assert.deepEqual(again, [], "a pane that stays on the thrash message is not re-escalated on every tick");
+    const later = recoverInterruptedWork({ agents: [agents[0]], ledgerPath: ledger, now: NOW + WAKE_TTL_MS + MIN, restartAt: null, moved: () => true, lastActive: () => NOW - 30 * MIN, log: () => {},
+      run: herdrReading({ "worker-2623": pane(THRASH_MESSAGE, "✻ Baked for 5h 24m · done 07:46") }) });
+    assert.equal(later.filter((l) => l.startsWith("ESCALATING")).length, 1);
+  });
 });
 
 // --- Done-when 11: a delivery a restart killed is UNDELIVERED, and is re-sent ------------------------------------------------------------------

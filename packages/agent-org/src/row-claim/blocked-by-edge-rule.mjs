@@ -23,16 +23,18 @@
 // reader of the row -- a bypass flag here would just be a second, unrecorded way to the same effect.
 import { waitingOn, todayIso } from "../waiting-condition.mjs";
 import { lookup, gh } from "../merge-guard/lookups.mjs";
-import { REPO } from "../../../../scripts/repo-identity.mjs";
+import { REPO } from "../project-identity.mjs";
 
 /**
+ * #2617: `repo` is the TRACKER the row lives in -- the one the project's declaration names for it (default: the first).
+ *
  * @param {number} issueNumber the row about to be claimed
- * @param {{ run?: typeof gh }} deps
+ * @param {{ run?: typeof gh, repo?: string }} deps
  * @returns {{blockedBy?: {nodes?: {number?: number, state?: string}[]}} | null} `null` on a failed lookup
  */
-export function lookupBlockedByEdge(issueNumber, { run = gh } = {}) {
+export function lookupBlockedByEdge(issueNumber, { run = gh, repo = REPO } = {}) {
   return lookup(() => {
-    const raw = run(["issue", "view", String(issueNumber), "--repo", REPO, "--json", "blockedBy"]);
+    const raw = run(["issue", "view", String(issueNumber), "--repo", repo, "--json", "blockedBy"]);
     return JSON.parse(raw);
   });
 }

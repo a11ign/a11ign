@@ -15,11 +15,15 @@
 import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { REPO } from "../../../scripts/repo-identity.mjs";
+import { REPO } from "./project-identity.mjs";
+// #2616: the board is a field of the project's declaration, not a value derived from `REPO` and a constant.
+import { homeProjectDeclaration } from "./project-config.mjs";
 // #1425: the classifier the close path already uses. That module imports nothing, so this file stays free of `gh`.
 import { refusalCause, PROJECT_UNREADABLE } from "./settle-closed-status.mjs";
 
-export const PROJECT_OWNER = REPO.split("/")[0];
+// #2616: read from `.agent-org/project.json`, where it used to be `REPO.split("/")[0]` -- which was only ever true because the
+// board's owner and the repository's happened to agree, and a project whose board lives elsewhere could not say so.
+export const PROJECT_OWNER = homeProjectDeclaration().boardOwner;
 // THE PROJECT DOES NOT MOVE WITH THE REPOSITORY, so this is the ORG's board rather than the user-level
 // Project 2 that stayed behind with the pre-transfer account.
 //
@@ -31,7 +35,7 @@ export const PROJECT_OWNER = REPO.split("/")[0];
 // of 'a11ign'`, while `organization(login: "a11ign") { projectV2(number: 1) }` returns
 // `PVT_kwDOExeOA84Bj5SX "a11ign"`. So both the accessor AND the number had to move; changing one without
 // the other reads as an empty board rather than a refused one.
-export const PROJECT_NUMBER = 1;
+export const PROJECT_NUMBER = homeProjectDeclaration().boardNumber;
 /**
  * #1352: the filesystem reads `commonGitDirOf` and `primaryLaunchRefusal` make, injectable so a test drives them with
  * the shapes git writes. No spawn: git's worktree files are plain text, and reading them keeps this module free of
@@ -50,7 +54,7 @@ const LIVE_FS = {
  * worktree of one repository. A `.git` DIRECTORY is the common dir itself: the primary checkout, or a plain clone.
  * A `.git` FILE is a linked worktree's `gitdir: <path>` line; that gitdir's `commondir` file names the common dir
  * relative to it (`../..` for `git worktree add`). Measured on this host: wt-1352's `.git` names
- * `…/a11y-witness/.git/worktrees/wt-1352`, whose `commondir` is `../..` -- `/home/agent/repos/a11y-witness/.git`,
+ * `…/<checkout>/.git/worktrees/wt-1352`, whose `commondir` is `../..` -- `<checkout>/.git`,
  * exactly what `git rev-parse --git-common-dir` answers from both trees. `null` when `root` holds no `.git` at all.
  * @param {string} root @param {GitFs} [fs]
  * @returns {string | null}

@@ -19,7 +19,9 @@
 // says which of three it is and never blames a merge for a failure it did not cause.
 import { execFileSync } from "node:child_process";
 import { summarizeTestLog, testIdentity } from "./parent-recheck-summary.mjs";
-import { REPO } from "../../../scripts/repo-identity.mjs";
+import { REPO } from "./project-identity.mjs";
+// #2619 (child 3d of #69): the `session:` prefix, moved to the project's declared vocabulary.
+import { SESSION_PREFIX } from "./project-vocabulary.mjs";
 
 /** The workflow whose newest run on `main` says whether `main` is red. */
 export const TRUNK_WORKFLOW = "trunk.yml";
@@ -186,9 +188,9 @@ function readOriginPr(run, sha) {
   const pulls = tryParse(() => run(["api", `repos/${REPO}/commits/${sha}/pulls`]));
   if (!Array.isArray(pulls) || pulls.length === 0) return null;
   const labels = (pulls[0].labels ?? []).map((/** @type {{ name: string }} */ l) => String(l.name));
-  const session = labels.find((/** @type {string} */ n) => n.startsWith("session:"));
+  const session = labels.find((/** @type {string} */ n) => n.startsWith(SESSION_PREFIX));
   return { number: pulls[0].number, title: String(pulls[0].title ?? ""),
-    session: session ? session.slice("session:".length) : null };
+    session: session ? session.slice(SESSION_PREFIX.length) : null };
 }
 
 /**
@@ -245,9 +247,10 @@ function attributionParagraph(attribution) {
  *
  * THE SUBJECT IS THE MERGED PR WHEN KNOWN (`pr-<n>`), which is what lets `wake`'s STUCK breaker label it
  * `answer:ceo` if six offers do not clear the red (#2636) -- a fix-forward nobody picks up must reach the session
- * that unsticks it. THE MERGED PR IS CLOSED, and the `answer-owed` reader looks at open rows, open pull requests and
- * closed ISSUES: that label on a merged PR is set and not read. `needs:chairman` had the same blind spot; it is named
- * here so the escalation is not taken for a delivery it may not be.
+ * that unsticks it. THE MERGED PR IS NO LONGER OPEN, and the `answer-owed` reader asks for it by label name
+ * (`readClosedAnswerRows`, #2641: `pr list --state all` with `-is:open`), beside open rows, open pull requests and closed
+ * ISSUES, so that label is read and the session it names is woken. `needs:chairman` had a blind spot here that this does
+ * not repair (`readChairmanBlocked` is open issues only), which is why the escalation goes to `answer:ceo`.
  *
  * @param {ReturnType<typeof readTrunkRed> | undefined} red `null` or omitted when `main` is not red
  * @returns {{ session: string, fallback?: string, cause: string, subject: string, discriminator: string,

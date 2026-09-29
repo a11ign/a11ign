@@ -1,0 +1,5 @@
+---
+"@a11ign/agent-org": patch
+---
+
+**CODEOWNERS and `work-gate.mjs`'s `ROLE_LOGIN` now name `@a11ign-ai-leads`, not `@DanBeckDev` (#2696).** #2333 (closed 2026-09-24) moved `ceo`/`product-manager`/`orchestrator` off the chairman's personal `DanBeckDev` login onto the dedicated `a11ign-ai-leads` account, but the pipeline lane's CODEOWNERS entry, `work-gate.mjs`'s `pr-codeowner-review-missing` cause and its test both kept asserting the stale login. Left as-is, `ceo` could never produce an `APPROVED` review whose `author.login` matched, so `pr-codeowner-review-missing` would have woken `ceo` with an order it could never satisfy the moment a `.github/workflows/`-touching PR appeared — and #1756 (turning on `require_code_owner_reviews`) could never land, since no session could produce the approval its acceptance asked for. This is mechanical follow-through on #2333's already-made decision: the mapping moves forward, the explanatory prose is corrected to name `a11ign-ai-leads` and cite #2333, and dated historical references to the old login (a past `assignees` measurement, a past review-authorship measurement) are left as history.

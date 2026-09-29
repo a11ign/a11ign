@@ -146,7 +146,7 @@
 // one fact this whole fleet can rely on is which issue a PR's own `Closes #N` resolves, because GitHub
 // computes it server-side. So: find the OTHER issues `mySession` currently holds (`in-progress` +
 // `session:<name>`, excluding the row being claimed right now), and ask GitHub which PR would close each.
-import { REPO } from "../../../../scripts/repo-identity.mjs";
+import { REPO } from "../project-identity.mjs";
 import { gh, lookup } from "../merge-guard/lookups.mjs";
 import { declaredRegionFiles, regionCovers } from "../region-paths.mjs";
 // #2126: the reviewer NAME is parsed by the tree's own verdict parser, never a second reading of the
@@ -155,6 +155,9 @@ import { headMatches, reviewVerdict } from "../review-verdict.mjs";
 // #2126: `answer:<session>` is the org's own spelling for "somebody owes this row an answer", and
 // removing the label IS the act of answering -- so the escalation needs nothing else to remember it.
 import { ANSWER_PREFIX, todayIso, waitingOn } from "../waiting-condition.mjs";
+// #2619 (child 3d of #69): the claim-lifecycle label and the `session:` prefix `lookupOtherHeldIssues`
+// searches by, moved to the project's declared vocabulary.
+import { CLAIM_LABEL, SESSION_PREFIX } from "../project-vocabulary.mjs";
 
 // NO `git` SPAWN HERE, deliberately -- every lookup in this file goes through `gh` (issue/PR/GraphQL
 // reads), which needs no `sandboxGitEnv()` scrub: that helper exists for `execFileSync("git", ...)`
@@ -270,9 +273,10 @@ function inBuildAndNotWaiting(row, nowMs) {
  * @param {readonly RowFacts[]} rows every OTHER row this session holds
  * @param {number} [nowMs] the caller's clock, injected the way `waitingOn` injects one -- a test moves time
  *   without a global stub, and a `Not-before:` timestamp is only in the future relative to SOME clock
+ * @param {{ repo?: string }} [where] the TRACKER the rows are in -- it is named in the sub-issue remedy, which must run as printed
  * @returns {string | null}
  */
-export function inBuildReason(rows, nowMs = Date.now()) {
+export function inBuildReason(rows, nowMs = Date.now(), { repo = REPO } = {}) {
   const inBuild = rows.find((row) => inBuildAndNotWaiting(row, nowMs));
   // #2126: the SECOND thing B2 caps, and it is checked SECOND on purpose -- a population that has always
   // been refused must keep the refusal it has always been given, word for word, so nothing about the new
@@ -293,7 +297,7 @@ export function inBuildReason(rows, nowMs = Date.now()) {
     //
     // Found by worker-capture following it, which is the only way it could have been found: the message is
     // correct, the diagnosis is correct, and THE ONE PART THAT IS EXECUTABLE IS THE PART NOBODY EXECUTED.
-    + `gh api repos/${REPO}/issues/${inBuild.number}/sub_issues -F sub_issue_id=<id>\` and this refusal lifts.`
+    + `gh api repos/${repo}/issues/${inBuild.number}/sub_issues -F sub_issue_id=<id>\` and this refusal lifts.`
     + deliversRemedy(inBuild.number)
     + waitingRemedy(inBuild.number);
 }
@@ -331,7 +335,7 @@ function waitingRemedy(issueNumber) {
   return `\n  If #${issueNumber} is genuinely WAITING on something no commit of yours can hasten -- a machine run, `
     + "a date, another row, an answer -- declare it and this refusal lifts: a `Not-before: YYYY-MM-DDTHH:MM:SSZ` "
     + "line still in the future, `gh issue edit " + issueNumber + " --add-blocked-by <row>` on an OPEN row, or an "
-    + "`answer:<session>` label. It reads no such condition on #" + issueNumber + " now (a `Not-before:` that "
+    + `\`${ANSWER_PREFIX}<session>\` label. It reads no such condition on #` + issueNumber + " now (a `Not-before:` that "
     + "has passed, or one that is malformed, is not one), so the row counts as work you can do today.";
 }
 
@@ -559,7 +563,7 @@ export const OPEN_PR_LIMIT = 200;
 
 /**
  * #2126: HOW MUCH OF A SHA A MESSAGE PRINTS. Eight, because that is what this repository's review
- * convention writes (`packages/agent-org/docs/roles/reviewer.md`: a verdict matching ``at `<head8>` ``), so a
+ * convention writes (`.agent-org/roles/reviewer.md`: a verdict matching ``at `<head8>` ``), so a
  * reader can match the refusal against the verdict without re-deriving anything.
  */
 const HEAD_DISPLAY_CHARS = 8;
@@ -578,21 +582,21 @@ const LIST_FIELDS = "number,headRefOid,reviewDecision,reviews,author";
  * after the latest refusal and returns 0 for a pull request with no `CHANGES_REQUESTED` review, so only a
  * pull request GitHub itself reports as `CHANGES_REQUESTED` can have its answer read from here. Everything
  * else costs nothing extra: with none refused, the whole health read is still exactly one call.
- * @param {number} number @param {(args: string[]) => string} run @returns {PrCommit[]}
+ * @param {number} number @param {(args: string[]) => string} run @param {string} repo @returns {PrCommit[]}
  */
-function commitsOf(number, run) {
-  const raw = run(["pr", "view", String(number), "--repo", REPO, "--json", "commits"]);
+function commitsOf(number, run, repo) {
+  const raw = run(["pr", "view", String(number), "--repo", repo, "--json", "commits"]);
   /** @type {{ commits?: PrCommit[] }} */
   const parsed = JSON.parse(raw);
   return parsed.commits ?? [];
 }
 
 /**
- * @param {(args: string[]) => string} run
+ * @param {(args: string[]) => string} run @param {string} repo
  * @returns {PrReviewHealth[]}
  */
-function readOpenPrReviewHealth(run) {
-  const raw = run(["pr", "list", "--repo", REPO, "--state", "open", "--limit", String(OPEN_PR_LIMIT),
+function readOpenPrReviewHealth(run, repo) {
+  const raw = run(["pr", "list", "--repo", repo, "--state", "open", "--limit", String(OPEN_PR_LIMIT),
     "--json", LIST_FIELDS]);
   /** @type {{ number: number, headRefOid?: string, reviewDecision?: string | null,
    *           reviews?: { state?: string, body?: string, submittedAt?: string,
@@ -603,7 +607,7 @@ function readOpenPrReviewHealth(run) {
     const refused = pr.reviewDecision === CHANGES_REQUESTED;
     return { number: pr.number, head: pr.headRefOid ?? "",
       reviewDecision: pr.reviewDecision ?? null, dispute: disputeAtHead(pr),
-      authorCommitsSinceReview: authorCommitsSinceRefusal({ ...pr, commits: refused ? commitsOf(pr.number, run) : [] }) };
+      authorCommitsSinceReview: authorCommitsSinceRefusal({ ...pr, commits: refused ? commitsOf(pr.number, run, repo) : [] }) };
   });
 }
 
@@ -628,12 +632,14 @@ function reasonOf(error) {
  * (#2316). `null` makes B2 refuse nothing, which is the right direction for an unanswerable read and the
  * wrong thing to do silently: the read was off for hours behind a swallowed error. The line names GitHub's
  * own reason, because that is what turns a diagnosis from hours into minutes.
- * @param {{ run?: (args: string[]) => string, log?: (line: string) => void }} [deps]
+ * #2617: the pull requests read are the TRACKER's own (`repo`, default the first): B2 asks what a session's ROWS are doing, and a
+ * row's pull request is the one its tracker's `closedByPullRequestsReferences` names.
+ * @param {{ run?: (args: string[]) => string, log?: (line: string) => void, repo?: string }} [deps]
  * @returns {PrReviewHealth[] | null}
  */
-export function lookupOpenPrReviewHealth({ run = gh, log = (line) => process.stderr.write(`${line}\n`) } = {}) {
+export function lookupOpenPrReviewHealth({ run = gh, log = (line) => process.stderr.write(`${line}\n`), repo = REPO } = {}) {
   try {
-    return readOpenPrReviewHealth(run);
+    return readOpenPrReviewHealth(run, repo);
   } catch (error) {
     log(`B2 review-health read FAILED: ${reasonOf(error)}; claims are not being checked for unanswered refusals`);
     return null;
@@ -647,13 +653,13 @@ export function lookupOpenPrReviewHealth({ run = gh, log = (line) => process.std
  *
  * @param {string} mySession
  * @param {number} excludeIssueNumber
- * @param {{ run?: (args: string[]) => string }} [deps]
+ * @param {{ run?: (args: string[]) => string, repo?: string }} [deps] `repo` is the tracker whose rows are read
  * @returns {number[] | null}
  */
-export function lookupOtherHeldIssues(mySession, excludeIssueNumber, { run = gh } = {}) {
+export function lookupOtherHeldIssues(mySession, excludeIssueNumber, { run = gh, repo = REPO } = {}) {
   return lookup(() => {
-    const raw = run(["issue", "list", "--repo", REPO, "--state", "open",
-      "--label", "in-progress", "--label", `session:${mySession}`, "--json", "number"]);
+    const raw = run(["issue", "list", "--repo", repo, "--state", "open",
+      "--label", CLAIM_LABEL, "--label", `${SESSION_PREFIX}${mySession}`, "--json", "number"]);
     /** @type {{ number: number }[]} */
     const parsed = JSON.parse(raw);
     return parsed.map((issue) => issue.number).filter((n) => n !== excludeIssueNumber);
@@ -673,12 +679,12 @@ export function lookupOtherHeldIssues(mySession, excludeIssueNumber, { run = gh 
  * not.
  *
  * @param {number} issueNumber
- * @param {{ run?: (args: string[]) => string }} [deps]
+ * @param {{ run?: (args: string[]) => string, repo?: string }} [deps] `repo` is the tracker the row lives in
  * @returns {{ number: number, state: "OPEN" | "MERGED" | "CLOSED" } | undefined | null}
  */
-export function lookupClosingPrHealth(issueNumber, { run = gh } = {}) {
+export function lookupClosingPrHealth(issueNumber, { run = gh, repo = REPO } = {}) {
   return lookup(() => {
-    const [owner, name] = REPO.split("/");
+    const [owner, name] = repo.split("/");
     const query = "query($owner:String!,$name:String!,$number:Int!){"
       + "repository(owner:$owner,name:$name){issue(number:$number){"
       + "closedByPullRequestsReferences(first:5){nodes{number state headRefOid}}}}}";
@@ -762,14 +768,14 @@ export function deliveredRowsDeclaredBy(body) {
  * declared one" are different states, the same distinction `lookupClosingPrHealth` draws.
  *
  * @param {number} issueNumber
- * @param {{ run?: (args: string[]) => string }} [deps]
+ * @param {{ run?: (args: string[]) => string, repo?: string }} [deps] `repo` is the tracker the row lives in
  * @returns {{ number: number, state: "OPEN" | "MERGED" | "CLOSED", changedPaths: string[] } | undefined | null}
  */
-export function lookupDeliveringPr(issueNumber, { run = gh } = {}) {
+export function lookupDeliveringPr(issueNumber, { run = gh, repo = REPO } = {}) {
   return lookup(() => {
     // A cross-reference whose source is an ISSUE matches no inline fragment and arrives as `{}`, so the
     // number is what separates a pull request from one -- not a `__typename` this query need not ask for.
-    const declaring = crossReferencingPrs(issueNumber, run)
+    const declaring = crossReferencingPrs(issueNumber, { run, repo })
       .filter((source) => source.number !== undefined
         && deliveredRowsDeclaredBy(source.body ?? "").includes(issueNumber));
     if (declaring.length === 0) return undefined;
@@ -777,7 +783,7 @@ export function lookupDeliveringPr(issueNumber, { run = gh } = {}) {
     // itself on a second pull request and the newest is the one that describes the tree now.
     const pr = declaring[declaring.length - 1];
     const number = /** @type {number} */ (pr.number);
-    return { number, state: /** @type {any} */ (pr.state), changedPaths: changedPathsOf(number, run) };
+    return { number, state: /** @type {any} */ (pr.state), changedPaths: changedPathsOf(number, { run, repo }) };
   });
 }
 
@@ -803,11 +809,11 @@ const CHANGED_FILES_QUERY = "query($owner:String!,$name:String!,$number:Int!,$af
  * the declaration first and the files second is what makes both reads complete.
  *
  * @param {number} issueNumber
- * @param {(args: string[]) => string} run
+ * @param {{ run: (args: string[]) => string, repo: string }} where
  * @returns {{ number?: number, state?: string, body?: string }[]}
  */
-function crossReferencingPrs(issueNumber, run) {
-  return everyNodeOf((cursor) => graphqlPage(run, CROSS_REFERENCE_QUERY, issueNumber, cursor)
+function crossReferencingPrs(issueNumber, where) {
+  return everyNodeOf((cursor) => graphqlPage(where, CROSS_REFERENCE_QUERY, issueNumber, cursor)
     .data.repository.issue.timelineItems)
     .map((/** @type {{ source?: object }} */ node) => node.source ?? {});
 }
@@ -818,11 +824,11 @@ function crossReferencingPrs(issueNumber, run) {
  * files, so a truncated list would refuse the delivery that proves the point.
  *
  * @param {number} prNumber
- * @param {(args: string[]) => string} run
+ * @param {{ run: (args: string[]) => string, repo: string }} where
  * @returns {string[]}
  */
-function changedPathsOf(prNumber, run) {
-  return everyNodeOf((cursor) => graphqlPage(run, CHANGED_FILES_QUERY, prNumber, cursor)
+function changedPathsOf(prNumber, where) {
+  return everyNodeOf((cursor) => graphqlPage(where, CHANGED_FILES_QUERY, prNumber, cursor)
     .data.repository.pullRequest.files)
     .map((/** @type {{ path: string }} */ file) => file.path);
 }
@@ -832,14 +838,14 @@ function changedPathsOf(prNumber, run) {
  * cursor: an unsupplied nullable variable is `null`, which is where a connection starts -- and `-f after=`
  * would send the empty STRING instead, which is a cursor GitHub rejects.
  *
- * @param {(args: string[]) => string} run
+ * @param {{ run: (args: string[]) => string, repo: string }} where the runner, and the repository the query is about
  * @param {string} query
  * @param {number} number the issue or pull request the query is about
  * @param {string | null} cursor
  * @returns {any}
  */
-function graphqlPage(run, query, number, cursor) {
-  const [owner, name] = REPO.split("/");
+function graphqlPage({ run, repo }, query, number, cursor) {
+  const [owner, name] = repo.split("/");
   const args = ["api", "graphql", "-f", `query=${query}`,
     "-F", `owner=${owner}`, "-F", `name=${name}`, "-F", `number=${number}`];
   if (cursor) args.push("-f", `after=${cursor}`);
@@ -881,15 +887,15 @@ function everyNodeOf(page) {
  * how two readings of one Region drift apart (`row-reachability.mjs` records that exact history).
  *
  * @param {number} issueNumber
- * @param {{ run?: (args: string[]) => string }} [deps]
+ * @param {{ run?: (args: string[]) => string, repo?: string }} [deps] `repo` is the tracker the row lives in
  * @returns {{ declaresPaths: boolean, declaredPaths: string[], subIssues: number, body: string,
  *   labels?: RowFacts["labels"], blockedBy?: RowFacts["blockedBy"] } | null}
  */
-export function lookupRowShape(issueNumber, { run = gh } = {}) {
+export function lookupRowShape(issueNumber, { run = gh, repo = REPO } = {}) {
   return lookup(() => {
     // #2241: `labels` and `blockedBy` ride the SAME call, because `waitingOn` reads all three of the row's
     // waiting conditions off one object and a second `issue view` would be a second round trip per held row.
-    const view = JSON.parse(run(["issue", "view", String(issueNumber), "--repo", REPO,
+    const view = JSON.parse(run(["issue", "view", String(issueNumber), "--repo", repo,
       "--json", "body,labels,blockedBy"]));
     const body = view.body;
     // `declaredRegionFiles` is the tree's own parser, not a second reading of the Region: #941 taught it
@@ -898,7 +904,7 @@ export function lookupRowShape(issueNumber, { run = gh } = {}) {
     const declared = declaredRegionFiles(body ?? "") ?? [];
     // GitHub's OWN sub-issue link, written by `row-file --parent`. It cannot be self-applied the way a
     // label can: filing the sub-row is what creates it.
-    const subs = JSON.parse(run(["api", `repos/${REPO}/issues/${issueNumber}/sub_issues`]));
+    const subs = JSON.parse(run(["api", `repos/${repo}/issues/${issueNumber}/sub_issues`]));
     return { declaresPaths: declared.length > 0, declaredPaths: declared,
       subIssues: Array.isArray(subs) ? subs.length : 0,
       body: body ?? "", labels: view.labels, blockedBy: view.blockedBy };
@@ -912,7 +918,7 @@ export function lookupRowShape(issueNumber, { run = gh } = {}) {
  *
  * @param {string} mySession
  * @param {number} excludeIssueNumber the row being claimed right now -- never checked against itself
- * @param {{ run?: (args: string[]) => string, log?: (line: string) => void }} [deps]
+ * @param {{ run?: (args: string[]) => string, log?: (line: string) => void, repo?: string }} [deps] `repo` is the tracker the rows are in (#2617)
  * @returns {RowFacts[] | null}
  */
 export function lookupHeldRows(mySession, excludeIssueNumber, deps = {}) {
@@ -940,7 +946,7 @@ export function lookupHeldRows(mySession, excludeIssueNumber, deps = {}) {
  * unanswerable read must not manufacture one -- the same reasoning `rowFactsFor`'s delivery clause states
  * in the opposite direction for the opposite reason. B2's existing teeth do not depend on this call.
  *
- * @param {RowFacts[]} rows @param {{ run?: (args: string[]) => string }} deps
+ * @param {RowFacts[]} rows @param {{ run?: (args: string[]) => string, repo?: string }} deps
  * @returns {RowFacts[]}
  */
 function withReviewHealth(rows, deps) {
@@ -973,19 +979,19 @@ function withReviewHealth(rows, deps) {
  * session can put the label on by hand, which is the one thing a swallowed error would have cost.
  *
  * @param {RowFacts} row
- * @param {{ run?: (args: string[]) => string, log?: (line: string) => void }} [deps]
+ * @param {{ run?: (args: string[]) => string, log?: (line: string) => void, repo?: string }} [deps] `repo` is the tracker the row lives in
  * @returns {boolean} whether the label was written by THIS call
  */
-export function escalateDisputeToCeo(row, { run = gh, log = (line) => process.stderr.write(`${line}\n`) } = {}) {
+export function escalateDisputeToCeo(row, { run = gh, log = (line) => process.stderr.write(`${line}\n`), repo = REPO } = {}) {
   const review = row.openPrReview;
   const dispute = review?.dispute;
   if (!review || !dispute) return false;
   const label = `${ANSWER_PREFIX}ceo`;
   try {
-    if (alreadyLabelled(row.number, label, run)) return false;
-    run(["label", "create", label, "--repo", REPO, "--force"]);
-    run(["issue", "edit", String(row.number), "--repo", REPO, "--add-label", label]);
-    run(["issue", "comment", String(row.number), "--repo", REPO,
+    if (alreadyLabelled(row.number, label, { run, repo })) return false;
+    run(["label", "create", label, "--repo", repo, "--force"]);
+    run(["issue", "edit", String(row.number), "--repo", repo, "--add-label", label]);
+    run(["issue", "comment", String(row.number), "--repo", repo,
       "--body", disputeComment(row.number, review, dispute)]);
     log(`row-claim: #${review.number} carries OPPOSITE verdicts at \`${dispute.head.slice(0, HEAD_DISPLAY_CHARS)}\` `
       + `(\`${dispute.approved.by}\` approved, \`${dispute.refused.by}\` asked for changes), so the claim `
@@ -1003,11 +1009,11 @@ export function escalateDisputeToCeo(row, { run = gh, log = (line) => process.st
  * Whether a row already carries `label` -- ONE read, made only on the dispute path, so the common claim
  * pays nothing for it. Throws on a failure rather than reading as "not labelled", which would re-post the
  * dispute comment on every claim.
- * @param {number} issueNumber @param {string} label @param {(args: string[]) => string} run
+ * @param {number} issueNumber @param {string} label @param {{ run: (args: string[]) => string, repo: string }} where
  * @returns {boolean}
  */
-function alreadyLabelled(issueNumber, label, run) {
-  const raw = run(["issue", "view", String(issueNumber), "--repo", REPO, "--json", "labels"]);
+function alreadyLabelled(issueNumber, label, { run, repo }) {
+  const raw = run(["issue", "view", String(issueNumber), "--repo", repo, "--json", "labels"]);
   /** @type {{ labels?: { name?: string }[] }} */
   const parsed = JSON.parse(raw);
   return (parsed.labels ?? []).some((entry) => entry?.name === label);
@@ -1042,7 +1048,7 @@ function disputeComment(issueNumber, review, dispute) {
  * value nothing consumed; this adds one back only where it decides the verdict.
  *
  * @param {number} issueNumber
- * @param {{ run?: (args: string[]) => string }} [deps]
+ * @param {{ run?: (args: string[]) => string, repo?: string }} [deps]
  * @returns {RowFacts | null}
  */
 function rowFactsFor(issueNumber, deps = {}) {
