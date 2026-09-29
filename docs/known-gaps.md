@@ -3387,9 +3387,13 @@ this commit, not against the ADR's prose.**
 **What a run does, measured by reading `packages/cli/src/auth/`, not by running a login against an identity provider:**
 
 - **The login is a form login and nothing else.** It types into controls by accessible name in a closed vocabulary, on
-  ONE pinned `origin:`. There is no one-time-code step, no way to wait for a person, no storage-state import (**mechanism 2 is
-  DECIDED in ADR 0038's amendment 7, #2566, and only its containment is built: `credentialsFromState` in `scrub.ts` and the
-  test that the tool writes no state file; there is still no `--auth-state` flag**) and no
+  ONE pinned `origin:`. There is no one-time-code step, no way to wait for a person, no tool that MAKES a storage state (**mechanism
+  2 is built as of #2632: `--auth-state <file>` LOADS one a person saved by hand, through both interpreters and the worker, and
+  ends one that no longer holds as `auth-state-expired`. Its limits are the file's: `sessionStorage` is not in it and IndexedDB is
+  not loaded, so a site that keeps its session there cannot be carried; only the run's own origin's cookies and `localStorage` are
+  loaded; the login flow's final `expect:` must hold on every page the run requests; and values under 8 characters are counted and
+  not hidden. It has run only over fake and local browsers: the reading on a real site, and the same state after its session is
+  ended, is owed (#2566, item 6)**) and no
   attach to a browser somebody has signed in (mechanism 3 is the one route ADR 0038 says handles MFA or SSO, and it
   is **not built**: interactive, CLI-only, a spike first).
 - **SSO ends the run, by name.** A login that sends the browser to another origin, such as an identity provider,

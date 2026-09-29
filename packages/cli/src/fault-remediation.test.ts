@@ -49,7 +49,7 @@ function captureDoubtCodes(): string[] {
   return match ? [...match[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]) : [];
 }
 
-// PLUS ADR 0038's twelve named errors: client-side like the doubts, listed by `auth/auth-faults.ts` as a runtime array
+// PLUS ADR 0038's thirteen named errors: client-side like the doubts, listed by `auth/auth-faults.ts` as a runtime array
 // (so no scrape is needed), and read from there rather than re-typed, so a code added there without an entry fails.
 const KNOWN_FAULTS: string[] = [...Object.values(FAULT), ...judgeLayerFaultCodes(), ...captureDoubtCodes(), ...AUTH_FAULTS];
 
@@ -191,4 +191,19 @@ test("MUTATION: a remediation entry missing one field is caught by name, not jus
     }
   }
   assert.deepEqual(problems, ['wrong-page: "tryThis"']);
+});
+
+test("auth-state-expired says what a person must check: the flow's expect: on EVERY page, sessionStorage and IndexedDB, and the form login", () => {
+  const entry = FAULT_REMEDIATION["auth-state-expired"];
+  assert.ok(entry, "the fault has no entry");
+  assert.match(entry.what, /--auth-state/);
+  assert.match(entry.what, /expect: was not met, or the page went to another origin/);
+  assert.match(entry.tryThis, /expect: holds on EVERY page this run requests/);
+  assert.match(entry.tryThis, /Sign out/, "it names the fix, not only the problem");
+  assert.match(entry.tryThis, /sessionStorage/);
+  assert.match(entry.tryThis, /IndexedDB/);
+  assert.match(entry.tryThis, /--login-flow and a dedicated test account/);
+  // Not the form login's advice: that one says a redirect off the origin is SSO the tool does not do.
+  assert.ok(!/does not do/.test(entry.tryThis));
+  assert.notEqual(entry.tryThis, FAULT_REMEDIATION["auth-login-failed"].tryThis);
 });

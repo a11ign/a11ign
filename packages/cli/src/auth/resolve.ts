@@ -20,15 +20,23 @@
  *
  * PURE apart from the two injected reads (`readText`, and `env`), so each decision has a test that needs no filesystem.
  */
+import { resolve as resolvePath } from "node:path";
+
 import { FlowsError, parseFlowsFile, refuseIfWrongOrigin, resolveLoginFlow } from "./flows.js";
 import { assertCredentialsPresent, type AuthPlan } from "./interpreter.js";
 import { judgeBackendDecision, refuseAuthOnPublicRepository, type AuthRequest } from "./refusals.js";
 import { MAX_CAPTURE_ATTEMPTS, minimumLogins, refuseAboveLoginCap, worstCaseLogins } from "../multi-page.js";
-import { buildScrubSet, refuseIfAnArgumentCarriesAValue, type ScrubSet } from "./scrub.js";
+import type { Credential } from "./leak-detector.js";
+import {
+  buildScrubSet, credentialsFromState, refuseIfAnArgumentCarriesAValue, stateScrubNotices, type ScrubSet,
+} from "./scrub.js";
+import { readStorageState } from "./state-file.js";
 
 export interface AuthArguments {
   flows: string | null;
   loginFlow: string | null;
+  /** `--auth-state <file>`: a storage state the person saved, loaded instead of performing the login. */
+  authState: string | null;
   sendAuthenticatedTranscriptToJudgeVendor: boolean;
 }
 
@@ -130,8 +138,11 @@ async function readFlows(readText: ResolveRequest["readText"], path: string): Pr
 }
 
 /** Was any authentication asked for at all? Both flags, or neither — one alone is a mistake named as such. */
-function asked({ flows, loginFlow, sendAuthenticatedTranscriptToJudgeVendor }: AuthArguments): boolean {
+function asked({ flows, loginFlow, authState, sendAuthenticatedTranscriptToJudgeVendor }: AuthArguments): boolean {
   if (flows === null && loginFlow === null) {
+    if (authState !== null) {
+      throw new FlowsError("login-flow-missing", "--auth-state needs --flows and --login-flow beside it: the login flow's final expect: is what decides that a saved state still signs in");
+    }
     if (sendAuthenticatedTranscriptToJudgeVendor) {
       throw new FlowsError("login-flow-missing", "--send-authenticated-transcript-to-judge-vendor only means something on an authenticated run; name --flows and --login-flow, or drop it");
     }
@@ -143,9 +154,33 @@ function asked({ flows, loginFlow, sendAuthenticatedTranscriptToJudgeVendor }: A
   return true;
 }
 
+/**
+ * The saved state a run loads, read HERE so its values are known before anything is captured, and refused here if the file is
+ * not a state. **Only the path goes on the wire** (`AuthRequest.state`): the worker reads the file itself, and this read exists
+ * to build the scrub set. Absolute, because the worker's working directory is not this process's.
+ */
+async function resolveState(
+  request: ResolveRequest, origin: string,
+): Promise<{ state: { path: string }; credentials: Credential[]; notices: string[] } | undefined> {
+  if (request.args.authState === null) return undefined;
+  const path = resolvePath(request.args.authState);
+  const found = credentialsFromState(await readStorageState(path, request.readText), { origin, publicText: [...request.urls, request.task] });
+  return { state: { path }, credentials: found.credentials, notices: stateScrubNotices(found) };
+}
+
 /** The plan the interpreters and the wire share, from the resolved login flow. */
-function planFrom(steps: AuthPlan["login"]): AuthRequest {
-  return { login: steps };
+function planFrom(steps: AuthPlan["login"], state?: { path: string }): AuthRequest {
+  return state === undefined ? { login: steps } : { login: steps, state };
+}
+
+/**
+ * What a state run says INSTEAD of the login count: no login is performed, and the state is not refreshed, so each capture
+ * loads it as the person saved it.
+ */
+export function stateNotice({ captures, axe }: { captures: number; axe: boolean }): string {
+  return `authenticated run: this run performs no login. It loads your saved state before each capture (${captures} `
+    + `capture${captures === 1 ? "" : "s"}${axe ? ", and again for the rule layer" : ""}) and never writes it back. `
+    + "The state is a credential: keep the file private.";
 }
 
 /**
@@ -166,20 +201,24 @@ export async function resolveAuthentication(request: ResolveRequest): Promise<Re
     if (request.isPdf(url)) throw new FlowsError("origin-pinned", `${url} is a PDF, which has no login to perform; an authenticated run is for pages`);
     refuseIfWrongOrigin(file, url);
   }
-  const plan = planFrom(login.steps);
+  const stated = await resolveState(request, file.origin);
+  const plan = planFrom(login.steps, stated?.state);
   const captures = await request.countCaptures();
   // Before anything is leased or captured, beside the other refusals: a run that asks a real account for more logins than
   // the bound is refused whole (PageListError, exit 2), and a single URL with many form states is caught here too.
   refuseAboveLoginCap({ captures, axe: request.axe });
   assertCredentialsPresent(plan, env);
-  const names = [...new Set(login.steps.flatMap((step) => ("fill" in step && step.fill.fromEnv !== undefined ? [step.fill.fromEnv] : [])))];
-  const scrubSet = buildScrubSet(names.map((name) => ({ name, value: env[name] as string })));
+  const names = stated === undefined
+    ? [...new Set(login.steps.flatMap((step) => ("fill" in step && step.fill.fromEnv !== undefined ? [step.fill.fromEnv] : [])))]
+    : []; // a state run performs no login, so no login variable is read and none needs hiding
+  const scrubSet = buildScrubSet([...names.map((name) => ({ name, value: env[name] as string })), ...(stated?.credentials ?? [])]);
   refuseIfAnArgumentCarriesAValue({ urls, task: request.task }, scrubSet);
   const judgeNotice = judgeBackendDecision({ auth: plan, sendTranscriptToJudgeVendor: args.sendAuthenticatedTranscriptToJudgeVendor });
   return {
     auth: plan,
     scrubSet,
-    notices: [PRESSING_OFF_NOTICE, loginNotice({ captures, axe: request.axe }), ...(judgeNotice ? [judgeNotice] : [])],
+    notices: [PRESSING_OFF_NOTICE, (stated === undefined ? loginNotice : stateNotice)({ captures, axe: request.axe }), ...(stated?.notices ?? []),
+      ...(judgeNotice ? [judgeNotice] : [])],
     overrides: { probeForms: false, probeNavigation: false },
   };
 }

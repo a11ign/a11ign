@@ -10,7 +10,7 @@ import { FlowsError } from "./flows.js";
 import { ScrubError } from "./scrub.js";
 import { AuthError } from "./auth-faults.js";
 import {
-  PRESSING_OFF_NOTICE, loginNotice, pressedByThisRun, repositoryPrivacy, resolveAuthentication, type ResolveRequest,
+  PRESSING_OFF_NOTICE, loginNotice, pressedByThisRun, repositoryPrivacy, resolveAuthentication, stateNotice, type ResolveRequest,
 } from "./resolve.js";
 import { parseArgs } from "../cli.js";
 import { DEFAULT_MAX_PAGES, MAX_CAPTURE_ATTEMPTS, MAX_LOGINS, CEILING_PAGES, PageListError, minimumLogins, worstCaseLogins } from "../multi-page.js";
@@ -39,7 +39,7 @@ flows:
 
 type Over = Omit<Partial<ResolveRequest>, "args"> & { args?: Partial<ResolveRequest["args"]> };
 const request = (over: Over = {}): ResolveRequest => ({
-  args: { flows: "flows.yml", loginFlow: "login", sendAuthenticatedTranscriptToJudgeVendor: false, ...over.args },
+  args: { flows: "flows.yml", loginFlow: "login", authState: null, sendAuthenticatedTranscriptToJudgeVendor: false, ...over.args },
   urls: [`${ORIGIN}/orders`],
   task: "Read and understand this page",
   axe: true,
@@ -58,6 +58,96 @@ const withJudge = async <T>(backend: string | undefined, run: () => Promise<T>):
   if (backend === undefined) delete process.env.JUDGE_BACKEND; else process.env.JUDGE_BACKEND = backend;
   try { return await run(); } finally { if (before === undefined) delete process.env.JUDGE_BACKEND; else process.env.JUDGE_BACKEND = before; }
 };
+
+// ---- ADR 0038, amendment 7: a saved storage state instead of a login ------------------------------------------------------
+
+const STATE_PATH = "/runner/temp/a11y-state.json";
+const SESSION = "sessioncookievalue-9f31c2ab";
+const TOKEN = "tokenvalue-0123456789ab";
+const stateFile = (over: object = {}) => JSON.stringify({
+  cookies: [
+    { name: "theme", value: "dark", domain: "app.example.test" },
+    { name: "sid", value: SESSION, domain: "app.example.test", path: "/", secure: true },
+    { name: "elsewhere", value: "othersitesession-5555aa", domain: "other.example.org" },
+  ],
+  origins: [{ origin: ORIGIN, localStorage: [{ name: "auth", value: JSON.stringify({ access_token: TOKEN, ttl: 3600 }) }] }],
+  ...over,
+});
+const withState = (text: string | undefined, over: Over = {}): ResolveRequest => request({
+  ...over, args: { authState: STATE_PATH, ...over.args },
+  readText: async (path) => {
+    if (path === "flows.yml") return FLOWS;
+    if (path === STATE_PATH && text !== undefined) return text;
+    throw new Error(`ENOENT: no such file or directory, open '${path}'`);
+  },
+});
+
+test("STATE: --auth-state without --flows and --login-flow is refused as --login-flow alone is, naming why", async () => {
+  await refusedAs(resolveAuthentication(request({ args: { flows: null, loginFlow: null, authState: STATE_PATH } })),
+    (e) => e instanceof FlowsError && e.rule === "login-flow-missing" && /--auth-state needs --flows and --login-flow/.test(e.message)
+      && /final expect:/.test(e.message), "the state alone");
+  // CONTROL: each half alone keeps its own refusal, and the pair with the state resolves.
+  await refusedAs(resolveAuthentication(request({ args: { flows: "flows.yml", loginFlow: null, authState: STATE_PATH } })),
+    (e) => e instanceof FlowsError && e.rule === "login-flow-missing" && /--login-flow needs --flows/.test(e.message) === false && /--flows needs --login-flow/.test(e.message), "flows without login-flow");
+  assert.ok(await withJudge("local", () => resolveAuthentication(withState(stateFile()))));
+});
+
+test("STATE: a state run sends the login's steps and a PATH (absolute), reads none of the login's variables, and hides the state's values instead", async () => {
+  const resolved = await withJudge("local", () => resolveAuthentication(withState(stateFile(), { env: {} })));
+  assert.ok(resolved);
+  assert.equal(resolved.auth.login.length, 5);
+  assert.deepEqual(resolved.auth.state, { path: STATE_PATH });
+  assert.deepEqual(Object.keys(resolved.auth.state ?? {}), ["path"]);
+  // Names are PLACES: never the file's own key, never a variable of the login.
+  const names = resolved.scrubSet.credentials.map((c) => c.name);
+  assert.ok(names.length > 0 && names.every((name) => /^state (cookie|localStorage) \d+$/.test(name)), names.join(", "));
+  const values = resolved.scrubSet.credentials.map((c) => c.value);
+  assert.ok(values.includes(SESSION) && values.includes(TOKEN), "the session cookie and the token inside the JSON value are hidden");
+  assert.ok(!values.includes("othersitesession-5555aa"), "another site's cookie is neither loaded nor hidden");
+  assert.ok(!JSON.stringify(resolved.auth).includes(SESSION), "no value from the file is in the request");
+  assert.deepEqual(resolved.overrides, { probeForms: false, probeNavigation: false });
+  assert.equal(resolved.notices[1], stateNotice({ captures: 1, axe: true }));
+  assert.match(resolved.notices[1], /performs no login/);
+  assert.ok(!resolved.notices.some((line) => /will perform at least/.test(line)), "no login is performed, so no login count is promised");
+  assert.ok(!JSON.stringify(resolved.notices).includes(SESSION) && !JSON.stringify(resolved.notices).includes(TOKEN));
+});
+
+test("STATE: a relative path is made absolute, because the worker's working directory is not this process's", async () => {
+  const resolved = await withJudge("local", () => resolveAuthentication(request({
+    args: { authState: "state.json" }, readText: async (path) => (path === "flows.yml" ? FLOWS : stateFile()),
+  })));
+  assert.ok(resolved?.auth.state?.path.startsWith("/") && resolved.auth.state.path.endsWith("/state.json"), String(resolved?.auth.state?.path));
+});
+
+test("STATE: values shorter than the floor and values that are text the run itself was handed are SKIPPED and COUNTED, not refused", async () => {
+  const resolved = await withJudge("local", () => resolveAuthentication(withState(stateFile({
+    origins: [{ origin: ORIGIN, localStorage: [{ name: "lastPage", value: "/orders/recent-history" }, { name: "flag", value: "true" }] }],
+  }), { urls: [`${ORIGIN}/orders/recent-history`] })));
+  assert.ok(resolved);
+  const said = resolved.notices.join("\n");
+  assert.match(said, /2 values in your saved state are shorter than 8 characters and not hidden/, "the theme cookie's `dark` and the flag `true`: counted");
+  assert.match(said, /1 value in your saved state appears in your URLs or task and is not hidden/);
+  assert.ok(!resolved.scrubSet.credentials.some((c) => c.value === "/orders/recent-history"));
+});
+
+test("STATE: a state file that is missing, not JSON or the wrong shape is refused naming the path and the reason, and never quoting the file", async () => {
+  const cases: Array<[string, string | undefined, RegExp]> = [
+    ["missing", undefined, /could not be read \(ENOENT/],
+    ["not JSON", `sid=${SESSION}; theme=dark`, /is not valid JSON/],
+    ["a cookie with no value", JSON.stringify({ cookies: [{ name: SESSION, domain: "a.test" }], origins: [] }), /cookies\[1\] has no string "value"/],
+  ];
+  for (const [label, text, reason] of cases) {
+    await refusedAs(resolveAuthentication(withState(text)), (e) => e instanceof FlowsError && e.rule === "file-shape" && reason.test(e.message)
+      && e.message.includes(STATE_PATH) && !e.message.includes(SESSION) && !e.message.includes("sid=") && !e.message.includes("theme"), label);
+  }
+});
+
+test("STATE: a state value inside a URL the caller wrote is the caller's own text: counted and not hidden, and the run is not refused", async () => {
+  // The value is longer than the floor and appears inside a URL query: the URLs are publicText, so it is skipped rather than refused.
+  const resolved = await withJudge("local", () => resolveAuthentication(withState(stateFile(), { urls: [`${ORIGIN}/orders?t=${SESSION}`] })));
+  assert.ok(resolved && !resolved.scrubSet.credentials.some((c) => c.value === SESSION), "an argument the caller wrote is theirs, and is counted, not hidden");
+  assert.match(resolved.notices.join("\n"), /appears? in your URLs or task/);
+});
 
 test("a run that asks for no authentication resolves to null and changes nothing", async () => {
   assert.equal(await resolveAuthentication(request({ args: { flows: null, loginFlow: null } })), null);

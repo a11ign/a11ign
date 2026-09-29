@@ -126,8 +126,8 @@ readable in process listings and shell history, and an Action input is interpola
 
 **Its status, measured 2026-09-25 (#2399).** The form login is implemented and has completed one authenticated capture on a real worker (`a11y-worker-3`, 64 announcements, on a fixture page built for the test). On that run **NVDA did not speak the text inserted through the browser protocol**: `npm run auth:leak-check` exited `0` on the raw transcript, and its positive control, a page that echoes the value back, exited `1`, so the check can see a leak when there is one. **That is one run, one machine and one page, with NVDA's typed-character setting as read there; it does not show the same of your page.** Everything below is what the code does and refuses, plus that one reading.
 
-**What does not exist.** MFA, SSO and CAPTCHA (**use a dedicated test account without MFA or SSO**); saved storage
-state; attaching to a browser you have signed in. A login that reaches an identity provider ends in `auth-login-failed`
+**What does not exist.** MFA, SSO and CAPTCHA (**use a dedicated test account without MFA or SSO**, or load a state you saved
+by signing in by hand: below); a tool that MAKES a saved state; attaching to a browser you have signed in. A login that reaches an identity provider ends in `auth-login-failed`
 (`left-origin`) and never in a capture. **A login step that fails on a page showing a reCAPTCHA, hCaptcha or Turnstile
 widget ends in `auth-challenge-detected`:** the run names the challenge and never answers it, and solving one is refused by
 design.
@@ -143,7 +143,7 @@ never a value.
 **Where the credential goes, and where it does not.**
 
 - **Never over the worker's channel.** The request to the worker carries the flow and the variable NAMES, never a value,
-  and never a cookie or a storage state. A worker that is not on the same machine **refuses** an authentication request
+  and never a cookie or the contents of a storage state (`--auth-state` sends a PATH, and the worker reads the file itself). A worker that is not on the same machine **refuses** an authentication request
   (`auth-refused-remote-worker`), because that channel is plain HTTP with no authentication and no TLS; a worker that
   predates the field is caught by insisting on `authApplied: true` in its answer (`auth-not-applied`).
 - **Not into what the run writes or prints.** A screen reader announces what is typed, so every value (and its JSON-escaped,
@@ -153,6 +153,16 @@ never a value.
   refused** (`auth-credential-too-short`): replacing `admin` everywhere would rewrite the page's own words, and its
   absence could not be proven. The Action also adds `::add-mask::` for the URL-encoded and base64 forms, which GitHub does
   not derive. `npm run auth:leak-check` has been read once against a real NVDA (2026-09-25, #2399: exit `0`, with a working positive control), and the first defence held on that page. **The redaction and the per-character refusal above remain the defence to rely on**; one reading is not a promise about yours.
+- **A saved storage state is a credential on your disk, and the tool only reads it.** `--auth-state <file>` (the Action's
+  `auth-state:`) loads a Playwright storage state you saved by signing in by hand, in place of the login. **The tool never
+  writes, copies or moves that file** (a test enumerates every file-writing call and requires the list to hold one entry,
+  which is not a state), and the worker is sent its path and reads it itself. Only the cookies for the run's own host and that
+  origin's `localStorage` are loaded; the rest of the file, which may hold sessions for every site you use, is not read.
+  Every value it loaded is hidden from what the run writes and prints, named by place and never by the file's own key, **except
+  values under 8 characters and values that are text you gave the run**: the run says how many. **The file itself is not
+  encrypted and nothing here protects it: keep it out of version control, and in the Action decode it from a secret into
+  `$RUNNER_TEMP` yourself**, because GitHub masks the secret and not the decoded contents. `sessionStorage` is not in a state
+  file, so a site that keeps its session there ends the run with `auth-state-expired`. **Not measured against a real site.**
 - **Not to a rented judge.** Authentication with `JUDGE_BACKEND=codex|anthropic|openai` is refused
   (`auth-refused-judge-backend`) unless the run names `--send-authenticated-transcript-to-judge-vendor` (the Action's
   `send-authenticated-transcript-to-judge-vendor: "true"`), which **cannot be set from the environment** and, given,

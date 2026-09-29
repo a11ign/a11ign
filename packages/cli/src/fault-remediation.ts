@@ -141,6 +141,18 @@ const AUTH_REMEDIATION: Record<AuthFault, FaultRemediation> = {
       + "does not trigger it; if the step failed for another reason and the page merely carries a widget, fix that step.",
     whereToLook: `${ADR}, Constraint 6, and docs/known-gaps.md, "A CAPTCHA is detected only where a login step failed".`,
   },
+  "auth-state-expired": {
+    what: "the run loaded your saved state (--auth-state) instead of logging in, and the page it asked for was not the signed-in "
+      + "page: the login flow's final expect: was not met, or the page went to another origin (an expired single-sign-on "
+      + "session redirects to the identity provider). No login was performed, so nothing behind it was examined.",
+    tryThis: "sign in by hand again and save a fresh state. If a state you have just saved reads as expired, check "
+      + "three things: that flow's final expect: holds on EVERY page this run requests (a heading only the dashboard shows "
+      + "reads a valid state on /settings as expired; name a control every signed-in page carries, such as Sign out); that "
+      + "the site does not keep its session in sessionStorage or IndexedDB, which a state file does not carry (sessionStorage "
+      + "is not persisted, and IndexedDB is not loaded here); and that the cookies were made for this origin. A site whose "
+      + "session a state cannot carry can still be tested with --login-flow and a dedicated test account.",
+    whereToLook: `${ADR}, amendment 7 (#2566), choices 1, 2 and 3.`,
+  },
 };
 
 export const FAULT_REMEDIATION: Record<string, FaultRemediation> = {
