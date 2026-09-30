@@ -56,6 +56,9 @@ import { loadLanes, inLane } from "./lane-ownership.mjs";
 // filing named in so many words. `row-branch-rule.mjs` imports NOTHING, and `git-env.mjs` imports nothing
 // either, so the gate keeps the property its own header states -- it runs before any `npm ci` or build.
 import { LS_REMOTE_ARGS, rowBranchesInListing } from "./row-claim/row-branch-rule.mjs";
+// #2791: THE RULE `row-claim.mjs` REFUSES A CLAIM ON, imported unchanged as `row-file` already does -- a second
+// copy of "which sections must a row state" is the drift this whole family of imports exists to prevent.
+import { missingTemplateFields } from "./row-claim/template-fields-rule.mjs";
 // EVERY `git` SPAWN IN THIS REPO STRIPS `GIT_*` THROUGH ONE FUNCTION (`git-env.mjs`'s own header records
 // the 2026-09-06 incident where an inherited `GIT_DIR` landed fifteen commits in the wrong checkout).
 // This tick runs under systemd, where the environment is not the one a person typed.
@@ -799,6 +802,20 @@ function branchesText(pushed) {
 }
 
 /**
+ * The template sections this row's body does not state, `[]` when it is complete OR WHEN THE BODY WAS NOT READ.
+ * A row with no string `body` is "not asked", never "asked and empty": `readReadyRows` always requests it, so a
+ * caller that lacks it (a fixture, a future read) must not shelve the whole queue on an absence.
+ * @param {any} row
+ * @returns {string[]}
+ */
+function missingFieldsOf(row) {
+  return typeof row?.body === "string" ? missingTemplateFields(row.body) : [];
+}
+
+/** @param {string[]} missing @returns {string} */
+const templateGapText = (missing) => `its body has no ${missing.map((f) => `\`## ${f}\``).join(", ")}`;
+
+/**
  * The unclaimed Ready rows, split into what a session could actually claim right now and what B4 would
  * refuse, with the reason and the row's lane owner.
  *
@@ -849,6 +866,16 @@ export function partitionUnclaimed(readyRows, prFiles, options) {
     // to a session other than the one already holding it" needed no expression -- a held row is not
     // offered to anybody, which is strictly stronger and was already true.
     if (labelsOf(row).includes(CLAIM_LABEL)) continue;
+    // #2791: A ROW THE CLAIM WILL REFUSE FOR A TEMPLATE DEFECT IS NOT STOCK. #2729 and #2730 read `ready` for ~38h
+    // with no `## Open-check`, so every offer ended in `NOT CLAIMED: ... is missing Open-check` while the pool
+    // counted them and `ready-queue-empty` stayed silent. SHELVED, like every reason here, and the reason
+    // names the section: `incompleteRowOrders` is what asks somebody to add it.
+    const missing = missingFieldsOf(row);
+    if (missing.length > 0) {
+      blocked.push({ number: Number(row.number), ...subjectIdentity(row), owner: laneOwnerOf(row),
+        reason: `${templateGapText(missing)} -- \`row-claim\` refuses it, and it clears when the section is added` });
+      continue;
+    }
     // #2031, AND AHEAD OF EVERY OTHER SHELVING REASON. The others say this row cannot be STARTED yet;
     // this one says it may already be FINISHED, and offering it as a fresh start is the one outcome
     // measured to cost a whole session's turn -- #2000 was offered throughout the 20 minutes its branch
@@ -4017,6 +4044,50 @@ function unshippedOrder({ row, pushed }) {
 }
 
 /**
+ * One order per unclaimed Ready row whose body lacks a required template section (#2791) -- the SPOKEN half of
+ * what `partitionUnclaimed` withholds, so a shelved row is never a silent one.
+ *
+ * THE ROW IS THE STATE. The key carries the missing sections, so the order stops the moment the section is
+ * added and a second one appears if a different section is later removed. Routed to the lane owner, else
+ * `product-manager`, who owns filing, amendments and promotion: the remedy is one `## <Field>` heading
+ * with real content under it, and the claim refuses until it exists.
+ *
+ * A JUDGMENT CAUSE for `row-branch-unshipped`'s reason -- the answer is durable, so an action cause's expiry
+ * would re-ask an unchanged row.
+ *
+ * @param {any[]} readyRows the `ready` rows (`readReadyRows`)
+ * @returns {{session: string, cause: string, subject: string, discriminator: string,
+ *            prompt: string, causeKey: string}[]}
+ */
+export function incompleteRowOrders(readyRows) {
+  const orders = [];
+  const oldestFirst = [...readyRows].sort((a, b) => Number(a.number) - Number(b.number));
+  for (const row of oldestFirst) {
+    if (sessionOf(row) || labelsOf(row).includes(CLAIM_LABEL)) continue;
+    const missing = missingFieldsOf(row);
+    if (missing.length === 0) continue;
+    const owner = laneOwnerOf(row) ?? "product-manager";
+    const subject = `row-${subjectRef(row.repoKey, row.number)}`;
+    orders.push({
+      session: owner,
+      cause: "ready-row-incomplete",
+      subject,
+      discriminator: missing.join("+"),
+      prompt: `Row ${subjectMention(row)} reads \`${READY_LABEL}\` and unclaimed, but ${templateGapText(missing)}, `
+        + "so `row-claim` REFUSES every claim on it (`NOT CLAIMED: ... is missing <section>`). The gate has "
+        + "STOPPED offering it and no longer counts it as Ready stock -- measured 2026-09-30 on #2729 and #2730, "
+        + `which sat \`${READY_LABEL}\` for ~38h behind exactly that refusal while the queue read as stocked and `
+        + "`ready-queue-empty` never fired.\n"
+        + "ADD THE SECTION, or take the label off: a `## <Field>` heading with real content under it "
+        + "(`Region`, `Acceptance`, `Open-check`). This order stops by itself once the body is complete.",
+      causeKey: `${owner}/ready-row-incomplete/${subject}/${missing.join("+")}`,
+    });
+    if (orders.length >= MAX_ROW_ORDERS_PER_TICK) break;
+  }
+  return orders;
+}
+
+/**
  * One order per lane whose owner has backlog and nothing Ready.
  *
  * SPLIT OUT OF `decide` because adding it took that function past
@@ -4255,7 +4326,7 @@ function emptyShelfOrder({ offerable, blocked, promotable, key }) {
         // what is true of every blocked row: promoting past it does not remove what is actually stopping it.
         ? "The blocked rows above are NOT rows to promote past: each names its own reason, and the work "
           + "that frees it belongs to whatever that reason names -- a pull request, a blocking issue, a "
-          + "date -- not necessarily a pull request. Promoting a row whose Region overlaps another open "
+          + "date, a missing template section -- not necessarily a pull request. Promoting a row whose Region overlaps another open "
           + "PR only moves that particular refusal.\n"
         : "")
       + "ASK OF EACH ROW: IS IT STILL TRUE? -- before asking whether it is promotable. A row can fail "
@@ -4653,7 +4724,7 @@ export function decide({ prs, readyRows, promotableRows = [], chairmanBlocked = 
   // said once as a withholding and once as a question. Ahead of `rowOrders` for the ordering reason the
   // causes above use: work that already EXISTS outranks work nobody has started.
   const { offerable, blocked } = partitionUnclaimed(readyRows, prFiles, { rowBranches, openRows });
-  orders.push(...rowBranchOrders(readyRows, rowBranches));
+  orders.push(...rowBranchOrders(readyRows, rowBranches), ...incompleteRowOrders(readyRows)); // #2791
   orders.push(...rowOrders(offerable));
 
   // #2139: AHEAD OF BOTH BACKLOG SURVEYS AND BEHIND EVERY OFFER, because it is neither. It names ONE row
