@@ -317,7 +317,7 @@ the smallest reading, and none changes a choice.
 
 ## Amendment 8 (#2788): what a state run's rule layer does on a site whose session the worker's browser can hold and the rule layer's cannot
 
-**Status: DECIDED and BUILT (#2788), the reading on a real runner owed (#2566, item 6, done-when 3).** **The answer, in a sentence:
+**Status: DECIDED and BUILT (#2788), and READ on a real runner (2026-09-30, #2566 item 6; the last paragraph of this amendment).** **The answer, in a sentence:
 a state run's rule layer presents itself as the worker's browser (the system Edge first, with the worker's `User-Agent` minus
 its headless marker and its `Accept-Language`), and where the rule layer's browser is still refused a state the worker's
 accepted, the run ends with its own fault, `auth-state-refused-by-rule-layer`, and never `auth-state-expired`.** That is
@@ -356,7 +356,20 @@ narrows the default, so this is not the `ceo` ruling the row reserves for (b).
 (`refusals.test.ts`), and the identity's derivation over a fake browser (`axe.test.ts`); the test that a binding site accepts the
 worker's identity and refuses the default one needs a launchable browser, and skips where there is none, as it did where this was
 built. The language is the worker's default (`en-US,en;q=0.9`), not read from the worker: a worker whose Edge is set to another
-language sends another header. Done-when 3, the `valid-state` job on row 1's runner ending 0, is `orchestrator`'s hand-run.
+language sends another header. Done-when 3 was `orchestrator`'s hand-run, and is read below.
+
+**The reading (2026-09-30, `a11ign/auth-capture-check` PR 7, `windows-2022`, the same target; posted on #2566).** At a commit
+containing #2806 the default run (rule layer ON, `axe-core: ran via the system Edge`) loaded a saved state, reached the signed-in
+page and ended 0 with the artifact scan clean, and its positive control fired: **7 of 8 default runs on a fresh state**
+(`98d71a53f`, plain `origin/main`: 36702407863, 36702404929, 36702414817; a diagnostic build with one added log line: 36701177194,
+36701650160, 36701659730, 36701670527). **One default run FAILED, `auth-state-expired` beside a worker-only job that passed
+(36700368154, `786a25590`), and its cause is unknown:** the log does not say which layer refused, it did not recur, and a slow
+answer past the flow's 10-second `expect:` would read the same way, which is a hypothesis. **The same state, later, ended
+`auth-state-expired`** through the real worker (36699966399, both jobs): the target had stopped honouring a session made about 21
+hours earlier, on its own and for a reason not read here, so this is the expiry reading against a real target and not one made on
+demand. The state was made by a script over HTTP with the runner Edge's headers, not by a person in a browser; the rule layer's own
+request headers were still not printed, so the passes are an elimination, not a header read; and a state both layers refuse still
+ends `auth-state-expired` in all four fixture cells, amendment 8's positive control.
 
 ## Constraint 4: the transcript and the evidence JSON are PROVEN not to contain the credential
 
