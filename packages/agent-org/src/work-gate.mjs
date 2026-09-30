@@ -59,6 +59,10 @@ import { LS_REMOTE_ARGS, rowBranchesInListing } from "./row-claim/row-branch-rul
 // #2791: THE RULE `row-claim.mjs` REFUSES A CLAIM ON, imported unchanged as `row-file` already does -- a second
 // copy of "which sections must a row state" is the drift this whole family of imports exists to prevent.
 import { missingTemplateFields } from "./row-claim/template-fields-rule.mjs";
+// #2823: THE CLOSES RULE `closes-mismatch-check.mjs` PASSES A PULL REQUEST ON, imported and not retyped -- the gate and the
+// CI step must call the same condition "repo-wide", or a PR the check passes with a warning is one the gate never reports.
+import { isRepoWideResolutionFault, recentClosesSiblings } from "./closes-mismatch-check.mjs";
+import { extractClosesDeclaration } from "./acceptance-commands.mjs";
 // EVERY `git` SPAWN IN THIS REPO STRIPS `GIT_*` THROUGH ONE FUNCTION (`git-env.mjs`'s own header records
 // the 2026-09-06 incident where an inherited `GIT_DIR` landed fifteen commits in the wrong checkout).
 // This tick runs under systemd, where the environment is not the one a person typed.
@@ -236,7 +240,10 @@ export function readPrs(run = defaultRun) {
       // `latestReviews[].commit.oid` comes back the EMPTY STRING and `reviews[].commit.oid` carries the sha the
       // review was posted at -- and "was this convinced verdict converted into a review AT THIS HEAD" is a
       // question about exactly that sha. `gh api .../pulls/N/reviews` `commit_id` agrees with it. No second call.
-      + "reviews"]);
+      + "reviews,"
+      // #2823: `closingIssuesReferences` (what GitHub will close) and `createdAt` (how long the condition has stood), on the
+      // same call, so `closesUnresolvedOrders` reads the Closes condition without a second request.
+      + "closingIssuesReferences,createdAt"]);
     const parsed = JSON.parse(out);
     return Array.isArray(parsed) ? parsed : null;
   } catch {
@@ -4088,6 +4095,70 @@ export function incompleteRowOrders(readyRows) {
 }
 
 /**
+ * The open pull requests that declare a `Closes` number and that GitHub resolved NOTHING for -- but only while that is
+ * REPO-WIDE, by `isRepoWideResolutionFault`'s own three-sibling rule (#2823). `[]` when the condition does not hold,
+ * and a PR whose `closingIssuesReferences` was not read (a fixture, a refused field) is neither declared-and-unresolved
+ * nor a sibling: an absent field is "not asked", never "resolved nothing".
+ * @param {any[] | null} prs @returns {any[]}
+ */
+export function closesUnresolvedPrs(prs) {
+  const candidates = (prs ?? [])
+    .filter((pr) => Array.isArray(pr.closingIssuesReferences) && typeof pr.body === "string")
+    .map((pr) => ({ pr, declaration: extractClosesDeclaration(pr.body) }))
+    .flatMap(({ pr, declaration }) => declaration.kind === "closes" && declaration.numbers.length > 0
+      ? [{ pr, declared: declaration.numbers,
+        resolved: pr.closingIssuesReferences.map((/** @type {{number: number}} */ issue) => Number(issue.number)) }]
+      : []);
+  const newestFirst = [...candidates].sort((a, b) => Number(b.pr.number) - Number(a.pr.number));
+  const asLookup = newestFirst.map(({ pr, resolved }) => ({ number: Number(pr.number), body: pr.body, resolved }));
+  const held = newestFirst.filter(({ pr, declared, resolved }) =>
+    isRepoWideResolutionFault({ declared, resolved }, recentClosesSiblings(asLookup, Number(pr.number))));
+  return held.map(({ pr }) => pr).sort((a, b) => Number(a.number) - Number(b.number));
+}
+
+/** @param {number} ms @returns {string} */
+const standingText = (ms) => (ms >= 2 * 3_600_000 ? `${Math.floor(ms / 3_600_000)}h` : `${Math.max(1, Math.round(ms / 60_000))} min`);
+
+/**
+ * ONE order, to `product-manager`, while GitHub resolves no closing reference for the open pull requests that declare one
+ * (#2823). `closes-mismatch-check.mjs` used to print "Tell `product-manager`" into a CI log for this and nothing reads a
+ * CI log for an instruction: all 8 open PRs failed `gate` for ~2h on 2026-09-30 before the chairman noticed idle agents.
+ * It now PASSES with a warning (#2822), which is quieter still, so the gate says it. NOT `pr-checks-failing`: that tells an
+ * AUTHOR to fix a branch, and this fault is on no branch.
+ *
+ * KEYED ON THE SET OF PULL REQUESTS, so it is asked once per condition and stops the moment a PR resolves (the rule then
+ * no longer holds). JUDGMENT: the answer is durable, and an action cause's expiry would re-ask an unchanged set.
+ *
+ * @param {any[] | null} prs
+ * @param {number} [now]
+ * @returns {{session: string, cause: string, subject: string, discriminator: string,
+ *            prompt: string, causeKey: string}[]}
+ */
+export function closesUnresolvedOrders(prs, now = Date.now()) {
+  const held = closesUnresolvedPrs(prs);
+  if (held.length === 0) return [];
+  const numbers = held.map((pr) => Number(pr.number)).sort((a, b) => a - b);
+  const oldestMs = Math.min(...held.map((pr) => Date.parse(pr.createdAt)).filter((t) => Number.isFinite(t)));
+  const standing = Number.isFinite(oldestMs) ? `, the oldest open ${standingText(now - oldestMs)}` : "";
+  const discriminator = numbers.join("+");
+  return [{
+    session: "product-manager",
+    cause: "closes-unresolved-repo-wide",
+    subject: "closes-resolution",
+    discriminator,
+    prompt: `GitHub resolves NO closing reference for ${numbers.length} open pull requests that each declare a \`Closes\` `
+      + `row (${held.map((pr) => subjectMention(pr)).join(", ")}${standing}). `
+      + "GitHub resolved nothing for these, nor for the three newest siblings of each, so the fault is GitHub's or the "
+      + "repo's and is on no branch -- do NOT send their authors to fix a body.\n"
+      + "`closes-mismatch-check.mjs` PASSES them with a warning and the post-merge closer closes the declared rows from "
+      + "the body, so nothing is blocked; the reader is needed for the rest: check whether GitHub is degraded, that the "
+      + "closer ran for each merge since, and file a row if it persists. This order stops by itself when any of them "
+      + "resolves.",
+    causeKey: `product-manager/closes-unresolved-repo-wide/${discriminator}`,
+  }];
+}
+
+/**
  * One order per lane whose owner has backlog and nothing Ready.
  *
  * SPLIT OUT OF `decide` because adding it took that function past
@@ -4718,7 +4789,7 @@ export function decide({ prs, readyRows, promotableRows = [], chairmanBlocked = 
   // #2470/#2711/#2729: A CLAIM THAT DOES NOT MOVE, A BARE `answer:` LABEL ON IT, OR A LAB JOB IT DISPATCHED THAT HAS ENDED -- all address the row's own holder, so all outrank every cause offering NEW work.
   orders.push(...stallOrdersOrNone(claimStalls), ...bareAnswerOrdersOrNone(bareAnswerLabels), ...labJobFinishedOrders(openRows, labJobs, Date.now()));
 
-  orders.push(...perPullRequestOrders(prs, required, baseTip));
+  orders.push(...perPullRequestOrders(prs, required, baseTip), ...closesUnresolvedOrders(prs)); // #2823 beside them
   // #2031: AHEAD OF THE OFFER, AND IT IS THE SAME READING THAT WITHHELD IT. `partitionUnclaimed` shelves
   // the row on `rowBranches` and this emits the cause that names the branch -- one condition, one read,
   // said once as a withholding and once as a question. Ahead of `rowOrders` for the ordering reason the
