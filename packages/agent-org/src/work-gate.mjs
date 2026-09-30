@@ -1539,7 +1539,7 @@ export function primaryStaleOrders(drift) {
         + `("would be overwritten by checkout"):\n${dirty.map((path) => `  ${path}`).join("\n")}\n` : "No tracked path is dirty, so the update itself "
         + "is failing for another reason: run `npm run primary:update` and read its output.\n")
       + "THE EDITS ARE NOT YOURS TO DISCARD UNREAD: an interactive session left them there (the 2026-09-28 cause), and no hook "
-      + "refuses an uncommitted edit. Save `git diff` to `~/.cache/a11ign/salvage/primary-<date>.patch` first and say on #2781 "
+      + "refuses an uncommitted edit. Save `git diff` to `" + stateEntryPath("salvage") + "/primary-<date>.patch` first and say on #2781 "
       + "where it went, then clear the tracked paths and run `npm run primary:update`. This order repeats until the primary is at `origin/main`.",
     causeKey: `ceo/primary-stale/${key}`,
   }];
