@@ -56,7 +56,7 @@
 import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
 import { extractClosesDeclaration } from "./acceptance-commands.mjs";
-import { lookupClosingIssues, lookupRecentOpenPrClosings } from "./merge-guard/lookups.mjs";
+import { lookupClosingIssues, lookupRecentClosesPrs } from "./merge-guard/lookups.mjs";
 import { refuseUnknownFlags } from "./lib/cli-flags.mjs";
 
 // GitHub's own documented closing keywords -- close/closes/closed, fix/fixes/fixed, resolve/resolves/
@@ -135,20 +135,20 @@ export function closesMismatchReport(declaration, resolved, body) {
 
 /** @typedef {{ number: number, resolved: number[] }} ClosesSibling */
 
-/** How many recent other open PRs declaring a `Closes` must ALL resolve nothing before the fault is called repo-wide. */
+/** How many recent other open-or-merged PRs declaring a `Closes` must ALL resolve nothing before the fault is called repo-wide. */
 export const REPO_WIDE_SIBLINGS = 3;
 
 /**
- * Pure. The newest `REPO_WIDE_SIBLINGS` OTHER open PRs whose body declares a non-empty `Closes` (drafts
- * included), each with the numbers GitHub resolved for it. `openPrs` is newest first, as the lookup
+ * Pure. The newest `REPO_WIDE_SIBLINGS` OTHER open or merged PRs whose body declares a non-empty `Closes` (drafts
+ * included), each with the numbers GitHub resolved for it. `recentPrs` is newest first, as the lookup
  * returns it. `null` in, `null` out: a lookup that could not ask has no siblings to name (#2810).
- * @param {{ number: number, body: string, resolved: number[] }[] | null} openPrs
+ * @param {{ number: number, body: string, resolved: number[] }[] | null} recentPrs
  * @param {number} prNumber the PR under test, never its own sibling
  * @returns {ClosesSibling[] | null}
  */
-export function recentClosesSiblings(openPrs, prNumber) {
-  if (openPrs === null) return null;
-  return openPrs
+export function recentClosesSiblings(recentPrs, prNumber) {
+  if (recentPrs === null) return null;
+  return recentPrs
     .filter((pr) => pr.number !== prNumber)
     .filter((pr) => {
       const declaration = extractClosesDeclaration(pr.body);
@@ -250,7 +250,7 @@ function main() {
     // The sibling query is asked only when this PR's own facts already fit, so a lone mismatch costs nothing extra.
     const underTest = { declared: declaration.kind === "closes" ? declaration.numbers : [], resolved: resolved ?? [] };
     const fits = underTest.declared.length > 0 && underTest.resolved.length === 0;
-    const siblings = fits ? recentClosesSiblings(lookupRecentOpenPrClosings(), prNumber) : null;
+    const siblings = fits ? recentClosesSiblings(lookupRecentClosesPrs(), prNumber) : null;
     const { exit, lines } = mismatchVerdict(report, underTest, siblings);
     for (const line of lines) console.log(line);
     process.exit(exit);
