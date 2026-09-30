@@ -539,6 +539,12 @@ and `localStorage` for other origins in the file are not loaded**, and are neith
 
 **What ends it: `auth-state-expired`.** If the `expect:` is not met, or the page went to another origin (an expired
 single-sign-on session redirects to the identity provider), the run ends with `auth-state-expired` and nothing is captured.
+**A state the screen reader's browser accepts and the rule layer's does not ends `auth-state-refused-by-rule-layer`, not
+`auth-state-expired`** (#2788). Some sites tie a session to the browser that made it (its `User-Agent` and language), so the
+rule layer's browser presents itself as the worker's Edge on a state run. If a site still refuses it, the state is not expired and
+signing in again gives the same fault: set `axe: false` (the rule-layer criteria are then reported as unchecked, not clean), or use
+`login-flow` with a dedicated test account.
+
 **Three things to check when a state you have just saved reads as expired:**
 
 1. **The `expect:` must hold on EVERY page the run requests.** Each capture loads the state afresh and asks the flow's

@@ -204,6 +204,30 @@ export interface LaunchableChromium {
 }
 
 /**
+ * Which browser the scan is meant to look like. `"worker"` is a run that loads a saved state (ADR 0038, amendment 8): a site
+ * may bind a session to the browser that made it, and the state was made in (and is accepted by) the WORKER's browser, so
+ * the rule layer must present itself as that browser or the site refuses the state here alone.
+ */
+export type BrowserIdentity = "worker";
+
+/** The order channels are tried in: the worker drives the system Edge, so a run that must look like it tries that first. */
+const CHANNEL_ORDER: Record<BrowserIdentity | "default", readonly AxeBrowserChannel[]> = {
+  default: ["chromium", "msedge"],
+  worker: ["msedge", "chromium"],
+};
+
+/**
+ * What a site that binds a session to its browser sees from the worker's Edge, measured on the Action's runner (2026-09-29,
+ * #2788): a headed Edge started with default flags sends `Accept-Language: en-US,en;q=0.9` and a `User-Agent` ending
+ * `Chrome/<n> Safari/537.36 Edg/<n>`, while a headless one sends `HeadlessChrome/<n>` in its place. The User-Agent is therefore
+ * derived from the browser this run launched (its version is the machine's), and only the headless marker is removed; the
+ * language is the worker's default and is not derived, which is this identity's stated limit (`docs/known-gaps.md`).
+ */
+const WORKER_ACCEPT_LANGUAGE = "en-US,en;q=0.9";
+const HEADLESS_MARKER = "HeadlessChrome/";
+const HEADED_MARKER = "Chrome/";
+
+/**
  * Launch a browser for axe to drive — the bundled Chromium first, a system channel as the fallback.
  *
  * FOUND 2026-09-06: `chromium.launch()` with no options needs the bundled browser, and the Action
@@ -220,16 +244,34 @@ export interface LaunchableChromium {
  * the two layers observe one rendering engine rather than two. Which one actually answered is returned
  * rather than assumed, because it is evidence: a finding depends on the renderer that produced it.
  */
-export async function launchBrowser(chromium: LaunchableChromium):
+export async function launchBrowser(chromium: LaunchableChromium, identity: BrowserIdentity | "default" = "default"):
 Promise<{ browser: Awaited<ReturnType<LaunchableChromium["launch"]>>; channel: AxeBrowserChannel }> {
+  const launch = (channel: AxeBrowserChannel) => chromium.launch(channel === "chromium" ? undefined : { channel });
+  const [first, second] = CHANNEL_ORDER[identity];
   try {
-    return { browser: await chromium.launch(), channel: "chromium" };
-  } catch (bundledError) {
+    return { browser: await launch(first), channel: first };
+  } catch (firstError) {
     try {
-      return { browser: await chromium.launch({ channel: "msedge" }), channel: "msedge" };
-    } catch (channelError) {
+      return { browser: await launch(second), channel: second };
+    } catch (secondError) {
+      const [bundledError, channelError] = first === "chromium" ? [firstError, secondError] : [secondError, firstError];
       throw new AxeLaunchError(bundledError, channelError);
     }
+  }
+}
+
+type LaunchedBrowser = Awaited<ReturnType<LaunchableChromium["launch"]>>;
+type ContextOptions = NonNullable<Parameters<import("playwright").Browser["newContext"]>[0]>;
+
+/** The context options that make this browser present as the worker's (see `WORKER_ACCEPT_LANGUAGE`), read from the browser itself. */
+export async function workerContextOptions(browser: LaunchedBrowser): Promise<ContextOptions> {
+  const probe = await (browser as unknown as import("playwright").Browser).newContext();
+  try {
+    const userAgent = await (await probe.newPage()).evaluate(() => navigator.userAgent);
+    return { userAgent: userAgent.replace(HEADLESS_MARKER, HEADED_MARKER), locale: "en-US",
+      extraHTTPHeaders: { "Accept-Language": WORKER_ACCEPT_LANGUAGE } };
+  } finally {
+    await probe.close();
   }
 }
 
@@ -267,13 +309,15 @@ export async function axeAvailable(
  * `finally` below either way, and it is this call's own in-memory context, so a session dies with it.
  */
 export async function scanWithAxe(
-  url: string, { signIn }: { signIn?: (page: import("playwright").Page) => Promise<void> } = {},
+  url: string,
+  { signIn, browserIdentity }: { signIn?: (page: import("playwright").Page) => Promise<void>; browserIdentity?: BrowserIdentity } = {},
 ): Promise<AxeResult> {
   const { chromium, AxeBuilder } = await loadAxe();
-  const { browser, channel } = await launchBrowser(chromium);
+  const { browser, channel } = await launchBrowser(chromium, browserIdentity);
   try {
     // @axe-core/playwright requires a page from an explicit context.
-    const context = await (browser as { newContext(): ReturnType<import("playwright").Browser["newContext"]> }).newContext();
+    const options = browserIdentity === "worker" ? await workerContextOptions(browser) : undefined;
+    const context = await (browser as unknown as import("playwright").Browser).newContext(options);
     const page = await context.newPage();
     if (signIn) await signIn(page);
     else await page.goto(url, { waitUntil: "load" });
