@@ -163,7 +163,7 @@ export function recentClosesSiblings(openPrs, prNumber) {
  * fault (#2810)? Only when the PR under test declares at least one number and resolves none, and EVERY
  * one of exactly `REPO_WIDE_SIBLINGS` recent siblings resolves none. `siblings: null` (could not ask) and
  * fewer than three siblings are both "cannot say", which reads as NOT repo-wide: unread data is never
- * evidence of a fault. This changes the words of a refusal only, never its verdict.
+ * evidence of a fault. #2822: it is the ONE condition `mismatchVerdict` passes on (with a warning); it decides nothing else.
  * @param {{ declared: number[], resolved: number[] }} underTest
  * @param {ClosesSibling[] | null} siblings
  * @returns {boolean}
@@ -174,24 +174,43 @@ export function isRepoWideResolutionFault(underTest, siblings) {
   return siblings.every((sibling) => sibling.resolved.length === 0);
 }
 
-/** The refusal for the repo-wide case: replaces the per-body "confirm #N exists" advice, for that case only. */
-export const REPO_WIDE_LINES = Object.freeze([
-  `  GitHub resolved no closing reference for the last ${REPO_WIDE_SIBLINGS} open PRs that declare one, so the condition `
-    + "is repo-wide and not this body.",
-  "  Do not edit the body. Do not rerun. Do not write `Closes: none`. The merge stays blocked.",
-  "  Tell `product-manager`.",
+/**
+ * The warning the repo-wide case PASSES with (#2822). It names the condition and the remedy: the post-merge closer
+ * closes the declared rows from the body, because GitHub will not.
+ */
+export const REPO_WIDE_WARNING = Object.freeze([
+  "CLOSES MISMATCH: WARNING -- GitHub resolved no closing reference for this PR or for the last "
+    + `${REPO_WIDE_SIBLINGS} open PRs that declare one, so the condition is repo-wide and not this body.`,
+  "  Passing: the post-merge closer (close-rows-for-merged-pr.mjs) will close the declared rows FROM THE BODY'S "
+    + "DECLARATION, because GitHub resolved none.",
 ]);
 
 /**
- * Pure. What a REFUSED report prints and exits with. The words differ when the fault is repo-wide; the exit
- * is the literal 1 either way (#2810: the diagnostic names the condition, it never changes the verdict).
+ * Pure. What a REFUSED report prints and exits with. The exit is the literal 1 for every refusal, and the words
+ * are today's for every one of them (#2810). The repo-wide case is not refused any more (#2822) -- see
+ * `repoWideWarning` -- so `refusal` is never asked about it and cannot turn a refusal into a pass.
  * @param {{ ok: false, reasons: string[] }} report
- * @param {boolean} repoWide
  * @returns {{ exit: 1, lines: string[] }}
  */
-export function refusal(report, repoWide) {
+export function refusal(report) {
   const head = "CLOSES MISMATCH: REFUSED -- what you declared and what GitHub will actually close disagree:";
-  return { exit: 1, lines: [head, ...(repoWide ? REPO_WIDE_LINES : report.reasons.map((reason) => `  ${reason}`))] };
+  return { exit: 1, lines: [head, ...report.reasons.map((reason) => `  ${reason}`)] };
+}
+
+/**
+ * Pure. What a mismatch prints and exits with (#2822). PASSES, with the warning, ONLY when
+ * `isRepoWideResolutionFault` holds: this PR declares a number, GitHub resolved none for it, and all
+ * `REPO_WIDE_SIBLINGS` recent siblings resolved none either. Every other mismatch -- an accidental closure even
+ * while the condition is repo-wide, a lone mismatch, too few siblings, an unreadable sibling lookup, a partial
+ * resolution -- is `refusal`, byte for byte. Absence of evidence never passes: `siblings: null` is refused.
+ * @param {{ ok: false, reasons: string[] }} report
+ * @param {{ declared: number[], resolved: number[] }} underTest
+ * @param {ClosesSibling[] | null} siblings
+ * @returns {{ exit: 0 | 1, lines: string[] }}
+ */
+export function mismatchVerdict(report, underTest, siblings) {
+  if (isRepoWideResolutionFault(underTest, siblings)) return { exit: 0, lines: [...REPO_WIDE_WARNING] };
+  return refusal(report);
 }
 
 function main() {
@@ -232,7 +251,7 @@ function main() {
     const underTest = { declared: declaration.kind === "closes" ? declaration.numbers : [], resolved: resolved ?? [] };
     const fits = underTest.declared.length > 0 && underTest.resolved.length === 0;
     const siblings = fits ? recentClosesSiblings(lookupRecentOpenPrClosings(), prNumber) : null;
-    const { exit, lines } = refusal(report, isRepoWideResolutionFault(underTest, siblings));
+    const { exit, lines } = mismatchVerdict(report, underTest, siblings);
     for (const line of lines) console.log(line);
     process.exit(exit);
   }
