@@ -3402,8 +3402,9 @@ this commit, not against the ADR's prose.**
   ends one that no longer holds as `auth-state-expired`. Its limits are the file's: `sessionStorage` is not in it and IndexedDB is
   not loaded, so a site that keeps its session there cannot be carried; only the run's own origin's cookies and `localStorage` are
   loaded; the login flow's final `expect:` must hold on every page the run requests; and values under 8 characters are counted and
-  not hidden. It has run only over fake and local browsers: the reading on a real site, and the same state after its session is
-  ended, is owed (#2566, item 6). **The rule layer presents itself as the worker's Edge for a state run (#2788, amendment 8), and
+  not hidden. It has been read on ONE real site (#2566, item 6, 2026-09-30: 7 of 8 default runs signed in and scanned clean, one failed as
+  `auth-state-expired` for a cause not known, and the same state ended `auth-state-expired` once the target dropped its session on its
+  own; the state was made by a script, not a person), and otherwise only over fake and local browsers. **The rule layer presents itself as the worker's Edge for a state run (#2788, amendment 8), and
   that is two headers and the browser channel: the `Accept-Language` is the worker's default and is not read from it, and a site that binds a
   session to more than those two things ends `auth-state-refused-by-rule-layer`, not a scan.** A test that a binding site accepts the
   identity needs a launchable browser and skips without one**) and no
