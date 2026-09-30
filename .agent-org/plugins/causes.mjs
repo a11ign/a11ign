@@ -30,4 +30,18 @@ export const causeDeclarations = [
     effort: "high",
     why: "a by-row reading of the fleet-gated batch decides how the org's scarcest resource is spent",
   }),
+  // #2729: the second plugin cause, for the first one's reason -- it exists only where there is a lab. Its DETECTION is
+  // `labJobFinishedOrders` (`packages/agent-org/src/work-gate/lab-job-orders.mjs`), reading records that `lab-job`'s
+  // `run-job.yml` writes; this is the declaration only, as `fleet-batch-due`'s is.
+  declareCause("lab-job-finished", GROUPS.JUDGMENT, {
+    kind: "claude",
+    // SONNET AND MEDIUM. The order carries the result itself (outcome, exit code, when, which run), so the woken turn
+    // diagnoses nothing from an absence: it reads a verdict it was handed and resumes a row it already holds, with its
+    // context loaded. That is `claimed-row-amended`'s case and priced the same. A JUDGMENT cause, not an ACTION one,
+    // because what to do about a failed or passed job is a decision -- and not a START one, since it addresses the
+    // holder of a row already claimed, which a drain must not withhold.
+    model: "sonnet",
+    effort: "medium",
+    why: "resuming a held row on a verdict the gate has already read -- the wake replaces a session polling lab:status",
+  }),
 ];
