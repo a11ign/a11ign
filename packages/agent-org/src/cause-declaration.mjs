@@ -351,6 +351,15 @@ export const TOOL_CAUSE_DECLARATIONS = Object.freeze([
     why: "reading whether GitHub is degraded and whether the post-merge closer ran, over a named set of pull "
       + "requests -- the gate hands over the set and its age, so nothing is built and nothing is inferred",
   }),
+  declareCause("primary-stale", GROUPS.ACTION, {
+    kind: "claude",
+    // SONNET AND MEDIUM: the gate hands over the dirty paths and the shas (#2781); the turn decides whether the edits are
+    // somebody's work to salvage before clearing them, which is judgment over gathered material, then runs one command.
+    model: "sonnet",
+    effort: "medium",
+    why: "salvaging or clearing a named set of uncommitted edits in the primary and re-running `primary:update` -- the "
+      + "gate hands over the paths and the commit distance, so nothing is diagnosed from an absence",
+  }),
   declareCause("host-units-stale", GROUPS.ACTION, {
     kind: "claude",
     model: "sonnet",
