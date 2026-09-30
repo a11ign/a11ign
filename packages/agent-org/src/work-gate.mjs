@@ -106,6 +106,7 @@ import { requiredWhenRed, perPullRequestOrders, mergeConflictOrders, greenUnarme
   HOLD_RED_JOBS } from "./work-gate/pr-orders.mjs";
 export { redOnlyBySupersededRun, mergeConflictOrders, greenUnarmedOrders, reviewBlockedOrders, HOLD_RED_JOBS,
   awaitingEvidenceStaleOrders } from "./work-gate/pr-orders.mjs";
+import { labJobFinishedOrders, readLabJobRecords } from "./work-gate/lab-job-orders.mjs"; // #2729
 // #2691: THE LIVE CALL-COUNT SIGNAL, reusing the parser rather than a second one -- `split-baseline.mjs`
 // already imports these two the same way. `token-audit.mjs` imports only `node:*` and `cli-flags.mjs`
 // (already here), so the gate keeps the property its own header states.
@@ -4547,7 +4548,8 @@ export function performActions(orders, run = defaultRun, log = (line) => process
  *           baseTip?: {sha: string, date: string} | null,
  *           claimStalls?: import("./claim-stall.mjs").StallOrder[], offBoard?: BoardFacts[] | null,
  *           callCountSignals?: { row: number, session: string, calls: number }[],
- *           bareAnswerLabels?: ReturnType<typeof bareAnswerLabelOrders> }} state
+ *           bareAnswerLabels?: ReturnType<typeof bareAnswerLabelOrders>,
+ *           labJobs?: import("./work-gate/lab-job-orders.mjs").LabJobRecord[] | null }} state
  *        `claimStalls` is `claimStallTick`'s orders (#2470): a nudge to a holder whose claim has not moved, or a release
  *        `wake.mjs` performs. OMITTED MEANS NONE.
  *        `required` is the checks that can block a merge (`requiredCheckNames`), or `null` for
@@ -4594,6 +4596,8 @@ export function performActions(orders, run = defaultRun, log = (line) => process
  *        per row's own claim record since #2710) -- split candidates past the threshold on calls made
  *        while holding their row. OMITTED MEANS NONE, and `rowCallCountOrders` carries its own `= []`
  *        default rather than this signature carrying one, for `rowBranches`'s reason.
+ *        `labJobs` is `labJobRecordsOrSay()` (#2729) -- the lab jobs that ended for a row, or `null` for a read that was
+ *        refused. OMITTED AND `null` MEAN THE SAME THING and it carries no `= []` default for `rowBranches`'s reason.
  *        `bareAnswerLabels` is `bareAnswerLabelOrders(...)` (#2711) -- already-built orders, because
  *        building them means a per-row timeline call `decide` itself must not make. OMITTED MEANS NONE,
  *        and it carries no `= []` default for `rowBranches`'s reason: `decide` sits exactly on its limit
@@ -4603,7 +4607,7 @@ export function performActions(orders, run = defaultRun, log = (line) => process
  */
 export function decide({ prs, readyRows, promotableRows = [], chairmanBlocked = [], prFiles = [],
   drain = false, required = null, epics = [], answerOwed = [], openRows = [], unarmed = null,
-  claimedComments = [], rowBranches, hostDrift, closings, trunkRed, baseTip, claimStalls, offBoard, key, repo, callCountSignals, bareAnswerLabels }) {
+  claimedComments = [], rowBranches, hostDrift, closings, trunkRed, baseTip, claimStalls, offBoard, key, repo, callCountSignals, bareAnswerLabels, labJobs }) {
   // FIRST, BEFORE EVERY OTHER CAUSE (#2356): a red `main` outranks even `answer-owed` -- see `trunkRedOrders`.
   // `answer-owed` says another session is ALREADY STOPPED waiting on them, which outranks any standing question.
   const orders = [...trunkRedOrders(trunkRed), ...answerOrders(answerOwed)];
@@ -4619,8 +4623,8 @@ export function decide({ prs, readyRows, promotableRows = [], chairmanBlocked = 
   // is queued behind that row stopped with it. Ahead of every cause that offers NEW work: a row already
   // claimed and now runnable beats a row nobody has picked up.
   orders.push(...blockerClearedOrders(openRows, todayIso(), Date.now(), { openPrs: prs, closings })); // #2741 backoff
-  // #2470/#2711: A CLAIM THAT DOES NOT MOVE, OR A BARE `answer:` LABEL ON IT -- both address the row's own holder, so both outrank every cause offering NEW work.
-  orders.push(...stallOrdersOrNone(claimStalls), ...bareAnswerOrdersOrNone(bareAnswerLabels));
+  // #2470/#2711/#2729: A CLAIM THAT DOES NOT MOVE, A BARE `answer:` LABEL ON IT, OR A LAB JOB IT DISPATCHED THAT HAS ENDED -- all address the row's own holder, so all outrank every cause offering NEW work.
+  orders.push(...stallOrdersOrNone(claimStalls), ...bareAnswerOrdersOrNone(bareAnswerLabels), ...labJobFinishedOrders(openRows, labJobs, Date.now()));
 
   orders.push(...perPullRequestOrders(prs, required, baseTip));
   // #2031: AHEAD OF THE OFFER, AND IT IS THE SAME READING THAT WITHHELD IT. `partitionUnclaimed` shelves
@@ -5197,6 +5201,20 @@ function hostUnitsEntry() {
 }
 
 /**
+ * The lab jobs that ended for a row (#2729), or `null` when the directory exists and cannot be read -- SAID on stderr, and
+ * emitting nothing, since "could not look" is not "nothing ended". A local disk read: it adds nothing to `GH_READS`.
+ * @param {typeof readLabJobRecords} [read]
+ */
+export function labJobRecordsOrSay(read = readLabJobRecords) {
+  try {
+    return read({ skipped: (file) => process.stderr.write(`SKIPPED lab job record ${file}: unreadable or not schema 1\n`) });
+  } catch (err) {
+    process.stderr.write(`COULD NOT READ lab job records: ${String(/** @type {any} */ (err)?.message ?? err).split("\n")[0]}\n`);
+    return null;
+  }
+}
+
+/**
  * `readRowsOffBoard`, saying on stderr when it could not ask (split out of `main`, which sits on `complexity`'s limit).
  * A refused read emits no order and MUST NOT read as a clean board, so the difference is written where the tick log reads.
  * @param {(line: string) => void} [log]
@@ -5540,7 +5558,7 @@ function main() {
     trunkRed: readTrunkRed(),
     // #2075: ONE GRAPHQL CALL, READ PER ISSUE. `null` (refused) emits nothing and is said on stderr below.
     // #2691's `callCountSignals` is beside it, costing no `GH_READS`; `claimedComments` (#2710's window anchor) is the SAME read made above.
-    offBoard, callCountSignals: rowCallCountSignals(allOpen, liveClaudeTurns(), claimedComments), bareAnswerLabels: bareAnswerLabelOrders(withAnswerLabel([...allOpen, ...openPrs])) }); // #2711
+    offBoard, callCountSignals: rowCallCountSignals(allOpen, liveClaudeTurns(), claimedComments), bareAnswerLabels: bareAnswerLabelOrders(withAnswerLabel([...allOpen, ...openPrs])), labJobs: labJobRecordsOrSay() }); // #2711, #2729
   const others = otherScopeTicks(drain); // #2618: the OTHER declared repositories -- none for one project, whose orders are what they were
   const outageNow = outageThisTick({ prs, readyRows, promotableRows, chairmanBlocked, openRows: openRowsRead, claimedComments, offBoard, others });
   const { delivered: orders, performed } = performActions(markOutageReads([...decided, ...others.flatMap((tick) => tick.orders)], outageNow));

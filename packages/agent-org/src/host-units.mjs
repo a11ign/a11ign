@@ -40,8 +40,8 @@ import { refuseUnknownFlags } from "./lib/cli-flags.mjs";
 import { localImports, stripComments } from "./lib/local-import-closure.mjs";
 import { sandboxGitEnv } from "./lib/git-env.mjs";
 import { SPAWNS_GH } from "./acceptance-commands.mjs";
-import { TEMPLATE_SUFFIX, homeHostConfig, leadsWorkspacesText, readUnitsDeclaration, renderTemplate, renderedName,
-  templateValues } from "./host-config.mjs";
+import { HostConfigRefusal, TEMPLATE_SUFFIX, homeHostConfig, leadsWorkspacesText, readBeforeTick, readUnitsDeclaration,
+  renderTemplate, renderedName, templateValues } from "./host-config.mjs";
 
 /**
  * Where the TOOL keeps the units and scripts it ships: three unit templates (each a service and a timer), the board-report
@@ -121,7 +121,8 @@ function namesIn(dir, read) {
 
 /**
  * @param {ShippedDeps} deps
- * @returns {{ toolDir: string, projectDir: string | null, read: typeof readFileSync, values: () => Record<string, string>, host: () => HostConfig }}
+ * @returns {{ toolDir: string, projectDir: string | null, read: typeof readFileSync, values: () => Record<string, string>, host: () => HostConfig,
+ *   beforeTicks: () => BeforeTick[] }}
  */
 function shippedContext({ shippedDir, projectUnitsDir, read = readFileSync, host, units } = {}) {
   /** @type {Record<string, string> | undefined} */
@@ -133,7 +134,64 @@ function shippedContext({ shippedDir, projectUnitsDir, read = readFileSync, host
     read,
     host: () => host ?? homeHostConfig(),
     values: () => (values ??= templateValues(host ?? homeHostConfig(), units ?? readUnitsDeclaration())),
+    beforeTicks: () => beforeTicksOf(host ?? homeHostConfig(), read),
   };
+}
+
+/** @typedef {{ checkout: string, command: string }} BeforeTick */
+
+/**
+ * What each project the host serves asks to have run before a tick, in the order `host.json` lists them. A project that declares
+ * none is skipped (it may need none), and a declaration that cannot be read REFUSES: a tick that silently skipped a project's
+ * `beforeTick` would leave that project's checkout stale for as long as nobody looked.
+ * @param {HostConfig} host @param {typeof readFileSync} read @returns {BeforeTick[]}
+ */
+function beforeTicksOf(host, read) {
+  return host.projects.flatMap(({ checkout }) => {
+    const command = readBeforeTick(checkout, /** @type {(path: string, encoding: "utf8") => string} */ (read));
+    return command === null ? [] : [{ checkout, command }];
+  });
+}
+
+/** The template whose three lines change when `host.json` names a `tool` (ADR 0040, decision 3; #2793). */
+const WORK_TICK_TEMPLATE = "work-tick.service.in";
+
+/** The tool checkout's own update command, run from its `WorkingDirectory`: the analogue of `npm run primary:update`. */
+export const TOOL_UPDATE_EXEC = "/usr/bin/node src/update-tool.mjs";
+
+/**
+ * DECISION 3'S FORM OF THE `work-tick` UNIT: exactly three lines change, and nothing else in the text does. `WorkingDirectory` becomes
+ * the tool's path, `ExecStart` loses its `packages/agent-org/` prefix, and the one `ExecStartPre` becomes the tool's update followed
+ * by each project's declared `beforeTick`, run IN that project's checkout (`env -C`, since a unit cannot set a directory per line).
+ * Each keeps the leading `-` the line it replaces had: a failed update must not stop the tick.
+ *
+ * DONE ON THE RENDERED TEXT, BY ANCHOR, and not as more placeholders, because a host without `tool` must render today's bytes
+ * (`host:check` compares them) and a template that gained a placeholder would have changed the file those bytes come from. An anchor
+ * that does not match exactly once REFUSES: a template edited out from under this function is a defect to hear about, not a unit
+ * that quietly stayed in the old form.
+ * @param {string} rendered the unit as it renders for a host with no `tool` @param {string} tool @param {BeforeTick[]} beforeTicks
+ */
+export function workTickToolForm(rendered, tool, beforeTicks) {
+  const steps = [
+    "# TOOL FORM (ADR 0040, decision 3; #2793): the tool runs from its own checkout, so the update above is of THAT checkout, and each",
+    "# project's declared `beforeTick` follows, run in the project's checkout, so the project keeps moving as its primary always did.",
+    `ExecStartPre=-${TOOL_UPDATE_EXEC}`,
+    ...beforeTicks.map(({ checkout, command }) => `ExecStartPre=-/usr/bin/env -C ${checkout} ${command}`),
+  ];
+  return [
+    [/^WorkingDirectory=.*$/m, `WorkingDirectory=${tool}`],
+    [/^ExecStartPre=.*$/m, steps.join("\n")],
+    [/^ExecStart=\/usr\/bin\/node packages\/agent-org\/src\/work-tick\.mjs$/m, "ExecStart=/usr/bin/node src/work-tick.mjs"],
+  ].reduce((text, [anchor, line]) => replaceOnce(text, /** @type {RegExp} */ (anchor), /** @type {string} */ (line)), rendered);
+}
+
+/** @param {string} text @param {RegExp} anchor a one-line, multiline-flag pattern @param {string} line */
+function replaceOnce(text, anchor, line) {
+  const found = text.match(new RegExp(anchor.source, "gm")) ?? [];
+  if (found.length !== 1) {
+    throw new HostConfigRefusal(anchor.source, `matches ${found.length} lines of the ${WORK_TICK_TEMPLATE} it renders, not one; decision 3's three lines cannot be placed`, WORK_TICK_TEMPLATE);
+  }
+  return text.replace(anchor, () => line);
 }
 
 /**
@@ -168,13 +226,16 @@ function leadsDirectory({ host } = {}) {
  * @param {string} unit @param {ShippedDeps} [deps] @returns {string | null}
  */
 export function shippedUnitText(unit, deps = {}) {
-  const { toolDir, projectDir, read, values } = shippedContext(deps);
+  const { toolDir, projectDir, read, values, host, beforeTicks } = shippedContext(deps);
   const plain = textOf(join(toolDir, unit), read);
   if (plain !== null) return plain;
   const prefix = values().prefix;
-  const template = unit.startsWith(prefix) ? textOf(join(toolDir, `${unit.slice(prefix.length)}${TEMPLATE_SUFFIX}`), read) : null;
-  if (template !== null) return renderTemplate(template, values(), unit);
-  return projectDir === null ? null : textOf(join(projectDir, unit), read);
+  const shipped = `${unit.slice(prefix.length)}${TEMPLATE_SUFFIX}`;
+  const template = unit.startsWith(prefix) ? textOf(join(toolDir, shipped), read) : null;
+  if (template === null) return projectDir === null ? null : textOf(join(projectDir, unit), read);
+  const rendered = renderTemplate(template, values(), unit);
+  const { tool } = host();
+  return shipped === WORK_TICK_TEMPLATE && tool !== undefined ? workTickToolForm(rendered, tool, beforeTicks()) : rendered;
 }
 
 /**

@@ -1065,9 +1065,12 @@ test("every cause is classified as START or FINISH -- a new one cannot default i
   // #2711: `answer-label-unexplained` is FINISH, and an ACTION cause (in `JUDGMENT_CAUSES` neither):
   // `claim-stalled`'s own argument -- its subject is a row a session already holds, which a drain exists to
   // land, and the two remedies (post the question, remove the label) start no new work.
+  // #2729: `lab-job-finished` is FINISH, and a JUDGMENT cause. Its subject is a row a session already holds and the
+  // result of a job that session already dispatched -- the plainest work in flight there is -- and it starts nothing:
+  // it replaces the holder polling `lab:status`. A window that withheld it would leave the holder to poll again.
   assert.deepEqual(finish, ["answer-label-unexplained", "answer-owed", "awaiting-evidence-stale", "blocker-cleared", "chairman-blocked",
     "claim-stalled", "claimed-row-amended", "disk-headroom-low", "draft-awaiting-verdict", "draft-convinced-not-ready", "host-units-stale",
-    "pr-checks-failing", "pr-codeowner-review-missing", "pr-green-unarmed", "pr-merge-conflict", "pr-review-blocked", "reviewer-auth-failed",
+    "lab-job-finished", "pr-checks-failing", "pr-codeowner-review-missing", "pr-green-unarmed", "pr-merge-conflict", "pr-review-blocked", "reviewer-auth-failed",
     "row-branch-unshipped", "row-call-count-signal", "row-off-board", "trunk-red", "verdict-comment-unreviewed", "verdict-not-convinced"]);
   for (const cause of START_CAUSES) {
     assert.ok(CAUSES.includes(cause), `${cause} is withheld by a drain but no longer exists`);
@@ -4482,8 +4485,10 @@ test("#2174: the history-requirement population is unchanged by this row", () =>
   // populations of the same size, and the thing worth catching is a file JOINING this list.
   // #2620 added `host-project-paths.test.ts`: checked, as this message asks -- it imports `host-units.mjs` for the rendered unit texts, the same
   // edge `host-units.test.ts` has, and the row's own Acceptance names it, so its pull request declares `History: full` (#497).
-  assert.deepEqual(charged, ["host-project-paths.test.ts", "host-units.test.ts", "pre-push-resolve-toward-main.test.ts",
-    "pre-push-stale-base.test.ts", "work-gate.test.ts"],
+  // #2793 added `host-tool-install.test.ts`: checked -- it imports `host-units.mjs` for the rendered `work-tick` unit, the same edge, and the
+  // row's Acceptance names it, so its pull request declares `History: full`.
+  assert.deepEqual(charged, ["host-project-paths.test.ts", "host-tool-install.test.ts", "host-units.test.ts",
+    "pre-push-resolve-toward-main.test.ts", "pre-push-stale-base.test.ts", "work-gate.test.ts"],
   "adding a `history` reader to the gate's import closure taxes every test file that reaches it -- if "
   + "this list grew, check what was imported rather than editing the list");
 });
