@@ -96,6 +96,28 @@ jobs:
             exit 1
           fi
 
+      # A DISPATCH AFTER A PARTIAL RUN MUST NOT RE-PUSH (#2789). Run 36676106251 got through step 2 and died
+      # at step 3b, leaving a non-empty, ruleset-less `agent-org`; a second dispatch would have
+      # pushed history into it again. This is the FIRST write-adjacent step, before the re-rehearsal, so a
+      # non-empty target costs seconds. `git ls-remote` prints nothing for an empty repository, and prints
+      # every ref (HEAD, branches, tags) for a populated one, so any output at all refuses. A FAILED read
+      # refuses too: "could not look" is not "empty" (absence is not proof).
+      - name: Refuse when a11ign/agent-org is not empty -- a second push would land on top of the first
+        env:
+          A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
+        run: |
+          if ! FOUND=$(git ls-remote "https://x-access-token:${A11IGN_BOT_TOKEN}@github.com/a11ign/agent-org.git"); then
+            echo "::error::Could not read a11ign/agent-org's refs, so it cannot be shown empty. Nothing pushed."
+            exit 1
+          fi
+          if [ -n "$FOUND" ]; then
+            echo "::error::a11ign/agent-org is NOT empty -- a previous run already pushed. Nothing pushed. Refs found:"
+            echo "$FOUND"
+            echo "::error::If step 2 already ran, finish steps 3a, 3b and 4 by hand from this file's bodies; do not re-dispatch."
+            exit 1
+          fi
+          echo "a11ign/agent-org has no refs: safe to push."
+
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
       - uses: pnpm/action-setup@v4
@@ -126,12 +148,16 @@ jobs:
           gh api --method PATCH repos/a11ign/agent-org \
             -F allow_auto_merge=true -F delete_branch_on_merge=true
 
-      - name: Step 2 -- the first push (the one unprotected write)
+      # `main` ONLY, by one explicit refspec -- never `--all` or `--mirror` (#2789). Run 36676106251's
+      # `push --all` put 20 further branches (`agent/*`, `measure/*`, two `revert/*`) into the PUBLIC
+      # repository; each still exists in the monorepo and none belongs in `agent-org`.
+      - name: Step 2 -- the first push, main only (the one unprotected write)
         env:
           A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
         run: |
           git -C /tmp/agent-org-extraction-push push \
-            "https://x-access-token:${A11IGN_BOT_TOKEN}@github.com/a11ign/agent-org.git" --all
+            "https://x-access-token:${A11IGN_BOT_TOKEN}@github.com/a11ign/agent-org.git" \
+            refs/heads/main:refs/heads/main
 
       - name: Step 3a -- classic branch protection, immediately after the push
         env:
@@ -149,6 +175,11 @@ jobs:
           }
           JSON
 
+      # The rules are a COPY of a11ign/a11ign's ruleset 23681721 (`gh api repos/a11ign/a11ign/rulesets/23681721
+      # --jq .rules`), pinned against `fixtures/merge-queue-main-ruleset-rules.json` by
+      # agent-org-extraction.test.ts. GitHub answers HTTP 422 `data matches no possible input` to a
+      # `pull_request` or `merge_queue` rule missing its required parameters (run 36676106251, #2789), so
+      # this body is never abbreviated by hand: re-read the live ruleset and update the fixture and this.
       - name: Step 3b -- the merge-queue-main ruleset, copied from a11ign/a11ign's ruleset 23681721
         env:
           GH_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
@@ -160,8 +191,39 @@ jobs:
             "enforcement": "active",
             "conditions": { "ref_name": { "include": ["refs/heads/main"], "exclude": [] } },
             "rules": [
-              { "type": "pull_request", "parameters": { "required_approving_review_count": 1 } },
-              { "type": "merge_queue" }
+              {
+                "parameters": {
+                  "check_response_timeout_minutes": 60,
+                  "grouping_strategy": "ALLGREEN",
+                  "max_entries_to_build": 5,
+                  "max_entries_to_merge": 5,
+                  "merge_method": "MERGE",
+                  "min_entries_to_merge": 1,
+                  "min_entries_to_merge_wait_minutes": 5
+                },
+                "type": "merge_queue"
+              },
+              {
+                "parameters": {
+                  "allowed_merge_methods": [
+                    "merge",
+                    "squash",
+                    "rebase"
+                  ],
+                  "dismiss_stale_reviews_on_push": false,
+                  "dismissal_restriction": {
+                    "allowed_actors": [],
+                    "enabled": false
+                  },
+                  "require_code_owner_review": false,
+                  "require_extra_approval_for_unattributed_changes": false,
+                  "require_last_push_approval": false,
+                  "required_approving_review_count": 1,
+                  "required_review_thread_resolution": false,
+                  "required_reviewers": []
+                },
+                "type": "pull_request"
+              }
             ]
           }
           JSON

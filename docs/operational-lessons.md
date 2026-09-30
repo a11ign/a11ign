@@ -2447,3 +2447,31 @@ runs, so the close stands. What changed is that it stopped being silent:
 **Not covered here:** `close-rows-sweep.mjs`'s own close loop (outside this row's Region) does not post the closing
 comment. It strips through the same `labelsToStrip`, so the label survives and the gate still reaches the session; only
 the note on the row is missing on that path.
+
+## A default scp fetch from a Windows OpenSSH guest is cut to 204800 bytes without a word (#2770, found on #2763)
+
+**The rule:** fetch a file FROM a Windows OpenSSH guest with `scp -O` (the legacy SCP protocol), never with bare
+`scp`. Modern OpenSSH's `scp` speaks SFTP by default, and from these guests it writes only the first 204800 bytes
+(200 KiB) to disk, exits `0` and prints nothing. The push direction (control plane -> guest) is unaffected.
+
+```bash
+scp -O "<guest>:<path>" "${DEST:?}"     # fetch: -O is required
+scp "${SRC:?}" "<guest>:<path>"         # push: either protocol works
+```
+
+- **What was observed (reported by `orchestrator` on #2763, not re-run for this row).** Two files of different
+  content, 2 MiB and 565 MB, both arrived as exactly 204800 bytes, so the cut is independent of source size and
+  content. `ssh -v`'s own "received" byte counter matched the source size, so the whole payload crossed the wire
+  and the client wrote only the first 200 KiB. `scp -O` fetched both intact, and the sha1 matched the source
+  before and after each hop of the source guest -> control plane -> target guest copy on #2763.
+- **Why it is dangerous:** the failure is silent (exit `0`, no error, a plausible-looking file). A copy-provisioned
+  guest built from a 200 KB file instead of a 565 MB image is the outcome #2763 nearly shipped.
+- **Verify, do not trust the exit code.** Compare the sha1 (or at least the byte count) of the source and of the
+  fetched copy on both sides of every hop. Exactly `204800` is this fault; any other short size is something else.
+- **Where the method is written down.** The copy-provisioning method (source guest -> control plane -> target
+  guest, used on #2662, #2718 and #2763) has no runbook or script yet: each row re-described it from the previous
+  one. This section is the one durable place that names the `-O` requirement until a runbook exists, and a
+  runbook is a follow-up, not this row.
+- **Not established here:** which side is at fault (the guest's `sftp-server` or the client's SFTP read loop),
+  and whether the fetch is truncated for other Windows OpenSSH builds than these guests'. `-O` avoids the SFTP
+  subsystem altogether, which is why it works whichever it is.

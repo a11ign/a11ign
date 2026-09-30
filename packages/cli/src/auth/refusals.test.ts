@@ -28,7 +28,7 @@ const REQUEST: Omit<CaptureRequest, "worker"> = {
 };
 
 const HTTP_OK = 200;
-const AUTH_FAULT_COUNT = 13; // the row's eight, plus amendment 2's and amendment 3's, plus #2563's auth-session-lost, #2564's auth-challenge-detected and amendment 7's auth-state-expired
+const AUTH_FAULT_COUNT = 14; // the row's eight, plus amendment 2's and amendment 3's, plus #2563's auth-session-lost, #2564's auth-challenge-detected, amendment 7's auth-state-expired and amendment 8's auth-state-refused-by-rule-layer
 
 /** A test that waits longer than this has found a hang, and must say so rather than wait. */
 const DEADLINE_MS = 8_000;
@@ -39,14 +39,14 @@ const DEADLINE_MS = 8_000;
  * the refusal fails to stop therefore lands in `received`, which is what "nothing was sent" is asserted against —
  * a real socket, not a spy on the transport, because a spy that silently sees nothing would pass every test below.
  */
-async function listener(address: "0.0.0.0" | "127.0.0.1", body: object = { transcript: ["Home"] }) {
+async function listener(address: "0.0.0.0" | "127.0.0.1", body: object = { transcript: ["Home"] }, status = HTTP_OK) {
   const received: unknown[] = [];
   const server: Server = createServer((req, res) => {
     let raw = "";
     req.on("data", (chunk) => { raw += chunk; });
     req.on("end", () => {
       received.push(JSON.parse(raw || "{}"));
-      res.writeHead(HTTP_OK);
+      res.writeHead(status);
       res.end(JSON.stringify(body));
     });
   });
@@ -183,6 +183,64 @@ test("A SAVED STATE does not lift the remote-worker refusal: authentication by s
     assert.ok(reason instanceof AuthError && reason.fault === "auth-refused-remote-worker", String(reason));
     assert.deepEqual(remote.received, []);
   } finally { await remote.close(); }
+});
+
+// ---- ADR 0038, amendment 8 (#2788): the two layers' fakes disagree about a state, and the fault says which layer -----------------
+
+const HTTP_CONFLICT = 409;
+const SCANNED = { findings: [], title: "", coverage: {}, browserChannel: "msedge" as const };
+const expiredInTheRuleLayer = new AuthError("auth-state-expired", "the saved state did not sign the run in (login step 5 (expect)): no heading \"Secure Area\" appeared within 10 s");
+
+/** `captureAndScan` over a worker whose fake browser answers `workerAnswer`, and a rule layer whose fake browser does `ruleLayer`. */
+async function bothLayers(
+  { auth, workerAnswer, ruleLayer }: { auth: AuthRequest; workerAnswer: { body: object; status: number }; ruleLayer: () => Promise<typeof SCANNED> },
+): Promise<unknown> {
+  const worker = await listener("127.0.0.1", workerAnswer.body, workerAnswer.status);
+  const realWrite = process.stderr.write.bind(process.stderr);
+  process.stderr.write = (() => true) as never;
+  try {
+    const outcome = await settle(() => captureAndScan(
+      { ...REQUEST, url: "https://app.example.test/secure", worker: worker.url, wantAxe: true, axeResults: null, auth },
+      { scan: ruleLayer as never, isAvailable: async () => true },
+    ));
+    return outcome.status === "rejected" ? outcome.reason : outcome.value;
+  } finally { process.stderr.write = realWrite; await worker.close(); }
+}
+
+const WORKER_SIGNED_IN = { status: HTTP_OK, body: { transcript: ["Secure Area, heading level 2"], authApplied: true } };
+const WORKER_REFUSED_THE_STATE = { status: HTTP_CONFLICT, body: { fault: "auth-state-expired", error: "the saved state did not sign the run in (login step 5 (expect)): no heading \"Secure Area\" appeared within 10 s" } };
+
+test("a state the worker's browser accepts and the rule layer's refuses is NOT auth-state-expired: it names the layer, and the state is not to blame", async () => {
+  const outcome = await bothLayers({ auth: STATE_AUTH, workerAnswer: WORKER_SIGNED_IN, ruleLayer: async () => { throw expiredInTheRuleLayer; } });
+  assert.ok(outcome instanceof AuthError, String(outcome));
+  assert.equal(outcome.fault, "auth-state-refused-by-rule-layer");
+  assert.notEqual(outcome.fault, "auth-state-expired");
+  assert.equal(outcome.cause, expiredInTheRuleLayer, "the rule layer's own sentence is kept, one step down");
+  assert.doesNotMatch(FAULT_REMEDIATION["auth-state-refused-by-rule-layer"].tryThis, /sign in by hand again/);
+});
+
+test("POSITIVE CONTROL: a state BOTH layers' browsers refuse still ends auth-state-expired", async () => {
+  const outcome = await bothLayers({ auth: STATE_AUTH, workerAnswer: WORKER_REFUSED_THE_STATE, ruleLayer: async () => { throw expiredInTheRuleLayer; } });
+  assert.ok(outcome instanceof AuthError, String(outcome));
+  assert.equal(outcome.fault, "auth-state-expired");
+});
+
+test("a state the worker refuses and the rule layer accepts ends auth-state-expired: the worker saw the page the person sees", async () => {
+  const outcome = await bothLayers({ auth: STATE_AUTH, workerAnswer: WORKER_REFUSED_THE_STATE, ruleLayer: async () => SCANNED });
+  assert.ok(outcome instanceof AuthError && outcome.fault === "auth-state-expired", String(outcome));
+});
+
+test("a state both layers accept ends with a capture and the rule layer's result", async () => {
+  const outcome = await bothLayers({ auth: STATE_AUTH, workerAnswer: WORKER_SIGNED_IN, ruleLayer: async () => SCANNED }) as { cap: { transcript: string[] }; axe: unknown };
+  assert.deepEqual(outcome.cap.transcript, ["Secure Area, heading level 2"]);
+  assert.deepEqual(outcome.axe, { ...SCANNED, findings: [] });
+});
+
+test("only a STATE run is re-read: a form login the rule layer fails keeps its own fault, and a rule layer failing for another reason keeps that", async () => {
+  const formLogin = await bothLayers({ auth: AUTH, workerAnswer: WORKER_SIGNED_IN, ruleLayer: async () => { throw new AuthError("auth-login-failed", "the login was refused"); } });
+  assert.ok(formLogin instanceof AuthError && formLogin.fault === "auth-login-failed", String(formLogin));
+  const stateRun = await bothLayers({ auth: STATE_AUTH, workerAnswer: WORKER_SIGNED_IN, ruleLayer: async () => { throw new AuthError("auth-challenge-detected", "a widget"); } });
+  assert.ok(stateRun instanceof AuthError && stateRun.fault === "auth-challenge-detected", String(stateRun));
 });
 
 test("A SAVED STATE run still needs authApplied: true: a worker that predates `state` refuses the unknown key or answers without it, and no report is made", () => {
