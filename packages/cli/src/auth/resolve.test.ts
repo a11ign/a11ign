@@ -287,6 +287,16 @@ test("what this run pressed: the controls its files name, by accessible name, in
   assert.ok(!JSON.stringify(pressedByThisRun(resolved!.auth)).includes("United Kingdom"));
 });
 
+test("what this run pressed, under a saved state (#2787): none of the login's steps ran, the flow's still did, and a form login names the same login", () => {
+  const login = [{ goto: "/login" }, { fill: { field: "Username", fromEnv: "U" } }, { press: { control: "Login" } }, { expect: { kind: "heading" as const, name: "Secure Area", timeoutSeconds: 10 } }];
+  const flow = [{ check: { field: "Remember me", checked: true } }, { press: { control: "Continue" } }];
+  assert.deepEqual(pressedByThisRun({ login }), ["Login"], "positive control: a form login presses the login's control");
+  assert.deepEqual(pressedByThisRun({ login, state: { path: "/x" } }), [], "a state run pressed nothing of the login");
+  assert.deepEqual(pressedByThisRun({ login, flow, upTo: 2 }), ["Login", "Remember me", "Continue"]);
+  assert.deepEqual(pressedByThisRun({ login, flow, upTo: 2, state: { path: "/x" } }), ["Remember me", "Continue"], "the flow replays after sign-in, so its steps stay listed");
+  assert.deepEqual(pressedByThisRun({ login, state: { path: "/x" } }, { submit: "Send", fields: [] }), ["Send"], "a forms config's submit is still pressed");
+});
+
 test("what this run pressed, with a forms config: its check/choose fields and its submit control, by name, and never a value", async () => {
   const resolved = await withJudge("local", () => resolveAuthentication(request()));
   const formState = {

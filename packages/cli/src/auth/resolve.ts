@@ -71,12 +71,16 @@ export const PRESSING_OFF_NOTICE = "authenticated run: automatic pressing and li
 /**
  * WHAT THIS RUN PRESSED (ADR 0038, Constraint 7, "how a user is told", place 2): the controls its own files name, by
  * accessible name, in the order they run — a login's `press:`, `check:` and `choose:` steps, then a flow's, then the
- * state a forms config (ADR 0024) names: each `check`/`choose` field, then its `submit` control. **No value**: not what
+ * state a forms config (ADR 0024) names: each `check`/`choose` field, then its `submit` control. **Under `state` the login's
+ * steps are not run** (ADR 0038, amendment 7, choice 1 and amendment 9: the saved state stands in for the sign-in and only its final `expect:`
+ * executes, which presses nothing), so none of them is listed: this list is the account of what the tool did to the
+ * session, and naming a press that never ran reads as more caution than was taken (#2787). **No value**: not what
  * was typed, not what was chosen, and not which variable supplied it. A run that names nothing to press says so,
  * because the absence is the finding: automatic pressing is off, so nothing else was.
  */
 export function pressedByThisRun(auth: AuthRequest, formState?: PressedFormState): string[] {
-  const steps = [...auth.login, ...(auth.flow ?? []).slice(0, auth.upTo ?? auth.flow?.length ?? 0)].flatMap((step) => {
+  const login = auth.state === undefined ? auth.login : [];
+  const steps = [...login, ...(auth.flow ?? []).slice(0, auth.upTo ?? auth.flow?.length ?? 0)].flatMap((step) => {
     if ("press" in step) return [step.press.control];
     if ("check" in step) return [step.check.field];
     if ("choose" in step) return [step.choose.field];

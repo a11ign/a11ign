@@ -517,7 +517,7 @@ async function runPages(args: Args): Promise<void> {
   });
   // Only an authenticated run has logins to report; the floor is the one the run stated before it started.
   const logins = args.logins && loginReport({ tally: args.logins, minimum: minimumLogins({
-    captures: captureCount({ pages: args.urls.length, states: states.length }), axe: args.axe }) });
+    captures: captureCount({ pages: args.urls.length, states: states.length }), axe: args.axe, auth: args.auth }) });
   if (args.json) printAsJson(multiPageJson(pages, logins));
   else for (const line of rollUpLines(pages, logins)) console.log(line);
   // A page that could not be captured is a failed run even though the other pages were reported.
@@ -591,7 +591,7 @@ async function main(): Promise<void> {
     // evidence and a report of the same shape, or every consumer downstream needs to know which it is
     // holding — which is the fact-stated-twice defect with a report attached.
     await runSingleUrl({
-      states, tally: args.logins, axe: args.axe, emit: printAsJson, say: (line) => process.stderr.write(`${noticeLine(line)}\n`),
+      states, tally: args.logins, axe: args.axe, auth: args.auth, emit: printAsJson, say: (line) => process.stderr.write(`${noticeLine(line)}\n`),
       capture: ({ formState, index, sink }) => {
         if (formState) {
           process.stderr.write(`\n=== form state ${index + 1}/${states.length}: `
@@ -1196,7 +1196,7 @@ export async function pageContext(
     return { findings: null, title: await titleWithoutTheRuleLayer(url, auth), coverage: {}, browserChannel: null };
   }
   // An authenticated run signs in FOR ITSELF in this layer's own browser (ADR 0038): it never receives the worker's session.
-  if (auth && logins) logins.ruleLayerScans += 1;
+  if (auth && auth.state === undefined && logins) logins.ruleLayerScans += 1;
   return scan(url, auth ? { signIn: ruleLayerSignIn({ plan: auth, url }), ...(auth.state ? { browserIdentity: "worker" as const } : {}) } : {}).then((result) => {
     // WHICH BROWSER ANSWERED, reported rather than assumed — see `launchBrowser`. The Action skips the
     // bundled download deliberately, so seeing "msedge" there is the fallback working as designed, not a
@@ -1368,8 +1368,8 @@ export async function captureViaWorker(
 ): Promise<CaptureResponse> {
   // BEFORE the body is built, so a remote worker is never sent anything that carries a login.
   refuseAuthOnRemoteWorker({ worker, auth });
-  // Counted here, where the worker is asked to log in, so a re-capture and each form state count as what they are.
-  if (auth && logins) logins.workerAttempts += 1;
+  // Counted here, where the worker is asked to log in (a state load is not a login, ADR 0038 amendment 9), so a re-capture and each form state count as what they are.
+  if (auth && auth.state === undefined && logins) logins.workerAttempts += 1;
   let res: { status: number; ok: boolean; text: string; json: unknown };
   try {
     res = await captureTolerantly({
