@@ -1,0 +1,5 @@
+---
+"@a11ign/agent-org": patch
+---
+
+**A model change now reaches the checks: the effort the org depends on for a model is recorded in the repo, and the host and the live sessions are read against it (#2783).** 2026-09-29: the chairman moved the org to Sonnet 5.5; `ceo`, `product-manager` and `orchestrator`, restarted with `--resume`, came back on Sonnet 5 (a resume keeps the SAVED model, and herdr resumes as a bare `claude --resume <uuid>`, so no launch flag holds it), and `modelSettings.claude-sonnet-5-5.effortLevel: high` existed only because it was added to `~/.claude/settings.json` by hand. `worker-profile.mjs` now declares `DECLARED_CLAUDE_MODELS` (alias, model id, effort floor). `host:check` gains `modelEffortDrift` (a declared model whose `effortLevel` is missing, unrecognised or lower is a finding, inside `hostUnitDrift`) and `sessionModelDrift` (each live Claude session's transcript, found through `herdr agent list`, names the model of its last answer; a session on an undeclared one is a finding naming `/model <alias>`). A session with no answer yet is a NOTE, not a finding. Both check and cannot fix, and say so.

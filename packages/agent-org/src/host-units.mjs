@@ -33,13 +33,14 @@
 // command either way.
 import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync, mkdirSync, rmSync, existsSync, realpathSync, writeFileSync,
-  renameSync, chmodSync } from "node:fs";
+  renameSync, chmodSync, openSync, fstatSync, readSync, closeSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { refuseUnknownFlags } from "./lib/cli-flags.mjs";
 import { localImports, stripComments } from "./lib/local-import-closure.mjs";
 import { sandboxGitEnv } from "./lib/git-env.mjs";
 import { SPAWNS_GH } from "./acceptance-commands.mjs";
+import { CLAUDE_EFFORTS, DECLARED_CLAUDE_MODELS } from "./worker-profile.mjs";
 import { HostConfigRefusal, TEMPLATE_SUFFIX, homeHostConfig, leadsWorkspacesText, readBeforeTick, readUnitsDeclaration,
   renderTemplate, renderedName, templateValues } from "./host-config.mjs";
 
@@ -1286,7 +1287,7 @@ function zshenvNote(unit, why) {
 
 /** Every note `host:check` reports beside its findings; none of them is a failure. @returns {Finding[]} */
 function hostNotes() {
-  return [...hostIdentityNotes(), ...compileCacheNotes()];
+  return [...hostIdentityNotes(), ...compileCacheNotes(), ...sessionModelNotes()];
 }
 
 /**
@@ -1720,7 +1721,7 @@ export function hostUnitDrift(deps = {}) {
   // ignore this command, which would lose the timer finding along with it.
   return [...unclassifiedInLiveTree(deps), ...unitDrift(shippedUnitNames(deps).map((u) => unitState(u, deps))),
     ...orphanedUnits(deps), ...supersededHostScripts(deps), ...missingUnitPrograms(deps),
-    ...hostIdentityDrift(deps), ...identityDrift(deps), ...permissionModeDrift(deps)];
+    ...hostIdentityDrift(deps), ...identityDrift(deps), ...permissionModeDrift(deps), ...modelEffortDrift(deps)];
 }
 
 /** @param {string[]} args */
@@ -1841,6 +1842,151 @@ export function permissionModeDrift({ settingsPath = `${process.env.HOME ?? ""}/
     detail: `permissions.defaultMode is ${mode === null ? "unset" : `\`${mode}\``}. Sessions cannot act `
       + "on shared resources and cannot ask either (AskUserQuestion is removed by agentArgs, #1744), so "
       + `they stop mid-task with no signal. ${remedy}` }];
+}
+
+/**
+ * THE EFFORT SETTING THAT GOES WITH A MODEL IS HOST STATE TOO (#2783). `modelSettings.<model id>.effortLevel` in
+ * `~/.claude/settings.json` is keyed by the exact model id, so moving the org to a new model drops every session to that
+ * model's default effort until somebody adds the entry -- and nothing in the repository recorded that anybody had.
+ * Checked against `DECLARED_CLAUDE_MODELS`: a declared model whose entry is missing, unrecognised or LOWER is a finding;
+ * higher is not (nobody is hurt by more effort than the org asked for).
+ *
+ * CHECKS AND CANNOT FIX, for `permissionModeDrift`'s reason: the file is outside the repository. An absent or
+ * unparseable file is `permissionModeDrift`'s finding and is not repeated here -- it already says the posture is
+ * unknown, and a second copy would only send a reader to the same file twice.
+ * @param {{ settingsPath?: string, read?: typeof readFileSync, exists?: typeof existsSync,
+ *   declared?: Record<string, { id: string, effortLevel: string }> }} [deps]
+ * @returns {Finding[]}
+ */
+export function modelEffortDrift({ settingsPath = `${process.env.HOME ?? ""}/.claude/settings.json`,
+  read = readFileSync, exists = existsSync, declared = DECLARED_CLAUDE_MODELS } = {}) {
+  if (!exists(settingsPath)) return [];
+  let entries;
+  try {
+    entries = JSON.parse(String(read(settingsPath)))?.modelSettings ?? {};
+  } catch {
+    return [];
+  }
+  const rank = (/** @type {unknown} */ level) => CLAUDE_EFFORTS.indexOf(/** @type {never} */ (level));
+  return Object.entries(declared).flatMap(([alias, { id, effortLevel }]) => {
+    const has = entries?.[id]?.effortLevel;
+    if (rank(has) >= rank(effortLevel)) return [];
+    const found = has === undefined ? "has no entry" : `is ${JSON.stringify(has)}`;
+    return [{ unit: "~/.claude/settings.json", problem: `EFFORT NOT SET FOR ${id}`,
+      detail: `modelSettings.${id}.effortLevel ${found}, and the org declares \`${effortLevel}\` for \`${alias}\` `
+        + "(worker-profile.mjs `DECLARED_CLAUDE_MODELS`), so sessions on it run at the model's default effort. "
+        + `Add \`"modelSettings": { "${id}": { "effortLevel": "${effortLevel}" } }\` by hand: this check cannot fix a `
+        + "file outside the repository." }];
+  });
+}
+
+/**
+ * The transcript directory Claude Code keeps for a working directory: every `/` and `.` becomes `-`.
+ * @param {string} cwd
+ */
+const transcriptDir = (cwd) => cwd.replace(/[/.]/g, "-");
+
+/** The tail of a transcript is enough to say what model answered last, and a transcript can run to megabytes. */
+const TRANSCRIPT_TAIL_BYTES = 262_144;
+
+/** @param {string} path @returns {string} the last {@link TRANSCRIPT_TAIL_BYTES} bytes */
+function readTail(path) {
+  const fd = openSync(path, "r");
+  try {
+    const { size } = fstatSync(fd);
+    const length = Math.min(size, TRANSCRIPT_TAIL_BYTES);
+    const buffer = Buffer.alloc(length);
+    readSync(fd, buffer, 0, length, size - length);
+    return buffer.toString("utf8");
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/**
+ * The model a transcript's LAST assistant message names, or `null` when none can be read. `<synthetic>` is Claude
+ * Code's own placeholder for a message no model produced, so it never counts as the model that is running.
+ * @param {string} text the tail of a `.jsonl` transcript
+ * @returns {string | null}
+ */
+export function lastModelIn(text) {
+  const lines = text.split("\n");
+  for (let i = lines.length - 1; i >= 0; i--) {
+    try {
+      const model = JSON.parse(lines[i])?.message?.model;
+      if (typeof model === "string" && model !== "<synthetic>") return model;
+    } catch {
+      // The first line of a tail can start mid-record, and a line being written may be cut short: neither is a model.
+    }
+  }
+  return null;
+}
+
+/**
+ * Every live Claude session herdr knows, as `{ name, cwd, sessionId }`, or `null` when herdr could not be asked --
+ * never `[]`, which would read as "nothing is running". Codex reviewers are a different product and are left out.
+ * @param {(args: string[]) => string} [run]
+ * @returns {{ name: string, cwd: string, sessionId: string }[] | null}
+ */
+export function liveClaudeSessions(run = (args) => execFileSync("herdr", args, { encoding: "utf8", timeout: 30_000 })) {
+  try {
+    const agents = JSON.parse(run(["--session", "org", "agent", "list"]))?.result?.agents;
+    if (!Array.isArray(agents)) return null;
+    return agents.filter((a) => a.agent === "claude" && a.agent_session?.value)
+      .map((a) => ({ name: String(a.name ?? a.pane_id), cwd: String(a.cwd ?? ""), sessionId: String(a.agent_session.value) }));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A RESUMED SESSION KEEPS ITS SAVED MODEL (#2783). 2026-09-29: the chairman moved the org to Sonnet 5.5 and the three
+ * standing sessions, restarted with `--resume`, came back on Sonnet 5 -- `settings.json`'s `model` is read for a FRESH
+ * session and herdr resumes as a bare `claude --resume <uuid>`, so no launch flag can hold it (the wall `permissionModeDrift`
+ * met). The org launches no resume of its own (`git grep -e --resume -- packages/agent-org` finds only comments and
+ * the tmp pruner's read of one), so there is no `--model` to add.
+ *
+ * SO IT READS, AND SAYS SO: each live Claude session's transcript (`~/.claude/projects/<cwd>/<session id>.jsonl`) names
+ * the model of its last answer. A session whose model is not one `DECLARED_CLAUDE_MODELS` names is a finding. THE REMEDY
+ * IS `/model <alias>` IN THAT SESSION, which this cannot do.
+ *
+ * TWO LIMITS, STATED. A session switched with `/model` still reads as its old model until its next answer, so a finding
+ * on a session that has just been switched clears itself on the next turn. A session with no assistant message yet (one
+ * just cleared, as `product-manager` was when this was first run against the live host) is NOT a finding -- the gate wakes
+ * a session on any finding, and "has not answered yet" is nothing to wake anybody for -- but it is reported as a NOTE
+ * ({@link sessionModelNotes}), because absence of a reading is not a clean one.
+ * @typedef {{ sessions?: ReturnType<typeof liveClaudeSessions>, projectsDir?: string,
+ *   tail?: (path: string) => string, declared?: Record<string, { id: string }> }} SessionModelDeps
+ * @param {SessionModelDeps} [deps]
+ * @returns {{ name: string, path: string, model: string | null }[]}
+ */
+function readSessionModels({ sessions = liveClaudeSessions(), projectsDir = `${process.env.HOME ?? ""}/.claude/projects`,
+  tail = readTail } = {}) {
+  return (sessions ?? []).map(({ name, cwd, sessionId }) => {
+    const path = join(projectsDir, transcriptDir(cwd), `${sessionId}.jsonl`);
+    try {
+      return { name, path, model: lastModelIn(tail(path)) };
+    } catch {
+      return { name, path, model: null };  // no transcript yet: the same state as one with no answer in it
+    }
+  });
+}
+
+/** @param {SessionModelDeps} [deps] @returns {Finding[]} */
+export function sessionModelDrift(deps = {}) {
+  const ids = Object.values(deps.declared ?? DECLARED_CLAUDE_MODELS).map((m) => m.id);
+  return readSessionModels(deps).flatMap(({ name, model }) => model === null || ids.includes(model) ? [] : [{
+    unit: `session ${name}`, problem: "SESSION ON AN UNDECLARED MODEL",
+    detail: `its last answer came from \`${model}\`; the org declares ${ids.map((i) => `\`${i}\``).join(", ")}. `
+      + "A resumed session keeps its saved model, not settings.json's. Run `/model <alias>` in that session: "
+      + "this check reads and cannot switch it." }]);
+}
+
+/** Sessions whose model could not be read: reported, never counted. @param {SessionModelDeps} [deps] @returns {Finding[]} */
+export function sessionModelNotes(deps = {}) {
+  return readSessionModels(deps).filter((r) => r.model === null).map(({ name, path }) => ({
+    unit: `session ${name}`, problem: "MODEL UNKNOWN",
+    detail: `no assistant message could be read from ${path}, so its model is unknown rather than correct.` }));
 }
 
 /**
@@ -1966,8 +2112,16 @@ function jsonReport() {
   const asked = systemdUserAvailable();
   // `notes` ARE NOT `findings`: the gate wakes a session on any finding, and a global `user.name` is not
   // something to wake anybody for (#2332).
-  return `${JSON.stringify({ asked, findings: asked ? hostUnitDrift() : [],
+  return `${JSON.stringify({ asked, findings: asked ? hostFindings() : [],
     notes: asked ? hostNotes() : [] })}\n`;
+}
+
+/**
+ * `hostUnitDrift` PLUS THE LIVE SESSIONS' MODELS (#2783), asked of herdr. It is here and not inside `hostUnitDrift` because
+ * that function is pure of the running org -- twenty tests hand it a fixture host -- while this one reads whoever is running.
+ */
+function hostFindings() {
+  return [...hostUnitDrift(), ...sessionModelDrift()];
 }
 
 function main() {
@@ -1980,10 +2134,10 @@ function main() {
   if (process.argv.slice(2).includes("--install")) {
     hostUnitsInstall();
     hostIdentityInstall();
-    process.stdout.write(driftReport(hostUnitDrift(), asked, asked ? hostNotes() : []));
+    process.stdout.write(driftReport(hostFindings(), asked, asked ? hostNotes() : []));
     return;
   }
-  const drift = hostUnitDrift();
+  const drift = hostFindings();
   process.stdout.write(driftReport(drift, asked, asked ? hostNotes() : []));
   if (drift.length > 0) process.exitCode = 1;
 }
