@@ -191,16 +191,22 @@ const HTTP_CONFLICT = 409;
 const SCANNED = { findings: [], title: "", coverage: {}, browserChannel: "msedge" as const };
 const expiredInTheRuleLayer = new AuthError("auth-state-expired", "the saved state did not sign the run in (login step 5 (expect)): no heading \"Secure Area\" appeared within 10 s");
 
-/** `captureAndScan` over a worker whose fake browser answers `workerAnswer`, and a rule layer whose fake browser does `ruleLayer`. */
+/**
+ * `captureAndScan` over a worker whose fake browser answers `workerAnswer`, and a rule layer whose fake browser does `ruleLayer`.
+ * Everything the run wrote to stderr is pushed onto `heard`, when given, instead of the terminal.
+ */
 async function bothLayers(
-  { auth, workerAnswer, ruleLayer }: { auth: AuthRequest; workerAnswer: { body: object; status: number }; ruleLayer: () => Promise<typeof SCANNED> },
+  { auth, workerAnswer, ruleLayer, wantAxe = true, heard = [] }: {
+    auth: AuthRequest; workerAnswer: { body: object; status: number }; ruleLayer: () => Promise<typeof SCANNED>;
+    wantAxe?: boolean; heard?: string[];
+  },
 ): Promise<unknown> {
   const worker = await listener("127.0.0.1", workerAnswer.body, workerAnswer.status);
   const realWrite = process.stderr.write.bind(process.stderr);
-  process.stderr.write = (() => true) as never;
+  process.stderr.write = ((chunk: string | Uint8Array) => { heard.push(String(chunk)); return true; }) as never;
   try {
     const outcome = await settle(() => captureAndScan(
-      { ...REQUEST, url: "https://app.example.test/secure", worker: worker.url, wantAxe: true, axeResults: null, auth },
+      { ...REQUEST, url: "https://app.example.test/secure", worker: worker.url, wantAxe, axeResults: null, auth },
       { scan: ruleLayer as never, isAvailable: async () => true },
     ));
     return outcome.status === "rejected" ? outcome.reason : outcome.value;
@@ -228,6 +234,67 @@ test("POSITIVE CONTROL: a state BOTH layers' browsers refuse still ends auth-sta
 test("a state the worker refuses and the rule layer accepts ends auth-state-expired: the worker saw the page the person sees", async () => {
   const outcome = await bothLayers({ auth: STATE_AUTH, workerAnswer: WORKER_REFUSED_THE_STATE, ruleLayer: async () => SCANNED });
   assert.ok(outcome instanceof AuthError && outcome.fault === "auth-state-expired", String(outcome));
+});
+
+// ---- #2820: a run that ends auth-state-expired says which layer(s) refused, on stderr, and the message is unchanged ------------------
+
+/** The one line that names the layers, or `undefined`. Matched on its subject so the run's other stderr lines are not it. */
+const layerLine = (heard: string[]): string | undefined => heard.find((line) => line.startsWith("auth-state-expired:"));
+
+test("#2820 POSITIVE CONTROL: a state BOTH layers refuse names the worker AND the rule layer as refusing", async () => {
+  const heard: string[] = [];
+  const outcome = await bothLayers({ auth: STATE_AUTH, workerAnswer: WORKER_REFUSED_THE_STATE, ruleLayer: async () => { throw expiredInTheRuleLayer; }, heard });
+  assert.ok(outcome instanceof AuthError && outcome.fault === "auth-state-expired", String(outcome));
+  assert.match(layerLine(heard) ?? "", /refused by the worker; the rule layer refused it too \(worker=rejected \| rule-layer=rejected\)/);
+});
+
+test("#2820: a state ONLY the worker refuses names the worker, and says the rule layer accepted it", async () => {
+  const heard: string[] = [];
+  await bothLayers({ auth: STATE_AUTH, workerAnswer: WORKER_REFUSED_THE_STATE, ruleLayer: async () => SCANNED, heard });
+  const line = layerLine(heard) ?? "";
+  assert.match(line, /refused by the worker; the rule layer accepted the state \(worker=rejected \| rule-layer=fulfilled\)/);
+  assert.doesNotMatch(line, /refused it too|rule-layer=rejected/, "the rule layer is not named as a refuser");
+});
+
+test("#2820: a rule layer that failed for a reason other than the state is not counted as having refused it", async () => {
+  const heard: string[] = [];
+  const lostTheSession = new AuthError("auth-session-lost", "the session ended mid-scan");
+  await bothLayers({ auth: STATE_AUTH, workerAnswer: WORKER_REFUSED_THE_STATE, ruleLayer: async () => { throw lostTheSession; }, heard });
+  const line = layerLine(heard) ?? "";
+  assert.match(line, /the rule layer failed for another reason/);
+  assert.doesNotMatch(line, /refused it too/);
+});
+
+test("#2820: where the rule layer did not run, the line says it did not, and does not call that an acceptance", async () => {
+  const heard: string[] = [];
+  const outcome = await bothLayers({ auth: STATE_AUTH, workerAnswer: WORKER_REFUSED_THE_STATE, ruleLayer: async () => SCANNED, wantAxe: false, heard });
+  assert.ok(outcome instanceof AuthError && outcome.fault === "auth-state-expired", String(outcome));
+  const line = layerLine(heard) ?? "";
+  assert.match(line, /refused by the worker; the rule layer did not run/);
+  assert.doesNotMatch(line, /accepted|fulfilled/);
+});
+
+test("#2820: the error's own message is untouched, and the line carries nothing from the state or the page's text", async () => {
+  const heard: string[] = [];
+  const outcome = await bothLayers({ auth: STATE_AUTH, workerAnswer: WORKER_REFUSED_THE_STATE, ruleLayer: async () => { throw expiredInTheRuleLayer; }, heard });
+  assert.ok(outcome instanceof AuthError);
+  assert.equal(outcome.message, WORKER_REFUSED_THE_STATE.body.error, "anything matching the message keeps matching");
+  assert.doesNotMatch(layerLine(heard) ?? "", /Secure Area|login step|cookie|header|a11y-state\.json/i);
+});
+
+test("#2820: a run that does NOT end auth-state-expired writes no such line", async () => {
+  const both = { auth: STATE_AUTH, ruleLayer: async () => { throw expiredInTheRuleLayer; } };
+  const refusedByTheRuleLayerOnly: string[] = [];
+  await bothLayers({ ...both, workerAnswer: WORKER_SIGNED_IN, heard: refusedByTheRuleLayerOnly });
+  const accepted: string[] = [];
+  await bothLayers({ auth: STATE_AUTH, workerAnswer: WORKER_SIGNED_IN, ruleLayer: async () => SCANNED, heard: accepted });
+  assert.equal(layerLine(refusedByTheRuleLayerOnly), undefined, "that run ends auth-state-refused-by-rule-layer, which names its layer already");
+  assert.equal(layerLine(accepted), undefined);
+  const anotherFault: string[] = [];
+  const workerLostTheSession = { status: HTTP_CONFLICT, body: { fault: "auth-session-lost", error: "the session ended mid-run" } };
+  const outcome = await bothLayers({ ...both, workerAnswer: workerLostTheSession, heard: anotherFault });
+  assert.ok(outcome instanceof AuthError && outcome.fault === "auth-session-lost", String(outcome));
+  assert.equal(layerLine(anotherFault), undefined, "a worker refusal that is not auth-state-expired is not narrated as one");
 });
 
 test("a state both layers accept ends with a capture and the rule layer's result", async () => {
