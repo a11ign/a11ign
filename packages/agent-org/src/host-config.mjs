@@ -30,7 +30,10 @@ export const TEMPLATE_SUFFIX = ".in";
  * @typedef {{ id: string, role: string }} LeadsWorkspace
  * @typedef {{ workers: string, leads: string, leadsHeader: string[], leadsWorkspaces: LeadsWorkspace[] }} GhDirectories
  * @typedef {{ id: string, checkout: string }} HostProject
- * @typedef {{ schema: number, home: string, binDir: string, primary: string, projects: HostProject[], gh: GhDirectories }} HostConfig
+ * @typedef {{ schema: number, home: string, binDir: string, primary: string, projects: HostProject[], gh: GhDirectories,
+ *   tool?: string, stateDir?: string }} HostConfig
+ * `tool` and `stateDir` are ABSENT (the key is not there, never `undefined`) on a host that has not moved to decision 3's installed
+ * form, and a11ign's `host.json` is exactly that host until #2623 cuts over.
  * @typedef {{ prefix: string, boardReportWorkflow: string, own: string[] }} UnitsDeclaration
  */
 
@@ -70,6 +73,14 @@ function requiredPath(from, name, at, source) {
     throw new HostConfigRefusal(`${at}${name}`, `it must be an absolute path with no trailing slash, not ${JSON.stringify(value)}`, source);
   }
   return value;
+}
+
+/**
+ * A path that MAY be absent, and is refused like a required one when it is there: `null` or `""` is a mistake, not "absent".
+ * @param {Record<string, unknown>} from @param {string} name @param {string} at @param {string} source @returns {string | undefined}
+ */
+function optionalPath(from, name, at, source) {
+  return Object.hasOwn(from, name) ? requiredPath(from, name, at, source) : undefined;
 }
 
 /** @param {Record<string, unknown>} from @param {string} name @param {string} at @param {string} source @returns {unknown[]} */
@@ -147,6 +158,9 @@ export function parseHostConfig(text, source = HOST_DECLARATION_PATH) {
   if (!projects.some((project) => project.id === primary)) {
     throw new HostConfigRefusal("primary", `\`${primary}\` is not one of \`projects\``, source);
   }
+  const tool = optionalPath(host, "tool", "", source);
+  const stateDir = optionalPath(host, "stateDir", "", source);
+  if (tool !== undefined) checkToolForm(tool, projects, source);
   return Object.freeze({
     schema: SUPPORTED_SCHEMA,
     home: requiredPath(host, "home", "", source),
@@ -154,6 +168,28 @@ export function parseHostConfig(text, source = HOST_DECLARATION_PATH) {
     primary,
     projects,
     gh: readGh(host, source),
+    ...(tool === undefined ? {} : { tool }),
+    ...(stateDir === undefined ? {} : { stateDir }),
+  });
+}
+
+/** A path a unit line can carry as one argument: nothing systemd splits on, expands (`%`, `$`) or unquotes. */
+const UNIT_SAFE_PATH = /^[A-Za-z0-9_./@+:=,-]+$/;
+
+/**
+ * WHAT DECISION 3'S INSTALLED FORM NEEDS OF THE PATHS, checked at the declaration and before any unit is rendered. The tool is "never
+ * run from inside a product checkout": a `tool` that is a project's checkout, or under one, would have `update-tool` detach that
+ * checkout at the tool's `main`, the one thing "never touches a project's checkout" forbids. And the tool's path and every checkout
+ * are written into `WorkingDirectory=` and `ExecStartPre=` lines, where a space or a `%` would change what runs.
+ * @param {string} tool @param {HostProject[]} projects @param {string} source
+ */
+function checkToolForm(tool, projects, source) {
+  if (!UNIT_SAFE_PATH.test(tool)) throw new HostConfigRefusal("tool", `it is written into unit lines, so it may not hold a space or a systemd specifier, not ${JSON.stringify(tool)}`, source);
+  projects.forEach(({ id, checkout }, index) => {
+    if (!UNIT_SAFE_PATH.test(checkout)) throw new HostConfigRefusal(`projects[${index}].checkout`, `it is written into a unit line once \`tool\` is set, so it may not hold a space or a systemd specifier, not ${JSON.stringify(checkout)}`, source);
+    if (tool === checkout || tool.startsWith(`${checkout}/`)) {
+      throw new HostConfigRefusal("tool", `it is inside the checkout of project \`${id}\` (${checkout}); the tool is installed beside the projects it serves, never in one`, source);
+    }
   });
 }
 
@@ -236,6 +272,63 @@ export function readUnitsDeclaration(root = HOME_CHECKOUT, read = readFileSync) 
     throw new HostConfigRefusal("(file)", "the declaration cannot be read", path, { cause });
   }
   return parseUnitsDeclaration(text, path);
+}
+
+/**
+ * A `beforeTick` is what systemd will run as one `ExecStartPre=` argument vector, so it is a COMMAND and not a shell line: the characters
+ * systemd itself reinterprets (`%` specifiers, `$` expansion, `;` command separators, `\` and quotes) and the ones that only a shell
+ * would honour (`|&<>` and a backtick) are REFUSED, because a line that looks like a pipeline and runs as arguments to its first word is
+ * a defect that fails silently at 2 a.m.
+ */
+const NOT_A_COMMAND = /[\n\r%$;\\"'`|&<>]/;
+
+/**
+ * The command a project asks the host to run before each tick, from its declaration -- `npm run primary:update` for a11ign, so its
+ * primary keeps moving now the tool no longer lives in it (ADR 0040, decision 3). ABSENT reads as `null` (a project may need none),
+ * and a present value that is not a command is refused naming the field. PURE: the text is handed in.
+ * @param {string} text @param {string} [source] @returns {string | null}
+ */
+export function parseBeforeTick(text, source = PROJECT_DECLARATION_PATH) {
+  /** @type {unknown} */
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (cause) {
+    throw new HostConfigRefusal("(file)", "it is not valid JSON", source, { cause });
+  }
+  const declaration = requiredObject(parsed, "(file)", source);
+  if (!Object.hasOwn(declaration, "beforeTick")) return null;
+  const command = requiredString(declaration, "beforeTick", "", source);
+  if (command.trim() !== command || command === "" || NOT_A_COMMAND.test(command)) {
+    throw new HostConfigRefusal("beforeTick", `it must be one command with no shell syntax and no systemd specifier, not ${JSON.stringify(command)}`, source);
+  }
+  return command;
+}
+
+/**
+ * @param {string} checkout the project's checkout @param {(path: string, encoding: "utf8") => string} [read]
+ * @returns {string | null}
+ */
+export function readBeforeTick(checkout, read = readFileSync) {
+  const path = join(checkout, PROJECT_DECLARATION_PATH);
+  /** @type {string} */
+  let text;
+  try {
+    text = read(path, "utf8");
+  } catch (cause) {
+    throw new HostConfigRefusal("(file)", "the declaration cannot be read", path, { cause });
+  }
+  return parseBeforeTick(text, path);
+}
+
+/**
+ * Where one of the org's state entries lives on THIS host: under `host.json`'s `stateDir`. REFUSED when the host declares none, and
+ * never answered with `~/.cache/a11ign` -- the directory a11ign's host uses is a value of its `host.json`, not a fact of the tool.
+ * @param {HostConfig} host @param {string} name a file name in the state directory, as `wake.mjs` and `work-gate.mjs` spell it
+ */
+export function stateFilePath(host, name) {
+  if (host.stateDir === undefined) throw new HostConfigRefusal("stateDir", "it is missing; the host declares no state directory", HOST_DECLARATION_PATH);
+  return join(host.stateDir, name);
 }
 
 /**
