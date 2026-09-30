@@ -21,17 +21,18 @@ import {
 const RESULT = { url: "https://app.example.test/orders", verdict: { findings: [] } };
 
 /** What the CLI does for a run with a form-state list of `states` states, its worker seam asked `asks` times per capture. */
-async function run({ states, tally, axe = true, asks, emitsResult = true, failAt }: {
-  states: string[]; tally?: LoginTally; axe?: boolean; asks: number[]; emitsResult?: boolean; failAt?: number;
+async function run({ states, tally, axe = true, auth, asks, emitsResult = true, failAt }: {
+  states: string[]; tally?: LoginTally; axe?: boolean; auth?: { state?: unknown }; asks: number[]; emitsResult?: boolean; failAt?: number;
 }) {
   const emitted: object[] = [];
   const said: string[] = [];
   const outcome = await runSingleUrl({
-    states, tally, axe, emit: (json) => emitted.push(json), say: (line) => said.push(line),
+    states, tally, axe, auth, emit: (json) => emitted.push(json), say: (line) => said.push(line),
     capture: async ({ index, sink }) => {
       // The worker seam: a login is counted when it is ASKED for, so a capture repeated because it did not read the page counts again.
-      for (let ask = 0; ask < asks[index]; ask++) if (tally) tally.workerAttempts += 1;
-      if (tally) tally.ruleLayerScans += 1;
+      const counts = tally && auth?.state === undefined; // and a state load is not a login: neither site counts it (#2787)
+      for (let ask = 0; ask < asks[index]; ask++) if (counts) tally.workerAttempts += 1;
+      if (counts) tally.ruleLayerScans += 1;
       if (failAt === index) throw new Error("the capture ran out of time");
       if (emitsResult) sink({ ...RESULT, state: states[index] ?? null });
     },
@@ -82,6 +83,13 @@ test("a run that logged in and then FAILED still reports what it performed, and 
   assert.equal(outcome, "the capture ran out of time", "the error is not swallowed");
   assert.deepEqual(emitted, []);
   assert.match(said[0], /^Logins: 4 performed \(3 capture attempts, 1 rule-layer scans\)/);
+});
+
+test("A SAVED-STATE SINGLE URL REPORTS ZERO LOGINS AGAINST A FLOOR OF 0 (#2787), where a form login of the same shape reports its floor of 2", async () => {
+  const state = await run({ states: [], tally: newLoginTally(), asks: [0], auth: { state: { path: "/x" } } });
+  assert.deepEqual((state.emitted[0] as { logins?: unknown }).logins, { performed: 0, workerAttempts: 0, ruleLayerScans: 0, minimum: 0 });
+  const form = await run({ states: [], tally: newLoginTally(), asks: [1], auth: {} });
+  assert.equal((form.emitted[0] as { logins: { minimum: number } }).logins.minimum, 2, "positive control: no state, the floor is unchanged");
 });
 
 test("POSITIVE CONTROL: an unauthenticated single URL prints and returns no `logins`, so the tests above do not pass for a path that always reports one", async () => {

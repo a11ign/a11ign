@@ -539,6 +539,12 @@ and `localStorage` for other origins in the file are not loaded**, and are neith
 
 **What ends it: `auth-state-expired`.** If the `expect:` is not met, or the page went to another origin (an expired
 single-sign-on session redirects to the identity provider), the run ends with `auth-state-expired` and nothing is captured.
+**A state the screen reader's browser accepts and the rule layer's does not ends `auth-state-refused-by-rule-layer`, not
+`auth-state-expired`** (#2788). Some sites tie a session to the browser that made it (its `User-Agent` and language), so the
+rule layer's browser presents itself as the worker's Edge on a state run. If a site still refuses it, the state is not expired and
+signing in again gives the same fault: set `axe: false` (the rule-layer criteria are then reported as unchecked, not clean), or use
+`login-flow` with a dedicated test account.
+
 **Three things to check when a state you have just saved reads as expired:**
 
 1. **The `expect:` must hold on EVERY page the run requests.** Each capture loads the state afresh and asks the flow's
@@ -558,9 +564,13 @@ that are text you passed the run yourself (your URLs and task) are not hidden, a
 is not private is refused, as for a login. The run sends the worker a path and nothing else, and a worker that is not on the
 runner refuses. Delete the file when the job ends if the runner is not thrown away.
 
-**Not measured against a real site.** Every statement here about how a site behaves under a loaded state is read from code and
-types and exercised over fake and local browsers; a state made by hand, loaded on a private repository with NVDA, and then
-the same state after the session is ended, is owed (#2566, item 6) and is not yet a reading.
+**Measured against one real site, and only one (#2566, item 6, 2026-09-30).** A state loaded on a private repository's runner with
+NVDA, through the worker and the rule layer's system Edge, reached the signed-in page and ended 0 in 7 of 8 runs; one of the eight
+failed as `auth-state-expired` and its cause is not known. The same state, once the target stopped honouring its session on its
+own (about 21 hours), ended `auth-state-expired`. **The state was made by a script over HTTP, not by a person in a browser**, and
+the target binds a session to the `User-Agent` and `Accept-Language` that made it, which is the case amendment 8 exists for. Every
+other statement here about how a site behaves under a loaded state is read from code and types and exercised over fake and local
+browsers. [The reading, with run ids →](adr/0038-authenticated-capture.md)
 
 ## Outputs
 

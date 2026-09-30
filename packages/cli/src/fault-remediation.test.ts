@@ -207,3 +207,14 @@ test("auth-state-expired says what a person must check: the flow's expect: on EV
   assert.ok(!/does not do/.test(entry.tryThis));
   assert.notEqual(entry.tryThis, FAULT_REMEDIATION["auth-login-failed"].tryThis);
 });
+
+test("auth-state-refused-by-rule-layer does not send a person to sign in again: the state is not expired, and the two remedies that work are named", () => {
+  const entry = FAULT_REMEDIATION["auth-state-refused-by-rule-layer"];
+  assert.ok(entry, "the fault has no entry");
+  assert.match(entry.what, /worker's browser was signed in/);
+  assert.match(entry.what, /not expired/);
+  assert.match(entry.tryThis, /do not sign in again/);
+  assert.match(entry.tryThis, /--no-axe/);
+  assert.match(entry.tryThis, /--login-flow/);
+  assert.notEqual(entry.tryThis, FAULT_REMEDIATION["auth-state-expired"].tryThis);
+});

@@ -89,6 +89,10 @@ import { staleRuleReason } from "./row-claim/stale-rule-guard.mjs";
 import { LS_REMOTE_ARGS, branchesForRow } from "./row-claim/row-branch-rule.mjs";
 import { sandboxGitEnv } from "./lib/git-env.mjs";
 import { primaryWorktreeOf, unverifiedRecords } from "./prune-worktrees.mjs";
+import { claimRefusal, recordRemoval } from "./worktree-removal.mjs";
+
+/** What the worktree-removal log (#2782) names as the asker for this file's two removers. */
+const CALLER = "row-claim.mjs";
 import { CLAIM_LABEL, STARTED_LABEL, CLAIM_RECORD_MARKER } from "./claim-labels.mjs";
 // #2619 (child 3d of #69): the rest of this file's vocabulary -- `blocked`, `answer:`, `session:`.
 import { BLOCKED_LABEL, ANSWER_PREFIX, SESSION_PREFIX } from "./project-vocabulary.mjs";
@@ -563,11 +567,12 @@ export function moveProjectStatus(issueNumber, statusName,
  * repository the project declares (`lookupOpenPrFiles`), and `repo` only tells it whose rows a `Closes` names.
  * @param {number} issueNumber the row about to be claimed -- excluded from B2's "other held rows" check
  * @param {string} mySession
- * @param {{ run?: typeof defaultRun, repo?: string, repos?: readonly { key: string, repo: string }[],
- *           }} deps `repos` is the code repositories B4 reads; absent, every one the project declares
+ * @param {{ run?: typeof defaultRun, repo?: string, repos?: readonly { key: string, repo: string }[], adoptedBranch?: string,
+ *           }} deps `repos` is the code repositories B4 reads; absent, every one the project declares. `adoptedBranch` (#2769) is
+ *   the branch `--adopt` is re-stamping, so the open PR from it is the row's own work under B4 even if it declares `Closes: none`
  * @returns {string | null}
  */
-export function sessionEligibilityReason(issueNumber, mySession, { run = defaultRun, repo = REPO, repos } = {}) {
+export function sessionEligibilityReason(issueNumber, mySession, { run = defaultRun, repo = REPO, repos, adoptedBranch } = {}) {
   const ghRun = (/** @type {string[]} */ args) => run("gh", args);
 
   // #989: B2 asks whether a ROW is in build, not whether a PR is open. `null` from the lookup is
@@ -595,7 +600,7 @@ export function sessionEligibilityReason(issueNumber, mySession, { run = default
   if (myFiles !== null && otherPrFiles !== null) {
     // #2101: the row's OWN pull request is not a competitor for its files. Without this number B4
     // refuses a row whose PR was opened before its claim -- against the very work that would finish it.
-    const { reason, emptyOtherPrs } = fileOverlapReason(myFiles, otherPrFiles, { rowNumber: issueNumber });
+    const { reason, emptyOtherPrs } = fileOverlapReason(myFiles, otherPrFiles, { rowNumber: issueNumber, adoptedBranch });
     for (const prNumber of emptyOtherPrs) {
       process.stderr.write(`row-claim: ${prLabel(prNumber)} is open and reports ZERO changed files -- not folded `
         + "into \"no overlap\", just nothing to compare against right now. Worth a look if that surprises "
@@ -834,7 +839,7 @@ function applyClaimLabels(issueNumber, { run, mySession, extraLabels, landed }) 
  *   dispatch, `[STARTED_LABEL]` for a claim/start
  * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus, branch?: string,
  *           worktree?: string, blockedBy?: string, drained?: readonly string[],
- *           instance?: { spare: boolean, rows: readonly number[] } }} deps
+ *           instance?: { spare: boolean, rows: readonly number[] }, adoptedBranch?: string }} deps
  *   `drained` (#2324) is the roles the drain holds back now -- see {@link drainedNow}. ABSENT MEANS NONE, so a
  *   caller that does not say is not refused for a fact it never asked about; the CLI is what asks. `instance`
  *   (#2407) is what the asking session's instance holds or has held -- see {@link instanceNow}, and the same
@@ -843,7 +848,7 @@ function applyClaimLabels(issueNumber, { run, mySession, extraLabels, landed }) 
  */
 function writeRowLabels(issueNumber, mySession, extraLabels,
   { run = defaultRun, moveStatus = moveProjectStatus, branch, worktree, blockedBy, drained = [],
-    instance = { spare: false, rows: [] } } = {}) {
+    instance = { spare: false, rows: [] }, adoptedBranch } = {}) {
   const before = fetchLabels(issueNumber, { run });
   const decision = decideClaim(before.labels, mySession);
   if (!decision.proceed) return { claimed: false, reason: decision.reason };
@@ -890,7 +895,7 @@ function writeRowLabels(issueNumber, mySession, extraLabels,
     // #2407: ONE INSTANCE, ONE ROW -- the same "new row only" placement, for a spare that holds or has held another.
     const oneRow = oneRowReason(mySession, issueNumber, instance);
     if (oneRow) return { claimed: false, reason: oneRow };
-    const ineligible = sessionEligibilityReason(issueNumber, mySession, { run });
+    const ineligible = sessionEligibilityReason(issueNumber, mySession, { run, adoptedBranch });
     if (ineligible) {
       const eligibility = eligibilityWithBlockedBy({ issueNumber, mySession, ineligible, blockedBy },
         { ghRun: ghRunForBody });
@@ -1037,7 +1042,8 @@ export function dispatchRow(issueNumber, mySession, deps = {}) {
  * @param {string} mySession
  * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus, branch?: string,
  *           worktree?: string, blockedBy?: string, drained?: readonly string[],
- *           instance?: { spare: boolean, rows: readonly number[] } }} [deps]
+ *           instance?: { spare: boolean, rows: readonly number[] }, adoptedBranch?: string }} [deps]
+ * `adoptedBranch` (#2769) is set by `--adopt` alone: the branch of the tree it resumes, whose open PR is the row's own work for B4.
  * @returns {{ claimed: true, statusMoved: true } | { claimed: true, statusMoved: false, notOnBoard: boolean, statusReason: string } | { claimed: false, reason: string }}
  */
 export function claimRow(issueNumber, mySession, deps = {}) {
@@ -1393,9 +1399,16 @@ export function implicitAdoptSession({ worktree, mySession, exists, owner, prede
  * @param {{ branch: string, worktree: string }} target @param {typeof defaultRun} run
  * @returns {string}
  */
-function undoCreatedWorktree({ branch, worktree }, run) {
+function undoCreatedWorktree({ branch, worktree }, run, record = recordRemoval) {
+  // #2782: THE ONE REMOVER THAT DOES NOT ASK THE ROW'S CLAIM, deliberately. It runs because the claim was LOST, so the row
+  // carries the WINNER's `session:` label by construction and `claimRefusal` would refuse every time; what makes it safe is that
+  // `worktreeTargetReason` refused an existing path before this call made the tree, so nothing in it predates this call.
+  // It still writes its line, and that line is how a later reader tells this remover from a prune.
+  const line = { path: worktree, branch, caller: CALLER, reason: "the claim did not win; removing the tree this call created" };
   try {
+    record({ ...line, event: "removing" });
     run("git", ["worktree", "remove", "--force", worktree]);
+    record({ ...line, event: "removed" });
     run("git", ["branch", "-D", branch]);
     return `the worktree ${worktree} and branch ${branch} it had just created were removed`;
   } catch (cause) {
@@ -1452,7 +1465,8 @@ function adoptWorktree(issueNumber, mySession, { branch, worktree, adopt, run, s
   return withLandedWrites(issueNumber, landed, () => {
     stamp(worktree, mySession);
     landed.push(`re-stamped ${worktree} from ${adopt} to ${mySession}`);
-    const result = claim(issueNumber, mySession, { run, ...claimDeps, branch, worktree });
+    // #2769: the branch being adopted is B4's fact that its own PR is not a competitor, even when that PR is a `Closes: none` split.
+    const result = claim(issueNumber, mySession, { run, ...claimDeps, branch, worktree, adoptedBranch: branch });
     if (result.claimed) return result;
     stamp(worktree, adopt);
     return { claimed: false, reason: `${result.reason} -- the adopted worktree ${worktree} was left in place, with its work, and re-stamped \`${adopt}\`` };
@@ -1487,11 +1501,17 @@ export function worktreeStatus(worktreePath, { run = defaultRun } = {}) {
  * every `runs/` file is in the primary checkout with a matching non-empty sha256 -- `prune-worktrees.mjs`'s
  * `unverifiedRecords`, the one predicate both removers share. `hash` is injectable so a test can drive the
  * row's incident: two failed reads that compare equal.
+ * #2782: THE ROW'S CLAIM IS READ, AND THE LINE IS WRITTEN. `decline` already proved the row is claimed by `session`; this asks
+ * whether the row the TREE names (its branch, its `wt-<n>` directory) carries anyone ELSE's `session:` label, which is the copy
+ * of a claim `.a11y-owner` cannot be. A `removing` line precedes the delete and a `removed`/`failed` line follows it.
+ *
  * @param {string} worktreePath
- * @param {{ run?: typeof defaultRun, hash?: (file: string) => string }} [deps]
+ * @param {{ run?: typeof defaultRun, hash?: (file: string) => string, session?: string, branch?: string | null,
+ *   claim?: typeof claimRefusal, record?: typeof recordRemoval }} [deps]
  * @returns {{ removed: true } | { removed: false, reason: string, files?: string[] }}
  */
-export function removeClaimedWorktree(worktreePath, { run = defaultRun, hash } = {}) {
+export function removeClaimedWorktree(worktreePath, { run = defaultRun, hash, session, branch = null, claim = claimRefusal,
+  record = recordRemoval } = {}) {
   if (!existsSync(worktreePath)) return { removed: true };
   const status = worktreeStatus(worktreePath, { run });
   if (!status.clean) {
@@ -1501,10 +1521,20 @@ export function removeClaimedWorktree(worktreePath, { run = defaultRun, hash } =
   }
   const held = unverifiedRecords(worktreePath, primaryWorktreeOf(worktreePath, { run }), { hash });
   if (held.refused) return { removed: false, reason: held.reason };
+  const claimed = claim({ path: worktreePath, branch }, { except: session });
+  if (claimed.refused) return { removed: false, reason: claimed.reason };
+  const line = { path: worktreePath, branch, caller: CALLER, reason: `decline by ${session ?? "an unnamed session"}` };
+  try {
+    record({ ...line, event: "removing" });
+  } catch (cause) {
+    return { removed: false, reason: `the removal log could not be written, so ${worktreePath} was not removed (#2782): ${/** @type {Error} */ (cause).message}` };
+  }
   try {
     run("git", ["worktree", "remove", worktreePath]);
+    record({ ...line, event: "removed" });
     return { removed: true };
   } catch (error) {
+    record({ ...line, event: "failed", detail: /** @type {Error} */ (error).message });
     return { removed: false,
       reason: `git worktree remove failed -- ${/** @type {Error} */ (error).message}` };
   }
@@ -1696,7 +1726,7 @@ function releaseRow(issueNumber,
     // so only an EXPLICIT --predecessor-gone assertion from a caller that actually knows writes the record.
     if (predecessorGone) recordGone(mySession);
   } else if (recorded.worktree) {
-    const removal = removeWorktree(recorded.worktree, { run });
+    const removal = removeWorktree(recorded.worktree, { run, session: mySession, branch: recorded.branch });
     if (!removal.removed) return { declined: false, reason: removal.reason };
     landed.push(`removed the recorded worktree ${recorded.worktree}`);
   }

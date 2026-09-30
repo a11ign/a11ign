@@ -29,7 +29,7 @@ import {
   CEILING_CAP_MINUTES, CEILING_PAGES, COST_DOC, DEFAULT_CAP_MINUTES, DEFAULT_MAX_PAGES, MAX_LOGINS, PageListError,
   captureCount, countLine, loginReport, loginsPerformed, minimumLogins, multiPageJson, newLoginTally, refuseAboveCap,
   refuseAboveLoginCap, resolveMaxPages, resolvePageList, rollUpLines, runPageList, splitUrlList, worstMinutes,
-  type PageEntry,
+  type LoginTally, type PageEntry,
 } from "./multi-page.js";
 import {
   isMultiPage, multiPageExitCode, multiPageLogLines, pageOutcome, pageTripsFailOn, renderMultiSummary,
@@ -451,6 +451,31 @@ test("THE RUN REPORTS THE LOGINS IT PERFORMED: 3 pages, axe on, one page re-capt
     assert.deepEqual(report, { performed: 7, workerAttempts: 4, ruleLayerScans: 3, minimum: 6 });
     assert.deepEqual(multiPageJson(entries, report).logins, report, "in --json");
     assert.ok(rollUpLines(entries, report).some((line) => line === "Logins: 7 performed (4 capture attempts, 3 rule-layer scans); the minimum stated before the run was 6."), "in the roll-up");
+  } finally { process.stderr.write = realWrite; await worker.close(); }
+});
+
+test("A STATE RUN PERFORMS NO LOGIN AND SAYS SO (#2787): the same three pages count 0 and state a floor of 0, and the form-login run beside it is unchanged", async () => {
+  const worker = await workerAnswering(() => ["Orders, heading level 1"]);
+  const scan = async () => ({ findings: [], title: "Orders", coverage: {}, browserChannel: "chromium" as const });
+  const realWrite = process.stderr.write.bind(process.stderr);
+  process.stderr.write = (() => true) as never;
+  try {
+    const tallyFor = async (auth: AuthRequest): Promise<LoginTally> => {
+      const tally = newLoginTally();
+      await runPageList({
+        urls: APP_PAGES, captures: captureCount({ pages: 3, states: 0 }), maxPages: DEFAULT_MAX_PAGES, surface: "cli", say: () => undefined,
+        lease: async () => ({ release: async () => undefined }),
+        capturePage: async (url) => [await captureAndScan({ ...CAPTURE_OPTIONS, auth, url, worker: worker.url, logins: tally },
+          { scan: scan as never, isAvailable: async () => true })],
+      });
+      return tally;
+    };
+    const state = await tallyFor({ ...AUTH_PLAN, state: { path: "/tmp/state.json" } });
+    assert.deepEqual(state, { workerAttempts: 0, ruleLayerScans: 0 }, "a state load is not a login: neither layer counts one");
+    assert.deepEqual(loginReport({ tally: state, minimum: minimumLogins({ captures: 3, axe: true, auth: { state: {} } }) }),
+      { performed: 0, workerAttempts: 0, ruleLayerScans: 0, minimum: 0 });
+    assert.deepEqual(await tallyFor(AUTH_PLAN), { workerAttempts: 3, ruleLayerScans: 3 }, "positive control: the form login still counts");
+    assert.equal(minimumLogins({ captures: 3, axe: true, auth: AUTH_PLAN }), 6, "positive control: a form login's floor is unchanged");
   } finally { process.stderr.write = realWrite; await worker.close(); }
 });
 

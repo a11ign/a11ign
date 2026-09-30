@@ -15,7 +15,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { launchBrowser, axeAvailable, AxeLaunchError, AxeUnavailableError, coverageFrom } from "./axe.js";
+import { launchBrowser, workerContextOptions, axeAvailable, AxeLaunchError, AxeUnavailableError, coverageFrom } from "./axe.js";
 
 /** A fake chromium whose `launch` behaves per a script: each call consumes the next scripted outcome. */
 function fakeChromium(outcomes: ("ok" | "throw")[]) {
@@ -47,6 +47,39 @@ test("the bundled browser failing falls back to the system Edge channel", async 
   assert.equal(channel, "msedge");
   assert.equal(calls.length, 2);
   assert.equal(calls[1]?.channel, "msedge");
+});
+
+test("a run that must look like the worker's browser tries the system Edge FIRST, and falls back to the bundled one", async () => {
+  const first = fakeChromium(["ok"]);
+  assert.equal((await launchBrowser(first.chromium, "worker")).channel, "msedge");
+  assert.equal(first.calls.length, 1, "Edge answered, so the bundled browser is not launched");
+  assert.equal(first.calls[0]?.channel, "msedge");
+  const fallback = fakeChromium(["throw", "ok"]);
+  assert.equal((await launchBrowser(fallback.chromium, "worker")).channel, "chromium");
+  const neither = fakeChromium(["throw", "throw"]);
+  await assert.rejects(() => launchBrowser(neither.chromium, "worker"), (e: unknown) => {
+    const cause = (e as { cause?: { bundledError?: Error; channelError?: Error } }).cause;
+    assert.match(String(cause?.bundledError?.message), /bundled/, "the causes stay under the names the error gives them");
+    assert.match(String(cause?.channelError?.message), /msedge/);
+    return e instanceof AxeLaunchError;
+  });
+});
+
+test("the worker's identity is the browser's own User-Agent minus its headless marker, and a language the worker sends; the probe context is closed", async () => {
+  const closed: string[] = [];
+  const headlessEdge = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36 Edg/152.0.0.0";
+  const browser = { newContext: async () => ({
+    newPage: async () => ({ evaluate: async () => headlessEdge }),
+    close: async () => { closed.push("probe"); },
+  }) };
+  const options = await workerContextOptions(browser as never);
+  // What the row measured a headed Edge send: `Chrome/152...` and an `Edg/` token, no `Headless`.
+  assert.equal(options.userAgent, headlessEdge.replace("HeadlessChrome/", "Chrome/"));
+  assert.match(String(options.userAgent), /Chrome\/152\.0\.0\.0 Safari\/537\.36 Edg\/152\.0\.0\.0$/);
+  assert.doesNotMatch(String(options.userAgent), /Headless/);
+  assert.deepEqual(options.extraHTTPHeaders, { "Accept-Language": "en-US,en;q=0.9" });
+  assert.equal(options.locale, undefined, "a `locale` would replace the Accept-Language header with plain `en-US`");
+  assert.deepEqual(closed, ["probe"]);
 });
 
 test("neither the bundled browser nor Edge launching throws AxeLaunchError carrying both causes", async () => {
