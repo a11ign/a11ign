@@ -2060,6 +2060,24 @@ function rowsWithOpenPr(openPrs) {
 }
 
 /**
+ * Whether a CLAIMED row is waiting on something, for the two readers that screen one (`blockerClearedOrders` and
+ * `anyBlockerClearingCandidate`), so the population that pays for a `closings` read cannot drift from the one that
+ * uses it. `fleetWaitingOn` is the declared-field waits (#2186); the two labels are the rest.
+ *
+ * `needs:chairman` AND `parked` ARE WAITS `waitingOn` DELIBERATELY DOES NOT READ, AND THIS IS THE FOURTH READER OF
+ * THAT GAP (#2780, after #2583/#2604/#2653 closed the three that reach an UNCLAIMED row). The order says "PICK IT
+ * BACK UP" to a holder whose row names a person or the schedule as the one thing it waits on: #2623
+ * (`needs:chairman` from 2026-09-28T16:06:31Z) was asked 19+ times in a day, and the prompt's own remedies never
+ * mention the label. Skipped here rather than taught to `waitingOn`, which every reader would then inherit.
+ *
+ * @param {any} row @param {string} today @param {number} nowMs
+ */
+function holderWaitingOn(row, today, nowMs) {
+  const labels = labelsOf(row);
+  return Boolean(fleetWaitingOn(row, today, nowMs)) || labels.includes(CHAIRMAN_LABEL) || labels.includes(PARKED_LABEL);
+}
+
+/**
  * THE GATE COULD SEE A ROW BECOME RUNNABLE AND HAD NOBODY TO TELL -- #2027.
  *
  * MEASURED 2026-09-22. PR #1957 merged at 21:26:01Z and closed #1948 one second later, leaving #1908 --
@@ -2140,7 +2158,7 @@ export function blockerClearedOrders(rows, today = todayIso(), nowMs = Date.now(
     // THE LINE THAT MAKES `cleared` MEAN CLEARED. `waitingOn` reports an OPEN `blockedBy` node before
     // anything else, so passing here is what proves every number above is closed -- and it covers the
     // other conditions in the same breath, which is why `declaredBlockers` does not re-ask.
-    if (fleetWaitingOn(row, today, nowMs)) continue;
+    if (holderWaitingOn(row, today, nowMs)) continue;
     const window = clearingAskWindow(cleared, nowMs, closings);
     if (!window) continue;
     const key = cleared.join(".");
@@ -5472,7 +5490,7 @@ export function rowsOffBoardOrSay(log = (line) => process.stderr.write(line)) {
 }
 
 /**
- * A CLAIMED row `blockerClearedOrders` would ask about -- the same four conditions that function screens
+ * A CLAIMED row `blockerClearedOrders` would ask about -- the same conditions that function screens
  * with EXCEPT `resumed`, which needs `openPrs` that this gate site does not carry (`main`/`trackerReadings`
  * read `closings` before `code.prs` exists in a split-repo scope, #2618). Ignoring it makes this a
  * SUPERSET of `blockerClearedOrders`' own population, never a narrower one: an already-resumed row pays
@@ -5484,7 +5502,7 @@ export function rowsOffBoardOrSay(log = (line) => process.stderr.write(line)) {
  */
 export function anyBlockerClearingCandidate(rows, today = todayIso(), nowMs = Date.now()) {
   return (rows ?? []).some((row) => sessionOf(row) && labelsOf(row).includes(CLAIM_LABEL)
-    && declaredBlockers(row) !== null && !fleetWaitingOn(row, today, nowMs));
+    && declaredBlockers(row) !== null && !holderWaitingOn(row, today, nowMs));
 }
 
 /**
