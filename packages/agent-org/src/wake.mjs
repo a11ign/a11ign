@@ -46,6 +46,7 @@ import { reviewerInstance, reviewerInstanceNumber, subjectMention } from "./revi
 // no new metric, only this one read at delivery time.
 import { claudeTurns, transcriptFiles } from "./token-audit.mjs";
 import { homeProjectDeclaration } from "./project-config.mjs";
+import { stateEntryPath } from "./host-config.mjs"; // #2799
 import { REPO } from "./project-identity.mjs";
 import { roleBriefPath } from "./project-roles.mjs";
 // #2619 (child 3d of #69): `session:`/`ready` -- `answer:` already arrives via `work-gate.mjs`'s
@@ -1673,7 +1674,7 @@ export function handoffQueuePath(ledgerPath) {
  * @param {string[]} argv @returns {string}
  */
 export function ledgerPathFrom(argv) {
-  return flagValue(argv, "ledger") ?? `${process.env.HOME}/.cache/a11ign/wake-ledger`;
+  return flagValue(argv, "ledger") ?? stateEntryPath("wake-ledger");
 }
 
 /**
