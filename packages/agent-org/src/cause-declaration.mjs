@@ -342,6 +342,15 @@ export const TOOL_CAUSE_DECLARATIONS = Object.freeze([
     why: "adding one named template section to a row, or taking the label off -- the gate hands over the "
       + "row and the section, so nothing is diagnosed and nothing is built",
   }),
+  declareCause("closes-unresolved-repo-wide", GROUPS.JUDGMENT, {
+    kind: "claude",
+    // SONNET AND LOW: the gate hands over the PR set and how long it has stood; the turn reads GitHub's status and the
+    // closer's last runs, and files a row or does not (#2823). Nothing is diagnosed from an absence.
+    model: "sonnet",
+    effort: "low",
+    why: "reading whether GitHub is degraded and whether the post-merge closer ran, over a named set of pull "
+      + "requests -- the gate hands over the set and its age, so nothing is built and nothing is inferred",
+  }),
   declareCause("host-units-stale", GROUPS.ACTION, {
     kind: "claude",
     model: "sonnet",

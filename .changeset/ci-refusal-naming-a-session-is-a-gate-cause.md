@@ -1,0 +1,5 @@
+---
+"@a11ign/agent-org": patch
+---
+
+**The repo-wide Closes condition is a gate cause, and a test sweeps every CI refusal that names a session (#2823).** `closes-mismatch-check.mjs` used to print "Tell `product-manager`" into a CI log, and nothing reads a CI log for an instruction: on 2026-09-30 all 8 open PRs failed `gate` for ~2 hours before the chairman noticed idle agents. `pr-checks-failing` is the wrong reader for it (it tells an author to fix a branch, and this fault is on none). `work-gate.mjs` now reads `closingIssuesReferences` and `createdAt` on the PR list it already makes and, when `isRepoWideResolutionFault` (imported, not retyped) holds over the open pull requests, wakes `product-manager` ONCE with the PR set and how long the oldest has stood, as `closes-unresolved-repo-wide` (a JUDGMENT cause, keyed on the set). It stops when any of them resolves. `work-gate.test.ts` sweeps the scripts the workflows run for a refusal that tells, asks or routes to a session and requires a gate cause or a reasoned, shrink-only exemption for each.
