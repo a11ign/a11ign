@@ -742,7 +742,7 @@ export async function captureAndScan(
   // Layer 1 (rule-based, local) and capture (lived-experience, remote worker)
   // load the same URL independently, so run them concurrently. axe failure is
   // non-fatal: we still report the lived-experience layer.
-  const [firstCap, axe] = orderTheLayers(auth, await Promise.allSettled([
+  const [firstCap, axe] = orderTheLayers({ auth, ruleLayer }, await Promise.allSettled([
     captureViaWorker(url,
       { task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, probeFocusReveal, formState, auth,
         logins }),
@@ -775,11 +775,38 @@ export async function captureAndScan(
  * `auth-state-expired`**, which is the positive control that the fault still means the state.
  */
 function orderTheLayers<C, A>(
-  auth: AuthRequest | undefined, [captured, ruled]: readonly [PromiseSettledResult<C>, PromiseSettledResult<A>],
+  { auth, ruleLayer }: { auth: AuthRequest | undefined; ruleLayer: RuleLayer },
+  [captured, ruled]: readonly [PromiseSettledResult<C>, PromiseSettledResult<A>],
 ): [C, A] {
-  if (captured.status === "rejected") throw captured.reason;
+  if (captured.status === "rejected") {
+    sayWhichLayersRefusedTheState(captured.reason, { ruled, ruleLayer });
+    throw captured.reason;
+  }
   if (ruled.status === "rejected") throw stateRefusedOnlyByTheRuleLayer(auth, ruled.reason) ?? ruled.reason;
   return [captured.value, ruled.value];
+}
+
+/**
+ * ONE stderr line when the run is ending `auth-state-expired` through the worker: which layer(s) refused the state (#2820).
+ *
+ * The fault's own message is the worker's sentence and says nothing of the rule layer, so "the worker refused" and "both
+ * refused" read the same in a log, and a failure that is not the state's own could not be told from one that is (#2566). A
+ * line on stderr rather than words in the `AuthError`, because the message is matched by anything reading it. It names layers
+ * and their outcomes and carries nothing from the state or the page.
+ */
+function sayWhichLayersRefusedTheState(
+  workerError: unknown, { ruled, ruleLayer }: { ruled: PromiseSettledResult<unknown>; ruleLayer: RuleLayer },
+): void {
+  if (!(workerError instanceof AuthError) || workerError.fault !== "auth-state-expired") return;
+  process.stderr.write(`auth-state-expired: refused by the worker; the rule layer ${describeTheRuleLayerBeside(ruled, ruleLayer)}\n`);
+}
+
+/** Only `run` loads the page in the rule layer's own browser: `none` and `import` never met the state at all. */
+function describeTheRuleLayerBeside(ruled: PromiseSettledResult<unknown>, ruleLayer: RuleLayer): string {
+  if (ruleLayer !== "run") return "did not run (no browser of its own loaded the page)";
+  if (ruled.status === "fulfilled") return "accepted the state (worker=rejected | rule-layer=fulfilled)";
+  const alsoRefused = ruled.reason instanceof AuthError && ruled.reason.fault === "auth-state-expired";
+  return alsoRefused ? "refused it too (worker=rejected | rule-layer=rejected)" : "failed for another reason (worker=rejected | rule-layer=rejected)";
 }
 
 function stateRefusedOnlyByTheRuleLayer(auth: AuthRequest | undefined, reason: unknown): AuthError | undefined {
