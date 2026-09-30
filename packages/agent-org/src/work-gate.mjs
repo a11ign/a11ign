@@ -1102,6 +1102,16 @@ export const FLEET_GATED_SELECTOR = Object.freeze({
  * silently is the failure `blocked` already is", so the shelved half is returned with its reason and
  * `main` prints it on the same `SHELVED row #N:` line the engineer pool's shelvings use.
  *
+ * `needs:chairman` IS THE FIFTH READER OF THE SAME GAP `waitingOn` deliberately does not close (after
+ * #2583/#2585, #2604 and #2653's `parked`): the label names a person and clears when removed, and
+ * `waitingOn`/`fleetWaitingOn` do not read it on purpose, so teaching it here rather than there keeps
+ * every OTHER reader of those functions unchanged. Without this, `fleet-batch-due` re-fired on #2728
+ * three minutes after `orchestrator` had already answered it -- a credential row that should never have
+ * carried `fleet-gated`, but whose re-firing this filter alone would have prevented: `needs:chairman` is
+ * not one of the order's own three machine-readable exits (`Fleet-hold-until:`, `--add-blocked-by`,
+ * `Not-before:`), so a row answered that way never left the set. The rule is the one #1899 applied to
+ * `answer:<session>`: a hold is an answer.
+ *
  * @param {any[]} rows
  * @param {{today?: string, nowMs?: number}} [clock] injected so a test moves time without a global stub
  * @returns {{batch: any[], waiting: {number: number, reason: string}[]}}
@@ -1114,13 +1124,21 @@ export function partitionFleetBatch(rows, clock = {}) {
     .filter(FLEET_GATED_SELECTOR.matches)
     .sort((a, b) => Number(a.number) - Number(b.number));
   for (const row of gated) {
-    const held = fleetWaitingOn(row, today, nowMs);
+    const held = labelsOf(row).includes(CHAIRMAN_LABEL)
+      ? `waiting on the chairman (${CHAIRMAN_LABEL})`
+      : fleetHeldPhrase(row, today, nowMs);
     if (held) {
       waiting.push({ number: Number(row.number),
-        reason: `${describeWaiting(held)} -- declared on the row, and it clears itself` });
+        reason: `${held} -- declared on the row, and it clears itself` });
     } else batch.push(row);
   }
   return { batch, waiting };
+}
+
+/** @param {any} row @param {string} today @param {number} nowMs @returns {string | null} */
+function fleetHeldPhrase(row, today, nowMs) {
+  const held = fleetWaitingOn(row, today, nowMs);
+  return held ? describeWaiting(held) : null;
 }
 
 /**
