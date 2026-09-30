@@ -777,6 +777,8 @@ export async function captureAndScan(
 function orderTheLayers<C, A>(
   auth: AuthRequest | undefined, [captured, ruled]: readonly [PromiseSettledResult<C>, PromiseSettledResult<A>],
 ): [C, A] {
+  const say = (r: PromiseSettledResult<unknown>) => r.status === "fulfilled" ? "fulfilled" : `rejected(${(r.reason as { fault?: string })?.fault ?? "no-fault"}, AuthError=${r.reason instanceof AuthError}): ${String((r.reason as Error)?.message).slice(0, 300)}`;
+  process.stderr.write(`DIAG-2566 worker=${say(captured)} | rule-layer=${say(ruled)}\n`);
   if (captured.status === "rejected") throw captured.reason;
   if (ruled.status === "rejected") throw stateRefusedOnlyByTheRuleLayer(auth, ruled.reason) ?? ruled.reason;
   return [captured.value, ruled.value];
