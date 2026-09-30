@@ -10,7 +10,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { createServer, type Server } from "node:http";
+import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -37,10 +37,11 @@ const DASHBOARD = html("Orders", `<h1>Dashboard</h1><img src="data:image/gif;bas
 const LOGIN_WALL = html("Sign in", `<h1>Sign in</h1><form method="post" action="/login"><label>Email address <input name="user"></label>
   <label>Password <input name="password" type="password"></label><button type="submit">Sign in</button></form>`);
 
-async function site() {
+/** `accepts` is a site that binds a session to the browser that made it: the cookie is honoured only for a request it approves. */
+async function site(accepts: (headers: IncomingHttpHeaders) => boolean = () => true) {
   const posted: Array<{ user: string; password: string }> = [];
   const server: Server = createServer((req, res) => {
-    const signedIn = /(?:^|;\s*)session=ok/.test(req.headers.cookie ?? "");
+    const signedIn = /(?:^|;\s*)session=ok/.test(req.headers.cookie ?? "") && accepts(req.headers);
     const send = (status: number, body: string, headers: Record<string, string> = {}) => { res.writeHead(status, { "content-type": "text/html", ...headers }); res.end(body); };
     if (req.url === "/login" && req.method === "POST") {
       let raw = "";
@@ -207,4 +208,37 @@ test("an EXPIRED saved state in the rule layer is an ERROR (auth-state-expired),
     assert.equal(context.title, "Orders (high-contrast-dark)");
     assert.deepEqual(web.posted, [], "neither run performed a form login");
   } finally { rmSync(dir, { recursive: true, force: true }); await web.close(); }
+});
+
+// ---- ADR 0038, amendment 8 (#2788): a state run's rule layer presents itself as the WORKER's browser ---------------------
+
+/** What `the-internet.herokuapp.com` measured (#2788): the session is honoured only for the worker's headed Edge's identity. */
+const workersBrowser = (headers: IncomingHttpHeaders): boolean =>
+  !String(headers["user-agent"]).includes("HeadlessChrome") && headers["accept-language"] === "en-US,en;q=0.9";
+
+test("a site that binds the session to the browser: the rule layer refuses the state as itself, and signs in as the worker's browser", { skip: SKIP, timeout: 90_000 }, async () => {
+  const web = await site(workersBrowser);
+  const url = `${web.origin}/orders`;
+  const short = [...LOGIN.slice(0, 4), { expect: { kind: "heading" as const, name: "Dashboard", timeoutSeconds: 0.5 } }];
+  const plan: AuthRequest = { login: short, state: { path: "/state/saved.json" } };
+  const signIn = ruleLayerSignIn({ plan, url, env: {}, readText: async () => stateFor(web.origin, "ok") });
+  try {
+    // THE CONTROL, and the row's own measurement: the headless default is refused by this site although the state is valid.
+    await assert.rejects(scanWithAxe(url, { signIn }), (e: Error & { fault?: string }) => e.fault === "auth-state-expired");
+    const result = await scanWithAxe(url, { signIn, browserIdentity: "worker" });
+    assert.equal(result.title, "Orders (high-contrast-dark)");
+  } finally { await web.close(); }
+});
+
+test("pageContext asks for the worker's identity on a state run and on no other", async () => {
+  const seen: Array<Record<string, unknown>> = [];
+  const scan = (async (_url: string, options: Record<string, unknown> = {}) => {
+    seen.push(options);
+    return { findings: [], title: "Orders", coverage: {}, browserChannel: "msedge" };
+  }) as unknown as typeof scanWithAxe;
+  const stateRun: AuthRequest = { login: LOGIN, state: { path: "/state/saved.json" } };
+  await pageContext("https://app.example.test/orders", "run", null, { auth: stateRun, scan });
+  await pageContext("https://app.example.test/orders", "run", null, { auth: { login: LOGIN }, scan });
+  await pageContext("https://app.example.test/orders", "run", null, { scan });
+  assert.deepEqual(seen.map((options) => options.browserIdentity), ["worker", undefined, undefined]);
 });
