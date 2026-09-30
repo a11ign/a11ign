@@ -605,19 +605,20 @@ test("#2470 (7a) a DIRTY tree is neither removed nor refused into a stuck claim"
 test("#2470 (7b) the respawn's claim ADOPTS the kept tree: nothing is created, nothing is removed, and it is re-stamped to the new instance", () => {
   const order: string[] = [];
   const stamped: [string, string][] = [];
-  const claims: { worktree?: string; branch?: string }[] = [];
+  const claims: { worktree?: string; branch?: string; adoptedBranch?: string }[] = [];
   const adopt = (over: { owner?: string | null; head?: string; exists?: boolean; claimed?: boolean } = {}) => claimWithWorktree(2416, "worker-2416", {
     branch: BRANCH, worktree: WT, adopt: "worker-7",
     run: ((cmd: string, args: string[]) => { order.push(`${cmd} ${args.join(" ")}`); return args.includes("symbolic-ref") ? `${over.head ?? BRANCH}\n` : ""; }) as never,
     exists: () => over.exists ?? true, owner: () => (over.owner === undefined ? "worker-7" : over.owner),
     stamp: (w: string, sess: string) => { stamped.push([w, sess]); },
-    claim: ((_n: number, _s: string, deps: { worktree?: string; branch?: string }) => { claims.push(deps); return over.claimed === false ? { claimed: false, reason: "B2 refused" } : { claimed: true, statusMoved: true }; }) as never });
+    claim: ((_n: number, _s: string, deps: { worktree?: string; branch?: string; adoptedBranch?: string }) => { claims.push(deps); return over.claimed === false ? { claimed: false, reason: "B2 refused" } : { claimed: true, statusMoved: true }; }) as never });
   const won = adopt();
   assert.equal(won.claimed, true);
   assert.deepEqual(stamped, [[WT, "worker-2416"]], "the tree becomes the new instance's");
   assert.deepEqual(claims.map(({ branch, worktree }) => ({ branch, worktree })), [{ branch: BRANCH, worktree: WT }],
     "the claim RECORDS the existing branch and worktree");
   assert.equal(order.some((c) => /fetch|worktree add|worktree remove/.test(c)), false, "it creates nothing and removes nothing");
+  assert.deepEqual(claims.map((c) => c.adoptedBranch), [BRANCH], "#2769: the adopted branch reaches the claim, so B4 can tell its own PR");
 
   // A claim that LOSES leaves the tree exactly where it was, re-stamped to its previous owner: it holds another instance's work.
   order.length = 0; stamped.length = 0;
