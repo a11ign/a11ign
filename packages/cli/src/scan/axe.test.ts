@@ -78,6 +78,7 @@ test("the worker's identity is the browser's own User-Agent minus its headless m
   assert.match(String(options.userAgent), /Chrome\/152\.0\.0\.0 Safari\/537\.36 Edg\/152\.0\.0\.0$/);
   assert.doesNotMatch(String(options.userAgent), /Headless/);
   assert.deepEqual(options.extraHTTPHeaders, { "Accept-Language": "en-US,en;q=0.9" });
+  assert.equal(options.locale, undefined, "a `locale` would replace the Accept-Language header with plain `en-US`");
   assert.deepEqual(closed, ["probe"]);
 });
 

@@ -268,8 +268,9 @@ export async function workerContextOptions(browser: LaunchedBrowser): Promise<Co
   const probe = await (browser as unknown as import("playwright").Browser).newContext();
   try {
     const userAgent = await (await probe.newPage()).evaluate(() => navigator.userAgent);
-    return { userAgent: userAgent.replace(HEADLESS_MARKER, HEADED_MARKER), locale: "en-US",
-      extraHTTPHeaders: { "Accept-Language": WORKER_ACCEPT_LANGUAGE } };
+    // No `locale`: Playwright sends `locale` as the Accept-Language header and it WINS over `extraHTTPHeaders`
+    // (measured: `locale: "en-US"` sent `en-US`, not the worker's `en-US,en;q=0.9`).
+    return { userAgent: userAgent.replace(HEADLESS_MARKER, HEADED_MARKER), extraHTTPHeaders: { "Accept-Language": WORKER_ACCEPT_LANGUAGE } };
   } finally {
     await probe.close();
   }
