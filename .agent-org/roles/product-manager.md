@@ -318,4 +318,6 @@ calls).
   call the held session makes. Post a comment on the row carrying the marker
   `<!-- row-call-count-signal: split assessment -->` and the count named in the signal's prompt, in the
   form `calls=<N>` (e.g. `calls=173`) — the row then stays exempt from this signal until its calls double
-  from that reading, and signals again once they do.
+  from that reading, and signals again once they do. **Compose the body with `formatRowCallCountAssessment`
+  (`work-gate.mjs`, #2762), never by hand:** it round-trips through the reader, and a hand-typed "not split"
+  carries neither marker nor count, so the row re-signals every tick.

@@ -3574,13 +3574,30 @@ const ASSESSED_CALLS = /\bcalls=(\d+)\b/;
  * @param {any[]} comments
  * @returns {number | null}
  */
-function rowCallCountAssessedCalls(comments) {
+export function rowCallCountAssessedCalls(comments) {
   const newest = comments.filter((c) => String(c?.body ?? "").includes(ROW_CALL_COUNT_ASSESSED_MARKER)).at(-1);
   if (newest === undefined) return null;
   const match = ASSESSED_CALLS.exec(String(newest.body));
   if (match === null) return null;
   const n = Number(match[1]);
   return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * The body of the verdict comment `product-manager` posts on a row-call-count signal (#2762): the WRITER the
+ * marker and `rowCallCountAssessedCalls` were specified without, so the marker and `calls=N` were typed by
+ * hand and a hand-typed verdict with neither left the doubling guard nothing to compare against.
+ *
+ * `calls=N` comes straight after the marker and BEFORE the free-text note: `ASSESSED_CALLS` takes the first
+ * match, so a note that happens to quote another `calls=` figure cannot displace the real one. A count that
+ * is not a non-negative integer throws rather than posting a comment the reader would read back as `null`.
+ * @param {{ calls: number, split: boolean, note?: string }} verdict `calls` is the figure named in the signal's prompt
+ * @returns {string}
+ */
+export function formatRowCallCountAssessment({ calls, split, note = "" }) {
+  if (!Number.isInteger(calls) || calls < 0) throw new RangeError(`calls must be a non-negative integer, got ${calls}`);
+  const head = `${ROW_CALL_COUNT_ASSESSED_MARKER}\ncalls=${calls}\n${split ? "Split" : "One unit, not split"}.`;
+  return note.trim() === "" ? head : `${head} ${note.trim()}`;
 }
 
 /**
