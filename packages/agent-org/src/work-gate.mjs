@@ -1503,6 +1503,82 @@ export function hostDriftOrders(drift) {
 const HOST_DRIFT_SESSION = "orchestrator";
 
 /**
+ * A PRIMARY THAT IS NOT AT `origin/main` IS A SIGNAL, NOT A JOURNAL LINE (#2781).
+ *
+ * `a11ign-work-tick.service` runs `primary:update` as `ExecStartPre=-`, so when it fails the tick goes on -- and from
+ * 2026-09-28T12:01Z a dirty primary made it fail on every tick for 22 hours (2,652 journal lines) while the gate gave orders from
+ * `a5f407d4f`. Nothing told any session. `ceo` owns the primary (`.github/CLAUDE.md`), so `ceo` is told, with the dirty paths
+ * and how far behind, on the tick they appear.
+ *
+ * TWO CONDITIONS, NEITHER DERIVED FROM THE UPDATE'S FAILURE: tracked paths with uncommitted changes (a dirty primary is reported
+ * before a newer `origin/main` makes it conflict), or HEAD is not `origin/main` (behind, or carrying commits origin lacks).
+ *
+ * AN ACTION CAUSE, so `wake.mjs`'s twenty-minute expiry RE-DELIVERS it until it clears -- a wake that does not stick leaves the
+ * gate running stale with nobody told, which is the defect. KEYED ON THE TWO SHAS AND THE DIRTY SET, so a further merge or a
+ * further edit is a new question and an unchanged stale primary is not a new one every tick.
+ *
+ * `null`/omitted emit NOTHING and are not a clean reading: a linked worktree, CI or a repository with no `origin/main` cannot be asked.
+ *
+ * @param {import("./update-primary.mjs").PrimaryDrift | null | undefined} drift
+ * @returns {{session: string, cause: string, subject: string, discriminator: string,
+ *            prompt: string, causeKey: string}[]}
+ */
+export function primaryStaleOrders(drift) {
+  if (!drift || (drift.behind === 0 && drift.ahead === 0 && drift.dirty.length === 0)) return [];
+  const dirty = [...drift.dirty].sort();
+  const key = `${drift.sha.slice(0, 9)}.${drift.originSha.slice(0, 9)}.${createHash("sha256").update(dirty.join("\n")).digest("hex").slice(0, 8)}`;
+  return [{
+    session: "ceo",
+    cause: "primary-stale",
+    subject: "primary-checkout",
+    discriminator: key,
+    prompt: `The PRIMARY checkout is not at \`origin/main\`: it is at ${drift.sha.slice(0, 9)}, ${drift.behind} commit(s) behind `
+      + `${drift.originSha.slice(0, 9)}${drift.ahead > 0 ? ` and carrying ${drift.ahead} commit(s) origin lacks` : ""}. Every order this gate gives `
+      + "is given from THAT code, and every agent reads its role briefs and scripts out of it.\n"
+      + (dirty.length > 0 ? `${dirty.length} tracked path(s) carry uncommitted changes, which is what makes \`npm run primary:update\` refuse `
+        + `("would be overwritten by checkout"):\n${dirty.map((path) => `  ${path}`).join("\n")}\n` : "No tracked path is dirty, so the update itself "
+        + "is failing for another reason: run `npm run primary:update` and read its output.\n")
+      + "THE EDITS ARE NOT YOURS TO DISCARD UNREAD: an interactive session left them there (the 2026-09-28 cause), and no hook "
+      + "refuses an uncommitted edit. Save `git diff` to `~/.cache/a11ign/salvage/primary-<date>.patch` first and say on #2781 "
+      + "where it went, then clear the tracked paths and run `npm run primary:update`. This order repeats until the primary is at `origin/main`.",
+    causeKey: `ceo/primary-stale/${key}`,
+  }];
+}
+
+/**
+ * EVERY ORDER SAYS THE GATE IS RUNNING STALE WHEN IT IS (#2781, done-when 2), with the sha and the count, at the head of its prompt.
+ * The builder's choice between this and withholding: withholding would stall the whole org on a condition `ceo` can clear in one
+ * command, but an order presented as current from stale code is what cost 22 hours, so the orders go out and SAY WHAT THEY ARE.
+ * Applied to the tick's orders after `decide`, so no cause's own text or key changes; `primary-stale` already says it.
+ *
+ * @template {{cause: string, prompt: string}} T
+ * @param {T[]} orders @param {import("./update-primary.mjs").PrimaryDrift | null | undefined} drift @returns {T[]}
+ */
+export function withStalePrimaryNotice(orders, drift) {
+  if (!drift || drift.behind === 0) return orders;
+  const notice = `[THIS GATE IS RUNNING FROM A STALE PRIMARY: ${drift.sha.slice(0, 9)}, ${drift.behind} commit(s) behind origin/main ${drift.originSha.slice(0, 9)}. `
+    + "What this order asks may already be superseded on main; check before acting.]\n";
+  return orders.map((order) => (order.cause === "primary-stale" ? order : { ...order, prompt: notice + order.prompt }));
+}
+
+/**
+ * `update-primary.mjs --drift` -- SPAWNED, like `readHostDrift`, so the gate and `primary:update` read one question with one
+ * reader and the gate's import closure does not grow. `null` for every unreadable case (a spawn that failed, a non-zero exit,
+ * unparseable output, `asked: false`), which is silence and never a clean primary.
+ * @returns {import("./update-primary.mjs").PrimaryDrift | null}
+ */
+function readPrimaryDriftNow() {
+  const run = spawnSync(process.execPath, [fileURLToPath(new URL("./update-primary.mjs", import.meta.url)), "--drift"], { encoding: "utf8" });
+  if (run.status !== 0 || typeof run.stdout !== "string") return null;
+  try {
+    const parsed = JSON.parse(run.stdout);
+    return parsed?.asked === true && parsed.drift ? parsed.drift : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * #2202: `readClosedAnswerRows` with its refusal SAID. Every other reader here degrades to `[]` silently, and
  * that is the one shape this row exists to end for this question -- an answer owed that stopped waking a
  * session with nothing saying it had -- so a refused read is a line, not an empty list.
@@ -4708,6 +4784,7 @@ export function performActions(orders, run = defaultRun, log = (line) => process
  *           claimedComments?: {number?: number, comments?: {body?: string, id?: string}[]}[],
  *           rowBranches?: {branch: string, head: string, row: number}[] | null,
  *           hostDrift?: {unit: string, problem: string, detail: string}[] | null,
+ *           primaryDrift?: import("./update-primary.mjs").PrimaryDrift | null,
  *           closings?: Map<number, number> | null, trunkRed?: ReturnType<typeof readTrunkRed>,
  *           baseTip?: {sha: string, date: string} | null,
  *           claimStalls?: import("./claim-stall.mjs").StallOrder[], offBoard?: BoardFacts[] | null,
@@ -4743,6 +4820,8 @@ export function performActions(orders, run = defaultRun, log = (line) => process
  *        default for `rowBranches`'s reason -- a default parameter is a branch `complexity` counts,
  *        and `decide` sits exactly on its limit of 15.
  *        It spends NO API pool: see `readHostDrift`.
+ *        `primaryDrift` is `readPrimaryDriftNow()` (#2781): where the primary stands against `origin/main`, or `null` for
+ *        "not asked". OMITTED AND `null` MEAN THE SAME, and it carries no default for the same `complexity` reason.
  *        `trunkRed` is `readTrunkRed()` -- the facts about a red `main`, or `null` when it is green or the
  *        read was refused. OMITTED AND `null` MEAN THE SAME THING and it carries no `= null` default, for
  *        `rowBranches`'s reason: `decide` sits exactly on its limit of 15.
@@ -4771,10 +4850,10 @@ export function performActions(orders, run = defaultRun, log = (line) => process
  */
 export function decide({ prs, readyRows, promotableRows = [], chairmanBlocked = [], prFiles = [],
   drain = false, required = null, epics = [], answerOwed = [], openRows = [], unarmed = null,
-  claimedComments = [], rowBranches, hostDrift, closings, trunkRed, baseTip, claimStalls, offBoard, key, repo, callCountSignals, bareAnswerLabels, labJobs }) {
+  claimedComments = [], rowBranches, hostDrift, primaryDrift, closings, trunkRed, baseTip, claimStalls, offBoard, key, repo, callCountSignals, bareAnswerLabels, labJobs }) {
   // FIRST, BEFORE EVERY OTHER CAUSE (#2356): a red `main` outranks even `answer-owed` -- see `trunkRedOrders`.
   // `answer-owed` says another session is ALREADY STOPPED waiting on them, which outranks any standing question.
-  const orders = [...trunkRedOrders(trunkRed), ...answerOrders(answerOwed)];
+  const orders = [...trunkRedOrders(trunkRed), ...primaryStaleOrders(primaryDrift), ...answerOrders(answerOwed)]; // #2781: a stale primary next, every order below is given from its code
   // SECOND, AND AHEAD OF `blocker-cleared` DELIBERATELY (#2110). Both address a session that already
   // holds a row, so both outrank every cause that offers new work -- but between the two, a constraint
   // the holder has not read is worse than a row they have not resumed. `blocker-cleared` says work can
@@ -5690,13 +5769,13 @@ function main() {
   // #2031: A LOCAL git CALL, NOT AN API ONE -- it adds nothing to `GH_READS` and cannot be refused by an
   // exhausted pool, which is the whole reason the detection can exist. `GIT_READS` counts it.
   const rowBranches = readRowBranches();
-  const offBoard = rowsOffBoardOrSay();
+  const offBoard = rowsOffBoardOrSay(), primaryDrift = readPrimaryDriftNow(); // #2781: local git, once; it feeds `decide` and banners its orders
   // #1969: NAMED RATHER THAN CALLED TWICE. `shouldBeMerging` needs the same answer `decide` does, and
   // `requiredWhenRed` makes a `gh` call when anything is red -- calling it inline in both places would
   // pay for it twice on exactly the red tick this row is about.
   const required = requiredWhenRed(openPrs);
   const baseTip = baseTipWhenRed(openPrs);
-  const decided = decide({ prs: withEvidenceLabelAges(withCommitChains(openPrs)), readyRows: rows, promotableRows: promotableRows ?? [],
+  const decided = withStalePrimaryNotice(decide({ primaryDrift, prs: withEvidenceLabelAges(withCommitChains(openPrs)), readyRows: rows, promotableRows: promotableRows ?? [],
     chairmanBlocked: chairmanBlocked ?? [], prFiles, drain, required, baseTip,
     epics: epicsWhenShelfEmpty(rows),
     answerOwed: rowsOwingAnswers({ openRows: allOpen, openPrs, closedRows: closedAnswerRows() }),
@@ -5722,7 +5801,7 @@ function main() {
     trunkRed: readTrunkRed(),
     // #2075: ONE GRAPHQL CALL, READ PER ISSUE. `null` (refused) emits nothing and is said on stderr below.
     // #2691's `callCountSignals` is beside it, costing no `GH_READS`; `claimedComments` (#2710's window anchor) is the SAME read made above.
-    offBoard, callCountSignals: rowCallCountSignals(allOpen, liveClaudeTurns(), claimedComments), bareAnswerLabels: bareAnswerLabelOrders(withAnswerLabel([...allOpen, ...openPrs])), labJobs: labJobRecordsOrSay() }); // #2711, #2729
+    offBoard, callCountSignals: rowCallCountSignals(allOpen, liveClaudeTurns(), claimedComments), bareAnswerLabels: bareAnswerLabelOrders(withAnswerLabel([...allOpen, ...openPrs])), labJobs: labJobRecordsOrSay() }), primaryDrift); // #2711, #2729
   const others = otherScopeTicks(drain); // #2618: the OTHER declared repositories -- none for one project, whose orders are what they were
   const outageNow = outageThisTick({ prs, readyRows, promotableRows, chairmanBlocked, openRows: openRowsRead, claimedComments, offBoard, others });
   const { delivered: orders, performed } = performActions(markOutageReads([...decided, ...others.flatMap((tick) => tick.orders)], outageNow));
