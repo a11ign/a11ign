@@ -563,11 +563,12 @@ export function moveProjectStatus(issueNumber, statusName,
  * repository the project declares (`lookupOpenPrFiles`), and `repo` only tells it whose rows a `Closes` names.
  * @param {number} issueNumber the row about to be claimed -- excluded from B2's "other held rows" check
  * @param {string} mySession
- * @param {{ run?: typeof defaultRun, repo?: string, repos?: readonly { key: string, repo: string }[],
- *           }} deps `repos` is the code repositories B4 reads; absent, every one the project declares
+ * @param {{ run?: typeof defaultRun, repo?: string, repos?: readonly { key: string, repo: string }[], adoptedBranch?: string,
+ *           }} deps `repos` is the code repositories B4 reads; absent, every one the project declares. `adoptedBranch` (#2769) is
+ *   the branch `--adopt` is re-stamping, so the open PR from it is the row's own work under B4 even if it declares `Closes: none`
  * @returns {string | null}
  */
-export function sessionEligibilityReason(issueNumber, mySession, { run = defaultRun, repo = REPO, repos } = {}) {
+export function sessionEligibilityReason(issueNumber, mySession, { run = defaultRun, repo = REPO, repos, adoptedBranch } = {}) {
   const ghRun = (/** @type {string[]} */ args) => run("gh", args);
 
   // #989: B2 asks whether a ROW is in build, not whether a PR is open. `null` from the lookup is
@@ -595,7 +596,7 @@ export function sessionEligibilityReason(issueNumber, mySession, { run = default
   if (myFiles !== null && otherPrFiles !== null) {
     // #2101: the row's OWN pull request is not a competitor for its files. Without this number B4
     // refuses a row whose PR was opened before its claim -- against the very work that would finish it.
-    const { reason, emptyOtherPrs } = fileOverlapReason(myFiles, otherPrFiles, { rowNumber: issueNumber });
+    const { reason, emptyOtherPrs } = fileOverlapReason(myFiles, otherPrFiles, { rowNumber: issueNumber, adoptedBranch });
     for (const prNumber of emptyOtherPrs) {
       process.stderr.write(`row-claim: ${prLabel(prNumber)} is open and reports ZERO changed files -- not folded `
         + "into \"no overlap\", just nothing to compare against right now. Worth a look if that surprises "
@@ -834,7 +835,7 @@ function applyClaimLabels(issueNumber, { run, mySession, extraLabels, landed }) 
  *   dispatch, `[STARTED_LABEL]` for a claim/start
  * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus, branch?: string,
  *           worktree?: string, blockedBy?: string, drained?: readonly string[],
- *           instance?: { spare: boolean, rows: readonly number[] } }} deps
+ *           instance?: { spare: boolean, rows: readonly number[] }, adoptedBranch?: string }} deps
  *   `drained` (#2324) is the roles the drain holds back now -- see {@link drainedNow}. ABSENT MEANS NONE, so a
  *   caller that does not say is not refused for a fact it never asked about; the CLI is what asks. `instance`
  *   (#2407) is what the asking session's instance holds or has held -- see {@link instanceNow}, and the same
@@ -843,7 +844,7 @@ function applyClaimLabels(issueNumber, { run, mySession, extraLabels, landed }) 
  */
 function writeRowLabels(issueNumber, mySession, extraLabels,
   { run = defaultRun, moveStatus = moveProjectStatus, branch, worktree, blockedBy, drained = [],
-    instance = { spare: false, rows: [] } } = {}) {
+    instance = { spare: false, rows: [] }, adoptedBranch } = {}) {
   const before = fetchLabels(issueNumber, { run });
   const decision = decideClaim(before.labels, mySession);
   if (!decision.proceed) return { claimed: false, reason: decision.reason };
@@ -890,7 +891,7 @@ function writeRowLabels(issueNumber, mySession, extraLabels,
     // #2407: ONE INSTANCE, ONE ROW -- the same "new row only" placement, for a spare that holds or has held another.
     const oneRow = oneRowReason(mySession, issueNumber, instance);
     if (oneRow) return { claimed: false, reason: oneRow };
-    const ineligible = sessionEligibilityReason(issueNumber, mySession, { run });
+    const ineligible = sessionEligibilityReason(issueNumber, mySession, { run, adoptedBranch });
     if (ineligible) {
       const eligibility = eligibilityWithBlockedBy({ issueNumber, mySession, ineligible, blockedBy },
         { ghRun: ghRunForBody });
@@ -1037,7 +1038,8 @@ export function dispatchRow(issueNumber, mySession, deps = {}) {
  * @param {string} mySession
  * @param {{ run?: typeof defaultRun, moveStatus?: typeof moveProjectStatus, branch?: string,
  *           worktree?: string, blockedBy?: string, drained?: readonly string[],
- *           instance?: { spare: boolean, rows: readonly number[] } }} [deps]
+ *           instance?: { spare: boolean, rows: readonly number[] }, adoptedBranch?: string }} [deps]
+ * `adoptedBranch` (#2769) is set by `--adopt` alone: the branch of the tree it resumes, whose open PR is the row's own work for B4.
  * @returns {{ claimed: true, statusMoved: true } | { claimed: true, statusMoved: false, notOnBoard: boolean, statusReason: string } | { claimed: false, reason: string }}
  */
 export function claimRow(issueNumber, mySession, deps = {}) {
@@ -1452,7 +1454,8 @@ function adoptWorktree(issueNumber, mySession, { branch, worktree, adopt, run, s
   return withLandedWrites(issueNumber, landed, () => {
     stamp(worktree, mySession);
     landed.push(`re-stamped ${worktree} from ${adopt} to ${mySession}`);
-    const result = claim(issueNumber, mySession, { run, ...claimDeps, branch, worktree });
+    // #2769: the branch being adopted is B4's fact that its own PR is not a competitor, even when that PR is a `Closes: none` split.
+    const result = claim(issueNumber, mySession, { run, ...claimDeps, branch, worktree, adoptedBranch: branch });
     if (result.claimed) return result;
     stamp(worktree, adopt);
     return { claimed: false, reason: `${result.reason} -- the adopted worktree ${worktree} was left in place, with its work, and re-stamped \`${adopt}\`` };
