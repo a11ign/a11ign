@@ -2229,7 +2229,7 @@ export function readRecentlyClosed(run = defaultRun) {
  */
 export function unclaimedBlockerClearedOrders(rows, today = todayIso(), { closings = null, now = Date.now() } = {}) {
   const orders = [];
-  for (const { row, cleared } of unclaimedClearings(rows, today)) {
+  for (const { row, cleared } of unclaimedClearings(rows, today, now)) {
     const window = clearingAskWindow(cleared, now, closings);
     if (window) orders.push(promotionOrder(row, cleared, window.suffix));
     if (orders.length >= MAX_ROW_ORDERS_PER_TICK) break;
@@ -2242,10 +2242,14 @@ export function unclaimedBlockerClearedOrders(rows, today = todayIso(), { closin
  * `unclaimedBlockerClearedOrders` asks about, and the one `main` reads BEFORE deciding whether to pay for
  * `readRecentlyClosed` at all. Split out so those two callers cannot drift into two spellings of "cleared".
  *
- * @param {any[]} rows @param {string} [today]
+ * `nowMs` IS THE CLOCK THE HOUR-FORM `Not-before:` IS READ AGAINST (#2812). `today` only decides the date form, so a
+ * caller that injected `now` and not this left the hour to the real clock: a fixture naming 2026-09-30T00:00:00Z as
+ * the future went red on main when the wall clock passed it.
+ *
+ * @param {any[]} rows @param {string} [today] @param {number} [nowMs]
  * @returns {{row: any, cleared: number[]}[]}
  */
-export function unclaimedClearings(rows, today = todayIso()) {
+export function unclaimedClearings(rows, today = todayIso(), nowMs = Date.now()) {
   const found = [];
   for (const row of rows ?? []) {
     const labels = labelsOf(row);
@@ -2264,7 +2268,7 @@ export function unclaimedClearings(rows, today = todayIso()) {
     // unchanged: `waitingOn` reports an OPEN `blockedBy` node before anything else, so passing here is
     // what proves every number above is closed -- and it covers the `Not-before:` and `answer:` cases in
     // the same breath, which is why `declaredBlockers` does not re-ask.
-    if (waitingOn(row, today)) continue;
+    if (waitingOn(row, today, nowMs)) continue;
     found.push({ row, cleared });
   }
   return found;
