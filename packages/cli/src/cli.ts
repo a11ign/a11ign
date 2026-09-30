@@ -742,12 +742,12 @@ export async function captureAndScan(
   // Layer 1 (rule-based, local) and capture (lived-experience, remote worker)
   // load the same URL independently, so run them concurrently. axe failure is
   // non-fatal: we still report the lived-experience layer.
-  const [firstCap, axe] = await Promise.all([
+  const [firstCap, axe] = orderTheLayers(auth, await Promise.allSettled([
     captureViaWorker(url,
       { task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, probeFocusReveal, formState, auth,
         logins }),
     pageContext(url, ruleLayer, axeResults, { auth, logins, scan }),
-  ]);
+  ]));
   // `null` when the rule layer did not run, so "unchecked" can never be mistaken for "clean". Both
   // output paths must use THIS, not `axe.findings`: the human report already did
   // (`ruleLayer === "none" ? null : ...`) while the --json path emitted the bare array, so `--no-axe`
@@ -763,6 +763,29 @@ export async function captureAndScan(
     { url, task, worker, probeForms, probeFocus, probeNavigation, probeFocusContext, probeFocusReveal, formState,
       auth, logins });
   return { cap, axe };
+}
+
+/**
+ * The two layers' outcomes as ONE result, or the one error that says what happened (ADR 0038, amendment 8, #2788).
+ *
+ * `Promise.all` threw whichever layer refused first and never looked at the other, so a saved state that signed the worker in
+ * and was refused by the rule layer's browser ended `auth-state-expired`, whose remedy ("sign in again") is wrong for it. Both
+ * layers are now SETTLED before either is read: the worker's error wins where it failed (it saw the page the person sees),
+ * and a rule layer that refused the state beside a worker that accepted it is a different fault. **Both refusing stays
+ * `auth-state-expired`**, which is the positive control that the fault still means the state.
+ */
+function orderTheLayers<C, A>(
+  auth: AuthRequest | undefined, [captured, ruled]: readonly [PromiseSettledResult<C>, PromiseSettledResult<A>],
+): [C, A] {
+  if (captured.status === "rejected") throw captured.reason;
+  if (ruled.status === "rejected") throw stateRefusedOnlyByTheRuleLayer(auth, ruled.reason) ?? ruled.reason;
+  return [captured.value, ruled.value];
+}
+
+function stateRefusedOnlyByTheRuleLayer(auth: AuthRequest | undefined, reason: unknown): AuthError | undefined {
+  if (!auth?.state || !(reason instanceof AuthError) || reason.fault !== "auth-state-expired") return undefined;
+  return new AuthError("auth-state-refused-by-rule-layer",
+    `the worker's browser was signed in by the saved state and the rule layer's was not: ${reason.message}`, { cause: reason });
 }
 
 /**
@@ -1174,7 +1197,7 @@ export async function pageContext(
   }
   // An authenticated run signs in FOR ITSELF in this layer's own browser (ADR 0038): it never receives the worker's session.
   if (auth && logins) logins.ruleLayerScans += 1;
-  return scan(url, auth ? { signIn: ruleLayerSignIn({ plan: auth, url }) } : {}).then((result) => {
+  return scan(url, auth ? { signIn: ruleLayerSignIn({ plan: auth, url }), ...(auth.state ? { browserIdentity: "worker" as const } : {}) } : {}).then((result) => {
     // WHICH BROWSER ANSWERED, reported rather than assumed — see `launchBrowser`. The Action skips the
     // bundled download deliberately, so seeing "msedge" there is the fallback working as designed, not a
     // warning; seeing it locally on a machine with no Edge would be the warning.
