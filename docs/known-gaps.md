@@ -3403,7 +3403,10 @@ this commit, not against the ADR's prose.**
   not loaded, so a site that keeps its session there cannot be carried; only the run's own origin's cookies and `localStorage` are
   loaded; the login flow's final `expect:` must hold on every page the run requests; and values under 8 characters are counted and
   not hidden. It has run only over fake and local browsers: the reading on a real site, and the same state after its session is
-  ended, is owed (#2566, item 6)**) and no
+  ended, is owed (#2566, item 6). **The rule layer presents itself as the worker's Edge for a state run (#2788, amendment 8), and
+  that is two headers and the browser channel: the `Accept-Language` is the worker's default and is not read from it, and a site that binds a
+  session to more than those two things ends `auth-state-refused-by-rule-layer`, not a scan.** A test that a binding site accepts the
+  identity needs a launchable browser and skips without one**) and no
   attach to a browser somebody has signed in (mechanism 3 is the one route ADR 0038 says handles MFA or SSO, and it
   is **not built**: interactive, CLI-only, a spike first).
 - **SSO ends the run, by name.** A login that sends the browser to another origin, such as an identity provider,
