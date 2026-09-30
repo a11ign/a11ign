@@ -358,6 +358,37 @@ worker's identity and refuses the default one needs a launchable browser, and sk
 built. The language is the worker's default (`en-US,en;q=0.9`), not read from the worker: a worker whose Edge is set to another
 language sends another header. Done-when 3, the `valid-state` job on row 1's runner ending 0, is `orchestrator`'s hand-run.
 
+## Amendment 9 (#2787): a state run reports no login press and no login performed
+
+**Status: DECIDED and BUILT (#2787), the reading on a real runner owed (#2566, item 6, done-when 3).** **The answer, in a sentence: a
+run that loads a saved state performed no login, so its "what this run pressed" list names none of the login's controls and its
+`logins` tally reads `performed: 0` against a `minimum` of `0`; a run without `state` is unchanged.**
+
+**The basis, measured:** the real reading on #2566 item 6 (`a11ign/auth-capture-check` PR 7, run 36572094781, job
+`valid-state-worker-only`) printed `What this run pressed: Login` and `"logins": {"performed": 1, ...}` beside its own notice, "this run
+performs no login". Read from code, `pressedByThisRun` took `auth.login` in full and `captureViaWorker` and the rule layer's scan counted
+a login for every authenticated call, whether or not `auth.state` was set.
+
+1. **`pressedByThisRun` skips the login's steps when the plan carries `state`.** Amendment 7's choice 1 already says they are never
+   executed (only the final `expect:` runs, and it presses nothing), so the list, which Constraint 7 makes the user's account of what
+   the tool did to their session, now says what choice 1 does. **The flow's `press:`/`check:`/`choose:` steps and a forms config's
+   state stay listed**, because the flow replays after sign-in.
+2. **A state load is NOT a login in the `logins` tally, and the wording follows the notice.** The tally exists to weigh a run against
+   an account lockout (`LoginTally`): a login is a credential exchange against a real account, and loading a cookie the person
+   already holds is not one, whatever it costs a browser. So neither `workerAttempts` nor `ruleLayerScans` counts a state run's calls,
+   and `minimumLogins` is `0` for one, so the result reads `performed: 0, minimum: 0` (explicit, not absent: a reader can tell "none
+   performed" from "not reported"). The other choice, counting each state load as a login, was rejected because it would make the
+   report contradict the notice ("this run performs no login") and would overstate the lockout risk.
+3. **What this does not change.** `refuseAboveLoginCap` still refuses on a state run's capture count, and its message still says
+   "logins": a state run is not a lockout risk, so that refusal is stricter than it needs to be. Left for its own row, since it
+   refuses runs and this amendment only corrects what a run reports. `docs/github-action.md`'s "The cost" row still describes the
+   tally as for a form login only implicitly; it does not mention a state run's zero.
+
+**What this amendment does not claim.** No real reading exists yet: the sentences above are read from code and the tests in
+`resolve.test.ts` (`pressedByThisRun` under `state`, with the form login as the positive control) and `multi-page.test.ts` /
+`single-url-login-report.test.ts` (the tally). Done-when 3, the `a11ign-summary.md` of a state run on row 1's runner no longer listing
+the login's `press`, is `orchestrator`'s hand-run.
+
 ## Constraint 4: the transcript and the evidence JSON are PROVEN not to contain the credential
 
 > **A screen reader announces what is typed.** The capture transcript and the evidence JSON must be proven **not to

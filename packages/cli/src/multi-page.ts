@@ -173,8 +173,10 @@ export const captureCount = ({ pages, states }: { pages: number; states: number 
 /**
  * The FEWEST logins a run can make: one per capture for the screen reader, and one per capture for the rule layer,
  * which signs in for itself in its own browser (ADR 0038). It is a floor and never a count -- see `LoginTally`.
+ * **A run that loads a saved state (`auth.state`) performs no login, so its floor is 0** (ADR 0038, amendment 9, #2787).
  */
-export const minimumLogins = ({ captures, axe }: { captures: number; axe: boolean }): number => captures * (axe ? 2 : 1);
+export const minimumLogins = ({ captures, axe, auth }: { captures: number; axe: boolean; auth?: { state?: unknown } }): number =>
+  auth?.state === undefined ? captures * (axe ? 2 : 1) : 0;
 
 /** The most logins a run can make when every capture is repeated as often as it may be. */
 export const worstCaseLogins = ({ captures, axe }: { captures: number; axe: boolean }): number =>
@@ -261,8 +263,8 @@ export interface SingleUrlCapture<State> { formState?: State; index: number; sin
  * and then failed is the one whose lockout risk a reader most needs counted. An unauthenticated run has no tally and reports
  * nothing.
  */
-export async function runSingleUrl<State>({ states, tally, axe, capture, emit, say }: {
-  states: readonly State[]; tally?: LoginTally; axe: boolean;
+export async function runSingleUrl<State>({ states, tally, axe, auth, capture, emit, say }: {
+  states: readonly State[]; tally?: LoginTally; axe: boolean; auth?: { state?: unknown };
   capture: (one: SingleUrlCapture<State>) => Promise<void>;
   emit: (json: object) => void; say: (line: string) => void;
 }): Promise<void> {
@@ -272,7 +274,7 @@ export async function runSingleUrl<State>({ states, tally, axe, capture, emit, s
     if (states.length === 0) await capture({ index: 0, sink });
     for (const [index, formState] of states.entries()) await capture({ formState, index, sink });
   } finally {
-    const report = tally && loginReport({ tally, minimum: minimumLogins({ captures: captureCount({ pages: 1, states: states.length }), axe }) });
+    const report = tally && loginReport({ tally, minimum: minimumLogins({ captures: captureCount({ pages: 1, states: states.length }), axe, auth }) });
     if (held) emit(report ? { ...held, logins: report } : held);
     else if (report) say(loginLine(report));
   }
