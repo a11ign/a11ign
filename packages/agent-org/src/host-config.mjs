@@ -332,6 +332,25 @@ export function stateFilePath(host, name) {
 }
 
 /**
+ * The state directory of a host whose `host.json` declares no `stateDir`: the one the running unit has always used (#2799, child 5c of
+ * #2623). It is the DOCUMENTED DEFAULT and the only spelling of it -- `stateFilePath` refuses without a `stateDir`, so the four readers
+ * that predate it (the drain marker, the reviewer state, the shadow gate's live directory, the wake ledger) reach it through
+ * `stateEntryPath`, which is the difference between "a host that says nothing keeps working" and "a host that says something is read".
+ */
+const UNDECLARED_STATE_DIR = ".cache/a11ign";
+
+/**
+ * Where one state entry lives on THIS host for a reader that ran before `stateDir` existed. A host that declares a `stateDir` gets
+ * `stateFilePath`'s answer; a host that declares none gets `${HOME}/.cache/a11ign`, BYTE-IDENTICAL to the string those readers spelled,
+ * so the running unit is unchanged until its `host.json` says otherwise (#2623's cut-over). `name` is `""` for the directory itself.
+ * @param {string} name @param {{ host?: HostConfig, home?: string | undefined }} [where]
+ */
+export function stateEntryPath(name, { host = homeHostConfig(), home = process.env.HOME } = {}) {
+  if (host.stateDir !== undefined) return name === "" ? host.stateDir : stateFilePath(host, name);
+  return name === "" ? `${home}/${UNDECLARED_STATE_DIR}` : `${home}/${UNDECLARED_STATE_DIR}/${name}`;
+}
+
+/**
  * The values a template's `@@name@@` placeholders are filled from. `checkout` is the PRIMARY project's, because every tool unit
  * runs in it (`WorkingDirectory=`), and `prefix` is the project's, because the project names the units it installs.
  * @param {HostConfig} host @param {UnitsDeclaration} units

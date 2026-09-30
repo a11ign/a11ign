@@ -72,6 +72,7 @@ import { sandboxGitEnv } from "./lib/git-env.mjs";
 // graph of a script that runs 720 times a day, to use a function it calls only when already refusing.
 import { poolDiagnosis, refusalPoolLine } from "./api-pool.mjs";
 import { declaredGhAccount } from "./gh-identity.mjs";
+import { stateEntryPath } from "./host-config.mjs"; // #2799
 // #1969, AND THE PREDICATE IS IMPORTED RATHER THAN RE-DECIDED. `armedFromApi` knows THREE armed states --
 // merged, a pending auto-merge, and SITTING IN THE MERGE QUEUE, where `autoMergeRequest` reads `null` on a
 // correctly armed pull request (#1729/#1727, and #2004 for the read that fed it). `ceo`'s ruling names
@@ -144,7 +145,7 @@ export const EXIT = { QUIET: 0, WORK: 1, CANNOT_ASK: 2, PARTIAL: 3 };
 export { CAUSES, JUDGMENT_CAUSES, START_CAUSES };
 
 /** Where the drain marker lives. `touch` it to open a window; `rm` it to close one. */
-export const DRAIN_MARKER = `${process.env.HOME}/.cache/a11ign/drain`;
+export const DRAIN_MARKER = stateEntryPath("drain");
 
 /**
  * Is the org draining -- finishing what is in flight and taking on nothing new?
@@ -4885,7 +4886,7 @@ function reportWithheld({ drain, blocked }) {
 // --- #2401: A REVIEWER WHOSE CODEX FAILED TO AUTHENTICATE ---------------------------------------------------
 
 /** Where the org's runtime state lives -- beside `wake.mjs`'s ledger, which defaults to the same directory. */
-export const REVIEWER_STATE_DIR = `${process.env.HOME}/.cache/a11ign`;
+export const REVIEWER_STATE_DIR = stateEntryPath("");
 
 /** The instances `wake.mjs` STARTED and has not ended: `{ "reviewer-<n>": { spawnedAt } }`. `wake` writes, this reads. */
 export const REVIEWER_REGISTRY_FILE = "reviewer-instances.json";
