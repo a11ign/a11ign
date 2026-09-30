@@ -333,6 +333,15 @@ export const TOOL_CAUSE_DECLARATIONS = Object.freeze([
     why: "reading one branch's diff and choosing between three named one-command exits -- the work "
       + "already exists on origin, so nothing here is built and nothing is diagnosed from an absence",
   }),
+  declareCause("ready-row-incomplete", GROUPS.JUDGMENT, {
+    kind: "claude",
+    // SONNET AND LOW, AND THE ORDER NAMES THE ROW AND THE MISSING SECTION: the woken turn adds one `## <Field>`
+    // heading (or takes `ready` off), which is amending a row, not building one (#2791).
+    model: "sonnet",
+    effort: "low",
+    why: "adding one named template section to a row, or taking the label off -- the gate hands over the "
+      + "row and the section, so nothing is diagnosed and nothing is built",
+  }),
   declareCause("host-units-stale", GROUPS.ACTION, {
     kind: "claude",
     model: "sonnet",
