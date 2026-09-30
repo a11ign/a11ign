@@ -315,6 +315,49 @@ the smallest reading, and none changes a choice.
   heading "Dashboard" appeared within 10 s`) **without the form login's advice**, which is wrong for a state: a redirect to an
   identity provider is what an expired single-sign-on session does, and the remedy is `FAULT_REMEDIATION`'s.
 
+## Amendment 8 (#2788): what a state run's rule layer does on a site whose session the worker's browser can hold and the rule layer's cannot
+
+**Status: DECIDED and BUILT (#2788), the reading on a real runner owed (#2566, item 6, done-when 3).** **The answer, in a sentence:
+a state run's rule layer presents itself as the worker's browser (the system Edge first, with the worker's `User-Agent` minus
+its headless marker and its `Accept-Language`), and where the rule layer's browser is still refused a state the worker's
+accepted, the run ends with its own fault, `auth-state-refused-by-rule-layer`, and never `auth-state-expired`.** That is
+options (a) and (c) of the row, together, and not (b).
+
+**The basis, measured (the row's own reading, `a11ign/auth-capture-check` PR 7, run 36572094781):** the same state file signed the
+worker in (the `valid-state-worker-only` job, `axe: false`, exit 0) and ended `auth-state-expired` with the rule layer on. The
+target (`https://the-internet.herokuapp.com/secure`) honours its `rack.session` cookie only for the `User-Agent` and
+`Accept-Language` that made it: from one host `curl` with the pair got `200`, another `User-Agent` got `302`, and only
+`Accept-Language` changed also got `302`. The runner's headed Edge sends `Chrome/152.0.0.0 Safari/537.36 Edg/152.0.0.0` with
+`Accept-Language: en-US,en;q=0.9`; a headless Playwright Edge sends `HeadlessChrome/152...`. **Not measured, and named by the
+row: the headers the rule layer's own first request sent.** The elimination (worker only signs in; both layers: expired), and the
+same file signing in when loaded in the runner's headed Edge through Playwright, is what points at the rule layer.
+
+**Why (a), and why only for a state run.** A form login makes the session in each browser itself, so the cookie is bound to
+whichever browser made it and there is nothing to match. A state is made ONCE, in the person's browser, and both layers load
+it, so it is the only mechanism in which the two browsers must agree with a third. The rule layer therefore launches the system
+Edge first for a state run (the bundled Chromium is the fallback, and which one answered is printed as before), reads the User-Agent that
+browser actually sends, removes its `HeadlessChrome/` marker, and sets the worker's `Accept-Language`. The version is the
+machine's own, never a constant: the worker and the rule layer on one runner run one Edge.
+
+**Why (c) as well.** (a) is a reproduction of two headers, and a site may bind a session to more than headers (a TLS
+fingerprint, a client hint, an address). When the worker's browser is signed in and the rule layer's is not, the run has learned
+something specific and the state is NOT expired: `auth-state-expired`'s remedy ("sign in by hand again and save a fresh state") is
+wrong for it, and a person who follows it gets the same fault. `captureAndScan` therefore SETTLES both layers before it reads either
+(it threw whichever refused first), and the fault names the layer and offers the two things that work: `--no-axe`, and the form
+login. **The worker's error wins wherever the worker failed** (it saw the page the person sees), and a state both layers refuse is
+still `auth-state-expired`, which is what keeps that fault meaning the state.
+
+**Why not (b), and no ruling is needed.** Running no rule layer under a state would end the run 0 and narrow what the tool checks
+for every state run, the sites that do not bind a session included, to fix the sites that do. It is left to the person: `--no-axe`
+is the remedy the new fault names, and the report then says those criteria are UNCHECKED, not clean (ADR 0020). Nothing here
+narrows the default, so this is not the `ceo` ruling the row reserves for (b).
+
+**What this does not claim.** No real reading exists yet: the sentence above is read from code and the fakes of both interpreters
+(`refusals.test.ts`), and the identity's derivation over a fake browser (`axe.test.ts`); the test that a binding site accepts the
+worker's identity and refuses the default one needs a launchable browser, and skips where there is none, as it did where this was
+built. The language is the worker's default (`en-US,en;q=0.9`), not read from the worker: a worker whose Edge is set to another
+language sends another header. Done-when 3, the `valid-state` job on row 1's runner ending 0, is `orchestrator`'s hand-run.
+
 ## Constraint 4: the transcript and the evidence JSON are PROVEN not to contain the credential
 
 > **A screen reader announces what is typed.** The capture transcript and the evidence JSON must be proven **not to

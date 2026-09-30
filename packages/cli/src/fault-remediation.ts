@@ -153,6 +153,18 @@ const AUTH_REMEDIATION: Record<AuthFault, FaultRemediation> = {
       + "session a state cannot carry can still be tested with --login-flow and a dedicated test account.",
     whereToLook: `${ADR}, amendment 7 (#2566), choices 1, 2 and 3.`,
   },
+  "auth-state-refused-by-rule-layer": {
+    what: "the run loaded your saved state (--auth-state), and the screen-reader worker's browser was signed in by it, but the "
+      + "rule layer's browser (axe-core) was not. The state is not expired: a site that ties a session to the browser that made "
+      + "it (its User-Agent and language) accepts the state in one browser and sends the other to sign in. Nothing was reported, "
+      + "because a run whose rule layer examined a login page and not the product would read as clean where it did not look.",
+    tryThis: "do not sign in again: a fresh state gives the same fault. Run with --no-axe (the Action's axe: false) to keep the "
+      + "screen-reader layer alone, its rule-layer criteria then reported as unchecked and not clean, or use --login-flow with "
+      + "a dedicated test account, which signs each browser in for itself. The rule layer already presents itself as the "
+      + "worker's Edge (its User-Agent without the headless marker, Accept-Language en-US,en;q=0.9), so a site that still "
+      + "refuses it is checking something more than those two headers.",
+    whereToLook: `${ADR}, amendment 8 (#2788).`,
+  },
 };
 
 export const FAULT_REMEDIATION: Record<string, FaultRemediation> = {

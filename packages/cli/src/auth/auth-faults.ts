@@ -15,7 +15,10 @@
  * `LoginFailureReason`: a step failed and a CAPTCHA widget is on the page that failed it (#2564). It NAMES the
  * challenge and never answers one. The thirteenth, `auth-state-expired`, is a FAULT for the reason `auth-session-lost` gives: the
  * login did not fail, there was none. It is raised ONLY on a run that loaded a saved storage state (`--auth-state`), when the
- * page that state was meant to sign in is not the signed-in page (ADR 0038, amendment 7, choice 2).
+ * page that state was meant to sign in is not the signed-in page (ADR 0038, amendment 7, choice 2). The fourteenth,
+ * `auth-state-refused-by-rule-layer`, is the same fact seen by ONE layer: the worker's browser was signed in by the state and
+ * the rule layer's was not (a site that binds a session to the browser that made it), so the state is NOT expired and the
+ * remedy `auth-state-expired` gives would be wrong for it (ADR 0038, amendment 8, #2788).
  */
 export const AUTH_FAULTS = [
   "auth-refused-remote-worker",
@@ -31,6 +34,7 @@ export const AUTH_FAULTS = [
   "auth-session-lost",
   "auth-challenge-detected",
   "auth-state-expired",
+  "auth-state-refused-by-rule-layer",
 ] as const;
 
 export type AuthFault = (typeof AUTH_FAULTS)[number];
