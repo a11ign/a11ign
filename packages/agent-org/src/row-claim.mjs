@@ -89,6 +89,10 @@ import { staleRuleReason } from "./row-claim/stale-rule-guard.mjs";
 import { LS_REMOTE_ARGS, branchesForRow } from "./row-claim/row-branch-rule.mjs";
 import { sandboxGitEnv } from "./lib/git-env.mjs";
 import { primaryWorktreeOf, unverifiedRecords } from "./prune-worktrees.mjs";
+import { claimRefusal, recordRemoval } from "./worktree-removal.mjs";
+
+/** What the worktree-removal log (#2782) names as the asker for this file's two removers. */
+const CALLER = "row-claim.mjs";
 import { CLAIM_LABEL, STARTED_LABEL, CLAIM_RECORD_MARKER } from "./claim-labels.mjs";
 // #2619 (child 3d of #69): the rest of this file's vocabulary -- `blocked`, `answer:`, `session:`.
 import { BLOCKED_LABEL, ANSWER_PREFIX, SESSION_PREFIX } from "./project-vocabulary.mjs";
@@ -1395,9 +1399,16 @@ export function implicitAdoptSession({ worktree, mySession, exists, owner, prede
  * @param {{ branch: string, worktree: string }} target @param {typeof defaultRun} run
  * @returns {string}
  */
-function undoCreatedWorktree({ branch, worktree }, run) {
+function undoCreatedWorktree({ branch, worktree }, run, record = recordRemoval) {
+  // #2782: THE ONE REMOVER THAT DOES NOT ASK THE ROW'S CLAIM, deliberately. It runs because the claim was LOST, so the row
+  // carries the WINNER's `session:` label by construction and `claimRefusal` would refuse every time; what makes it safe is that
+  // `worktreeTargetReason` refused an existing path before this call made the tree, so nothing in it predates this call.
+  // It still writes its line, and that line is how a later reader tells this remover from a prune.
+  const line = { path: worktree, branch, caller: CALLER, reason: "the claim did not win; removing the tree this call created" };
   try {
+    record({ ...line, event: "removing" });
     run("git", ["worktree", "remove", "--force", worktree]);
+    record({ ...line, event: "removed" });
     run("git", ["branch", "-D", branch]);
     return `the worktree ${worktree} and branch ${branch} it had just created were removed`;
   } catch (cause) {
@@ -1490,11 +1501,17 @@ export function worktreeStatus(worktreePath, { run = defaultRun } = {}) {
  * every `runs/` file is in the primary checkout with a matching non-empty sha256 -- `prune-worktrees.mjs`'s
  * `unverifiedRecords`, the one predicate both removers share. `hash` is injectable so a test can drive the
  * row's incident: two failed reads that compare equal.
+ * #2782: THE ROW'S CLAIM IS READ, AND THE LINE IS WRITTEN. `decline` already proved the row is claimed by `session`; this asks
+ * whether the row the TREE names (its branch, its `wt-<n>` directory) carries anyone ELSE's `session:` label, which is the copy
+ * of a claim `.a11y-owner` cannot be. A `removing` line precedes the delete and a `removed`/`failed` line follows it.
+ *
  * @param {string} worktreePath
- * @param {{ run?: typeof defaultRun, hash?: (file: string) => string }} [deps]
+ * @param {{ run?: typeof defaultRun, hash?: (file: string) => string, session?: string, branch?: string | null,
+ *   claim?: typeof claimRefusal, record?: typeof recordRemoval }} [deps]
  * @returns {{ removed: true } | { removed: false, reason: string, files?: string[] }}
  */
-export function removeClaimedWorktree(worktreePath, { run = defaultRun, hash } = {}) {
+export function removeClaimedWorktree(worktreePath, { run = defaultRun, hash, session, branch = null, claim = claimRefusal,
+  record = recordRemoval } = {}) {
   if (!existsSync(worktreePath)) return { removed: true };
   const status = worktreeStatus(worktreePath, { run });
   if (!status.clean) {
@@ -1504,10 +1521,20 @@ export function removeClaimedWorktree(worktreePath, { run = defaultRun, hash } =
   }
   const held = unverifiedRecords(worktreePath, primaryWorktreeOf(worktreePath, { run }), { hash });
   if (held.refused) return { removed: false, reason: held.reason };
+  const claimed = claim({ path: worktreePath, branch }, { except: session });
+  if (claimed.refused) return { removed: false, reason: claimed.reason };
+  const line = { path: worktreePath, branch, caller: CALLER, reason: `decline by ${session ?? "an unnamed session"}` };
+  try {
+    record({ ...line, event: "removing" });
+  } catch (cause) {
+    return { removed: false, reason: `the removal log could not be written, so ${worktreePath} was not removed (#2782): ${/** @type {Error} */ (cause).message}` };
+  }
   try {
     run("git", ["worktree", "remove", worktreePath]);
+    record({ ...line, event: "removed" });
     return { removed: true };
   } catch (error) {
+    record({ ...line, event: "failed", detail: /** @type {Error} */ (error).message });
     return { removed: false,
       reason: `git worktree remove failed -- ${/** @type {Error} */ (error).message}` };
   }
@@ -1699,7 +1726,7 @@ function releaseRow(issueNumber,
     // so only an EXPLICIT --predecessor-gone assertion from a caller that actually knows writes the record.
     if (predecessorGone) recordGone(mySession);
   } else if (recorded.worktree) {
-    const removal = removeWorktree(recorded.worktree, { run });
+    const removal = removeWorktree(recorded.worktree, { run, session: mySession, branch: recorded.branch });
     if (!removal.removed) return { declined: false, reason: removal.reason };
     landed.push(`removed the recorded worktree ${recorded.worktree}`);
   }
