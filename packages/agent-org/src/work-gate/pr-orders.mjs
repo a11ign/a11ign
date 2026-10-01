@@ -349,6 +349,9 @@ function refusedPrompt(b) {
  */
 export const HOLD_RED_JOBS = ["deliberateRefusals", "gate"];
 
+/** The session that places a hold on a PR it does not own: before #2882 an unlabelled PR was addressed to it. */
+const HOLDING_SESSION = "product-manager";
+
 /**
  * PURE. Is this pull request red ONLY because its addressee holds it?
  *
@@ -370,6 +373,12 @@ export const HOLD_RED_JOBS = ["deliberateRefusals", "gate"];
  * again, and the run of deliveries it earned while suppressed starts from nothing (`endedRuns` writes `RESET` for
  * the key that stopped being emitted).
  *
+ * A ROW-ROUTED ORDER ACCEPTS THE FALLBACK'S HOLD TOO (#2935). #2882 addressed an unlabelled red PR to the session
+ * holding its row, so `hold:product-manager` -- the hold of the session the order went to BEFORE that change -- stopped
+ * matching: five identical orders in an hour for #2883, each answered "nothing to fix: held". When the addressee came
+ * from a row, a branch or a stamp and not from a `session:` label, the PR names nobody, and `product-manager`'s hold is an
+ * answer as well. A labelled PR keeps #2400's rule: a hold by somebody else still goes.
+ *
  * WHAT IT CANNOT SEE: `deliberateRefusals` also carries #549's `Closes` comparison, and a rollup names the JOB, not
  * the step. A held PR whose body ALSO declares the wrong `Closes` is red for two reasons and silent about one of
  * them until the hold is released, when the refusal reappears with nothing else red.
@@ -379,7 +388,8 @@ export const HOLD_RED_JOBS = ["deliberateRefusals", "gate"];
  */
 function redOnlyFromHoldOf(pr, onHead, { session, source }) {
   const holders = holdersOf(labelsOf(pr));
-  const answered = source === "ceo" ? holders.length > 0 : holders.includes(`${HOLD_PREFIX}${session}`);
+  const answerers = source === "label" ? [session] : [session, HOLDING_SESSION];
+  const answered = source === "ceo" ? holders.length > 0 : answerers.some((a) => holders.includes(`${HOLD_PREFIX}${a}`));
   if (!answered) return false;
   const red = onHead.filter((c) => checksSettledGreen([c]) === false);
   return red.length > 0 && red.every((c) => HOLD_RED_JOBS.includes(String(c?.name ?? c?.context)));
