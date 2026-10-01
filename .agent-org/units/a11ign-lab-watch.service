@@ -28,7 +28,7 @@ Environment=PATH=/home/agent/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin
 Environment=HOME=/home/agent
 
 # V8'S COMPILE CACHE GOES UNDER THE HOME, NOT /tmp -- #2458. `tsc`, `eslint`, `rstest` and `changeset` (all reached
-# through `npm run`) call `enableCompileCache()` with no directory, which writes `<tmpdir>/node-compile-cache`:
+# through `pnpm run`) call `enableCompileCache()` with no directory, which writes `<tmpdir>/node-compile-cache`:
 # one entry per file per checkout path, 141,353 inodes in the 2026-09-25 outage. A unit reads no shell startup
 # file, so this line is the ONLY place a unit can get it; `host-units.test.ts` pins it on every shipped service.
 Environment=NODE_COMPILE_CACHE=%h/.cache/node-compile-cache
@@ -43,9 +43,9 @@ Environment=GH_CONFIG_DIR=/home/agent/workers/gh
 EnvironmentFile=-%h/.config/a11ign/fleet.env
 
 # UPDATED FIRST, and non-fatal, as the other units that run this checkout's code do.
-ExecStartPre=-/usr/bin/npm run primary:update
+ExecStartPre=-%h/.local/bin/pnpm run primary:update
 
-ExecStart=/usr/bin/npm run lab:watch -- --post
+ExecStart=%h/.local/bin/pnpm run lab:watch -- --post
 
 # THE EXIT CONTRACT IS THE POINT (docs/gate-exit-codes.md): 0 QUIET, 1 ATTENTION -- it found something and
 # has ALREADY posted it, so the unit did its job -- and 2 CANNOT_ASK, which must stay a FAILED unit: a clock
