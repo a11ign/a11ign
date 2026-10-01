@@ -24,12 +24,12 @@ WorkingDirectory=@@checkout@@
 # SAME REASON @@prefix@@work-tick.service AND a11ign-corpus-snapshot.service BOTH DECLARE THEIRS: a systemd
 # unit gets no login shell's PATH, and this one reaches `git` through `execFileSync` once per worktree.
 # Without this line every firing dies before it reads anything, quietly, while the timer looks healthy.
-# Verified on this host: node and npm at /usr/bin, git at /usr/bin.
+# Verified on this host: node and git at /usr/bin, the pnpm shim at ~/.local/bin (a corepack shim, #2892).
 Environment=PATH=@@binDir@@:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Environment=HOME=@@home@@
 
 # V8'S COMPILE CACHE GOES UNDER THE HOME, NOT /tmp -- #2458. `tsc`, `eslint`, `rstest` and `changeset` (all reached
-# through `npm run`) call `enableCompileCache()` with no directory, which writes `<tmpdir>/node-compile-cache`:
+# through `pnpm run`) call `enableCompileCache()` with no directory, which writes `<tmpdir>/node-compile-cache`:
 # one entry per file per checkout path, 141,353 inodes in the 2026-09-25 outage. A unit reads no shell startup
 # file, so this line is the ONLY place a unit can get it; `host-units.test.ts` pins it on every shipped service.
 Environment=NODE_COMPILE_CACHE=%h/.cache/node-compile-cache
@@ -54,7 +54,7 @@ Environment=NODE_COMPILE_CACHE=%h/.cache/node-compile-cache
 Environment=GH_CONFIG_DIR=@@workersDir@@/gh
 
 # `--apply` OR THIS UNIT IS A REPORT NOBODY READS. The bare script is deliberately a DRY RUN, and for a
-# measured reason: on 2026-09-09 a session ran `npm run worktrees:prune` to READ the breakdown before
+# measured reason: on 2026-09-09 a session ran the bare prune script to READ the breakdown before
 # writing a row about worktree accounting, and removed three other sessions' trees. So the flag that makes
 # it act lives here, in the file, where the repository can see that something does pass it.
 #
@@ -64,7 +64,7 @@ Environment=GH_CONFIG_DIR=@@workersDir@@/gh
 # git activity in the last 10 minutes (#220, a tree deleted mid-`git stash`). It never passes `--force`, so
 # `git worktree remove`'s own refusal is a second guard behind its own. Nothing here needs a human's eye,
 # which is exactly why it must not need a model turn.
-ExecStart=/usr/bin/npm run worktrees:prune -- --apply
+ExecStart=%h/.local/bin/pnpm run worktrees:prune -- --apply
 
 # MEASURED 2026-09-22 ON THIS HOST: 88s for a full pass over 143 worktrees, most of it `git status` in each
 # one. The bound is generous against that because the cost falls as the backlog clears (fewer trees, less
