@@ -12,7 +12,7 @@
 import type { Judgment } from "@a11ign/judge";
 import { taskVerdictLabel, judgeBackend } from "@a11ign/judge";
 import type { AxeFinding } from "./scan/axe.js";
-import type { PdfFinding } from "@a11ign/pdf";
+import type { PdfFinding } from "@a11ign/documents";
 import { layerOf, orderByLayer, LAYER_LABEL, type ExperienceLayer } from "@a11ign/judge/layers";
 import { notAConformanceClaim, type ConformanceRequirement }
   from "@a11ign/evidence/conformance";
