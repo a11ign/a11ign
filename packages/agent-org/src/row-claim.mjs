@@ -2386,6 +2386,14 @@ function runConflict(issueNumber, rest) {
   }
 }
 
+/**
+ * EVERY FLAG THIS COMMAND ACCEPTS, exported so a test can drive the argv its callers build (`wake.mjs`'s claim, release and undo) through the
+ * REAL list rather than a restated copy. #2841: `--predecessor-gone` was parsed below and sent by `performRelease` from #2748, but was
+ * never added here, so every gone-worker release was refused at the guard before any parse -- each side was tested alone.
+ */
+export const ROW_CLAIM_FLAGS = ["--session", "--row=", "--found=", "--blocked=", "--branch=", "--worktree=",
+  "--blocked-by=", "--keep-worktree", "--predecessor-gone", "--answer=", "--adopt=", "--tracker="];
+
 async function main() {
   // THE PULL LOOP RESTS ON THIS COMMAND, so a flag it silently discards is the worst place for one.
   // Measured 2026-09-07 before this guard: `row-claim.mjs check 161 --jsonn` printed the ordinary claim
@@ -2396,8 +2404,7 @@ async function main() {
   // the bare status-read shape below, and a guard listing only `--session` would refuse the command's
   // own documented invocation. A flag guard that has not been merged forward is a guard that breaks the
   // thing it protects.
-  refuseUnknownFlags(["--session", "--row=", "--found=", "--blocked=", "--branch=", "--worktree=",
-    "--blocked-by=", "--keep-worktree", "--answer=", "--adopt=", "--tracker="], { entry: import.meta.url, command: "node packages/agent-org/src/row-claim.mjs" });
+  refuseUnknownFlags(ROW_CLAIM_FLAGS, { entry: import.meta.url, command: "node packages/agent-org/src/row-claim.mjs" });
   // #1352: FIRST OF ALL, where it was launched. From the primary checkout or a plain clone this refuses before any read,
   // exit 2 -- the "could not determine at all" outcome every consumer already classifies, as the stale-rule guard does.
   if (launchGate("row-claim")) {
