@@ -50,7 +50,7 @@ name: trunk
 # throughput pressure here that would justify the same path-scoping.
 #
 # KNOWN GAP, STATED RATHER THAN HIDDEN: this does not (yet) run `ci.yml`'s `ansible` syntax-check or
-# `rulesFitness` (`npm run rules-check`) jobs. Both are cheap to add later; left out of the first version
+# `rulesFitness` (`pnpm run rules-check`) jobs. Both are cheap to add later; left out of the first version
 # to keep this row's scope to the red-trunk MECHANISM, which is what #316's acceptance actually exercises.
 on:
   push:
@@ -211,7 +211,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
-      - run: npm run build
+      - run: pnpm run build
       # The re-check runs the red job's own battery, which includes pytest (#2389 review).
       - uses: actions/setup-python@v5
         with: { python-version: "3.12", cache: pip }
@@ -263,7 +263,7 @@ jobs:
           fi
           # #2389 review: `|| true` HERE WAS A FALSE PASS. A parent whose build broke has no `dist`, its suite
           # then fails for that reason or (worse) skips what needs it, and the answer read as the parent's own.
-          if ! npm run build > /tmp/parent-build.log 2>&1; then
+          if ! pnpm run build > /tmp/parent-build.log 2>&1; then
             echo "::warning::the parent does not build; the re-check is UNKNOWN, not a pass."
             echo "result=unknown" >> "$GITHUB_OUTPUT"
             exit 0
@@ -274,9 +274,9 @@ jobs:
           # green at the parent and an inherited failure was recorded as this merge's own. `trunk-revert.test.ts`
           # pins that each command below is one the red job runs. A failure that is not a `not ok` line (lint,
           # typecheck, pytest) summarises as `unknown`, which is honest: nobody can name a test.
-          if npm run lint > /tmp/parent-test.log 2>&1 \
-            && npm run typecheck >> /tmp/parent-test.log 2>&1 \
-            && npm run test:all >> /tmp/parent-test.log 2>&1 \
+          if pnpm run lint > /tmp/parent-test.log 2>&1 \
+            && pnpm run typecheck >> /tmp/parent-test.log 2>&1 \
+            && pnpm run test:all >> /tmp/parent-test.log 2>&1 \
             && PYTHONDONTWRITEBYTECODE=1 pytest -p no:cacheprovider packages/*/tests -q >> /tmp/parent-test.log 2>&1; then
             echo "the parent PASSES the suite now -- its recorded green is still the answer."
             echo "result=pass" >> "$GITHUB_OUTPUT"

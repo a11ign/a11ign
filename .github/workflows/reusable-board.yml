@@ -34,7 +34,7 @@ jobs:
       # the stale-dist trap CLAUDE.md names for every other job in this repo's CI, reached one hop further
       # than the grep looked. Caught by actually RUNNING the job's real command with no build present, not
       # by reading the imports.
-      - run: npm run build
+      - run: pnpm run build
       # GH_TOKEN: `board-*.test.ts` reach real `gh` calls TRANSITIVELY -- `board-style.test.ts` imports
       # `packages/agent-org/src/board-data.mjs`, whose `collect()` shells out to `gh issue list`. Read-only;
       # `github.token` already has that scope for the repo the workflow runs in.
@@ -43,7 +43,7 @@ jobs:
       # beneath it, and requires GH_TOKEN on any job that can reach a `gh` spawn. A test grepping the test
       # FILES alone would have found nothing here -- neither board test names `gh` at all.
       # THROUGH THE SAME FLOOR `test:ts`/`test:org`/`test:all`/`guards:sweep` all use (#1321), not a bare
-      # `npx rstest run --config <rstest's config, under scripts/rstest> ...`: spelling that config file's
+      # `pnpm exec rstest run --config <rstest's config, under scripts/rstest> ...`: spelling that config file's
       # path here, even in a comment, is exactly what `entry-points.test.ts` reads (over this whole file's
       # text, unstripped) as an unguarded npm/workflow entry point -- the config module is meant to be
       # imported, not run, so guarding it the way an entry point is guarded would be the wrong fix. Keeping
