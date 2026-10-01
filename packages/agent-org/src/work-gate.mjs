@@ -4183,7 +4183,7 @@ export function unclaimableRowOrders(offerable, streaks) {
         + "Find out whose tree it is (`npm run worktree:whose -- <path>`) and whether that session still holds the row. A "
         + "live holder whose row lost its claim label needs the label back; a leftover tree whose work is merged and clean "
         + "goes with `npm run worktrees:prune` (never `rm -rf`), which names and leaves any dirty one; a tree with unpushed "
-        + "work is that session's to finish. If none of that fits, take the row off the shelf (`blocked`, with what would "
+        + "work is that session's to finish. If none of that fits, take the row off the shelf (`" + BLOCKED_LABEL + "`, with what would "
         + "clear it) so the engineers stop being offered it.",
       causeKey: `product-manager/ready-row-unclaimable/${discriminator}`,
     }];
