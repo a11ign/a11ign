@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
-// command: the whole-repo coverage gate `npm run coverage` runs, now through rstest, not c8
+// command: the whole-repo coverage gate `pnpm run coverage` runs, now through rstest, not c8
 //
 // #1320, STEP 4 OF THE RSTEST ADOPTION (#1317): coverage moves off c8 onto `@rstest/coverage-v8`. Three
 // pieces, each already built and tested for a reason of its own, wired together here for the first time:
