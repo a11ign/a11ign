@@ -382,8 +382,8 @@ function redOnlyFromHoldOf(pr, onHead, session) {
 
 /**
  * WHO A PULL REQUEST BELONGS TO: its own `session:` label, else the live session that holds the single row it
- * closes (`rowOwner`, put there by `withClosingRowOwners`, #2882), else `null`. The label comes first and the
- * row never outranks it. Only the two orders that route the AUTHOR'S work read this; the others keep `sessionOf`.
+ * closes, else the one holding the row its branch suffix names (`rowOwner`, put there by `withClosingRowOwners`,
+ * #2882/#2928), else `null`. The label comes first and the row never outranks it. Only the two orders that route the AUTHOR'S work read this; the others keep `sessionOf`.
  *
  * @param {any} pr @returns {string | null}
  */
@@ -397,6 +397,9 @@ function ownerOf(pr) {
  */
 function ownershipSentence(pr) {
   if (sessionOf(pr)) return "It carries your session label, so it is yours to fix.";
+  if (pr?.rowOwner?.source === "branch") {
+    return `It carries no session label and closes no row you hold, but its branch \`${pr.headRefName}\` was claimed for row #${pr.rowOwner.row}, which is held by you, so it is yours to fix.`;
+  }
   if (pr?.rowOwner) {
     return `It carries no session label, but the row it closes (#${pr.rowOwner.row}) is held by you, so it is yours to fix.`;
   }
