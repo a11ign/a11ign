@@ -367,7 +367,7 @@ of the encoding rather than a fact about focus pages.
 `notFor`, whose recorded reason is: *"`focusOrder` truncates at 12 stops, so four more push the case's own
 controls out of the window"*. **`MAX_TAB_STOPS` is 150 now.** The exclusion may still be correct, but not
 for the reason written down — and one command settles it:
-`npm run lab:pipeline -- --pipeline=verify --only=focus-order-tabindex+`. Until that runs, "unavailable"
+`pnpm run lab:pipeline --pipeline=verify --only=focus-order-tabindex+`. Until that runs, "unavailable"
 means "not re-measured since the cap changed".
 
 **And 57 is measured on 18 heads with the corpus as it stands.** The remaining vetoes concentrate in

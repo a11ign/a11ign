@@ -16,8 +16,8 @@ them and missed at the eighth is a capture that launches Chrome and kills Edge.
 ```bash
 A11Y_BROWSER=chrome          # what this GUEST has (set once in run-server.cmd)
 {"url": "...", "browser": "chrome"}          # per REQUEST, for a comparison run
-npm run evidence:check -- <worker> --browser=chrome     # does Chrome announce the same as Edge?
-npm run training:repeat -- --url=<page> --browser=chrome --times=5
+pnpm run evidence:check <worker> --browser=chrome     # does Chrome announce the same as Edge?
+pnpm run training:repeat --url=<page> --browser=chrome --times=5
 ```
 
 **The browser is EVIDENCE, not configuration.** `environmentKey()` has always keyed the cache on

@@ -15,9 +15,9 @@ later, with less context than whoever filed it had.
 ## Use this instead of `gh issue create` directly
 
 ```sh
-npm run row-file -- --title "..." --body "## Region\n\n...\n\n## Acceptance\n\n...\n\n## Open-check\n\n..." --session=<your-session-name> [any other gh issue create flag]
+pnpm run row-file --title "..." --body "## Region\n\n...\n\n## Acceptance\n\n...\n\n## Open-check\n\n..." --session=<your-session-name> [any other gh issue create flag]
 # or
-npm run row-file -- --title "..." --body-file /path/to/body.md --session=<your-session-name> [any other gh issue create flag]
+pnpm run row-file --title "..." --body-file /path/to/body.md --session=<your-session-name> [any other gh issue create flag]
 ```
 
 `--session=<name>` is **required** — the same flag `row-claim.mjs` already uses for dispatch/claim/decline,

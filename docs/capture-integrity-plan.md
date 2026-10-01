@@ -281,7 +281,7 @@ comparison inverts, the population is the first suspect, not the subject.
 ## How to know it worked
 
 ```bash
-npm run capture:explain -- <any real page>     # says what the capture can support, and why not
+pnpm run capture:explain <any real page>     # says what the capture can support, and why not
 ```
 
 And one number, on the corpus that produced this plan: **the 97% falls, and whatever remains is
@@ -435,7 +435,7 @@ This was got wrong three times in one day, and each time the clean result was re
 
 ## `evidence:check`, 2 of 48, and the `examinedNothing` guard
 
-- `npm run evidence:check <worker>` — after ANY change to the capture pipeline, asks whether the
+- `pnpm run evidence:check <worker>` — after ANY change to the capture pipeline, asks whether the
   evidence moved rather than whether the timing did. Exit 0 = ship without invalidating the cache,
   1 = evidence CHANGED, bump `CAPTURE_PROTOCOL_VERSION` and recapture, **2 = INCONCLUSIVE, which now
   includes PARTIAL coverage and not only zero**. It reported `2 compared: 2 same ... evidence unchanged —
@@ -452,7 +452,7 @@ This was got wrong three times in one day, and each time the clean result was re
 
 ## npm run identity:rate
 
-- `npm run identity:rate -- --worker=<url> [--rounds=20]` — **does a capture ever read the wrong page?**
+- `pnpm run identity:rate --worker=<url> [--rounds=20]` — **does a capture ever read the wrong page?**
   Rotates three pages with mutually exclusive signatures so a stale read names which page it came from, and
   every capture after the first navigates an already-open window, because a freshly launched browser has no
   previous document and therefore cannot express the fault. Reports wrong-page, silent and unrecognised
@@ -490,15 +490,15 @@ silently disables only half of what you asked for.
 
 ## eval and eval:gate, what cannot run in CI
 
-- **Pre-release, and not covered by CI:** `npm run eval:gate` for judge quality, and
+- **Pre-release, and not covered by CI:** `pnpm run eval:gate` for judge quality, and
   `verify.corpus.test.ts` for the capture gates. Neither can run in CI — eval needs the Python venv
   login, the corpus test needs `runs/`. Note also that `capture-regression.yml` is path-filtered to
   `packages/lab/src/capture/**`, so it does **not** fire for changes under `packages/lab/src/training/**` — which is exactly
   where the guard bug above lived.
-- `npm run eval [-- <substring>]` — judge quality against 34 labelled fixtures, **against our own scorer** (`JUDGE_BACKEND` defaults to `local`). Needs the Python venv, so it **cannot run in CI**; run it when you touch the judge, prompts, criteria, or fixtures. Do **not** quote its numbers as a headline: `docs/METHODOLOGY.md` records that the guards were tuned against these cases, scoring is single-run, and there is no expert baseline yet. Report with those caveats or not at all.
+- `pnpm run eval [<substring>]` — judge quality against 34 labelled fixtures, **against our own scorer** (`JUDGE_BACKEND` defaults to `local`). Needs the Python venv, so it **cannot run in CI**; run it when you touch the judge, prompts, criteria, or fixtures. Do **not** quote its numbers as a headline: `docs/METHODOLOGY.md` records that the guards were tuned against these cases, scoring is single-run, and there is no expert baseline yet. Report with those caveats or not at all.
 
 ## training:check-signals and worker-troubleshooting pointers
 
-- `npm run training:check-signals` — proves every dataset `badSignal` fires on the bad page and stays silent on the good one, against captures already on disk (no worker needed). Run it after ANY change to a probe's output shape: a probe and its signal are coupled, and 8 cases once went silently blind when a probe changed. `npm run training:status` reports a long capture run; `--resume` picks up where one stopped.
+- `pnpm run training:check-signals` — proves every dataset `badSignal` fires on the bad page and stays silent on the good one, against captures already on disk (no worker needed). Run it after ANY change to a probe's output shape: a probe and its signal are coupled, and 8 cases once went silently blind when a probe changed. `pnpm run training:status` reports a long capture run; `--resume` picks up where one stopped.
 - **Worker broken? Don't debug from first principles** — `docs/nvda-worker-runbook.md` has the error-string → real-cause table (the messages are misleading: `"NVDA not installed"` usually means a version mismatch, not a missing install), and `packages/worker-fleet/src/provisioning/diagnose-nvda-worker.ps1` applies it automatically. `packages/worker-fleet/src/provisioning/provision-nvda-worker.ps1` is the idempotent repair.
 - **No worker to hand?** Build one: `docs/getting-started.md` (~1.5–2 h, almost all of it downloading Windows). Validating capture changes through CI is a ~10-minute loop and should be the fallback, not the habit.

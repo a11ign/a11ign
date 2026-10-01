@@ -1,21 +1,21 @@
 # Lab Pipeline
 
 This is the capture/lab pipeline reference moved from CLAUDE.md during #458 — the ordered stages behind
-`npm run lab:pipeline`. **Not** to be confused with `docs/pipeline.md`, which is the merge/CI pipeline.
+`pnpm run lab:pipeline`. **Not** to be confused with `docs/pipeline.md`, which is the merge/CI pipeline.
 
 ## Producing evidence is a PIPELINE, and it is one command
 
-`npm run lab:pipeline -- --pipeline=<name>` runs the ordered stages that used to be typed out by hand.
+`pnpm run lab:pipeline --pipeline=<name>` runs the ordered stages that used to be typed out by hand.
 `--list` names them; `gates` needs no worker and so leaves the fleet alone.
 
 ```bash
-npm run lab:pipeline -- --list
-npm run lab:pipeline -- --pipeline=real-pages          # deploy -> capture -> rules:real-pages -> rules:coverage
-npm run lab:pipeline -- --pipeline=corpus --ref=<branch>
-npm run lab:pipeline -- --pipeline=gates               # no fleet: reads the corpus already on disk
-npm run lab:pipeline -- --pipeline=verify --only=route-title-stale+  # PROVE a corpus change first
-npm run lab:pipeline -- --pipeline=full                # corpus + model + gates, proven TOGETHER
-npm run lab:job -- -e job=everything                  # the same chain as ONE supervised unit
+pnpm run lab:pipeline --list
+pnpm run lab:pipeline --pipeline=real-pages          # deploy -> capture -> rules:real-pages -> rules:coverage
+pnpm run lab:pipeline --pipeline=corpus --ref=<branch>
+pnpm run lab:pipeline --pipeline=gates               # no fleet: reads the corpus already on disk
+pnpm run lab:pipeline --pipeline=verify --only=route-title-stale+  # PROVE a corpus change first
+pnpm run lab:pipeline --pipeline=full                # corpus + model + gates, proven TOGETHER
+pnpm run lab:job -e job=everything                  # the same chain as ONE supervised unit
                                                       # (it runs `lab:everything` on the lab)
 ```
 
@@ -79,7 +79,7 @@ prints per-stage boundaries live and a single unit cannot.
 > entry carries `fleet: true` and ships the ref to the workers before dispatching. `lab:job -e
 > job=everything` cannot: only the control plane holds both credentials (ADR 0012), so the lab has no
 > route to deploy the boxes it is about to capture on. Choosing the job route therefore means running
-> `npm run fleet:deploy -- --ref=<ref>` yourself.
+> `pnpm run fleet:deploy --ref=<ref>` yourself.
 >
 > Measured 2026-08-27: a worker file changed, `everything` was dispatched without deploying, and it died
 > 30 seconds in with `5 stale worker(s)`. That is `assertFleetRunsThisCheckout` working exactly as built —
@@ -100,7 +100,7 @@ command nobody was forced to run.
 
 Measured: after `MAX_TAB_STOPS` went 12 → 150 and `collectByType` began recording `prevCount`, the
 real-page corpus held **both populations at once**, and reading it meant bucketing captures by whether they
-carried the new diagnostic mark at all. Every gate was green. `npm run worker:code` has answered this
+carried the new diagnostic mark at all. Every gate was green. `pnpm run worker:code` has answered this
 correctly the whole time and is a separate command a human must remember — this file's own definition of a
 check that does not happen. It was remembered by hand four times in one day.
 
@@ -132,7 +132,7 @@ capture-client guards were mutation-checked the same way.
 
 ### `lab:job` checks the fleet BEFORE dispatching, for the jobs that would actually need it
 
-The check above runs on the LAB, inside the job's own script — so `npm run lab:job -- -e job=capture` still
+The check above runs on the LAB, inside the job's own script — so `pnpm run lab:job -e job=capture` still
 dispatches over the lab's own SSH key, the lab starts the job, and only THEN does it refuse `10 stale
 worker(s)`. Correct, and one round trip too late: worker files merged, a capture dispatched, a wait, a
 refusal — twice in one day. `lab:pipeline` avoids this because `fleet: true` ships the ref to the workers
