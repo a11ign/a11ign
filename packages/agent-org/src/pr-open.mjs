@@ -566,14 +566,12 @@ const defaultGit = (args) =>
   execFileSync("git", args, { encoding: "utf8", env: sandboxGitEnv() }).trim();
 
 /**
- * What is refused BEFORE `checkBody` runs the Acceptance: the tree is not the head being sent (#1344), or the body carries
- * a `Hand-fix:`/`Not-a-hand-fix:` line the ledger could not read and would silently not count (#2939). Both are pure.
- * @param {string} mode @param {string[]} rest @param {string} body
- * @param {{ git?: (args: string[]) => string, prHead?: (repo: string, number: string) => { ref: string, oid: string } | null }} deps
- * @returns {string | null}
+ * #2307's mutation report, printed for a body that will be SENT. Its own function only to keep `main` under the
+ * complexity ceiling the #2939 declaration check pushed it past.
+ * @param {string} body @param {(command: string) => number} runMutation @param {(line: string) => void} out
  */
-function preAcceptanceRefusal(mode, rest, body, { git, prHead }) {
-  return headTreeRefusal(mode, rest, { git }) ?? editTreeRefusal(mode, rest, { git, prHead }) ?? declarationRefusal(body);
+function printMutationReport(body, runMutation, out) {
+  for (const line of mutationReport(body, runMutation).lines) out(`${line}\n`);
 }
 
 /**
@@ -625,7 +623,9 @@ export function main(argv = process.argv.slice(2),
     return EXIT_USAGE;
   }
   // #1344: BEFORE checkBody, because checkBody RUNS the Acceptance -- in this working tree, whatever --head says.
-  const headRefused = preAcceptanceRefusal(mode, rest, body, { git, prHead });
+  // #2939: and a `Hand-fix:` line the ledger could not read, which it would silently not count. Pure, like the heads.
+  const headRefused = headTreeRefusal(mode, rest, { git }) ?? editTreeRefusal(mode, rest, { git, prHead })
+    ?? declarationRefusal(body);
   if (headRefused) {
     err(`${headRefused}\n`);
     return EXIT_NOTHING_SENT;
@@ -641,7 +641,7 @@ export function main(argv = process.argv.slice(2),
     return EXIT_NOTHING_SENT;
   }
   // #2307: only for a body that will be SENT, and never a reason not to send it.
-  for (const line of mutationReport(body, runMutation).lines) out(`${line}\n`);
+  printMutationReport(body, runMutation, out);
   return sendToGitHub(mode, rest, { run, git, err, owner });
 }
 
