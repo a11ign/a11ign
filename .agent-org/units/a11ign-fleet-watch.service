@@ -1,7 +1,7 @@
 [Unit]
 # THE UNATTENDED HALF OF #1815, SCHEDULED HERE BY #2230. `fleet-watch.mjs` reads `fleet:status` and posts to
 # #928 when a worker has been non-`ready` past a threshold. It had no invoker anywhere in the tree -- not
-# even an npm script -- so it had only ever run as `node` typed by hand. Its docblock believed
+# even a package script -- so it had only ever run as `node` typed by hand. Its docblock believed
 # `lab-watch.mjs` had already become "a script the host schedules"; it had not, and this pair and
 # a11ign-lab-watch.* are the first of either.
 #
@@ -25,7 +25,7 @@ Environment=PATH=/home/agent/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin
 Environment=HOME=/home/agent
 
 # V8'S COMPILE CACHE GOES UNDER THE HOME, NOT /tmp -- #2458. `tsc`, `eslint`, `rstest` and `changeset` (all reached
-# through `npm run`) call `enableCompileCache()` with no directory, which writes `<tmpdir>/node-compile-cache`:
+# through `pnpm run`) call `enableCompileCache()` with no directory, which writes `<tmpdir>/node-compile-cache`:
 # one entry per file per checkout path, 141,353 inodes in the 2026-09-25 outage. A unit reads no shell startup
 # file, so this line is the ONLY place a unit can get it; `host-units.test.ts` pins it on every shipped service.
 Environment=NODE_COMPILE_CACHE=%h/.cache/node-compile-cache
@@ -37,9 +37,9 @@ Environment=GH_CONFIG_DIR=/home/agent/workers/gh
 # missing file is left to the script's own CANNOT_ASK.
 EnvironmentFile=-%h/.config/a11ign/fleet.env
 
-ExecStartPre=-/usr/bin/npm run primary:update
+ExecStartPre=-%h/.local/bin/pnpm run primary:update
 
-ExecStart=/usr/bin/npm run fleet:watch -- --post
+ExecStart=%h/.local/bin/pnpm run fleet:watch -- --post
 
 # 0 QUIET and 1 ATTENTION (already posted) are the unit doing its job; 2 CANNOT_ASK stays FAILED so a
 # fleet this could not read never looks like a healthy one. docs/gate-exit-codes.md.
