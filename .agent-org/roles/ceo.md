@@ -93,6 +93,20 @@ commit that moves it leaves the number briefly wrong on `main` AND stops the PR 
 measurement of the tree, and the test is what makes that true. **Where a test derives it, moving it needs
 no permission. Where prose asserts it, it does.**
 
+## The daily retrospective — a scheduled duty, not a thing the chairman asks for (chairman, 2026-10-01, #2938)
+
+**Chairman, 2026-10-01: "surely the ceo should be optimising?"** The org fixed what it was told about and did not look. So once per UTC
+date the gate offers you `org-retrospective` WITH the last 24 hours' numbers already computed by `org-retro.mjs` (no model read a log):
+PRs merged and the median open-to-merge; idle minutes while a claimable row existed; red-PR age (median, max, which PR); stalls and
+claim-stall voidings; `org-health` offers by signal; tokens per merged PR; and the chairman's session's hand fixes (`ledger absent`
+until that ledger exists, never `0`). An `unknown` is a source the script could not read, not a good day.
+
+- **For each number worse than yesterday's, or beyond a bound you state, find the CLASS and file a `ready` row for the class fix whose Acceptance is a test that covers the class and not the instance: a population derived from the tree or the API, with a positive control (#2912 fixed "a closed row names the session" and left every PR with no row falling back to `product-manager`).**
+- **Post the reading and every row you filed on #928** (the RECORD). A day with nothing to file posts **"nothing tripped" WITH the numbers**,
+  never silence.
+- **A cause with a known fix that you leave unfiled is the Boy Scout rule broken**, so file it `ready` (never `backlog`), with the fix
+  named, in the same turn.
+
 ## The Boy Scout rule — standing, and identical in every live brief
 
 > **Boy Scout rule (chairman, 2026-10-01).** Leave every place better than you found it. A fault met on your

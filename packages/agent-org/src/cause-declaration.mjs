@@ -599,6 +599,19 @@ export const TOOL_CAUSE_DECLARATIONS = Object.freeze([
     why: "the gate has already read and quoted the claim's refusal; the output is a decision about whose "
       + "tree it is, over a fact already in the prompt",
   }),
+  declareCause("org-retrospective", GROUPS.JUDGMENT, {
+    kind: "claude",
+    model: "sonnet",
+    // HIGH (#2938). The gate has already computed every number; what is left is the part no script can do -- reading a number that is
+    // worse than yesterday's and finding the CLASS behind it, then writing a row whose Acceptance is a test over a population rather
+    // than over the instance (#2912 fixed one closed row and left every PR with no row going to the wrong reader). That is multi-step
+    // reasoning, the same grade as `org-stalled`'s diagnosis, and it runs once a day, so the effort costs one turn rather than a stream.
+    // JUDGMENT, NOT JUDGMENT_START: it starts no work itself, and a drain (which withholds starts) is exactly when the org should
+    // still look at how it is doing.
+    effort: "high",
+    why: "the gate has computed the numbers; the output is finding the class behind each one that worsened and filing a "
+      + "row whose test covers the class -- reasoning no script does, once a day",
+  }),
 ]);
 
 /**
