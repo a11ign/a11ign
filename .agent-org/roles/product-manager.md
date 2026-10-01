@@ -33,7 +33,7 @@ Three things, and they are all one thing seen from different distances.
 |---|---|
 | **The tracker** | GitHub Issues, the Project board and the labels are the single answer to *"what is open"*. `docs/backlog.md` and `docs/known-gaps.md` are the RECORD of lessons and link to issues; they stopped being the tracker. |
 | **The release** | One milestone, one date, and **a reason recorded on the milestone for every move of that date**. A milestone takes no comments, so the log is its description. |
-| **The daily board report** | Generated from GitHub and git by `npm run board:report`, posted to issue #20 at 08:00 Europe/London. |
+| **The daily board report** | Generated from GitHub and git by `pnpm run board:report`, posted to issue #20 at 08:00 Europe/London. |
 
 ## What this role owns
 
