@@ -114,15 +114,20 @@ export function readRecordRows(recordPath) {
 /** A TICK row is the one a tick wrote, which has no `kind`; a window row (`gap`, `refused`, `stop`) names its kind. Rows written before #2867 are all ticks. @param {any} row */
 export const isTickRow = (row) => row.kind === undefined;
 
-/** @param {any[]} rows @returns {number} DISTINCT ticks recorded, so a row written twice would still count once */
-export const ticksRecorded = (rows) => new Set(rows.filter(isTickRow).map((row) => row.tickMs)).size;
+/**
+ * DISTINCT ticks recorded, so a row written twice would still count once. `t0Ms` leaves out a tick that began BEFORE the window opened: the live
+ * tap's directory can hold a file from an earlier marker, which the first armed run recorded as tick 1 (2026-10-01, #2867).
+ * @param {any[]} rows @param {number} [t0Ms]
+ * @returns {number}
+ */
+export const ticksRecorded = (rows, t0Ms = 0) => new Set(rows.filter((row) => isTickRow(row) && row.tickMs >= t0Ms).map((row) => row.tickMs)).size;
 
 /**
- * The record's last TICK row, which is where the next tick starts. `null` for a record with no tick yet.
- * @param {string} recordPath @returns {{ tickMs: number, bootId: string | null } | null}
+ * The record's last TICK row at or after `t0Ms`, which is where the next tick starts. `null` for a record with no tick yet.
+ * @param {string} recordPath @param {number} [t0Ms] @returns {{ tickMs: number, bootId: string | null } | null}
  */
-export function lastRecorded(recordPath) {
-  const ticks = readRecordRows(recordPath).filter(isTickRow);
+export function lastRecorded(recordPath, t0Ms = 0) {
+  const ticks = readRecordRows(recordPath).filter((row) => isTickRow(row) && row.tickMs >= t0Ms);
   if (ticks.length === 0) return null;
   const { tickMs, bootId } = ticks[ticks.length - 1];
   return { tickMs, bootId: bootId ?? null };
@@ -130,14 +135,15 @@ export function lastRecorded(recordPath) {
 
 /**
  * The OLDEST tick file newer than the last one recorded, or `null`. Ordered by the number in its name (the tick's UTC
- * milliseconds), never by directory order or mtime.
- * @param {{ liveDir: string, after: number | null }} where @returns {{ tickMs: number, path: string } | null}
+ * milliseconds), never by directory order or mtime. `notBefore` (the window's T0) skips a file from a tick that began before the window: it is
+ * not one of its 1,440, and taking it would also record the hours up to T0 as a gap that never happened.
+ * @param {{ liveDir: string, after: number | null, notBefore?: number }} where @returns {{ tickMs: number, path: string } | null}
  */
-export function nextTickFile({ liveDir, after }) {
+export function nextTickFile({ liveDir, after, notBefore = 0 }) {
   const dir = join(liveDir, READS_DIR);
   if (!existsSync(dir)) return null;
   const found = readdirSync(dir).map((name) => ({ name, tickMs: Number(name.replace(/\.json$/, "")) }))
-    .filter(({ name, tickMs }) => name.endsWith(".json") && Number.isSafeInteger(tickMs) && (after === null || tickMs > after))
+    .filter(({ name, tickMs }) => name.endsWith(".json") && Number.isSafeInteger(tickMs) && tickMs >= notBefore && (after === null || tickMs > after))
     .sort((a, b) => a.tickMs - b.tickMs);
   return found.length === 0 ? null : { tickMs: found[0].tickMs, path: join(dir, found[0].name) };
 }
@@ -222,15 +228,16 @@ export function buildRecord({ tickMs, tick, live, candidate, gapBefore, now, boo
 
 /**
  * ONE tick: refuse, refresh the copy, take the oldest unrecorded tick, run the candidate over it, append one line.
- * `windowed` (the unit's run) adds a boot id to the line and, when ticks are missing before this one, a gap row BEFORE it.
+ * `windowed` (the unit's run) adds a boot id to the line and, when ticks are missing before this one, a gap row BEFORE it, and its `t0Ms` keeps a
+ * tick from before the window out of both the choice of the next tick and the gap arithmetic.
  * @param {{ liveDir?: string, copyDir: string, recordPath: string, candidate: string, now?: Date,
- *   windowed?: { bootId: string | null } }} job
+ *   windowed?: { bootId: string | null, t0Ms: number } }} job
  * @returns {{ status: "QUIET" | "RECORDED", record?: ReturnType<typeof buildRecord> }}
  */
 export function shadowTick({ liveDir = LIVE_STATE_DIR, copyDir, recordPath, candidate, now = new Date(), windowed }) {
   refuseBeforeReading({ liveDir, copyDir, recordPath });
-  const last = lastRecorded(recordPath);
-  const next = nextTickFile({ liveDir, after: last?.tickMs ?? null });
+  const last = lastRecorded(recordPath, windowed?.t0Ms);
+  const next = nextTickFile({ liveDir, after: last?.tickMs ?? null, notBefore: windowed?.t0Ms });
   if (next === null) return { status: "QUIET" };
   refreshCopy({ liveDir, copyDir });
   const { tick, args, orders } = JSON.parse(readFileSync(next.path, "utf8"));
@@ -340,20 +347,21 @@ export function windowTick({ liveDir = LIVE_STATE_DIR, copyDir, recordPath, cand
     endWindow({ liveDir, timerUnit, disableTimer });
     return { status: "ENDED", cause: ended.cause, ticks: ended.ticks };
   }
-  const ticks = ticksRecorded(readRecordRows(recordPath));
-  const before = stopReason({ ticks, t0Ms: Date.parse(marker.t0), now });
+  const t0Ms = Date.parse(marker.t0);
+  const ticks = ticksRecorded(readRecordRows(recordPath), t0Ms);
+  const before = stopReason({ ticks, t0Ms, now });
   if (before !== null) return stopWindow({ cause: before, ticks, recordPath, liveDir, timerUnit, now, disableTimer });
-  const result = tickOrRecordRefusal({ liveDir, copyDir, recordPath, candidate, now, bootId });
-  const after = ticksRecorded(readRecordRows(recordPath));
-  const reason = stopReason({ ticks: after, t0Ms: Date.parse(marker.t0), now });
+  const result = tickOrRecordRefusal({ liveDir, copyDir, recordPath, candidate, now, bootId, t0Ms });
+  const after = ticksRecorded(readRecordRows(recordPath), t0Ms);
+  const reason = stopReason({ ticks: after, t0Ms, now });
   if (reason !== null && result.status === "RECORDED") return { ...stopWindow({ cause: reason, ticks: after, recordPath, liveDir, timerUnit, now, disableTimer }), record: result.record };
   return { ...result, ticks: after };
 }
 
-/** @param {Parameters<typeof shadowTick>[0] & { bootId: string | null }} job */
-function tickOrRecordRefusal({ bootId, ...job }) {
+/** @param {Parameters<typeof shadowTick>[0] & { bootId: string | null, t0Ms: number }} job */
+function tickOrRecordRefusal({ bootId, t0Ms, ...job }) {
   try {
-    return shadowTick({ ...job, windowed: { bootId } });
+    return shadowTick({ ...job, windowed: { bootId, t0Ms } });
   } catch (error) {
     const cause = /** @type {Error} */ (error).message;
     try {
