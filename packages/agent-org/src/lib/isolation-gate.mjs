@@ -72,6 +72,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 // `ci.yml`'s `changed` job runs no `npm ci` — it decides whether anything else installs at all. A package
 // specifier here dies before the workflow starts.
 import { refuseUnknownFlags } from "./cli-flags.mjs";
+// STAYS npm for the consumer half (`no-npm-spawn.test.ts` pins this file by name; the header's "Two package managers, on purpose" says why):
+// the tarballs are installed as `npm install a11ign` would, outside any workspace.
 import { npmCliInvocation, pnpmCliInvocation } from "./npm-cli-executable.mjs";
 
 export const SMOKE = "isolation-smoke.mjs";
