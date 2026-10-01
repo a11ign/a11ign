@@ -124,7 +124,7 @@ environment variable of the machine that drives the browser, and the flows file 
 There is no `--password`, `--token`, `--cookie` or `--header` flag and no `password:` input, on purpose: argv is
 readable in process listings and shell history, and an Action input is interpolated into shell text.
 
-**Its status, measured 2026-09-25 (#2399).** The form login is implemented and has completed one authenticated capture on a real worker (`a11y-worker-3`, 64 announcements, on a fixture page built for the test). On that run **NVDA did not speak the text inserted through the browser protocol**: `npm run auth:leak-check` exited `0` on the raw transcript, and its positive control, a page that echoes the value back, exited `1`, so the check can see a leak when there is one. **That is one run, one machine and one page, with NVDA's typed-character setting as read there; it does not show the same of your page.** Everything below is what the code does and refuses, plus that one reading.
+**Its status, measured 2026-09-25 (#2399).** The form login is implemented and has completed one authenticated capture on a real worker (`a11y-worker-3`, 64 announcements, on a fixture page built for the test). On that run **NVDA did not speak the text inserted through the browser protocol**: `pnpm run auth:leak-check` exited `0` on the raw transcript, and its positive control, a page that echoes the value back, exited `1`, so the check can see a leak when there is one. **That is one run, one machine and one page, with NVDA's typed-character setting as read there; it does not show the same of your page.** Everything below is what the code does and refuses, plus that one reading.
 
 **What does not exist.** MFA, SSO and CAPTCHA (**use a dedicated test account without MFA or SSO**, or load a state you saved
 by signing in by hand: below); a tool that MAKES a saved state; attaching to a browser you have signed in. A login that reaches an identity provider ends in `auth-login-failed`
@@ -152,7 +152,7 @@ never a value.
   ends the run with `auth-credential-in-artifact`, writing and printing nothing. **A value shorter than 8 characters is
   refused** (`auth-credential-too-short`): replacing `admin` everywhere would rewrite the page's own words, and its
   absence could not be proven. The Action also adds `::add-mask::` for the URL-encoded and base64 forms, which GitHub does
-  not derive. `npm run auth:leak-check` has been read once against a real NVDA (2026-09-25, #2399: exit `0`, with a working positive control), and the first defence held on that page. **The redaction and the per-character refusal above remain the defence to rely on**; one reading is not a promise about yours.
+  not derive. `pnpm run auth:leak-check` has been read once against a real NVDA (2026-09-25, #2399: exit `0`, with a working positive control), and the first defence held on that page. **The redaction and the per-character refusal above remain the defence to rely on**; one reading is not a promise about yours.
 - **A saved storage state is a credential on your disk, and the tool only reads it.** `--auth-state <file>` (the Action's
   `auth-state:`) loads a Playwright storage state you saved by signing in by hand, in place of the login. **The tool never
   writes, copies or moves that file** (a test enumerates every file-writing call and requires the list to hold one entry,

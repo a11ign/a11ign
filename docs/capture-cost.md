@@ -16,7 +16,7 @@ numbers are right, which is why every figure names its run.
 ## Fleet
 
 **What one capture occupies a worker for, at the protocol the workers serve now.** The figure is the last
-`diagnostics[].atMs` of the capture's own record (what `npm run fleet:hours` sums), in seconds. The CLI's
+`diagnostics[].atMs` of the capture's own record (what `pnpm run fleet:hours` sums), in seconds. The CLI's
 wall-clock, which is what a person waits for, is 4-5 s longer (the CLI's own start and the judging call).
 
 Two commands, both with `--no-axe` (axe is the client's layer, not a worker cost) and both with the page's
@@ -180,7 +180,7 @@ batches ran on 2026-09-24 between 08:27Z and 09:02Z, all 33 at `captureProtocol`
 | B-ikea-2 | .224 | 08:30:45 | 453.8 | 458.9 | 136 |  |
 | B-ikea-3 | .146 | 08:34:41 | 452.1 | 457.5 | 136 |  |
 
-Replay one: `npm run witness -- <url> --task "<task>" --worker http://<box>:8765 --json --no-axe [--probe-forms]`
-from a checkout that can reach the fleet (`eval "$(npm run --silent fleet:env)"`); the Action rows replay with
+Replay one: `pnpm run witness <url> --task "<task>" --worker http://<box>:8765 --json --no-axe [--probe-forms]`
+from a checkout that can reach the fleet (`eval "$(pnpm run --silent fleet:env)"`); the Action rows replay with
 `gh workflow run action-smoke.yml --ref main` and `gh run view <id> --log`, whose `##[group]` lines carry the
 timestamps the decomposition reads.

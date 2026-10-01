@@ -120,7 +120,7 @@ Recapturing after an update gives a *different* corpus. It is also 3 h 46 m of f
 Git suits it: 42 MB of pretty-printed JSON packs to 4 MB, and `git diff` shows exactly which
 announcements changed between recaptures — a research capability, not just recovery.
 
-`npm run corpus:backup` remains the belt to that repo's braces: a local verified archive, so the corpus
+`pnpm run corpus:backup` remains the belt to that repo's braces: a local verified archive, so the corpus
 does not depend on one vendor. It refuses to report success without a destination and verifies by
 reading the copy back.
 
@@ -154,8 +154,8 @@ here. They are **deprecated** — "The UTM is deprecated, that was a testing thi
 ## Verify it, before trusting it
 
 ```bash
-npm run doctor                    # every check names its own fix
-npm run fleet:discover            # does it see the workers, and does the inventory agree
+pnpm run doctor                    # every check names its own fix
+pnpm run fleet:discover            # does it see the workers, and does the inventory agree
 cd packages/control/ansible && ansible a11y_workers -m ansible.windows.win_ping
 ```
 
