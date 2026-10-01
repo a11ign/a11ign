@@ -81,6 +81,7 @@ export function pruneShadowReads(dir, { keep = KEEP_TICKS } = {}) {
  * its RAW return (before `withStalePrimaryNotice`), so the runner compares like with like.
  *
  * NEVER THROWS, and never changes what the tick does: a failure is written to `log` with its cause and returned in `diagnostic`.
+ * That includes a failed PRUNE after a good write: `recorded` is then true, and `diagnostic` carries the pruning failures.
  * @param {{ args: unknown, orders: unknown, tick?: number, stateDir?: string, keep?: number, log?: (line: string) => void }} tap
  * @returns {{ recorded: boolean, path?: string, diagnostic?: string }}
  */
@@ -90,9 +91,9 @@ export function tapShadowReads({ args, orders, tick = Date.now(), stateDir = sta
     const dir = join(stateDir, SHADOW_READS_DIR);
     const path = writeRecord({ dir, tick, args, orders });
     const { diagnostics } = pruneShadowReads(dir, { keep });
-    // The record is on disk, so a pruning failure is reported and is not a failed tap.
+    // The record is on disk, so a pruning failure is reported and is not a failed tap: `recorded` stays true, and the caller is told too.
     for (const line of diagnostics) log(`shadow-reads: ${line}\n`);
-    return { recorded: true, path };
+    return diagnostics.length === 0 ? { recorded: true, path } : { recorded: true, path, diagnostic: diagnostics.join("; ") };
   } catch (cause) {
     const diagnostic = `could not record tick ${tick} under ${join(stateDir, SHADOW_READS_DIR)}: ${causeText(cause)}`;
     log(`shadow-reads: ${diagnostic}\n`);
