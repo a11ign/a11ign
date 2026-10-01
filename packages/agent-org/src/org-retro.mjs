@@ -347,7 +347,7 @@ export function retrospectiveKey(date) {
  */
 export const CLASS_FIX_INSTRUCTION = "For each number worse than yesterday's, or beyond a bound you state, find the CLASS and file a `" + READY_LABEL + "` row for the class fix "
   + "whose Acceptance is a test that covers the class and not the instance: a population derived from the tree or the API, with a "
-  + "positive control (#2912 fixed \"a closed row names the session\" and left every PR with no row going to `product-manager`).";
+  + "positive control (#2912 fixed \"a closed row names the session\" and left every PR with no row falling back to `product-manager`).";
 
 /** Where the reading and every filed row are posted: #928, the RECORD. */
 export const RETRO_DESTINATION = "#928";

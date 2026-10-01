@@ -101,7 +101,7 @@ PRs merged and the median open-to-merge; idle minutes while a claimable row exis
 claim-stall voidings; `org-health` offers by signal; tokens per merged PR; and the chairman's session's hand fixes (`ledger absent`
 until that ledger exists, never `0`). An `unknown` is a source the script could not read, not a good day.
 
-- **For each number worse than yesterday's, or beyond a bound you state, find the CLASS and file a `ready` row for the class fix whose Acceptance is a test that covers the class and not the instance: a population derived from the tree or the API, with a positive control (#2912 fixed "a closed row names the session" and left every PR with no row going to `product-manager`).**
+- **For each number worse than yesterday's, or beyond a bound you state, find the CLASS and file a `ready` row for the class fix whose Acceptance is a test that covers the class and not the instance: a population derived from the tree or the API, with a positive control (#2912 fixed "a closed row names the session" and left every PR with no row falling back to `product-manager`).**
 - **Post the reading and every row you filed on #928** (the RECORD). A day with nothing to file posts **"nothing tripped" WITH the numbers**,
   never silence.
 - **A cause with a known fix that you leave unfiled is the Boy Scout rule broken**, so file it `ready` (never `backlog`), with the fix
