@@ -13,13 +13,15 @@
 import { execFileSync } from "node:child_process";
 import { isPrimaryWorktree } from "./prune-worktrees.mjs";
 import { sandboxGitEnv } from "./lib/git-env.mjs";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
 import { refuseUnknownFlags } from "./lib/cli-flags.mjs";
 import { npmCliInvocation, pnpmCliInvocation } from "./lib/npm-cli-executable.mjs";
 import { changedFiles } from "./lib/changed-files.mjs";
+import { HOME_CHECKOUT } from "./project-config.mjs";
 
-const REPO = fileURLToPath(new URL("../../../", import.meta.url));
+/** The checkout `primary:update` moves: the PROJECT's (`HOME_CHECKOUT`), which is the tool's own `src` up three only when `$AGENT_ORG_HOST` is unset (#2879). */
+export const PRIMARY_CHECKOUT = HOME_CHECKOUT;
 
 /**
  * FAST-FORWARD THE LOCAL `main` BRANCH TOO, because every worktree shares it and this is the only
@@ -100,7 +102,7 @@ export function lockfileMoved(changed, before, after) {
  * @param {(root: string, argv: string[]) => void} [runAt] runs `argv` (its first element names the tool, `npm` or `pnpm`) in `root`; throws on a non-zero exit
  * @param {(range: string[], pathspec: string[]) => string[]} [changed] the paths a range touched
  */
-export function updatePrimary(root = REPO, run = (args) =>
+export function updatePrimary(root = PRIMARY_CHECKOUT, run = (args) =>
   execFileSync("git", args, { cwd: root, env: sandboxGitEnv(), encoding: "utf8" }), runAt = runTool,
 changed = (range, pathspec) => changedFiles(range, { repoRoot: root, pathspec })) {
   if (!isPrimaryWorktree(root)) {
@@ -146,7 +148,7 @@ changed = (range, pathspec) => changedFiles(range, { repoRoot: root, pathspec })
  * @param {(args: string[]) => string} [run]
  * @returns {PrimaryDrift | null}
  */
-export function readPrimaryDrift(root = REPO, run = (args) =>
+export function readPrimaryDrift(root = PRIMARY_CHECKOUT, run = (args) =>
   execFileSync("git", args, { cwd: root, env: sandboxGitEnv(), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] })) {
   if (!isPrimaryWorktree(root)) return null;
   try {
