@@ -242,12 +242,13 @@ export function splitAtDoubleDash(argv) {
 }
 
 /**
- * `pnpm` is resolved through its own CLI script, never spawned by name: a bare `pnpm` spawn fails on Windows
- * (CVE-2024-27980) and the repo's own guard refuses one. The pre-push hook still names `npx`, so that spelling is
- * resolved here too, as `pnpm exec`, and `npm` as `pnpm`: no spelling of the old tool is ever spawned.
+ * Every package-manager spelling resolves to `pnpm`, through its own CLI script and never by name: a bare `pnpm` spawn
+ * fails on Windows (CVE-2024-27980) and the repo's own guard refuses one. The pre-push hook still names `npx`, so that
+ * is `pnpm exec` here and `npm` is `pnpm`: no spelling of the old tool is ever spawned. The name stays `resolveNpmCommand`
+ * because it resolves the npm-family spellings, and `pre-push`'s resolve-toward-main check pins exported names.
  * @param {string} command @param {string[]} args
  */
-export function resolvePackageManagerCommand(command, args) {
+export function resolveNpmCommand(command, args) {
   if (command === "npx") return pnpmCliInvocation(["exec", ...args]);
   return command === "npm" || command === "pnpm" ? pnpmCliInvocation(args) : { command, args };
 }
@@ -262,7 +263,7 @@ async function main() {
   }
   const [command, ...args] = after;
   if (subcommand === "run") {
-    const target = resolvePackageManagerCommand(command, args);
+    const target = resolveNpmCommand(command, args);
     process.exitCode = runUnderCap({ name: before[0], command: target.command, args: target.args });
     return;
   }
