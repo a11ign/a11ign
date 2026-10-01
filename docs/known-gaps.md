@@ -36,6 +36,8 @@ entry names what is missing, what it would cost, and what would tell you it is f
 - [§51](#51-a-run-cannot-get-past-mfa-sso-or-a-captcha-and-nothing-in-the-tool-detects-the-third-out-of-v1-by-ruling-2275-2262) A RUN CANNOT GET PAST MFA, SSO OR A CAPTCHA, AND NOTHING IN THE TOOL DETECTS THE THIRD — OUT OF v1, by ruling (#2275, #2262)
 - [§52](#52-a-claim-that-does-not-move-is-read-from-one-fast-week-and-the-interrupted-pane-needle-was-never-seen-render-open-by-design-2470) A CLAIM THAT DOES NOT MOVE IS READ FROM ONE FAST WEEK, AND THE INTERRUPTED-PANE NEEDLE WAS NEVER SEEN RENDER — OPEN, by design (#2470)
 - [§53](#53-the-413-status-heads-are-at-the-limit-of-their-input-and-their-false-positives-and-misses-are-accepted-by-enumeration-accepted-by-ceo-2026-09-25-2258-2527) THE 4.1.3 STATUS HEADS ARE AT THE LIMIT OF THEIR INPUT, AND THEIR FALSE POSITIVES AND MISSES ARE ACCEPTED BY ENUMERATION — ACCEPTED by ceo, 2026-09-25 (#2258, #2527)
+- [§54](#54-the-thrash-guard-needle-was-never-seen-render-open-by-design-2745) THE THRASH-GUARD NEEDLE WAS NEVER SEEN RENDER — OPEN, by design (#2745)
+- [§55](#55-githubs-closingissuesreferences-was-empty-for-prs-opened-from-0912z-on-2026-09-30-came-back-by-itself-and-the-cause-was-not-found-open-a-reading-2824) GITHUB'S closingIssuesReferences WAS EMPTY FOR PRs OPENED FROM 09:12Z ON 2026-09-30, CAME BACK BY ITSELF, AND THE CAUSE WAS NOT FOUND — OPEN, a reading (#2824)
 <!-- known-gaps-index:end -->
 
 ## The order these should be done in
@@ -3623,3 +3625,69 @@ string's wording (the constant lives with a comment naming its extraction method
 `work-gate-claim-stalled.test.ts`. Until then this is a documented limit of the repro, not a defect awaiting a fix — the same posture #52 took
 for the interrupted-pane needle, and for the same reason: the alternative is shipping nothing and re-paying #2743's cost the next time the guard
 fires.
+
+## 55. GITHUB'S `closingIssuesReferences` WAS EMPTY FOR PRs OPENED FROM 09:12Z ON 2026-09-30, CAME BACK BY ITSELF, AND THE CAUSE WAS NOT FOUND — OPEN, a reading (#2824)
+
+**A dated reading, taken 2026-10-01T06:36Z-06:45Z from the API and from the CI logs of the PRs themselves.** Nothing here was
+measured during the outage, so what the outage looked like from inside is read second-hand off what it left behind; each claim below says
+which. The reading answers what row #2824 asked and finds that **the question's own premise is half wrong: there was no clean cutoff at
+09:12Z.**
+
+**1. Which PRs are still empty now: none that should not be.** Measured (`gh pr list --state all --search "created:>=2026-09-30T05:00:00Z"`,
+`closingIssuesReferences` per PR, then the body's `Closes` line per PR): 30 PRs, #2794 to #2839, all MERGED. 24 declare `Closes #N` and **all 24
+resolve to N today**, including the five the row listed as empty (#2815, #2817, #2818, #2819, #2821). The 6 that read `[]` (#2798, #2801,
+#2804, #2808, #2816, #2825) all open with `Closes: none`, so empty is correct for them. That includes #2808, which the row cites as a PR
+"back-filled late": its body reads `Closes: none` today, so it is not an example of a back-fill.
+
+**2. Whether, and after how long, post-09:12Z PRs back-filled: yes, after roughly two hours, unevenly. Not a probe; read off CI logs, so a
+bound and not a time.** `closes-mismatch-check.mjs` prints what GitHub had resolved at the moment its job ran, and the log of each PR's LAST
+`deliberateRefusals` run still carries that line (a rerun overwrites an earlier run, so each is the latest reading, not the first):
+
+| PR (opened Z) | the check's reading, and when |
+|---|---|
+| #2814 (09:11:20) | `ok` at 11:14:23, so resolved within 2h03m. Reported `[]` at 09:29-09:35 by `worker-2800` on #2813 (**second-hand**: their comment, not my reading) |
+| #2815 (09:14:21) | `ok` at 11:27:50, within 2h13m |
+| #2818 (10:37:46), #2819 (10:39:09), #2821 (10:57:23) | `WARNING -- GitHub resolved no closing reference` at 11:51:38 to 11:51:45, so still empty 54 to 74 minutes after opening |
+| #2817 (10:12:44) | still `WARNING` at 12:06:28, empty at 1h54m |
+| #2826 (11:59:16), #2828 (12:26:44), #2829 (12:29:31), #2831 (12:42:40) | `WARNING` at 12:45:00 to 12:56:36, empty at 14 to 46 minutes |
+| #2833 (13:14:18) | `ok` at 15:16:04 |
+| #2835 (14:30:29) | `ok` at 15:01:58, **within 31 minutes: the shortest, and the first that beats the two-hour pattern** |
+| #2836 to #2839 (15:44 to 18:30) | `ok` at 10 to 49 minutes after opening each time |
+
+The two-hour lag fits #2814, #2815 and the unresolved #2817 to #2831; **it does not fit #2835**, so it is a pattern in the data and not a
+law. **The row's cutoff is an observation boundary, not a property of when a PR was opened:** `worker-2800` (second-hand, 09:29-09:35Z) read
+`[]` for #2805 (opened 07:07Z) and #2811 (opened 07:48Z) too, and both resolve today (to #2790 and #2810). **Nothing I read dates the
+recovery to a moment**; the best bracket is "after 12:56Z (#2831 still empty) and by 15:01Z (#2835 resolved)", and the sweep's 14:12Z
+closings of #2826/#2828/#2829 are NOT usable as an earlier bound, because `close-rows-sweep.mjs` imports `closurePlan`, which may close from the
+body.
+
+**3. The change between the last linked and the first unlinked PR: none was found, and each candidate is marked.**
+
+| candidate | read | how |
+|---|---|---|
+| opening account | NOT the cause: `a11ign-ai-workers` and `a11ign-ai-leads` (#2818) both sat in the empty set | measured, bodies and authors off `gh pr list` |
+| head branch prefix | NOT the cause: every PR in the window is `agent/<slug>-<row>` | measured |
+| `Closes` line position | NOT the cause: line 1 on #2814, #2815, #2818, #2819, #2821 and line 28 on #2817, all empty at their moment | measured off each body |
+| body bytes, target state, base, timeline events, githubstatus, `/users/` flags, a body re-save | ruled out by the row's author; I did not re-run them. `githubstatus.com/api/v2/incidents.json` lists no incident dated 2026-09-29 to 10-01 among its 50 most recent | the row's reading, plus one fetch of mine (measured) |
+| a workflow editing the body, the merge queue or auto-arm touching the PR | **not isolated, and I have no evidence either way**: I did not compare arm or queue timing against the empty and resolved sets | untested |
+| a delayed GitHub-side linking job | **the best fit and the only one the data supports, and it is inferred**: it explains the uneven two-hour lag, the back-fill of PRs opened BEFORE 09:12Z, and the self-recovery. Nothing I can read shows the job | inferred |
+
+**4. What was probed, and what could not be.** One probe, **measured**: draft PR #2840 from scratch branch `scratch/closing-ref-probe-2824`
+(created by the API, not a push, because a fresh worktree's `pre-push` refuses without a toolchain and the probe carries no code), opened by
+`a11ign-ai-workers` with `Closes #2824` on line 1. **`closingIssuesReferences` was `[2824]` at the first read, in the same second the PR was
+created (06:39:36Z)**, and again at 06:39:43Z. It was closed unmerged and its branch deleted (404 on the ref afterwards). So linking is
+immediate today, and the two-hour lag is not present now. **What a probe cannot do is test any outage-time condition**: whether the account, a
+ready-versus-draft PR, or the queue mattered while it was failing is not reachable, because the failure is not reproducible on demand. That is the
+reason section 3's untested rows stay untested.
+
+**5. Done-when 3: the cause is NOT found, so there is no GitHub workaround to report, and its absence is itself the finding.** A body re-save did
+not link (`worker-2800`, three edits on #2814; second-hand). What exists is the repo's own: the merge guard passes with a warning while GitHub
+resolves nothing repo-wide, and the post-merge closer closes the declared rows from the body (#2822, #2830). **The recovery signal a gate cause can read is the one the repo already reads:** a PR whose body declares
+`Closes #N` and whose `closingIssuesReferences` includes N. `closes-unresolved-repo-wide` (#2823) clears when ANY of the open PRs it names
+resolves, so it needs nothing new; **what it cannot do is say how long the next lag will be**, and the table in section 2 is the only measure of the
+last one.
+
+**What would close it:** a second occurrence read from INSIDE, with a probe PR opened the moment the check first warns and polled to the
+second it resolves (the poll that ran today, `gh pr view <n> --json closingIssuesReferences` every 120 s, costs one GraphQL call per read), which
+would turn "roughly two hours, unevenly" into a measured latency and would let the account/draft/queue candidates be tested while the failure
+is live. Until then this is a documented unknown, not a defect awaiting a fix.
