@@ -45,7 +45,7 @@ import { reviewerInstance, reviewerInstanceNumber, subjectMention } from "./revi
 // #2688: THE SAME INSTRUMENT #928's OFFLINE REPORT IS BUILT FROM, READ LIVE INSTEAD OF ONLY REPORTED --
 // no new metric, only this one read at delivery time.
 import { claudeTurns, transcriptFiles } from "./token-audit.mjs";
-import { homeProjectDeclaration } from "./project-config.mjs";
+import { HOME_CHECKOUT, homeProjectDeclaration } from "./project-config.mjs";
 import { stateEntryPath } from "./host-config.mjs"; // #2799
 import { REPO } from "./project-identity.mjs";
 import { roleBriefPath } from "./project-roles.mjs";
@@ -1046,8 +1046,8 @@ export function spawnableReviewer(order, agents, registry = {}) {
  */
 export const REVIEW_CHECKOUT_ROOT = `${process.env.HOME}/reviews`;
 
-/** The tick's own checkout, where every review tree's git metadata lives (a linked worktree keeps it there). */
-const REPO_ROOT = new URL("../../..", import.meta.url).pathname;
+/** The project checkout the tick serves (`HOME_CHECKOUT`), where every review tree's git metadata lives (a linked worktree keeps it there). */
+export const REPO_ROOT = HOME_CHECKOUT;
 
 /**
  * The path of `session`'s tree: named for the instance, and so for the pull request it may never leave.
@@ -4777,7 +4777,7 @@ export function tearDownSpares(agents, ledgerPath, say = (line) => process.stder
   try {
     const paths = sparePathsFrom(ledgerPath);
     mkdirSync(dirname(ledgerPath), { recursive: true });
-    const repoRoot = new URL("../../..", import.meta.url).pathname;
+    const repoRoot = HOME_CHECKOUT;
     const { ended, registry } = endFinishedSpares(agents, {
       spares: spareInstances(agents), registry: readSpareRegistry(paths.registry), now: Date.now(), run: defaultRun,
       heldRows: (role) => lookupOtherHeldIssues(role, 0),
