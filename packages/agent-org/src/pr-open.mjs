@@ -53,6 +53,7 @@ import { SESSION_PREFIX } from "./project-vocabulary.mjs";
 import { launchGate } from "./board-snapshot-scope.mjs";
 import { worktreeOwner } from "./worktree-owner.mjs";
 import { isLiveSession } from "./arm-pr.mjs";
+import { declarationRefusal } from "./hand-fix-ledger.mjs";
 
 // The header's EXIT CODES, named because 1 and 3 ask a caller for opposite next steps.
 export const EXIT_NOTHING_SENT = 1;
@@ -565,6 +566,17 @@ const defaultGit = (args) =>
   execFileSync("git", args, { encoding: "utf8", env: sandboxGitEnv() }).trim();
 
 /**
+ * What is refused BEFORE `checkBody` runs the Acceptance: the tree is not the head being sent (#1344), or the body carries
+ * a `Hand-fix:`/`Not-a-hand-fix:` line the ledger could not read and would silently not count (#2939). Both are pure.
+ * @param {string} mode @param {string[]} rest @param {string} body
+ * @param {{ git?: (args: string[]) => string, prHead?: (repo: string, number: string) => { ref: string, oid: string } | null }} deps
+ * @returns {string | null}
+ */
+function preAcceptanceRefusal(mode, rest, body, { git, prHead }) {
+  return headTreeRefusal(mode, rest, { git }) ?? editTreeRefusal(mode, rest, { git, prHead }) ?? declarationRefusal(body);
+}
+
+/**
  * #2417: `checkRegion` in `main`'s terms: prints its note, or its refusal, and returns the exit code only for a refusal.
  * OFF when no `rowBody` is wired, which is every direct caller of `main` and none of the shipped CLI: the entry block
  * passes the real reader (#1352's `launchGate` is placed the same way, and `pr-open-region.test.ts` pins the wiring).
@@ -613,7 +625,7 @@ export function main(argv = process.argv.slice(2),
     return EXIT_USAGE;
   }
   // #1344: BEFORE checkBody, because checkBody RUNS the Acceptance -- in this working tree, whatever --head says.
-  const headRefused = headTreeRefusal(mode, rest, { git }) ?? editTreeRefusal(mode, rest, { git, prHead });
+  const headRefused = preAcceptanceRefusal(mode, rest, body, { git, prHead });
   if (headRefused) {
     err(`${headRefused}\n`);
     return EXIT_NOTHING_SENT;
