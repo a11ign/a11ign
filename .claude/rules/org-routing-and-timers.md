@@ -36,10 +36,10 @@
 - **Three things come up to `ceo`:** a ruling `product-manager` cannot make (a rule or ADR conflict, a
   crossing into a `ceo` lane, the publish path); ONE state reading per tick; anything for the chairman.
 - **That reading is POSTED and DELIVERED (#2083):** post on **#928** (the RECORD), then deliver it with
-  **`npm run prompt:session -- ceo "…"`**. **Both halves, or it is unrecorded or undelivered.**
+  **`pnpm run prompt:session -- ceo "…"`**. **Both halves, or it is unrecorded or undelivered.**
 - **`orchestrator` is the first reader for fleet and lab questions**; answers are posted on the row.
 - **PR n's reviewer is `reviewer-<n>` (#2401):** the gate starts it.
-  The author re-prompts a live one after a push: `npm run prompt:session -- reviewer-<n> "…"`.
+  The author re-prompts a live one after a push: `pnpm run prompt:session -- reviewer-<n> "…"`.
   **Neither does for `awaiting-evidence` PRs (#2416).**
   **`prompt:session` CLEARS A STANDING SEAT, never a `reviewer-<n>` or spawned `worker-<n>` (#2483)**, so
   it re-prompts a reviewer; no raw `herdr … agent prompt`. No verdict in 30 min goes to `product-manager`,

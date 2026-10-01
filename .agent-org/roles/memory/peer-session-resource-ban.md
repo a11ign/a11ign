@@ -29,7 +29,7 @@ the ban is still right, the justification was not.
 ```
 node packages/agent-org/src/row-claim.mjs check <n>
 node packages/agent-org/src/row-claim.mjs claim <n> --session=<name> --branch=agent/<branch> --worktree=../a11y-wt-<name>
-cd ../a11y-wt-<name> && npm install && ln -s <main>/runs runs && ln -s <main>/.venv .venv
+cd ../a11y-wt-<name> && pnpm install && ln -s <main>/runs runs && ln -s <main>/.venv .venv
 ```
 
 **Since #1432 (2026-09-14) `claim` CREATES the worktree** from `origin/main`, stamps it, then claims, so both

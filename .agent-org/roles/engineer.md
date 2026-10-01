@@ -84,16 +84,16 @@ rule, because every rule then assumed continuous agents.
 
 A unit is finished when a COMMAND says so, not when it looks right.
 
-- **The suite that covers what you touched.** `npm test` runs `test:ts` and `test:python`, and `test:ts` does
-  NOT cover `agent-org`, `guards`, `lab` or `control`: those are `npm run test:org`. `npm run test:all` is
-  every package, and `npm run test:changed` runs the tests your diff can reach (about half of them, because
-  the tree-walking guards always run). **Run `npm test` rather than `npx tsx --test <file>` when you changed
+- **The suite that covers what you touched.** `pnpm test` runs `test:ts` and `test:python`, and `test:ts` does
+  NOT cover `agent-org`, `guards`, `lab` or `control`: those are `pnpm run test:org`. `pnpm run test:all` is
+  every package, and `pnpm run test:changed` runs the tests your diff can reach (about half of them, because
+  the tree-walking guards always run). **Run `pnpm test` rather than `pnpm exec tsx --test <file>` when you changed
   another package's source**, since cross-package imports resolve to `dist` and only the `pretest` build keeps
   that honest. A row's own Acceptance command is the exception: run it exactly as written.
-- `npm run lint` and `npm run typecheck` — zero errors, and CI gates on both.
+- `pnpm run lint` and `pnpm run typecheck` — zero errors, and CI gates on both.
 - `node -e "import('./path.mjs')"` for any `.mjs` you touched. Neither lint nor `tsc` catches a
   `ReferenceError` at import in `.mjs`.
-- `npm run test:python` when the change reaches the Python leg. A `SKIPPED` line is an honest skip, not a pass.
+- `pnpm run test:python` when the change reaches the Python leg. A `SKIPPED` line is an honest skip, not a pass.
 - **A test that fails BEFORE the change and passes after**, and **a mutation check in both directions** where
   a guard has two: break it so it never fires, break it so it always fires, and confirm each breaks its own
   test and no other.
@@ -171,7 +171,7 @@ against a target of 120k, #928), so keep the large paste out rather than trimmin
   accumulated context again for a partial answer: late in a long session, a handful of separate
   `grep`/`sed`/`cat` calls at ~0.6k of output each still cost ~150k of re-read apiece (#928, 2026-09-27 —
   844 such calls measured across 25 sessions). One command that runs the same greps/reads (and small
-  `gh --jq` projections) and returns them together pays that re-read once — `npm run survey --` is that
+  `gh --jq` projections) and returns them together pays that re-read once — `pnpm run survey --` is that
   command. Reach for this before a second `grep`, `sed`, `cat` or single-file `Read` in the same turn, not
   after.
 

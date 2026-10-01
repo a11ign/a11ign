@@ -22,14 +22,14 @@ heads is the fact-stated-twice defect one layer up.
 It is not in the tree and never will be (#83: no addresses in source). A session that has not been told
 it cannot deploy, and that is the intended state, not a gap. Obtain it from one of two places and
 nowhere else: the installed file on the control plane, `/etc/a11ign/control-host`, written by
-`fleet:control-host-install` (#285); or `eval "$(npm run --silent fleet:env)"`, which reads the
+`fleet:control-host-install` (#285); or `eval "$(pnpm run --silent fleet:env)"`, which reads the
 inventory. Do not read it out of `inventory.yml` by hand and do not paste it into a message, a row, or
 a record. On 2026-09-09 three deploy attempts failed for three different reasons and the first was this
 value being unset in the shell; the fix was knowing where it lives, which is why this section exists.
 
 ## Any fleet write starts with `fleet:status`: is every box on the network? (#1298)
 
-**Before a deploy, a provision, a recover or a key change, run `npm run fleet:status` and read its first
+**Before a deploy, a provision, a recover or a key change, run `pnpm run fleet:status` and read its first
 lines.** For every box that does not answer `/health` it asks the control plane's neighbour table, and it
 prints one line per box BEFORE the table, then a `fleet write:` line:
 
@@ -47,14 +47,14 @@ prints one line per box BEFORE the table, then a `fleet write:` line:
 else is attempted on it.** Not a deploy to the other nine that forgets it, and not a key change that would
 strand it: on #918 the channel that installs keys was the one a withdrawn key would have closed.
 
-**Try one wake-on-LAN packet before the walk: `npm run fleet:wake -- <name>`.** It needs no credential and
+**Try one wake-on-LAN packet before the walk: `pnpm run fleet:wake -- <name>`.** It needs no credential and
 costs nothing. After that it is a person at the machine, because **layer 2 cannot tell a powered-off box, an
 OS that is not up and a running machine whose link is down.** Measured on #918: a worker was absent at layer
 2 from two vantage points for about forty minutes with an uptime of 1303 minutes throughout, on a loose
 cable. Only the box's own uptime, once it returns, separates the three.
 
 **UNKNOWN is a better read, not a walk.** `control plane unreachable` means the question was never asked;
-`no layer-2 verdict` means it was asked and the entry never settled. `npm run fleet:link-view` asks the same
+`no layer-2 verdict` means it was asked and the entry never settled. `pnpm run fleet:link-view` asks the same
 question from three vantage points.
 
 ## THE PRIMARY CHECKOUT IS THE FLEET-DRIVING TREE
@@ -71,7 +71,7 @@ Two mechanical reasons, not tidiness:
   STALE primary `dist` does the same thing passively. Both were measured on 2026-09-06, hours apart, and the
   second cost an hour and a reverted commit.
 
-**Rebuild the primary after merges** (`npm run build`), or worktrees inherit whatever it last built. Safe
+**Rebuild the primary after merges** (`pnpm run build`), or worktrees inherit whatever it last built. Safe
 during a live capture: a build writes `dist/` only and `nvda-worker` has no build step (ADR 0031).
 
 ## What this role does NOT do
@@ -117,7 +117,7 @@ dispatch; a mis-keyed cache costs 2,122 captures.
 | `product-manager` | the tracker, the milestone, the board report. They get PRINTED gate output, never a summary, and **"not instrumented" in those words** rather than an estimate. New blockers go to them with `found by: <gate>` so the board sees why a date moves. |
 | `ceo` | the status shape below, the merge queue and trunk health, and any decision that trades money or dates against evidence. |
 
-**Blockers I find get filed on the milestone with `found by:` naming the gate**, not the person. `found by: npm test` and `found by: manual verification` need different weight, and a reader cannot tell them apart afterwards.
+**Blockers I find get filed on the milestone with `found by:` naming the gate**, not the person. `found by: pnpm test` and `found by: manual verification` need different weight, and a reader cannot tell them apart afterwards.
 
 ## The status shape I send upward
 
@@ -150,8 +150,8 @@ Nothing, currently, and that is a real risk rather than a boast. If this session
 - **What is lost is the QUEUE and the rulings**: which branches are held and why, which gate output is
   stale, what was measured versus inferred today. That is why this file exists, and why findings go to
   `product-manager`'s tracker rather than staying in a transcript.
-- **The successor's first three commands** are `npm run doctor`, `npm run fleet:status`, and
-  `npm run lab:status -- -e job=capture`. Each names its own next step. Do not deploy or dispatch before
+- **The successor's first three commands** are `pnpm run doctor`, `pnpm run fleet:status`, and
+  `pnpm run lab:status -- -e job=capture`. Each names its own next step. Do not deploy or dispatch before
   all three are read — this repo's guards turn a collision into a silent wrong answer, not an error.
 
 ## What this role reports upward
