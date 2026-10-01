@@ -4,7 +4,7 @@
  *
  * #2880 (`Closes #2875`) was opened before its worktree was stamped, so it carried no `session:` label while row #2875
  * carried `session:worker-2875`, and `pr-checks-failing` went to `product-manager` six times. The POSITIVE CONTROL for
- * every "falls back to `product-manager`" assertion is the same fixture with ONE thing changed -- the rows that DO name
+ * every "falls back to `ceo`" assertion (it was `product-manager` until #2941) is the same fixture with ONE thing changed -- the rows that DO name
  * one live session -- which is the first test; nothing here is asserted against an empty population.
  */
 import { test } from "node:test";
@@ -36,12 +36,12 @@ test("an unlabelled red PR whose closed row holds one live session is addressed 
   assert.match(order.prompt, /row it closes \(#2875\) is held by you/);
 });
 
-test("the same PR with rows naming nobody, a released claim, no read at all or an unlisted row still goes to product-manager", () => {
+test("the same PR with rows naming nobody, a released claim, no read at all or an unlisted row still falls to ceo", () => {
   const fallsBack = (openRows: Fixture[], closes = [2875]) => {
     const [order] = failingOrders([pr(closes)], openRows);
-    assert.equal(order.session, "product-manager");
-    assert.equal(order.causeKey, "product-manager/pr-checks-failing/pr-2880/24b0e94f");
-    assert.match(order.prompt, /It names no session\./);
+    assert.equal(order.session, "ceo");
+    assert.equal(order.causeKey, "ceo/pr-checks-failing/pr-2880/24b0e94f");
+    assert.match(order.prompt, /NOBODY COULD BE NAMED/);
   };
   fallsBack([row(2875, "in-progress")]); // claimed by nobody
   fallsBack([row(2875, "session:worker-2875")]); // a released claim: the label outlived `in-progress`
@@ -50,9 +50,9 @@ test("the same PR with rows naming nobody, a released claim, no read at all or a
   fallsBack([claimed(2875, "worker-2875")], []); // GitHub resolved no closing reference
 });
 
-test("two rows naming two different sessions are a question, so product-manager keeps it; two naming the SAME one are an answer", () => {
+test("two rows naming two different sessions are a question, so ceo keeps it; two naming the SAME one are an answer", () => {
   const [split] = failingOrders([pr([2875, 2876])], [claimed(2875, "worker-2875"), claimed(2876, "worker-2876")]);
-  assert.equal(split.session, "product-manager");
+  assert.equal(split.session, "ceo");
   const [same] = failingOrders([pr([2875, 2876])], [claimed(2875, "worker-2875"), claimed(2876, "worker-2875")]);
   assert.equal(same.session, "worker-2875");
 });
@@ -64,7 +64,7 @@ test("a PR WITH its own label keeps it, whatever the row says", () => {
   assert.match(order.prompt, /carries your session label/);
 });
 
-test("the NOT CONVINCED order takes the row's session too, and keeps product-manager when the row names nobody", () => {
+test("the NOT CONVINCED order takes the row's session too, and keeps ceo when the row names nobody", () => {
   const convinced = (closes: number[]) => ({
     ...pr(closes), statusCheckRollup: [{ name: "gate", status: "COMPLETED", conclusion: "SUCCESS" }],
     comments: [{ author: { login: "reviewer-2880" }, createdAt: "2026-10-01T15:00:00Z", body: "Re-read of `24b0e94f` -- **not convinced**." }],
@@ -76,7 +76,7 @@ test("the NOT CONVINCED order takes the row's session too, and keeps product-man
   assert.match(owned.prompt, /row it closes \(#2875\) is held by you/);
   assert.equal(owned.causeKey.startsWith("worker-2875/verdict-not-convinced/"), true);
   const [unowned] = verdictOrders([]);
-  assert.equal(unowned?.session, "product-manager");
+  assert.equal(unowned?.session, "ceo");
 });
 
 /**
@@ -95,11 +95,11 @@ test("a PR with no label and no closing row, on a branch whose suffix names a he
   assert.match(order.prompt, /branch `agent\/finish-the-move-to-2892` was claimed for row #2892, which is held by you/);
 });
 
-test("a branch naming no held row, a released claim, an unread row list or no numeric suffix still goes to product-manager", () => {
+test("a branch naming no held row, a released claim, an unread row list or no numeric suffix still falls to ceo", () => {
   const fallsBack = (headRefName: string, openRows: Fixture[]) => {
     const [order] = failingOrders([onBranch(headRefName)], openRows);
-    assert.equal(order.session, "product-manager");
-    assert.match(order.prompt, /It names no session\./);
+    assert.equal(order.session, "ceo");
+    assert.match(order.prompt, /NOBODY COULD BE NAMED/);
   };
   fallsBack("agent/finish-the-move-to-2892", [claimed(9999, "worker-9999")]); // a held row, but not the suffix's
   fallsBack("agent/finish-the-move-to-2892", [row(2892, "session:worker-2892")]); // released: the label outlived `in-progress`
@@ -117,7 +117,7 @@ test("a closing row naming a different session than the suffix keeps the closing
   assert.equal(closing.session, "worker-2875");
   assert.match(closing.prompt, /row it closes \(#2875\) is held by you/);
   const [split] = failingOrders([withCloses([2875, 2893])], rows);
-  assert.equal(split.session, "product-manager");
+  assert.equal(split.session, "ceo");
 });
 
 test("a PR WITH its own label keeps it over its branch suffix", () => {
