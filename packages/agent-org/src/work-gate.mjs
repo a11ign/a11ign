@@ -3970,7 +3970,9 @@ export function withEvidenceLabelAges(prs, run = defaultRun) {
  * (`packaging/work-gate.test.ts`, #2174), so a retired session is excluded only because its claim is gone. Two different
  * sessions across the rows a PR closes is a question rather than an answer. A PR whose rows were not read (`openRows`
  * empty because the read was refused) matches nothing and is left exactly as it was. A PR with its OWN label is never
- * touched: the row never outranks it. Wired for the default scope only -- a scope whose pull requests live in another
+ * touched: the row never outranks it. #2928: when the closing rows name NOBODY, the row its branch `agent/<slug>-<n>` was
+ * claimed for is asked (`branchRowOwner`); a closing-row split stays a split, because the suffix does not break that tie.
+ * Wired for the default scope only -- a scope whose pull requests live in another
  * repository than its rows would match a PR's `Closes #n` against the wrong tracker's numbers.
  *
  * @param {any[]} prs @param {any[]} openRows
@@ -3979,12 +3981,37 @@ export function withClosingRowOwners(prs, openRows) {
   const held = new Map(openRows.filter((row) => labelsOf(row).includes(CLAIM_LABEL) && sessionOf(row))
     .map((row) => [Number(row.number), { session: String(sessionOf(row)), row: Number(row.number) }]));
   return prs.map((pr) => {
-    if (sessionOf(pr) || !Array.isArray(pr.closingIssuesReferences)) return pr;
-    const owners = pr.closingIssuesReferences.map((/** @type {any} */ ref) => held.get(Number(ref?.number)))
-      .filter((/** @type {any} */ owner) => owner !== undefined);
-    const sessions = new Set(owners.map((/** @type {any} */ owner) => owner.session));
-    return sessions.size === 1 ? { ...pr, rowOwner: owners[0] } : pr;
+    if (sessionOf(pr)) return pr;
+    const closing = closingRowOwner(pr, held);
+    if (closing === "split") return pr;
+    const owner = closing ?? branchRowOwner(pr, held);
+    return owner ? { ...pr, rowOwner: owner } : pr;
   });
+}
+
+/**
+ * The live session the rows a PR CLOSES name: that session, `null` for none, `"split"` for two different ones.
+ * @param {any} pr @param {Map<number, {session: string, row: number}>} held
+ */
+function closingRowOwner(pr, held) {
+  if (!Array.isArray(pr.closingIssuesReferences)) return null;
+  const owners = pr.closingIssuesReferences.map((/** @type {any} */ ref) => held.get(Number(ref?.number)))
+    .filter((/** @type {any} */ owner) => owner !== undefined);
+  const sessions = new Set(owners.map((/** @type {any} */ owner) => owner.session));
+  if (sessions.size > 1) return "split";
+  return sessions.size === 1 ? { ...owners[0], source: "closing" } : null;
+}
+
+/**
+ * #2928: the live session holding the row a PR's BRANCH was claimed for, or `null`. `row-claim claim <n>
+ * --branch=agent/<slug>-<n>` writes the trailing number, so it names the row even when the PR says `Closes: none`
+ * because the done-when belongs to someone else. The last authority: a PR that closes rows is answered by them.
+ * @param {any} pr @param {Map<number, {session: string, row: number}>} held
+ */
+function branchRowOwner(pr, held) {
+  const suffix = /^agent\/.+-(\d+)$/.exec(String(pr.headRefName ?? ""));
+  const owner = suffix ? held.get(Number(suffix[1])) : undefined;
+  return owner ? { ...owner, source: "branch" } : null;
 }
 
 /**

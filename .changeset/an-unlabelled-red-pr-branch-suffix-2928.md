@@ -1,0 +1,5 @@
+---
+"@a11ign/agent-org": patch
+---
+
+**A red PR that says `Closes: none` is routed by its branch suffix, not to `product-manager` (#2928).** #2925, #2921 and #2919 each declared `Closes: none` because the done-when was someone else's, so `withClosingRowOwners` (#2882) found no closing row and every `pr-checks-failing` order went to `product-manager` while `worker-2892`, `worker-2885` and `worker-2890` sat idle. The branch `agent/<slug>-<row>` is written by `row-claim claim <row> --branch=...`, so its trailing number names the row. The order of authority is the PR's own `session:` label, then the live session holding the row it closes, then the live session holding the row its branch suffix names; two closing rows naming two sessions stay a question for `product-manager` (the suffix does not break that tie), and a suffix naming no held row, a released claim or no number matches nothing. The order's sentence says which source named the session. The missing labels were not `pr-open.mjs`: all three workers opened the PR with raw `gh pr create`, so `labelAfterCreate` never ran.
