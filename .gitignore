@@ -137,3 +137,12 @@ packages/control/ansible/inventory.yml
 # Untracked-but-visible would make every stamped tree read dirty to `git status --porcelain`, which is
 # exactly what `prune-worktrees.mjs`'s isWorkingTreeClean asks before reporting a tree safe to delete.
 .a11y-owner
+
+# The transient copies `corpus-backup.test.ts` makes BESIDE the real scripts, then deletes (#2876). They live
+# inside the repo on purpose (a bare-specifier import has to walk up to `node_modules`), so a guard that
+# lists untracked files -- `fixture-absence-guard.test.ts` runs `git ls-files --others --exclude-standard`
+# -- sees the directory in git's list and finds it gone by the read: `the walk read 2219 files and skipped
+# 0; git lists 2220`, once in a full `test:org`. Ignored, git never lists it, so there is nothing to race.
+# One pattern for both makers (`.corpus-backup-mutation-*`, `.corpus-snapshot-mutation-*`); no trailing
+# slash, per the header.
+packages/lab/.corpus-*-mutation-*
