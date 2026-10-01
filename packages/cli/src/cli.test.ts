@@ -484,7 +484,7 @@ test("--no-keep parses to keep:false; the default is true", () => {
 /**
  * #68's own acceptance test, run directly: a PDF target reaches `runPdfLayer`, never `leaseWorker`, and a
  * finding from the new layer appears in the printed report, labelled with its layer, alongside the
- * existing sections. `@a11ign/pdf`'s own tests cover the tag-tree reading itself (tagged/untagged, alt
+ * existing sections. `@a11ign/documents`'s own tests cover the tag-tree reading itself (tagged/untagged, alt
  * text, language) in depth; this file only proves the CLI's WIRING -- one minimal untagged PDF is enough
  * for that.
  */
@@ -500,7 +500,7 @@ async function capturedStdoutAsync(run: () => Promise<void>): Promise<string> {
   return out;
 }
 
-/** One untagged, one-page PDF, hand-built exactly like `@a11ign/pdf`'s own fixture -- enough to produce
+/** One untagged, one-page PDF, hand-built exactly like `@a11ign/documents`'s own fixture -- enough to produce
  *  one real `pdf-untagged` finding without re-testing the parser this file does not own. */
 function untaggedPdfBytes(): Uint8Array {
   const content = "BT /F1 16 Tf 50 150 Td (Hello world) Tj ET\n";

@@ -1,11 +1,11 @@
-# `@a11ign/pdf`
+# `@a11ign/documents`
 
 The PDF layer ([ADR 0036](../../docs/adr/0036-the-layer-model.md), #68). Reads a PDF's own accessibility
 **tag tree** directly -- the structure a screen reader or a checker like PAC reads -- rather than
 rendering the document or driving any assistive technology. No browser, no NVDA, no fleet.
 
 ```js
-import { scanPdfTagTree } from "@a11ign/pdf";
+import { scanPdfTagTree } from "@a11ign/documents";
 
 const result = await scanPdfTagTree("https://example.com/report.pdf");
 if (result.ok) {
