@@ -23,6 +23,7 @@ import { dirname, join, relative, resolve, isAbsolute } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { diffOrders, refuseLiveStateDir, LIVE_STATE_DIR } from "./shadow-gate.mjs";
 import { parseShadowRecord } from "./shadow-reads.mjs";
+import { SHADOW_COPY_MARKER, SHADOW_STATE_DIR_ENV } from "./host-config.mjs";
 import { flagValue, refuseUnknownFlags } from "./lib/cli-flags.mjs";
 
 /** `0` a tick was recorded, or there was none to record; `2` a path was refused or an input could not be read. */
@@ -30,9 +31,9 @@ export const EXIT = { OK: 0, REFUSED: 2 };
 
 /** Where #2849's live tick leaves the reads, and the file inside the COPY that says the runner made that directory. */
 export const READS_DIR = "shadow-reads";
-export const COPY_MARKER = ".shadow-copy";
-/** Handed to the candidate so one that reads local state can read the COPY; `decide` has no parameter for it. */
-export const STATE_DIR_ENV = "A11IGN_SHADOW_STATE_DIR";
+export const COPY_MARKER = SHADOW_COPY_MARKER;
+/** Handed to the candidate so one that reads local state can read the COPY; `decide` has no parameter for it. The gate honours it in `host-config.mjs`'s `stateEntryPath`. */
+export const STATE_DIR_ENV = SHADOW_STATE_DIR_ENV;
 
 const SELF = fileURLToPath(import.meta.url);
 /** A candidate that has not answered in this long is recorded as failed; it must not hold the next tick's turn. */
