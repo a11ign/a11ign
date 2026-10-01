@@ -456,7 +456,7 @@ export function programCandidates(command, { repoRoot = REPO_ROOT,
       const argv = stage.trim().split(/\s+/).filter(Boolean);
       const tool = basename(argv[0] ?? "");
       if ((tool === "node" || SHELLS.has(tool)) && isPath(argv[1])) entries.push(resolve(repoRoot, argv[1]));
-      else if ((tool === "npm" || tool === "npx") && argv[1] === "run" && argv[2]) followScript(argv[2]);
+      else if (PACKAGE_RUNNERS.has(tool) && argv[1] === "run" && argv[2]) followScript(argv[2]);
     }
   };
   /** @param {string} name */
@@ -500,8 +500,15 @@ export function unitEntryPoints(unitText, deps = {}) {
   return [...new Set(execCommands(unitText).flatMap((command) => entriesFromCommand(command, deps)))];
 }
 
-/** The only three tools `entriesFromCommand` can follow into a repository file WITHOUT a path to check. */
-const ANALYSABLE_TOOLS = new Set(["node", "npm", "npx"]);
+/**
+ * The package managers whose `<tool> run <script>` is followed through package.json. `pnpm` is here since
+ * #2892 moved the host's units onto it: a unit that spelled it and a parser that did not know it would
+ * have scored every one of them OPAQUE, and `unitsSpendingGh` would have lost them without a failure.
+ */
+const PACKAGE_RUNNERS = new Set(["npm", "npx", "pnpm"]);
+
+/** The only tools `entriesFromCommand` can follow into a repository file WITHOUT a path to check. */
+const ANALYSABLE_TOOLS = new Set(["node", ...PACKAGE_RUNNERS]);
 
 /**
  * The interpreters that take the file to run as their first argument. NOT in `ANALYSABLE_TOOLS`, and the

@@ -13,7 +13,7 @@ Type=oneshot
 WorkingDirectory=/home/agent/repos/a11y-witness
 
 # SAME REASON a11ign-fleet-gated-nightly.service AND a11ign-work-tick.service BOTH STATE THEIR OWN: a
-# systemd unit gets no login shell's PATH, and this job spawns `ansible-playbook`, `npm` and (through
+# systemd unit gets no login shell's PATH, and this job spawns `ansible-playbook`, the package manager and (through
 # `corpus:release`) `gh` and `tar` -- none of them on a unit's default PATH.
 Environment=PATH=/home/agent/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
@@ -23,7 +23,7 @@ Environment=PATH=/home/agent/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin
 Environment=HOME=/home/agent
 
 # V8'S COMPILE CACHE GOES UNDER THE HOME, NOT /tmp -- #2458. `tsc`, `eslint`, `rstest` and `changeset` (all reached
-# through `npm run`) call `enableCompileCache()` with no directory, which writes `<tmpdir>/node-compile-cache`:
+# through `pnpm run`) call `enableCompileCache()` with no directory, which writes `<tmpdir>/node-compile-cache`:
 # one entry per file per checkout path, 141,353 inodes in the 2026-09-25 outage. A unit reads no shell startup
 # file, so this line is the ONLY place a unit can get it; `host-units.test.ts` pins it on every shipped service.
 Environment=NODE_COMPILE_CACHE=%h/.cache/node-compile-cache
@@ -52,7 +52,7 @@ EnvironmentFile=-%h/.config/a11ign/fleet.env
 # UPDATED FIRST, same as a11ign-fleet-gated-nightly.service's own ExecStartPre -- a firing against a stale
 # checkout could release a snapshot fetched by yesterday's `lab-fetch.yml`. The `-` prefix makes a failed
 # update non-fatal: a firing against a slightly stale checkout is worth far more than no firing at all.
-ExecStartPre=-/usr/bin/npm run primary:update
+ExecStartPre=-%h/.local/bin/pnpm run primary:update
 
 ExecStart=/usr/bin/node packages/lab/scripts/corpus-release-nightly.mjs
 
