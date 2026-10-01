@@ -9,7 +9,7 @@ packages:
 # concrete ranges over it and `gate:isolation` reads them back out of the tarballs. pnpm resolves a bare version from the REGISTRY unless
 # told to link workspace packages, so with this off an install can succeed while every @a11ign/* import reads
 # a downloaded copy. Measured 2026-09-24: off, `pnpm import` stopped on a 404 for the unpublished
-# @a11ign/pdf -- a published package would have installed silently. `pnpm-workspace.test.ts` pins that every
+# @a11ign/documents -- a published package would have installed silently. `pnpm-workspace.test.ts` pins that every
 # internal edge in pnpm-lock.yaml is a `link:`.
 #
 # What it does to release: `changeset version` still rewrites each dependent's "0.0.0" range to the new

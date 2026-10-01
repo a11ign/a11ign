@@ -42,14 +42,17 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node packages/agent-org/src/row-file.mjs` — refuse to file a backlog row via `gh issue create` when its body is missing a required
 - `node packages/agent-org/src/row-reachability.mjs` — compute whether a row is actually startable from the tree, never from a label alone
 - `node packages/agent-org/src/settle-closed-rows.mjs` — settle every CLOSED row the board still shows at a live Status -- keyed on the board, never on a PR
+- `node packages/agent-org/src/shadow-window.mjs` — shadow-window -- ONE tick of the candidate gate beside the live one, over a copy of the state, appended to a diff record
 - `node packages/agent-org/src/stash-whose.mjs` — list every git stash entry with the branch it was made on, since git alone will not say
 - `node packages/agent-org/src/stranded-branches.mjs` — find pushed branches with no open PR, which are otherwise invisible to CI and review
+- `node packages/agent-org/src/survey.mjs` — batch several small grep/read/gh-jq checks into ONE call -- engineer.md's "batch related small
 - `node packages/agent-org/src/token-audit.mjs` — token-audit -- what the org actually spent, read from the transcripts it already writes.
 - `node packages/agent-org/src/tracker-comment.mjs` — read and edit a tracker comment safely -- the one place, so no edit is improvised again
 - `node packages/agent-org/src/trunk-revert-guard.mjs` — compare main's before/after state on a merge and refuse one that silently deletes prior work
 - `node packages/agent-org/src/trunk-sweep.mjs` — sweep main for a gate failure while GITHUB_TOKEN-authored merges suppress every triggering event
 - `node packages/agent-org/src/update-branch-sweep.mjs` — push every armed, green-or-running PR up to main's new tip after a merge lands
 - `node packages/agent-org/src/update-primary.mjs` — the one sanctioned way to move the primary checkout: fetch, detach at origin/main, install if the lockfile moved, rebuild
+- `node packages/agent-org/src/update-tool.mjs` — the one way to move the tool's own checkout: fetch, refuse a dirty tree, detach at origin/main
 - `node packages/agent-org/src/wake.mjs` — wake -- deliver work-gate's orders to the sessions that can take them. The other half of #912.
 - `node packages/agent-org/src/work-gate.mjs` — work-gate -- is there work for any session? One cheap read; a wake order per line when yes.
 - `node packages/agent-org/src/work-tick.mjs` — work-tick -- one tick of the org: ask work-gate, hand the orders to wake. Runs on a timer.
@@ -60,11 +63,13 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node packages/guards/src/changed-files.mjs` — list the paths a range changed, BOTH SIDES OF A RENAME
 - `node packages/guards/src/changed-packages.mjs` — list which packages/<name> directories a branch touched against origin/main
 - `node packages/guards/src/isolation-gate.mjs` — prove a published package installs and works standalone, by actually installing and running it
+- `node packages/guards/src/layer-edges.mjs` — `node packages/guards/src/layer-edges.mjs --check` -- every reach across a LAYER package's boundary, by path, against a baseline (#2612)
 - `node packages/guards/src/mutant-survivors.mjs` — choose mutants on a diff's changed lines by machine, run the named tests against each, and list the survivors
 - `node packages/guards/src/mutation-check.mjs` — prove a guard actually bites: mutate a file, confirm its test fails, restore, confirm it passes
 - `node packages/guards/src/piped-exit-status-guard.mjs` — detect a piped command whose exit status was read from the wrong side of the pipe
 - `node packages/guards/src/test-memory-cap.mjs` — run a test runner under a per-process memory cap (systemd-run MemoryMax) and say what the cap did
 - `node packages/guards/src/tree-wide-guards.mjs` — every tracked *.test.ts file that DECLARES ITSELF a TREE-WIDE GUARD by importing and calling
+- `node scripts/agent-org-extraction-rehearsal.mjs` — rehearse the history-preserving extraction of agent-org (and its travelling tests) into its own repository
 - `node scripts/auth-artifact-scan.mjs` — prove no credential is in what a REAL run produced -- scans every text file under a path (markdown, comment, log, JSON, whatever the extension) for the values of two environment variables. Exit 0 clean, 1 a leak, 2 could not examine.
 - `node scripts/auth-leak-check.mjs` — prove a login's credential never reaches what a run writes (ADR 0038) -- drives a real capture on THIS machine's worker with a fake credential, then searches for it. Exit 0 clean, 1 a leak, 2 could not examine.
 - `node scripts/build-packages.mjs` — run tsc --build across every package under packages/ in dependency order
@@ -74,7 +79,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/check-transfer-urls.mjs` — check-transfer-urls -- walk the tree for every URL naming PRODUCT_REPO (a11ign/a11ign) and
 - `node scripts/ci-changed.mjs` — classify what a PR's diff touches, so CI's conditional jobs know whether to run
 - `node scripts/coverage-failure-classifier.mjs` — turn a nightly coverage.yml failure comment into an actual finding, not just 'it failed'
-- `node scripts/coverage.mjs` — the whole-repo coverage gate `npm run coverage` runs, now through rstest, not c8
+- `node scripts/coverage.mjs` — the whole-repo coverage gate `pnpm run coverage` runs, now through rstest, not c8
 - `node scripts/doc-cross-reference-report.mjs` — print the nightly doc cross-reference report -- every doc-to-doc and doc-to-tree check, as markdown
 - `node scripts/generate-commands-doc.mjs` — regenerate docs/commands.md from every script's own `// command:` header
 - `node scripts/generate-consumer-gate.mjs` — regenerate .github/workflows/consumer-gate.yml from README.md's own documented workflow
