@@ -4397,7 +4397,8 @@ export function spawnClaimer({ exec = defaultExec, exists = existsSync, worktree
       settle(role);
       const launch = launchWorktree(role, { exec, exists, worktreesDir, primary });
       if ("refusal" in launch) return launch;
-      const { claimed, args } = claimTarget({ row, order, role, launchDir: launch.dir, worktreesDir, left: kept(row), exists });
+      const left = settleGoneKept(kept(row), { exists, exec, primary, env, forget: () => { forget(row); } }).left;
+      const { claimed, args } = claimTarget({ row, order, role, launchDir: launch.dir, worktreesDir, left, exists });
       const ran = exec("node", [ROW_CLAIM, ...args], { cwd: launch.dir, env });
       const landed = /^STARTED/m.test(ran.output) && CLAIM_LANDED.includes(Number(ran.status));
       if (landed && exists(claimed.worktree)) {
@@ -4411,6 +4412,48 @@ export function spawnClaimer({ exec = defaultExec, exists = existsSync, worktree
     },
     release: (claimed, role, env) => releaseClaim(claimed, role, env, exec),
   };
+}
+
+/**
+ * A KEPT RECORD WHOSE TREE IS GONE IS NO RECORD (#2864). A release keeps a tree "for the next instance" and records it; whoever later removes the
+ * tree (a merge-cleanup sweep, `endFinishedSpares`, a person) removes the tree and nothing else, so the record outlived it and the branch stayed
+ * behind -- and the claim that should have started afresh refused over that leftover local branch (`--branch=... ALREADY EXISTS locally`) every
+ * tick, for over an hour on #2846. The record is dropped and the branch deleted with `-d`, never `-D`: git refuses a branch holding commits found
+ * nowhere else, and that refusal STANDS -- the claim then names the branch, and a person decides.
+ *
+ * @param {KeptClaim | null} left
+ * @param {{ exists: (path: string) => boolean, exec: Exec, primary: string, env: Record<string, string>, forget: () => void }} host
+ * @returns {{ left: KeptClaim | null, note: string | null }} `left` is the record still good to adopt; `note` says what a dropped one cost
+ */
+function settleGoneKept(left, { exists, exec, primary, env, forget }) {
+  if (left === null || exists(left.worktree)) return { left, note: null };
+  forget();
+  const deleted = exec("git", ["branch", "-d", left.branch], { cwd: primary, env });
+  const branch = deleted.status === 0 ? `deleted its merged branch ${left.branch}`
+    : `left the branch ${left.branch}, which git would not delete with -d (${verdictLine(deleted.output)})`;
+  return { left: null, note: `DROPPED the kept record for ${left.worktree}: the tree is gone; ${branch}` };
+}
+
+/**
+ * Every kept record whose tree is gone, dropped (#2864): the claim only reads the record of the row it is claiming, so a record for a row nobody
+ * offers would stay for ever, and the file's own claim -- every record names a tree that exists -- would stay false. A record whose tree exists is
+ * never touched. One line per record dropped, so the tick says it ONCE (the record is gone after it).
+ *
+ * @param {string} keptPath
+ * @param {{ exists?: (path: string) => boolean, exec?: Exec, primary?: string, env?: Record<string, string> }} [host]
+ * @returns {string[]}
+ */
+export function pruneGoneKeptClaims(keptPath, { exists = existsSync, exec = defaultExec, primary = PRIMARY_CHECKOUT, env = spawnEnvironment() } = {}) {
+  const lines = [];
+  for (const [row, record] of Object.entries(readKeptClaims(keptPath))) {
+    const { note } = settleGoneKept(record, { exists, exec, primary, env, forget: () => {
+      const all = readKeptClaims(keptPath);
+      delete all[row];
+      writeKeptClaims(keptPath, all);
+    } });
+    if (note !== null) lines.push(`${note} (#${row})`);
+  }
+  return lines;
 }
 
 /**
@@ -5587,6 +5630,7 @@ function main() {
   const agents = readAgents();
   if (agents === null) exitCannotAsk(gateOrders.length, handoffs);
   const { orders, failed: releasesNotDone } = performReleases(gateOrders, agents, { ledgerPath, hostLayout });
+  for (const line of pruneGoneKeptClaims(keptClaimsPath(ledgerPath), { primary: hostLayout.primary })) process.stdout.write(`${line}\n`);
 
   const waiting = settleEndedOrders(handoffs, agents, { queuePath, ledgerPath });
   for (const line of backlogReport(handoffBacklog(waiting), agents)) process.stderr.write(line);

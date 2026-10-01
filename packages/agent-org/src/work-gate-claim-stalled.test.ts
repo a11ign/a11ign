@@ -21,6 +21,7 @@ import {
   WAKE_TTL_MS, MAX_DELIVERIES, performRelease, spawnClaimer, spawnedPrompt, deliver, consecutiveClean, drainInForce, isReleaseLine,
   cyclesReport, readLedger, deliveryCounts, readLedgerDeliveries, readDeliveredHandoffs, recoverInterruptedWork, recoverableWork,
   queueHandoff, readHandoffs, handoffBatches, recentlyVoidedKeys, sessionMoved, VOIDED, keptClaimsPath, ledgerLine, thrashEscalationPrompt,
+  pruneGoneKeptClaims, readKeptClaims, writeKeptClaims,
 } from "./wake.mjs";
 import {
   claimRecordComment, declineRow, claimWithWorktree, worktreeTargetReason, worktreeFlagsReason,
@@ -1122,7 +1123,7 @@ test("#2470 (7b) a kept record whose tree is GONE falls back to a fresh claim, a
   gone.claimer.claim(SPAWN_ORDER, "worker-2407", {});
   assert.deepEqual(gone.claimArgs(), ["claim", "2407", "--session=worker-2407", "--branch=agent/one-instance-one-row-2407", "--worktree=../wt-2407"],
     "a record naming a path that no longer exists must not send the claim to adopt nothing");
-  assert.deepEqual(gone.forgotten, [], "and the stale record is not 'used'");
+  assert.deepEqual(gone.forgotten, [2407], "and the stale record is DROPPED (#2864), not left to be read again next tick");
   const refused = spawnHost({ kept: KEPT, claimStatus: 1 });
   const got = refused.claimer.claim(SPAWN_ORDER, "worker-2407", {});
   assert.ok("refusal" in got);
@@ -1607,4 +1608,67 @@ test("#2841 every argv wake.mjs sends to row-claim.mjs passes row-claim's REAL f
   const without = ROW_CLAIM_FLAGS.filter((f: string) => f !== "--predecessor-gone");
   const gone = argvs.find((a) => a.args.includes("--predecessor-gone"))!;
   assert.deepEqual(unknownFlags(gone.args.slice(1), without), ["--predecessor-gone"]);
+});
+
+// --- #2864: a kept record whose tree was later removed is dropped, and a merged leftover branch with it ---------------------------------
+
+test("#2864 the claim DROPS a kept record whose tree is gone and deletes its leftover branch with `-d` BEFORE claiming; a record whose tree exists is untouched", () => {
+  const gone = spawnHost({ kept: KEPT, treeGone: true });
+  gone.claimer.claim(SPAWN_ORDER, "worker-2407", {});
+  const deletes = gone.execs.filter((e) => e.args[0] === "git" && e.args[1] === "branch");
+  assert.deepEqual(deletes.map((e) => e.args), [["git", "branch", "-d", BRANCH]], "`-d`, never `-D`, on the recorded branch");
+  assert.ok(gone.execs.indexOf(deletes[0]) < gone.execs.findIndex((e) => e.args[1] === "claim"), "before the claim that would refuse over it");
+  // THE CONTROL: the tree exists, so the record is adopted and nothing is deleted.
+  const kept = spawnHost({ kept: KEPT });
+  kept.claimer.claim(SPAWN_ORDER, "worker-2407", {});
+  assert.equal(kept.execs.some((e) => e.args[0] === "git" && e.args[1] === "branch"), false);
+});
+
+/** A scratch `origin`/primary pair: `main` published, plus one local branch that is MERGED into main and one holding a commit nowhere else. */
+function keptScratch() {
+  const root = mkdtempSync(join(tmpdir(), "a11y-2864-"));
+  const git = (...args: string[]) => execFileSync("git", ["-C", root, ...args], { env: sandboxGitEnv(), encoding: "utf8" });
+  git("init", "-q", "-b", "main");
+  git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "base");
+  git("branch", "agent/merged-9");
+  git("checkout", "-q", "-b", "agent/unmerged-8");
+  git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "work only here");
+  git("checkout", "-q", "main");
+  const keptPath = join(root, "kept-claims.json");
+  const record = (branch: string, worktree: string) => ({ worktree, branch, from: "worker-1", at: NOW, why: "merged", dirty: 0, unpushed: 0 });
+  const branches = () => git("branch", "--format=%(refname:short)").split("\n").filter(Boolean);
+  return { root, keptPath, git, record, branches };
+}
+
+test("#2864 pruneGoneKeptClaims over a REAL repo: a gone tree's record goes and its MERGED branch with it; an UNMERGED branch stays and is named; an existing tree's record is untouched", () => {
+  const s = keptScratch();
+  try {
+    const live = join(s.root, "live-tree");
+    writeFileSync(s.keptPath, JSON.stringify({
+      9: s.record("agent/merged-9", join(s.root, "gone-a")),
+      8: s.record("agent/unmerged-8", join(s.root, "gone-b")),
+      7: s.record("agent/live-7", live),
+    }));
+    // The kept tree for #7 exists on disk; the other two were removed.
+    execFileSync("mkdir", [live]);
+    const lines = pruneGoneKeptClaims(s.keptPath, { primary: s.root, env: {} });
+    assert.deepEqual(Object.keys(readKeptClaims(s.keptPath)), ["7"], "exactly the records whose trees are gone are dropped");
+    assert.deepEqual(s.branches().sort(), ["agent/unmerged-8", "main"], "the merged branch is deleted; the unmerged one is NEVER deleted");
+    assert.equal(lines.length, 2);
+    assert.match(lines.find((l) => l.includes("#9")) ?? "", /deleted its merged branch agent\/merged-9/);
+    assert.match(lines.find((l) => l.includes("#8")) ?? "", /left the branch agent\/unmerged-8/);
+    // IDEMPOTENT: the second tick has nothing left to say.
+    assert.deepEqual(pruneGoneKeptClaims(s.keptPath, { primary: s.root, env: {} }), []);
+    assert.deepEqual(Object.keys(readKeptClaims(s.keptPath)), ["7"]);
+  } finally { rmSync(s.root, { recursive: true, force: true }); }
+});
+
+test("#2864 a record is dropped even when git REFUSES the branch, so the refusal that follows is the claim's own and names the branch", () => {
+  const s = keptScratch();
+  try {
+    writeKeptClaims(s.keptPath, { 8: s.record("agent/unmerged-8", join(s.root, "gone")) });
+    pruneGoneKeptClaims(s.keptPath, { primary: s.root, env: {} });
+    assert.deepEqual(readKeptClaims(s.keptPath), {});
+    assert.ok(s.branches().includes("agent/unmerged-8"));
+  } finally { rmSync(s.root, { recursive: true, force: true }); }
 });
