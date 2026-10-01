@@ -16,7 +16,7 @@
 // variable yet (rows 4 and 5 install it), and the running units are untouched.
 //
 // A LEAF, like `project-config.mjs`: `node:fs`, `node:path` and that module only.
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { HOME_CHECKOUT, PROJECT_DECLARATION_PATH, SUPPORTED_SCHEMA } from "./project-config.mjs";
 
@@ -340,13 +340,42 @@ export function stateFilePath(host, name) {
 const UNDECLARED_STATE_DIR = ".cache/a11ign";
 
 /**
+ * Handed by the shadow-window runner (#2846) to the CANDIDATE gate it runs, naming the COPY of the state directory that candidate may read
+ * (`decide(args)` has no state-directory parameter, so an environment variable is the only way to give it one). The runner makes that
+ * directory and writes `SHADOW_COPY_MARKER` into it last.
+ */
+export const SHADOW_STATE_DIR_ENV = "A11IGN_SHADOW_STATE_DIR";
+export const SHADOW_COPY_MARKER = ".shadow-copy";
+
+/**
+ * The directory `$A11IGN_SHADOW_STATE_DIR` names, or `undefined` when it is unset (today's behaviour, byte for byte). SET AND UNUSABLE REFUSES,
+ * naming the path, and never falls back: a variable that leaked into the LIVE tick's environment would otherwise point the drain marker and the
+ * reviewer state at somewhere else, and the tick would go on running as though nothing had moved. A directory counts as usable only when the
+ * runner made it (`SHADOW_COPY_MARKER`), which is also what the runner demands before it empties one.
+ * @param {Record<string, string | undefined>} env
+ */
+function shadowStateDir(env) {
+  const dir = env[SHADOW_STATE_DIR_ENV];
+  if (dir === undefined) return undefined;
+  if (!isAbsolute(dir)) throw new HostConfigRefusal(SHADOW_STATE_DIR_ENV, `it must be an absolute path, not ${JSON.stringify(dir)}`, "the environment");
+  if (!existsSync(join(dir, SHADOW_COPY_MARKER))) {
+    throw new HostConfigRefusal(SHADOW_STATE_DIR_ENV, `${dir} has no ${SHADOW_COPY_MARKER}, so the shadow-window runner did not make it; only a copy it made may stand in for the state directory`, "the environment");
+  }
+  return dir;
+}
+
+/**
  * Where one state entry lives on THIS host for a reader that ran before `stateDir` existed. A host that declares a `stateDir` gets
  * `stateFilePath`'s answer; a host that declares none gets `${HOME}/.cache/a11ign`, BYTE-IDENTICAL to the string those readers spelled,
  * so the running unit is unchanged until its `host.json` says otherwise (#2623's cut-over). `name` is `""` for the directory itself.
- * @param {string} name @param {{ host?: HostConfig, home?: string | undefined }} [where]
+ * UNDER `$A11IGN_SHADOW_STATE_DIR` (the candidate gate, #2623 done-when 6) the answer is the runner's COPY, ahead of both, and `host.json` is not read.
+ * @param {string} name @param {{ host?: HostConfig, home?: string | undefined, env?: Record<string, string | undefined> }} [where]
  */
-export function stateEntryPath(name, { host = homeHostConfig(), home = process.env.HOME } = {}) {
-  if (host.stateDir !== undefined) return name === "" ? host.stateDir : stateFilePath(host, name);
+export function stateEntryPath(name, { host, home = process.env.HOME, env = process.env } = {}) {
+  const copy = shadowStateDir(env);
+  if (copy !== undefined) return name === "" ? copy : join(copy, name);
+  const declared = host ?? homeHostConfig();
+  if (declared.stateDir !== undefined) return name === "" ? declared.stateDir : stateFilePath(declared, name);
   return name === "" ? `${home}/${UNDECLARED_STATE_DIR}` : `${home}/${UNDECLARED_STATE_DIR}/${name}`;
 }
 
