@@ -109,7 +109,7 @@ guard is being added or changed, it is mutation-checked in both directions befor
 real defect (or a synthetic fixture shaped like one) must make it fail, by name; a correct or empty state
 must make it pass. Mutations are applied via a `/tmp` copy and restored the same way — never
 `git checkout --`, which discards every uncommitted change in a file, not just the one under test. Every
-commit reports `npm run lint`, `npx tsc --noEmit`, and `npm test` (the full suite — a file runner alone can
+commit reports `pnpm run lint`, `pnpm exec tsc --noEmit`, and `pnpm test` (the full suite — a file runner alone can
 test a stale build across a cross-package import boundary and not know it).
 
 ## THE TURN IS THE UNIT, AND FILING IS THE EVENT — 2026-09-06

@@ -45,7 +45,7 @@ outranks the screen-reader layer's `cantTell` only — **asserted BY axe-core an
 
 The applicable subset of *Clean Code* (Martin), in two halves, enforced differently.
 
-**Mechanical — enforced by ESLint (`npm run lint`); errors block CI:**
+**Mechanical — enforced by ESLint (`pnpm run lint`); errors block CI:**
 - Small functions doing one thing at one level of abstraction; the top-level reads as a top-down narrative (the Stepdown Rule). Gated by `max-lines-per-function` (70), `complexity` (15), `max-depth` (3).
 - Few arguments, and **no boolean flag arguments** — bundle cohesive arguments into an object instead. Gated by `max-params` (4).
 - **Never swallow an error** with an empty `catch {}` — record a diagnostic or rethrow with `{ cause }`. Gated by `no-empty`.

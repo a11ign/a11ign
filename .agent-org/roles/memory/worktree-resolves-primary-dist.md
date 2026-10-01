@@ -9,7 +9,7 @@ On a11ign the peer worktrees (`../a11y-wt-*`) can have `node_modules` **symlinke
 checkout's**. When they do, `@a11ign/<pkg>` resolves to the PRIMARY's `packages/<pkg>`, so any
 cross-package import reads the **primary's `dist`** — not the worktree's.
 
-**Consequence: `npm run build` inside your worktree changes nothing that a cross-package tool will read.**
+**Consequence: `pnpm run build` inside your worktree changes nothing that a cross-package tool will read.**
 
 Measured 2026-09-06. `npm run docs:coverage` in `a11y-wt-lead` emitted a `docs/coverage.md` missing two
 paragraphs the source plainly contained, because the primary's `packages/judge/dist` was built at 10:55 and
@@ -32,13 +32,13 @@ readlink node_modules                                           # the whole tree
 ```
 
 **And rebuild the PRIMARY after merges**, or every worktree sharing its `node_modules` inherits whatever it
-last built. Verified safe to run during a live capture: `npm run build` writes only `dist/`, `nvda-worker`
+last built. Verified safe to run during a live capture: `pnpm run build` writes only `dist/`, `nvda-worker`
 has no build step at all (plain `.mjs`, ADR 0031), and `workerSourceDirty()` reads
 `git status -- packages/nvda-worker/src`, which a build cannot touch. Confirmed by measurement — worker
 source 0 dirty before and after, `worker:code` 10/10 matching afterwards.
 
 This is CLAUDE.md's own stale-`dist` rule one layer out: that file warns cross-package imports resolve to
-`dist` so `npx tsx --test` alone tests the last build. It does not say WHOSE.
+`dist` so `pnpm exec tsx --test` alone tests the last build. It does not say WHOSE.
 
 Related: [[peer-session-resource-ban]] for the worktree setup, and [[a-number-from-the-apparatus]] — this is
 the same defect with code in place of a number.
