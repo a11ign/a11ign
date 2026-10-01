@@ -25,9 +25,9 @@ command, because any one of them missing sends you back to the shell.
 ## Run something on the lab
 
 ```bash
-npm run lab:job -- -e job=<name> [-e <param>=<value> …] [-e ref=<git-ref>]
-npm run lab:job                                  # no job: refuses, and names every one it has
-npm run lab:job -- -e job=<name> -e describe=1   # what this job runs, and what it takes
+pnpm run lab:job -e job=<name> [-e <param>=<value> …] [-e ref=<git-ref>]
+pnpm run lab:job                                  # no job: refuses, and names every one it has
+pnpm run lab:job -e job=<name> -e describe=1   # what this job runs, and what it takes
 ```
 
 `-e ref=` runs the job at a named commit. It is **refused before anything expensive starts** if the ref is
@@ -41,7 +41,7 @@ A job takes only the parameters its own command reads, and the gate derives that
 than from a list beside it. **Ask the job:**
 
 ```bash
-$ npm run lab:job -- -e job=capture-only -e describe=1
+$ pnpm run lab:job -e job=capture-only -e describe=1
 capture-only — reads only; REQUIRES only. Budget 3600s.
 Runs /usr/bin/npm run training:capture -- --only={{ only }}
 ```
@@ -69,7 +69,7 @@ any other route to the box, which an in-process flag could not.
 
 ### The catalogue
 
-36 jobs. `npm run lab:job` with no arguments prints the current list; these are the groups.
+36 jobs. `pnpm run lab:job` with no arguments prints the current list; these are the groups.
 
 | | |
 |---|---|
@@ -85,12 +85,12 @@ any other route to the box, which an in-process flag could not.
 ## Watch it, read it, stop it
 
 ```bash
-npm run lab:status                      # every a11y-job-* unit and its state
-npm run lab:status -- -e job=<name>     # systemd's view + the journal + the run's own progress file
-npm run lab:log    -- -e job=<name>     # the job's OWN OUTPUT, unwrapped — bytes, not YAML
-npm run lab:fetch  -- -e artifact=<name> [-e out=<model>]   # a report, as a file
-npm run lab:stop   -- -e job=<name>     # end one deliberately; reports what it discards first
-npm run lab:reset  [-e ref=<git-ref>] [-e remove=<path>]    # unblock a pull the lab's own output blocks
+pnpm run lab:status                      # every a11y-job-* unit and its state
+pnpm run lab:status -e job=<name>     # systemd's view + the journal + the run's own progress file
+pnpm run lab:log    -e job=<name>     # the job's OWN OUTPUT, unwrapped — bytes, not YAML
+pnpm run lab:fetch  -e artifact=<name> [-e out=<model>]   # a report, as a file
+pnpm run lab:stop   -e job=<name>     # end one deliberately; reports what it discards first
+pnpm run lab:reset  [-e ref=<git-ref>] [-e remove=<path>]    # unblock a pull the lab's own output blocks
 ```
 
 **`lab:status` is the authoritative source, and hand-rolling `journalctl` instead of running it is itself a
@@ -126,8 +126,8 @@ it **reports** rather than aborting on, and `-e remove=<path>` is the deliberate
 ## Run several in order
 
 ```bash
-npm run lab:pipeline -- --list
-npm run lab:pipeline -- --pipeline=<name> [--ref=<git-ref>] [--only=<case-ids>]
+pnpm run lab:pipeline --list
+pnpm run lab:pipeline --pipeline=<name> [--ref=<git-ref>] [--only=<case-ids>]
 ```
 
 | pipeline | fleet? | what |
@@ -161,12 +161,12 @@ the full run, so nothing it produces is thrown away when you commit to `full`.
 ## The fleet
 
 ```bash
-npm run fleet:status                    # what every box is doing, right now
-npm run fleet:deploy                    # pull + install + restart + PROVE it
-npm run fleet:provision [--serial=0]    # the ROLE: NVDA, the Edge pin, policies, the provision stamp
-npm run worker:code                     # each worker's /health.code vs this checkout
-eval "$(npm run --silent fleet:env)"    # A11Y_WORKERS from inventory.yml
-npm run fleet:sleep / fleet:wake / fleet:tailscale / fleet:normalise / fleet:discover
+pnpm run fleet:status                    # what every box is doing, right now
+pnpm run fleet:deploy                    # pull + install + restart + PROVE it
+pnpm run fleet:provision [--serial=0]    # the ROLE: NVDA, the Edge pin, policies, the provision stamp
+pnpm run worker:code                     # each worker's /health.code vs this checkout
+eval "$(pnpm run --silent fleet:env)"    # A11Y_WORKERS from inventory.yml
+pnpm run fleet:sleep / fleet:wake / fleet:tailscale / fleet:normalise / fleet:discover
 ```
 
 The fleet is defined **once**, in `inventory.yml`. Three things are worth knowing before you type any of
@@ -196,7 +196,7 @@ reader to run `--write-baseline` when the flag is `--update-baseline`, and `--on
 covered 1 of that family's 7 cases. Neither produced an error; both produced a plausible wrong answer.
 
 ```
-$ npm run lab:pipeline -- --pipeline=gates --refs=main
+$ pnpm run lab:pipeline --pipeline=gates --refs=main
   npm run lab:pipeline: unknown flag --refs — did you mean --ref?
   It takes: --list --only --pipeline --ref
   Refusing rather than ignoring it: an ignored flag runs the default and reports success.
@@ -216,12 +216,12 @@ that is neither guarded nor on it fails that test, so the gap stays countable ra
 play succeeded, **2** a task failed — which includes every refusal above. `lab:pipeline` exits **0** on a
 clean run, **2** on a refused or failed stage, and names the stage.
 
-**Never pipe a command whose exit status you intend to read.** `npm run lab:pipeline … | tail` reports
+**Never pipe a command whose exit status you intend to read.** `pnpm run lab:pipeline … | tail` reports
 `tail`'s status, and a real `ANSIBLE_EXIT=2` has read as success here twice. Redirect to a file, then read
 both the file and the status:
 
 ```bash
-npm run lab:pipeline -- --pipeline=gates > /tmp/gates.log 2>&1; echo "EXIT=$?"
+pnpm run lab:pipeline --pipeline=gates > /tmp/gates.log 2>&1; echo "EXIT=$?"
 ```
 
 And **read the echoed value** — appending `; echo "EXIT=$?"` makes the compound command's status the
@@ -240,9 +240,9 @@ run as exit 0, because the shell's last statement had succeeded.
 ### What state is the CORPUS in — `lab:inventory`
 
 ```bash
-npm run lab:job -- -e job=inventory     # the authoritative answer, on the box that holds the corpus
-npm run lab:inventory                   # against a local copy; it SAYS it is a copy
-npm run lab:inventory -- --json
+pnpm run lab:job -e job=inventory     # the authoritative answer, on the box that holds the corpus
+pnpm run lab:inventory                   # against a local copy; it SAYS it is a copy
+pnpm run lab:inventory --json
 ```
 
 Every other moving part had a status command — `fleet:status` for the boxes, `lab:status` for a job,
@@ -271,7 +271,7 @@ guest and a failing one. `A11Y_NVDA_LOG_LEVEL=DEBUG` raises it (applied to `nvda
 elevation needed). Opt-in, because NVDA writes a great deal at DEBUG and this pipeline measures
 per-capture timing.
 
-**Comparing two guests:** `npm run worker:compare -- <page> <worker> <worker> [--rounds=7]`. Interleaved
+**Comparing two guests:** `pnpm run worker:compare <page> <worker> <worker> [--rounds=7]`. Interleaved
 round-robin with medians and IQRs, and it refuses to declare a difference the samples do not support.
 Use it instead of reading two `bench-capture` printouts — that is how a 2x difference got attributed to
 the wrong phase for hours.
@@ -282,10 +282,10 @@ reproducible: `browserVersion` is a cache key precisely because Edge announces d
 releases, so evidence taken under Edge 151 cannot be recreated now 152 ships.
 
 ```bash
-npm run lab:job -- -e job=corpus-snapshot        # archive ON THE LAB, beside the corpus
-npm run lab:fetch -- -e artifact=corpus-archive  # bring the newest one to the control plane
-npm run corpus:release -- --archive=runs/fetched/<name>.tar.gz   # upload, then DOWNLOAD IT BACK
-npm run corpus:release -- --verify=corpus-<stamp>               # is an old release still restorable
+pnpm run lab:job -e job=corpus-snapshot        # archive ON THE LAB, beside the corpus
+pnpm run lab:fetch -e artifact=corpus-archive  # bring the newest one to the control plane
+pnpm run corpus:release --archive=runs/fetched/<name>.tar.gz   # upload, then DOWNLOAD IT BACK
+pnpm run corpus:release --verify=corpus-<stamp>               # is an old release still restorable
 ```
 
 **The transport is two hops because of CREDENTIALS.** The lab is the machine the corpus lives on, so a
@@ -310,11 +310,11 @@ one disk converts a known risk into an assumed safety.
 Three commands answer "what happened", and the third was missing for months:
 
 ```bash
-npm run lab:status -- -e job=<name>   # systemd's view, the journal, and the run's own progress file
-npm run lab:log -- -e job=<name>      # the job's OWN OUTPUT, unwrapped — bytes, not YAML
-npm run lab:fetch -- -e artifact=<name>   # a report, as a file
-npm run lab:reset                         # what is dirty in the lab checkout, and is it safe to discard
-npm run lab:reset -- -e apply=true        # discard it — ONLY files origin already has
+pnpm run lab:status -e job=<name>   # systemd's view, the journal, and the run's own progress file
+pnpm run lab:log -e job=<name>      # the job's OWN OUTPUT, unwrapped — bytes, not YAML
+pnpm run lab:fetch -e artifact=<name>   # a report, as a file
+pnpm run lab:reset                         # what is dirty in the lab checkout, and is it safe to discard
+pnpm run lab:reset -e apply=true        # discard it — ONLY files origin already has
 ```
 
 **`lab:reset` exists because promoting leaves the lab dirty and every later job then refuses to pull.**
@@ -323,7 +323,7 @@ deliberately does not commit, since promoting is a MAJOR release. `run-job.yml` 
 a dirty checkout — correctly, it cannot tell a stray artefact from work in progress — so the next job runs
 at the pre-promotion commit and the `gates` pipeline fails at stage 1 saying so.
 
-**`npm run lab:collect-promotion` does this whole dance, and exists because the paragraph below is a
+**`pnpm run lab:collect-promotion` does this whole dance, and exists because the paragraph below is a
 procedure a human has to remember.** It fetches all four promoted artefacts, reads the changeset's real
 name OFF THE LAB rather than guessing it, installs them, and runs `scorer:verify` and `release:provenance`
 on the result — the one check that can see weights and a changeset describing different models, which it

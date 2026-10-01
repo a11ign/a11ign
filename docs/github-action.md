@@ -187,7 +187,7 @@ path is now the opt-in one.
 ## Testing it without spending runner minutes
 
 ```bash
-npm run doctor                  # whatever worker you have — fleet, or a local VM
+pnpm run doctor                  # whatever worker you have — fleet, or a local VM
 ./packages/lab/scripts/action-dry-run.sh https://example.com "Complete the checkout"
 FAIL_ON=blocker ./packages/lab/scripts/action-dry-run.sh ...      # check the exit contract
 ```
@@ -374,7 +374,7 @@ page, so the field names in it are the names the screen reader actually uses rat
 markup:
 
 ```bash
-npx tsx packages/cli/src/cli.ts https://staging.example.com/signup --task "Create an account" \
+pnpm exec tsx packages/cli/src/cli.ts https://staging.example.com/signup --task "Create an account" \
   --emit-form-config > .github/a11y-forms.yml
 ```
 
@@ -432,7 +432,7 @@ refused before any setup is billed.
 given: `url`, `status` (`captured` or `failed`), `results` (that page's own result, in the shape below; one per configured
 form state) and, for a failed page, `error`. The `findings` output is the sum over the captured pages, and
 `task-completable` is `true` only when every page was captured and judged completable. The CLI takes the same list:
-`npm run witness -- <url> <url> ...` or `--urls "<url> <url>"`, with `--max-pages N` as the override.
+`pnpm run witness <url> <url> ...` or `--urls "<url> <url>"`, with `--max-pages N` as the override.
 
 ## Logging in: `flows` and `login-flow`
 
@@ -498,9 +498,9 @@ never an input, because an input is interpolated into shell text. Whether a comp
 verified on the Action rehearsal recorded in [ADR 0038](adr/0038-authenticated-capture.md); if a runner ever does not, the fallback
 is an input mapped into the step's `env:`, never into `run:` text.
 
-`npm run auth:leak-check` is the check for whether a credential reaches a file, with a positive control. It has been read once against a real NVDA (2026-09-25, #2399: exit `0`, with a working positive control), and the first defence held on that page. **A full Action run has since been read against a page that is not a fixture (2026-09-26, #2561: this Action, a private repository, `windows-2022` with NVDA, a form login to `the-internet.herokuapp.com`):** it exited 0; the same job ran the three commands above as written (exits 0, 1, 0), and `auth:artifact-scan` read the report, the summary, the PR comment and the job log clean, with a positive control that exited 1. **Read that as one page, one runner and one afternoon:** the target prints its demo credentials on its login page, so a clean scan there proves the redaction and not that the tool never sees a credential, and it has no MFA, SSO or CAPTCHA. **Two things it showed:** a control is bound by its exact accessible name, and the target's Login button is named `U+F090 Login` (an icon glyph a stylesheet adds), so the flow had to say so, and the first run ended in `auth-login-failed` until it did; and that run, a single URL, stated a login *minimum* but did not report the number performed (only a page list's `result-json` carried `logins`; #2645 makes a single URL report it too, which no run has yet read on the Action); **the redaction and the per-character refusal remain the defence to rely on**, and one reading is not a promise about yours. See the ADR for its three invocations and what each must exit.
+`pnpm run auth:leak-check` is the check for whether a credential reaches a file, with a positive control. It has been read once against a real NVDA (2026-09-25, #2399: exit `0`, with a working positive control), and the first defence held on that page. **A full Action run has since been read against a page that is not a fixture (2026-09-26, #2561: this Action, a private repository, `windows-2022` with NVDA, a form login to `the-internet.herokuapp.com`):** it exited 0; the same job ran the three commands above as written (exits 0, 1, 0), and `auth:artifact-scan` read the report, the summary, the PR comment and the job log clean, with a positive control that exited 1. **Read that as one page, one runner and one afternoon:** the target prints its demo credentials on its login page, so a clean scan there proves the redaction and not that the tool never sees a credential, and it has no MFA, SSO or CAPTCHA. **Two things it showed:** a control is bound by its exact accessible name, and the target's Login button is named `U+F090 Login` (an icon glyph a stylesheet adds), so the flow had to say so, and the first run ended in `auth-login-failed` until it did; and that run, a single URL, stated a login *minimum* but did not report the number performed (only a page list's `result-json` carried `logins`; #2645 makes a single URL report it too, which no run has yet read on the Action); **the redaction and the per-character refusal remain the defence to rely on**, and one reading is not a promise about yours. See the ADR for its three invocations and what each must exit.
 
-`npm run auth:artifact-scan -- --path <file or directory> --user-env <VAR> --secret-env <VAR>` is the check for a REAL run's output, which `auth:leak-check` cannot be: that command reads only the `.json` it wrote itself from a fixture, so a credential in the markdown summary, a saved PR comment or a job log would read as clean because it was never looked at. This one scans every text file under the path, whatever its extension, with the same detector and the same exit codes (`0` clean, `1` a leak, `2` could not examine), and prints how much it examined before it says clean. An empty directory, or one holding only binary files, is exit `2`; a binary file is named as skipped and is not searched. **It covers only what it is pointed at:** a credential that reached a channel you did not point it at (a log you did not save, a comment you did not fetch, an upload step of your own) is not covered, and neither is one inside a skipped file.
+`pnpm run auth:artifact-scan --path <file or directory> --user-env <VAR> --secret-env <VAR>` is the check for a REAL run's output, which `auth:leak-check` cannot be: that command reads only the `.json` it wrote itself from a fixture, so a credential in the markdown summary, a saved PR comment or a job log would read as clean because it was never looked at. This one scans every text file under the path, whatever its extension, with the same detector and the same exit codes (`0` clean, `1` a leak, `2` could not examine), and prints how much it examined before it says clean. An empty directory, or one holding only binary files, is exit `2`; a binary file is named as skipped and is not searched. **It covers only what it is pointed at:** a credential that reached a channel you did not point it at (a log you did not save, a comment you did not fetch, an upload step of your own) is not covered, and neither is one inside a skipped file.
 
 ### Logging in with a saved state: `auth-state`
 

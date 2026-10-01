@@ -86,7 +86,7 @@ Then, on the host:
 
 ```bash
 curl http://127.0.0.1:8765/health
-A11Y_WORKER=http://127.0.0.1:8765 npm run witness -- https://example.com --task "..."
+A11Y_WORKER=http://127.0.0.1:8765 pnpm run witness https://example.com --task "..."
 ```
 
 Budget ~1.5–2 h, almost all of it downloading. What the three scripts do:
@@ -347,7 +347,7 @@ Windows install is still hands-off:
 5. Boot. The install should complete, auto-log in as `witness`, and run the bootstrap
    with no interaction.
 6. `utmctl ip-address <vm>` for the guest IP, then
-   `A11Y_WORKER=http://<ip>:8765 npm run witness -- ...`
+   `A11Y_WORKER=http://<ip>:8765 pnpm run witness ...`
 
 If you skip `support.iso` entirely, Windows Setup becomes interactive: click through it,
 create a local admin (`Shift+F10` → `start ms-cxh:localonly` to dodge the Microsoft
@@ -361,13 +361,13 @@ wraps the lifecycle. It refuses without `A11Y_LOCAL_VM=1` (#636) — export it o
 
 ```bash
 export A11Y_LOCAL_VM=1
-npm run worker:ctl -- up        # start or resume, then wait for /health
-npm run worker:ctl -- pool      # every a11y-worker* VM, as JSON
-npm run worker:ctl -- pool-up   # start them all
-npm run worker:ctl -- pool-stop # release them all (~13 s for three)
-npm run worker:ctl -- pause     # ~0.6% CPU, resume under a second
-npm run worker:ctl -- stop      # nothing held, ~15 s to come back
-npm run worker:ctl -- idle-pause 15   # pause after 15 min with no capture
+pnpm run worker:ctl up        # start or resume, then wait for /health
+pnpm run worker:ctl pool      # every a11y-worker* VM, as JSON
+pnpm run worker:ctl pool-up   # start them all
+pnpm run worker:ctl pool-stop # release them all (~13 s for three)
+pnpm run worker:ctl pause     # ~0.6% CPU, resume under a second
+pnpm run worker:ctl stop      # nothing held, ~15 s to come back
+pnpm run worker:ctl idle-pause 15   # pause after 15 min with no capture
 ```
 
 `idle-*` polls the worker's own `busy` flag, so a capture in flight resets the clock.
@@ -392,7 +392,7 @@ swapped-out guests also produced `NVDA is running but not speaking` failures and
 blackouts, a pattern that reads as the workers dying.
 
 So the lease reads available memory and starts only what fits, leaving the rest stopped (their
-correct resting state anyway). `npm run doctor` shows the verdict before you start:
+correct resting state anyway). `pnpm run doctor` shows the verdict before you start:
 
 ```
 OK  host memory  ~12185 MB available — room for 2 of 3 worker(s)
@@ -405,7 +405,7 @@ OK  host memory  ~12185 MB available — room for 2 of 3 worker(s)
   thing that shrinks the pool.
 - The reading is noisy just after a VM shuts down, because macOS reclaims lazily — it can
   under-report for a minute or two, which costs parallelism but never correctness.
-- **Your own tooling is on the same host.** A `npm test` or a browser competes with the guests.
+- **Your own tooling is on the same host.** A `pnpm test` or a browser competes with the guests.
 
 That release used to be missing on the pooled path: the single-worker lease restored state,
 the pool handed back a no-op, and a pooled run left every guest running indefinitely.
@@ -427,7 +427,7 @@ You rarely need `worker-ctl.sh up` by hand. Run the CLI with **no** `A11Y_WORKER
 manages the VM itself:
 
 ```bash
-npm run witness -- https://example.com --task "Find the contact details"
+pnpm run witness https://example.com --task "Find the contact details"
 # Local worker VM 'a11y-worker' is stopped; bringing it up ...
 #   ready after 12s: health includes the deployed code and worker-reported runtime versions
 # ... report ...
@@ -457,7 +457,7 @@ started a capture while the first was finishing.
 Everything UTM-specific stays in `worker-ctl.sh`; `packages/worker-fleet/src/` only reads its
 `json` output, so the control plane never learns about utmctl, bundles or bookmarks.
 
-`npm run training:capture` uses the same lease (it runs under `tsx` so it can import the
+`pnpm run training:capture` uses the same lease (it runs under `tsx` so it can import the
 TypeScript module), and it is the run that benefits most: long, unattended, and previously
 guaranteed to leave the guest running afterwards.
 
@@ -516,7 +516,7 @@ Check in this order:
 pgrep -x UTM              # utmctl needs this
 pgrep -f QEMULauncher     # is a guest actually running?
 utmctl list               # is the VM registered, and under what UUID?
-npm run worker:ctl -- status
+pnpm run worker:ctl status
 ```
 
 **Two shells or two agents driving one worker will produce exactly this confusion.** There is
@@ -542,7 +542,7 @@ osascript \
 ```
 
 Repeat for `a11y-worker-2.utm` and `a11y-worker-3.utm`, then verify with `utmctl list` and
-`npm run worker:ctl -- pool`. Some UTM versions show a security confirmation
+`pnpm run worker:ctl pool`. Some UTM versions show a security confirmation
 when an imported bundle contains custom arguments; an operator must approve that prompt in
 UTM before the AppleScript call returns. The repository deliberately does not bypass that
 confirmation or edit UTM's private registry while the app is running.
@@ -591,7 +591,7 @@ scp packages/nvda-worker/src/capture-core.mjs user@vm:C:/Users/user/a11ign/packa
 # Prefer a REBOOT over a task restart. Stop/Start-ScheduledTask silently fails to replace the
 # running process when the guest agent is not ready, and two workers once served stale code for
 # an hour that way. `worker-ctl.sh stop && up` always picks up a pushed file, and
-# `npm run worker:code` proves it did.
+# `pnpm run worker:code` proves it did.
 ssh user@vm "powershell -NoProfile -Command \"Stop-ScheduledTask -TaskName a11ysrv; Get-Process node -EA SilentlyContinue | Stop-Process -Force; Start-ScheduledTask -TaskName a11ysrv\""
 ```
 
@@ -631,7 +631,7 @@ ignored outright; `worker-ctl.sh stop` uses a guest-agent shutdown and waits for
 **Verify through `/health`, not through `exec`.** The old advice was "hash-check both sides", but
 reading the guest's hash goes through `exec` too — so when `exec` is broken the check returns
 *empty*, not *mismatched*, and empty reads as a flaky tool rather than a failed deploy. A
-verification that shares a failure mode with the action verifies nothing. `npm run worker:code`
+verification that shares a failure mode with the action verifies nothing. `pnpm run worker:code`
 asks each worker over the channel it serves on, which is reachable exactly when it is usable.
 
 **This shell is zsh.** `for U in $UUIDS` does **not** word-split a scalar — it iterates once with
@@ -666,12 +666,12 @@ you had already started is left running. Measured 1.90x on two, 2.36x on three �
 and **how many actually start is capped by host memory** (next section).
 
 ```bash
-npm run training:capture                            # uses every local worker, releases them after
+pnpm run training:capture                            # uses every local worker, releases them after
 packages/worker-fleet/src/local-worker/clone-worker.sh              # add one (handles utmctl's MAC copying)
-npm run worker:ctl -- pool           # what have I got, as JSON
-npm run worker:ctl -- pool-up        # start them all
-npm run worker:ctl -- pool-stop      # release the lot (~13 s for three)
-A11Y_WORKERS=url1,url2 npm run training:capture     # explicit pool: yours to manage, no lifecycle
+pnpm run worker:ctl pool           # what have I got, as JSON
+pnpm run worker:ctl pool-up        # start them all
+pnpm run worker:ctl pool-stop      # release the lot (~13 s for three)
+A11Y_WORKERS=url1,url2 pnpm run training:capture     # explicit pool: yours to manage, no lifecycle
 ```
 
 `A11Y_WORKERS` is the escape hatch, not the normal path: naming workers means you are managing
