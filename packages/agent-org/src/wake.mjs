@@ -4566,6 +4566,10 @@ const defaultGit = (cmd, args, opts) =>
  * working engineer. And a workspace that will not close is left, said, and retried -- no line is written for
  * an ending that did not happen.
  *
+ * A REGISTERED INSTANCE WITH NO WORKSPACE IS SETTLED HERE TOO (#2860, {@link settleGoneInstances}): since #2469 a
+ * spare is named `worker-<row>`, so an address is never spawned twice and the settle that `registerSpawn` runs for the
+ * SAME address never fires -- the registry grew a stale entry per finished engineer.
+ *
  * @param {{label: string, status: string}[]} agents
  * @param {TeardownDeps} deps
  * @returns {{ ended: SpareCycle[], registry: Record<string, SpareInstance> }}
@@ -4592,7 +4596,39 @@ export function endFinishedSpares(agents, deps) {
     ended.push(cycle);
     delete registry[role];
   }
+  ended.push(...settleGoneInstances(agents, registry, deps));
   return { ended, registry };
+}
+
+/**
+ * SETTLE EVERY REGISTRY ENTRY WHOSE WORKSPACE IS GONE AND WHOSE ROWS GITHUB SAYS ARE ALL CLOSED (#2860), as a failed
+ * cycle through {@link absentInstanceCycle} (the line {@link settleAbsentInstance} writes). Deletes from `registry`
+ * (the caller's copy) and returns the cycles written.
+ *
+ * THREE READINGS MUST AGREE, AND ANY ONE MISSING LEAVES THE ENTRY: the role is absent from a listing that
+ * {@link listingIsComplete} calls complete (a partial one reads every instance absent, #2465); the entry names at
+ * least one row (an entry that recorded none has nothing to ask GitHub); and every row's state READ as `CLOSED`
+ * (`null`, an open row and any other state keep it). The closed rows are what a single complete listing lacks:
+ * it cannot prove a workspace is really gone, but a spare whose every row is closed has no work left to lose.
+ *
+ * @param {{label: string, status: string}[]} agents
+ * @param {Record<string, SpareInstance>} registry
+ * @param {TeardownDeps} deps
+ * @returns {SpareCycle[]}
+ */
+function settleGoneInstances(agents, registry, deps) {
+  if (!listingIsComplete(agents)) return [];
+  /** @type {SpareCycle[]} */
+  const settled = [];
+  for (const [role, instance] of Object.entries(registry)) {
+    if (agents.some((a) => a.label === role)) continue;
+    if (instance.rows.length === 0 || !instance.rows.every((row) => deps.rowState(row) === "CLOSED")) continue;
+    const cycle = absentInstanceCycle(role, instance, deps.now);
+    deps.record(cycle);
+    settled.push(cycle);
+    delete registry[role];
+  }
+  return settled;
 }
 
 /**
@@ -4662,12 +4698,22 @@ export function registerSpawn(paths, role, now = Date.now()) {
 export function settleAbsentInstance(paths, role, now = Date.now()) {
   const registry = readSpareRegistry(paths.registry);
   if (registry[role] === undefined) return registry;
-  const rows = registry[role].rows;
-  appendSpareCycle(paths.cycles, { role, row: rows.length > 0 ? rows[rows.length - 1] : null, at: now,
-    clean: false, rows, why: "the previous instance left without the teardown (closed by hand or crashed)" });
+  appendSpareCycle(paths.cycles, absentInstanceCycle(role, registry[role], now));
   delete registry[role];
   writeFileSync(paths.registry, `${JSON.stringify(registry)}\n`);
   return registry;
+}
+
+/**
+ * The failed cycle for an instance that left without the teardown, shared by {@link settleAbsentInstance} (a spawn
+ * finds the leftover) and {@link settleGoneInstances} (the tick finds it, #2860).
+ * @param {string} role @param {SpareInstance} instance @param {number} now
+ * @returns {SpareCycle}
+ */
+function absentInstanceCycle(role, instance, now) {
+  const { rows } = instance;
+  return { role, row: rows.length > 0 ? rows[rows.length - 1] : null, at: now, clean: false, rows,
+    why: "the previous instance left without the teardown (closed by hand or crashed)" };
 }
 
 /** @param {string} path @param {SpareCycle} cycle */
