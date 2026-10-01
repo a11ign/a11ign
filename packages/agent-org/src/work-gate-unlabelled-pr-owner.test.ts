@@ -36,7 +36,7 @@ test("an unlabelled red PR whose closed row holds one live session is addressed 
   assert.match(order.prompt, /row it closes \(#2875\) is held by you/);
 });
 
-test("the same PR with rows naming nobody, a retired claim, no read at all or an unlisted row still goes to product-manager", () => {
+test("the same PR with rows naming nobody, a released claim, no read at all or an unlisted row still goes to product-manager", () => {
   const fallsBack = (openRows: Fixture[], closes = [2875]) => {
     const [order] = failingOrders([pr(closes)], openRows);
     assert.equal(order.session, "product-manager");

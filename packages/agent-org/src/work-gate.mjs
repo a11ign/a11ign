@@ -3965,7 +3965,9 @@ export function withEvidenceLabelAges(prs, run = defaultRun) {
  * this costs no call.
  *
  * EXACTLY ONE LIVE SESSION, OR NOTHING. A row is LIVE when it still holds its claim (`in-progress` beside a `session:`
- * label, the pair `anyBlockerClearingCandidate` reads), so a released or retired claim names nobody. Two different
+ * label, the pair `anyBlockerClearingCandidate` reads), so a released claim names nobody. `isLiveSession` is NOT asked:
+ * `arm-pr.mjs` reads `sessions.json` at load and the gate must load in a tree with no `.agent-org/roles`
+ * (`packaging/work-gate.test.ts`, #2174), so a retired session is excluded only because its claim is gone. Two different
  * sessions across the rows a PR closes is a question rather than an answer. A PR whose rows were not read (`openRows`
  * empty because the read was refused) matches nothing and is left exactly as it was. A PR with its OWN label is never
  * touched: the row never outranks it. Wired for the default scope only -- a scope whose pull requests live in another
