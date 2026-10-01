@@ -109,7 +109,7 @@ something else to enforce.
 directly, per `ceo`'s instruction, and the enforcing test below names exactly which are still missing
 until they do, as a **reported gap rather than a failure**: see that test's own comment for why a missing
 file (owned by an agent other than the one pushing) is not the same defect as a malformed row or an
-existing file missing one of its four required parts, and must not block everyone else's `npm test` for it.
+existing file missing one of its four required parts, and must not block everyone else's `pnpm test` for it.
 
 ## The bring-up order, and why it is not alphabetical
 
@@ -163,11 +163,11 @@ Named here once, so nobody has to rediscover it under time pressure:
 | state | lives | notes |
 |---|---|---|
 | Source, tests, docs, this role system | **GitHub** (`origin`) | The repo. Everything in this table that is NOT here is a reason the repo alone cannot reconstitute the org. |
-| The authoritative training/real-page corpus, trained model candidates | **The lab** (`a11y-lab`, reached over its own SSH key — see below) | `runs/` in any local checkout, including the primary one, is a COPY. `npm run lab:inventory` says how stale; `orchestrator`'s file says who may treat a `runs/`-reading gate as a verdict. |
-| The capture fleet | **Bare-metal workers** (`inventory.yml` in the repo names them; they are not reachable without the fleet SSH key) | `npm run fleet:status` from a machine holding the key is the only way to ask them anything. |
+| The authoritative training/real-page corpus, trained model candidates | **The lab** (`a11y-lab`, reached over its own SSH key — see below) | `runs/` in any local checkout, including the primary one, is a COPY. `pnpm run lab:inventory` says how stale; `orchestrator`'s file says who may treat a `runs/`-reading gate as a verdict. |
+| The capture fleet | **Bare-metal workers** (`inventory.yml` in the repo names them; they are not reachable without the fleet SSH key) | `pnpm run fleet:status` from a machine holding the key is the only way to ask them anything. |
 | **Credentials: the fleet SSH key and the lab's `a11y-pve` key** | **This Mac only** | See "Credentials" below — this is the single point of failure the board finding is actually about. |
 | Agent memory — cross-session facts an agent has learned and chosen to keep (e.g. the lab's host address, which key does what) | **`~/.claude`** on this Mac, per agent/session | Not the repo, not backed up by a `git clone`. An agent rebuilding context after a loss starts with none of this and has to re-derive or re-be-told it. |
-| **The git hooks** (`core.hooksPath`), which run the full test suite on `git push` | **The repo's own git config**, installed by `scripts/install-git-hooks.mjs` via `npm run prepare` | Bring-up state, not a detail: it is what created a real exposure the same day this page was written — the audit row *"nothing installs the git hooks"* was CLOSED, so hooks began running `npm test` on push with `GIT_DIR` set in the environment, and a test that shells `git` with only `cwd` set follows `GIT_DIR` instead, onto the real repo. `ceo`'s own framing: a closed row created the exposure. See the contingency drill below for what this means for anything that shells git during bring-up. |
+| **The git hooks** (`core.hooksPath`), which run the full test suite on `git push` | **The repo's own git config**, installed by `scripts/install-git-hooks.mjs` via `pnpm run prepare` | Bring-up state, not a detail: it is what created a real exposure the same day this page was written — the audit row *"nothing installs the git hooks"* was CLOSED, so hooks began running `pnpm test` on push with `GIT_DIR` set in the environment, and a test that shells `git` with only `cwd` set follows `GIT_DIR` instead, onto the real repo. `ceo`'s own framing: a closed row created the exposure. See the contingency drill below for what this means for anything that shells git during bring-up. |
 
 | **What is open** — every work item, its acceptance command, its region, and which are release blockers | **GitHub Issues, the Project board and the `v0.1.0` milestone** on `a11ign/a11ign` | Survives the loss of this machine, which is why it moved there on 2026-09-06. `docs/backlog.md` and `docs/known-gaps.md` stay as the RECORD of lessons and are NOT the tracker — the backlog contradicted itself (it says a closed row is deleted, and keeps them struck through) and five rows checked that day were already closed. Filed as issue #19 rather than fixed silently. |
 | **The daily board report's schedule** | **Moving to GitHub Actions, per `ceo`'s ruling** — reversing this row's own earlier position | This row used to argue the report **cannot** be moved to a GitHub runner: a runner only ever sees `origin/main`, so the merge count would miss anything merged locally and unpushed and the push-state line would read *"level, checked"* every day whether or not it was true. That argument's premise was "work can sit unpushed" — and the push-per-commit rule (see the resource ban below) removes exactly that premise. `ceo`'s ruling: **"push-everything means nothing is unpushed, so the runner sees everything."** Until the Action lands, the report still runs from **a launchd agent on this Mac** (`bash scripts/install-board-report.sh`, one command, idempotent) — issue #20's body already says a missing edition is a defect in this process, not a quiet period, which stays true either way. Full notes: [`docs/board/README.md`](../board/README.md); the migration runbook's systemd recipe is now a general reference, not this job's answer. |
@@ -415,14 +415,14 @@ meant to test is the worst possible version of this bug, because it would look l
 
 Then, for each row in the roster table above: open its linked file, confirm it exists and states its own
 lane/reporter/ban, and copy its "first message" from the section above. **Run
-`npx tsx --test packages/lab/src/packaging/roles-readme.test.ts`** to have the same check done
+`pnpm exec tsx --test packages/lab/src/packaging/roles-readme.test.ts`** to have the same check done
 mechanically — it asserts every agent named in this table has a working link, and that every linked file
 declares its own name, its lane, its reporter, and the ban.
 
 **Run this drill for real, not as a thought experiment**, per `ceo`'s own condition that this IS the
 acceptance test. Findings from the run performed while writing this page:
 
-- **"Get `npm test` green" is the wrong instruction for this drill, and it must never appear as one.** A
+- **"Get `pnpm test` green" is the wrong instruction for this drill, and it must never appear as one.** A
   fresh clone has no `runs/` at all, so every corpus-reading check skips HONESTLY there — `worker-capture`'s
   own guard makes that skip explicit and reason-bearing rather than silent, and is what to point at rather
   than re-describing. But a fresh clone can also surface a REAL, pre-existing gap unrelated to being fresh
