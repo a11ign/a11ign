@@ -86,7 +86,7 @@ assert.match(text, /axe|visual|not (?:been )?checked|unchecked/i,
 // The visual layer is an optional dependency on purpose: someone who only wants the screen-reader layer should
 // not download a browser engine for it.
 assert.ok(manifest.optionalDependencies?.playwright, "playwright must stay optional");
-assert.ok(!manifest.dependencies?.["@a11ign/nvda-worker"],
+assert.ok(!manifest.dependencies?.["@a11ign/screenreader-worker"],
   "the CLI speaks HTTP to a worker; it must not depend on the Windows package");
 
 console.log(`a11ign works when installed: bin RUNS (exit 2, usage printed), ${lines.length} report `
