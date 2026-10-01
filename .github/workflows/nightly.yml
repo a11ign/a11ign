@@ -7,7 +7,7 @@
 #
 # - `coverage` (below, unchanged) was already nightly; it moved here from `coverage.yml` so there is ONE
 #   scheduled file to read.
-# - `ready-audit` runs `npm run ready:audit` once a night instead of hourly plus on every issue event.
+# - `ready-audit` runs `pnpm run ready:audit` once a night instead of hourly plus on every issue event.
 #   `ready-label-audit.yml` is DELETED, not renamed: its hourly-plus-event shape was the livelock, and its
 #   findings are the tracker owner's, who reads them once a day and runs the script by hand for a same-day
 #   answer. Do not re-add an `issues:` trigger here; that is the 1,040-run shape.
@@ -21,7 +21,7 @@
 #
 name: nightly
 
-# NIGHTLY COVERAGE, OFF THE PR PATH -- chairman's direction, 2026-09-06, follow-up to #133/#140. `npm run
+# NIGHTLY COVERAGE, OFF THE PR PATH -- chairman's direction, 2026-09-06, follow-up to #133/#140. `pnpm run
 # coverage` re-runs the WHOLE suite under rstest (`@rstest/coverage-v8`, #1320) against `.c8rc.json`'s 78%
 # threshold. Before the move to rstest (#1320), it ran under c8, measured at 154s of
 # `ci/ts`'s 269s on a one-package PR -- most of it re-testing packages that PR could not have touched. It
@@ -63,10 +63,10 @@ jobs:
       - id: ci
         run: pnpm install --frozen-lockfile --ignore-scripts
       - id: build
-        run: npm run build
+        run: pnpm run build
       # GH_TOKEN: `board-style.test.ts` and `row-claim.test.ts`'s live `fetchLabels` shell out to real `gh`
       # calls against this repo's own Issues -- read-only, and `github.token` already has that scope for
-      # the repo the workflow runs in. `npm run coverage` runs the whole suite under rstest, so it reaches
+      # the repo the workflow runs in. `pnpm run coverage` runs the whole suite under rstest, so it reaches
       # both.
       #
       # CAPTURED TO A FILE, NOT JUST THE ACTIONS LOG -- `scripts/coverage-failure-classifier.mjs` (#169)
@@ -79,7 +79,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -o pipefail
-          npm run coverage 2>&1 | tee coverage-output.log
+          pnpm run coverage 2>&1 | tee coverage-output.log
 
       # A COMMENT SAYING "coverage failed" IS NOT A FINDING (#169) -- `if: failure()` here fires
       # identically whichever of `ci`/`build`/`coverage` broke, and the three need three different
@@ -102,7 +102,7 @@ jobs:
             --run-url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}")
           gh issue comment 169 --body "$BODY"
 
-  # #1135: THE NIGHTLY-ONLY TEST POPULATION. `npm test` (the PR path) and `npm run coverage` (above) resolve
+  # #1135: THE NIGHTLY-ONLY TEST POPULATION. `pnpm test` (the PR path) and `pnpm run coverage` (above) resolve
   # the SAME glob, `packages/*/src/**/*.test.ts`, and the runner accepts no exclusion -- so until this job
   # existed there was nowhere a guard could go that the PR path did not also pay for, and #908's plan to
   # move a converted guard's run-property residual (its vacuity check and exemption table) off the PR path
@@ -121,7 +121,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
-      - run: npm run build
+      - run: pnpm run build
       # CAPTURED TO A FILE, NOT JUST THE ACTIONS LOG (#2576) -- the step below reads it to name the failing
       # test files. `set -o pipefail`, because `| tee` on its own reports the PIPELINE's exit status as
       # `tee`'s (always 0): without it this step would go GREEN over a red population, which is the exact
@@ -131,7 +131,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -o pipefail
-          npm run test:nightly 2>&1 | tee nightly-only-output.log
+          pnpm run test:nightly 2>&1 | tee nightly-only-output.log
 
       # #2576: THE READER. Before this step a nightly-only failure was a red run on the Actions page and
       # nothing else -- `org-watch.mjs`'s `mainColour` reads `trunk` only, so no gate cause, no comment, no
@@ -235,7 +235,7 @@ jobs:
       # resolving to `dist/`, which `--ignore-scripts` does not produce and which this repo does not track.
       # Every other nightly job that runs tests (`coverage`, `nightly-only`, `doc-report`) builds for the
       # same reason.
-      - run: npm run build
+      - run: pnpm run build
       - name: Ask GitHub whether main's `pull_request` rule binds the identity that merges here
         env:
           A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
@@ -261,7 +261,7 @@ jobs:
             echo '::error::CANNOT_TELL: could not read RSTEST_CONFIG from packages/guards/src/assert-glob-not-empty.mjs, so the runner was never started and NOTHING WAS READ. The export was renamed, or the build did not run. This is not a pass. See #2120.'
             exit 1
           fi
-          A11Y_CHECK_MAIN_RULESET=1 npx rstest run --config "$RSTEST_CONFIG" \
+          A11Y_CHECK_MAIN_RULESET=1 pnpm exec rstest run --config "$RSTEST_CONFIG" \
             --include packages/lab/src/packaging/branch-protection.test.ts \
             --disableConsoleIntercept 2>&1 | tee ruleset-read.log
           # A GREEN EXIT IS NOT A PASS, and that is the defect this job exists to end one layer up. Every
@@ -299,7 +299,7 @@ jobs:
             export GH_TOKEN="$GITHUB_TOKEN"
             echo "::warning::A11IGN_BOT_TOKEN is not set -- GITHUB_TOKEN cannot resolve a user-owned ProjectV2, so the board-membership check will report as unable to run. See #416."
           fi
-          npm run ready:audit
+          pnpm run ready:audit
 
   # #948 (The CI Reset, step 3 of the doc-guard triage #905): the doc cross-reference REPORT, once a night,
   # as one comment. Until #954 retires them, the ~14 doc cross-reference guards still run on every PR; this
@@ -323,7 +323,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
-      - run: npm run build
+      - run: pnpm run build
       - name: Write the doc cross-reference report and post it as one comment
         env:
           GH_TOKEN: ${{ github.token }}

@@ -168,7 +168,7 @@ jobs:
         with: { node-version: 22, cache: pnpm, registry-url: https://registry.npmjs.org }
 
       - run: pnpm install --frozen-lockfile
-      - run: npm run build
+      - run: pnpm run build
 
       # THE WHOLE-REPO COVERAGE THRESHOLD, HERE AND ON A NIGHTLY SCHEDULE (`nightly.yml`'s `coverage`
       # job -- moved there from the now-deleted `coverage.yml`, #901) -- chairman's direction, 2026-09-06,
@@ -177,7 +177,7 @@ jobs:
       # still be checked: nothing else on the release path re-runs the full suite, so a threshold
       # regression that a package-scoped PR run could not see would otherwise ship unnoticed.
       #
-      # #1308: BUT NOT TWICE FOR THE SAME SHA. `npm run coverage` is rstest (`@rstest/coverage-v8`, #1320)
+      # #1308: BUT NOT TWICE FOR THE SAME SHA. `pnpm run coverage` is rstest (`@rstest/coverage-v8`, #1320)
       # over the whole suite, and nightly already pays that cost once a day against whatever `main`'s tip was at
       # 06:17 London -- a release cut soon after a nightly run re-runs coverage for a sha nightly already
       # verified. This step reads nightly's own `coverage` JOB conclusion (never the run's -- a sibling
@@ -193,7 +193,7 @@ jobs:
         if: steps.coverage-verdict.outputs.reuse != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: npm run coverage
+        run: pnpm run coverage
 
       # The full gate, not a subset. `release:gate` is ordered cheapest-first so a cheap failure does not
       # wait behind an expensive one, and it starts with `scorer:shortcuts` — the one check that can see a
@@ -207,7 +207,7 @@ jobs:
       # the Python venv or the CORPUS, and the corpus is gitignored and hours of fleet time: `scorer:shortcuts`,
       # `corpus:distribution`, `check-signals`, `rules:gate`, `rules:coverage`, `rules:real-pages`,
       # `evaluate-acceptance:shipped` and `eval:gate`. No amount of runner setup makes them possible, so
-      # `npm run release:gate` here could only ever fail -- and a gate that cannot pass is one people stop
+      # `pnpm run release:gate` here could only ever fail -- and a gate that cannot pass is one people stop
       # dispatching, which is how this file's own five locks would come to be bypassed.
       #
       # `release:gate:ci` is the part a runner CAN prove: the artefact is safetensors, the weights have a
@@ -220,7 +220,7 @@ jobs:
       # check on the machine that wants to publish is not evidence. The difference is only that a lab job
       # leaves no artefact this workflow can query, so it says so instead of implying otherwise.
       - name: The release gate — the part a runner can prove
-        run: npm run release:gate:ci
+        run: pnpm run release:gate:ci
 
       # #558: THIS STEP NO LONGER VERIFIES THE PIN'S FRESHNESS -- IT CANNOT, AND NEITHER CAN ANYTHING ELSE
       # RUN AT THIS POINT. `generate-consumer-gate.mjs`'s own header explains why: a regenerated file pins
@@ -263,10 +263,10 @@ jobs:
       # `changeset version` does NOT update the lockfile, under pnpm or npm. Without the lockfile-only install
       # that follows, the lockfile ships describing the PREVIOUS versions — and under pnpm the failure is
       # louder but no better: the next `pnpm install --frozen-lockfile` refuses a workspace whose manifests
-      # moved, so the release commit would break every CI job after it. `npm run release:version` does both;
+      # moved, so the release commit would break every CI job after it. `pnpm run release:version` does both;
       # see .changeset/README.md.
       - name: Apply the pending changesets
-        run: npm run release:version
+        run: pnpm run release:version
 
       # #1466: AFTER `release:version`, the manifests hold the version this run would actually publish --
       # the applied half of "pending and applied" (`git diff --stat` below names which FILES changed, never
@@ -290,7 +290,7 @@ jobs:
       # `workspace:` protocol or an internal range its sibling does not satisfy. The gate prints which tool
       # did which half, so this log says it rather than a comment.
       - name: Pack every package, which is what a consumer receives
-        run: npm run gate:isolation
+        run: pnpm run gate:isolation
 
       # #1536: EVERY PUBLISHED MANIFEST MUST NAME THE REPOSITORY THIS RUN PUBLISHES FROM, and this asks before the
       # registry does. Run 34816466408 passed every guard job and every step above, then npm's provenance check
@@ -336,6 +336,9 @@ jobs:
       # workspace). pnpm packs, then shells out to `npm publish <tarball>` with THE STEP'S environment, so
       # `NPM_CONFIG_PROVENANCE` below reaches the npm that signs -- proved by the rehearsal step after this one,
       # not assumed from the setting.
+      # THE ONE DELIBERATE npm IN THIS FILE (#2891, pinned in `workflows-run-pnpm.test.ts`): no step here spells `npm publish`,
+      # the hand-off to it happens inside pnpm, and it stays npm's because trusted publishing is bound to npm's OIDC and the
+      # provenance is npm's to sign.
       - name: Publish
         if: inputs.dry-run == false && inputs.confirm == 'publish-for-real'
         # `--tag` ONLY when a dist-tag was given -- changesets' own default (no flag) is "latest", and
