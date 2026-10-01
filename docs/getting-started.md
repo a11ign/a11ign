@@ -28,14 +28,14 @@ Rationale in [`adr/0001-capture-architecture.md`](./adr/0001-capture-architectur
 
 So: set up the control plane, get a worker, run it.
 
-**Scanning a PDF needs none of the worker set up below.** Once step 1 has installed the repository, a URL whose path ends in `.pdf` (any case; a `?query` or `#fragment` after it does not hide it) is routed to the PDF layer before any worker is leased: `npm run witness -- https://example.com/report.pdf` scans the document's accessibility tag tree with no worker, no browser and no NVDA, and reports `pdf:` findings (`pdf-untagged`, `pdf-missing-lang`, `pdf-figure-no-alt`) in a *PDF layer* section, the `pdf` field under `--json`. **It does not run a screen reader over the document:** it reads the tag tree, not what a screen reader would announce.
+**Scanning a PDF needs none of the worker set up below.** Once step 1 has installed the repository, a URL whose path ends in `.pdf` (any case; a `?query` or `#fragment` after it does not hide it) is routed to the PDF layer before any worker is leased: `pnpm run witness https://example.com/report.pdf` scans the document's accessibility tag tree with no worker, no browser and no NVDA, and reports `pdf:` findings (`pdf-untagged`, `pdf-missing-lang`, `pdf-figure-no-alt`) in a *PDF layer* section, the `pdf` field under `--json`. **It does not run a screen reader over the document:** it reads the tag tree, not what a screen reader would announce.
 
 ## 1. Install the control plane
 
 ```bash
 git clone https://github.com/a11ign/a11ign.git
 cd a11y-witness
-npm install
+pnpm install
 ```
 
 Node 20 or newer.
@@ -44,7 +44,7 @@ The rule-based (axe-core) layer is **optional** and not installed by this. Add i
 you want it and do not already run axe elsewhere — it pulls ~536 MB of Chromium:
 
 ```bash
-npm install playwright @axe-core/playwright && npx playwright install chromium
+pnpm exec playwright install chromium
 ```
 
 If you already run axe in your own pipeline, skip that and pass your results in later with
@@ -110,7 +110,7 @@ It installs Windows, logs in, installs NVDA and starts the worker with no clicki
 1.5–2 hours, almost all of it the download. Check it came up:
 
 ```bash
-npm run worker:ctl -- status
+pnpm run worker:ctl status
 # health:  includes deployed code plus worker-reported NVDA/Edge/runtime versions
 ```
 
@@ -147,7 +147,7 @@ for a working example to copy.
 ## 4. Check you are ready
 
 ```bash
-npm run doctor
+pnpm run doctor
 ```
 
 **A stopped worker is not a problem.** Runs start what they need and stop it again, so
@@ -157,7 +157,7 @@ than trying to get everything running first.
 **If you changed anything under `packages/nvda-worker/src/`, check the workers are running it:**
 
 ```bash
-npm run worker:code    # each worker's /health.code vs this checkout; exits 1 if any is stale
+pnpm run worker:code    # each worker's /health.code vs this checkout; exits 1 if any is stale
 ```
 
 Deploying is push-then-restart and both halves can fail silently — a `utmctl exec` restart does
@@ -174,7 +174,7 @@ and the symptoms mislead (see the table below).
 ## 5. Your first report
 
 ```bash
-npm run witness -- https://example.com --task "Read and understand this page"
+pnpm run witness https://example.com --task "Read and understand this page"
 ```
 
 On Route A you can leave `A11Y_WORKER` unset — the run finds the local VM, starts it, and
@@ -211,7 +211,7 @@ That is a working install. `--json` gives you the full transcript alongside the 
 |---|---|
 | `fetch failed` / `ECONNREFUSED` | Routes A/B: the worker is not reachable. Check `A11Y_WORKER`, and that the worker machine is up and its firewall allows 8765 |
 | `WARNING: 0 announcements captured` | The worker is running but NVDA produced no speech. **This is a worker problem, not a clean page.** Re-run with `--debug` and read `documentReady` first |
-| `Local worker VM ... did not become healthy` | Route A: the VM booted but the worker task did not start. `npm run worker:ctl -- status` |
+| `Local worker VM ... did not become healthy` | Route A: the VM booted but the worker task did not start. `pnpm run worker:ctl status` |
 | `NVDA not installed` | Almost always a **version mismatch**, not a missing install |
 | `nvda.start failed: NVDA is not supported` | You ran the capture in **session 0** — `utmctl exec` and SSH both land there and cannot drive NVDA. Use a scheduled task with `LogonType Interactive` |
 | VM state `unknown`, worker unreachable, but the bundle is there | **UTM is not running.** `utmctl` is a client for the app, not a daemon; `worker-ctl.sh` launches it for you. `pgrep -x UTM` to confirm |
@@ -236,5 +236,5 @@ enough that the table is faster than reasoning from first principles.
   a run uses as many local workers as the host can hold and puts each one back afterwards.
   Measured 1.90x on two workers, 2.36x on three *on a quiet host* — but a worker VM costs ~7 GB
   of host memory, so three do not fit on a 36 GB Mac that is also your desktop, and
-  over-committing causes failed captures rather than just slow ones. `npm run doctor` prints how
+  over-committing causes failed captures rather than just slow ones. `pnpm run doctor` prints how
   many will fit. See [`local-worker-vm.md`](./local-worker-vm.md).

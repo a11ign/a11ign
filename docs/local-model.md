@@ -132,8 +132,8 @@ checkpoint and train from the exported screen-reader-only JSONL:
 ~~~sh
 python3.12 -m venv .venv
 .venv/bin/python -m pip install -r packages/scorer/requirements.txt
-npm run training:fetch-encoder
-npm run training:train
+pnpm run training:fetch-encoder
+pnpm run training:train
 node packages/lab/scripts/verify-safetensors.mjs models/encoders/all-MiniLM-L6-v2
 node packages/lab/scripts/verify-safetensors.mjs packages/scorer/models/screenreader-scorer
 ~~~
@@ -161,18 +161,18 @@ training again. Existing acceptance captures are retained, but the
 acceptance gate must be rerun against a release-eligible artifact rather than
 treated as evidence for this diagnostic model.
 
-The repeatable collection path is implemented in packages/lab/src/training/. npm run
+The repeatable collection path is implemented in packages/lab/src/training/. pnpm run
 training:generate creates 1,061 controlled good/bad page pairs across independent
 content families (45 seed pairs, 128 initial independent variants, 627 bulk
 variants, 36 targeted follow-ups, and 225 calibration variants).
-npm run training:capture sends each pair through the existing interactive NVDA
-worker, and npm run training:export emits JSONL only for pairs whose expected
+pnpm run training:capture sends each pair through the existing interactive NVDA
+worker, and pnpm run training:export emits JSONL only for pairs whose expected
 contrast was actually heard by NVDA. The exporter keeps the page source as an
 instrument and provenance, never as model input. It stops rather than
 fabricating transcripts when no Windows/NVDA worker is available. It also
 rejects captures whose page hash or provenance no longer matches the current
 generated fixture, so stale evidence cannot silently become a label.
-`npm run training:analyze-errors` then writes per-case reports for the selected
+`pnpm run training:analyze-errors` then writes per-case reports for the selected
 held-out split and grouped out-of-fold calibration, joining each scorer error to
 its NVDA transcript, structured screen-reader evidence, and capture provenance.
 This report is for diagnosis; it is not fed back into training as a label.
@@ -180,11 +180,11 @@ This report is for diagnosis; it is not fed back into training as a label.
 The untouched acceptance set is generated separately:
 
 ~~~sh
-npm run training:generate-acceptance
-npm run training:preflight-acceptance
-DATASET_KIND=acceptance DATASET_ROOT=runs/screenreader-acceptance DATASET_PAGES_PORT=5051 DATASET_BASE_URL=http://localhost:5051 npm run training:capture
-DATASET_ROOT=runs/screenreader-acceptance npm run training:check-signals
-DATASET_ROOT=runs/screenreader-acceptance npm run training:export -- --out=runs/screenreader-acceptance/screenreader-evidence.jsonl
+pnpm run training:generate-acceptance
+pnpm run training:preflight-acceptance
+DATASET_KIND=acceptance DATASET_ROOT=runs/screenreader-acceptance DATASET_PAGES_PORT=5051 DATASET_BASE_URL=http://localhost:5051 pnpm run training:capture
+DATASET_ROOT=runs/screenreader-acceptance pnpm run training:check-signals
+DATASET_ROOT=runs/screenreader-acceptance pnpm run training:export --out=runs/screenreader-acceptance/screenreader-evidence.jsonl
 # Run the evaluator after the repeat exports below so stability is measured.
 ~~~
 
@@ -192,11 +192,11 @@ For capture-to-capture stability, repeat the acceptance capture into separate
 namespaces and pass every exported JSONL file to the evaluator:
 
 ~~~sh
-DATASET_KIND=acceptance DATASET_ROOT=runs/screenreader-acceptance DATASET_PAGES_PORT=5051 DATASET_BASE_URL=http://localhost:5051 DATASET_CAPTURE_ROOT=captures/repeat-1 npm run training:capture
-DATASET_KIND=acceptance DATASET_ROOT=runs/screenreader-acceptance DATASET_PAGES_PORT=5051 DATASET_BASE_URL=http://localhost:5051 DATASET_CAPTURE_ROOT=captures/repeat-2 npm run training:capture
-DATASET_ROOT=runs/screenreader-acceptance DATASET_CAPTURE_ROOT=captures/repeat-1 npm run training:export -- --out=runs/screenreader-acceptance/repeat-1.jsonl
-DATASET_ROOT=runs/screenreader-acceptance DATASET_CAPTURE_ROOT=captures/repeat-2 npm run training:export -- --out=runs/screenreader-acceptance/repeat-2.jsonl
-npm run training:evaluate-acceptance -- \
+DATASET_KIND=acceptance DATASET_ROOT=runs/screenreader-acceptance DATASET_PAGES_PORT=5051 DATASET_BASE_URL=http://localhost:5051 DATASET_CAPTURE_ROOT=captures/repeat-1 pnpm run training:capture
+DATASET_KIND=acceptance DATASET_ROOT=runs/screenreader-acceptance DATASET_PAGES_PORT=5051 DATASET_BASE_URL=http://localhost:5051 DATASET_CAPTURE_ROOT=captures/repeat-2 pnpm run training:capture
+DATASET_ROOT=runs/screenreader-acceptance DATASET_CAPTURE_ROOT=captures/repeat-1 pnpm run training:export --out=runs/screenreader-acceptance/repeat-1.jsonl
+DATASET_ROOT=runs/screenreader-acceptance DATASET_CAPTURE_ROOT=captures/repeat-2 pnpm run training:export --out=runs/screenreader-acceptance/repeat-2.jsonl
+pnpm run training:evaluate-acceptance \
   --data runs/screenreader-acceptance/screenreader-evidence.jsonl \
   --data runs/screenreader-acceptance/repeat-1.jsonl \
   --data runs/screenreader-acceptance/repeat-2.jsonl
@@ -216,18 +216,18 @@ order, feature scaling, multipliers, and every safetensors head before it
 scores anything:
 
 ~~~sh
-npm run training:score -- \
+pnpm run training:score \
   --data runs/screenreader-acceptance/screenreader-evidence.jsonl \
   --out /tmp/screenreader-scores.json
 
-npm run training:shadow -- \
+pnpm run training:shadow \
   --data runs/screenreader-acceptance/screenreader-evidence.jsonl \
   --out /tmp/screenreader-shadow.json
 ~~~
 
-`npm run training:shadow` is score-only and explicitly log-only. To run the
+`pnpm run training:shadow` is score-only and explicitly log-only. To run the
 same scorer beside the existing witness judge for a live capture, set
-`A11Y_SHADOW_MODEL=1` on `npm run witness`. The existing judge and deterministic
+`A11Y_SHADOW_MODEL=1` on `pnpm run witness`. The existing judge and deterministic
 rules remain authoritative; a scorer failure or ineligible artifact leaves the
 current result unchanged.
 
@@ -256,7 +256,7 @@ its own captured and evaluated artifact.
 Run the offline hardening gate before an integration change:
 
 ~~~sh
-npm run training:hardening
+pnpm run training:hardening
 ~~~
 
 It checks artifact integrity, family-disjoint acceptance data, per-criterion
