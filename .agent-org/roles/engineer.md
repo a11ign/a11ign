@@ -47,6 +47,10 @@ assumed standing seats. The org has ruled since, so what follows replaces it.
   before any write (`NOT CLAIMED: --worktree=<path> ALREADY EXISTS … Refusing before any write`). The new
   tree has no `node_modules`; the remedy is a hybrid link, not a symlink of the whole directory
   ([why](../../../../docs/operational-lessons.md#resolves-to-dist-does-not-say-whose)).
+- **Open the PR with `pnpm run pr:open`, never raw `gh pr create` (#2931).** `pr:open` labels the PR with your
+  session after creating it, checks the body's `Acceptance:` and `Closes` with the parser CI uses, and refuses a
+  diff outside the row's Region before anything is sent; a raw create skips all three (#2925, #2921 and #2919
+  carry no session label for that reason).
 - **Verifying the row is still open is yours**, against `origin/main` PLUS every unmerged `agent/*` branch:
   the local form with `--not origin/main`, never a bare `origin/agent/*` check, which answered "clear" for
   every row for as long as agent branches went unpushed. Two briefs were refuted on exactly this check and
