@@ -42,10 +42,10 @@ import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { CoverageProvider } from "@rstest/coverage-v8";
-// RELATIVE, the reason every other script here gives: the flag guard and the npx resolver need no build.
+// RELATIVE, the reason every other script here gives: the flag guard and the pnpm resolver need no build.
 import { refuseUnknownFlags } from "../../packages/worker-fleet/src/cli-flags.mjs";
-// #492: a bare "npx" spawn is ENOENT on windows-2022; `npm-cli-windows-spawn.test.ts` refuses one.
-import { npmCliInvocation } from "../npm-cli-executable.mjs";
+// #492: a bare "pnpm" spawn is ENOENT on windows-2022; `npm-cli-windows-spawn.test.ts` refuses one.
+import { pnpmCliInvocation } from "../npm-cli-executable.mjs";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const REPORTS_DIRECTORY = join(ROOT, "coverage", "rstest");
@@ -202,8 +202,8 @@ async function main() {
   const c8rc = JSON.parse(readFileSync(join(ROOT, ".c8rc.json"), "utf8"));
   const options = coverageOptionsFromC8rc(c8rc, REPORTS_DIRECTORY);
   const rawDir = realpathSync(mkdtempSync(join(tmpdir(), "rstest-child-coverage-")));
-  const rstest = npmCliInvocation("npx",
-    ["rstest", "run", "--config", "scripts/rstest/rstest.config.mjs", ...rstestCoverageArgs(options)]);
+  const rstest = pnpmCliInvocation(
+    ["exec", "rstest", "run", "--config", "scripts/rstest/rstest.config.mjs", ...rstestCoverageArgs(options)]);
   const run = spawnSync(rstest.command, rstest.args, { cwd: ROOT, stdio: "inherit", env: { ...process.env, NODE_V8_COVERAGE: rawDir } });
   const reportPath = join(REPORTS_DIRECTORY, "coverage-final.json");
   if (!existsSync(reportPath)) {
