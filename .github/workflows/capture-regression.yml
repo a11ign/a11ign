@@ -49,8 +49,8 @@ jobs:
       - name: Set up NVDA (Guidepup)
         shell: pwsh
         run: |
-          npx --yes @guidepup/setup setup
-          npx --yes @guidepup/setup install nvda
+          pnpm exec guidepup setup
+          pnpm exec guidepup install nvda
       # Guidepup ships the Speech Viewer ON. Its focus event lands in the
       # spokenPhraseLog delta captured after activating a control, so every
       # interaction probe records "NVDA Speech Viewer" instead of the page's

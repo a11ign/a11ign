@@ -30,11 +30,11 @@ on:
   workflow_call:
     inputs:
       run-lint-typecheck:
-        description: "Run npm run lint and npm run typecheck. On for ci.yml's ts and trunk's trunkGate; off for ci.yml's python (which never ran either)."
+        description: "Run pnpm run lint and pnpm run typecheck. On for ci.yml's ts and trunk's trunkGate; off for ci.yml's python (which never ran either)."
         type: boolean
         default: false
       run-docs-coverage:
-        description: "Run npm run docs:coverage before lint/typecheck, so doc-references.test.ts sees the generated file. ONLY ci.yml's ts job had this -- neither python nor trunkGate ever ran it."
+        description: "Run pnpm run docs:coverage before lint/typecheck, so doc-references.test.ts sees the generated file. ONLY ci.yml's ts job had this -- neither python nor trunkGate ever ran it."
         type: boolean
         default: false
       run-ts-tests:
@@ -42,7 +42,7 @@ on:
         type: boolean
         default: false
       ts-test-scope:
-        description: "'scoped' (select-changed-tests.mjs, with a per-package fallback) or 'unscoped' (npm run test:all, every package). Only meaningful when run-ts-tests is true. ci.yml's ts job is 'scoped'; trunk's trunkGate is 'unscoped', matching its own unconditional, every-merge trigger rather than a diff."
+        description: "'scoped' (select-changed-tests.mjs, with a per-package fallback) or 'unscoped' (pnpm run test:all, every package). Only meaningful when run-ts-tests is true. ci.yml's ts job is 'scoped'; trunk's trunkGate is 'unscoped', matching its own unconditional, every-merge trigger rather than a diff."
         type: string
         default: scoped
       base-ref:
@@ -112,7 +112,7 @@ jobs:
       # warm run pays for linking rather than for downloads. A restored `node_modules` keyed on the OLD lockfile
       # would never have invalidated when pnpm-lock.yaml changed.
       - run: pnpm install --frozen-lockfile --ignore-scripts
-      - run: npm run build
+      - run: pnpm run build
       # #168: WHAT THE BUILD ACTUALLY PRODUCED, kept only when something after it fails. See the ORIGINAL
       # comment in ci.yml's history for the full incident (an intermittent cross-package dist race) --
       # kept here verbatim in spirit: cheap on a green run, and the thing that would tell a future reader
@@ -125,17 +125,17 @@ jobs:
           echo "--- wcag.d.ts, first 20 lines ---"
           head -20 packages/evidence/dist/wcag.d.ts || echo "(no wcag.d.ts)"
           echo "--- does tsc consider the graph up to date? ---"
-          npx tsc --build --dry $(node -e "const fs=require('fs');console.log(fs.readdirSync('packages').filter(d=>fs.existsSync('packages/'+d+'/tsconfig.json')).map(d=>'packages/'+d).join(' '))") || true
+          pnpm exec tsc --build --dry $(node -e "const fs=require('fs');console.log(fs.readdirSync('packages').filter(d=>fs.existsSync('packages/'+d+'/tsconfig.json')).map(d=>'packages/'+d).join(' '))") || true
       # docs/coverage.md is GENERATED and DELIBERATELY UNTRACKED (#158) -- a fresh checkout has no copy, so
       # doc-references.test.ts (reached by the unscoped suite, and by a scoped run whenever
       # select-changed-tests.mjs picks it) would otherwise report a real citation as broken. Only the
       # original `ts` job ever paid for this; kept opt-in so trunkGate does not gain a step it never had.
       - if: inputs.run-docs-coverage
-        run: npm run docs:coverage
+        run: pnpm run docs:coverage
       - if: inputs.run-lint-typecheck
-        run: npm run lint
+        run: pnpm run lint
       - if: inputs.run-lint-typecheck
-        run: npm run typecheck
+        run: pnpm run typecheck
       # #1319: RSTEST'S BUILD CACHE, PERSISTED -- the chairman's requirement for the runner switch, per rstest's CI guide.
       # `scripts/rstest/rstest.config.mjs` turns `performance.buildCache` on only when `CI` is set, and rstest writes it
       # under node_modules/.cache/rstest-<project-name>. Keyed on the two inputs the row names, the lockfile and the rstest
@@ -201,7 +201,7 @@ jobs:
         # the org's 373 tests live in agent-org/guards/lab. "Unscoped" means every merge to main gets the
         # full answer, so it must be the glob that covers every package -- `test:ts` here would drop two
         # thirds of the suite and still read green, which is the exact shape this job exists to prevent.
-        run: npm run test:all
+        run: pnpm run test:all
       # #1319: A CACHE THAT IS NEVER WRITTEN RESTORES NOTHING AND STILL READS GREEN. rstest ran above with its build cache
       # on, since CI is set, so the cache directory must now hold files. An empty one fails the job rather than leaving
       # the HIT or MISS line to describe a cache that does not exist. No workflow expressions, so
