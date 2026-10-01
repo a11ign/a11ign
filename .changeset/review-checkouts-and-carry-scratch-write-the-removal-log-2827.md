@@ -1,0 +1,5 @@
+---
+"@a11ign/agent-org": patch
+---
+
+**The last two `git worktree remove --force` callers in `packages/agent-org/src` now write #2782's removal log (#2827).** `removeReviewCheckout` (`wake.mjs`, a reviewer's checkout when its instance ends) and the carry's scratch removal (`carry-branch.mjs`) wrote no line, so "every removal of a worktree directory is logged" was false and the next unexplained deletion could have come from either. Each writes `removing` BEFORE the delete and `removed` or `failed` after, naming the path, the caller and the reason. A line that cannot be written refuses the review-checkout removal and leaves the carry's scratch tree in place (with a stderr note, since a throw in `carryBranch`'s `finally` would replace the carry's own result). Neither gains `claimRefusal`: a `reviewer-<n>` checkout and a fresh `carry-branch-*` temp dir are never a claimed row's tree, and a comment at each call site says so. `wake-reviewer-instance.test.ts` and `carry-branch.test.ts` pin the line, the order, the refusal and the default wiring, with the host's real log redirected.

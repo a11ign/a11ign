@@ -57,6 +57,7 @@ import { inBuildReason, isInBuild, unansweredRefusal, lookupHeldRows, lookupOthe
 import { parseWorktreeList, isPrimaryWorktree, isWorkingTreeClean, mergeStatus, detachedMergeStatus }
   from "./prune-worktrees.mjs";
 import { worktreeOwner } from "./worktree-owner.mjs";
+import { recordRemoval } from "./worktree-removal.mjs"; // #2827
 import { spawnMemoryGate } from "./spawn-memory-floor.mjs";
 // THE FAMILY IS THE ROSTER'S, READ BY ONE MODULE (#2403): `worker-<n>` for n from 4 is a spare engineer role, and
 // `arm-pr.mjs` is where every other reader of a `session:<name>` label already asks whether a name is one.
@@ -1067,7 +1068,8 @@ const reviewRef = (pr, key = "") => (key === "" ? `refs/review/pr-${pr}` : `refs
 
 /**
  * @typedef {{git?: (cmd: string, args: string[], opts?: object) => string, exists?: (path: string) => boolean,
- *   root?: string, repoRoot?: string, link?: (args: {path: string, repoRoot: string}) => string | null}} CheckoutDeps
+ *   root?: string, repoRoot?: string, link?: (args: {path: string, repoRoot: string}) => string | null,
+ *   record?: typeof recordRemoval}} CheckoutDeps `record` is #2827's removal log, a seam so a test can read the line or refuse it
  */
 
 /**
@@ -1163,6 +1165,28 @@ export function prepareReviewCheckout({ pr, session, git = defaultGit, exists = 
 }
 
 /**
+ * #2827: {@link removeReviewCheckout}'s one `git worktree remove`, WITH its line -- `removing` BEFORE the delete, `removed` or
+ * `failed` after, in the log #2782 introduced -- so a later session can read who removed a tree. A line that cannot be
+ * written is a removal that does not happen (it throws, and the caller reports it): a delete nobody can see is the defect.
+ *
+ * NO `claimRefusal`, on purpose: a review checkout lives under {@link REVIEW_CHECKOUT_ROOT} and is named for a `reviewer-<n>`
+ * instance, which no row claims, so it is never a claimed row's tree and the row's `session:` label has nothing to say here.
+ * @param {{path: string, session: string, git: NonNullable<CheckoutDeps["git"]>, repoRoot: string,
+ *   record: typeof recordRemoval}} args
+ */
+function removeLoggedCheckout({ path, session, git, repoRoot, record }) {
+  const line = { path, caller: "wake.mjs removeReviewCheckout", reason: `the reviewer instance ${session} ended (#2401)` };
+  record({ ...line, event: "removing" });
+  try {
+    git("git", ["-C", repoRoot, "worktree", "remove", "--force", path]);
+  } catch (cause) {
+    record({ ...line, event: "failed", detail: firstLine(cause) });
+    throw cause;
+  }
+  record({ ...line, event: "removed" });
+}
+
+/**
  * REMOVE `session`'s tree and its private ref, and answer `null` when nothing is left, or WHY it could not.
  * The counterpart of {@link prepareReviewCheckout}, called when the instance is ended (#2401, Done-when 7): a tree
  * that outlives its pull request is the leak #2163 measured, and this row must not add instances of it.
@@ -1171,10 +1195,10 @@ export function prepareReviewCheckout({ pr, session, git = defaultGit, exists = 
  * @param {{pr: number, session: string, key?: string} & CheckoutDeps} args @returns {string | null}
  */
 export function removeReviewCheckout({ pr, session, key = "", git = defaultGit, exists = existsSync,
-  root = REVIEW_CHECKOUT_ROOT, repoRoot = REPO_ROOT }) {
+  root = REVIEW_CHECKOUT_ROOT, repoRoot = REPO_ROOT, record = recordRemoval }) {
   const path = reviewCheckoutPath(session, root);
   try {
-    if (exists(path)) git("git", ["-C", repoRoot, "worktree", "remove", "--force", path]);
+    if (exists(path)) removeLoggedCheckout({ path, session, git, repoRoot, record });
     if (exists(path)) return `${path} is still there after \`git worktree remove\``;
     git("git", ["-C", repoRoot, "update-ref", "-d", reviewRef(pr, key)]);
     return null;
