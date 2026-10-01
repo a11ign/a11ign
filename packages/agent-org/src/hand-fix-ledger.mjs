@@ -287,11 +287,11 @@ function firstParentLine(git, base, since) {
 
 /**
  * sha -> GitHub login for every commit on `main` since `since`; an unmatched email gives an EMPTY login, kept as null.
- * @param {Run} gh @param {string} repo @param {Date} since
+ * @param {Run} runGh @param {string} repo @param {Date} since
  * @returns {Map<string, string | null>}
  */
-function loginsBySha(gh, repo, since) {
-  const raw = gh(["api", "--paginate", `repos/${repo}/commits?sha=main&since=${since.toISOString()}&per_page=100`,
+function loginsBySha(runGh, repo, since) {
+  const raw = runGh(["api", "--paginate", `repos/${repo}/commits?sha=main&since=${since.toISOString()}&per_page=100`,
     "--jq", '.[] | [.sha, (.author.login // "")] | @tsv']);
   return new Map(raw.split("\n").filter(Boolean).map((row) => {
     const [sha, login] = row.split("\t");
@@ -302,11 +302,11 @@ function loginsBySha(gh, repo, since) {
 /**
  * Merged pull requests since `since`: author, title and body. No `commits` connection -- GraphQL refuses it at this
  * page size (measured 2026-10-01: 1,000,000 nodes against a 500,000 limit).
- * @param {Run} gh @param {string} repo @param {Date} since
+ * @param {Run} runGh @param {string} repo @param {Date} since
  * @returns {Map<number, { author: string | null, title: string, body: string }>}
  */
-function mergedPullRequests(gh, repo, since) {
-  const raw = gh(["pr", "list", "--repo", repo, "--state", "merged", "--search", `merged:>=${since.toISOString().slice(0, 10)}`,
+function mergedPullRequests(runGh, repo, since) {
+  const raw = runGh(["pr", "list", "--repo", repo, "--state", "merged", "--search", `merged:>=${since.toISOString().slice(0, 10)}`,
     "--limit", "5000", "--json", "number,author,title,body"]);
   /** @type {{ number: number, author: { login?: string } | null, title: string, body: string }[]} */
   const rows = JSON.parse(raw);
@@ -347,10 +347,10 @@ function pullRequestNumber({ subject, parents }) {
  * @param {{ git?: Run, gh?: Run, repo?: string, base?: string }} [seams]
  * @returns {(range: { from: Date, to: Date }) => Change[]}
  */
-export function gatherChanges({ git = defaultGit, gh = defaultGh, repo = REPO, base = "origin/main" } = {}) {
+export function gatherChanges({ git = defaultGit, gh: runGh = defaultGh, repo = REPO, base = "origin/main" } = {}) {
   return ({ from }) => {
-    const prs = mergedPullRequests(gh, repo, from);
-    const logins = loginsBySha(gh, repo, from);
+    const prs = mergedPullRequests(runGh, repo, from);
+    const logins = loginsBySha(runGh, repo, from);
     /** @type {Map<string, Change>} */
     const changes = new Map();
     for (const commit of firstParentLine(git, base, from)) {
