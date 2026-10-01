@@ -371,6 +371,9 @@ export const GIT_READS = Object.freeze({
   // #2470: LOCAL, AND SPENDS NO POOL. Per claimed row: `git rev-parse` and `git log` for the newest commit on its branch and
   // on `origin/<branch>`; `git status`, `git rev-list` only for a row that is quiet or blocked or merged. Plus one
   // `systemctl --user show herdr.service` for the restart the no-progress clock may not start before.
+  // #2941: LOCAL, ONE CALL AT MOST. `git worktree list --porcelain` plus a `.a11y-owner` read per stamped tree, made only when a
+  // pull request reaches the stamp rung of `ownerOfPr` -- no label, no live row, no live session in its head ref.
+  conditionalOnUnownedPr: "git worktree list --porcelain; .a11y-owner per stamped tree (withNamedOwners -- ownerOfPr's stamp rung)",
   conditionalOnClaimedRows: "git rev-parse/log per claimed branch; git status/rev-list per QUIET claimed worktree;"
     + " systemctl --user show herdr.service (claim-stalled)",
 });
@@ -3990,6 +3993,86 @@ export function withClosingRowOwners(prs, openRows) {
 }
 
 /**
+ * #2941: THE REST OF `ownerOfPr`'S LADDER -- the two rungs below the rows, put on each pull request that nothing above has
+ * answered. `withClosingRowOwners` is rung 2 and 3; this is 4 (a live session the HEAD REF names) and 5 (a live session that
+ * STAMPED the worktree the branch is checked out in). Runs AFTER it, and touches only a PR with no label and no `rowOwner`, so a
+ * higher rung is never outranked and a PR with its own label is not even looked up.
+ *
+ * LIVE IS #2912's TEST, AND ITS LIMIT IS KEPT: a session that still holds a claim on an open row. `isLiveSession` is not asked
+ * (#2174: the gate loads without `.agent-org/roles`), so a live session holding no claim is not named, and the PR falls to
+ * `ceo`. The stamp rung is paid for only when a PR reaches it: `stampOf` is a function precisely so the `git worktree list` it
+ * costs is made lazily, at most once, and not at all on a tick where every PR already has an owner.
+ *
+ * @param {any[]} prs @param {any[]} openRows @param {(branch: string) => string | null} [stampOf]
+ */
+export function withNamedOwners(prs, openRows, stampOf = () => null) {
+  const live = new Set(openRows.filter((row) => labelsOf(row).includes(CLAIM_LABEL) && sessionOf(row)).map((row) => String(sessionOf(row))));
+  return prs.map((pr) => {
+    if (sessionOf(pr) || pr.rowOwner) return pr;
+    const named = sessionNamedByBranch(pr.headRefName, live);
+    if (named) return { ...pr, branchOwner: { session: named } };
+    const stamped = stampOf(String(pr.headRefName ?? ""));
+    return stamped && live.has(stamped) ? { ...pr, stampOwner: { session: stamped } } : pr;
+  });
+}
+
+/**
+ * THE WHOLE LADDER BELOW A PR'S OWN LABEL, in the one order `main` and the test share, so neither can drift from the other.
+ * @param {any[]} prs @param {any[]} openRows @param {(branch: string) => string | null} [stampOf]
+ */
+export function withPrOwners(prs, openRows, stampOf) {
+  return withNamedOwners(withClosingRowOwners(prs, openRows), openRows, stampOf);
+}
+
+/**
+ * The live session a head ref NAMES: `agent/<session>` whole, or a `worker-<n>` token anywhere in it. `null` when it names no
+ * live one. Two live ones in one ref name the first -- the ref is the author's, and a ref naming two sessions is a rename.
+ * @param {unknown} headRef @param {Set<string>} live
+ */
+function sessionNamedByBranch(headRef, live) {
+  const ref = String(headRef ?? "");
+  const whole = /^agent\/(.+)$/.exec(ref)?.[1];
+  if (whole && live.has(whole)) return whole;
+  return (ref.match(/worker-\d+/g) ?? []).find((token) => live.has(token)) ?? null;
+}
+
+/**
+ * `{ branch -> stamped session }` for every worktree on this host, from ONE local `git worktree list --porcelain` and a file read
+ * per stamped tree. `null` when git refused: a refused read names nobody, which is a fall to `ceo`, never a guess. Spends no pool.
+ *
+ * @param {(cmd: string, args: string[]) => string} [run] @param {typeof worktreeOwner} [owner]
+ * @returns {Map<string, string> | null}
+ */
+export function readWorktreeStamps(run = defaultSpawn, owner = worktreeOwner) {
+  try {
+    const stamps = new Map();
+    for (const block of run("git", ["worktree", "list", "--porcelain"]).split(/\n\s*\n/)) {
+      const path = /^worktree (.+)$/m.exec(block)?.[1];
+      const branch = /^branch refs\/heads\/(.+)$/m.exec(block)?.[1];
+      const stamped = path && branch ? owner(path) : null;
+      if (stamped) stamps.set(branch, stamped);
+    }
+    return stamps;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The lazy, once-per-tick stamp lookup `withNamedOwners` takes: the first call reads the host, every later one reuses it.
+ * @param {() => Map<string, string> | null} [read]
+ * @returns {(branch: string) => string | null}
+ */
+export function stampLookup(read = readWorktreeStamps) {
+  /** @type {Map<string, string> | null | undefined} */
+  let stamps;
+  return (branch) => {
+    if (stamps === undefined) stamps = read();
+    return stamps?.get(branch) ?? null;
+  };
+}
+
+/**
  * The live session the rows a PR CLOSES name: that session, `null` for none, `"split"` for two different ones.
  * @param {any} pr @param {Map<number, {session: string, row: number}>} held
  */
@@ -6047,7 +6130,7 @@ function main() {
   // pay for it twice on exactly the red tick this row is about.
   const required = requiredWhenRed(openPrs);
   const baseTip = baseTipWhenRed(openPrs);
-  const decideArgs = { primaryDrift, prs: withClosingRowOwners(withEvidenceLabelAges(withCommitChains(openPrs)), allOpen), readyRows: rows, promotableRows: promotableRows ?? [],
+  const decideArgs = { primaryDrift, prs: withPrOwners(withEvidenceLabelAges(withCommitChains(openPrs)), allOpen, stampLookup()), readyRows: rows, promotableRows: promotableRows ?? [],
     chairmanBlocked: chairmanBlocked ?? [], prFiles, drain, required, baseTip,
     epics: epicsWhenShelfEmpty(rows),
     answerOwed: rowsOwingAnswers({ openRows: allOpen, openPrs, closedRows: closedAnswerRows() }),

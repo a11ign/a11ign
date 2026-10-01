@@ -99,7 +99,7 @@ export function rootPrepareBuildsEverything(repoRoot) {
  * from source elsewhere in the repo -- that is the shape CLAUDE.md's own dist-resolution incident was
  * about, because a bare specifier resolves through the package's `exports`/`main` field, which for a
  * TypeScript package points into `dist/`. A SUBPATH specifier -- shaped like `@a11ign/lab/src/x.mjs`
- * or `@a11ign/nvda-worker/error-text` -- is deliberately excluded: this repo uses that shape specifically
+ * or `@a11ign/screenreader-worker/error-text` -- is deliberately excluded: this repo uses that shape specifically
  * to reach raw `.mjs` source with no build step at all (ADR 0031), so flagging it would be a false
  * positive -- checked against the real repo while building this, which is what found the false positives
  * a cruder "does the name appear" search produced first.
