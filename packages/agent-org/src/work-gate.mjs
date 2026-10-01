@@ -73,6 +73,7 @@ import { sandboxGitEnv } from "./lib/git-env.mjs";
 import { poolDiagnosis, refusalPoolLine } from "./api-pool.mjs";
 import { declaredGhAccount } from "./gh-identity.mjs";
 import { stateEntryPath } from "./host-config.mjs"; // #2799
+import { tapShadowReads } from "./shadow-reads.mjs"; // #2849
 // #1969, AND THE PREDICATE IS IMPORTED RATHER THAN RE-DECIDED. `armedFromApi` knows THREE armed states --
 // merged, a pending auto-merge, and SITTING IN THE MERGE QUEUE, where `autoMergeRequest` reads `null` on a
 // correctly armed pull request (#1729/#1727, and #2004 for the read that fed it). `ceo`'s ruling names
@@ -5752,6 +5753,18 @@ function exitPartial(unread, delivered) {
   process.exit(EXIT.PARTIAL);
 }
 
+/**
+ * #2849: `decide`, with the call RECORDED for the shadow-window runner (#2846): the arguments it was given and its RAW return, before
+ * `withStalePrimaryNotice`. A helper rather than three lines in `main`, which is at its physical-line limit. DORMANT unless
+ * `<stateDir>/shadow-window-open` exists, and a failed write is a stderr line, never a different tick (`shadow-reads.mjs`).
+ * @param {Parameters<typeof decide>[0]} args @returns {ReturnType<typeof decide>}
+ */
+function decideAndTap(args) {
+  const orders = decide(args);
+  tapShadowReads({ args, orders, stateDir: REVIEWER_STATE_DIR });
+  return orders;
+}
+
 function main() {
   refuseUnknownFlags([], { entry: import.meta.url, command: "node packages/agent-org/src/work-gate.mjs" });
   // READ BEFORE ANY GITHUB CALL (#2163), because it is the one reading a `CANNOT_ASK` exit must not hide: a tick
@@ -5793,7 +5806,7 @@ function main() {
   // pay for it twice on exactly the red tick this row is about.
   const required = requiredWhenRed(openPrs);
   const baseTip = baseTipWhenRed(openPrs);
-  const decided = withStalePrimaryNotice(decide({ primaryDrift, prs: withEvidenceLabelAges(withCommitChains(openPrs)), readyRows: rows, promotableRows: promotableRows ?? [],
+  const decideArgs = { primaryDrift, prs: withEvidenceLabelAges(withCommitChains(openPrs)), readyRows: rows, promotableRows: promotableRows ?? [],
     chairmanBlocked: chairmanBlocked ?? [], prFiles, drain, required, baseTip,
     epics: epicsWhenShelfEmpty(rows),
     answerOwed: rowsOwingAnswers({ openRows: allOpen, openPrs, closedRows: closedAnswerRows() }),
@@ -5819,7 +5832,7 @@ function main() {
     trunkRed: readTrunkRed(),
     // #2075: ONE GRAPHQL CALL, READ PER ISSUE. `null` (refused) emits nothing and is said on stderr below.
     // #2691's `callCountSignals` is beside it, costing no `GH_READS`; `claimedComments` (#2710's window anchor) is the SAME read made above.
-    offBoard, callCountSignals: rowCallCountSignals(allOpen, liveClaudeTurns(), claimedComments), bareAnswerLabels: bareAnswerLabelOrders(withAnswerLabel([...allOpen, ...openPrs])), labJobs: labJobRecordsOrSay() }), primaryDrift); // #2711, #2729
+    offBoard, callCountSignals: rowCallCountSignals(allOpen, liveClaudeTurns(), claimedComments), bareAnswerLabels: bareAnswerLabelOrders(withAnswerLabel([...allOpen, ...openPrs])), labJobs: labJobRecordsOrSay() }; const decided = withStalePrimaryNotice(decideAndTap(decideArgs), primaryDrift); // #2711, #2729; `main` is at its 90-line limit
   const others = otherScopeTicks(drain); // #2618: the OTHER declared repositories -- none for one project, whose orders are what they were
   const outageNow = outageThisTick({ prs, readyRows, promotableRows, chairmanBlocked, openRows: openRowsRead, claimedComments, offBoard, others });
   const { delivered: orders, performed } = performActions(markOutageReads([...decided, ...others.flatMap((tick) => tick.orders)], outageNow));
