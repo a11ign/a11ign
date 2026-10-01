@@ -27,7 +27,7 @@ open rows                                              52
 
 ```
 grep -c 'NOT YOURS TO REPORT' CLAUDE.md            # must be 0 afterwards
-npm run gate:isolation                             # 6 of 6
+pnpm run gate:isolation                             # 6 of 6
 npx a11ign <a url>                                 # its findings appear, labelled with their layer
 ```
 

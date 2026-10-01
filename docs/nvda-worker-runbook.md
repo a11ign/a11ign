@@ -6,7 +6,7 @@ context assumed.
 
 > **`utmctl` appears throughout, and UTM is DEPRECATED — a testing path, not the fleet.** This project
 > captures on ten bare-metal Windows machines (`inventory.yml`), which have no `utmctl` and are reached by
-> SSH; `npm run fleet:status` is the equivalent of every `utmctl` status command below, and `fleet:deploy`
+> SSH; `pnpm run fleet:status` is the equivalent of every `utmctl` status command below, and `fleet:deploy`
 > — never `worker:deploy` — is how code reaches them. **The `utmctl` procedures are kept and are still
 > correct for a local VM**, which remains a reasonable option for a single contributor on a Mac. What has
 > changed is which one this project exercises daily, and therefore which one is likely to be right when
@@ -55,7 +55,7 @@ capture cannot run in a container — see [ADR 0001](./adr/0001-capture-architec
 
 ```
 control plane (any OS)                    worker (Windows, logged-on desktop)
-  npm run witness ──HTTP──▶  server.mjs ──▶ capture-core.mjs
+  pnpm run witness ──HTTP──▶  server.mjs ──▶ capture-core.mjs
                              :8765          │
                                             ├─▶ Edge  (--app window, own profile)
                                             └─▶ NVDA  (via @guidepup/guidepup)
@@ -144,7 +144,7 @@ Cheapest first — stop at the first failure.
 ```bash
 # 1. is it up?
 curl http://<worker>:8765/health   # -> includes code and environment versions
-#   `code` identifies the DEPLOYED code. `npm run worker:code` compares it against your checkout
+#   `code` identifies the DEPLOYED code. `pnpm run worker:code` compares it against your checkout
 #   and exits 1 on a mismatch — the only deploy check that does not go through `utmctl exec`.
 #   `environment` is reported by the worker itself: NVDA, Edge, guidepup, Node, Windows,
 #   and workerCode. Capture responses carry the same object for dataset provenance.
@@ -222,7 +222,7 @@ The error text is often actively misleading. This table is the shortcut.
 | `NVDA not installed` | **rarely** a missing install. Thrown by `NVDAClient.connect` when the speech-channel cert is absent — usually guidepup too old for this NVDA | upgrade guidepup ≥0.29.2 |
 | `NVDA is not supported` | `getNVDAInstallationPath()` found nothing at guidepup's cache path | `npx @guidepup/setup install nvda` from the repo |
 | `NVDA is running but not speaking` | **should now be rare — the speech channel is probed before every capture.** The cause: guidepup reaches NVDA over a TLS socket (NVDA Remote, 127.0.0.1:6837) and speech is *pushed* back over it, so when that socket goes half-open every keystroke still succeeds and nothing is ever spoken. Guidepup reconnects only on a socket `error`, which a half-open connection never raises — no keepalive, no read timeout, no `reconnect()`. Previously NVDA answers keystrokes but its speech channel has died. It is stochastic: across the corpus ~45% of NVDA instances survive to the 25-capture recycle, while in a tight loop on a swapping host lifespans of 5-9 were measured. Reuse is causal (with `reuseScreenReader:false`, 8 of 8 ran clean) | **nothing to do.** The worker retries once itself on a fresh NVDA before answering, so the caller never sees it. Do **not** reboot the guest, and do **not** lower `MAX_CAPTURES_PER_NVDA` — most instances reach 25, so recycling early costs more than it saves. Watch `/health.vitals.recoveries`: if it climbs, suspect host memory first |
-| every capture on a worker slow (~45s) *and* mute failures *and* `/health` blackouts | **the host is out of memory, not the worker degrading.** A worker VM costs the host ~7 GB, not its configured 4096 MB; guests get swapped out from under NVDA. This exact pattern was misread as "the workers are dying" for a day | `npm run doctor` prints what the host can hold. Run fewer workers, or `A11Y_MAX_WORKERS=N`. Note the host's own load counts — a `npm test` on the Mac competes with the guests |
+| every capture on a worker slow (~45s) *and* mute failures *and* `/health` blackouts | **the host is out of memory, not the worker degrading.** A worker VM costs the host ~7 GB, not its configured 4096 MB; guests get swapped out from under NVDA. This exact pattern was misread as "the workers are dying" for a day | `pnpm run doctor` prints what the host can hold. Run fewer workers, or `A11Y_MAX_WORKERS=N`. Note the host's own load counts — a `pnpm test` on the Mac competes with the guests |
 | 0 phrases, `afterStart.lastSpoken` empty, no error | Three candidates, in order of likelihood: **`ForegroundLockTimeout` is not 0 in the live session** (Edge cannot take focus, so there is nothing to read); no interactive desktop; or a modal dialog freezing the session | run `packages/worker-fleet/src/provisioning/apply-foreground-lock-timeout.ps1` **in the interactive session** and re-capture; otherwise log in at the console and dismiss the dialog *there* — it never surfaces over SSH |
 | every probe `after` is `"NVDA Speech Viewer"` | Speech Viewer enabled; probes record that window, not the page | patch `nvda.ini` |
 | phantom `"Welcome to Microsoft Edge"` / `"Sign in to sync data"` | fresh Edge profile; quick-nav escaped an empty document into browser UI | Edge policies + durable profile dir |
@@ -331,7 +331,7 @@ answer, and an intact bundle plus a state of `unknown` reads as a corrupted VM. 
 pgrep -x UTM              # utmctl needs this
 pgrep -f QEMULauncher     # is a guest actually running?
 utmctl list               # registered, and under which UUID?
-npm run worker:ctl -- status   # launches UTM if needed, explains `unknown`
+pnpm run worker:ctl status   # launches UTM if needed, explains `unknown`
 ```
 
 The other cause is contention. One machine hosts **one** VM and **one** NVDA, so a second
@@ -485,7 +485,7 @@ stayed at 0, and the eviction rule (three consecutive *failures*) could never fi
 was that it ran at **122.9 s per capture against a healthy peer's 40.6 s**, and wall-clock time says
 "slower" without saying where.
 
-**`npm run worker:compare <page> <worker> <worker>`** is how you find it. It puts the phases side by
+**`pnpm run worker:compare <page> <worker> <worker>`** is how you find it. It puts the phases side by
 side, which took the diagnosis from hours to one command:
 
 ```
@@ -504,7 +504,7 @@ The signal is now acted on, not just printed:
 
 - `/health.vitals.recoveries` — faults the worker papered over. The one number that rises while
   everything still appears to work.
-- `npm run doctor` reports `DEGRADED` with the repair command.
+- `pnpm run doctor` reports `DEGRADED` with the repair command.
 - **A run retires a degraded worker automatically** (`shouldRetireWorker`): it stops taking cases, nothing
   is requeued (its captures were fine), and the run summary names it. Never the last worker standing —
   a slow run beats no run.
@@ -623,7 +623,7 @@ Two related facts worth not rediscovering:
   `exec` is silent, the guest has not finished logging on; wait rather than diagnose.
 - **`server.log` persists on the guest**, and it is the record of a worker's death — still there after
   it comes back, which is the only way to read a fault that killed it.
-  - **On the bare-metal fleet, pull it while the worker is down: `npm run fleet:logs`.** Ansible reaches
+  - **On the bare-metal fleet, pull it while the worker is down: `pnpm run fleet:logs`.** Ansible reaches
     the box over SSH whether or not the worker process is running, and `collect-logs.yml` takes
     `server.log`, one rotation back, and NVDA's two logs into `runs/worker-logs/`. **`/diagnostics`
     cannot serve this case** — it is an endpoint ON the worker, so it answers only when the worker does.
@@ -678,7 +678,7 @@ on-demand only.
   probe; before it the same pool measured 36.7 / 42.0 / 93.7 s with IQRs up to 20.7. If you see anything
   like the older numbers, check `/health.vitals.recoveries` first — that is the fault returning, not the
   host being busy. Historic figures in this repo of "13–19 s", "27 s", and "45 s" all predate the fix.
-- Quote the host state with any timing number. Your own `npm test` or a browser competes with the guests.
+- Quote the host state with any timing number. Your own `pnpm test` or a browser competes with the guests.
 > **EVERY FIGURE IN THIS SECTION IS MEASURED ON THE SYNTHETIC CORPUS, AND IT SAID SO NOWHERE UNTIL
 > 2026-09-09.** A corpus capture is ~12 s of a generated page; a real page is four to eight minutes
 > (#311). The two populations do not share a shape, and the headline below — `windowsActivate` at ~37%,
@@ -704,7 +704,7 @@ on-demand only.
   process, so the window appears fast and the announcements stay identical. It touches window focus,
   which this project's own notes call "the #1 flakiness fix", and it is testable only on the VM.
 
-  **Mitigating the recapture cost.** This is why `npm run evidence:check` exists: it compares evidence
+  **Mitigating the recapture cost.** This is why `pnpm run evidence:check` exists: it compares evidence
   field by field on a stratified sample and says whether the change is evidence-neutral. If it reports
   SAME, the change ships without invalidating the cache — the key is a proxy, the diff is the direct
   measurement. If it reports CHANGED, the recapture is genuinely required, and the cheap moment to pay

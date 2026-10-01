@@ -25,7 +25,7 @@ is counted as not found, in the `Found:` line of each section (`yes`, `half`, `n
   --base=<merge base> --test='<the Acceptance commands the reviewer ran>' --budget=300 --cap=10`, which is the
   budget and cap this row proposed for `pr:open` (its defaults), run by hand. It chooses mutants on the lines the diff **added**, in
   source files (never tests, comments or docs), with six line-local operators; it applies each through
-  `mutation-check.mjs` (`npm run mutate`), so the copy-aside, the byte-for-byte restore and the exit codes are that tool's.
+  `mutation-check.mjs` (`pnpm run mutate`), so the copy-aside, the byte-for-byte restore and the exit codes are that tool's.
 - **Each PR at the commit the reviewer refused**, in a detached worktree (`git worktree add --detach <dir> <commit>`),
   `node_modules` symlinked to the primary's, `--base` the merge base with `main` at the time.
 - **The tests are the reviewer's own recorded Acceptance commands** for that head, because those are what the row's

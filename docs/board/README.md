@@ -36,7 +36,7 @@ an edition published into the wrong category looks exactly like success.
 The category is resolved **by slug on every run**, never by id: an id is per-repository and changes when
 the category is created again.
 
-**The PDF is an optional flag, for a day a file is wanted** — `npm run board:document -- --pdf`, with
+**The PDF is an optional flag, for a day a file is wanted** — `pnpm run board:document --pdf`, with
 `--release` beside it still attaching it to a draft release. The scheduled job uses neither, and its token
 has `contents: read`, so it cannot create a release draft even if somebody re-adds the flag.
 
@@ -114,7 +114,7 @@ the report reads is a ref or the GitHub API, and neither is affected by an uncom
 
 ## Knowing a failure mode does not protect you from it; only a check that runs does
 
-Two things happened within an hour of `npm run mutate` being built **by the person who then did them**,
+Two things happened within an hour of `pnpm run mutate` being built **by the person who then did them**,
 and they are the two halves of this repository's oldest defect. They are here rather than in a commit
 message because the next person building a generator will open this file, not that commit.
 
@@ -133,7 +133,7 @@ assert old in s, "ANCHOR NOT FOUND -- refusing a no-op edit"
 two separate commands rather than one gating the other. Nothing was lost that time. **Gate the action on
 the check** — `cmp -s a b && rm a` — because a check whose result nothing consumes is decoration.
 
-**Use `npm run mutate` even where it feels like overhead.** It refuses a mutation that changed nothing,
+**Use `pnpm run mutate` even where it feels like overhead.** It refuses a mutation that changed nothing,
 which is the first of these exactly; and it runs the test again after restoring, which is the discipline
 of the second. Both of the above were done by hand, going round the outside of a tool built that hour to
 catch them.
@@ -195,8 +195,8 @@ entirely correct and still say nothing to the board because the sentence went in
 ## By hand
 
 ```bash
-npm run board:report                          # generate to stdout and read it
-npm run board:report -- --post --issue=20     # publish it
+pnpm run board:report                          # generate to stdout and read it
+pnpm run board:report --post --issue=20     # publish it
 gh workflow run board-report.yml              # force one edition now
 ```
 
@@ -248,8 +248,8 @@ Actions it is sharper and needs no human error at all: **GitHub disables a sched
 days without repository activity**, silently, producing no run and no red mark.
 
 ```bash
-npm run board:liveness                        # have the editions stopped arriving?
-npm run board:liveness -- --post --issue=20   # and comment once on the report issue if they have
+pnpm run board:liveness                        # have the editions stopped arriving?
+pnpm run board:liveness --post --issue=20   # and comment once on the report issue if they have
 ```
 
 It asks about the **edition**, never about the run, and the distinction is not pedantry: both scheduled

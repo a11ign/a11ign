@@ -108,11 +108,11 @@ identical in both halves is what keeps the pair a controlled comparison.
 **veto (free veto)** — a feature a trained head penalises at no cost, because it is 0
 on every one of that head's training positives. Nothing in the data punishes the
 weight, and no held-out split can either, since the split shares the corpus's
-structure. `npm run scorer:shortcuts` counts them; there are 225.
+structure. `pnpm run scorer:shortcuts` counts them; there are 225.
 
 **starvation** — the corpus-side view of the same thing, asked *before* a capture run:
 which features will be constant across a subtype's positives, and therefore free to
-veto? `npm run corpus:starvation` reads the case definitions and answers without
+veto? `pnpm run corpus:starvation` reads the case definitions and answers without
 capturing anything.
 
 **subtype** — the unit a head and a rule actually decide, finer than a WCAG criterion.

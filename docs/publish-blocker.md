@@ -3,7 +3,7 @@
 Issue #5 was the checklist for the first publish itself. This is the narrower checklist for #72/#73 — the
 token that covers that first publish, and getting rid of it afterwards. Like #5, most of this needs a
 human logged into npmjs.com or GitHub's org settings; a worker cannot do it. What a worker *can* do is
-build the check that proves it happened, which is `npm run npm-token:check` (below).
+build the check that proves it happened, which is `pnpm run npm-token:check` (below).
 
 ## The token's scope — issue #304
 
@@ -110,12 +110,12 @@ and package names, not the org-level secret, and #72's own configuration step is
 
 ## What is already built, and what it proves
 
-`npm run npm-token:check` (`scripts/npm-token-liveness.mjs`) answers "is `NPM_TOKEN` gone" as one of
+`pnpm run npm-token:check` (`scripts/npm-token-liveness.mjs`) answers "is `NPM_TOKEN` gone" as one of
 **three** states, never two — present, gone, or *could not ask*:
 
 ```
-npm run npm-token:check              # what it can tell today, from wherever you run it
-npm run npm-token:check -- --post    # and comment once on #73 if it is a real finding
+pnpm run npm-token:check              # what it can tell today, from wherever you run it
+pnpm run npm-token:check --post    # and comment once on #73 if it is a real finding
 ```
 
 - **Runs on `push`, never on a schedule** — as a `continue-on-error` step in `.github/workflows/trunk.yml`'s

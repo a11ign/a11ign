@@ -9,9 +9,9 @@ Two hooks protect it: `pre-commit` refuses commits there, and `post-checkout` ke
 `origin/main`.
 
 ```bash
-npm run primary:mark              # is this checkout marked?
-npm run primary:mark -- --set     # mark it — do this once, on the machine that drives the fleet
-npm run primary:mark -- --unset   # stop treating this checkout as the primary
+pnpm run primary:mark              # is this checkout marked?
+pnpm run primary:mark --set     # mark it — do this once, on the machine that drives the fleet
+pnpm run primary:mark --unset   # stop treating this checkout as the primary
 ```
 
 ## Why it must be told rather than work it out
@@ -46,5 +46,5 @@ worktrees every agent works in. `primary-checkout-guard.test.ts`'s two linked-wo
 ## An unmarked checkout is not guarded, and that gap is reported
 
 That is the correct default — a guard firing on machines it was never meant for is what #198 was — but
-*unmarked* and *safe* must not read the same. `npm run doctor` reports an unmarked primary, and the
+*unmarked* and *safe* must not read the same. `pnpm run doctor` reports an unmarked primary, and the
 command above is what closes it.

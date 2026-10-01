@@ -80,7 +80,7 @@ under.
   because those runs exist to test whether NVDA's output is still stable. `--no-cache` anywhere else.
 
 ```bash
-npm run training:repeat -- --url=<page> --times=5 [--probe-tables]   # is a field stable at all?
+pnpm run training:repeat --url=<page> --times=5 [--probe-tables]   # is a field stable at all?
 node packages/lab/scripts/bench-capture.mjs --from-disk                          # p50/p95 per phase, per worker
 ```
 
@@ -215,7 +215,7 @@ Consequences, all of which are now enforced:
   > current.** A position in a file is a convention nobody wrote down; a commit time is a fact. This cost
   > two wrong citations in two days, and the second was written into this file as guidance.
 
-Upgrading guidepup is an evidence change: run `npm run evidence:check` and expect a recapture.
+Upgrading guidepup is an evidence change: run `pnpm run evidence:check` and expect a recapture.
 
 
 ## The OS key, provisionRevision, and RUNS_ROOT
@@ -223,7 +223,7 @@ Upgrading guidepup is an evidence change: run `npm run evidence:check` and expec
 - **The OS is in the key because a fleet can have more than one image.** Without it, a capture from an
   ARM64 guest on a developer's Mac and one from an x64 guest on a server are, to the cache, the same
   evidence — so the two blend into one corpus indistinguishably. Whether NVDA announces identically
-  across two images is exactly what `npm run evidence:check` answers, and until it has for a given
+  across two images is exactly what `pnpm run evidence:check` answers, and until it has for a given
   pair, the cache must not assume it. `provisionRevision` is an additional guard: older guests that
   have not been re-provisioned still report `"unstamped"`, while the current worker resolves the
   stamp from its checkout rather than assuming a Windows username.

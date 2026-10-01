@@ -8,18 +8,18 @@ on what you want to change. Read the section that matches.
 
 | you want to change | needs a worker? | how you verify |
 |---|---|---|
-| the deterministic rules, the judge, the CLI report | no | `npm test` |
-| a WCAG criterion's boundary, coverage claims | no | `npm test`, then `npm run rules:gate` |
-| the capture pipeline (`packages/nvda-worker/`) | **yes** | `npm run capture:check -- --worker=<url>` |
-| the training corpus (`packages/lab/src/training/`) | **yes**, for the recapture | `npm run training:check-signals` |
-| the trained scorer | no worker, but the Python venv | `npm run eval` |
+| the deterministic rules, the judge, the CLI report | no | `pnpm test` |
+| a WCAG criterion's boundary, coverage claims | no | `pnpm test`, then `pnpm run rules:gate` |
+| the capture pipeline (`packages/nvda-worker/`) | **yes** | `pnpm run capture:check --worker=<url>` |
+| the training corpus (`packages/lab/src/training/`) | **yes**, for the recapture | `pnpm run training:check-signals` |
+| the trained scorer | no worker, but the Python venv | `pnpm run eval` |
 | docs, ADRs | no | read them back |
 
 ```bash
 corepack pnpm install --frozen-lockfile   # pnpm, pinned by `packageManager`; there is no package-lock.json any more (#2301)
-npm test          # the product suite: 206 files, ~1,800 tests, no worker, no network, ~26s
-npm run lint
-npm run typecheck
+pnpm test          # the product suite: 206 files, ~1,800 tests, no worker, no network, ~26s
+pnpm run lint
+pnpm run typecheck
 ```
 
 If those three pass you can open a PR for anything in the top two rows.
@@ -69,7 +69,7 @@ that are not say so. If you change a number, say where the new one came from and
 
 The applicable subset of *Clean Code*, split by what a machine can check.
 
-Mechanical, enforced by `npm run lint` and blocking:
+Mechanical, enforced by `pnpm run lint` and blocking:
 `max-lines-per-function` 70, `complexity` 15, `max-depth` 3, `max-params` 4, `no-empty`, and no boolean flag
 arguments — bundle cohesive arguments into an object. `no-magic-numbers` is a non-blocking warning: name a
 number when it is not self-explanatory.

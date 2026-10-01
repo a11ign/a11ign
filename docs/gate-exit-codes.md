@@ -111,7 +111,7 @@ is the finding, not an omission.
 | `page-identity-rate.mjs` | 0 no wrong-page reads; 1 `wrong > 0`, a real gate failure; 2 malformed `--worker` (usage); **3 "MEASURED NOTHING"** — no capture ever navigated a reused window, so the fault under test structurally could not occur, explicitly documented as "not evidence" (i.e. this script's own INCONCLUSIVE, spelled 3 rather than `verdict.mjs`'s 2) |
 | `run-spike.ts` | 0 ran; 1 no URL argument (usage) OR any thrown error. One-off spike tool |
 | `eval/rules-check.ts` | 0 no false positives on conformant fixtures — **including when every fixture is pending/uncaptured, so 0 fixtures examined still reports success**; 1 `cleanFP > 0` |
-| `eval/run.ts` | 0 by default, always, unless `EVAL_GATE` is set AND fitness fails (then `exitCode=1`) — **by default this cannot fail on judge quality at all**, only on a thrown error (also 1). A caller reading a bare `npm run eval`'s exit code as a quality verdict is reading something this script does not compute unless asked to |
+| `eval/run.ts` | 0 by default, always, unless `EVAL_GATE` is set AND fitness fails (then `exitCode=1`) — **by default this cannot fail on judge quality at all**, only on a thrown error (also 1). A caller reading a bare `pnpm run eval`'s exit code as a quality verdict is reading something this script does not compute unless asked to |
 
 ### `packages/lab/src/training/`
 
@@ -128,7 +128,7 @@ is the finding, not an omission.
 
 ### `packages/lab/src/gates/dispatch.mjs` (shared infrastructure, not a gate of its own)
 
-`dispatchUnlessLocal` hands a gate to the lab via `npm run lab:job` and exits with whatever that returns —
+`dispatchUnlessLocal` hands a gate to the lab via `pnpm run lab:job` and exits with whatever that returns —
 **except that a spawn error or a killed child also produces 2**, with its own honest comment ("INCONCLUSIVE
 is the honest verdict for a dispatch that was killed"). So a bare `2` from any gate using this helper is
 ambiguous between three things: the dispatched job's own INCONCLUSIVE (if it happens to use `verdict.mjs`),
@@ -207,7 +207,7 @@ pin one contract from two sides without either importing the other.
 | script | codes → meaning |
 |---|---|
 | `audit-scorer-shortcuts.py` | 0 `--update-baseline` written, `--no-baseline`, no baseline file exists yet, or `compare_to_baseline` finds nothing wrong; 1 any of REGRESSION / UNAUDITED / LOST COVERAGE (three distinct findings, collapsed) OR the exported corpus file is empty (a plain-string `SystemExit`, which Python reports as exit 1); 2 no record in the corpus could be featurized at all — the real "examined nothing" refusal, distinct from an empty corpus |
-| `check-screenreader-hardening.py` | 0 every adversarial/hardening check passed; 1 any failed. Run via `npm run training:hardening` |
+| `check-screenreader-hardening.py` | 0 every adversarial/hardening check passed; 1 any failed. Run via `pnpm run training:hardening` |
 | `compose-multi-defect-probe.py` | A module-level ADR 0015 mechanism probe with no `if __name__` guard and no caller anywhere in this repo — run by hand only, never dispatched. Its one `raise SystemExit(f'...')` (a string, so exit 1) refuses when the corpus has no donor page carrying a required marker feature |
 | `diagnose-false-positives.py` | 0 usable records were examined (possibly with some malformed JSON lines skipped and counted, reported in `malformedLinesSkipped`); 2 zero usable records in `--data` — **refuses**, rather than the earlier "0 always, unconditionally" (#11: printing `{"records": 0}` and exiting 0 was indistinguishable from "examined everything, found nothing"). Still no gate or promotion decision reads this script's exit code today |
 | `evaluate-screenreader-acceptance.py` | 0 held-out acceptance passed; 1 the acceptance result failed OR a precondition refusal — five distinct causes share 1: stamping a verdict into tracked source, a record naming a case `ALL_ACCEPTANCE_CASES` does not define (#2094), a record whose case has been REDEFINED since it was captured (#2129), no manifest beside the records to say what they WERE captured under (#2129, CANNOT-TELL), and being unable to read those definitions at all (node absent or failing, which is CANNOT-TELL and deliberately not a pass). The bare exit code cannot itself distinguish "capture-to-capture stability could not be measured" from a real regression; only the JSON/message can |
