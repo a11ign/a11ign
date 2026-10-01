@@ -349,6 +349,9 @@ function refusedPrompt(b) {
  */
 export const HOLD_RED_JOBS = ["deliberateRefusals", "gate"];
 
+/** Who an order goes to when a pull request names no session and closes no held row. */
+const FALLBACK_ADDRESSEE = "product-manager";
+
 /**
  * PURE. Is this pull request red ONLY because its addressee holds it?
  *
@@ -368,6 +371,12 @@ export const HOLD_RED_JOBS = ["deliberateRefusals", "gate"];
  * again, and the run of deliveries it earned while suppressed starts from nothing (`endedRuns` writes `RESET` for
  * the key that stopped being emitted).
  *
+ * A ROW-ROUTED ORDER ACCEPTS THE FALLBACK'S HOLD TOO (#2935). #2882 addressed an unlabelled red PR to the session
+ * holding its row, so `hold:product-manager` -- the hold of the session the order went to BEFORE that change -- stopped
+ * matching: five identical orders in an hour for #2883, each answered "nothing to fix: held". When the addressee came
+ * from `rowOwner` and not from a `session:` label, the PR names nobody, and the `product-manager` fallback's hold is an
+ * answer as well. A labelled PR keeps #2400's rule: a hold by somebody else still goes.
+ *
  * WHAT IT CANNOT SEE: `deliberateRefusals` also carries #549's `Closes` comparison, and a rollup names the JOB, not
  * the step. A held PR whose body ALSO declares the wrong `Closes` is red for two reasons and silent about one of
  * them until the hold is released, when the refusal reappears with nothing else red.
@@ -375,7 +384,9 @@ export const HOLD_RED_JOBS = ["deliberateRefusals", "gate"];
  * @param {any} pr @param {any[]} onHead every check on the head, narrowed @param {string} session the addressee
  */
 function redOnlyFromHoldOf(pr, onHead, session) {
-  if (!holdersOf(labelsOf(pr)).includes(`${HOLD_PREFIX}${session}`)) return false;
+  const answerers = sessionOf(pr) ? [session] : [session, FALLBACK_ADDRESSEE];
+  const holders = holdersOf(labelsOf(pr));
+  if (!answerers.some((a) => holders.includes(`${HOLD_PREFIX}${a}`))) return false;
   const red = onHead.filter((c) => checksSettledGreen([c]) === false);
   return red.length > 0 && red.every((c) => HOLD_RED_JOBS.includes(String(c?.name ?? c?.context)));
 }
@@ -441,7 +452,7 @@ function failingChecksOrder(pr, required = null, baseTip = null) {
   const head8 = head.slice(0, 8);
   // ITS OWN SESSION FIRST, THEN THE ROW'S (#2882). Falling back to `product-manager` rather than dropping the
   // order: an unlabelled red PR is still a stalled PR, and the queue's first reader can find out whose it is.
-  const session = ownerOf(pr) ?? "product-manager";
+  const session = ownerOf(pr) ?? FALLBACK_ADDRESSEE;
   if (redOnlyFromHoldOf(pr, onHead, session)) return null;
   return {
     session,
