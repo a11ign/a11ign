@@ -15,7 +15,7 @@ while a capture is running.
 | The authoritative training/real-page corpus | `a11y-lab` (CT 121) | unchanged — the lab is a separate host from whichever Mac is the control plane | nothing to migrate here UNLESS the lab itself is also moving, which this runbook does not cover |
 | The daily board report's schedule | a launchd agent on this Mac (`bash scripts/install-board-report.sh`) | GitHub Actions, per `ceo`'s ruling — see "The board report job" below | nothing to migrate once the Action lands; kept as a row here until it does |
 | `docs/board/reported/` | tracked in the repo | tracked in the repo | moves automatically with `git clone` — nothing to do |
-| `runs/` in the primary checkout | this Mac's local copy | re-synced on the new machine | `runs/` is gitignored and a LOCAL COPY everywhere, including the primary checkout today — the new machine starts with none and that is normal; `npm run lab:inventory` says how stale a copy is once one exists. The authoritative corpus never moved (see row above) |
+| `runs/` in the primary checkout | this Mac's local copy | re-synced on the new machine | `runs/` is gitignored and a LOCAL COPY everywhere, including the primary checkout today — the new machine starts with none and that is normal; `pnpm run lab:inventory` says how stale a copy is once one exists. The authoritative corpus never moved (see row above) |
 
 ## The project-key rename
 
@@ -151,8 +151,8 @@ once at next boot rather than being silently skipped), which is the same propert
 
 ## The freeze rule — never migrate during a capture
 
-**Do not begin any step of this runbook while `npm run fleet:status` shows a worker `busy`, or while
-`npm run lab:status` shows a job running.** Two independent reasons, both already established elsewhere in
+**Do not begin any step of this runbook while `pnpm run fleet:status` shows a worker `busy`, or while
+`pnpm run lab:status` shows a job running.** Two independent reasons, both already established elsewhere in
 this repo rather than invented for this file:
 
 - **A capture in flight has no resumption of its own.** `docs/nvda-worker-runbook.md` and CLAUDE.md's
@@ -165,8 +165,8 @@ this repo rather than invented for this file:
   (ADR 0012); a migration in progress is briefly a period where that assumption may not hold, and starting
   new work into that window is how a split-brain dispatch happens.
 
-**Concretely:** before starting a migration, run `npm run fleet:status` and `npm run lab:status` and
-confirm nothing is `busy`/running. If a capture is in flight, wait for it to finish or use `npm run
+**Concretely:** before starting a migration, run `pnpm run fleet:status` and `pnpm run lab:status` and
+confirm nothing is `busy`/running. If a capture is in flight, wait for it to finish or use `pnpm run
 lab:stop -- -e job=<name>` to end it deliberately (it reports what it discards first) rather than migrating
 underneath it.
 
