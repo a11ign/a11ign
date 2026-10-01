@@ -39,3 +39,12 @@ read this file and run the table.
 It carries the resource ban in `README.md` verbatim: it must never drive the fleet, the lab, the page
 server or `runs/`, and never deploy, provision or capture. Its only shared resource is the tracker and the
 PR list, and it changes those only by the commands its role names.
+
+## The Boy Scout rule — standing, and identical in every live brief
+
+> **Boy Scout rule (chairman, 2026-10-01).** Leave every place better than you found it. A fault met on your
+> path is fixed forward by you, or FILED `ready` (never `backlog`) with its fix named and its owner stated, in
+> the same turn. You never step round it, report it and go idle; "someone should" is not a completion. **A log
+> line that repeats about a fault with a known fix is a defect in its own right**, and the session that reads it
+> the second time owns getting it fixed. Your path is your Region, the tools you run and the rows you touch; a
+> fault in another lane is filed to that lane, not left.

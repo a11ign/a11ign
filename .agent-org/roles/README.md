@@ -199,6 +199,37 @@ decision belongs to whoever holds them today, not to this page.
 driver, rather than a rule everyone else follows, is what keeps `lab:job`'s refusal-not-queueing and
 `assertFleetRunsThisCheckout`'s one-commit invariant meaningful at all.
 
+## The Boy Scout rule, verbatim — every live role brief carries it, and this is how it is held
+
+The chairman's standing rule (2026-10-01: "we should be doing the Boy Scout rule, so we should be fixing any
+problems"). It exists because sessions SAW faults, often hundreds of times, and nothing fixed them: a dirty
+primary checkout ignored for 22 h, a leftover branch blocking a respawn, a flag guard rejecting the gate's own
+flag and logging "NOT RELEASED" every tick for days, rows filed `backlog` and never promoted, an order to a
+nonexistent session retried for 18 h. The text below is the ONE copy; every `live` brief in
+`sessions.json`, plus `reviewer.md` and `tracker-auditor.md`, carries it verbatim, and
+`packages/lab/src/packaging/boy-scout-rule.test.ts` compares each brief to this section, so edit it here and
+copy it out.
+
+> **Boy Scout rule (chairman, 2026-10-01).** Leave every place better than you found it. A fault met on your
+> path is fixed forward by you, or FILED `ready` (never `backlog`) with its fix named and its owner stated, in
+> the same turn. You never step round it, report it and go idle; "someone should" is not a completion. **A log
+> line that repeats about a fault with a known fix is a defect in its own right**, and the session that reads it
+> the second time owns getting it fixed. Your path is your Region, the tools you run and the rows you touch; a
+> fault in another lane is filed to that lane, not left.
+
+**How `ceo` holds sessions to it:**
+
+1. **Every `ceo` state reading on #928 carries one line, "faults met and left":** the oldest `ready` row filed
+   from a fault, `backlog` rows older than 24 h with no promotion decision, and any log line repeating past
+   the threshold #2848 builds.
+2. **A session whose completion report names a fault and no filed row or fix is asked for the row**, and a
+   second occurrence goes to `product-manager` as a brief defect.
+3. **`product-manager` promotes or refuses a `backlog` row inside one tick of seeing it**; a refusal is a
+   comment saying why.
+4. **`tracker-auditor` counts, in each pass, closed rows whose comments name a fault with no row linked.**
+
+The repeating-log-line detector is #2848, not this section.
+
 ## THE BRANCH AND PR RULES — ruled 2026-09-07, because the conflicts had a cause
 
 **The chairman saw too many merge conflicts. They were not carelessness, and part of the cause was
