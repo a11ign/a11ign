@@ -24,7 +24,7 @@ import {
 } from "./wake.mjs";
 import {
   claimRecordComment, declineRow, claimWithWorktree, worktreeTargetReason, worktreeFlagsReason,
-  implicitAdoptSession, predecessorLivenessUnknown, predecessorGoneReading, recordPredecessorGone, adoptFor, ROW_CLAIM_FLAGS,
+  implicitAdoptSession, worktreeCleanliness, predecessorLivenessUnknown, predecessorGoneReading, recordPredecessorGone, adoptFor, ROW_CLAIM_FLAGS,
 } from "./row-claim.mjs";
 import { unknownFlags } from "./lib/cli-flags.mjs";
 import { CLAIM_RECORD_MARKER } from "./claim-labels.mjs";
@@ -779,6 +779,110 @@ test("#2748 `adoptFor` (CLI wiring): an explicit `--adopt=` always wins, and the
   assert.equal(adoptFor("claim", "worker-2623", { branch: BRANCH }), undefined, "no --worktree -- never asked");
   assert.equal(adoptFor("claim", "worker-2623", { branch: BRANCH, worktree: NOWHERE }), undefined,
     "asked, but the tree does not exist on disk -- the real `existsSync` answers false, same as `implicitAdoptSession`'s own control");
+});
+
+// --- #2842: the SAME-NAME respawn over its predecessor's CLEAN tree needs no predecessor-gone record --------------------------------
+// REAL git on a scratch origin + clone + worktree, because a clean-check that reads only one of the four ways is exactly what a fake
+// `run` cannot catch: each way below is broken alone, and each must be refused for ITS OWN named reason and no other.
+
+const CLEAN_BRANCH = "agent/clean-respawn-2842";
+
+/** real git, but only ever pointed at the scratch tree; injected so no call reaches a live default seam (#1401) */
+const scratchRun = (cmd: string, args: string[]) => execFileSync(cmd, args, { env: sandboxGitEnv(), encoding: "utf8" });
+
+function scratchTree() {
+  const root = mkdtempSync(join(tmpdir(), "a11y-clean-tree-"));
+  const git = (cwd: string, ...args: string[]) => execFileSync("git", ["-C", cwd, ...args], { env: sandboxGitEnv(), encoding: "utf8" });
+  git(root, "init", "--quiet", "--bare", "-b", "main", "origin.git");
+  git(root, "clone", "--quiet", "origin.git", "main-clone");
+  const clone = join(root, "main-clone");
+  git(clone, "config", "user.email", "t@example.invalid");
+  git(clone, "config", "user.name", "t");
+  writeFileSync(join(clone, "tracked.txt"), "one\n");
+  git(clone, "add", "tracked.txt");
+  git(clone, "commit", "--quiet", "-m", "base");
+  git(clone, "push", "--quiet", "origin", "HEAD:main");
+  git(clone, "fetch", "--quiet", "origin");
+  const tree = join(root, "wt-2842");
+  git(clone, "worktree", "add", "--quiet", "-b", CLEAN_BRANCH, tree, "origin/main");
+  writeFileSync(join(tree, ".a11y-owner"), "worker-2842\n");
+  return { root, tree, git: (...args: string[]) => git(tree, ...args) };
+}
+
+test("#2842 `worktreeCleanliness` reads FOUR ways, and each one alone is refused under its own name (a one-way check is caught)", () => {
+  const fx = scratchTree();
+  try {
+    assert.deepEqual(worktreeCleanliness({ worktree: fx.tree, branch: CLEAN_BRANCH }), { clean: true },
+      "CONTROL: a fresh tree at origin/main, stamped, is clean -- the stamp is this tree's marker (the scratch repo has no .gitignore for it) and is not dirt");
+    const why = () => (worktreeCleanliness({ worktree: fx.tree, branch: CLEAN_BRANCH }) as { why?: string }).why;
+
+    writeFileSync(join(fx.tree, "tracked.txt"), "two\n");
+    assert.match(String(why()), /uncommitted changes to tracked files \(.*tracked\.txt/, "way 1: a tracked file modified");
+    fx.git("checkout", "--quiet", "--", "tracked.txt");
+
+    writeFileSync(join(fx.tree, "new.txt"), "x\n");
+    assert.match(String(why()), /untracked files \(\?\? new\.txt/, "way 2: an untracked file");
+    rmSync(join(fx.tree, "new.txt"));
+    assert.equal(why(), undefined, "CONTROL: both dirt readings clear when the dirt does");
+
+    writeFileSync(join(fx.tree, "tracked.txt"), "three\n");
+    fx.git("-c", "user.email=t@example.invalid", "-c", "user.name=t", "commit", "--quiet", "-am", "unpushed");
+    assert.match(String(why()), /HEAD is 1 commit\(s\) ahead of origin\/main/, "way 3: a commit ahead of origin/main");
+
+    // way 4 ALONE: HEAD detached back at origin/main (not ahead), the branch still holding the unpushed commit.
+    fx.git("checkout", "--quiet", "--detach", "origin/main");
+    assert.match(String(why()), /branch `agent\/clean-respawn-2842`'s tip is not an ancestor of origin\/main/,
+      "way 4: a HEAD-only reading calls this tree clean; the branch tip says otherwise");
+    // and with NO branch to name, the same tree reads clean: the fourth reading is the branch's, not HEAD's.
+    assert.deepEqual(worktreeCleanliness({ worktree: fx.tree }), { clean: true }, "no branch named and none attached -- nothing to read");
+  } finally { rmSync(fx.root, { recursive: true, force: true }); }
+});
+
+test("#2842 `worktreeCleanliness` -- a git that cannot answer is NOT clean, and says so", () => {
+  const out = worktreeCleanliness({ worktree: "/nonexistent/wt" }, { run: (() => { throw new Error("fatal: cannot change to '/nonexistent/wt'"); }) as never });
+  assert.equal(out.clean, false);
+  assert.match((out as { why: string }).why, /git could not answer \(fatal: cannot change.*"could not ask" is not "clean"/);
+});
+
+test("#2842 `implicitAdoptSession`: a CLEAN own tree is adopted with NO predecessor-gone record; a dirty one, a stranger's, and a live predecessor are not", () => {
+  const rule = (over: { clean?: boolean; gone?: boolean | null; owner?: string | null } = {}) => implicitAdoptSession({
+    worktree: WT, mySession: "worker-2842", exists: () => true,
+    owner: () => (over.owner === undefined ? "worker-2842" : over.owner),
+    predecessorGone: () => (over.gone === undefined ? null : over.gone),
+    clean: () => over.clean ?? true,
+  });
+  assert.equal(rule(), "worker-2842", "the row's Open-check: own stamped tree, clean, NO record (gone is null) -- adopted");
+  assert.equal(rule({ clean: false }), undefined, "CONTROL: the same tree dirty and no record -- refused as before");
+  assert.equal(rule({ clean: false, gone: true }), "worker-2842", "CONTROL: dirty with the record is #2748's path, unchanged");
+  assert.equal(rule({ owner: "worker-9" }), undefined, "a clean tree stamped by someone else is never adopted");
+  assert.equal(rule({ owner: null }), undefined, "nor an unstamped one");
+  assert.equal(rule({ gone: false }), undefined, "a reading that the predecessor is ALIVE outranks a clean tree");
+});
+
+test("#2842 through `claimWithWorktree` over a real scratch tree: clean proceeds with no record and creates nothing; each dirt is refused, naming it", () => {
+  const fx = scratchTree();
+  try {
+    const claims: string[] = [];
+    const claim = (() => { claims.push("claimed"); return { claimed: true, statusMoved: true }; }) as never;
+    const ledgerPath = join(fx.root, "wake-ledger");
+    const attempt = () => {
+      const adopt = implicitAdoptSession({ worktree: fx.tree, mySession: "worker-2842", exists: existsSync, owner: (w) => readFileSync(join(w, ".a11y-owner"), "utf8").trim(),
+        predecessorGone: (s: string) => predecessorGoneReading(s, { ledgerPath }), clean: (w) => worktreeCleanliness({ worktree: w, branch: CLEAN_BRANCH }).clean });
+      return claimWithWorktree(2842, "worker-2842", { branch: CLEAN_BRANCH, worktree: fx.tree, adopt, claim, run: scratchRun });
+    };
+    assert.equal(predecessorGoneReading("worker-2842", { ledgerPath }), null, "no predecessor-gone record exists, and the claim must not need one");
+    assert.equal(attempt().claimed, true, "the clean tree is adopted");
+    assert.deepEqual(claims, ["claimed"]);
+    assert.equal(existsSync(join(fx.tree, "tracked.txt")), true, "and nothing was removed or recreated");
+
+    writeFileSync(join(fx.tree, "new.txt"), "x\n");
+    const refused = attempt() as { claimed: false; reason: string };
+    assert.equal(refused.claimed, false);
+    assert.match(refused.reason, /ALREADY EXISTS, stamped by `worker-2842`/);
+    assert.match(refused.reason, /YOUR OWN tree.*because it has untracked files \(\?\? new\.txt\).*--adopt=worker-2842/,
+      "the refusal names the reading that failed and the exit, instead of only ALREADY EXISTS");
+    assert.deepEqual(claims, ["claimed"], "and no claim was written for the refused one");
+  } finally { rmSync(fx.root, { recursive: true, force: true }); }
 });
 
 test("#2470 (10) `decline --answer=<session>` releases to that session's `answer:` label, NOT to `ready`, and refuses to be a finding too", () => {
