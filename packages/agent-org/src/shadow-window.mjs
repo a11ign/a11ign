@@ -22,6 +22,7 @@ import { spawnSync } from "node:child_process";
 import { dirname, join, relative, resolve, isAbsolute } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { diffOrders, refuseLiveStateDir, LIVE_STATE_DIR } from "./shadow-gate.mjs";
+import { parseShadowRecord } from "./shadow-reads.mjs";
 import { flagValue, refuseUnknownFlags } from "./lib/cli-flags.mjs";
 
 /** `0` a tick was recorded, or there was none to record; `2` a path was refused or an input could not be read. */
@@ -124,10 +125,12 @@ export function gapBetween(previousMs, tickMs) {
 /**
  * The candidate's side of the child process: `decide(args)` from the candidate's own module, orders as JSON on stdout.
  * A child, so a candidate that exits non-zero, throws or hangs is an observation and not a crash of the runner.
+ * The revive happens HERE and not in `shadowTick`: `args` crosses the process boundary as JSON, which would flatten a revived Map back to `{}`.
+ * The parent leaves the tap's `$type` tags as plain objects, so they cross unchanged and `parseShadowRecord` (one reviver, #2858) restores them.
  * @param {string} modulePath
  */
 async function runAsCandidateChild(modulePath) {
-  const args = JSON.parse(readFileSync(0, "utf8"));
+  const args = parseShadowRecord(readFileSync(0, "utf8"));
   const { decide } = await import(pathToFileURL(resolve(modulePath)).href);
   process.stdout.write(JSON.stringify(decide(args)));
 }
