@@ -250,10 +250,25 @@ export function internalDependencies(packageDir, seen = new Set()) {
   return dirs;
 }
 
-/** `@a11ign/foo` lives at `packages/foo`, beside the package asking for it.
+/** `@a11ign/foo` lives beside the package asking for it, at the directory whose manifest NAMES it: usually
+ * `packages/foo`, but `@a11ign/screenreader-worker` is still `packages/nvda-worker` until M1 (#2885), so the
+ * directory is not derivable from the name. A name nobody carries falls back to the short-name path, whose
+ * absence the callers report.
  * @type {(packageDir: string, dependency: string) => string} */
-const siblingDir = (packageDir, dependency) =>
-  join(resolve(packageDir), "..", dependency.slice("@a11ign/".length));
+const siblingDir = (packageDir, dependency) => {
+  const parent = join(resolve(packageDir), "..");
+  const named = readdirSync(parent).find((entry) => manifestNameAt(join(parent, entry)) === dependency);
+  return join(parent, named ?? dependency.slice("@a11ign/".length));
+};
+
+/** @param {string} dir @returns {string | undefined} */
+function manifestNameAt(dir) {
+  try {
+    return JSON.parse(readFileSync(join(dir, "package.json"), "utf8")).name;
+  } catch {
+    return undefined; // a directory with no readable manifest names nothing; the lookup moves on
+  }
+}
 
 
 /**
