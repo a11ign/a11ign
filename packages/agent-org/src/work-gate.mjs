@@ -3957,6 +3957,35 @@ export function withEvidenceLabelAges(prs, run = defaultRun) {
 }
 
 /**
+ * #2882: THE SESSION A PULL REQUEST'S OWN ROW NAMES, for a pull request that carries no `session:` label.
+ *
+ * `pr:open` stamps the label from the worktree's `.a11y-owner`, and #2880 was opened 43 minutes before its tree was
+ * stamped -- so it was unlabelled while row #2875 carried `session:worker-2875`, and `pr-checks-failing` went to
+ * `product-manager` six times for a PR whose owner was on disk. The rows are already in hand (`readOpenRows`), so
+ * this costs no call.
+ *
+ * EXACTLY ONE LIVE SESSION, OR NOTHING. A row is LIVE when it still holds its claim (`in-progress` beside a `session:`
+ * label, the pair `anyBlockerClearingCandidate` reads), so a released or retired claim names nobody. Two different
+ * sessions across the rows a PR closes is a question rather than an answer. A PR whose rows were not read (`openRows`
+ * empty because the read was refused) matches nothing and is left exactly as it was. A PR with its OWN label is never
+ * touched: the row never outranks it. Wired for the default scope only -- a scope whose pull requests live in another
+ * repository than its rows would match a PR's `Closes #n` against the wrong tracker's numbers.
+ *
+ * @param {any[]} prs @param {any[]} openRows
+ */
+export function withClosingRowOwners(prs, openRows) {
+  const held = new Map(openRows.filter((row) => labelsOf(row).includes(CLAIM_LABEL) && sessionOf(row))
+    .map((row) => [Number(row.number), { session: String(sessionOf(row)), row: Number(row.number) }]));
+  return prs.map((pr) => {
+    if (sessionOf(pr) || !Array.isArray(pr.closingIssuesReferences)) return pr;
+    const owners = pr.closingIssuesReferences.map((/** @type {any} */ ref) => held.get(Number(ref?.number)))
+      .filter((/** @type {any} */ owner) => owner !== undefined);
+    const sessions = new Set(owners.map((/** @type {any} */ owner) => owner.session));
+    return sessions.size === 1 ? { ...pr, rowOwner: owners[0] } : pr;
+  });
+}
+
+/**
  * THE `priority` LABEL ORDERS OFFERS, AND DOES NOT GRANT (#2296). `ceo` created it 2026-09-24 as "offer this
  * row before others"; nothing read it, so a priority row waited its turn by row number like any other.
  * Labelled rows go AHEAD of the rest and this runs BEFORE the per-tick slice, or a high-numbered priority
@@ -5989,7 +6018,7 @@ function main() {
   // pay for it twice on exactly the red tick this row is about.
   const required = requiredWhenRed(openPrs);
   const baseTip = baseTipWhenRed(openPrs);
-  const decideArgs = { primaryDrift, prs: withEvidenceLabelAges(withCommitChains(openPrs)), readyRows: rows, promotableRows: promotableRows ?? [],
+  const decideArgs = { primaryDrift, prs: withClosingRowOwners(withEvidenceLabelAges(withCommitChains(openPrs)), allOpen), readyRows: rows, promotableRows: promotableRows ?? [],
     chairmanBlocked: chairmanBlocked ?? [], prFiles, drain, required, baseTip,
     epics: epicsWhenShelfEmpty(rows),
     answerOwed: rowsOwingAnswers({ openRows: allOpen, openPrs, closedRows: closedAnswerRows() }),
