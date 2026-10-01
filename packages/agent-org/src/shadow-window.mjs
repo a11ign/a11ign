@@ -81,14 +81,14 @@ export function refreshCopy({ liveDir, copyDir }) {
 
 /**
  * The record's last line, which is where the next tick starts. `null` for a record with no line yet.
- * @param {string} recordPath @returns {{ tick: number | null, tickMs: number } | null}
+ * @param {string} recordPath @returns {{ tickMs: number } | null}
  */
 export function lastRecorded(recordPath) {
   if (!existsSync(recordPath)) return null;
   const lines = readFileSync(recordPath, "utf8").split("\n").filter((line) => line.trim() !== "");
   if (lines.length === 0) return null;
-  const { tick, tickMs } = JSON.parse(lines[lines.length - 1]);
-  return { tick: Number.isInteger(tick) ? tick : null, tickMs };
+  const { tickMs } = JSON.parse(lines[lines.length - 1]);
+  return { tickMs };
 }
 
 /**
@@ -105,15 +105,20 @@ export function nextTickFile({ liveDir, after }) {
   return found.length === 0 ? null : { tickMs: found[0].tickMs, path: join(dir, found[0].name) };
 }
 
+/** The live tick's cadence (#2849: "one hour at two minutes"); a tick id is its UTC milliseconds, so ticks are counted by it. */
+export const TICK_INTERVAL_MS = 120_000;
+
 /**
  * Ticks that never reached a file between the last recorded one and this one, so "1,440 consecutive ticks" is
- * computable from the record. `null` when nothing is missing OR when either tick number is not an integer -- a record
- * that cannot be told consecutive says nothing rather than a number it does not have.
- * @param {number | null} previous @param {unknown} tick @returns {{ missing: number, firstMissing: number } | null}
+ * computable from the record. #2849 names a tick by its UTC milliseconds, not by a counter, so a miss is read off the
+ * elapsed time: rounded to whole intervals, which absorbs a timer's seconds of jitter. `null` when nothing is missing.
+ * @param {number | null} previousMs @param {number} tickMs
+ * @returns {{ missing: number, firstMissingUtc: string } | null}
  */
-export function gapBetween(previous, tick) {
-  if (previous === null || !Number.isInteger(tick) || /** @type {number} */ (tick) <= previous + 1) return null;
-  return { missing: /** @type {number} */ (tick) - previous - 1, firstMissing: previous + 1 };
+export function gapBetween(previousMs, tickMs) {
+  if (previousMs === null) return null;
+  const missing = Math.round((tickMs - previousMs) / TICK_INTERVAL_MS) - 1;
+  return missing < 1 ? null : { missing, firstMissingUtc: new Date(previousMs + TICK_INTERVAL_MS).toISOString() };
 }
 
 /**
@@ -188,7 +193,7 @@ export function shadowTick({ liveDir = LIVE_STATE_DIR, copyDir, recordPath, cand
   const { tick, args, orders } = JSON.parse(readFileSync(next.path, "utf8"));
   const answer = runCandidate({ module: candidate, args, copyDir });
   const record = buildRecord({ tickMs: next.tickMs, tick: Number.isInteger(tick) ? tick : null, live: orders, candidate: answer,
-    gapBefore: gapBetween(last?.tick ?? null, tick), now });
+    gapBefore: gapBetween(last?.tickMs ?? null, next.tickMs), now });
   mkdirSync(dirname(recordPath), { recursive: true });
   appendFileSync(recordPath, `${JSON.stringify(record)}\n`);
   return { status: "RECORDED", record };
