@@ -15,8 +15,8 @@ command that showed it:
 | question | command |
 |---|---|
 | is any `in-progress` row's branch already merged? | `git rev-list --count origin/main..origin/<branch>` |
-| is any `ready` row carrying a label that means not pickable? | `npm run ready:audit` |
-| is any pushed branch without a PR? | `npm run branches:stranded` |
+| is any `ready` row carrying a label that means not pickable? | `pnpm run ready:audit` |
+| is any pushed branch without a PR? | `pnpm run branches:stranded` |
 | is any issue closed by a merge still open? | `gh pr list --state merged` against each PR body's `Closes #N` |
 | does any open row lack acceptance, region or open-check? | the template fields, read back |
 | does any open row carry NEITHER a milestone nor `out-of-release`? | `gh issue list --state open --json number,milestone,labels` — the rule allows no third state, and an unclassified row is counted in the open-items total while being invisible to every milestone figure |
