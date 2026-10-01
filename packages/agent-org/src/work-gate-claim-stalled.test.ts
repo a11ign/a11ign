@@ -483,6 +483,49 @@ test("#2747 the session REAPPEARING clears the memory: a complete listing that s
   assert.equal(back.memory[2407], undefined, "the goneSince memory is dropped: a stall (or a fresh disappearance) is a first reading again");
 });
 
+// --- (#2863) a holder LISTED but holding no agent reads as absent ---------------------------------------------------------------------
+
+/** A COMPLETE listing in which `worker-7`'s workspace survives its agent: herdr's `unknown` is "no agent detected". */
+const AGENTLESS_LISTING = [...CEO_ORCH, { label: "worker-7", status: "unknown" }];
+
+test("#2863 a holder listed with status `unknown` reads as absent: vacating on the first tick, released as gone after GONE_CONFIRM_MS", () => {
+  const first = tickWith({}, [claim(300)], { agents: AGENTLESS_LISTING });
+  assert.deepEqual(first.orders, [], "not yet -- the clock starts now");
+  assert.deepEqual(first.memory[2407], { session: "worker-7", goneSince: NOW }, "the same memory a closed workspace writes");
+  const memory = { 2407: { session: "worker-7", goneSince: NOW - GONE_CONFIRM_MS } };
+  const matured = tickWith({}, [claim(300)], { agents: AGENTLESS_LISTING, memory });
+  assert.equal(matured.orders.length, 1);
+  assert.equal(matured.orders[0].release!.why, "gone");
+});
+
+test("#2863 POSITIVE CONTROL: the same fixture with the holder idle/working/done stays a nudge, never gone", () => {
+  for (const status of ["idle", "working", "done"]) {
+    const memory = { 2407: { session: "worker-7", goneSince: NOW - GONE_CONFIRM_MS } };
+    const live = tickWith({ commit: null }, [claim(N_MIN + 10)], { agents: [...CEO_ORCH, { label: "worker-7", status }], memory });
+    assert.equal(live.orders.length, 1, status);
+    assert.equal(live.orders[0].release, undefined, `${status}: a live session is nudged, not released`);
+    assert.equal((live.memory[2407] as { goneSince?: number } | undefined)?.goneSince, undefined, `${status}: reappearing with an agent drops the clock`);
+  }
+});
+
+test("#2863 a holder that goes `unknown` and then returns to a live status resets the clock", () => {
+  const memory = { 2407: { session: "worker-7", goneSince: ago(9) } };
+  const back = tickWith({}, [claim(20)], { agents: [...CEO_ORCH, { label: "worker-7", status: "working" }], memory });
+  assert.deepEqual(back.orders, []);
+  assert.equal(back.memory[2407], undefined, "the goneSince is dropped");
+  const again = tickWith({}, [claim(20)], { agents: AGENTLESS_LISTING, memory: back.memory });
+  assert.deepEqual(again.memory[2407], { session: "worker-7", goneSince: NOW }, "a fresh first sighting, not the old clock");
+});
+
+test("#2863 a PARTIAL listing with the holder agentless still proves nothing: listingIsComplete is asked first", () => {
+  const partial = [{ label: "ceo", status: "idle" }, { label: "worker-7", status: "unknown" }];
+  const none = tickWith({}, [claim(20)], { agents: partial });
+  assert.deepEqual(none.orders, []);
+  assert.equal(none.memory[2407], undefined, "nothing started");
+  const stale = tickWith({}, [claim(20)], { agents: partial, memory: { 2407: { session: "worker-7", goneSince: ago(999) } } });
+  assert.deepEqual(stale.orders, [], "and nothing confirmed either");
+});
+
 // --- the reading, directly ---------------------------------------------------------------------------------------------------------
 
 test("#2470 claimReading is pure in its inputs: an UNDELIVERED `nudged` row keeps offering its key, a delivered one goes quiet", () => {
