@@ -18,7 +18,7 @@ const RED = [{ name: "gate", status: "COMPLETED", conclusion: "FAILURE", started
 const row = (number: number, ...labels: string[]) => ({ number, labels: labels.map((name) => ({ name })) });
 const claimed = (number: number, session: string) => row(number, "in-progress", `session:${session}`);
 const pr = (closes: number[], ...labels: string[]) => ({
-  number: 2880, headRefOid: "24b0e94f00000000", isDraft: false, statusCheckRollup: RED,
+  number: 2880, headRefOid: "24b0e94f00000000", isDraft: false, statusCheckRollup: RED, headRefName: "agent/an-unnamed-branch",
   labels: labels.map((name) => ({ name })), closingIssuesReferences: closes.map((number) => ({ number })),
 });
 
@@ -77,4 +77,67 @@ test("the NOT CONVINCED order takes the row's session too, and keeps product-man
   assert.equal(owned.causeKey.startsWith("worker-2875/verdict-not-convinced/"), true);
   const [unowned] = verdictOrders([]);
   assert.equal(unowned?.session, "product-manager");
+});
+
+/**
+ * #2928: THE BRANCH SUFFIX IS THE LAST AUTHORITY. #2925 (`agent/finish-the-move-to-2892`) said `Closes: none` because the
+ * done-when was someone else's, so GitHub resolved no closing row and the order went to `product-manager` while
+ * `worker-2892` sat idle. `row-claim claim <n> --branch=agent/<slug>-<n>` writes the suffix, so it names the row.
+ * The positive control is the first test; every fallback below is the SAME fixture with one thing changed.
+ */
+const onBranch = (headRefName: string, ...labels: string[]) => ({ ...pr([], ...labels), headRefName });
+
+test("a PR with no label and no closing row, on a branch whose suffix names a held row, goes to that row's session", () => {
+  const [order, ...rest] = failingOrders([onBranch("agent/finish-the-move-to-2892")], [claimed(2892, "worker-2892")]);
+  assert.equal(rest.length, 0);
+  assert.equal(order.session, "worker-2892");
+  assert.equal(order.causeKey, "worker-2892/pr-checks-failing/pr-2880/24b0e94f");
+  assert.match(order.prompt, /branch `agent\/finish-the-move-to-2892` was claimed for row #2892, which is held by you/);
+});
+
+test("a branch naming no held row, a released claim, an unread row list or no numeric suffix still goes to product-manager", () => {
+  const fallsBack = (headRefName: string, openRows: Fixture[]) => {
+    const [order] = failingOrders([onBranch(headRefName)], openRows);
+    assert.equal(order.session, "product-manager");
+    assert.match(order.prompt, /It names no session\./);
+  };
+  fallsBack("agent/finish-the-move-to-2892", [claimed(9999, "worker-9999")]); // a held row, but not the suffix's
+  fallsBack("agent/finish-the-move-to-2892", [row(2892, "session:worker-2892")]); // released: the label outlived `in-progress`
+  fallsBack("agent/finish-the-move-to-2892", [row(2892, "in-progress")]); // claimed by nobody
+  fallsBack("agent/finish-the-move-to-2892", []); // the rows were not read
+  fallsBack("agent/finish-the-move-to", [claimed(2892, "worker-2892")]); // no numeric suffix
+  fallsBack("agent/2892-finish-the-move", [claimed(2892, "worker-2892")]); // a number that is not the SUFFIX
+  fallsBack("feature/finish-the-move-to-2892", [claimed(2892, "worker-2892")]); // not an `agent/` branch
+});
+
+test("a closing row naming a different session than the suffix keeps the closing row's; a closing split stays a question", () => {
+  const rows = [claimed(2875, "worker-2875"), claimed(2892, "worker-2892"), claimed(2893, "worker-2893")];
+  const withCloses = (closes: number[]) => ({ ...pr(closes), headRefName: "agent/finish-the-move-to-2892" });
+  const [closing] = failingOrders([withCloses([2875])], rows);
+  assert.equal(closing.session, "worker-2875");
+  assert.match(closing.prompt, /row it closes \(#2875\) is held by you/);
+  const [split] = failingOrders([withCloses([2875, 2893])], rows);
+  assert.equal(split.session, "product-manager");
+});
+
+test("a PR WITH its own label keeps it over its branch suffix", () => {
+  const [order] = failingOrders([onBranch("agent/finish-the-move-to-2892", "session:worker-1")], [claimed(2892, "worker-2892")]);
+  assert.equal(order.session, "worker-1");
+  const [labelled] = withClosingRowOwners([onBranch("agent/finish-the-move-to-2892", "session:worker-1")], [claimed(2892, "worker-2892")]);
+  assert.equal("rowOwner" in labelled, false, "the row is not even looked up for a PR that carries its own label");
+});
+
+test("the suffix is read when GitHub's closing references were not, and the NOT CONVINCED order takes it too", () => {
+  const unread: Fixture = onBranch("agent/finish-the-move-to-2892");
+  delete unread.closingIssuesReferences;
+  const [order] = failingOrders([unread], [claimed(2892, "worker-2892")]);
+  assert.equal(order.session, "worker-2892");
+  const convinced = {
+    ...onBranch("agent/finish-the-move-to-2892"), statusCheckRollup: [{ name: "gate", status: "COMPLETED", conclusion: "SUCCESS" }],
+    comments: [{ author: { login: "reviewer-2880" }, createdAt: "2026-10-01T15:00:00Z", body: "Re-read of `24b0e94f` -- **not convinced**." }],
+  };
+  const rows = [claimed(2892, "worker-2892")];
+  const [verdict] = decide({ prs: withClosingRowOwners([convinced], rows), readyRows: [], openRows: rows })
+    .filter((o) => o.cause === "verdict-not-convinced");
+  assert.equal(verdict?.session, "worker-2892");
 });
