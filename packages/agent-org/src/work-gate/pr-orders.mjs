@@ -381,6 +381,29 @@ function redOnlyFromHoldOf(pr, onHead, session) {
 }
 
 /**
+ * WHO A PULL REQUEST BELONGS TO: its own `session:` label, else the live session that holds the single row it
+ * closes (`rowOwner`, put there by `withClosingRowOwners`, #2882), else `null`. The label comes first and the
+ * row never outranks it. Only the two orders that route the AUTHOR'S work read this; the others keep `sessionOf`.
+ *
+ * @param {any} pr @returns {string | null}
+ */
+function ownerOf(pr) {
+  return sessionOf(pr) ?? pr?.rowOwner?.session ?? null;
+}
+
+/**
+ * The sentence of `failingChecksPrompt` that says whose the fix is, and on whose authority.
+ * @param {any} pr
+ */
+function ownershipSentence(pr) {
+  if (sessionOf(pr)) return "It carries your session label, so it is yours to fix.";
+  if (pr?.rowOwner) {
+    return `It carries no session label, but the row it closes (#${pr.rowOwner.row}) is held by you, so it is yours to fix.`;
+  }
+  return "It names no session.";
+}
+
+/**
  * A pull request whose checks have SETTLED RED, and nobody is fixing it.
  *
  * THE THIRD BLIND SPOT, and the one where work actually dies. Found 2026-09-17 by the chairman looking at
@@ -413,9 +436,9 @@ function failingChecksOrder(pr, required = null, baseTip = null) {
   const head = String(pr.headRefOid ?? "");
   if (!head) return null;
   const head8 = head.slice(0, 8);
-  // ITS OWN SESSION FIRST. Falling back to `product-manager` rather than dropping the order: an unlabelled
-  // red PR is still a stalled PR, and the queue's first reader can find out whose it is.
-  const session = sessionOf(pr) ?? "product-manager";
+  // ITS OWN SESSION FIRST, THEN THE ROW'S (#2882). Falling back to `product-manager` rather than dropping the
+  // order: an unlabelled red PR is still a stalled PR, and the queue's first reader can find out whose it is.
+  const session = ownerOf(pr) ?? "product-manager";
   if (redOnlyFromHoldOf(pr, onHead, session)) return null;
   return {
     session,
@@ -442,7 +465,7 @@ function failingChecksOrder(pr, required = null, baseTip = null) {
  */
 function failingChecksPrompt({ pr, head8, blocking, baseTip }) {
   return `${subjectMention(pr)} at \`${head8}\` has FAILING checks and is blocked. `
-    + `${sessionOf(pr) ? "It carries your session label, so it is yours to fix." : "It names no session."} `
+    + `${ownershipSentence(pr)} `
     + `${baseMovedSentence(failingRunStartedAt(blocking), baseTip)} `
     + "WHICH FIX is decided by what the failing assertion names, and this order does not choose: "
     + "(a) a real defect on your branch -- fix it and push; "
@@ -512,12 +535,12 @@ function baseMovedSentence(startedAt, baseTip) {
  *        byIsAuthor: boolean | null}} found @param {ReviewHeads} heads
  */
 function notConvincedOrder(pr, found, { head8, keyHead8 }) {
-  const owner = sessionOf(pr);
+  const owner = ownerOf(pr);
   const session = owner ?? "product-manager";
   const from = found.by ? ` from ${found.by}` : "";
   const prompt = owner
-    ? `${subjectMention(pr)} at \`${head8}\` carries a NOT CONVINCED verdict${from} and it carries your session `
-      + "label, so the rework is yours. Read the verdict, fix what it names on that branch and push. If "
+    ? `${subjectMention(pr)} at \`${head8}\` carries a NOT CONVINCED verdict${from} and ${sessionOf(pr) ? "it carries your session label" : `the row it closes (#${pr.rowOwner?.row}) is held by you`}, `
+      + "so the rework is yours. Read the verdict, fix what it names on that branch and push. If "
       + "you believe the verdict is wrong, that is a DISPUTE rather than rework: say so on the PR and "
       + "product-manager decides."
     : `${subjectMention(pr)} at \`${head8}\` carries a NOT CONVINCED verdict${from} and nothing has moved since. `
