@@ -3,7 +3,7 @@
 // command: run only the tests a change can reach -- the local half of CI's scoped selection
 //
 // WHY THIS EXISTS. `select-changed-tests.mjs` has picked the reachable tests since #1160, and `ci.yml`'s
-// `ts` job uses it -- but there was no npm entry, so locally the only choices were `npm run test:org`
+// `ts` job uses it -- but there was no npm entry, so locally the only choices were `pnpm run test:org`
 // (8m57s, measured on a 14-core Mac) or nothing. That is why a development loop reached for the
 // nine-minute command: it was the only one there.
 //
@@ -21,9 +21,9 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
 import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
-// NEVER a bare `npm`/`npx` spawn -- unsafe on Windows (CVE-2024-27980), and this repo's own
+// NEVER a bare `pnpm` spawn -- unsafe on Windows (CVE-2024-27980), and this repo's own
 // guard refuses one anywhere in the tree. Same call shape as every other site.
-import { npmCliInvocation } from "./npm-cli-executable.mjs";
+import { pnpmCliInvocation } from "./npm-cli-executable.mjs";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 
@@ -39,7 +39,7 @@ export function parseSelection(out) {
 }
 
 function main() {
-  refuseUnknownFlags(["--base"], { entry: import.meta.url, command: "npm run test:changed" });
+  refuseUnknownFlags(["--base"], { entry: import.meta.url, command: "pnpm run test:changed" });
   const base = flagValue(process.argv, "base") ?? process.env.A11Y_TEST_BASE ?? "origin/main";
 
   const selected = spawnSync("node", [`${REPO}scripts/select-changed-tests.mjs`, `--base=${base}`],
@@ -75,7 +75,7 @@ function run(args) {
 }
 
 function runAll() {
-  const { command, args } = npmCliInvocation("npm", ["run", "test:all"]);
+  const { command, args } = pnpmCliInvocation(["run", "test:all"]);
   const r = spawnSync(command, args, { stdio: "inherit", cwd: REPO });
   return r.status ?? 1;
 }

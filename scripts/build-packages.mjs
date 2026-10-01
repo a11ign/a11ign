@@ -1,6 +1,6 @@
 // @ts-check
 // command: run tsc --build across every package under packages/ in dependency order
-// Build every package under `packages/` — `npm run build`.
+// Build every package under `packages/` — `pnpm run build`.
 //
 // `tsc --build` is given all the package directories at once, so it resolves their `references` itself and
 // builds in dependency order. That is the whole reason there is no hand-written solution file: a list of
@@ -9,7 +9,7 @@
 // several). Discovery cannot drift.
 //
 // `tsconfig.json` at the root is untouched and stays `noEmit: true`: it type-checks `src/` as one program for
-// `npm run typecheck` and the editor, and must keep working unchanged while packages are extracted one at a
+// `pnpm run typecheck` and the editor, and must keep working unchanged while packages are extracted one at a
 // time (PLAN.md M2-M8).
 import { execFileSync } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
@@ -17,7 +17,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { join } from "node:path";
 
 import { allPackages } from "../packages/guards/src/isolation-gate.mjs";
-import { npmCliInvocation } from "./npm-cli-executable.mjs";
+import { pnpmCliInvocation } from "./npm-cli-executable.mjs";
 // RELATIVE, NOT `@a11ign/worker-fleet/cli-flags` -- same rule `ci-changed.mjs`'s header already
 // states, and `isolation-gate.mjs` (imported above) already follows: this script IS the thing that
 // builds every package's `dist/`, so it cannot depend on a build having already happened. The package
@@ -44,7 +44,7 @@ function main() {
   }
 
   process.stdout.write(`building ${buildable.length} package(s)\n`);
-  const { command, args } = npmCliInvocation("npx", ["tsc", "--build", ...buildable]);
+  const { command, args } = pnpmCliInvocation(["exec", "tsc", "--build", ...buildable]);
   execFileSync(command, args, { cwd: root, stdio: "inherit" });
 }
 
