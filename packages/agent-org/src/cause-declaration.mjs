@@ -587,6 +587,18 @@ export const TOOL_CAUSE_DECLARATIONS = Object.freeze([
     why: "building a row is multi-step, but no measurement shows sonnet failing it -- agent-practices "
       + "reserves opus for a cheaper tier measurably getting it wrong, and that evidence does not exist",
   }),
+  declareCause("ready-row-unclaimable", GROUPS.JUDGMENT, {
+    kind: "claude",
+    model: "sonnet",
+    // MEDIUM (#2845). The gate has already read the refusal and quoted it; the work is deciding whose tree it is and
+    // whether the row should be claimed, re-laned or the tree released -- a short judgment over a stated fact, not
+    // diagnosis from an absence. NOT `ready-row-unclaimed`'s `high`: that is a build, this is a queue-state decision.
+    // JUDGMENT, NOT ACTION_START: it asks `product-manager` to look and decide, it starts no work, and a drain
+    // (which withholds starts) is exactly when a stuck row should still be seen.
+    effort: "medium",
+    why: "the gate has already read and quoted the claim's refusal; the output is a decision about whose "
+      + "tree it is, over a fact already in the prompt",
+  }),
 ]);
 
 /**
