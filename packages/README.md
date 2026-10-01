@@ -16,7 +16,7 @@ decide across whichever layers exist and so name none of them.
 | `nvda-worker` (M5) | `@a11ign/screenreader-worker` — screen-reader layer | AGPL-3.0-or-later | the Windows capture worker. `.mjs` ships verbatim, so no build step; the HTTP contract is the API and `CAPTURE_PROTOCOL_VERSION` versions it independently of semver. Published as `screenreader-worker` since #2885; the registry name was `nvda-worker` before, and the directory keeps it until M1 |
 | `worker-fleet` (M6) | `@a11ign/screenreader-fleet` — screen-reader layer | AGPL-3.0-or-later | host-side lease/health/capacity, the `a11ign-doctor` and `a11y-worker-*` bins, and the UTM provisioning scripts. Touches no NVDA |
 | `a11ign` (M7) | **`a11ign`, unscoped** — product | AGPL-3.0-or-later | the CLI. Stays unscoped so `npx a11ign` needs no wrapper — ADR 0036 rejected `@a11ign/cli` for exactly this reason. Exports `reportLines` only; the root package was renamed to `a11ign-monorepo` to free the name |
-| `pdf` | `@a11ign/pdf` — the PDF layer | AGPL-3.0-or-later | the second layer (#68, `ceo`'s ruling on #1131): reads a PDF's own accessibility tag tree directly — tagged/untagged, document language, alt text on `Figure` elements — with `pdf-lib`, no browser, no NVDA and no fleet |
+| `pdf` (renamed `documents`, #2705) | `@a11ign/documents` — the PDF layer | Apache-2.0 | the second layer (#68, `ceo`'s ruling on #1131): reads a PDF's own accessibility tag tree directly — tagged/untagged, document language, alt text on `Figure` elements — with `pdf-lib`, no browser, no NVDA and no fleet |
 
 **`pdf` joined after M1–M8 rather than inside them** — the migration above renamed what already existed;
 `pdf` is the first package ADR 0036's "a new layer joins by the same contract" clause was ever tested

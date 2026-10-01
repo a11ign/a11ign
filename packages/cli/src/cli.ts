@@ -21,7 +21,7 @@
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { judge, type Judgment } from "@a11ign/judge";
-import { looksLikePdfUrl, scanPdfTagTree } from "@a11ign/pdf";
+import { looksLikePdfUrl, scanPdfTagTree } from "@a11ign/documents";
 import { scanWithAxe, axeAvailable, type AxeFinding, type AxeBrowserChannel } from "./scan/axe.js";
 import { fetchPageTitle } from "./scan/page-title.js";
 import { loadAxeResults, warnOnUrlMismatch } from "./scan/axe-results.js";

@@ -1,9 +1,9 @@
 ---
-"@a11ign/pdf": minor
+"@a11ign/documents": minor
 "a11ign": minor
 ---
 
-**A second layer, alongside the screen-reader and rule-based ones: `@a11ign/pdf` reads a PDF's own
+**A second layer, alongside the screen-reader and rule-based ones: `@a11ign/documents` reads a PDF's own
 accessibility tag tree (#68, ADR 0036).** Point `a11ign` at a URL ending in `.pdf` and it reads the
 document's `/MarkInfo`, `/StructTreeRoot` and struct-element dictionaries directly -- no browser, no NVDA,
 no fleet -- and reports whether the document is tagged at all, whether it declares a language, and whether

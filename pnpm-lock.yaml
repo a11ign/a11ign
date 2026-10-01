@@ -78,15 +78,15 @@ importers:
 
   packages/cli:
     dependencies:
+      '@a11ign/documents':
+        specifier: 0.0.0
+        version: link:../pdf
       '@a11ign/evidence':
         specifier: 0.0.0
         version: link:../evidence
       '@a11ign/judge':
         specifier: 0.0.0
         version: link:../judge
-      '@a11ign/pdf':
-        specifier: 0.0.0
-        version: link:../pdf
       '@a11ign/scorer':
         specifier: 0.0.0
         version: link:../scorer

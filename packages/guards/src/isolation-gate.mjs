@@ -252,25 +252,19 @@ export function internalDependencies(packageDir, seen = new Set()) {
   return dirs;
 }
 
-/** `@a11ign/foo` lives beside the package asking for it, at the directory whose manifest NAMES it: usually
- * `packages/foo`, but `@a11ign/screenreader-worker` is still `packages/nvda-worker` until M1 (#2885), so the
- * directory is not derivable from the name. A name nobody carries falls back to the short-name path, whose
- * absence the callers report.
+/** The directory beside the package asking whose manifest NAMES `dependency`. Found by name, not spelled from
+ * it: `packages/pdf` is `@a11ign/documents` (#2705), and a directory spelled from the name did not exist. A
+ * name matching no directory falls back to the spelled one, so the caller's "not a package in this repo"
+ * refusal still fires with the path it would have looked at.
  * @type {(packageDir: string, dependency: string) => string} */
 const siblingDir = (packageDir, dependency) => {
-  const parent = join(resolve(packageDir), "..");
-  const named = readdirSync(parent).find((entry) => manifestNameAt(join(parent, entry)) === dependency);
-  return join(parent, named ?? dependency.slice("@a11ign/".length));
+  const packagesDir = join(resolve(packageDir), "..");
+  const named = readdirSync(packagesDir).find((entry) => {
+    const manifest = join(packagesDir, entry, "package.json");
+    return existsSync(manifest) && JSON.parse(readFileSync(manifest, "utf8")).name === dependency;
+  });
+  return join(packagesDir, named ?? dependency.slice("@a11ign/".length));
 };
-
-/** @param {string} dir @returns {string | undefined} */
-function manifestNameAt(dir) {
-  try {
-    return JSON.parse(readFileSync(join(dir, "package.json"), "utf8")).name;
-  } catch {
-    return undefined; // a directory with no readable manifest names nothing; the lookup moves on
-  }
-}
 
 
 /**
