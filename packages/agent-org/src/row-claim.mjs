@@ -96,7 +96,7 @@ const CALLER = "row-claim.mjs";
 import { CLAIM_LABEL, STARTED_LABEL, CLAIM_RECORD_MARKER } from "./claim-labels.mjs";
 // #2619 (child 3d of #69): the rest of this file's vocabulary -- `blocked`, `answer:`, `session:`.
 import { BLOCKED_LABEL, ANSWER_PREFIX, SESSION_PREFIX } from "./project-vocabulary.mjs";
-import { worktreeOwner, stampWorktree } from "./worktree-owner.mjs";
+import { worktreeOwner, stampWorktree, OWNER_FILE } from "./worktree-owner.mjs";
 import { launchGate } from "./board-snapshot-scope.mjs";
 import { assertNoLeakInArgv } from "./lib/leak-patterns.mjs";
 
@@ -1258,17 +1258,19 @@ function rowBranchRefusal(issueNumber, found) {
  * `branch`, which is the author's free choice, so two sessions picking different slugs collided with nothing.
  * The fourth NAMES NO OWNER, deliberately, so that it spends nothing: a `gh` read here would be a GraphQL call on
  * the one path whose whole premise is an exhausted GraphQL pool. `rowBranchRefusal` carries the full reasoning.
- * @param {{ branch: string, worktree: string, issueNumber: number, adopt?: string }} target
- *   `adopt` (#2470) names the session whose EXISTING tree this claim takes in place -- see {@link adoptionReason}
+ * @param {{ branch: string, worktree: string, issueNumber: number, adopt?: string, mySession?: string }} target
+ *   `adopt` (#2470) names the session whose EXISTING tree this claim takes in place -- see {@link adoptionReason}.
+ *   `mySession` (#2842) is the claimant, so a refusal over the claimant's OWN tree can say which cleanliness reading failed
  * @param {{ run?: typeof defaultRun, exists?: (path: string) => boolean, owner?: (worktree: string) => string | null }} [deps]
  * @returns {string | null} the refusal, or null to go ahead
  */
-export function worktreeTargetReason({ branch, worktree, issueNumber, adopt }, { run = defaultRun, exists = existsSync, owner = worktreeOwner } = {}) {
+export function worktreeTargetReason({ branch, worktree, issueNumber, adopt, mySession }, { run = defaultRun, exists = existsSync, owner = worktreeOwner } = {}) {
   if (adopt !== undefined) return adoptionReason({ branch, worktree, adopt }, { run, exists, owner });
   if (exists(worktree)) {
     const who = owner(worktree);
     return `--worktree=${worktree} ALREADY EXISTS, ${who ? `stamped by \`${who}\`` : "UNSTAMPED (nobody recorded an owner, which is not the same as free)"}. `
-      + "Refusing before any write: a claim that went on would act inside a tree it did not create.";
+      + "Refusing before any write: a claim that went on would act inside a tree it did not create."
+      + ownTreeRemedy({ worktree, branch, who, mySession }, run);
   }
   if (gitRefExists(["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`], 1, `branch ${branch} locally`, run)) {
     return `--branch=${branch} ALREADY EXISTS locally (${branchOwnerText(branch, run)}). Refusing before any write.`;
@@ -1317,6 +1319,71 @@ function headBranchOf(worktree, run) {
   } catch {
     return null;
   }
+}
+
+/**
+ * #2842: IS THIS TREE PROVABLY LOSING NOTHING if a claim goes on inside it? FOUR readings, each a way a deletion or a careless
+ * adoption could lose work, and the FIRST that fails is named -- so a refusal can tell the next session which one it was rather
+ * than only that the path exists: (1) a tracked file modified or staged, (2) an untracked file (`git status --porcelain` reads
+ * both; they are split so the message says which), (3) HEAD ahead of `origin/main`, (4) the claim branch's tip (`branch`, else
+ * the one checked out) not an ancestor of `origin/main`. Reading 4 differs from 3 only when HEAD is detached somewhere else
+ * while the branch holds commits -- the case a HEAD-only reading calls clean. Gitignored files are not read, as in
+ * {@link worktreeStatus}; that is safe HERE only because an adoption deletes nothing.
+ * A reading git cannot answer is `clean: false` with that said: "could not ask" is never "clean".
+ * @param {{ worktree: string, branch?: string }} tree @param {{ run?: typeof defaultRun }} [deps]
+ * @returns {{ clean: true } | { clean: false, why: string }}
+ */
+export function worktreeCleanliness({ worktree, branch }, { run = defaultRun } = {}) {
+  /** @param {string[]} args */
+  const git = (...args) => String(run("git", ["-C", worktree, ...args]));
+  try {
+    const lines = git("status", "--porcelain").split("\n").filter(Boolean);
+    // The owner stamp is this tree's own marker, not work: a tree cut before `.a11y-owner` was gitignored would otherwise read dirty.
+    const untracked = lines.filter((l) => l.startsWith("??") && l !== `?? ${OWNER_FILE}`);
+    const tracked = lines.filter((l) => !l.startsWith("??"));
+    if (tracked.length > 0) return { clean: false, why: `it has uncommitted changes to tracked files (${tracked.slice(0, 5).join("; ")})` };
+    if (untracked.length > 0) return { clean: false, why: `it has untracked files (${untracked.slice(0, 5).join("; ")})` };
+    const ahead = Number(git("rev-list", "--count", "origin/main..HEAD").trim());
+    if (ahead > 0) return { clean: false, why: `HEAD is ${ahead} commit(s) ahead of origin/main` };
+    const tip = branch ?? headBranchOf(worktree, run);
+    if (tip !== null && branchTipIsUnpushed(worktree, tip, run)) {
+      return { clean: false, why: `branch \`${tip}\`'s tip is not an ancestor of origin/main (unpushed commits)` };
+    }
+    return { clean: true };
+  } catch (cause) {
+    return { clean: false, why: `git could not answer (${/** @type {Error} */ (cause).message.split("\n")[0]}), and "could not ask" is not "clean"` };
+  }
+}
+
+/**
+ * @param {string} worktree @param {string} branch @param {typeof defaultRun} run
+ * @returns {boolean} true when the LOCAL branch exists and its tip is not an ancestor of `origin/main`. A branch that does not
+ *   exist has no tip to lose (exit 1 of both reads is "no"); any OTHER failure throws, because "could not ask" is not "absent".
+ */
+function branchTipIsUnpushed(worktree, branch, run) {
+  const ref = `refs/heads/${branch}`;
+  if (!gitRefExists(["-C", worktree, "rev-parse", "--verify", "--quiet", ref], 1, `branch ${branch} in ${worktree}`, run)) return false;
+  try {
+    run("git", ["-C", worktree, "merge-base", "--is-ancestor", ref, "origin/main"]);
+    return false;
+  } catch (cause) {
+    if (exitStatusOf(cause) === 1) return true;
+    throw cause;
+  }
+}
+
+/**
+ * #2842: THE SENTENCE A REFUSAL OVER THE CLAIMANT'S OWN TREE ENDS WITH -- which cleanliness reading failed, and the two exits.
+ * Empty for anyone else's tree: the reading is the claimant's to act on only where the tree is theirs.
+ * @param {{ worktree: string, branch: string, who: string | null, mySession?: string }} tree @param {typeof defaultRun} run
+ * @returns {string}
+ */
+function ownTreeRemedy({ worktree, branch, who, mySession }, run) {
+  if (!mySession || who !== mySession) return "";
+  const reading = worktreeCleanliness({ worktree, branch }, { run });
+  if (reading.clean) return " The tree is the claimant's own and reads clean, so it is adopted without a flag; this refusal is for another reason.";
+  return ` It is YOUR OWN tree and is not adopted automatically, because ${reading.why}. Push or discard that work, or re-run with `
+    + `--adopt=${mySession} to take the tree and its work in place.`;
 }
 
 /**
@@ -1383,14 +1450,23 @@ export function predecessorGoneReading(session, { ledgerPath = ledgerPathFrom(pr
  * see {@link predecessorLivenessUnknown}). Where either is not true, this answers `undefined` and
  * `worktreeTargetReason` refuses precisely as it always has: this narrows that refusal, it does not
  * remove the #1128 safety it was built for.
+ * #2842 widens "AND that session's predecessor is confirmed gone" to "OR the tree is demonstrably clean" ({@link worktreeCleanliness}).
  * @param {{ worktree: string, mySession: string, exists: (path: string) => boolean,
- *   owner: (worktree: string) => string | null, predecessorGone: (session: string) => boolean | null }} args
+ *   owner: (worktree: string) => string | null, predecessorGone: (session: string) => boolean | null,
+ *   clean?: (worktree: string) => boolean }} args `clean` defaults to "not clean", so a caller that supplies none behaves as before
  * @returns {string | undefined}
  */
-export function implicitAdoptSession({ worktree, mySession, exists, owner, predecessorGone }) {
+export function implicitAdoptSession({ worktree, mySession, exists, owner, predecessorGone, clean = () => false }) {
   if (!exists(worktree)) return undefined;
   if (owner(worktree) !== mySession) return undefined;
-  return predecessorGone(mySession) === true ? mySession : undefined;
+  const gone = predecessorGone(mySession);
+  if (gone === true) return mySession;
+  if (gone === false) return undefined; // a reading that says the predecessor is ALIVE outranks "the tree looks clean"
+  // #2842: a tree that is demonstrably CLEAN holds nothing an adoption could lose, so it needs no record that its
+  // predecessor is gone -- the record is a proof of a different thing (that nothing is still WORKING in it) and a clean tree
+  // has no work for a live predecessor to lose. Adopting rather than deleting and recreating: it removes nothing, so it
+  // cannot lose a gitignored file either, and it needs no knowledge of which branch the old tree was on.
+  return clean(worktree) ? mySession : undefined;
 }
 
 /**
@@ -1432,7 +1508,7 @@ function undoCreatedWorktree({ branch, worktree }, run, record = recordRemoval) 
  */
 export function claimWithWorktree(issueNumber, mySession, { branch, worktree, adopt, run = defaultRun, exists = existsSync,
   owner = worktreeOwner, stamp = stampWorktree, claim = claimRow, claimDeps = {} }) {
-  const refusal = worktreeTargetReason({ branch, worktree, issueNumber, adopt }, { run, exists, owner });
+  const refusal = worktreeTargetReason({ branch, worktree, issueNumber, adopt, mySession }, { run, exists, owner });
   if (refusal) return { claimed: false, reason: refusal };
   if (adopt !== undefined) return adoptWorktree(issueNumber, mySession, { branch, worktree, adopt, run, stamp, claim, claimDeps });
   /** @type {string[]} */
@@ -2202,7 +2278,8 @@ function trackerKeyOf(args) {
 export function adoptFor(mode, mySession, { adoptFlag, branch, worktree }) {
   if (adoptFlag !== undefined) return adoptFlag;
   if (mode !== "claim" || !branch || !worktree) return undefined;
-  return implicitAdoptSession({ worktree, mySession, exists: existsSync, owner: worktreeOwner, predecessorGone: predecessorGoneReading });
+  return implicitAdoptSession({ worktree, mySession, exists: existsSync, owner: worktreeOwner, predecessorGone: predecessorGoneReading,
+    clean: (tree) => worktreeCleanliness({ worktree: tree, branch }).clean });
 }
 
 /**
