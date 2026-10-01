@@ -29,7 +29,7 @@ Two mechanical reasons, not tidiness:
   STALE primary `dist` does the same thing passively. Both were measured on 2026-09-06, hours apart, and the
   second cost an hour and a reverted commit.
 
-**Rebuild the primary after merges** (`npm run build`), or worktrees inherit whatever it last built. Safe
+**Rebuild the primary after merges** (`pnpm run build`), or worktrees inherit whatever it last built. Safe
 during a live capture: a build writes `dist/` only and `nvda-worker` has no build step (ADR 0031).
 
 ## What this role does NOT do

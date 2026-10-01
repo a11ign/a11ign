@@ -23,7 +23,7 @@ What is safe to keep, because it is a workflow fact rather than a reachability f
   extra hop was the whole source of a quoting bug that once sent four capture shards at a malformed URL for
   29 minutes.
 - **The lab is small** (measured as a couple of vCPUs, a few GB) — a retrain runs on the order of 15-25
-  minutes wall clock there. Long jobs are dispatched through `npm run lab:job -- -e job=<name>`
+  minutes wall clock there. Long jobs are dispatched through `pnpm run lab:job -- -e job=<name>`
   (Ansible → a supervised systemd unit), never a bare ssh command — see ADR 0013. Direct SSH is for
   READING state; jobs go through the job runner.
 
