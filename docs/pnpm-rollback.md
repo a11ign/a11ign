@@ -13,7 +13,7 @@ Roll back when — and only when — one of these is READ, not suspected:
 
 | reading | what it means |
 |---|---|
-| `npm run gate:isolation` fails on `main` for a package that is **usable on Linux** (not the `worker-fleet` decline, which is by design) | a tarball pnpm packed does not install or resolve for a stranger. That is the one thing the migration must not break |
+| `pnpm run gate:isolation` fails on `main` for a package that is **usable on Linux** (not the `worker-fleet` decline, which is by design) | a tarball pnpm packed does not install or resolve for a stranger. That is the one thing the migration must not break |
 | the release **dry run** is red at a step the migration touched (`pnpm install --frozen-lockfile`, the pack, or the `release-publish-rehearsal` hand-off that must show provenance on) | the publish path cannot run, and it is the one path that cannot be re-run |
 | a fleet install fails on a machine whose lockfile and manifests AGREE (`corepack pnpm install --frozen-lockfile` exits non-zero on the lab or a Windows worker for a reason other than the lockfile refusal below) | the fleet cannot be brought to the commit CI tested |
 
