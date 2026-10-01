@@ -86,7 +86,7 @@ import { tapShadowReads } from "./shadow-reads.mjs"; // #2849
 import { armedFromApi, openPullRequestsQueryArgs } from "./auto-arm-sweep.mjs";
 import { armabilityOf, holdersOf } from "./pr-hold-state.mjs";
 import { REPO } from "./project-identity.mjs";
-import { homeProjectDeclaration } from "./project-config.mjs";
+import { HOME_CHECKOUT, homeProjectDeclaration } from "./project-config.mjs";
 import { CAUSES, JUDGMENT_CAUSES, START_CAUSES } from "./cause-declaration.mjs";
 // #2619 (child 3d of #69): the rest of this file's vocabulary -- `backlog`, `needs:chairman`,
 // `out-of-release`, `blocked`, the `lane:`/`session:` prefixes and `lane:any`.
@@ -2906,8 +2906,8 @@ export function claimStallsNow(rows, claimedComments, prs, { tick = claimStallTi
 /** @param {string[]} args */
 const systemctlRun = (args) => execFileSync("systemctl", args, { encoding: "utf8", timeout: 10_000 });
 
-/** The checkout this file runs from: where `../wt-<row>` claim records are resolved against. */
-const REPO_CHECKOUT = fileURLToPath(new URL("../../..", import.meta.url));
+/** The project checkout this tool serves (`HOME_CHECKOUT`, not `src` up three): where `../wt-<row>` claim records are resolved against. */
+export const REPO_CHECKOUT = HOME_CHECKOUT;
 
 /**
  * AN EPIC WITH NO CHILDREN IS NOT A CONTAINER -- IT IS WORK NOBODY HAS FILED.
