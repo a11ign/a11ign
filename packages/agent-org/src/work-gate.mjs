@@ -100,7 +100,9 @@ import { diskHeadroom, MIN_FREE_FRACTION } from "./disk-headroom.mjs";
 // #2470: A CLAIM THAT DOES NOT MOVE. A leaf, like every import above, so the gate keeps the property its own header states.
 import { STALL_STATE_FILE, claimFactsFrom, readClaim, claimStalledOrders, nextStallState, readStallState,
   writeStallState, readHerdrRestart, gitRun, pathExists, statMtime, nudgeKey, nudgeDeliveredAt,
-  claimRecordOf } from "./claim-stall.mjs";
+  claimRecordOf, KEPT_CLAIMS_FILE, readJsonObject, writeJsonObject } from "./claim-stall.mjs";
+// #2845: WHO STAMPED A WORKTREE -- the reading a refused claim names. Imports only `node:*` and `lib/`, like the rest.
+import { worktreeOwner } from "./worktree-owner.mjs";
 // #2747: WHETHER A CLAIM'S SESSION STILL EXISTS AT ALL -- a DIFFERENT question from "who is free" (line 26-29
 // above): that is routing, `wake.mjs`'s job, and stays out of this file. This is a fact the STALL reading needs
 // (a claim held by nobody is not a stall to be nudged), read the same seamed way `readHerdrRestart` already reads
@@ -4055,6 +4057,139 @@ function rowOrders(unclaimed) {
   return orders;
 }
 
+// --- #2845: A READY ROW THE CLAIM REFUSES, TICK AFTER TICK -------------------------------------------------------------------
+//
+// MEASURED 2026-10-01 from `a11ign-work-tick.service`'s journal: #2824 was offered every tick for 7.5 hours and refused at the
+// claim every time (`--worktree=../wt-2824 ALREADY EXISTS`) -- 211 `UNDELIVERED` lines, and `product-manager` was never
+// woken, because `ready-queue-empty` fires only on an EMPTY pool and the pool held that one row. A refusal that only logs
+// is read by nobody. THE GATE CANNOT SEE THE SPAWNER'S REFUSAL (a derived cause is not in the ledger and `wake.mjs` prints
+// it to stderr), so it asks the claim's own question itself and keeps its own streak: not a new "everyone is idle" probe, which
+// would have fired on a legitimately empty org too.
+
+/**
+ * N, THE TICKS A REFUSAL MUST REPEAT BEFORE IT IS REPORTED: 15, which is about 30 minutes at the tick's 2-minute cadence (the
+ * 211 lines over 7.5 hours above are ~28 a tick-hour). Long enough that the ordinary transient -- a claim that has just
+ * been declined and whose tree is on its way out, a release whose kept tree is about to be adopted -- clears first; short
+ * enough that a stuck row costs half an hour rather than the 7.5 it did.
+ */
+export const UNCLAIMABLE_AFTER_TICKS = 15;
+
+/** The streak memory, beside `claim-stalls.json` and the wake ledger: `{ "<row>": { reason, ticks } }`. */
+export const CLAIM_REFUSALS_FILE = "claim-refusals.json";
+
+/**
+ * The refusal the claim would give this row for a reason that does NOT depend on who claims: its target worktree already
+ * exists. The words are `row-claim.mjs`'s `worktreeTargetReason`, which this file cannot import (`row-claim` imports
+ * `wake`, which imports this), so a test pins the two to the same text. WHAT IT DOES NOT PREDICT: the exact-branch and
+ * origin-branch refusals (the second is `rowBranchOrders`' already) -- a row refused for one of those is not reported
+ * here, and says so by being offered without ever being reported.
+ *
+ * A TREE A RELEASE KEPT FOR THIS ROW IS NOT A REFUSAL: the spawner adopts it (`--adopt`, #2470), so the claim lands.
+ *
+ * @param {{ number: number }} row
+ * @param {{ worktreesDir: string, kept?: Record<string, { worktree?: string }>, exists?: (path: string) => boolean,
+ *   owner?: typeof worktreeOwner }} deps
+ * @returns {string | null}
+ */
+export function claimRefusalOf(row, { worktreesDir, kept = {}, exists = existsSync, owner = worktreeOwner }) {
+  const keptTree = kept[String(row.number)]?.worktree;
+  if (keptTree !== undefined && exists(keptTree)) return null;
+  const path = join(worktreesDir, `wt-${row.number}`);
+  if (!exists(path)) return null;
+  const who = owner(path);
+  return `--worktree=../wt-${row.number} ALREADY EXISTS, ${who ? `stamped by \`${who}\`` : "UNSTAMPED (nobody recorded an owner, which is not the same as free)"}. `
+    + "Refusing before any write: a claim that went on would act inside a tree it did not create.";
+}
+
+/**
+ * The streaks after one more tick. KEYED ON THE ROW AND THE REFUSAL TEXT: the same refusal extends the streak, a CHANGED
+ * one starts it again at 1, and a row with no refusal this tick (claimed, withdrawn, or its tree gone) is simply not carried.
+ * @param {Record<string, { reason: string, ticks: number }>} before
+ * @param {Record<string, string | null>} readings row -> this tick's refusal, or `null` for none
+ * @returns {Record<string, { reason: string, ticks: number }>}
+ */
+export function nextRefusalStreaks(before, readings) {
+  /** @type {Record<string, { reason: string, ticks: number }>} */
+  const after = {};
+  for (const [row, reason] of Object.entries(readings)) {
+    if (reason === null) continue;
+    after[row] = { reason, ticks: before[row]?.reason === reason ? before[row].ticks + 1 : 1 };
+  }
+  return after;
+}
+
+/**
+ * THE WHOLE OF THIS CAUSE'S MEMORY FOR ONE TICK: read each offered row's refusal, advance the streaks on disk, and return them.
+ * NEVER THROWS, and says so on stderr: a broken detector must not stop the orders behind it, and it returns NO streaks rather
+ * than stale ones, so nothing is reported on a tick that could not be read.
+ * @param {any[]} offerable the rows `partitionUnclaimed` judged offerable this tick
+ * @param {{ stateDir?: string, worktreesDir?: string, log?: (line: string) => void, exists?: (path: string) => boolean,
+ *   owner?: typeof worktreeOwner }} [host] every one a seam
+ * @returns {Record<string, { reason: string, ticks: number }>}
+ */
+export function claimRefusalStreaksNow(offerable, { stateDir = REVIEWER_STATE_DIR, worktreesDir = dirname(REPO_CHECKOUT),
+  log = (line) => process.stderr.write(line), ...seams } = {}) {
+  try {
+    const path = `${stateDir}/${CLAIM_REFUSALS_FILE}`;
+    const before = readJsonObject(path);
+    const kept = readJsonObject(`${stateDir}/${KEPT_CLAIMS_FILE}`);
+    /** @type {Record<string, string | null>} */
+    const readings = {};
+    for (const row of offerable) readings[subjectRef(row.repoKey, row.number)] = claimRefusalOf(row, { worktreesDir, kept, ...seams });
+    const after = nextRefusalStreaks(before, readings);
+    if (JSON.stringify(after) !== JSON.stringify(before)) writeJsonObject(path, after);
+    return after;
+  } catch (/** @type {any} */ err) {
+    log(`claim-refusals: could not run (${String(err?.message ?? err).split("\n")[0]}) -- no ready-row-unclaimable order this tick.\n`);
+    return {};
+  }
+}
+
+/**
+ * `claimRefusalStreaksNow` over the rows `decide` will OFFER -- the same `partitionUnclaimed` reading, so the streaks advance on
+ * those rows and on no others (a row shelved for B4 or a branch on `origin` is not being refused by the claim, it is not offered).
+ * @param {Parameters<typeof partitionUnclaimed>[0]} rows @param {Parameters<typeof partitionUnclaimed>[1]} prFiles
+ * @param {Parameters<typeof partitionUnclaimed>[2]} options
+ */
+function offeredRefusalStreaks(rows, prFiles, options) {
+  return claimRefusalStreaksNow(partitionUnclaimed(rows, prFiles, options).offerable);
+}
+
+/**
+ * One order to `product-manager` per offered row whose claim has been refused `UNCLAIMABLE_AFTER_TICKS` ticks running, QUOTING
+ * the refusal. THE DISCRIMINATOR CARRIES THE REFUSAL'S DIGEST, which is what `emptyShelfOrder`'s count is for it: the order
+ * stops repeating while the answer is unchanged, and a refusal that changes (a different owner stamped the tree) is a new
+ * question and re-fires. It stops altogether when the row is claimed or leaves the shelf, because `offerable` no longer holds it.
+ * `streaks` ABSENT MEANS NOT ASKED and carries no default here, for `rowBranches`'s reason: `decide` sits on its complexity limit.
+ *
+ * @param {any[]} offerable @param {Record<string, { reason: string, ticks: number }> | undefined} streaks
+ * @returns {{session: string, cause: string, subject: string, discriminator: string, prompt: string, causeKey: string}[]}
+ */
+export function unclaimableRowOrders(offerable, streaks) {
+  return offerable.flatMap((row) => {
+    const ref = subjectRef(row.repoKey, row.number);
+    const seen = streaks?.[ref];
+    if (seen === undefined || seen.ticks < UNCLAIMABLE_AFTER_TICKS) return [];
+    const discriminator = `${ref}-${digestOf(seen.reason)}`;
+    return [{
+      session: "product-manager",
+      cause: "ready-row-unclaimable",
+      subject: `row-${ref}`,
+      discriminator,
+      prompt: `Ready row ${subjectMention(row)} CANNOT BE CLAIMED: the gate has offered it to the engineers and the claim has `
+        + `refused it on ${seen.ticks} consecutive ticks. The refusal, quoted:\n\n> ${seen.reason}\n\n`
+        + "Nobody can act on this but whoever stocks the queue, and nothing else will tell you: an offer the claim refuses is "
+        + "logged and retried, and `ready-queue-empty` stays silent while the row sits in the pool.\n"
+        + "Find out whose tree it is (`npm run worktree:whose -- <path>`) and whether that session still holds the row. A "
+        + "live holder whose row lost its claim label needs the label back; a leftover tree whose work is merged and clean "
+        + "goes with `npm run worktrees:prune` (never `rm -rf`), which names and leaves any dirty one; a tree with unpushed "
+        + "work is that session's to finish. If none of that fits, take the row off the shelf (`blocked`, with what would "
+        + "clear it) so the engineers stop being offered it.",
+      causeKey: `product-manager/ready-row-unclaimable/${discriminator}`,
+    }];
+  }).slice(0, MAX_ROW_ORDERS_PER_TICK);
+}
+
 /**
  * A READY ROW WHOSE WORK IS ALREADY ON `origin`, SAID OUT LOUD -- #2031.
  *
@@ -4808,7 +4943,8 @@ export function performActions(orders, run = defaultRun, log = (line) => process
  *           claimStalls?: import("./claim-stall.mjs").StallOrder[], offBoard?: BoardFacts[] | null,
  *           callCountSignals?: { row: number, session: string, calls: number }[],
  *           bareAnswerLabels?: ReturnType<typeof bareAnswerLabelOrders>,
- *           labJobs?: import("./work-gate/lab-job-orders.mjs").LabJobRecord[] | null }} state
+ *           labJobs?: import("./work-gate/lab-job-orders.mjs").LabJobRecord[] | null,
+ *           claimRefusals?: Record<string, { reason: string, ticks: number }> }} state
  *        `claimStalls` is `claimStallTick`'s orders (#2470): a nudge to a holder whose claim has not moved, or a release
  *        `wake.mjs` performs. OMITTED MEANS NONE.
  *        `required` is the checks that can block a merge (`requiredCheckNames`), or `null` for
@@ -4863,12 +4999,14 @@ export function performActions(orders, run = defaultRun, log = (line) => process
  *        building them means a per-row timeline call `decide` itself must not make. OMITTED MEANS NONE,
  *        and it carries no `= []` default for `rowBranches`'s reason: `decide` sits exactly on its limit
  *        of 15, and `bareAnswerOrdersOrNone` carries the `?? []` instead.
+ *        `claimRefusals` is `claimRefusalStreaksNow(offerable)` (#2845) -- each offered row's consecutive-refusal streak. OMITTED MEANS
+ *        NOT ASKED, so no `ready-row-unclaimable` order, and `unclaimableRowOrders` carries the absence handling for `rowBranches`'s reason.
  * @returns {{session: string, cause: string, subject: string, discriminator: string,
  *            prompt: string, causeKey: string}[]}
  */
 export function decide({ prs, readyRows, promotableRows = [], chairmanBlocked = [], prFiles = [],
   drain = false, required = null, epics = [], answerOwed = [], openRows = [], unarmed = null,
-  claimedComments = [], rowBranches, hostDrift, primaryDrift, closings, trunkRed, baseTip, claimStalls, offBoard, key, repo, callCountSignals, bareAnswerLabels, labJobs }) {
+  claimedComments = [], rowBranches, hostDrift, primaryDrift, closings, trunkRed, baseTip, claimStalls, offBoard, key, repo, callCountSignals, bareAnswerLabels, labJobs, claimRefusals }) {
   // FIRST, BEFORE EVERY OTHER CAUSE (#2356): a red `main` outranks even `answer-owed` -- see `trunkRedOrders`.
   // `answer-owed` says another session is ALREADY STOPPED waiting on them, which outranks any standing question.
   const orders = [...trunkRedOrders(trunkRed), ...primaryStaleOrders(primaryDrift), ...answerOrders(answerOwed)]; // #2781: a stale primary next, every order below is given from its code
@@ -4894,7 +5032,7 @@ export function decide({ prs, readyRows, promotableRows = [], chairmanBlocked = 
   // causes above use: work that already EXISTS outranks work nobody has started.
   const { offerable, blocked } = partitionUnclaimed(readyRows, prFiles, { rowBranches, openRows });
   orders.push(...rowBranchOrders(readyRows, rowBranches), ...incompleteRowOrders(readyRows)); // #2791
-  orders.push(...rowOrders(offerable));
+  orders.push(...rowOrders(offerable), ...unclaimableRowOrders(offerable, claimRefusals)); // #2845: the offer, and its refusal
 
   // #2139: AHEAD OF BOTH BACKLOG SURVEYS AND BEHIND EVERY OFFER, because it is neither. It names ONE row
   // and the exact set that cleared, which outranks `ready-queue-empty` and `lane-backlog-unpromoted`
@@ -5807,7 +5945,7 @@ function main() {
     // #1969: CONDITIONAL, and the condition is answered for free from the list already in hand.
     // `shouldBeMerging` reads `openPrs`; only if it finds a green, unheld, non-draft PR is the
     // merge-queue call made at all.
-    unarmed: readUnarmed(shouldBeMerging(openPrs, required)), rowBranches,
+    unarmed: readUnarmed(shouldBeMerging(openPrs, required)), rowBranches, claimRefusals: offeredRefusalStreaks(rows, prFiles, { rowBranches, openRows: allOpen }),
     // #2174: A LOCAL READ, NOT AN API ONE -- a `readdir`, some `readFileSync` and one `systemctl` spawn
     // per shipped timer. It adds nothing to `GH_READS` and cannot be refused by an exhausted pool, which
     // is what lets the detection exist at all.
