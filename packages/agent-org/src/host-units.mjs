@@ -45,8 +45,8 @@ import { HostConfigRefusal, TEMPLATE_SUFFIX, homeHostConfig, leadsWorkspacesText
   renderTemplate, renderedName, templateValues } from "./host-config.mjs";
 
 /**
- * Where the TOOL keeps the units and scripts it ships: three unit templates (each a service and a timer), the board-report
- * dispatcher and the `gh` routing wrapper (#2620, child 3f of #69).
+ * Where the TOOL keeps the units and scripts it ships: four unit templates (each a service and a timer; the fourth, the shadow window's, is #2867), the
+ * board-report dispatcher and the `gh` routing wrapper (#2620, child 3f of #69).
  */
 export const SHIPPED_DIR = fileURLToPath(new URL("../host/", import.meta.url));
 
@@ -64,7 +64,7 @@ export const PROJECT_UNITS_DIR = join(REPO_ROOT, ".agent-org/units");
 // SEVENTEEN entries were in `packages/agent-org/host/` before this row, and every one is now classified as exactly one of three
 // things, so an eighteenth that is none of them is REFUSED (`unclassifiedEntries`) and not adopted by whichever glob it happens to
 // match:
-//   the TOOL's     eight files that stay in `host/`: the three unit templates (service + timer), the dispatcher, the `gh` wrapper;
+//   the TOOL's     eight files that stay in `host/`: the three unit templates (service + timer), the dispatcher, the `gh` wrapper -- TEN since #2867's shadow-window pair;
 //   the PROJECT's  eight that moved to `.agent-org/units/` -- the project's declaration (`units.own`) names them, because the tool
 //                  cannot name a11ign's units in its own source without being a11ign's tool;
 //   HOST DATA      one, `gh-leads-workspaces.txt`, which is now `host.json`'s `gh.leadsWorkspaces` and is rendered, not shipped.
@@ -73,6 +73,8 @@ export const PROJECT_UNITS_DIR = join(REPO_ROOT, ".agent-org/units");
 export const TOOL_ENTRIES = Object.freeze([
   "board-report-dispatch.sh", "board-report.service.in", "board-report.timer.in", "gh",
   "work-tick.service.in", "work-tick.timer.in", "worktree-prune.service.in", "worktree-prune.timer.in",
+  // #2867: the shadow window's own pair, installed BESIDE the work-tick unit and sharing none of its text.
+  "shadow-window.service.in", "shadow-window.timer.in",
 ]);
 
 /** The host-data entry that is no longer a file, and where its content lives now. */
