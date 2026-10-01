@@ -1,0 +1,5 @@
+---
+"@a11ign/agent-org": patch
+---
+
+**An unlabelled red pull request is addressed to the live session that holds the row it closes, not to `product-manager` (#2882).** #2880 (`Closes #2875`) was opened before its worktree was stamped, so it carried no `session:` label while row #2875 carried `session:worker-2875`; `failingChecksOrder` read the PR's labels only, and the `pr-checks-failing` order went to `product-manager` six times in three hours until `repeating-lines` flagged it. `withClosingRowOwners` now attaches `rowOwner` to a PR with no `session:` label of its own when the rows in its `closingIssuesReferences` that still hold a claim (`in-progress` beside `session:`) name exactly one session, from the open rows the tick already read, so it costs no call. `failingChecksOrder` and `notConvincedOrder` route on the PR's own label first and the row's second, and the causeKey moves with the session. A PR whose rows name nobody, a released claim, two different sessions, or no read at all keeps `product-manager`, exactly as before.
