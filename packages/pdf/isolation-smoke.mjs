@@ -4,7 +4,7 @@
 // prove nothing.
 import assert from "node:assert/strict";
 
-import { looksLikePdfUrl, pdfFindingsFromBytes, scanPdfTagTree } from "@a11ign/pdf";
+import { looksLikePdfUrl, pdfFindingsFromBytes, scanPdfTagTree } from "@a11ign/documents";
 
 // The `.` subpath's runtime shape, proven by actually calling every export -- an entry point that does not
 // resolve is one of the failures this gate exists to catch, and it is invisible to a workspace install.
@@ -39,5 +39,5 @@ pdf += `trailer\n<< /Size ${objs.length} /Root 1 0 R >>\nstartxref\n${xrefOffset
 const findings = await pdfFindingsFromBytes(new Uint8Array(Buffer.from(pdf, "latin1")));
 assert.deepEqual(findings.map((f) => f.rule), ["pdf-untagged", "pdf-missing-lang"]);
 
-console.log(`@a11ign/pdf works when installed: ${findings.length} finding(s) from an untagged fixture, `
+console.log(`@a11ign/documents works when installed: ${findings.length} finding(s) from an untagged fixture, `
   + "3 exports resolve");
