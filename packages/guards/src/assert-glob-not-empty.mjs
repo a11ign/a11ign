@@ -3,7 +3,7 @@
 // command: refuse a test glob that resolves to zero files instead of passing silently
 // `npm test` PASSES, exit 0, if the glob it hands to `tsx --test` resolves to zero files (#355) --
 //
-//   $ npx tsx --test "packages/lab/src/packaging/nothing-matches-*.test.ts"; echo "EXIT=$?"
+//   $ pnpm exec tsx --test "packages/lab/src/packaging/nothing-matches-*.test.ts"; echo "EXIT=$?"
 //   EXIT=0    ℹ tests 0  ℹ pass 0  ℹ fail 0
 //
 // A LITERAL missing path fails correctly (`tsx --test` errors "Could not find ..."); a QUOTED GLOB that
@@ -28,7 +28,7 @@
 // `--run` EXECUTES `tsx --test` on the SAME `<glob...>` ARGV THIS PROCESS PARSED, rather than checking one
 // copy of the pattern and leaving the caller to write a second copy for the real invocation. A `--run`-less
 // version of this shipped first and looked complete: `test:ts` read
-// `npm run test:glob-check && tsx --test "<pattern>"`, the SAME literal typed twice in one JSON string.
+// `pnpm run test:glob-check && tsx --test "<pattern>"`, the SAME literal typed twice in one JSON string.
 // Mutating ONLY the second copy -- exactly the shape of an ordinary future edit, someone widening the real
 // glob and not noticing the separate check line -- passed `test:glob-check` (which still validated the
 // FIRST, unmutated copy) and then silently zero-test-passed the actual suite, reproducing #355 through the
@@ -37,7 +37,7 @@
 import { globSync, realpathSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { refuseUnknownFlags, flagValue } from "@a11ign/worker-fleet/cli-flags";
-import { npmCliInvocation } from "../../../scripts/npm-cli-executable.mjs";
+import { pnpmCliInvocation } from "../../../scripts/npm-cli-executable.mjs";
 import { suiteStartVerdict } from "./worktree-resolution.mjs";
 import { runUnderCap } from "./test-memory-cap.mjs";
 
@@ -110,7 +110,7 @@ export const RSTEST_CONFIG = fileURLToPath(new URL("../../../scripts/rstest/rste
  * selected files needs, and a pattern outside the config's include still runs (measured on `packages/*` + `/nightly`).
  * `--test-concurrency` maps to rstest's worker count, the nearest equivalent of node:test's file concurrency.
  * @param {{ runner: string, patterns: string[], concurrency?: string }} request
- * @returns {string[]} the arguments for `npx`
+ * @returns {string[]} the arguments for `pnpm exec`
  */
 export function runnerInvocation({ runner, patterns, concurrency }) {
   // AN EMPTY PATTERN LIST NEVER REACHES A RUNNER. `rstest run` with no `--include` falls back to the config's include,
@@ -198,10 +198,10 @@ function main() {
   // normal, top-level test run regardless of what process happened to launch this script.
   const env = { ...process.env };
   delete env.NODE_TEST_CONTEXT;
-  const npx = npmCliInvocation("npx", args);
+  const pnpm = pnpmCliInvocation(["exec", ...args]);
   // #2507: THE CHOKE POINT. `test:ts`, `test:org`, `test:all`, `test:changed` and `coverage`'s floor all reach a runner
   // from this one line, so this is where a runaway `node` is capped to its own scope. It prints which path it took.
-  process.exitCode = runUnderCap({ name: args[0], command: npx.command, args: npx.args, env });
+  process.exitCode = runUnderCap({ name: args[0], command: pnpm.command, args: pnpm.args, env });
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {

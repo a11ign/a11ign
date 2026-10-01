@@ -24,6 +24,8 @@ import { spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+// STAYS npm for the `npm` calls (`no-npm-spawn.test.ts` pins this file by name): trusted publishing is bound to npm's OIDC, and
+// `pnpm publish` shells out to `npm publish`, so the rehearsal must read the npm the publish would use.
 import { npmCliInvocation, pnpmCliInvocation } from "./npm-cli-executable.mjs";
 import { publishedManifests } from "./manifest-repository-check.mjs";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
