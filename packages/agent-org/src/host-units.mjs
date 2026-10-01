@@ -600,10 +600,11 @@ export function shellSpawnsGh(text) {
 
 /**
  * `npm run <script>` SPAWNED FROM CODE, which no import edge carries.
- * `corpus-release-nightly.mjs` reaches `gh` only through `npmCliInvocation("npm", ["run",
- * "corpus:release"])` -- an import-closure walk alone reports it clean, and it is not.
+ * `corpus-release-nightly.mjs` reaches `gh` only through `pnpmCliInvocation(["run", "corpus:release", ...])`
+ * (`npmCliInvocation("npm", ["run", ...])` before #2889, and still the spelling in this package) -- an
+ * import-closure walk alone reports it clean, and it is not. A `--silent` between `run` and the script is not handled.
  */
-const RUNS_NPM_SCRIPT = /["'`]npm["'`]\s*,\s*\[\s*["'`]run["'`]\s*,\s*["'`]([^"'`]+)["'`]/g;
+const RUNS_NPM_SCRIPT = /(?:["'`]npm["'`]\s*,\s*|pnpmCliInvocation\(\s*)\[\s*["'`]run["'`]\s*,\s*["'`]([^"'`]+)["'`]/g;
 
 /**
  * DOES STARTING THIS FILE REACH A `gh` SPAWN? Two edge kinds, because the repository uses both: local
