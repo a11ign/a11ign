@@ -13,7 +13,7 @@
 #                  installed sibling does not satisfy, a `--version` that disagrees, an entry point that will not
 #                  import. Says which layers it did NOT check. The decisions are pure and tested without a network.
 #   `combination`  (windows-2022)     installs into a clean directory AGAIN and runs `npx a11ign <url>` from it, with
-#                  a worker started from THE INSTALLED `@a11ign/nvda-worker`, the scorer's requirements and encoder
+#                  a worker started from THE INSTALLED `@a11ign/screenreader-worker`, the scorer's requirements and encoder
 #                  fetch taken from THE INSTALLED `@a11ign/scorer`, and the foreground-lock script from THE INSTALLED
 #                  `@a11ign/worker-fleet`. This is `ceo`'s Acceptance line, and it is what makes this a combination
 #                  gate and not an install check: every layer here is the published one, at the published version.
@@ -86,7 +86,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
 
-      # `--require-imports`: on THIS platform `@a11ign/nvda-worker` must import, so a throw at evaluation is a
+      # `--require-imports`: on THIS platform `@a11ign/screenreader-worker` must import, so a throw at evaluation is a
       # refusal here and only "unchecked" on the ubuntu job above.
       - name: Install into a clean directory, and refuse what a consumer could not run
         shell: bash
@@ -94,7 +94,7 @@ jobs:
 
       # The pinned installer, from this repository's own manifest so the two cannot drift. It runs FROM the clean
       # directory because it reads `node_modules/@guidepup/guidepup/manifest.json` for the NVDA build to fetch, and
-      # that file is the one the PUBLISHED `@a11ign/nvda-worker` brought.
+      # that file is the one the PUBLISHED `@a11ign/screenreader-worker` brought.
       - name: Set up NVDA
         shell: bash
         working-directory: ${{ runner.temp }}/clean
@@ -155,7 +155,7 @@ jobs:
             || { echo "::error::the published @a11ign/scorer carries no trained model." >&2; exit 1; }
 
       # `ceo`'s Acceptance line, verbatim: `npx a11ign <url>`, from the clean install, against the page the Action's own
-      # smoke uses (W3C publishes it WITH a conformance claim). The worker is the INSTALLED `@a11ign/nvda-worker`.
+      # smoke uses (W3C publishes it WITH a conformance claim). The worker is the INSTALLED `@a11ign/screenreader-worker`.
       - name: npx a11ign <url>, from the clean install
         id: run
         shell: bash
@@ -165,7 +165,7 @@ jobs:
           A11Y_PYTHON: python
           PAGE: https://www.w3.org/WAI/demos/bad/after/survey.html
         run: |
-          node node_modules/@a11ign/nvda-worker/src/server.mjs > "$RUNNER_TEMP/worker.log" 2> "$RUNNER_TEMP/worker.err" &
+          node node_modules/@a11ign/screenreader-worker/src/server.mjs > "$RUNNER_TEMP/worker.log" 2> "$RUNNER_TEMP/worker.err" &
           worker=$!
           trap 'kill $worker 2>/dev/null || true' EXIT
 
@@ -178,7 +178,7 @@ jobs:
           if [ -z "$ready" ]; then
             echo "--- worker stdout ---"; cat "$RUNNER_TEMP/worker.log" 2>/dev/null || true
             echo "--- worker stderr ---"; cat "$RUNNER_TEMP/worker.err" 2>/dev/null || true
-            echo "::error::the INSTALLED @a11ign/nvda-worker never became ready. Last /health: $health" >&2
+            echo "::error::the INSTALLED @a11ign/screenreader-worker never became ready. Last /health: $health" >&2
             exit 1
           fi
 

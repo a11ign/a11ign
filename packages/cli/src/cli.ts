@@ -1297,7 +1297,7 @@ type FormStateRequest = Omit<CaptureFormState, "state"> & { state: string };
 // The SHARED ceiling, imported rather than recomputed. This was
 // `CAPTURE_HARD_TIMEOUT_DEFAULT_MS + 40_000`, which was 560_000 at the time -- byte for byte the value
 // `worker-http.mjs` already exported, arrived at a second way and paid for with an import of
-// `@a11ign/nvda-worker`. That package is NOT a dependency of this one (isolation-smoke.mjs asserts
+// `@a11ign/screenreader-worker`. That package is NOT a dependency of this one (isolation-smoke.mjs asserts
 // it must not be, "the CLI speaks HTTP to a worker"), so the published bundle imported something npm
 // never installed -- and it reached guidepup, which throws at import wherever there is no screen reader.
 // Found by `no-win32-imports.test.ts`; `budget-ladder.test.ts` already treats an unresolvable ceiling as

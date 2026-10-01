@@ -2,9 +2,9 @@
  * Every fault code the worker can report must have remediation text here, or a stranger meeting
  * `(fault: screen-reader-mute)` learns nothing from it — see this file's own header for the incident.
  *
- * DISCOVERS the fault codes from `@a11ign/nvda-worker/capture-faults`'s `FAULT`, BY PACKAGE NAME (#2613): a relative
+ * DISCOVERS the fault codes from `@a11ign/screenreader-worker/capture-faults`'s `FAULT`, BY PACKAGE NAME (#2613): a relative
  * `../../nvda-worker/src/` import was true in this tree and nowhere else, and the layer is to leave for its own repository.
- * `@a11ign/nvda-worker` is still deliberately not a RUNTIME dependency of this package (see `fault-remediation.ts`'s header);
+ * `@a11ign/screenreader-worker` is still deliberately not a RUNTIME dependency of this package (see `fault-remediation.ts`'s header);
  * a TEST names it because the fault codes are an agreement between the two. The package's `exports` map points at `src/`, not
  * a `dist`, so the name reads the same source this checkout is testing whatever any package's build state (docs/backlog.md,
  * issue #28's shape, the reason this once used a relative path).
@@ -25,7 +25,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { FAULT } from "@a11ign/nvda-worker/capture-faults";
+import { FAULT } from "@a11ign/screenreader-worker/capture-faults";
 import { AUTH_FAULTS } from "./auth/auth-faults.js";
 import {
   FAULT_REMEDIATION, remediationFor, formatFaultMessage, formatDoubtMessage, formatEarlyContainmentNotice,

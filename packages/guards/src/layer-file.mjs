@@ -5,7 +5,7 @@
 // A test that asserts something about `nvda-worker`'s SOURCE TEXT (a `.mjs` it cannot import because guidepup throws at
 // module load without a screen reader, a `.cmd`, a `package.json`) used to spell `../../nvda-worker/src/x.mjs`. That path
 // is true in this tree and nowhere else: when the layer leaves for its own repository the test is red for a reason that
-// has nothing to do with what it checks. `layerFile("@a11ign/nvda-worker", "src/x.mjs")` names the PACKAGE, and node's own
+// has nothing to do with what it checks. `layerFile("@a11ign/screenreader-worker", "src/x.mjs")` names the PACKAGE, and node's own
 // lookup decides where it is.
 //
 // THREE REFUSALS, each named, because each is a way for a resolver to answer a question it should not:
@@ -66,7 +66,7 @@ export function isPublished(manifest, rel) {
 
 /**
  * The absolute path of `rel` inside installed package `name`.
- * @param {string} name package name, as an import would spell it: `@a11ign/nvda-worker`
+ * @param {string} name package name, as an import would spell it: `@a11ign/screenreader-worker`
  * @param {string} rel posix path from the package root: `src/capture-core.mjs`
  * @param {{ from?: string }} [options] where to start looking; the caller's cwd by default
  * @returns {string}
