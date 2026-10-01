@@ -155,7 +155,7 @@ jobs:
             || { echo "::error::the published @a11ign/scorer carries no trained model." >&2; exit 1; }
 
       # `ceo`'s Acceptance line, verbatim: `npx a11ign <url>`, from the clean install, against the page the Action's own
-      # smoke uses (W3C publishes it WITH a conformance claim). The worker is the INSTALLED `@a11ign/screenreader-worker`.
+      # smoke uses (W3C publishes it WITH a conformance claim). The worker is the INSTALLED worker package (whichever name the install carries).
       - name: npx a11ign <url>, from the clean install
         id: run
         shell: bash
@@ -165,7 +165,17 @@ jobs:
           A11Y_PYTHON: python
           PAGE: https://www.w3.org/WAI/demos/bad/after/survey.html
         run: |
-          node node_modules/@a11ign/screenreader-worker/src/server.mjs > "$RUNNER_TEMP/worker.log" 2> "$RUNNER_TEMP/worker.err" &
+          # BEFORE the first publish of the renamed package (#2885) `latest` still carries the worker under its old name,
+          # so start whichever directory the install actually has. A follow-up drops the fallback once `latest` is the new name.
+          server=""
+          for d in screenreader-worker nvda-worker; do
+            if [ -f "node_modules/@a11ign/$d/src/server.mjs" ]; then server="node_modules/@a11ign/$d/src/server.mjs"; break; fi
+          done
+          if [ -z "$server" ]; then
+            echo "::error::the clean install carries no worker package: neither node_modules/@a11ign/screenreader-worker nor its old-name directory has src/server.mjs." >&2
+            exit 1
+          fi
+          node "$server" > "$RUNNER_TEMP/worker.log" 2> "$RUNNER_TEMP/worker.err" &
           worker=$!
           trap 'kill $worker 2>/dev/null || true' EXIT
 
@@ -178,7 +188,7 @@ jobs:
           if [ -z "$ready" ]; then
             echo "--- worker stdout ---"; cat "$RUNNER_TEMP/worker.log" 2>/dev/null || true
             echo "--- worker stderr ---"; cat "$RUNNER_TEMP/worker.err" 2>/dev/null || true
-            echo "::error::the INSTALLED @a11ign/screenreader-worker never became ready. Last /health: $health" >&2
+            echo "::error::the INSTALLED worker package ($server) never became ready. Last /health: $health" >&2
             exit 1
           fi
 
