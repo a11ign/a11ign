@@ -92,7 +92,7 @@ export function rootPrepareBuildsEverything(repoRoot) {
   const pkg = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8"));
   const prepare = pkg.scripts?.prepare ?? "";
   const build = pkg.scripts?.build ?? "";
-  return Boolean(build) && (prepare.includes("npm run build") || prepare.includes(build));
+  return Boolean(build) && (prepare.includes("pnpm run build") || prepare.includes(build));
 }
 
 /** Which packages are imported by their BARE root specifier (`from "@a11ign/name"`, no subpath)

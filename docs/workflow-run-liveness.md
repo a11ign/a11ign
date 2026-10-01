@@ -2,7 +2,7 @@
 
 Three guards prove CI is correctly **configured**: `board-schedule.test.ts` (the crons exist and are
 gated on London's clock), `workflow-path-coverage.test.ts` (#70 — every source directory is reachable by
-some filter, and an unfiltered backstop exists), and `npm test` (the code that decides all of this is
+some filter, and an unfiltered backstop exists), and `pnpm test` (the code that decides all of this is
 right). None of them can ask whether a run any of that machinery expected actually **happened**.
 
 Measured 2026-09-06: that gap was silent and real. Two commits reached `main` outside their PR, `ci.yml`
@@ -20,7 +20,7 @@ context that never ran is not a failing check, it is *no check*, and `mergeState
 two apart.
 
 ```bash
-npm run workflow:liveness -- --sha=<commit>   # was the PR that produced this commit actually tested?
+pnpm run workflow:liveness --sha=<commit>   # was the PR that produced this commit actually tested?
 ```
 
 `packages/agent-org/src/workflow-run-liveness.mjs` generalises that into an automatic check for **any commit that has
