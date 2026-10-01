@@ -5610,6 +5610,10 @@ function main() {
   // test drive this entry through PATH stubs without the claim creating `role-<name>` beside the real checkout.
   const hostLayout = layoutUnder(flagValue(process.argv, "worktrees-dir") ?? HOST_REPOS);
 
+  // BEFORE THE QUIET EXIT BELOW, NOT AFTER (#2864, review of 343594ad): the tick that has nothing to deliver is the commonest one, and a record
+  // for a row nobody is offering is only ever reached by a prune that runs on it. It reads no order and delivers nothing.
+  for (const line of pruneGoneKeptClaims(keptClaimsPath(ledgerPath), { primary: hostLayout.primary })) process.stdout.write(`${line}\n`);
+
   const gateOrders = parseOrders(readFileSync(0, "utf8"));
   // A QUEUED ORDER IS WORK EVEN WHEN THE GATE FOUND NONE, and this is the line that makes it so. The
   // common case for a handoff is precisely a quiet gate -- the reviewer is busy reviewing, nothing else
@@ -5630,7 +5634,6 @@ function main() {
   const agents = readAgents();
   if (agents === null) exitCannotAsk(gateOrders.length, handoffs);
   const { orders, failed: releasesNotDone } = performReleases(gateOrders, agents, { ledgerPath, hostLayout });
-  for (const line of pruneGoneKeptClaims(keptClaimsPath(ledgerPath), { primary: hostLayout.primary })) process.stdout.write(`${line}\n`);
 
   const waiting = settleEndedOrders(handoffs, agents, { queuePath, ledgerPath });
   for (const line of backlogReport(handoffBacklog(waiting), agents)) process.stderr.write(line);

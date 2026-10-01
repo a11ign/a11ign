@@ -13,7 +13,7 @@ import { test } from "node:test";
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync, chmodSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, basename } from "node:path";
 import assert from "node:assert/strict";
 import { decide, claimStallTick, claimStallsNow, CAUSES, START_CAUSES, JUDGMENT_CAUSES, GH_READS } from "./work-gate.mjs";
 import { profileFor } from "./worker-profile.mjs";
@@ -21,7 +21,7 @@ import {
   WAKE_TTL_MS, MAX_DELIVERIES, performRelease, spawnClaimer, spawnedPrompt, deliver, consecutiveClean, drainInForce, isReleaseLine,
   cyclesReport, readLedger, deliveryCounts, readLedgerDeliveries, readDeliveredHandoffs, recoverInterruptedWork, recoverableWork,
   queueHandoff, readHandoffs, handoffBatches, recentlyVoidedKeys, sessionMoved, VOIDED, keptClaimsPath, ledgerLine, thrashEscalationPrompt,
-  pruneGoneKeptClaims, readKeptClaims, writeKeptClaims,
+  pruneGoneKeptClaims, readKeptClaims, writeKeptClaims, PRIMARY_CHECKOUT,
 } from "./wake.mjs";
 import {
   claimRecordComment, declineRow, claimWithWorktree, worktreeTargetReason, worktreeFlagsReason,
@@ -1714,4 +1714,31 @@ test("#2864 a record is dropped even when git REFUSES the branch, so the refusal
     assert.deepEqual(readKeptClaims(s.keptPath), {});
     assert.ok(s.branches().includes("agent/unmerged-8"));
   } finally { rmSync(s.root, { recursive: true, force: true }); }
+});
+
+test("#2864 the wake ENTRY prunes a gone tree's kept record on a QUIET tick -- empty stdin, nothing queued -- and a record whose tree exists survives it", () => {
+  const dir = mkdtempSync(join(tmpdir(), "a11y-2864-tick-"));
+  try {
+    // The tick's primary under `--worktrees-dir=<dir>` is `<dir>/<basename of the real primary>`: make THAT a real repo with a merged branch.
+    const primary = join(dir, basename(PRIMARY_CHECKOUT));
+    execFileSync("mkdir", [primary]);
+    const git = (...args: string[]) => execFileSync("git", ["-C", primary, ...args], { env: sandboxGitEnv(), encoding: "utf8" });
+    git("init", "-q", "-b", "main");
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "base");
+    git("branch", "agent/merged-9");
+    const live = join(dir, "live-tree");
+    execFileSync("mkdir", [live]);
+    const record = (branch: string, worktree: string) => ({ worktree, branch, from: "worker-1", at: NOW, why: "merged", dirty: 0, unpushed: 0 });
+    writeFileSync(join(dir, "kept-claims.json"), JSON.stringify({ 9: record("agent/merged-9", join(dir, "gone")), 7: record("agent/live-7", live) }));
+    const tick = () => spawnSync(process.execPath, [WAKE_ENTRY, `--ledger=${join(dir, "wake-ledger")}`, `--worktrees-dir=${dir}`], {
+      input: "", encoding: "utf8", env: { ...process.env, HOME: dir, PATH: process.env.PATH ?? "" } });
+    const ran = tick();
+    assert.equal(ran.status, 0, ran.stdout + ran.stderr);
+    assert.match(ran.stdout, /DROPPED the kept record .*deleted its merged branch agent\/merged-9 \(#9\)/);
+    assert.deepEqual(Object.keys(readKeptClaims(join(dir, "kept-claims.json"))), ["7"]);
+    assert.equal(git("branch", "--list", "agent/merged-9").trim(), "", "the merged leftover branch went with it");
+    // A SECOND quiet tick has nothing to say: the exit is the same and the output is empty.
+    const again = tick();
+    assert.deepEqual([again.status, again.stdout], [0, ""]);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
