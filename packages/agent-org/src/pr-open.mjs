@@ -430,6 +430,21 @@ function landedThenFailedLine({ mode, branch, head, step, message }) {
     + `\`${command}\` once the cause below is gone.\n  ${message.split("\n")[0]}`;
 }
 
+/**
+ * #2929: SAID AT THE MOMENT OF OPENING, because that is the only place every author is certain to be reading. A recap
+ * ended "PR #2925 is open with its test passing" while `acceptance / run` and `gate` were red on that head: the author
+ * had run a subset locally and the claim "passing" was that subset wearing CI's name. The author's turn cannot be held
+ * open to wait for the checks, so the wording is fixed here, before the turn ends. It carries no judgment and changes
+ * no exit code.
+ * @param {{ head: string }} at the short head that was opened
+ * @returns {string}
+ */
+export function ciPendingLine({ head }) {
+  return `pr-open: opened \`${head}\` -- CI has NOT run on it. If a check goes red the gate wakes you with the result; `
+    + `until then your recap must say \`opened, CI pending on ${head}\` and never "passing" until the checks on that head `
+    + `are green. A local run of a subset (a test file, \`test:changed\`) is reported as that subset, not as passing.\n`;
+}
+
 /** @param {unknown} error */
 function messageOf(error) {
   return error instanceof Error ? error.message : String(error);
@@ -466,6 +481,7 @@ export function sendToGitHub(mode, rest,
   /** @type {(args: string[], fallback: string) => string} */
   const fact = (args, fallback) => { try { return git(args) || fallback; } catch { return fallback; } };
   const head = () => fact(["rev-parse", "--short", "HEAD"], "(unknown)");
+  const head8 = () => fact(["rev-parse", "--short=8", "HEAD"], "(unknown)");
   try {
     run(["pr", mode, ...rest]);
   } catch (error) {
@@ -499,6 +515,9 @@ export function sendToGitHub(mode, rest,
         + `author. Apply it by hand: \`gh pr edit <n> --add-label ${args[args.length - 1]}\`.\n`);
     }
   }
+  // #2929: only a create that LANDED and was armed -- the failed create and the failed arm returned above with their
+  // own line, and this one never stands in for either. Last, so it is the line still on screen when the turn ends.
+  if (mode === "create") err(ciPendingLine({ head: head8() }));
   return 0;
 }
 
