@@ -73,6 +73,26 @@ test("CONTROL: another live holder of the row still wins over the author", () =>
   assert.equal(records.find((r) => r.reroutedTo !== undefined && r.dropped === written.id).reroutedTo, "worker-8");
 });
 
+test("CONTROL: an author-only reference does not end the scan -- a LATER reference with another live holder wins", () => {
+  const written = order("reviewer-9", "worker-7", "PR #7 and PR #8 both need a second look");
+  const { out, records, asked } = resolve(written, { live: ["worker-7", "worker-8"], ended: [["reviewer-9", TORN_DOWN]],
+    rows: { 7: { open: true, sessions: ["worker-7"] }, 8: { open: true, sessions: ["worker-8"] } } });
+
+  assert.deepEqual(asked, [7, 8], "the scan went past the author-only reference");
+  assert.deepEqual(out.settled, [written.id]);
+  assert.equal(records.find((r) => r.dropped === written.id).reroutedTo, "worker-8");
+});
+
+test("an author-only reference followed by a reference nobody live holds is still dropped as the author's", () => {
+  const written = order("reviewer-9", "worker-7", "PR #7 and PR #8 both need a second look");
+  const { out, records } = resolve(written, { live: ["worker-7"], ended: [["reviewer-9", TORN_DOWN]],
+    rows: { 7: { open: true, sessions: ["worker-7"] }, 8: { open: false, sessions: [] } } });
+
+  assert.deepEqual(out.settled, [written.id]);
+  assert.equal(records.length, 1);
+  assert.match(records[0].reason, /its own author "worker-7"/);
+});
+
 test("an order for a worker with NO WORKSPACE whose row is CLOSED is dropped with a record", () => {
   const written = order("worker-7", "reviewer-9", "your PR #7 has a review comment");
   const { out, records, asked } = resolve(written, { live: ["ceo"], rows: { 7: { open: false, sessions: [] } } });

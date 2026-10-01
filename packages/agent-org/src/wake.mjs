@@ -2186,7 +2186,7 @@ const MAX_REFS_LOOKED_UP = 3;
  * THE AUTHOR IS NOT AN ADDRESSEE (#2853): an order whose only live holder is the session that WROTE it is `author`,
  * and is dropped -- `worker-2783` wrote an order for `reviewer-2826`, the reviewer ended, and the "holder of #2783"
  * was `worker-2783` itself, so the order was queued back to its author for ever. An author does not need to be told
- * what it wrote; another live holder, when there is one, still wins.
+ * what it wrote; another live holder, on this reference or a LATER one, still wins.
  *
  * @param {{session: string, prompt: string}} order @param {readonly {label: string}[]} agents
  * @param {(ref: number) => {open: boolean, sessions: string[]} | null} holder
@@ -2196,15 +2196,18 @@ const MAX_REFS_LOOKED_UP = 3;
 function readdress(order, agents, holder) {
   const refs = namedRefs(order.prompt).slice(0, MAX_REFS_LOOKED_UP);
   const author = authorOf(order.prompt);
+  /** @type {{author: string, ref: number} | undefined} */
+  let authorOnly;
   for (const ref of refs) {
     const facts = holder(ref);
     if (facts === null) return { unknown: `could not read who holds #${ref}` };
     const live = facts.open ? facts.sessions.filter((s) => s !== order.session && !isAbsent(s, agents)) : [];
     const to = live.find((s) => s !== author);
     if (to !== undefined) return { to, ref };
-    if (live.length > 0) return { author: /** @type {string} */ (author), ref };
+    // ONLY THE AUTHOR HOLDS THIS REFERENCE: remembered, not returned -- a later reference may have another live holder.
+    if (live.length > 0 && authorOnly === undefined) authorOnly = { author: /** @type {string} */ (author), ref };
   }
-  return { none: true, looked: refs };
+  return authorOnly ?? { none: true, looked: refs };
 }
 
 /**
