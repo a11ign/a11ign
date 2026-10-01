@@ -135,7 +135,7 @@ The literature documents several biases in LLM judges. Our exposure:
 ## Honest status of current results
 
 **This section was written 2026-06-26, at n = 5 cases, and was never updated as the fixture set grew.**
-`npm run eval` now runs against **34 labelled fixtures** (`packages/lab/src/eval/fixtures/`) — verified
+`pnpm run eval` now runs against **34 labelled fixtures** (`packages/lab/src/eval/fixtures/`) — verified
 2026-09-05 by counting the tracked files, not re-measured here. The specific "recall 100%, high precision"
 headline below is the ORIGINAL n=5 result and has not been re-run at the current scale in this pass; do not
 read it as today's number. What has not changed, and is still the reason to distrust either number as a
@@ -145,7 +145,7 @@ headline:
 - scoring is still **single-run** (no test-retest interval),
 - there is still **no human-agreement baseline**.
 
-Therefore neither the original n=5 numbers above nor whatever `npm run eval` reports today should be quoted
+Therefore neither the original n=5 numbers above nor whatever `pnpm run eval` reports today should be quoted
 without these caveats. They are evidence that the approach is promising, not that it is validated.
 
 ## Pre-registration: what "trustworthy enough" will mean
@@ -227,13 +227,13 @@ scanners and other tools — a division of labour, not a blind spot:
 > of its two listed failures and is not a pixel question at all.
 >
 > **So this section no longer restates the list.** It is generated from
-> `criterion-coverage.ts` into `coverage.md` (`npm run docs:coverage` — deliberately
+> `criterion-coverage.ts` into `coverage.md` (`pnpm run docs:coverage` — deliberately
 > not committed, issue #158, so it is not a link here), with a per-criterion reason
 > and a test that fails when the generator produces nothing real — which is the only
 > form of this claim that cannot rot. A prose copy of a machine-readable fact is the
 > defect this repo records most often, and it had one here.
 
-**`docs/coverage.md` is the answer** (`npm run docs:coverage`), all 55 criteria with
+**`docs/coverage.md` is the answer** (`pnpm run docs:coverage`), all 55 criteria with
 the reason for each. The families that are out of scope, and why:
 
 - **Visual / sensory** — contrast, use of colour, text spacing, reflow, target

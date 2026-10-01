@@ -26,7 +26,7 @@ The findings it is *for* are the ones a rule scanner structurally cannot produce
 *Asserted* — the evidence decides it, so the tool states the criterion is not satisfied. A control that
 announced `collapsed`, was activated, and still announces `collapsed` has contradicted itself; there is no
 second reading. These come from the deterministic rule layer, which is exact on every criterion it owns with
-**zero false positives across 1,405 conformant records**, re-verified by `npm run rules:gate` on every push.
+**zero false positives across 1,405 conformant records**, re-verified by `pnpm run rules:gate` on every push.
 
 *Referred* — the evidence is suggestive and the judgement is a human's. Whether a link named "Details" is
 adequate depends on context WCAG itself says may be off-screen; the tool reports `cantTell` in ACT and EARL's
@@ -209,13 +209,13 @@ Local runs need a capture worker: a Windows machine running NVDA that you contro
 every failure names its own fix:
 
 ```bash
-npm run doctor              # VM, worker, page server, judge, unfinished runs
-npm run doctor -- --json    # same, machine-readable
+pnpm run doctor              # VM, worker, page server, judge, unfinished runs
+pnpm run doctor --json    # same, machine-readable
 ```
 
 ```bash
-npm install                        # Node 20+
-npm run witness -- https://example.com --task "Find the contact details"
+pnpm install                       # Node 20+
+pnpm run witness https://example.com --task "Find the contact details"
 ```
 
 No login step: the default judge is local. `JUDGE_BACKEND=anthropic|openai` swaps in a rented model and
@@ -231,7 +231,7 @@ runner is one.
 
 Add `--json` for machine-readable output and `--debug` for per-phase capture diagnostics.
 
-**More than one page:** give several URLs (`npm run witness -- <url> <url> --task "..."`, or `--urls "<url> <url>"`; the Action's `urls` input takes the same list, one per line). It is a list you write, not a crawl. The run prints its count and an estimated time before it captures anything, **refuses a list above 5 captures unless you pass `--max-pages N`** (the Action's `max-pages`; 25 is the ceiling), and reports each page on its own — a page whose capture fails is reported as failed, never as clean, and does not stop the pages after it. The figures come from [`docs/capture-cost.md`](./docs/capture-cost.md); see [the Action guide](./docs/github-action.md#several-pages--the-urls-input) for what the Action bills.
+**More than one page:** give several URLs (`pnpm run witness <url> <url> --task "..."`, or `--urls "<url> <url>"`; the Action's `urls` input takes the same list, one per line). It is a list you write, not a crawl. The run prints its count and an estimated time before it captures anything, **refuses a list above 5 captures unless you pass `--max-pages N`** (the Action's `max-pages`; 25 is the ceiling), and reports each page on its own — a page whose capture fails is reported as failed, never as clean, and does not stop the pages after it. The figures come from [`docs/capture-cost.md`](./docs/capture-cost.md); see [the Action guide](./docs/github-action.md#several-pages--the-urls-input) for what the Action bills.
 
 To test how a page *behaves* when operated, add `--probe-forms`: the worker submits the form with no valid input and records what is announced, catching forms that fail silently — the error shown visually and never announced (3.3.1 Error Identification, 4.1.3 Status Messages). In the CLI this is opt-in because activating a submit button has side effects on a page you may not own; in the GitHub Action it is **on by default**, because a workflow tests your own application and reviewing a page means checking what is on it. Disclosure controls are always activated, to check the expanded/collapsed change is announced at all (4.1.2).
 
@@ -240,7 +240,7 @@ To test how a page *behaves* when operated, add `--probe-forms`: the worker subm
 **Better still, feed it the axe run you already have:**
 
 ```bash
-npm run witness -- https://example.com --axe-results ./axe.json
+pnpm run witness https://example.com --axe-results ./axe.json
 ```
 
 You keep your own axe, at your own version, on your own schedule; we consume its output and still print the two-layer report — no second scan, no Chromium, no duplicate findings. It accepts what the common tools emit (`{ "violations": [...] }`, the axe CLI's array of those, or a bare violations array) and maps them through the same code as our own run, so a finding cannot differ by who scanned. If the file records a `url` that disagrees with the page you are testing, it says so.
@@ -249,7 +249,7 @@ You keep your own axe, at your own version, on your own schedule; we consume its
 
 Running it is one command; getting value out of it is a few habits.
 
-**A PDF is scanned for its tag tree, and needs no worker, no browser and no NVDA.** Give it a URL whose path ends in `.pdf` (any case; a `?query` or `#fragment` after it does not hide it), for example `npm run witness -- https://example.com/report.pdf`, and it reads the document's own accessibility tag tree instead of driving a screen reader. It reports `pdf:` findings — a section headed *PDF layer* in the report, the `pdf` field under `--json` — for an untagged document (`pdf-untagged`, 1.3.1), a missing document language (`pdf-missing-lang`, 3.1.1) and a figure with no alternative text (`pdf-figure-no-alt`, 1.1.1). **It does not run a screen reader over the document:** it reads the structure a screen reader would be given, not what one would announce, so the report says the screen-reader layer is not applicable. A PDF that cannot be fetched or read is reported as not run, never as clean.
+**A PDF is scanned for its tag tree, and needs no worker, no browser and no NVDA.** Give it a URL whose path ends in `.pdf` (any case; a `?query` or `#fragment` after it does not hide it), for example `pnpm run witness https://example.com/report.pdf`, and it reads the document's own accessibility tag tree instead of driving a screen reader. It reports `pdf:` findings — a section headed *PDF layer* in the report, the `pdf` field under `--json` — for an untagged document (`pdf-untagged`, 1.3.1), a missing document language (`pdf-missing-lang`, 3.1.1) and a figure with no alternative text (`pdf-figure-no-alt`, 1.1.1). **It does not run a screen reader over the document:** it reads the structure a screen reader would be given, not what one would announce, so the report says the screen-reader layer is not applicable. A PDF that cannot be fetched or read is reported as not run, never as clean.
 
 **`task` is optional. It names a button for the probe to press, by a word from that button's label; it is a label for your report; and it does NOT change the analysis.** Leave it unset and the default, "Read and understand this page", is used.
 
@@ -285,8 +285,8 @@ This is not a footnote to the interesting work — it *is* some of the work. Scr
 
 **This project's own worker fleet is bare metal, not a UTM VM.** The local UTM path below was the
 original testing setup and is deprecated for anything beyond a quick single-worker trial — "The UTM is
-deprecated, that was a testing thing" (repository owner, 2026-09-05). See `npm run fleet:status`,
-`npm run fleet:deploy` and [`packages/worker-fleet/README.md`](./packages/worker-fleet/README.md) for how
+deprecated, that was a testing thing" (repository owner, 2026-09-05). See `pnpm run fleet:status`,
+`pnpm run fleet:deploy` and [`packages/worker-fleet/README.md`](./packages/worker-fleet/README.md) for how
 the real fleet works; the table below is about getting ONE worker of your own running, which is still a
 reasonable way to try the tool on a machine that is not part of any fleet.
 
@@ -306,13 +306,13 @@ comes from ten bare-metal Windows boxes managed by Ansible (`packages/control/`,
 this repository can hand you; the VM route below is what a contributor without one actually gets.
 
 **Scaling past one worker.** Because captures serialise per machine, throughput comes from
-more machines. For this project's own fleet that means more bare-metal boxes (`npm run fleet:status`);
+more machines. For this project's own fleet that means more bare-metal boxes (`pnpm run fleet:status`);
 the commands below are the deprecated UTM equivalent, kept for a contributor's own local trial pool:
 
 ```bash
 ./packages/worker-fleet/src/local-worker/clone-worker.sh          # add a worker (handles a MAC-copying trap)
 ./packages/worker-fleet/src/local-worker/worker-ctl.sh pool       # what have I got
-npm run training:capture                        # uses them all, then puts them back
+pnpm run training:capture                        # uses them all, then puts them back
 ./packages/worker-fleet/src/local-worker/worker-ctl.sh pool-stop  # or release them yourself
 ```
 
@@ -326,7 +326,7 @@ correct and the conclusion drawn from it was wrong. A worker VM costs the host ~
 desktop. Over-committed, the guests get swapped out from under NVDA: the same page on the same
 worker took **44.5 s with three up against 27.4 s with one**, and the swapped-out guests also
 produced mute-NVDA failures. Ruling the host out because it had CPU to spare cost a day of
-diagnosis, so the pool now sizes itself from `vm_stat`, `npm run doctor` prints what will fit, and
+diagnosis, so the pool now sizes itself from `vm_stat`, `pnpm run doctor` prints what will fit, and
 `A11Y_MAX_WORKERS=N` overrides it.
 
 **A worker serves one capture at a time.** One machine has one desktop, one foreground window
@@ -340,16 +340,16 @@ When a worker breaks, the error messages lie — `"NVDA not installed"` usually 
 ## How we know it works
 
 Verification is layered, and each layer tests something the others cannot. There are unit tests
-(`npm test`, ~1,900 of them across ~250 files) for the pure functions — the deterministic rules, the judge
+(`pnpm test`, ~1,900 of them across ~250 files) for the pure functions — the deterministic rules, the judge
 layers, eval fitness — and CI gates on them; everything below exists because most of this system cannot be
 unit-tested, since a real screen reader on a real desktop is the thing under test.
 
 | command | what it checks |
 |---|---|
-| `npm run lint` / `npm run typecheck` | mechanical; both gate CI |
-| `npm run eval` | judge quality against **34 labelled fixtures** — W3C tutorial pages and paired good/bad cases. Runs against our own scorer by default; needs the Python venv, so it cannot run in CI |
-| `npm run rules-check` | the deterministic rules in isolation. Exits non-zero on **any** false positive against a conformant page — precision is the entire point of a rule |
-| `npm run capture:check -- --worker=<url>` | the capture half, against a live worker (`packages/lab/src/harnesses/capture-check.mjs`). Asserts probe *values*, not just that a probe fired — a check that only asserts "it ran" stays green while the evidence is garbage |
+| `pnpm run lint` / `pnpm run typecheck` | mechanical; both gate CI |
+| `pnpm run eval` | judge quality against **34 labelled fixtures** — W3C tutorial pages and paired good/bad cases. Runs against our own scorer by default; needs the Python venv, so it cannot run in CI |
+| `pnpm run rules-check` | the deterministic rules in isolation. Exits non-zero on **any** false positive against a conformant page — precision is the entire point of a rule |
+| `pnpm run capture:check --worker=<url>` | the capture half, against a live worker (`packages/lab/src/harnesses/capture-check.mjs`). Asserts probe *values*, not just that a probe fired — a check that only asserts "it ran" stays green while the evidence is garbage |
 | `capture-regression.yml` | real NVDA on a GitHub-hosted Windows runner |
 
 **On the numbers.** The suite currently reports full recall on the observable failure cases with a small number of false positives, concentrated in the subjective link-purpose (2.4.4) and descriptive-heading (2.4.6) criteria. Treat that as *promising, not validated*, and read [`docs/METHODOLOGY.md`](./docs/METHODOLOGY.md) before quoting it anywhere: the guards were iteratively tuned against these cases, scoring is single-run with no test-retest interval, and **there is no expert human-agreement baseline yet**. That document sets the bar for "trustworthy enough" *before* measuring against it, and lists what is still missing — deliberately, so the goalposts cannot move.
@@ -405,7 +405,7 @@ declining is the right answer for them.
 *The blind spot is the one it does not.* Measured 2026-08-22, the scorer's heads have learned to penalise
 features that were 0 on every one of their training examples — a penalty that costs nothing to learn and
 that no accuracy metric we compute can see, because every held-out split shares the corpus's structure.
-`npm run scorer:shortcuts` counted **225** of them across the 13 heads that existed then — the shipped
+`pnpm run scorer:shortcuts` counted **225** of them across the 13 heads that existed then — the shipped
 model now has 16 (`training-report.json`), and that count has not been re-measured since; the mechanism is
 current even though the number is not.
 
@@ -445,22 +445,22 @@ HTML, DOM, CSS, URL or axe findings** — so a model trained on it cannot learn 
 markup. The pages are instruments for producing captures and labels; they are not training input.
 
 ```bash
-npm run training:generate      # write the page pairs + manifest
-npm run training:generate-acceptance # write the untouched acceptance pairs
-npm run training:capture       # starts/leases the local workers and page server on demand
-npm run training:status        # progress, current case, failures, worker health
-npm run training:export        # JSONL, only for pairs where the contrast was observable
-npm run training:analyze-errors # held-out false positives/negatives with NVDA evidence
-npm run training:evaluate-acceptance # acceptance + repeated-capture stability gate
+pnpm run training:generate      # write the page pairs + manifest
+pnpm run training:generate-acceptance # write the untouched acceptance pairs
+pnpm run training:capture       # starts/leases the local workers and page server on demand
+pnpm run training:status        # progress, current case, failures, worker health
+pnpm run training:export        # JSONL, only for pairs where the contrast was observable
+pnpm run training:analyze-errors # held-out false positives/negatives with NVDA evidence
+pnpm run training:evaluate-acceptance # acceptance + repeated-capture stability gate
 ```
 
 A long unattended run publishes its state rather than expecting you to watch a log — and you
 can block on it instead of polling:
 
 ```bash
-npm run training:wait              # blocks until it finishes, exits with the outcome
-npm run training:wait -- --json
-npm run training:status -- --json  # snapshot: eta_minutes, failures, next_command
+pnpm run training:wait              # blocks until it finishes, exits with the outcome
+pnpm run training:wait --json
+pnpm run training:status --json  # snapshot: eta_minutes, failures, next_command
 ```
 
 `wait` watches the progress file rather than polling, and cannot hang on a dead run — if
@@ -518,7 +518,7 @@ you are trying to do. The four you are most likely to want:
 | [`docs/getting-started.md`](./docs/getting-started.md) | **start here**: install, set up a worker by whichever route fits, run your first report, and what to do when it fails |
 | [`docs/adr/README.md`](./docs/adr/README.md) | 37 architecture decision records, indexed — the *why*, including the alternatives that were rejected |
 | [`docs/METHODOLOGY.md`](./docs/METHODOLOGY.md) | how the numbers were produced, the biases we are exposed to, and why the eval figures must not be quoted as a headline |
-| `docs/coverage.md` | **every WCAG 2.2 A/AA criterion and whether we detect it** — each partial one names the gap. Generated from the code, deliberately not committed (issue #158: two branches regenerating the same tracked page produced conflicts in a file neither author wrote), so it is not a link — run `npm run docs:coverage` to read it |
+| `docs/coverage.md` | **every WCAG 2.2 A/AA criterion and whether we detect it** — each partial one names the gap. Generated from the code, deliberately not committed (issue #158: two branches regenerating the same tracked page produced conflicts in a file neither author wrote), so it is not a link — run `pnpm run docs:coverage` to read it |
 | [`docs/screenreader-coverage.md`](./docs/screenreader-coverage.md) | every behaviour we drive — and **what we do not drive yet**, which bounds what this tool can claim |
 
 For contributors: [`CONTRIBUTING.md`](./CONTRIBUTING.md) and [`SECURITY.md`](./SECURITY.md). Read the second

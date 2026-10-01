@@ -349,7 +349,7 @@ run — the delta read had already fixed it, and the noise was coming from somew
 The lesson is the familiar one: three fields varying together was one fault, not three. Reproduce with:
 
 ```bash
-npm run training:repeat -- --url=http://<host>:5050/<table-case>/good --times=5 --probe-tables
+pnpm run training:repeat --url=http://<host>:5050/<table-case>/good --times=5 --probe-tables
 ```
 
 It exits non-zero if any field varies. `tableCells` stays opt-in outside the table cases, and the
@@ -427,4 +427,4 @@ problem — both returned NVDA's identical "Not in a table cell". Do not spend t
    stayed green.
 5. It only runs against NVDA on the Windows worker, and there is no local test. Deploy, **reboot
    the guest** (a `utmctl exec` restart silently does nothing when the guest agent is not ready),
-   confirm with `npm run worker:code`, then capture a real page and read the diagnostics.
+   confirm with `pnpm run worker:code`, then capture a real page and read the diagnostics.

@@ -96,17 +96,17 @@ merged PR must never be able to push**, and `close-rows-on-merge.test.ts` goes r
 ## Merging `main` into a branch now needs `npm install`, not just a build
 
 **Since #357 landed at 21:34Z on 2026-09-07, the workspace scope is `@a11ign/*` and was `@a11y-witness/*`.**
-A worktree that merges `main` in and goes straight to `npm run build` fails with roughly 35
+A worktree that merges `main` in and goes straight to `pnpm run build` fails with roughly 35
 `TS2307: Cannot find module '@a11ign/...'` across `cli`, `judge`, `worker-fleet` and `scorer`.
 
 The cause is one step further back than the hazard this repo already records. A worktree's `node_modules`
 is a symlink to the primary checkout's, and **the workspace links under it are named after the scope**.
-`npm run build` recreates `dist/`; nothing recreates a symlink whose name changed. So:
+`pnpm run build` recreates `dist/`; nothing recreates a symlink whose name changed. So:
 
 ```bash
-npm run primary:update        # in the PRIMARY: fetch, detach at origin/main, nothing else
-npm install                   # in the PRIMARY: recreates node_modules/@a11ign/*
-npm run build                 # in the PRIMARY
+pnpm run primary:update        # in the PRIMARY: fetch, detach at origin/main, nothing else
+pnpm install                  # in the PRIMARY: recreates node_modules/@a11ign/*
+pnpm run build                 # in the PRIMARY
 ```
 
 Found by `worker-config` and `worker-judge` independently, within minutes, because every worktree broke at
@@ -254,7 +254,7 @@ standing resource ban applies to this job by construction rather than by policy.
 | a unit test | the specific test file, or `--test-name-pattern` for your cases |
 | something needing history | declare `// requires: history` in the test and `History: full` in the PR body (below) — or run it in `ts` and say so in the body instead |
 | something needing the API | run it locally, paste the output, and name a non-live command here |
-| a guard bites | `npm run mutate -- --file=… --mutate=… --test=…` on a file the job has |
+| a guard bites | `pnpm run mutate --file=… --mutate=… --test=…` on a file the job has |
 
 **Say which job runs each command.** *"It passed"* and *"it passed in the one job with full history"* are
 different claims, and only the second survives being read a week later.
@@ -291,7 +291,7 @@ same mechanism from `ts`/`trunkGate` would need its own, differently-true `token
 checkout before running Acceptance/Refutation commands. `reusable-acceptance.yml` (this job's actual steps,
 since #452 split it out of `ci.yml`) reads the identical `hasFullHistoryDeclaration` function
 `acceptance-commands.mjs` itself uses — never a second, hand-written copy of the regex in YAML — and runs
-`git fetch --unshallow origin main` when it is present, after `npm ci`/`npm run build` and before the
+`git fetch --unshallow origin main` when it is present, after `pnpm install --frozen-lockfile`/`pnpm run build` and before the
 command actually runs. With it declared, a `// requires: history` test runs for real, in `acceptance`, on
 this job's own token; without it, the command is refused and named.
 
@@ -383,7 +383,7 @@ re-reading the whole body.
 (the `acceptance` job's own gate) already refuses those; this check would only be a second, independently
 drifting opinion about the identical fact.
 
-**`npm run mutate` and `Refutation:` have OPPOSITE exit conventions (#516).** `mutate`'s own contract is
+**`pnpm run mutate` and `Refutation:` have OPPOSITE exit conventions (#516).** `mutate`'s own contract is
 exit 0 = the guard bites — the good outcome. `Refutation:` reads success as any non-zero exit (#438), so
 naming `mutate` on a `Refutation:` line inverts the verdict, and the dangerous half is silent: a guard that
 did **not** bite exits 1, which `Refutation:` reads as *refused* — the passing state. It produces a green

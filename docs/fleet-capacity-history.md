@@ -173,9 +173,9 @@ at 23 s only slightly, and they fail far more. If a run must be reliable, prefer
 For long runs, do not poll:
 
 ```bash
-npm run training:wait           # blocks until the run finishes, exits with its outcome
-npm run training:wait -- --json
-npm run training:status -- --json   # a snapshot, with eta_minutes and next_command
+pnpm run training:wait           # blocks until the run finishes, exits with its outcome
+pnpm run training:wait --json
+pnpm run training:status --json   # a snapshot, with eta_minutes and next_command
 ```
 
 `wait` is event-driven (it watches the progress file) and cannot hang on a dead run: if

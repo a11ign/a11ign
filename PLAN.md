@@ -501,7 +501,7 @@ deterministic rules are exact where they own a subtype. It blocks because **the 
 to every quality gate this project has**, so shipping without closing it means shipping a number nobody
 can defend. See [ADR 0015](./docs/adr/0015-one-defect-per-page-taught-the-scorer-to-veto.md).
 
-**Done looks like.** `npm run scorer:shortcuts` materially lower after a retrain on the multi-defect
+**Done looks like.** `pnpm run scorer:shortcuts` materially lower after a retrain on the multi-defect
 corpus, **and** held-out acceptance no better than it was. The second half matters more than the first:
 the splice probe removed vetoes and cost 3.3.2 eight false positives, and could not distinguish "the veto
 was load-bearing" from "spliced input is incoherent". Real pages are the experiment.
