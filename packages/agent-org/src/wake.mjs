@@ -2183,19 +2183,31 @@ const MAX_REFS_LOOKED_UP = 3;
  * A LOOKUP THAT CANNOT ASK ENDS NOTHING: `holder` answers `null` for a GitHub that would not say, and that is
  * `unknown`, never `none` -- an order is dropped only when GitHub said nobody holds what it names.
  *
+ * THE AUTHOR IS NOT AN ADDRESSEE (#2853): an order whose only live holder is the session that WROTE it is `author`,
+ * and is dropped -- `worker-2783` wrote an order for `reviewer-2826`, the reviewer ended, and the "holder of #2783"
+ * was `worker-2783` itself, so the order was queued back to its author for ever. An author does not need to be told
+ * what it wrote; another live holder, on this reference or a LATER one, still wins.
+ *
  * @param {{session: string, prompt: string}} order @param {readonly {label: string}[]} agents
  * @param {(ref: number) => {open: boolean, sessions: string[]} | null} holder
- * @returns {{to: string, ref: number} | {none: true, looked: number[]} | {unknown: string}}
+ * @returns {{to: string, ref: number} | {author: string, ref: number} | {none: true, looked: number[]}
+ *   | {unknown: string}}
  */
 function readdress(order, agents, holder) {
   const refs = namedRefs(order.prompt).slice(0, MAX_REFS_LOOKED_UP);
+  const author = authorOf(order.prompt);
+  /** @type {{author: string, ref: number} | undefined} */
+  let authorOnly;
   for (const ref of refs) {
     const facts = holder(ref);
     if (facts === null) return { unknown: `could not read who holds #${ref}` };
-    const to = facts.open ? facts.sessions.find((s) => s !== order.session && !isAbsent(s, agents)) : undefined;
+    const live = facts.open ? facts.sessions.filter((s) => s !== order.session && !isAbsent(s, agents)) : [];
+    const to = live.find((s) => s !== author);
     if (to !== undefined) return { to, ref };
+    // ONLY THE AUTHOR HOLDS THIS REFERENCE: remembered, not returned -- a later reference may have another live holder.
+    if (live.length > 0 && authorOnly === undefined) authorOnly = { author: /** @type {string} */ (author), ref };
   }
-  return { none: true, looked: refs };
+  return authorOnly ?? { none: true, looked: refs };
 }
 
 /**
@@ -2251,13 +2263,43 @@ export function resolveEndedHandoffs(handoffs, deps) {
   /** @type {string[]} */
   const lines = [];
   for (const order of handoffs) {
-    if (targetState(order.session, deps.agents, deps.ended) !== "ended") continue;
-    const outcome = readdress(order, deps.agents, holder);
-    const line = settle(order, outcome, deps);
+    const state = targetState(order.session, deps.agents, deps.ended);
+    const line = state === "ended" ? settle(order, readdress(order, deps.agents, holder), deps)
+      : state === "absent" ? settleOrphan(order, holder, deps) : null;
+    if (line === null) continue;
     lines.push(line.said);
     if (line.done) settled.push(order.id);
   }
   return { settled, lines };
+}
+
+/** The row an engineer instance is named for: `worker-2783` -> 2783. Anything else is `null`. @param {string} session @returns {number | null} */
+function engineerRow(session) {
+  const found = /^worker-([1-9][0-9]*)$/.exec(session);
+  return found === null ? null : Number(found[1]);
+}
+
+/**
+ * AN ORDER FOR AN ENGINEER INSTANCE THAT IS GONE AND WHOSE ROW IS CLOSED HAS NOBODY TO WAIT FOR (#2853). `absent` is
+ * kept in general ({@link targetState}) because the tick has no record of an ending -- and `worker-2783` left without
+ * the teardown, so it never gets one. An engineer instance is named for its row (#2469) and never started twice, so
+ * once GitHub says the row is closed nothing will ever start under that name. A row that is open keeps its order (an
+ * instance may yet start), and a row GitHub would not read keeps it too: dropped only on a reading that was made.
+ * @param {{id: string, session: string, prompt: string, queuedAt?: number}} order
+ * @param {(ref: number) => {open: boolean, sessions: string[]} | null} holder @param {EndedDeps} deps
+ * @returns {{done: boolean, said: string} | null} `null` when the order is none of this function's business
+ */
+function settleOrphan(order, holder, deps) {
+  const row = engineerRow(order.session);
+  if (row === null) return null;
+  const facts = holder(row);
+  if (facts === null || facts.open) return null;
+  const now = deps.now ?? Date.now();
+  const author = authorOf(order.prompt);
+  recordDrop(deps.queuePath, order, { reason: `target has no workspace and its row #${row} is closed` }, { write: deps.write, now });
+  return { done: true, said: `DROPPED ${order.id}: "${order.session}" has no workspace and its row #${row} is closed, so order `
+    + `${order.id}${author === null ? "" : ` from "${author}"`} (waited ${waitedFor(now - Number(order.queuedAt ?? now))}) has no `
+    + "addressee and never will. It is retired with a record (`dropped`, carrying its text), not as a delivery.\n" };
 }
 
 /**
@@ -2285,6 +2327,11 @@ function settle(order, outcome, deps) {
       reroutedTo: outcome.to }, io);
     return { done: true, said: `RE-ADDRESSED ${order.id}: ${gone}. #${outcome.ref} is held by live "${outcome.to}", `
       + `so it now waits there as ${entry.id}.\n` };
+  }
+  if ("author" in outcome) {
+    recordDrop(deps.queuePath, order, { reason: `target ended; the only live holder of #${outcome.ref} is its own author "${outcome.author}"` }, io);
+    return { done: true, said: `DROPPED ${order.id}: ${gone}, and the only live holder of #${outcome.ref} is "${outcome.author}", `
+      + "who wrote it. An author is not told what it wrote; it is retired with a record (`dropped`, carrying its text).\n" };
   }
   const named = outcome.looked.length === 0 ? "names no row or pull request"
     : `names ${outcome.looked.map((n) => `#${n}`).join(", ")}, none open and held by a live session`;
@@ -4519,6 +4566,10 @@ const defaultGit = (cmd, args, opts) =>
  * working engineer. And a workspace that will not close is left, said, and retried -- no line is written for
  * an ending that did not happen.
  *
+ * A REGISTERED INSTANCE WITH NO WORKSPACE IS SETTLED HERE TOO (#2860, {@link settleGoneInstances}): since #2469 a
+ * spare is named `worker-<row>`, so an address is never spawned twice and the settle that `registerSpawn` runs for the
+ * SAME address never fires -- the registry grew a stale entry per finished engineer.
+ *
  * @param {{label: string, status: string}[]} agents
  * @param {TeardownDeps} deps
  * @returns {{ ended: SpareCycle[], registry: Record<string, SpareInstance> }}
@@ -4545,7 +4596,39 @@ export function endFinishedSpares(agents, deps) {
     ended.push(cycle);
     delete registry[role];
   }
+  ended.push(...settleGoneInstances(agents, registry, deps));
   return { ended, registry };
+}
+
+/**
+ * SETTLE EVERY REGISTRY ENTRY WHOSE WORKSPACE IS GONE AND WHOSE ROWS GITHUB SAYS ARE ALL CLOSED (#2860), as a failed
+ * cycle through {@link absentInstanceCycle} (the line {@link settleAbsentInstance} writes). Deletes from `registry`
+ * (the caller's copy) and returns the cycles written.
+ *
+ * THREE READINGS MUST AGREE, AND ANY ONE MISSING LEAVES THE ENTRY: the role is absent from a listing that
+ * {@link listingIsComplete} calls complete (a partial one reads every instance absent, #2465); the entry names at
+ * least one row (an entry that recorded none has nothing to ask GitHub); and every row's state READ as `CLOSED`
+ * (`null`, an open row and any other state keep it). The closed rows are what a single complete listing lacks:
+ * it cannot prove a workspace is really gone, but a spare whose every row is closed has no work left to lose.
+ *
+ * @param {{label: string, status: string}[]} agents
+ * @param {Record<string, SpareInstance>} registry
+ * @param {TeardownDeps} deps
+ * @returns {SpareCycle[]}
+ */
+function settleGoneInstances(agents, registry, deps) {
+  if (!listingIsComplete(agents)) return [];
+  /** @type {SpareCycle[]} */
+  const settled = [];
+  for (const [role, instance] of Object.entries(registry)) {
+    if (agents.some((a) => a.label === role)) continue;
+    if (instance.rows.length === 0 || !instance.rows.every((row) => deps.rowState(row) === "CLOSED")) continue;
+    const cycle = absentInstanceCycle(role, instance, deps.now);
+    deps.record(cycle);
+    settled.push(cycle);
+    delete registry[role];
+  }
+  return settled;
 }
 
 /**
@@ -4615,12 +4698,22 @@ export function registerSpawn(paths, role, now = Date.now()) {
 export function settleAbsentInstance(paths, role, now = Date.now()) {
   const registry = readSpareRegistry(paths.registry);
   if (registry[role] === undefined) return registry;
-  const rows = registry[role].rows;
-  appendSpareCycle(paths.cycles, { role, row: rows.length > 0 ? rows[rows.length - 1] : null, at: now,
-    clean: false, rows, why: "the previous instance left without the teardown (closed by hand or crashed)" });
+  appendSpareCycle(paths.cycles, absentInstanceCycle(role, registry[role], now));
   delete registry[role];
   writeFileSync(paths.registry, `${JSON.stringify(registry)}\n`);
   return registry;
+}
+
+/**
+ * The failed cycle for an instance that left without the teardown, shared by {@link settleAbsentInstance} (a spawn
+ * finds the leftover) and {@link settleGoneInstances} (the tick finds it, #2860).
+ * @param {string} role @param {SpareInstance} instance @param {number} now
+ * @returns {SpareCycle}
+ */
+function absentInstanceCycle(role, instance, now) {
+  const { rows } = instance;
+  return { role, row: rows.length > 0 ? rows[rows.length - 1] : null, at: now, clean: false, rows,
+    why: "the previous instance left without the teardown (closed by hand or crashed)" };
 }
 
 /** @param {string} path @param {SpareCycle} cycle */

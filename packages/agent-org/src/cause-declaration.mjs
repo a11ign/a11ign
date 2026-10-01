@@ -498,6 +498,26 @@ export const TOOL_CAUSE_DECLARATIONS = Object.freeze([
     why: "the gate has already read the filesystem and named the low resource; the output is a decision about "
       + "what to remove, and a full disk is the one fault that stops every session at once",
   }),
+  declareCause("repeating-log-line", GROUPS.JUDGMENT, {
+    kind: "claude",
+    model: "sonnet",
+    // MEDIUM (#2848), and the recipient is `orchestrator`, so this is the profile a spawned worker would take if one ever were.
+    // The gate has already normalised the journal, counted the run and quoted the line; the work is reading what the line
+    // reports, then FIXING it or filing it `ready` or allowlisting it with a reason -- a short diagnosis from a stated line, and
+    // not the diagnosis from an absence that `org-stalled`'s `high` is paid for.
+    effort: "medium",
+    why: "the gate has already counted the run and quoted the line; the output is a fix, a row filed ready, or an allowlist entry "
+      + "with its reason, chosen by reading what one stated line reports",
+  }),
+  declareCause("backlog-aged-unpromoted", GROUPS.JUDGMENT, {
+    kind: "claude",
+    model: "sonnet",
+    // MEDIUM (#2848). The gate has already established that the row carries no wait and no unpickable label and how long that
+    // has been true; the act is promoting it or recording the wait as a field, a short judgment over one stated row.
+    effort: "medium",
+    why: "the gate has already established that the row carries no wait and named its age; the output is a promotion or a "
+      + "declared wait, a short judgment over one stated row",
+  }),
   declareCause("claim-stalled", GROUPS.ACTION, {
     kind: "claude",
     // SONNET AND MEDIUM, AND THE RECIPIENT IS THE HOLDER, so this is the profile a spawned worker would take if one ever were

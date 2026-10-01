@@ -1,0 +1,5 @@
+---
+"@a11ign/agent-org": patch
+---
+
+**The shadow-reads tap now writes a `Map`, a `Set` and a `Date` as tagged objects and reads them back (#2858, child 5d-1 of #69).** `decide`'s `closings` is a `Map`, which a bare `JSON.stringify` wrote as `{}`: replaying that record threw `closings.get is not a function`, and reviving only the type would have dropped the `blocker-cleared` order computed from the map's content. `args` is now written through `encodeShadowValue` (`{"$type":"Map","entries":[...]}`, `{"$type":"Set","values":[...]}`, `{"$type":"Date","iso":...}`, recursively) and read through the exported `parseShadowRecord` / `reviveShadowValue`, which live in the same module so they cannot drift. A record with no tags, or an object carrying some other `$type`, reads unchanged. Any OTHER non-plain value (a class instance, a function, a `bigint`) is named on stderr and in the returned `diagnostic` by its key path and constructor, at most ten lines a tick, and the tick still records. Dormant until the `shadow-window-open` marker exists.

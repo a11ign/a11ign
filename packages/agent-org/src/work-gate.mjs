@@ -73,6 +73,9 @@ import { sandboxGitEnv } from "./lib/git-env.mjs";
 import { poolDiagnosis, refusalPoolLine } from "./api-pool.mjs";
 import { declaredGhAccount } from "./gh-identity.mjs";
 import { stateEntryPath } from "./host-config.mjs"; // #2799
+// #2848: THE REPEATING-LINE QUESTION, in its own leaf for the reason `disk-headroom.mjs` is one: it reads the journal, not GitHub.
+import { repeatingLinesTick } from "./repeating-lines.mjs";
+import { tapShadowReads } from "./shadow-reads.mjs"; // #2849
 // #1969, AND THE PREDICATE IS IMPORTED RATHER THAN RE-DECIDED. `armedFromApi` knows THREE armed states --
 // merged, a pending auto-merge, and SITTING IN THE MERGE QUEUE, where `autoMergeRequest` reads `null` on a
 // correctly armed pull request (#1729/#1727, and #2004 for the read that fed it). `ceo`'s ruling names
@@ -618,7 +621,7 @@ export function readPromotableRows(run = defaultRun) {
     // dependency edge -- `gh issue create --blocked-by` writes it, the UI renders it, and this `--json`
     // returns it -- so reading a waiting condition costs nothing this tick did not already spend.
     const out = run(["issue", "list", "--state", "open", "--label", BACKLOG_LABEL, "--limit", "200",
-      "--json", "number,labels,body,blockedBy"]);
+      "--json", "number,title,createdAt,labels,body,blockedBy"]);
     const parsed = JSON.parse(out);
     if (!Array.isArray(parsed)) return null;
     // `NOT_STARTABLE`, NOT `NOT_PICKABLE`: a routed row is kept here and removed again by `ownerOf` for
@@ -4388,6 +4391,49 @@ export function closesUnresolvedOrders(prs, now = Date.now()) {
   }];
 }
 
+/** How long a promotable `backlog` row may sit with no promotion decision before `product-manager` is asked (#2848). */
+export const AGED_BACKLOG_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * BACKLOG ROWS OLDER THAN 24 HOURS WITH NO PROMOTION DECISION, to `product-manager` (#2848, the second question beside the
+ * repeating-line one: both are a thing that stays true and that nobody reads).
+ *
+ * "NO DECISION" IS READ OFF THE ROW, NEVER GUESSED: `promotableRows` already dropped every row that carries a decision in a
+ * FIELD -- a `blockedBy` edge, `Not-before:`, `answer:<session>`, `parked`, `needs:chairman`, and every `NOT_STARTABLE` label
+ * (blocked, epic, decision, meta, ...) -- so what is left is a row somebody could promote and nobody has, and its age is
+ * the time that has been true. The row's age is its `createdAt`: GitHub gives no date for when `backlog` was applied without a
+ * timeline call per row, and a row demoted again by a declined claim (`was-ready`) reads old, which errs toward asking.
+ *
+ * ONE ORDER PER ROW AND THE SET IN EVERY PROMPT, `laneBacklogOrders`' discipline (#1799): the key follows the row, so one row's
+ * answer is not re-litigated when another is filed, and a session is delivered one order per tick, so the prompt carries the
+ * rest. Oldest first, capped at `MAX_ROW_ORDERS_PER_TICK`.
+ *
+ * @param {any[]} promotableRows
+ * @param {number} [now]
+ * @returns {{session: string, cause: string, subject: string, discriminator: string, prompt: string, causeKey: string}[]}
+ */
+export function agedBacklogOrders(promotableRows, now = Date.now()) {
+  const aged = promotableRows
+    .map((row) => ({ row, ageMs: now - Date.parse(row?.createdAt) }))
+    .filter(({ ageMs }) => Number.isFinite(ageMs) && ageMs > AGED_BACKLOG_MS)
+    .sort((a, b) => b.ageMs - a.ageMs);
+  const named = aged.map(({ row, ageMs }) => `${subjectMention(row)} (${standingText(ageMs)}${row.title ? `, ${row.title}` : ""})`);
+  return aged.slice(0, MAX_ROW_ORDERS_PER_TICK).map(({ row, ageMs }, i) => ({
+    session: "product-manager",
+    cause: "backlog-aged-unpromoted",
+    subject: `row-${subjectRef(row.repoKey, row.number)}`,
+    discriminator: "aged",
+    prompt: `${subjectMention(row)}${row.title ? ` (${row.title})` : ""} HAS BEEN IN BACKLOG ${standingText(ageMs)} WITH NO PROMOTION DECISION. `
+      + `It carries no wait -- no \`blockedBy\` edge, \`Not-before:\`, \`${ANSWER_PREFIX}<session>\`, \`${PARKED_LABEL}\` or \`${CHAIRMAN_LABEL}\` -- and no unpickable `
+      + `label, so nothing says why it is not \`${READY_LABEL}\` and nothing else will ask: \`lane-backlog-unpromoted\` fires only when a lane `
+      + "owner has nothing Ready, and `ready-queue-empty` only on an empty shelf.\n"
+      + `PROMOTE IT, OR RECORD WHY NOT AS DATA: a \`${READY_LABEL}\` label is the promotion; a wait goes in a FIELD (\`--add-blocked-by <n>\`, `
+      + `\`Not-before: YYYY-MM-DDTHH:MM:SSZ\`, \`${ANSWER_PREFIX}<session>\`), which clears itself and stops this being asked.`
+      + (named.length > 1 ? `\nALSO AGED (${named.length - 1}): ${named.filter((_, j) => j !== i).slice(0, MAX_ROW_ORDERS_PER_TICK).join("; ")}.` : ""),
+    causeKey: `product-manager/backlog-aged-unpromoted/row-${subjectRef(row.repoKey, row.number)}`,
+  }));
+}
+
 /**
  * One order per lane whose owner has backlog and nothing Ready.
  *
@@ -5050,7 +5096,7 @@ export function decide({ prs, readyRows, promotableRows = [], chairmanBlocked = 
   const shelf = emptyShelfOrder({ offerable, blocked, promotable: poolPromotable.length, key });
   if (shelf) orders.push(shelf);
 
-  orders.push(...laneBacklogOrders(promotableRows, readyRows));
+  orders.push(...laneBacklogOrders(promotableRows, readyRows), ...agedBacklogOrders(promotableRows)); // #2848: the same stock, aged
 
 
   // AFTER the lane orders and BEFORE the chairman's: an unfiled epic is a supply problem, which only
@@ -5890,6 +5936,18 @@ function exitPartial(unread, delivered) {
   process.exit(EXIT.PARTIAL);
 }
 
+/**
+ * #2849: `decide`, with the call RECORDED for the shadow-window runner (#2846): the arguments it was given and its RAW return, before
+ * `withStalePrimaryNotice`. A helper rather than three lines in `main`, which is at its physical-line limit. DORMANT unless
+ * `<stateDir>/shadow-window-open` exists, and a failed write is a stderr line, never a different tick (`shadow-reads.mjs`).
+ * @param {Parameters<typeof decide>[0]} args @returns {ReturnType<typeof decide>}
+ */
+function decideAndTap(args) {
+  const orders = decide(args);
+  tapShadowReads({ args, orders, stateDir: REVIEWER_STATE_DIR });
+  return orders;
+}
+
 function main() {
   refuseUnknownFlags([], { entry: import.meta.url, command: "node packages/agent-org/src/work-gate.mjs" });
   // READ BEFORE ANY GITHUB CALL (#2163), because it is the one reading a `CANNOT_ASK` exit must not hide: a tick
@@ -5931,7 +5989,7 @@ function main() {
   // pay for it twice on exactly the red tick this row is about.
   const required = requiredWhenRed(openPrs);
   const baseTip = baseTipWhenRed(openPrs);
-  const decided = withStalePrimaryNotice(decide({ primaryDrift, prs: withEvidenceLabelAges(withCommitChains(openPrs)), readyRows: rows, promotableRows: promotableRows ?? [],
+  const decideArgs = { primaryDrift, prs: withEvidenceLabelAges(withCommitChains(openPrs)), readyRows: rows, promotableRows: promotableRows ?? [],
     chairmanBlocked: chairmanBlocked ?? [], prFiles, drain, required, baseTip,
     epics: epicsWhenShelfEmpty(rows),
     answerOwed: rowsOwingAnswers({ openRows: allOpen, openPrs, closedRows: closedAnswerRows() }),
@@ -5957,11 +6015,11 @@ function main() {
     trunkRed: readTrunkRed(),
     // #2075: ONE GRAPHQL CALL, READ PER ISSUE. `null` (refused) emits nothing and is said on stderr below.
     // #2691's `callCountSignals` is beside it, costing no `GH_READS`; `claimedComments` (#2710's window anchor) is the SAME read made above.
-    offBoard, callCountSignals: rowCallCountSignals(allOpen, liveClaudeTurns(), claimedComments), bareAnswerLabels: bareAnswerLabelOrders(withAnswerLabel([...allOpen, ...openPrs])), labJobs: labJobRecordsOrSay() }), primaryDrift); // #2711, #2729
+    offBoard, callCountSignals: rowCallCountSignals(allOpen, liveClaudeTurns(), claimedComments), bareAnswerLabels: bareAnswerLabelOrders(withAnswerLabel([...allOpen, ...openPrs])), labJobs: labJobRecordsOrSay() }; const decided = withStalePrimaryNotice(decideAndTap(decideArgs), primaryDrift); // #2711, #2729; `main` is at its 90-line limit
   const others = otherScopeTicks(drain); // #2618: the OTHER declared repositories -- none for one project, whose orders are what they were
   const outageNow = outageThisTick({ prs, readyRows, promotableRows, chairmanBlocked, openRows: openRowsRead, claimedComments, offBoard, others });
   const { delivered: orders, performed } = performActions(markOutageReads([...decided, ...others.flatMap((tick) => tick.orders)], outageNow));
-  orders.push(...reviewerAuthTick({ orders }));
+  orders.push(...reviewerAuthTick({ orders }), ...repeatingLinesTick()); // #2848: before the dead man's switch -- a repeating line is something found
   // FIRST OF ALL, AND ON PURPOSE (#2163): `wake` delivers in this order and records each delivery with a write, so
   // on a full disk the tick can end partway. The order that says the disk is full must not be the one behind it.
   orders.unshift(...diskOrders);
