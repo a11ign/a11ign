@@ -599,6 +599,18 @@ export const TOOL_CAUSE_DECLARATIONS = Object.freeze([
     why: "the gate has already read and quoted the claim's refusal; the output is a decision about whose "
       + "tree it is, over a fact already in the prompt",
   }),
+  declareCause("org-health", GROUPS.JUDGMENT, {
+    kind: "claude",
+    model: "sonnet",
+    // HIGH (#2936), for `org-stalled`'s reason: three of the four signals hand the session a NUMBER that says something is not
+    // happening (no merge in 3 h, a PR red for 2 h, a row refused for 2.6 h) and the work is finding which link is stuck. That
+    // is diagnosis from an absence, and a wrong reading leaves the org idle with the signal already spent on it.
+    // JUDGMENT, NOT JUDGMENT_START: it asks `ceo` to look, it starts no work, and a drain (which withholds starts) is exactly
+    // when an org that is not landing anything should still be told.
+    effort: "high",
+    why: "the gate read a number that says nothing is landing, a red PR is unattended, a row is refused or the primary is stale; "
+      + "the output is which link is stuck and a fix or a ready row, diagnosed from an absence",
+  }),
 ]);
 
 /**

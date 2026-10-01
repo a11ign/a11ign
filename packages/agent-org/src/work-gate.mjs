@@ -75,6 +75,8 @@ import { declaredGhAccount } from "./gh-identity.mjs";
 import { stateEntryPath } from "./host-config.mjs"; // #2799
 // #2848: THE REPEATING-LINE QUESTION, in its own leaf for the reason `disk-headroom.mjs` is one: it reads the journal, not GitHub.
 import { repeatingLinesTick } from "./repeating-lines.mjs";
+// #2936: THE ORG-HEALTH QUESTION, in its own leaf for the same reason: relative imports only, so the gate keeps the property its own header states.
+import { orgHealthTick, readLastMergedAt, primaryStandingSince } from "./org-health.mjs";
 import { tapShadowReads } from "./shadow-reads.mjs"; // #2849
 // #1969, AND THE PREDICATE IS IMPORTED RATHER THAN RE-DECIDED. `armedFromApi` knows THREE armed states --
 // merged, a pending auto-merge, and SITTING IN THE MERGE QUEUE, where `autoMergeRequest` reads `null` on a
@@ -116,7 +118,7 @@ import { readAgents } from "./herdr-agents.mjs";
 // nothing there reads an import at load time (only inside a function), and this file stays the entry point:
 // every name that module exported is re-exported here, so no caller of `work-gate.mjs` changes.
 import { requiredWhenRed, perPullRequestOrders, mergeConflictOrders, greenUnarmedOrders, reviewBlockedOrders,
-  HOLD_RED_JOBS } from "./work-gate/pr-orders.mjs";
+  HOLD_RED_JOBS, ownerOfPr } from "./work-gate/pr-orders.mjs";
 export { redOnlyBySupersededRun, mergeConflictOrders, greenUnarmedOrders, reviewBlockedOrders, HOLD_RED_JOBS,
   awaitingEvidenceStaleOrders } from "./work-gate/pr-orders.mjs";
 import { labJobFinishedOrders, readLabJobRecords } from "./work-gate/lab-job-orders.mjs"; // #2729
@@ -298,7 +300,9 @@ export const GH_READS = Object.freeze({
     "api actions/workflows/trunk.yml/runs (readTrunkRed -- trunk-red)",
     // #2075: ONE GRAPHQL CALL PER 100 OPEN ROWS (one, at 50 open), each row carrying ITS OWN `projectItems` -- never the board
     // listing, which lags minutes behind an add (see `readRowsOffBoard`).
-    "api graphql repository.issues(states: OPEN) { projectItems } (readRowsOffBoard -- row-off-board)"],
+    "api graphql repository.issues(states: OPEN) { projectItems } (readRowsOffBoard -- row-off-board)",
+    // #2936: ONE REST CALL on the core pool -- the 20 newest-updated closed pull requests, of which the latest `merged_at` is the last merge.
+    "api repos/{repo}/pulls?state=closed&sort=updated (readLastMergedAt -- org-health's no-merge-while-work-exists)"],
   conditionalOnEmptyShelf: "issue list --label epic (readEpics)",
   // ONE call, and it needs no admin (#2331). It used to be two -- the admin-only protection endpoint, then
   // `branches/main` as the discriminator for its 404 (#2106, #2022) -- and the discriminator's only job
@@ -6089,6 +6093,51 @@ function decideAndTap(args) {
   return orders;
 }
 
+/**
+ * The open pull requests whose required check has settled red AND which `pr-checks-failing` is already ordering this tick, as
+ * `org-health.mjs` reads them. THE ORDERS ARE CONSUMED RATHER THAN THE PREDICATE REPEATED: `failingChecksOrder` also excuses a
+ * red made only of a hold's own jobs and a red that is only a superseded run, and a second copy of those exclusions is how a
+ * PR is called red by one cause and healthy by another (`mergeCandidates`' argument). `redSince` is the EARLIEST failing check's
+ * finish on the current head, which is when that order was first given, to within a tick.
+ * @param {any[]} prs @param {string[] | null} required @param {{ cause: string, subject: string }[]} decided
+ */
+export function redPrFacts(prs, required, decided) {
+  const ordered = new Set(decided.filter((order) => order.cause === "pr-checks-failing").map((order) => order.subject));
+  return prs.filter((pr) => ordered.has(`pr-${subjectRef(pr.repoKey, pr.number)}`)).map((pr) => {
+    const red = blockingChecks(newestPerName(pr.statusCheckRollup ?? []), required).filter((/** @type {any} */ c) => checksSettledGreen([c]) === false);
+    const times = red.map((/** @type {any} */ c) => Date.parse(String(c?.completedAt || c?.startedAt || ""))).filter(Number.isFinite);
+    const owner = ownerOfPr(pr);
+    const login = pr.author?.login;
+    return { number: pr.number, owner: owner.source === "ceo" ? null : owner.session,
+      redSince: times.length > 0 ? Math.min(...times) : null,
+      // The shared account opens every PR, so "its owner's comment" is a comment by the account that opened it.
+      ownerCommentAts: (pr.comments ?? []).filter((/** @type {any} */ c) => login && c?.author?.login === login).map((/** @type {any} */ c) => Date.parse(c?.createdAt)).filter(Number.isFinite) };
+  });
+}
+
+/**
+ * #2936: THE ORG-HEALTH TICK over what `main` already holds. Reads ONE new thing, the last merge (`GH_READS`); every other fact is a
+ * value the tick computed for `decide`: the PRs with their owners, `required`, the offered rows, the #2845 streaks and the primary's
+ * drift. `prsRead`/`readyRead` are the RAW reads, `null` for a refusal, because `decideArgs` carries them coalesced to `[]` and
+ * a refused read must reach the detector as an unknown. A refusal of the streak read is the counter's own stderr line
+ * (`claim-refusals: could not run`), which `repeating-lines.mjs` offers if it persists; it reaches here as no streaks.
+ * @param {{ prsRead: any[] | null, readyRead: any[] | null, decideArgs: any, decided: any[] }} tick
+ */
+function orgHealthNow({ prsRead, readyRead, decideArgs, decided }) {
+  const { prs, required, readyRows, prFiles, rowBranches, openRows, primaryDrift, claimRefusals } = decideArgs;
+  const asked = prsRead !== null && readyRead !== null;
+  return orgHealthTick({
+    now: Date.now(),
+    lastMergedAt: readLastMergedAt(defaultRun, repoNow()),
+    work: asked ? { greenPrs: shouldBeMerging(prs, required).length,
+      claimableRows: partitionUnclaimed(readyRows, prFiles, { rowBranches, openRows }).offerable.length } : null,
+    redPrs: prsRead === null ? null : redPrFacts(prs, required, decided),
+    refusals: claimRefusals ?? null,
+    drift: primaryDrift ?? null,
+    primarySince: primaryStandingSince(primaryDrift ?? null, { root: REPO_CHECKOUT }),
+  });
+}
+
 function main() {
   refuseUnknownFlags([], { entry: import.meta.url, command: "node packages/agent-org/src/work-gate.mjs" });
   // READ BEFORE ANY GITHUB CALL (#2163), because it is the one reading a `CANNOT_ASK` exit must not hide: a tick
@@ -6160,7 +6209,7 @@ function main() {
   const others = otherScopeTicks(drain); // #2618: the OTHER declared repositories -- none for one project, whose orders are what they were
   const outageNow = outageThisTick({ prs, readyRows, promotableRows, chairmanBlocked, openRows: openRowsRead, claimedComments, offBoard, others });
   const { delivered: orders, performed } = performActions(markOutageReads([...decided, ...others.flatMap((tick) => tick.orders)], outageNow));
-  orders.push(...reviewerAuthTick({ orders }), ...repeatingLinesTick()); // #2848: before the dead man's switch -- a repeating line is something found
+  orders.push(...reviewerAuthTick({ orders }), ...repeatingLinesTick(), ...orgHealthNow({ prsRead: prs, readyRead: readyRows, decideArgs, decided })); // #2848, #2936: before the dead man's switch -- a repeating line, a stuck org: something found
   // FIRST OF ALL, AND ON PURPOSE (#2163): `wake` delivers in this order and records each delivery with a write, so
   // on a full disk the tick can end partway. The order that says the disk is full must not be the one behind it.
   orders.unshift(...diskOrders);
