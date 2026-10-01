@@ -5624,8 +5624,9 @@ export function diskHeadroomOrders(low) {
       + "`~/repos/wt-*` worktrees (each with a `node_modules`), and npm caches. `node "
       + "packages/agent-org/src/prune-tmp.mjs` classifies `/tmp` and removes NOTHING without `--apply`, and "
       + "`--apply` waits for a named list one cycle first (#2243). `npm run worktrees:prune` is the worktree half.\n"
-      + "IF YOUR OWN SHELL IS FAILING WITH ENOSPC you cannot fix this from here: tell the chairman by another "
-      + "route. The same reading is written on the tick's stderr before `wake` runs (`journalctl --user -u "
+      + "IF YOUR OWN SHELL IS FAILING WITH ENOSPC you cannot fix this from here: label a row `" + CHAIRMAN_LABEL + "` and "
+      + "@-mention `@DanBeckDev` in its brief (a GitHub write, and the label is what the gate reads). "
+      + "The same reading is written on the tick's stderr before `wake` runs (`journalctl --user -u "
       + "a11ign-work-tick.service | grep 'DISK LOW'`), though that journal sits on this same filesystem.",
     causeKey: `ceo/disk-headroom-low/${key}`,
   }];
