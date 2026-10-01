@@ -2183,19 +2183,31 @@ const MAX_REFS_LOOKED_UP = 3;
  * A LOOKUP THAT CANNOT ASK ENDS NOTHING: `holder` answers `null` for a GitHub that would not say, and that is
  * `unknown`, never `none` -- an order is dropped only when GitHub said nobody holds what it names.
  *
+ * THE AUTHOR IS NOT AN ADDRESSEE (#2853): an order whose only live holder is the session that WROTE it is `author`,
+ * and is dropped -- `worker-2783` wrote an order for `reviewer-2826`, the reviewer ended, and the "holder of #2783"
+ * was `worker-2783` itself, so the order was queued back to its author for ever. An author does not need to be told
+ * what it wrote; another live holder, on this reference or a LATER one, still wins.
+ *
  * @param {{session: string, prompt: string}} order @param {readonly {label: string}[]} agents
  * @param {(ref: number) => {open: boolean, sessions: string[]} | null} holder
- * @returns {{to: string, ref: number} | {none: true, looked: number[]} | {unknown: string}}
+ * @returns {{to: string, ref: number} | {author: string, ref: number} | {none: true, looked: number[]}
+ *   | {unknown: string}}
  */
 function readdress(order, agents, holder) {
   const refs = namedRefs(order.prompt).slice(0, MAX_REFS_LOOKED_UP);
+  const author = authorOf(order.prompt);
+  /** @type {{author: string, ref: number} | undefined} */
+  let authorOnly;
   for (const ref of refs) {
     const facts = holder(ref);
     if (facts === null) return { unknown: `could not read who holds #${ref}` };
-    const to = facts.open ? facts.sessions.find((s) => s !== order.session && !isAbsent(s, agents)) : undefined;
+    const live = facts.open ? facts.sessions.filter((s) => s !== order.session && !isAbsent(s, agents)) : [];
+    const to = live.find((s) => s !== author);
     if (to !== undefined) return { to, ref };
+    // ONLY THE AUTHOR HOLDS THIS REFERENCE: remembered, not returned -- a later reference may have another live holder.
+    if (live.length > 0 && authorOnly === undefined) authorOnly = { author: /** @type {string} */ (author), ref };
   }
-  return { none: true, looked: refs };
+  return authorOnly ?? { none: true, looked: refs };
 }
 
 /**
@@ -2251,13 +2263,43 @@ export function resolveEndedHandoffs(handoffs, deps) {
   /** @type {string[]} */
   const lines = [];
   for (const order of handoffs) {
-    if (targetState(order.session, deps.agents, deps.ended) !== "ended") continue;
-    const outcome = readdress(order, deps.agents, holder);
-    const line = settle(order, outcome, deps);
+    const state = targetState(order.session, deps.agents, deps.ended);
+    const line = state === "ended" ? settle(order, readdress(order, deps.agents, holder), deps)
+      : state === "absent" ? settleOrphan(order, holder, deps) : null;
+    if (line === null) continue;
     lines.push(line.said);
     if (line.done) settled.push(order.id);
   }
   return { settled, lines };
+}
+
+/** The row an engineer instance is named for: `worker-2783` -> 2783. Anything else is `null`. @param {string} session @returns {number | null} */
+function engineerRow(session) {
+  const found = /^worker-([1-9][0-9]*)$/.exec(session);
+  return found === null ? null : Number(found[1]);
+}
+
+/**
+ * AN ORDER FOR AN ENGINEER INSTANCE THAT IS GONE AND WHOSE ROW IS CLOSED HAS NOBODY TO WAIT FOR (#2853). `absent` is
+ * kept in general ({@link targetState}) because the tick has no record of an ending -- and `worker-2783` left without
+ * the teardown, so it never gets one. An engineer instance is named for its row (#2469) and never started twice, so
+ * once GitHub says the row is closed nothing will ever start under that name. A row that is open keeps its order (an
+ * instance may yet start), and a row GitHub would not read keeps it too: dropped only on a reading that was made.
+ * @param {{id: string, session: string, prompt: string, queuedAt?: number}} order
+ * @param {(ref: number) => {open: boolean, sessions: string[]} | null} holder @param {EndedDeps} deps
+ * @returns {{done: boolean, said: string} | null} `null` when the order is none of this function's business
+ */
+function settleOrphan(order, holder, deps) {
+  const row = engineerRow(order.session);
+  if (row === null) return null;
+  const facts = holder(row);
+  if (facts === null || facts.open) return null;
+  const now = deps.now ?? Date.now();
+  const author = authorOf(order.prompt);
+  recordDrop(deps.queuePath, order, { reason: `target has no workspace and its row #${row} is closed` }, { write: deps.write, now });
+  return { done: true, said: `DROPPED ${order.id}: "${order.session}" has no workspace and its row #${row} is closed, so order `
+    + `${order.id}${author === null ? "" : ` from "${author}"`} (waited ${waitedFor(now - Number(order.queuedAt ?? now))}) has no `
+    + "addressee and never will. It is retired with a record (`dropped`, carrying its text), not as a delivery.\n" };
 }
 
 /**
@@ -2285,6 +2327,11 @@ function settle(order, outcome, deps) {
       reroutedTo: outcome.to }, io);
     return { done: true, said: `RE-ADDRESSED ${order.id}: ${gone}. #${outcome.ref} is held by live "${outcome.to}", `
       + `so it now waits there as ${entry.id}.\n` };
+  }
+  if ("author" in outcome) {
+    recordDrop(deps.queuePath, order, { reason: `target ended; the only live holder of #${outcome.ref} is its own author "${outcome.author}"` }, io);
+    return { done: true, said: `DROPPED ${order.id}: ${gone}, and the only live holder of #${outcome.ref} is "${outcome.author}", `
+      + "who wrote it. An author is not told what it wrote; it is retired with a record (`dropped`, carrying its text).\n" };
   }
   const named = outcome.looked.length === 0 ? "names no row or pull request"
     : `names ${outcome.looked.map((n) => `#${n}`).join(", ")}, none open and held by a live session`;
