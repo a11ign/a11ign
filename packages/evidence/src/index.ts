@@ -80,7 +80,7 @@ export interface CaptureRequest {
   nav?: "object" | "line";
 
   /** Ten opt-in probes, each paying for evidence only when asked — `PROBE_FLAGS` in
-   *  `@a11ign/nvda-worker/capture-pure` is the worker's own copy of this exact list. */
+   *  `@a11ign/screenreader-worker/capture-pure` is the worker's own copy of this exact list. */
   probeForms?: boolean;
   probeFocus?: boolean;
   probeTables?: boolean;

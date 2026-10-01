@@ -37,7 +37,7 @@
  *
  *  - `a11ign@0.1.0` has no `--version` flag (it prints its usage and exits 1). A version that is printed and
  *    DISAGREES with the install is refused; a CLI that offers no version to compare is "could not tell".
- *  - `@a11ign/nvda-worker` throws when imported on a machine with no supported screen reader (Linux). Every
+ *  - `@a11ign/screenreader-worker` throws when imported on a machine with no supported screen reader (Linux). Every
  *    specifier resolved and the package's own code then refused the platform, so it is unchecked there, and
  *    `--require-imports` on the Windows runner is what makes it a refusal if it fails where it should work.
  */
@@ -236,7 +236,7 @@ export function versionFindings(output, installed) {
 /**
  * Every published layer's entry point must import. A failure to RESOLVE (a missing file, an `exports` map that
  * names nothing, a syntax error) is a packaging defect and is refused. Anything else was thrown by the package's
- * own code after every specifier resolved -- `@a11ign/nvda-worker` refuses a machine with no screen reader -- so it
+ * own code after every specifier resolved -- `@a11ign/screenreader-worker` refuses a machine with no screen reader -- so it
  * is UNCHECKED here, and REFUSED only where the caller says the platform is one that must import
  * (`requireImports`).
  * @param {ImportOutcome[]} imports
