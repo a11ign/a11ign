@@ -51,7 +51,7 @@ complete without it, not in a list you intend to follow.**
 staleness check above asks about rows THIS role already knows are claimed; it says nothing about a branch
 pushed and then never proposed at all — `agent/ssh-key-defaults` carried a finished security fix for
 **eleven hours** with no PR, no CI run, and no merge path, found only because a human happened to read a
-branch list. `npm run branches:stranded` is the standing answer: run it alongside the resume checklist
+branch list. `pnpm run branches:stranded` is the standing answer: run it alongside the resume checklist
 above, and treat what it names as CANDIDATES needing a look, not an automatic dispatch — see the script's
 own header for why a rebase can produce the identical shape without being stranded.
 
@@ -102,7 +102,7 @@ A reviewer given either alone would have approved it. See [`not-working.md` §24
   worker pulls rather than waits.
 - **First-pass review.** Reading the diff, checking the acceptance test is a COMMAND and not a judgement,
   confirming the mutation check was run and reported.
-  **`npm run mutate` is the required form, and a hand-typed sequence is not evidence.** It runs the
+  **`pnpm run mutate` is the required form, and a hand-typed sequence is not evidence.** It runs the
   test first and refuses if it is already red, copies the file aside rather than `git checkout --`,
   **proves the mutation actually landed**, requires the test to FAIL, then restores and runs the test
   again. Its exit code is the report: **0** the guard bites, **1** it did not — suspect the guard
@@ -112,7 +112,7 @@ A reviewer given either alone would have approved it. See [`not-working.md` §24
   a quoting slip made the edit a no-op, one because it read a whole document where it meant to read
   one section. **A worker reporting "mutation-checked" without that exit code is reporting a
   memory.**
-- **Running the local gates**: `npm test`, `npm run lint`, `npx tsc --noEmit`, and for any `.mjs`,
+- **Running the local gates**: `pnpm test`, `pnpm run lint`, `pnpm exec tsc --noEmit`, and for any `.mjs`,
   `node -e "import('./path.mjs')"` — which neither lint nor tsc catches and this repo has paid for more
   than once, including in a merge resolution by the lead the same night.
 - **Merging what is clean and self-contained**, and pushing it.
@@ -222,7 +222,7 @@ was written:
   tests against**, on top of moving the hash. The stale-`dist` case is the passive version of this; a
   feature branch there is the active one.
 
-**Rebuild the primary after merges** — `npm run build` — or every worktree inherits whatever it last built.
+**Rebuild the primary after merges** — `pnpm run build` — or every worktree inherits whatever it last built.
 Verified safe during a live capture: a build writes `dist/` only, `nvda-worker` has no build step at all
 (plain `.mjs`, ADR 0031), and `workerSourceDirty()` reads `git status -- packages/nvda-worker/src`. Measured
 worker source 0 dirty either side and `worker:code` 10/10 after.
@@ -450,7 +450,7 @@ something I missed"* rather than *"I did not commit what I tested"*:
 > **A green local suite and a red CI on the same "commit" means the thing tested and the thing committed are
 > not the same object.**
 
-`npm test` reads the working tree; CI reads the commit. `CLAUDE.md` records the mirror — *"`git commit --
+`pnpm test` reads the working tree; CI reads the commit. `CLAUDE.md` records the mirror — *"`git commit --
 <paths>` commits from the WORKING TREE, so a staged path not listed is silently dropped"* — and this is the
 other door: stage, then edit, then commit without paths, and the edit is dropped instead.
 
@@ -470,7 +470,7 @@ unrelated branch.
 
 ```bash
 git stash push -m "agent/my-branch: what this is"   # required — the message is the only owner record
-npm run stash:whose                                 # every stash with the branch it was made on
+pnpm run stash:whose                                 # every stash with the branch it was made on
 A11Y_STASH_ANY=1 git stash push                     # deliberate exception, named in the refusal
 ```
 
@@ -510,9 +510,9 @@ real predicate is *"a PR somebody is actively working on"*, and the other party 
 from outside. The collision was invisible, not careless.
 
 ```bash
-npm run pr:hold -- <n> --session=<name>      # take it; prints who held it before
-npm run pr:release -- <n> --session=<name>   # give it back
-npm run pr:hold -- <n>                       # report only, writes nothing
+pnpm run pr:hold -- <n> --session=<name>      # take it; prints who held it before
+pnpm run pr:release -- <n> --session=<name>   # give it back
+pnpm run pr:hold -- <n>                       # report only, writes nothing
 ```
 
 `merge-guard` refuses a PR held by another session and names the holder. **There is deliberately no

@@ -23,7 +23,7 @@ when the pull request merges or closes, and there is no limit on how many instan
 checkout of the pull request's head, prepared for you and re-pointed on every push: review from that path, and do not
 make another (your sandbox cannot write `.git`). **The tick also links that checkout's dependencies in and gives your pane a cache it can
 write (#2498):** third-party `node_modules` entries point at the tick's checkout, `@a11ign/*` at THIS tree's `packages/`, and
-`npm_config_cache` at `<checkout>/node_modules/.cache/npm`, because `~/.npm` is read-only in your sandbox. Run `npm run build` first when the
+`npm_config_cache` at `<checkout>/node_modules/.cache/npm`, because `~/.npm` is read-only in your sandbox. Run `pnpm run build` first when the
 Acceptance needs `dist`; do not install, and do not build a `node_modules` of your own. **Your pane may hold no `A11Y_REVIEWER_SESSION`**
 (the tick sets it when it starts you, and herdr's restore of you after a `herdr.service` restart, a `codex resume`, does not), so the order says to post the verdict as
 `A11Y_REVIEWER_SESSION=reviewer-<n> pr-review-verdict …`, which signs it whatever the pane holds. The two standing panes keep
@@ -70,7 +70,7 @@ So:
   GitHub review object.
 - **Never run anything that reads `runs/` as a reported result** (rules:gate, check-signals, rules:coverage);
   the fleet operator owns those. You may run a package's tests.
-- **Never commit, and never run `npm run primary:update`.**
+- **Never commit, and never run `pnpm run primary:update`.**
 
 ## The lane
 
@@ -242,7 +242,7 @@ reason to read the diff instead. Measured on #2376: at `2e0ee2ce` the Acceptance
 its cache path is read-only/EROFS)", and at `a2059643` a `convinced (provisional)` rested on "settled CI and prior acceptance evidence" and
 named no run.
 
-- **Try the remedies first:** `npm run build` when the command needs `dist`; `printenv npm_config_cache` (set it to the path the order names
+- **Try the remedies first:** `pnpm run build` when the command needs `dist`; `printenv npm_config_cache` (set it to the path the order names
   when it is empty); `ls node_modules/@a11ign`. If the Acceptance still did not execute, put the command and its first error line under
   `Acceptance:` and say which of the three it is.
 - **A `convinced` verdict whose Acceptance did not execute names the CI run it relies on (run id or job URL) in the verdict line**, at the

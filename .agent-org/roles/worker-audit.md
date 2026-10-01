@@ -114,7 +114,7 @@ whether a real one is worth requesting.
 ## Acceptance standard I hold myself to
 
 Every report names the branch and commit(s), the acceptance command verbatim and its actual output,
-`npm test`/`npm run lint`/`npx tsc --noEmit` results, and — for anything fixed, not just found — a
+`pnpm test`/`pnpm run lint`/`pnpm exec tsc --noEmit` results, and — for anything fixed, not just found — a
 mutation check in both directions with the restore confirmed by `diff`. A corpus-reading failure caused
 upstream of my change is named as such, not chased or ignored.
 
