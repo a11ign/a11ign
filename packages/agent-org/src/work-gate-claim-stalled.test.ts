@@ -24,8 +24,9 @@ import {
 } from "./wake.mjs";
 import {
   claimRecordComment, declineRow, claimWithWorktree, worktreeTargetReason, worktreeFlagsReason,
-  implicitAdoptSession, predecessorLivenessUnknown, predecessorGoneReading, recordPredecessorGone, adoptFor,
+  implicitAdoptSession, predecessorLivenessUnknown, predecessorGoneReading, recordPredecessorGone, adoptFor, ROW_CLAIM_FLAGS,
 } from "./row-claim.mjs";
+import { unknownFlags } from "./lib/cli-flags.mjs";
 import { CLAIM_RECORD_MARKER } from "./claim-labels.mjs";
 import {
   CLAIM_STALLED, STALL_INTERVAL_MS, STALL_UNTOLD_RELEASE_MS, INTERRUPTED_SETTLE_MS, GONE_CONFIRM_MS, nudgeKey, nudgeDeliveredAt, claimRecordOf, commentMove, workAtRisk, fileMove, claimReading,
@@ -1471,4 +1472,35 @@ test("#2470 (9) a pane interrupted for LESS than the settle time is left alone (
   assert.deepEqual(seen(null), [], "a session whose last activity cannot be established is left alone");
   assert.match(readFileSync(new URL("./wake.mjs", import.meta.url), "utf8"), /if you were stopped on purpose, say so on the row and stop/,
     "and the prompt itself tells a deliberately stopped session what to do");
+});
+
+test("#2841 every argv wake.mjs sends to row-claim.mjs passes row-claim's REAL flag guard, and the guard refuses one flag short of that", () => {
+  // Callers covered: `performRelease` (decline: --keep-worktree, --predecessor-gone, --answer=), `spawnClaimer.claim` (claim: fresh and --adopt=),
+  // and `releaseClaim`'s undo (decline, plain and --keep-worktree). Those are every `ROW_CLAIM` spawn in wake.mjs; no other src/ file spawns it.
+  const argvs: { from: string; args: string[] }[] = [];
+  const release = (o: { answer?: string; spare?: boolean }, from: string) => {
+    const r = releaseHost({ world: { dirty: [{ file: "a.mjs", ago: 900 }], unpushed: 2 } });
+    performRelease({ ...STALL, ...(o.answer === undefined ? {} : { answer: o.answer }) }, r.deps);
+    argvs.push({ from, args: r.decline()!.args.slice(1) });
+  };
+  release({}, "performRelease, gone worker, tree kept");
+  release({ answer: "product-manager" }, "performRelease with --answer=");
+  const adopt = spawnHost({ kept: KEPT });
+  adopt.claimer.claim(SPAWN_ORDER, "worker-2407", {});
+  argvs.push({ from: "spawnClaimer.claim --adopt=", args: adopt.claimArgs() });
+  const fresh = spawnHost({ kept: null });
+  fresh.claimer.claim(SPAWN_ORDER, "worker-2407", {});
+  argvs.push({ from: "spawnClaimer.claim fresh", args: fresh.claimArgs() });
+  const undone = spawnHost({ kept: KEPT, vanish: true });
+  undone.claimer.claim(SPAWN_ORDER, "worker-2407", {});
+  argvs.push({ from: "releaseClaim undo, adopted", args: undone.execs.find((e) => e.args[1] === "decline")!.args.slice(1) });
+
+  assert.ok(argvs.some((a) => a.args.includes("--predecessor-gone")), "the population includes the flag this row is about");
+  for (const { from, args } of argvs) {
+    assert.deepEqual(unknownFlags(args.slice(1), ROW_CLAIM_FLAGS), [], `${from}: ${args.join(" ")}`);
+  }
+  // THE POSITIVE CONTROL: the same argv against the list WITHOUT `--predecessor-gone` is refused, as it was on main since #2748.
+  const without = ROW_CLAIM_FLAGS.filter((f: string) => f !== "--predecessor-gone");
+  const gone = argvs.find((a) => a.args.includes("--predecessor-gone"))!;
+  assert.deepEqual(unknownFlags(gone.args.slice(1), without), ["--predecessor-gone"]);
 });
