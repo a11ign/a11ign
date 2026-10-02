@@ -90,6 +90,10 @@ import { tapShadowReads } from "./shadow-reads.mjs"; // #2849
 // `pr-hold-state.mjs` (no imports at all), so the gate keeps the property its own header states.
 import { armedFromApi, openPullRequestsQueryArgs } from "./auto-arm-sweep.mjs";
 import { armabilityOf, holdersOf } from "./pr-hold-state.mjs";
+// #3019: ARMED-AND-EJECTED IS READ WHERE `armed` IS DECIDED. `pr-armed-state.mjs` is the leaf `armedFromApi` lives in; the
+// timeline reading is its sibling and this file only RUNS the query it builds, so there is still one place deciding it.
+import { ejectionQueryArgs, queueEjectionOf } from "./pr-armed-state.mjs";
+import { summarizeTestLog, testIdentity } from "./parent-recheck-summary.mjs";
 import { REPO } from "./project-identity.mjs";
 import { HOME_CHECKOUT, homeProjectDeclaration } from "./project-config.mjs";
 import { CAUSES, JUDGMENT_CAUSES, START_CAUSES } from "./cause-declaration.mjs";
@@ -329,6 +333,9 @@ export const GH_READS = Object.freeze({
   // request carries it -- the label's age is not on `pr list`, so the labelled ones are asked and only those.
   conditionalOnAwaitingEvidenceLabel: "api repos/{repo}/issues/{n}/events (readEvidenceLabelledAt -- awaiting-evidence-stale)",
   conditionalOnGreenUnheldPr: "api graphql (open PRs' mergeQueueEntry -- readUnarmed)",
+  // #3019: ONE GRAPHQL CALL PER UNARMED CANDIDATE (the timeline's queue events, readEjections), and for one the queue EJECTED, one REST
+  // call for the failed `merge_group` run and one `run view --log-failed`. A healthy tick has no unarmed candidate and pays none of it.
+  conditionalOnUnarmedPr: "api graphql timelineItems (readEjections); api actions/runs?event=merge_group; run view --log-failed (readEjectionRun)",
   // #2970: ONE REST CALL PER OPEN PULL REQUEST that is neither progressing nor held AND whose newest comment, review or creation is already
   // older than org-health's threshold -- the only ones whose push time could change the answer. `commits` cannot ride on `pr list`.
   conditionalOnQuietStalledPr: "api repos/{repo}/commits/{headRefOid} (readHeadCommittedAt -- org-health's pr-not-progressing)",
@@ -3833,6 +3840,85 @@ export function readUnarmed(candidates, run = defaultRun) {
 }
 
 /**
+ * #3019: WHICH OF THE UNARMED CANDIDATES WERE ARMED AND THEN EJECTED, split out before `greenUnarmedOrders` sees them.
+ *
+ * `readUnarmed` says "nothing is armed NOW"; that is also what a PR the queue removed for a red `merge_group` run looks like,
+ * and the order built from it told `product-manager` to re-arm it into a third red run. Each candidate's timeline is read
+ * (one call each -- the candidates are the few PRs a tick found green and unarmed) and an ejected one is returned with what
+ * the owner needs: when, which run, which subtests.
+ *
+ * `null` WHEN THE CANDIDATES THEMSELVES WERE REFUSED, and a candidate whose OWN timeline read is refused or unreadable is
+ * DROPPED FROM BOTH SIDES: it is neither called unarmed nor called ejected, because either would be a guess and an order
+ * built on a guess is the defect this fixes. A refused read sends no order, never a false all-clear.
+ *
+ * @param {number[] | null} unarmed `readUnarmed`'s answer
+ * @param {(args: string[]) => string} [run]
+ * @returns {{ unarmed: number[], ejections: Map<number, {removedAt: string | null, runId: number | null, failingTests: string[] | null}> } | null}
+ */
+export function readEjections(unarmed, run = defaultRun) {
+  if (unarmed === null) return null;
+  const ejections = new Map();
+  const stillUnarmed = [];
+  for (const number of unarmed) {
+    const ejection = readEjection(number, run);
+    if (ejection === null) continue;
+    if (ejection.ejected) ejections.set(number, readEjectionRun(number, ejection.removedAt, run));
+    else stillUnarmed.push(number);
+  }
+  return { unarmed: stillUnarmed, ejections };
+}
+
+/** @param {number} number @param {(args: string[]) => string} run */
+function readEjection(number, run) {
+  try {
+    return queueEjectionOf(JSON.parse(run(ejectionQueryArgs({ number, repo: repoNow() }))));
+  } catch {
+    return null; // refused or not JSON: `queueEjectionOf(null)`'s own answer for "the API did not say"
+  }
+}
+
+/**
+ * The failed `merge_group` run behind one ejection and the subtests it failed -- each fact `null` when it could not be read,
+ * because an order that names an ejection without its run is still better than none, and one that INVENTS a run is worse.
+ *
+ * The run is found by its branch (`gh-readonly-queue/main/pr-<n>-<sha>`, measured on `agent-org#16`): the newest failed
+ * `merge_group` run for this PR created no later than the removal. A PR ejected twice has two, and the removal time picks.
+ *
+ * @param {number} number @param {string | null} removedAt @param {(args: string[]) => string} run
+ */
+function readEjectionRun(number, removedAt, run) {
+  const found = { removedAt, runId: /** @type {number | null} */ (null), failingTests: /** @type {string[] | null} */ (null) };
+  try {
+    /** @type {{ id: number, head_branch: string, conclusion: string, created_at: string }[]} */
+    const runs = JSON.parse(run(["api", `repos/${repoNow()}/actions/runs?event=merge_group&per_page=50`, "--jq", "[.workflow_runs[] | {id, head_branch, conclusion, created_at}]"]));
+    const failed = runs
+      .filter((r) => String(r.head_branch).includes(`/pr-${number}-`) && r.conclusion === "failure"
+        && (removedAt === null || String(r.created_at) <= removedAt))
+      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0];
+    if (!failed) return found;
+    found.runId = Number(failed.id);
+    found.failingTests = failingSubtestsOf(run(["run", "view", String(failed.id), "--repo", repoNow(), "--log-failed"]));
+  } catch {
+    /* the facts read so far stand; the order says the rest could not be read */
+  }
+  return found;
+}
+
+/**
+ * The failing subtest identities in a `--log-failed` dump, capped so a mass failure does not become the order.
+ * `null` when the log names none: "the log did not say" is a different report from "no subtest failed".
+ * @param {string} log
+ * @returns {string[] | null}
+ */
+function failingSubtestsOf(log) {
+  const lines = log.split("\n").map((l) => l.replace(/^.*?\t.*?\t/, "").replace(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z /, ""));
+  const { notOkLines } = summarizeTestLog(lines.join("\n"));
+  const names = [...new Set(notOkLines.map(testIdentity))];
+  return names.length === 0 ? null : names.slice(0, MAX_EJECTION_SUBTESTS);
+}
+const MAX_EJECTION_SUBTESTS = 5;
+
+/**
  * Is this pull request's red made ONLY of the hold's own manufactured jobs? A `hold:` label reddens
  * exactly `HOLD_RED_JOBS` on purpose (`work-gate/pr-orders.mjs`'s own header), and the REVIEW question
  * does not care who placed the hold -- unlike `redOnlyFromHoldOf`, which asks whether a hold answers a
@@ -6021,8 +6107,19 @@ export function scopeTick(scope, drain, read = readLanes(scope), readings = { co
  */
 function codeReadings(openPrs) {
   const required = requiredWhenRed(openPrs);
-  return { prs: withEvidenceLabelAges(withCommitChains(openPrs)), required, baseTip: baseTipWhenRed(openPrs),
-    unarmed: readUnarmed(shouldBeMerging(openPrs, required)) };
+  const split = readEjections(readUnarmed(shouldBeMerging(openPrs, required)));
+  return { prs: withEjections(withEvidenceLabelAges(withCommitChains(openPrs)), split?.ejections), required, baseTip: baseTipWhenRed(openPrs),
+    unarmed: split === null ? null : split.unarmed };
+}
+
+/**
+ * #3019: STAMP `ejection` ON THE PULL REQUESTS THE QUEUE EJECTED, so `stallReasonOf` -- which reads only the pull request --
+ * can classify them. Absent is not `null`: a pull request nobody read stays unstamped and is never accused.
+ * @param {any[]} prs @param {Map<number, unknown> | undefined} ejections
+ */
+function withEjections(prs, ejections) {
+  if (!ejections || ejections.size === 0) return prs;
+  return prs.map((pr) => (ejections.has(Number(pr?.number)) ? { ...pr, ejection: ejections.get(Number(pr.number)) } : pr));
 }
 
 /**
@@ -6342,8 +6439,8 @@ function main() {
   // `requiredWhenRed` makes a `gh` call when anything is red -- calling it inline in both places would
   // pay for it twice on exactly the red tick this row is about.
   const required = requiredWhenRed(openPrs);
-  const baseTip = baseTipWhenRed(openPrs);
-  const decideArgs = { primaryDrift, prs: withPrOwners(withEvidenceLabelAges(withCommitChains(openPrs)), allOpen, stampLookup()), readyRows: rows, promotableRows: promotableRows ?? [],
+  const baseTip = baseTipWhenRed(openPrs), armingSplit = readEjections(readUnarmed(shouldBeMerging(openPrs, required))); // #3019: BEFORE the arguments -- ejected PRs are stamped onto `prs` and leave `unarmed`
+  const decideArgs = { primaryDrift, prs: withEjections(withPrOwners(withEvidenceLabelAges(withCommitChains(openPrs)), allOpen, stampLookup()), armingSplit?.ejections), readyRows: rows, promotableRows: promotableRows ?? [],
     chairmanBlocked: chairmanBlocked ?? [], prFiles, drain, required, baseTip,
     epics: epicsWhenShelfEmpty(rows),
     answerOwed: rowsOwingAnswers({ openRows: allOpen, openPrs, closedRows: closedAnswerRows() }),
@@ -6357,7 +6454,7 @@ function main() {
     // #1969: CONDITIONAL, and the condition is answered for free from the list already in hand.
     // `shouldBeMerging` reads `openPrs`; only if it finds a green, unheld, non-draft PR is the
     // merge-queue call made at all.
-    unarmed: readUnarmed(shouldBeMerging(openPrs, required)), rowBranches, claimRefusals: offeredRefusalStreaks(rows, prFiles, { rowBranches, openRows: allOpen }),
+    unarmed: armingSplit === null ? null : armingSplit.unarmed, rowBranches, claimRefusals: offeredRefusalStreaks(rows, prFiles, { rowBranches, openRows: allOpen }),
     // #2174: A LOCAL READ, NOT AN API ONE -- a `readdir`, some `readFileSync` and one `systemctl` spawn
     // per shipped timer. It adds nothing to `GH_READS` and cannot be refused by an exhausted pool, which
     // is what lets the detection exist at all.
