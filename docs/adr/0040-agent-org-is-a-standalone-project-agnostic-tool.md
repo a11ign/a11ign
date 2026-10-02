@@ -2,6 +2,8 @@
 
 ## Status
 
+**AMENDED 2026-10-02 -- DECISION 5 IS REPLACED (chairman's ruling, recorded by `ceo`).** "Before the trial, we should make sure the code is synced between the two versions rather, just fix forward and just delete the old one." The two-copy period was costing more than it protected: it froze the gate's own self-healing fixes until 2026-10-03T18:27Z, and 133 monorepo commits touching `packages/agent-org` had not reached `a11ign/agent-org` (measured at `244b573aa`). **What replaces decision 5:** (1) the shadow window is CANCELLED (stopped 2026-10-02T06:52Z after 355 recorded ticks; its record is kept, not deleted) and the freeze on the gate's import closure is lifted; (2) `a11ign/agent-org` is synced to the monorepo's `packages/agent-org` at ONE named commit, proved by an empty diff apart from `agent-org`'s own paths (#2972); (3) the host is pointed at `agent-org` with a short smoke test straight after, NOT a trial, and NO rollback copy: a break is fixed forward in `agent-org` (#2974); (4) `packages/agent-org` is deleted from `a11ign/a11ign` and a guard refuses its return (#2976), after the monorepo's reach into it is repointed (#2975) and the docs and briefs follow (#2977); (5) from then on all `agent-org` work happens in `a11ign/agent-org` only. **One precondition `ceo` added and the chairman did not name:** `agent-org`'s `gate` runs none of the tool's own suite today (it needs a project), so the cut waits for a `gate` that can go red (#2973); "fix forward" with no suite that fails is not a check. The text of decision 5 below is kept as written and marked REPLACED; the readings it rests on stay true as readings. The decisions the ruling does not touch (1-4 and 6-11) stand.
+
 **Proposed, 2026-09-26.** Row #2615, child 2 of #69. It moves no code and files no row: the appendix holds, for each of
 the eight children already filed (#2616 to #2623), the Region, Acceptance and Done-when **confirmed or amended against
 the decisions below**, plus two rows the decisions found were missing and the nine MOVE rows (one per target repository and one per npm rename, each naming its chairman step or saying it has none), so `product-manager` promotes from the appendix and
@@ -84,7 +86,7 @@ names** (decision 1, surface 2), which is why the label row is larger than it wa
    project units and the routing data stay in the project.
 4. **`guards` stays with the product; the tool COPIES the seven small files it needs; the org's tests split by what they
    import (113 travel, 14 stay to be divided).** The tool ends with no relative import out of its own tree.
-5. **The rehearsal is a shadow run on a copy of the state with a stated window (1,440 ticks, chosen not measured), and the
+5. **REPLACED 2026-10-02 by the chairman's ruling (see Status): no shadow window, no two installed copies, no rollback copy; sync, cut, delete.** *Original text, kept as the record:* The rehearsal is a shadow run on a copy of the state with a stated window (1,440 ticks, chosen not measured), and the
    rollback is that no state file changes shape or place across the cut.** The old unit stays installed and its timer is
    disabled, not deleted, until a separate row removes it.
 6. **`agent-org`'s `main` is protected BEFORE its first pull request, and the one unprotected write is named: the first push
