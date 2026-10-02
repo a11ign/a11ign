@@ -595,7 +595,7 @@ run_gate() { # run_gate <branch-label>
   if [ "${#lint_paths[@]}" -eq 0 ]; then
     skipped+=("lint (no .ts/.mjs/.js file changed against origin/main -- nothing for eslint to read)")
   else
-    run "lint (${#lint_paths[@]} changed file(s))" npx eslint "${lint_paths[@]}"
+    run "lint (${#lint_paths[@]} changed file(s))" pnpm exec eslint "${lint_paths[@]}"
   fi
 
   # TYPECHECK IS NOT SCOPED, AND THE REASON IS THE MECHANISM RATHER THAN A PREFERENCE -- #911.
@@ -606,7 +606,7 @@ run_gate() { # run_gate <branch-label>
   # "typecheck the changed packages" drops 664 of the 953 and reports clean -- the root tsconfig's own
   # comment records that regression happening once already, 25 test files silently unchecked. It costs
   # 4.86s, against the 30.22s the tree-wide sweep cost before this row removed it.
-  run "typecheck (the whole program)"  npm run --silent typecheck
+  run "typecheck (the whole program)"  pnpm run --silent typecheck
 
   # THE LEAK SCAN IS THE ONE CHECK HERE WHOSE VALUE IS BEING BEFORE THE PUSH -- #911, and it is named by
   # file rather than swept for. Everything else this hook used to run is a second copy of CI minutes
@@ -619,7 +619,7 @@ run_gate() { # run_gate <branch-label>
   # growing to 25 GB. The entry that `test:*` use refuses a suite start in a tree whose `node_modules` reads another
   # checkout (#2218), which is 42 of 56 linked worktrees, and a push hook that newly refused those pushes would be a
   # different change. The cap module is the shared half; it prints `memory cap: ...` so this run says which path it took.
-  run "leak scan" node packages/guards/src/test-memory-cap.mjs run tsx -- npx tsx --test \
+  run "leak scan" node packages/guards/src/test-memory-cap.mjs run tsx -- pnpm exec tsx --test \
     packages/lab/src/packaging/tracked-source-leak-guard.test.ts \
     packages/lab/src/packaging/tracked-prose-leak-guard.test.ts
 
@@ -737,7 +737,7 @@ run_gate "$BRANCH"
 # BEGIN #911 NOT-RUN LINE -- extraction markers for pre-push-hook-scope.test.ts; keep both if edited.
 echo "  NOT RUN training:check-signals, rules:gate -- both read the corpus in runs/, and a copy here is"
 echo "          only as fresh as its last sync. The authoritative verdict comes from the lab:"
-echo "          npm run lab:job -- -e job=check-signals   |   npm run lab:job -- -e job=rules-gate"
+echo "          pnpm run lab:job -- -e job=check-signals   |   pnpm run lab:job -- -e job=rules-gate"
 # END #911 NOT-RUN LINE
 
 

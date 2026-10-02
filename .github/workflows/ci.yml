@@ -39,7 +39,7 @@ name: ci
 #     already there) and `coverage.yml` (new: nightly schedule + release-time, threshold intact). Neither
 #     answers "did THIS PR's diff regress"; both answer "is the repository as a whole still sound", which
 #     does not need re-asking on every commit of every PR.
-#   - The rules fitness gate (`npm run rules-check`) is now its own job below, `rulesFitness`, gated on
+#   - The rules fitness gate (`pnpm run rules-check`) is now its own job below, `rulesFitness`, gated on
 #     `packages/judge` or `packages/evidence` having changed -- the only two paths that can move its
 #     answer, per `ci-changed.mjs`'s `rulesFitness` category.
 #
@@ -268,8 +268,8 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
-      - run: npm run build
-      - run: npm run rules-check
+      - run: pnpm run build
+      - run: pnpm run rules-check
 
   changeset:
     needs: changed
@@ -296,12 +296,12 @@ jobs:
       - name: A consumer-visible change must say what it does to a consumer
         if: steps.precise.outputs.changeset == 'true'
         run: |
-          if ! npx changeset status --since=${{ needs.changed.outputs.base }}; then
+          if ! pnpm exec changeset status --since=${{ needs.changed.outputs.base }}; then
             echo "::error::This PR changes a published package and carries no changeset."
-            echo "Run 'npm run changeset', pick the packages and bump levels, and write one sentence a"
+            echo "Run 'pnpm run changeset', pick the packages and bump levels, and write one sentence a"
             echo "CONSUMER would want to read. See .changeset/README.md -- the bump level does NOT follow"
             echo "from the size of the diff, and for the scorer any retrain is a MAJOR."
-            echo "If the change genuinely cannot affect a consumer, 'npx changeset add --empty' records"
+            echo "If the change genuinely cannot affect a consumer, 'pnpm exec changeset add --empty' records"
             echo "that decision explicitly rather than leaving it to be inferred from silence."
             exit 1
           fi
@@ -330,12 +330,12 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
-      - run: npm run build
+      - run: pnpm run build
       # `GH_TOKEN` because the packaging guards in the population shell out to `gh`, as `ts`'s own test step does.
       - name: Every tree-wide guard, on this tree
         env:
           GH_TOKEN: ${{ github.token }}
-        run: npm run guards:sweep
+        run: pnpm run guards:sweep
 
   # #298 (pipeline unit 1): WITH `strict=false` (#277), branch protection no longer requires this head to
   # contain `main`'s current tip before merging -- it merges the instant `gate` is green for the RECORDED
@@ -416,7 +416,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
-      - run: npm run build
+      - run: pnpm run build
       - name: This head matches what GitHub recorded (#294)
         env:
           GH_TOKEN: ${{ github.token }}

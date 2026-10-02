@@ -6,6 +6,9 @@
   "type": "module",
   "license": "AGPL-3.0-or-later",
   "packageManager": "pnpm@10.34.5",
+  "engines": {
+    "npm": "use pnpm instead: run pnpm install"
+  },
   "scripts": {
     "mutate": "node packages/guards/src/mutation-check.mjs",
     "guards:sweep": "node packages/guards/src/tree-wide-guards.mjs | xargs node packages/guards/src/assert-glob-not-empty.mjs --min=1 --run --runner=rstest",
@@ -46,6 +49,7 @@
     "eval:gate": "A11Y_PYTHON=.venv/bin/python EVAL_GATE=1 EVAL_RUNS=3 tsx packages/lab/src/eval/run.ts",
     "typecheck": "tsc --noEmit",
     "build": "node scripts/build-packages.mjs",
+    "preinstall": "node scripts/refuse-other-installers.mjs",
     "prepare": "node scripts/install-git-hooks.mjs && node scripts/build-packages.mjs",
     "lint": "eslint .",
     "scan": "tsx packages/cli/src/scan/run-axe.ts",

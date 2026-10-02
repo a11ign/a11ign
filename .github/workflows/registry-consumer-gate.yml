@@ -92,6 +92,9 @@ jobs:
         shell: bash
         run: node scripts/registry-consumer-gate.mjs --into="$RUNNER_TEMP/clean" --require-imports --spec="$SPEC"
 
+      # STAYS `npx` (#2891, pinned by name in `workflows-run-pnpm.test.ts`): this job installs NOTHING from the repository, so
+      # there is no pnpm project here for `pnpm exec` to resolve against, and `pnpm dlx` is the run-time fetch the move to pnpm
+      # forbids. The directory is the CONSUMER's, and what a consumer has in it is npm's.
       # The pinned installer, from this repository's own manifest so the two cannot drift. It runs FROM the clean
       # directory because it reads `node_modules/@guidepup/guidepup/manifest.json` for the NVDA build to fetch, and
       # that file is the one the PUBLISHED `@a11ign/screenreader-worker` brought.
@@ -135,6 +138,8 @@ jobs:
           $v = (Get-ItemProperty 'HKCU:\Control Panel\Desktop' -Name ForegroundLockTimeout -ErrorAction SilentlyContinue).ForegroundLockTimeout
           if ($v -ne 0) { throw "ForegroundLockTimeout is '$v', not 0 - the capture would return 0 phrases with no error." }
 
+      # STAYS `npx` (#2891): the bin is the one the CONSUMER's npm install linked into `node_modules/.bin`; a gate that ran it
+      # through pnpm would test a different consumer.
       # The scorer's requirements and its `a11ign-scorer-fetch-encoder` bin are the published `@a11ign/scorer`'s.
       - name: Set up the local scorer from the installed package
         shell: bash
@@ -154,6 +159,7 @@ jobs:
           test -f node_modules/@a11ign/scorer/models/screenreader-scorer/model.safetensors \
             || { echo "::error::the published @a11ign/scorer carries no trained model." >&2; exit 1; }
 
+      # STAYS `npx` (#2891): this IS the consumer's command, and the Acceptance line below quotes it verbatim.
       # `ceo`'s Acceptance line, verbatim: `npx a11ign <url>`, from the clean install, against the page the Action's own
       # smoke uses (W3C publishes it WITH a conformance claim). The worker is the INSTALLED worker package (whichever name the install carries).
       - name: npx a11ign <url>, from the clean install

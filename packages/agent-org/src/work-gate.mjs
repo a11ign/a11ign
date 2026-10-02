@@ -77,6 +77,8 @@ import { stateEntryPath } from "./host-config.mjs"; // #2799
 import { repeatingLinesTick } from "./repeating-lines.mjs";
 // #2936: THE ORG-HEALTH QUESTION, in its own leaf for the same reason: relative imports only, so the gate keeps the property its own header states.
 import { orgHealthTick, readLastMergedAt, primaryStandingSince } from "./org-health.mjs";
+// #2938: THE DAILY RETROSPECTIVE, in its own leaf for the same reason: it reads the journal, the ledger and a day of PRs once, and says what it found.
+import { retrospectiveTick } from "./org-retro.mjs";
 import { tapShadowReads } from "./shadow-reads.mjs"; // #2849
 // #1969, AND THE PREDICATE IS IMPORTED RATHER THAN RE-DECIDED. `armedFromApi` knows THREE armed states --
 // merged, a pending auto-merge, and SITTING IN THE MERGE QUEUE, where `autoMergeRequest` reads `null` on a
@@ -5626,8 +5628,9 @@ export function diskHeadroomOrders(low) {
       + "`~/repos/wt-*` worktrees (each with a `node_modules`), and npm caches. `node "
       + "packages/agent-org/src/prune-tmp.mjs` classifies `/tmp` and removes NOTHING without `--apply`, and "
       + "`--apply` waits for a named list one cycle first (#2243). `npm run worktrees:prune` is the worktree half.\n"
-      + "IF YOUR OWN SHELL IS FAILING WITH ENOSPC you cannot fix this from here: tell the chairman by another "
-      + "route. The same reading is written on the tick's stderr before `wake` runs (`journalctl --user -u "
+      + "IF YOUR OWN SHELL IS FAILING WITH ENOSPC you cannot fix this from here: label a row `" + CHAIRMAN_LABEL + "` and "
+      + "@-mention `@DanBeckDev` in its brief (a GitHub write, and the label is what the gate reads). "
+      + "The same reading is written on the tick's stderr before `wake` runs (`journalctl --user -u "
       + "a11ign-work-tick.service | grep 'DISK LOW'`), though that journal sits on this same filesystem.",
     causeKey: `ceo/disk-headroom-low/${key}`,
   }];
@@ -6213,7 +6216,7 @@ function main() {
   // FIRST OF ALL, AND ON PURPOSE (#2163): `wake` delivers in this order and records each delivery with a write, so
   // on a full disk the tick can end partway. The order that says the disk is full must not be the one behind it.
   orders.unshift(...diskOrders);
-  orders.push(...deadMansSwitch({ orders, drain, performed, openRows: openRowsRead }));
+  orders.push(...deadMansSwitch({ orders, drain, performed, openRows: openRowsRead }), ...retrospectiveTick()); // #2938: AFTER the switch, which reads `orders` -- a once-a-day offer must not mask a stall
   for (const order of orders) process.stdout.write(`${JSON.stringify(order)}\n`);
 
   // BOTH SHELVES ON ONE LINE-SHAPE. The engineer pool's B4/declared-wait shelvings and the fleet batch's
