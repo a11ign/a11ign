@@ -16,7 +16,6 @@
 // only in it when something the gate already reads can prove it: the row kinds are `waiting-condition.mjs`'s own (the gate asks it
 // through `declaredWait`, never a second copy), the pull-request kinds are facts on the `pr list` payload and the herdr listing.
 import { listingIsComplete } from "./herdr-agents.mjs";
-import { newestPerName } from "./newest-check-run.mjs";
 import { ANSWER_PREFIX, NEEDS_CHAIRMAN_LABEL } from "./project-vocabulary.mjs";
 
 const MINUTE_MS = 60_000;
@@ -71,21 +70,8 @@ export const WAIT_FIELDS = Object.freeze({
 
 /** @typedef {{ label: string, status: string }} Agent */
 /** @typedef {{ number?: number, reviewDecision?: string | null, labels?: ({ name?: string } | string)[],
- *   statusCheckRollup?: { name?: string, status?: string }[] | null }} IdlePr a `gh pr list --json` object, as `readPrs` returns it */
-
-/**
- * `status` values of a check run still to finish. CHECK RUNS ONLY: `newestPerName` keys on `name` and a commit status (a `StatusContext`) has a
- * `context` instead, so it is not read -- this repository's checks are GitHub Actions runs, and a second reading of a different shape would be one
- * nobody here has seen on a live payload.
- */
-const CHECK_RUN_UNSETTLED = new Set(["IN_PROGRESS", "QUEUED", "PENDING", "WAITING", "REQUESTED"]);
-
-/** @param {IdlePr} pr @returns {boolean} */
-function hasUnsettledCheck(pr) {
-  // THE NEWEST RUN PER NAME, because the rollup unions superseded attempts and a re-run's earlier, still-listed run would read as pending forever.
-  return newestPerName(/** @type {never} */ (pr.statusCheckRollup ?? [])).some(
-    (c) => /** @type {{ status?: string }} */ (c).status !== undefined && CHECK_RUN_UNSETTLED.has(String(/** @type {{ status?: string }} */ (c).status).toUpperCase()));
-}
+ *   checksPending?: boolean }} IdlePr a `gh pr list --json` object, as `readPrs` returns it, plus `checksPending`, which THE GATE derives: the rollup is
+ * read only where `stillRunning` and `newestPerName` live, so this leaf neither re-decides what a running check is nor reads a rollup unnarrowed */
 
 /** @param {IdlePr} pr @returns {boolean} */
 function hasEvidenceLabel(pr) {
@@ -102,7 +88,7 @@ function prWaitKinds(pr, agents) {
   /** @type {string[]} */
   const kinds = [];
   if (agents.some((a) => a.label === `reviewer-${pr.number}` && a.status !== "unknown")) kinds.push("review-requested");
-  if (hasUnsettledCheck(pr)) kinds.push("checks-pending");
+  if (pr.checksPending === true) kinds.push("checks-pending");
   if (pr.reviewDecision === "APPROVED") kinds.push("review-approved");
   if (hasEvidenceLabel(pr)) kinds.push("awaiting-evidence");
   return kinds;

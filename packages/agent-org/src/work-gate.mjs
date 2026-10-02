@@ -2876,7 +2876,7 @@ function readClaims({ held, byRow, openPrs, mergedPrs, io, repo, now, restart, a
     }
     const session = sessions[0].slice(SESSION_PREFIX.length);
     const facts = claimFactsFrom({ row: row.number, title: row.title, session, waiting: declaredWait(row, session),
-      waitKind: declaredWaitOf(row, session)?.kind ?? null, blockedBy: openBlockers(row), comments: byRow.get(Number(row.number)) ?? [], openPrs, mergedPrs, repo }, io);
+      waitKind: declaredWaitOf(row, session)?.kind ?? null, blockedBy: openBlockers(row), comments: byRow.get(Number(row.number)) ?? [], openPrs: withChecksPending(openPrs), mergedPrs, repo }, io);
     if ("skip" in facts) {
       log(`claim-stall: ${facts.skip} -- not evaluated.\n`);
       continue;
@@ -2892,6 +2892,15 @@ function readClaims({ held, byRow, openPrs, mergedPrs, io, repo, now, restart, a
     readings.push({ facts, reading });
   }
   return readings;
+}
+
+/**
+ * Each open pull request with `checksPending`: a check of its NEWEST run per name is still running. The idle-claimant reading counts that as a wait
+ * (#2999), and it is decided HERE, through `newestPerName` and `stillRunning`, so there is one reader of the rollup and one meaning of "running".
+ * @param {any[]} prs
+ */
+function withChecksPending(prs) {
+  return prs.map((pr) => ({ ...pr, checksPending: newestPerName(pr?.statusCheckRollup ?? []).some(stillRunning) }));
 }
 
 /**
