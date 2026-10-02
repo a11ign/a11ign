@@ -32,6 +32,8 @@ import { statSync } from "node:fs";
 import { sandboxGitEnv } from "./lib/git-env.mjs";
 // A LEAF (`claim-labels.mjs` imports nothing), so the label is read from where it is declared, as `repeating-lines.mjs` does.
 import { READY_LABEL } from "./claim-labels.mjs";
+// A LEAF too (it imports `newest-check-run.mjs` and `pr-hold-state.mjs`, which import nothing): the ONE decider of what counts as red.
+import { brokenChecks } from "./red-pr.mjs";
 
 /** No PR merged for this long, with work that could merge, is the idle org the chairman found. See the table above. */
 export const NO_MERGE_HOURS = 3;
@@ -120,6 +122,20 @@ export function noMergeReading({ now, lastMergedAt, work }) {
  * `redSince` is when the head's first failing check finished, `null` when no check carried a time. `ownerCommentAts` are the
  * times of comments from the account that opened the PR, all of them: the leaf asks which fall after the red began.
  */
+
+/**
+ * WHEN DID THIS PULL REQUEST'S BREAKAGE BEGIN, or `null` when it has none to date (#2956). RED IS DECIDED ONCE, BY `red-pr.mjs`
+ * (`isBrokenRed`, #2954), and the question is asked of it here and not re-answered: `pr-checks-failing` excuses a hold only when the
+ * hold is its ADDRESSEE's own (#2400), so a PR a worker owns and `ceo` holds is still ordered, and a count built from those orders
+ * alone offered `ceo` its own freeze every day of it (#2883). THE HOLD'S OWN TWO JOBS ARE LEFT OUT and every other red is dated by
+ * ITSELF: a held PR with a real `ts / run` failure is red since THAT check finished, not since the hold's `gate` did.
+ * @param {{ labels?: any[], statusCheckRollup?: any[] }} pr
+ * @returns {number | null} epoch ms of the earliest broken check, `null` for none or for a broken check GitHub gave no time
+ */
+export function redSinceOf(pr) {
+  const times = brokenChecks(pr).map((check) => check.failedAt).filter(Number.isFinite);
+  return times.length > 0 ? Math.min(...times) : null;
+}
 
 /**
  * Is this red PR UNATTENDED once `RED_PR_MINUTES` have passed?
