@@ -660,6 +660,12 @@ function unownedSentence(pr, { blocking, nowMs }) {
  * whether the order is sent, to whom, or under which key -- so it can excuse no genuine red. See
  * `failingChecksPrompt`.
  *
+ * A RED PULL REQUEST THAT ALSO CONFLICTS IS A NEW CAUSE, THOUGH THE HEAD HAS NOT MOVED (#3005). `stallReasonOf` puts `red`
+ * before `conflicted`, so such a PR is ordered here alone; and a branch that conflicts gets no `pull_request` run, so
+ * the red stays on the head while the real work turns from "fix the check" into "rebase". #2990 sat 63 minutes at
+ * one key, delivered six times, with its owner never told. `/conflicting` is therefore part of the key: a
+ * conflict-free red PR keeps its key byte for byte, and red-to-conflicted restarts the count.
+ *
  * @param {any} pr @param {string[] | null} [required] @param {{sha: string, date: string} | null} [baseTip]
  */
 function failingChecksOrder(pr, required = null, baseTip = null) {
@@ -676,15 +682,24 @@ function failingChecksOrder(pr, required = null, baseTip = null) {
   // `ownerOfPr` IS TOTAL (#2941): an unlabelled red PR is still a stalled PR, and its last answer is a session that can act.
   const { session } = ownerOfPr(pr);
   if (redOnlyFromAHold(pr)) return null;
+  const conflicting = conflictStateOf(pr) === CONFLICT_STATE.CONFLICTING;
   return {
     session,
     cause: "pr-checks-failing",
     subject: `pr-${subjectRef(pr.repoKey, pr.number)}`,
     discriminator: head8,
-    prompt: failingChecksPrompt({ pr, head8, blocking, baseTip, nowMs: Date.now() }),
-    causeKey: `${session}/pr-checks-failing/pr-${subjectRef(pr.repoKey, pr.number)}/${head8}`,
+    prompt: failingChecksPrompt({ pr, head8, blocking, baseTip, conflicting, nowMs: Date.now() }),
+    causeKey: `${session}/pr-checks-failing/pr-${subjectRef(pr.repoKey, pr.number)}/${head8}${conflicting ? "/conflicting" : ""}`,
   };
 }
+
+/**
+ * FIRST THING TO DO for a red pull request that also conflicts: a conflicting branch gets no `pull_request` run, so
+ * the red on its head is the last run's and nothing will re-test it until the branch is rebased (#3005).
+ */
+const CONFLICTING_RED_SENTENCE = "IT ALSO CONFLICTS with `main` (GitHub reports it cannot merge), and a branch that conflicts gets no "
+  + "`pull_request` run, so the red below is stale and will not clear by itself: FIRST merge or rebase `main` into the branch, "
+  + "resolve the conflicts and push, then read what is red on the new run. ";
 
 /**
  * The words of a `pr-checks-failing` order: when the failing run started, whether `main` has moved since,
@@ -697,10 +712,11 @@ function failingChecksOrder(pr, required = null, baseTip = null) {
  * whether the failing assertion names a defect or a refusal. #2087 (2026-09-23) cost two sessions a cycle
  * each, and they reached opposite readings of one PR.
  *
- * @param {{pr: any, head8: string, blocking: any[], baseTip: {sha: string, date: string} | null, nowMs: number}} facts
+ * @param {{pr: any, head8: string, blocking: any[], baseTip: {sha: string, date: string} | null, conflicting: boolean, nowMs: number}} facts
  */
-function failingChecksPrompt({ pr, head8, blocking, baseTip, nowMs }) {
+function failingChecksPrompt({ pr, head8, blocking, baseTip, conflicting, nowMs }) {
   return `${subjectMention(pr)} at \`${head8}\` has FAILING checks and is blocked. `
+    + (conflicting ? CONFLICTING_RED_SENTENCE : "")
     + `${ownershipSentence(pr, { blocking, nowMs })} `
     + `${baseMovedSentence(failingRunStartedAt(blocking), baseTip)} `
     + "WHICH FIX is decided by what the failing assertion names, and this order does not choose: "
