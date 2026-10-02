@@ -93,7 +93,7 @@ measurement behind it, that is a bug — please report it.
 ## Running the agent organisation (maintainers)
 
 These describe the AI agent org that develops this repository, not the product. A contributor never
-needs them; they live here because `@a11ign/agent-org` is private-by-boundary rather than by repository.
+needs them. The tool itself lives in [a11ign/agent-org](https://github.com/a11ign/agent-org), where all work on it happens; these docs stay here.
 
 | doc | read it when |
 |---|---|
