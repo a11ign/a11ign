@@ -223,7 +223,7 @@ jobs:
           if [ -n "$A11IGN_BOT_TOKEN" ]; then
             export GH_TOKEN="$A11IGN_BOT_TOKEN"
           else
-            echo "::warning::A11IGN_BOT_TOKEN is not set -- arming with GITHUB_TOKEN instead. A merge completed with it fires no workflow events (trunk.yml's closeRows, watchdogs and trunkGate/trunkBuildTest/trunkRecheck chain) -- see #416. And arming with it fires no auto_merge_enabled run, so update-branch does not sweep on arming and #1094 returns with no log line -- see #1094."
+            echo "::warning::A11IGN_BOT_TOKEN is not set -- arming with GITHUB_TOKEN instead. A merge completed with it fires no workflow events (trunk.yml's closeRows, watchdogs and trunkGate/trunkBuildTest/trunkRecheck chain) -- see #416. And arming with it fires no auto_merge_enabled run, so no auto_merge_enabled-triggered sweep ran on arming (the update-branch job, deleted in #3046) and #1094 returns with no log line -- see #1094."
             export GH_TOKEN="$FALLBACK_TOKEN"
           fi
           node packages/agent-org/src/arm-pr.mjs --pr="${{ github.event.pull_request.number }}" --repo="${{ github.repository }}"
@@ -314,7 +314,7 @@ jobs:
           if [ -n "$A11IGN_BOT_TOKEN" ]; then
             export GH_TOKEN="$A11IGN_BOT_TOKEN"
           else
-            echo "::warning::A11IGN_BOT_TOKEN is not set -- arming with GITHUB_TOKEN instead. A merge completed with it fires no workflow events (trunk.yml's closeRows, watchdogs and trunkGate/trunkBuildTest/trunkRecheck chain) -- see #416. And arming with it fires no auto_merge_enabled run, so update-branch does not sweep on arming and #1094 returns with no log line -- see #1094."
+            echo "::warning::A11IGN_BOT_TOKEN is not set -- arming with GITHUB_TOKEN instead. A merge completed with it fires no workflow events (trunk.yml's closeRows, watchdogs and trunkGate/trunkBuildTest/trunkRecheck chain) -- see #416. And arming with it fires no auto_merge_enabled run, so no auto_merge_enabled-triggered sweep ran on arming (the update-branch job, deleted in #3046) and #1094 returns with no log line -- see #1094."
             export GH_TOKEN="$FALLBACK_TOKEN"
           fi
           # `|| status=$?` and not a bare call: the default shell is `bash -e`, which would abort the step
@@ -362,7 +362,7 @@ jobs:
     # No such run can exist before this change reaches `main` -- it needs a `ci` completion evaluated
     # against the MERGED copy of this file, which only exists after the merge it would otherwise be asked
     # to gate. Same shape as #1103/#1125: that row's done-when also named "the first workflow_run-caused
-    # run of update-branch" as its measurement, #1125 merged and closed #1103 first, and the confirming run
+    # run of update-branch" (a job since deleted, #3046) as its measurement, #1125 merged and closed #1103 first, and the confirming run
     # (workflow_run for #1132) was posted as a follow-up comment on the already-closed issue, not held up
     # front. This row follows the identical order -- merge on the code and mutation evidence below, then
     # name the first real run on #1633 once it fires.
