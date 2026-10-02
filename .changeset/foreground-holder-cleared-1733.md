@@ -1,5 +1,5 @@
 ---
-"@a11ign/nvda-worker": patch
+"@a11ign/screenreader-worker": patch
 ---
 
 A worker whose desktop foreground is held by a notification toast, Windows search, or the Start menu (so a

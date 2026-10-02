@@ -1,5 +1,5 @@
 ---
-"@a11ign/worker-fleet": patch
+"@a11ign/screenreader-fleet": patch
 ---
 
 Fixes provisioning against the real fleet: the display-mode step (`packages/control/ansible/roles/worker/tasks/display.yml`)

@@ -1,5 +1,5 @@
 ---
-"@a11ign/worker-fleet": minor
+"@a11ign/screenreader-fleet": minor
 ---
 
 The first published version of `@a11ign/worker-fleet`. Everything below landed before it: the rename first, then oldest first.

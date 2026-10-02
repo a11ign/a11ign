@@ -1,5 +1,5 @@
 ---
-"@a11ign/worker-fleet": minor
+"@a11ign/screenreader-fleet": minor
 ---
 
 **`nodeVersion` is a fleet consistency GATE, not just a reported field (#2170).** Step 3 of `ceo`'s ruling

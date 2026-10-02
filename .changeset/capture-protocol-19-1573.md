@@ -1,5 +1,5 @@
 ---
-"@a11ign/nvda-worker": patch
+"@a11ign/screenreader-worker": patch
 ---
 
 **`CAPTURE_PROTOCOL_VERSION` moves 18 -> 19**, one bump carrying four meaning changes at once rather than
