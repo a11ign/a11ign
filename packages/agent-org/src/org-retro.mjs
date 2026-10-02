@@ -602,14 +602,15 @@ export function readAll({ now, stateDir, unit = "a11ign-work-tick.service",
 
 /**
  * APPENDS TODAY'S READING, ONCE PER UTC DATE: the offer repeats every tick until the wake delivers it, and the first reading of the date is the one
- * kept. A readings file the disk would not let us read is left alone rather than appended to blind, since that could write a second line for a date.
+ * kept. A readings file that is `unreadable` (the disk would not let us read it, or nothing in it parses) is left alone rather than appended to blind: a valid line added to
+ * corrupt content would make the file read as a baseline and mask the corruption (reviewer, #2985).
  * @param {{ stateDir: string, date: string, numbers: Record<string, number | null> }} reading
  * @returns {"recorded" | "already recorded" | "not recorded"}
  */
 export function recordReading({ stateDir, date, numbers }) {
   const path = join(stateDir, READINGS_FILE);
   const existing = readReadings(path);
-  if (existing.ioError) return "not recorded";
+  if (existing.status === "unreadable") return "not recorded"; // an I/O error or a file where no line reads: appending would turn corruption into a baseline
   if (existing.entries.some((e) => e.date === date)) return "already recorded";
   const lead = existing.text === "" || existing.text.endsWith("\n") ? "" : "\n";
   appendFileSync(path, `${lead}${JSON.stringify({ date, numbers })}\n`);
