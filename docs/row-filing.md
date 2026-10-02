@@ -221,6 +221,47 @@ acceptance names and the change never touched. **Both are wrong and they cancel 
 negation would make it guess at intent, and the exclusion belongs under its own heading for the human
 reader anyway.
 
+## A row that finishes in another repository says so: `Finished-in:` (#2995, #3009)
+
+`Closes #N` cannot close a row from a pull request of another repository: GitHub resolves it only inside
+the repository the pull request is in. #2972's work merged as `agent-org#8` and the row was closed by hand
+three hours later (measured 2026-10-02: merge 07:32:26Z, close 10:31:15Z), with #2973 to #2977 shelved on
+it meanwhile. The gate (`cross-repo-row-completion.mjs` of `a11ign/agent-org`) closes such a row itself, but
+**only a row that CARRIES the field is read**. A sentence saying the same thing moves nothing.
+
+```
+Finished-in: <owner>/<repo>#<n>
+Finished-in: <owner>/<repo>#<n>, <owner>/<repo>#<m>
+```
+
+- **A comma or `and` list means ALL must merge.** The gate closes the row when every named pull request is
+  MERGED, read from the API at that moment.
+- **The repository must be declared** in `.agent-org/project.json`'s `code` list (today `a11ign/a11ign` and
+  `a11ign/agent-org`). An undeclared one is refused, not guessed at.
+- **Write it as a line of the row body, outside any code fence.** The parser is line-anchored (a list item
+  or bold is fine) and SKIPS fenced blocks, so a row that quotes the field to explain it is not declaring it.
+  The same goes for the issue form: it renders a value under a `###` heading, so the form's field must be
+  filled with the whole `Finished-in: …` line, never the bare `owner/repo#n`.
+- **The filer usually cannot write it**, because the pull request does not exist at filing. **The claimant
+  adds it the moment the pull request exists**, by editing the row body. Most rows finish in this
+  repository and need none (the form's field is optional).
+
+A row that names a pull request and is not closed gets ONE comment saying which refusal, keyed by a marker
+so a pull request that stays open for a day is not reported every tick. The row stays OPEN and the gate
+re-reads on every tick. The kinds, in the gate's own words:
+
+| kind | the gate says |
+|---|---|
+| `undeclared` | `<repo>` is not a repository this project declares |
+| `open` | `<repo>#<n>` is still OPEN |
+| `closed-unmerged` | `<repo>#<n>` is CLOSED WITHOUT MERGING |
+| `absent` | `<repo>#<n>` is not a pull request that exists |
+| `malformed` | cannot read the line: write `Finished-in: owner/repo#N` (nothing is closed: a half-read list would close fewer than the author named) |
+| `reopened-after-merge` | the row was reopened after the pull request merged, so it is left alone (#1877: a reopen is a session's decision) |
+
+A read that FAILED (a `gh` error that is not "no such pull request") is none of these: the row stays open
+and nothing is said on it, since "could not ask" is never "refused" and never "merged".
+
 ## What `row-file` warns about after the checks pass (#2035)
 
 Every check above refuses. These print and file anyway, because each is a fact about the body the filer can
