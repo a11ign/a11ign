@@ -62,7 +62,7 @@ export function refusalFor(userAgent) {
     `This repository installs with pnpm only, and this install was started by ${seen}.`,
     "Use `pnpm install` (or `corepack pnpm install` where `pnpm` is not on PATH): `corepack enable` provides it,",
     "and the exact version is the `packageManager` pin in package.json.",
-    "Nothing was fetched. If that tool left a lockfile behind (`package-lock.json` is git-ignored), delete it.",
+    "Nothing was fetched. If that tool left a lockfile behind, delete it: git ignores it and nothing reads it.",
   ].join("\n");
 }
 
