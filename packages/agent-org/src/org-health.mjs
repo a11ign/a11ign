@@ -26,10 +26,11 @@
 //                                            body no longer matches its original beyond the lines its own header names
 // THE SEVENTH, #2970 (the chairman, 2026-10-02: "an open PR is not progressing towards merge for N minutes, whatever the reason"):
 //   pr-not-progressing           180 min     an open PR the classifier (`stallReasonOf`, #2968) puts in NEITHER `progressing` NOR
-//                                            `held-on-purpose`, with no push, review or comment for that long. N IS THE p94.8 OF PR
-//                                            OPEN-TO-MERGE: 670 PRs merged 2026-09-18..10-01 (`gh pr list --state merged`, createdAt to
-//                                            mergedAt) had p50/p75/p90/p95/p97.7 = 30 / 59 / 121 / 181 / 432 minutes, so a PR quiet for
-//                                            longer than 95% of PRs take to merge ENTIRELY is not on its way. A reading at a moment.
+//                                            `held-on-purpose`, with no push, review or comment for that long. N IS THE p94.9 OF PR
+//                                            OPEN-TO-MERGE: 651 PRs merged 2026-09-18..10-01 (`gh pr list --state merged`, createdAt to
+//                                            mergedAt) had p50/p75/p90/p95 = 29 / 59 / 121 / 181 minutes and 618 of them merged within
+//                                            180, so a PR quiet for longer than 95% of PRs take to merge ENTIRELY is not on its way.
+//                                            A reading at a moment: the command is under `## Measured` on #3001.
 // THE SUBJECT IS TIME WITHOUT A STATE CHANGE, NOT A CHECK STATE: #2950 sat a conflicted DRAFT with no checks for 7.5 h and the red
 // signal could not see it, a green PR nobody reviews has no red either, and the detector for it was the PR that was stuck.
 // WHAT `host-units-stale` AND `primary-not-at-main` ALREADY COVER, so this does not repeat them: the first asks about the systemd UNIT
