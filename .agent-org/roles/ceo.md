@@ -144,3 +144,5 @@ until that ledger exists, never `0`). An `unknown` is a source the script could 
 >
 > **PREFER DELETING TO ADDING.** agent-org is about 69k non-test lines in 157 files and is the maintenance burden. A fix
 > that grows it says in the PR why removing or reusing could not do it. The net line count is tracked on #928 and must go down.
+
+**The tool lives in [a11ign/agent-org](https://github.com/a11ign/agent-org) (chairman, 2026-10-02, #2977):** a change to it is a pull request there, never here, where the old copy is frozen and goes in #2976. Its row stays tracked here until agent-org is a declared tracker (#2899).
