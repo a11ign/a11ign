@@ -6213,16 +6213,27 @@ function listedActivityAt(pr) {
  * @returns {{ number: any, reason: string, owner: string | null, lastActivityAt: number | null }[]}
  */
 export function stalledPrFacts(prs, required, { now, run = defaultRun }) {
-  const quietMs = PR_NOT_PROGRESSING_MINUTES * MS_PER_MINUTE;
   return prs.map((pr) => ({ pr, reason: stallReasonOf(pr, required) }))
     .filter(({ reason }) => !REASONS_THAT_ARE_NOT_A_STALL.includes(reason))
     .map(({ pr, reason }) => {
-      const listed = listedActivityAt(pr);
-      const pushed = Number.isFinite(listed) && now - listed < quietMs ? NaN : readHeadCommittedAt(String(pr.headRefOid ?? ""), run) ?? NaN;
-      const known = [listed, pushed].filter(Number.isFinite);
       const owner = ownerOfPr(pr);
-      return { number: pr.number, reason, owner: owner.source === "ceo" ? null : owner.session, lastActivityAt: known.length > 0 ? Math.max(...known) : null };
+      return { number: pr.number, reason, owner: owner.source === "ceo" ? null : owner.session, lastActivityAt: lastActivityOf(pr, { now, run }) };
     });
+}
+
+/**
+ * THE NEWEST ACTIVITY ON ONE PR, as epoch ms, or `null` when the answer is not known. A PR whose listed activity is already recent pays no
+ * read. A quiet one is asked for its head commit's date, and IF THAT READ IS REFUSED THE ANSWER IS `null`, NOT THE LISTED TIME: the listed
+ * time is a FLOOR (a push is not in it), so a PR pushed ten minutes ago whose creation was nine hours ago would otherwise read as nine hours
+ * quiet and trip `pr-not-progressing` on a 403 -- the unknown `org-health.mjs` says a refused read must be.
+ * @param {any} pr @param {{ now: number, run: (args: string[]) => string }} io @returns {number | null}
+ */
+function lastActivityOf(pr, { now, run }) {
+  const listed = listedActivityAt(pr);
+  if (Number.isFinite(listed) && now - listed < PR_NOT_PROGRESSING_MINUTES * MS_PER_MINUTE) return listed;
+  const pushed = readHeadCommittedAt(String(pr.headRefOid ?? ""), run);
+  if (pushed === null) return null;
+  return Number.isFinite(listed) ? Math.max(listed, pushed) : pushed;
 }
 
 /**
