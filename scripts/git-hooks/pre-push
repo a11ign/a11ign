@@ -629,6 +629,10 @@ BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 if [ "$BRANCH" != "main" ]; then
   if ! command -v gh >/dev/null 2>&1; then
     skipped+=("armed-pr-push-guard (no gh on PATH -- could not ask, allowing)")
+  elif [ ! -e node_modules/.bin/agent-org ]; then
+    # The tool is a pinned dependency now (#2975), so a tree that has not run `pnpm install` cannot ask. Named, like the
+    # missing-gh skip above, rather than a bare failure that reads as "this branch is armed".
+    skipped+=("armed-pr-push-guard (agent-org is not installed in this tree -- run pnpm install; could not ask, allowing)")
   elif [ -n "${A11Y_ALLOW_ARMED_PUSH:-}" ]; then
     echo "pre-push: armed-pr-push-guard overridden: $A11Y_ALLOW_ARMED_PUSH" >&2
   else
@@ -638,7 +642,7 @@ if [ "$BRANCH" != "main" ]; then
     # one of the few contexts `set -e` exempts, which is the ONLY reason this can read the exit code at
     # all rather than dying silently with no message printed -- found by this guard's own wiring test,
     # not by reasoning about it.
-    if ARMED_CHECK_OUT="$(node packages/agent-org/src/merge-guard.mjs --armed-check="$BRANCH" 2>&1)"; then
+    if ARMED_CHECK_OUT="$(pnpm exec agent-org merge-guard --armed-check="$BRANCH" 2>&1)"; then
       ARMED_CHECK_CODE=0
     else
       ARMED_CHECK_CODE=$?

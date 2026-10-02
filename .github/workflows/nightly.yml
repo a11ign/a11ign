@@ -351,11 +351,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { ref: main }
+      # The tool is a pinned dependency now (#2975): `pnpm exec agent-org` needs `node_modules`. `--filter .` installs the
+      # ROOT project only, which is all the tool needs, not every workspace package's dependencies.
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile --ignore-scripts --filter .
       - name: If main's tip has zero check runs, trigger a real gate run against it
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: node packages/agent-org/src/trunk-sweep.mjs
+        run: pnpm exec agent-org trunk-sweep
   closeRowsSweep:
     if: github.event.schedule == '37 * * * *' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -366,11 +372,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { ref: main }
+      # The tool is a pinned dependency now (#2975): `pnpm exec agent-org` needs `node_modules`. `--filter .` installs the
+      # ROOT project only, which is all the tool needs, not every workspace package's dependencies.
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile --ignore-scripts --filter .
       - name: Close any row a merged PR declared that the push-time job missed
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: node packages/agent-org/src/close-rows-sweep.mjs --window=120
+        run: pnpm exec agent-org close-rows-sweep --window=120
   watch:
     # Runs on the :37 cron AND on workflow_dispatch, so the one job whose failure mode is silence can be
     # asked to speak by hand (worker-judge's review of #1068).
@@ -393,7 +405,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set +e
-          node packages/agent-org/src/org-watch.mjs > /tmp/org-watch.md 2>&1; rc=$?
+          pnpm exec agent-org org-watch > /tmp/org-watch.md 2>&1; rc=$?
           set -e
           cat /tmp/org-watch.md
           if [ "$rc" -ne 0 ]; then gh issue comment 928 --body-file /tmp/org-watch.md; fi

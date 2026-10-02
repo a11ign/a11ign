@@ -51,6 +51,9 @@ importers:
       '@types/node':
         specifier: ^26.0.1
         version: 26.0.1
+      agent-org:
+        specifier: github:a11ign/agent-org#semver:^0.1.0
+        version: https://codeload.github.com/a11ign/agent-org/tar.gz/fdb27f9190678ff9ab77806a839915c15011717c(typescript@6.0.3)
       eslint:
         specifier: ^10.5.0
         version: 10.5.0
@@ -867,6 +870,14 @@ packages:
   agent-base@6.0.2:
     resolution: {integrity: sha512-RZNwNclF7+MS/8bDg70amg32dyeZGZxiDuQmZxKLAlQjr3jGyLx+4Kkk58UO7D2QdgFIQCovuSuZESne6RG6XQ==}
     engines: {node: '>= 6.0.0'}
+
+  agent-org@https://codeload.github.com/a11ign/agent-org/tar.gz/fdb27f9190678ff9ab77806a839915c15011717c:
+    resolution: {gitHosted: true, integrity: sha512-9CkuLO5NHkDdpzC0Jm6TAI7J3ukF2g/FYsIkDQRBc3WxWCu4N5IFz4u+HheloDHXzWiv+CqvSOuX5MlPeFkdmw==, tarball: https://codeload.github.com/a11ign/agent-org/tar.gz/fdb27f9190678ff9ab77806a839915c15011717c}
+    version: 0.1.0
+    engines: {node: '>=22'}
+    hasBin: true
+    peerDependencies:
+      typescript: ^6.0.3
 
   ajv@6.15.0:
     resolution: {integrity: sha512-fgFx7Hfoq60ytK2c7DhnF8jIvzYgOMxfugjLOSMHjLIPgenqa7S7oaagATUq99mV6IYvN2tRmC0wnTYX6iPbMw==}
@@ -2279,6 +2290,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
     optional: true
+
+  agent-org@https://codeload.github.com/a11ign/agent-org/tar.gz/fdb27f9190678ff9ab77806a839915c15011717c(typescript@6.0.3):
+    dependencies:
+      typescript: 6.0.3
 
   ajv@6.15.0:
     dependencies:

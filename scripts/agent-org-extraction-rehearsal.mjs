@@ -24,7 +24,7 @@ import { tmpdir } from "node:os";
 import { join, resolve, posix } from "node:path";
 import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
-import { refuseUnknownFlags, flagValue } from "../packages/agent-org/src/lib/cli-flags.mjs";
+import { refuseUnknownFlags, flagValue } from "agent-org/src/lib/cli-flags.mjs";
 import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 import { nonStandardRefs } from "./history-purge-rehearsal.mjs";
 import { scanHistory } from "./history-secret-scan.mjs";

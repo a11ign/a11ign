@@ -27,8 +27,8 @@ import { basename, dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
-import { claudeTurns, transcriptFiles } from "../packages/agent-org/src/token-audit.mjs";
-import { extractRegionSection, regionPathsFromBody } from "../packages/agent-org/src/region-paths.mjs";
+import { claudeTurns, transcriptFiles } from "agent-org/src/token-audit.mjs";
+import { extractRegionSection, regionPathsFromBody } from "agent-org/src/region-paths.mjs";
 import {
   selectionFor, alwaysRunTests, narrowByDeclaredScope, testFilesToRun, packageIndex, sourceClosure, discoverTestFiles,
 } from "./select-changed-tests.mjs";
@@ -265,7 +265,7 @@ export function regionPaths(body) {
 
 /**
  * @typedef {{ dir: string, text: string }} Transcript
- * @typedef {{ session: string | null, row: number | null, calls: import("../packages/agent-org/src/token-audit.mjs").Turn[] }} Attributed
+ * @typedef {{ session: string | null, row: number | null, calls: import("agent-org/src/token-audit.mjs").Turn[] }} Attributed
  */
 
 /**
@@ -300,7 +300,7 @@ export function rowsNeeded(attributed) {
  */
 export function groupReading(members) {
   const calls = members.flatMap((m) => m.calls);
-  const column = (/** @type {(t: import("../packages/agent-org/src/token-audit.mjs").Turn) => number} */ pick) => spread(calls.map(pick));
+  const column = (/** @type {(t: import("agent-org/src/token-audit.mjs").Turn) => number} */ pick) => spread(calls.map(pick));
   return {
     // A transcript that names no session has no session to count; it is a transcript and its calls, nothing more.
     sessions: new Set(members.flatMap((m) => (m.session === null ? [] : [m.session]))).size,
