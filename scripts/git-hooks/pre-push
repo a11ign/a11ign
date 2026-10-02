@@ -131,12 +131,12 @@
 #
 # `pre-push-hook-scope.test.ts` is what holds this to three: it enumerates this file's own `run` call
 # sites and every npm/node invocation outside them, and a fourth check fails it. The git-only refusals
-# below -- the stale-base check, resolve-toward-main, the 300-deletion warning, the armed-PR lookup and
+# below -- the 300-deletion warning, resolve-toward-main, the armed-PR lookup and
 # the A11Y_SKIP_VERIFY gate -- are outside that assertion by name: none is a copy of CI, each costs
 # milliseconds, and they are push SAFETY rather than verification.
 set -euo pipefail
 
-# A BYPASS NEEDS A REASON, AND THE REASON IS PRINTED -- the same shape as A11Y_STALE_BASE_REASON,
+# A BYPASS NEEDS A REASON, AND THE REASON IS PRINTED -- the same shape as
 # A11Y_RESOLVE_REASON and A11Y_PRIMARY_CHECKOUT_REASON below and in `post-checkout`. This block used to
 # accept a bare `A11Y_SKIP_VERIFY=1` and print one general sentence.
 #
@@ -198,57 +198,48 @@ for v in "${!GIT_@}"; do unset "$v"; done
 failed=()
 skipped=()
 
-# #348: A FAILED CHECKOUT IN AN && CHAIN LEAVES A BRANCH THAT LOOKS RIGHT. `git checkout -q main &&
-# git reset --hard origin/main` silently no-ops past the `&&` when the checkout fails (e.g. `main` is
-# already checked out in another worktree) -- the reset never runs, and a branch built off that stale
-# HEAD is a valid commit on a plausibly-named branch. Measured cost of the real incident this reproduces:
-# 65 files, 3,281 deletions, caught only by hand (`c7b1a0a0` is the surviving artefact). Twice in one day,
-# by two independent sessions, and `ceo` hit the identical trap with `git checkout -B`.
+# #348 / #3046: A GUTTING COMMIT IS PRINTED, AND A BRANCH THAT IS MERELY BEHIND `main` IS NOT A FINDING.
+# #348's incident: `git checkout -q main && git reset --hard origin/main` silently no-ops past the `&&` when
+# the checkout fails (e.g. `main` is already checked out in another worktree), and a branch built off that
+# stale HEAD is a valid commit on a plausibly-named branch. Measured cost: 65 files, 3,281 deletions, caught
+# only by hand. This hook used to REFUSE any push whose HEAD did not contain `origin/main`'s tip, and the
+# refusal's only remedy was to merge `main` in: 123 of the 250 commits on the last 60 merged PRs (49%, measured
+# on #3046 2026-10-02) were exactly that merge, each a new head and a full `ci` run for nothing. It is gone (#3046, chairman 2026-10-02):
+# the merge queue builds every PR ON `main` and runs `ci` on that merge commit (`merge_group:` in `ci.yml`),
+# and a merge applies only the branch's OWN diff, so a branch built off a stale point cannot delete what
+# `main` added since. What stays is the warning below, which reads the GUTTING itself.
 #
-# TWO DOTS, not three. `git diff --stat origin/main...HEAD` reports only what HEAD added since the merge
-# base -- which on a stale branch IS the stale point, so it prints a clean, reassuring summary for
-# exactly the incident that motivated this check. `git merge-base --is-ancestor origin/main HEAD` is the
-# real test and needs no dot count; the two-dot diff below is a second, human-readable signal, never a
-# substitute for the ancestry check.
+# TWO DOTS, not three, and the consequence is named rather than hidden: `origin/main...HEAD` reports only
+# what HEAD added since the merge base, which cannot see a branch that deleted what `main` has. The two-dot
+# diff compares tips, so a branch that is merely behind by 300+ lines of `main`'s additions ALSO prints it.
+# That is a warning to read, not a refusal; if it proves noisy, narrow it with a measurement, not a bypass.
 #
-# A stale LOCAL `origin/main` (this hook does not fetch) makes the ancestry check pass on a branch that
-# is genuinely behind -- the guard reassuring you for the reason it exists. Fetch before trusting a green
-# result here, the same caveat every other `origin/main`-relative check in this hook already carries.
+# A stale LOCAL `origin/main` (this hook does not fetch) makes the diff read an old tip, the same caveat
+# every other `origin/main`-relative check in this hook already carries.
 #
-# BEGIN #348 STALE-BASE CHECK -- extraction markers for pre-push-stale-base.test.ts; keep both if edited.
+# BEGIN #348 LARGE-DELETION WARNING -- extraction markers for pre-push-stale-base.test.ts; keep both if edited.
 #
-# #583: A DELETION HAS NO BASE TO BE STALE AGAINST. `git push origin --delete <branch>` sends this hook
-# no commits at all -- there is nothing being pushed for "does HEAD contain origin/main's tip" to be a
-# question ABOUT. The refusal, and its own advice ("merge origin/main in before pushing"), name an action
-# that does not exist for a deletion. git's own pre-push protocol (githooks(5)) reports exactly this on
-# STDIN, one line per ref update, as `<local ref> SP <local sha1> SP <remote ref> SP <remote sha1>` -- a
-# deleted ref's LOCAL sha1 is the all-zeros object name. Read here, once, rather than inferred from HEAD,
-# which names the CURRENT checkout's branch and has nothing to do with which ref is actually being
-# pushed. A push mixing a deletion with a real update still has a real update line present, so this only
-# ever skips when EVERY line read is a deletion -- and an empty read (no lines at all) must NOT count as
-# "all deletions", since that is indistinguishable from a caller that supplied no stdin and existed before
-# this check did; both keep this check fully active.
+# #583: A DELETION HAS NO DIFF TO WARN ABOUT. `git push origin --delete <branch>` sends this hook no commits
+# at all, and HEAD names the CURRENT checkout's branch, which has nothing to do with the ref being deleted.
+# git's own pre-push protocol (githooks(5)) reports exactly this on STDIN, one line per ref update, as
+# `<local ref> SP <local sha1> SP <remote ref> SP <remote sha1>` -- a deleted ref's LOCAL sha1 is the
+# all-zeros object name. A push mixing a deletion with a real update still has a real update line present,
+# so this only ever skips when EVERY line read is a deletion -- and an empty read (no lines at all) must NOT
+# count as "all deletions", since that is indistinguishable from a caller that supplied no stdin.
 #
-# #1292: A TAG WRITE HAS NO BASE TO BE STALE AGAINST EITHER. `git push origin <sha>:refs/tags/<name>`
-# records a commit that already exists; no branch is advanced, and HEAD is not part of what is written,
-# so "does HEAD contain origin/main's tip" is not a question about this push. 91 of 91 such pushes were
-# refused in one run (#1246) -- a refusal true of its own subject and irrelevant to the command, which
-# teaches the override. Keyed on the REMOTE ref, the one field that names what is written: measured on
-# git 2.53.0, a mixed push reports its branch line's LOCAL ref as `HEAD`. A push that also writes any
-# branch still refuses, and the refusal names the ref(s) that made it a branch push, so a mixed push
-# cannot hide a real finding behind its tag.
+# #1292: A TAG WRITE ADVANCES NO BRANCH EITHER. `git push origin <sha>:refs/tags/<name>` records a commit
+# that already exists, and HEAD is not part of what is written. Keyed on the REMOTE ref, the one field that
+# names what is written: measured on git 2.53.0, a mixed push reports its branch line's LOCAL ref as `HEAD`.
+# A push that also writes any branch still warns.
 push_ref_lines=0
 push_deletion_lines=0
 push_tag_lines=0
-push_based_refs=()
 while IFS=' ' read -r push_local_ref push_local_sha push_remote_ref push_remote_sha; do
   push_ref_lines=$((push_ref_lines + 1))
   if [ "$push_local_sha" = "0000000000000000000000000000000000000000" ]; then
     push_deletion_lines=$((push_deletion_lines + 1))
   elif [[ "$push_remote_ref" == refs/tags/* ]]; then
     push_tag_lines=$((push_tag_lines + 1))
-  else
-    push_based_refs+=("$push_remote_ref")
   fi
 done
 push_is_all_deletions=0
@@ -261,31 +252,16 @@ if [ "$push_tag_lines" -gt 0 ] && [ "$push_ref_lines" -eq $((push_tag_lines + pu
 fi
 
 if [ "$push_is_all_deletions" = "1" ]; then
-  skipped+=("stale-base-check (this push only deletes remote ref(s), which have no base to be stale against)")
+  skipped+=("large-deletion-warning (this push only deletes remote ref(s), which carry no diff)")
 elif [ "$push_is_tags_only" = "1" ]; then
   # #1309: THE REASON NAMES WHAT THE PUSH DID. A deletion riding with a tag write may delete a BRANCH, so
   # "only writes or deletes tag(s)" was false for that push; an operator reads this line to judge the skip.
   if [ "$push_deletion_lines" -gt 0 ]; then
-    skipped+=("stale-base-check (this push only writes tag(s) and deletes ref(s): a tag records an existing commit and a deletion has no base, so neither advances a branch built on HEAD)")
+    skipped+=("large-deletion-warning (this push only writes tag(s) and deletes ref(s): a tag records an existing commit and a deletion carries no diff, so neither advances a branch built on HEAD)")
   else
-    skipped+=("stale-base-check (this push only writes tag(s), which record an existing commit rather than advance a branch built on HEAD)")
+    skipped+=("large-deletion-warning (this push only writes tag(s), which record an existing commit rather than advance a branch built on HEAD)")
   fi
 elif git rev-parse --verify -q origin/main >/dev/null; then
-  if ! git merge-base --is-ancestor origin/main HEAD; then
-    if [ -n "${A11Y_STALE_BASE_REASON:-}" ]; then
-      echo "pre-push: HEAD does not contain origin/main's tip, overridden: $A11Y_STALE_BASE_REASON" >&2
-    else
-      echo "pre-push: REFUSING — HEAD does not contain origin/main's tip (#348: a failed checkout in an" >&2
-      echo "&& chain leaves a branch that looks right). Merge origin/main in before pushing." >&2
-      if [ "${#push_based_refs[@]}" -gt 0 ]; then
-        echo "The ref(s) in this push that need a base: ${push_based_refs[*]}" >&2
-      fi
-      echo "If this is deliberate: A11Y_STALE_BASE_REASON=\"<why>\" git push ... — the reason is printed," >&2
-      echo "not just the override, so a deliberate exception is in the log rather than in somebody's" >&2
-      echo "memory." >&2
-      exit 1
-    fi
-  fi
   # PRINTED, never refused: a legitimate large deletion exists (a purge, a revert); a SILENT one does
   # not. `tail -1` reads the diffstat's own summary line, e.g. "3 files changed, 1 insertion(+), 3281
   # deletion(-)" -- absent when nothing was deleted, which `grep -oE` then reports as no match rather
@@ -297,9 +273,9 @@ elif git rev-parse --verify -q origin/main >/dev/null; then
     echo "-- worth a second look before it lands." >&2
   fi
 else
-  skipped+=("stale-base-check (origin/main not resolvable here)")
+  skipped+=("large-deletion-warning (origin/main not resolvable here)")
 fi
-# END #348 STALE-BASE CHECK
+# END #348 LARGE-DELETION WARNING
 
 # BEGIN B5 RESOLVE-TOWARD-MAIN -- extraction markers for pre-push-resolve-toward-main.test.ts.
 #
@@ -326,11 +302,14 @@ fi
 # failure is silent -- nobody goes looking. So the count is printed whether or not anything is wrong, and
 # a zero population is stated rather than read as a pass.
 #
-# ## RUN ONLY WHEN `main` IS AN ANCESTOR, which the block above has already established
+# ## RUN ONLY WHEN `main` IS AN ANCESTOR -- and since #3046 nothing above guarantees it
 #
 # On a branch that has not merged `main`, every symbol `main` gained since would read as LOST -- the
-# same false-positive flood that makes the two-dot path diff useless there. The refusal above is this
-# check's precondition, not merely its neighbour.
+# same false-positive flood that makes the two-dot path diff useless there. This used to be established by
+# the ancestry refusal that preceded this block; that refusal is gone, so a branch that is merely BEHIND
+# `main` now SKIPS this check, and says so below. RESIDUAL RISK: a merge of an OLDER `main` that kept its own
+# side of a conflict is no longer re-checked once `main` has moved on; the merge queue's `ci` run on the
+# merge commit is what stands in for it.
 if git rev-parse --verify -q origin/main >/dev/null && git merge-base --is-ancestor origin/main HEAD; then
   resolve_checked=0
   resolve_lost=()
@@ -396,7 +375,7 @@ if git rev-parse --verify -q origin/main >/dev/null && git merge-base --is-ances
     fi
   fi
 else
-  skipped+=("resolve-toward-main (origin/main not resolvable, or not an ancestor — see the refusal above)")
+  skipped+=("resolve-toward-main (origin/main not resolvable, or not an ancestor of HEAD: a branch behind main is not checked)")
 fi
 # END B5 RESOLVE-TOWARD-MAIN
 
