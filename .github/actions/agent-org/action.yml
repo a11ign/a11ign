@@ -1,0 +1,39 @@
+name: agent-org
+description: >-
+  Put the agent-org TOOL (a11ign/agent-org) where this job can run it, and tell it which project it serves. After the
+  2026-10-02 cut-over (a11ign/a11ign#2974-#2977) the tool is no longer in this repository, so a job that runs one of its
+  programs calls this first and then `node scripts/agent-org.mjs <program>.mjs`.
+
+inputs:
+  ref:
+    description: >-
+      The commit, branch or tag of a11ign/agent-org the job runs. THE ONE PLACE THE TOOL'S VERSION IS CHOSEN FOR CI. `main` follows
+      the tool as the host does (ADR 0040 decision 3: the tool tracks main, because a pin adds a second release act per change), so
+      a fix merged there is in the next job; hold it still with a commit hash.
+    default: main
+
+runs:
+  using: composite
+  steps:
+    # THE TOOL IS CLONED OUTSIDE THE WORKSPACE, and not with `actions/checkout`, which only writes inside it: a tool tree under the
+    # workspace would be walked by every guard that scans the project's files and read as the project's own. The repository is
+    # public, so no token is passed, and a fetch of one ref at depth 1 takes a branch, a tag or a full commit hash alike.
+    - name: Fetch a11ign/agent-org and declare the project it serves
+      shell: bash
+      env:
+        TOOL_REF: ${{ inputs.ref }}
+      run: |
+        set -euo pipefail
+        tool="${RUNNER_TEMP:?}/agent-org-tool"
+        host="${RUNNER_TEMP:?}/agent-org-host.json"
+        git init -q "$tool"
+        git -C "$tool" fetch -q --depth 1 https://github.com/a11ign/agent-org.git "$TOOL_REF"
+        git -C "$tool" checkout -q FETCH_HEAD
+        # The host declaration the repository carries, with the two facts only the runner knows: where THIS checkout is, and where the tool is.
+        # Every other key is the repository's own, so the tool reads the same declaration here as on the host.
+        jq --arg workspace "${GITHUB_WORKSPACE:?}" --arg tool "$tool" \
+          '. as $h | .projects |= map(if .id == $h.primary then .checkout = $workspace else . end) | .tool = $tool | .clones = { "agent-org": $tool }' \
+          .agent-org/host.json > "$host"
+        echo "AGENT_ORG_TOOL=$tool" >> "$GITHUB_ENV"
+        echo "AGENT_ORG_HOST=$host" >> "$GITHUB_ENV"
+        echo "agent-org tool at $(git -C "$tool" rev-parse HEAD) (asked for: $TOOL_REF)"

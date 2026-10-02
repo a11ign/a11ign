@@ -284,6 +284,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { ref: main, fetch-depth: 0 }
+      # THE TOOL IS NOT IN THIS REPOSITORY (a11ign/a11ign#2975): this step puts a11ign/agent-org where `node scripts/agent-org.mjs` finds it.
+      - uses: ./.github/actions/agent-org
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
@@ -351,11 +353,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { ref: main }
+      # THE TOOL IS NOT IN THIS REPOSITORY (a11ign/a11ign#2975): this step puts a11ign/agent-org where `node scripts/agent-org.mjs` finds it.
+      - uses: ./.github/actions/agent-org
       - name: If main's tip has zero check runs, trigger a real gate run against it
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: node packages/agent-org/src/trunk-sweep.mjs
+        run: node scripts/agent-org.mjs trunk-sweep.mjs
   closeRowsSweep:
     if: github.event.schedule == '37 * * * *' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -366,11 +370,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { ref: main }
+      # THE TOOL IS NOT IN THIS REPOSITORY (a11ign/a11ign#2975): this step puts a11ign/agent-org where `node scripts/agent-org.mjs` finds it.
+      - uses: ./.github/actions/agent-org
       - name: Close any row a merged PR declared that the push-time job missed
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: node packages/agent-org/src/close-rows-sweep.mjs --window=120
+        run: node scripts/agent-org.mjs close-rows-sweep.mjs --window=120
   watch:
     # Runs on the :37 cron AND on workflow_dispatch, so the one job whose failure mode is silence can be
     # asked to speak by hand (worker-judge's review of #1068).
@@ -384,6 +390,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { ref: main }
+      # THE TOOL IS NOT IN THIS REPOSITORY (a11ign/a11ign#2975): this step puts a11ign/agent-org where `node scripts/agent-org.mjs` finds it.
+      - uses: ./.github/actions/agent-org
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
@@ -393,7 +401,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set +e
-          node packages/agent-org/src/org-watch.mjs > /tmp/org-watch.md 2>&1; rc=$?
+          node scripts/agent-org.mjs org-watch.mjs > /tmp/org-watch.md 2>&1; rc=$?
           set -e
           cat /tmp/org-watch.md
           if [ "$rc" -ne 0 ]; then gh issue comment 928 --body-file /tmp/org-watch.md; fi

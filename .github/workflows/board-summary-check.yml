@@ -62,6 +62,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: main
+      # THE TOOL IS NOT IN THIS REPOSITORY (a11ign/a11ign#2975): this step puts a11ign/agent-org where `node scripts/agent-org.mjs` finds it.
+      - uses: ./.github/actions/agent-org
 
       - name: Set up node
         if: steps.hour.outputs.mode != 'none'
@@ -83,7 +85,7 @@ jobs:
         if: steps.hour.outputs.mode == 'reminder'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node packages/agent-org/src/board-summary-check.mjs --post --reminder
+        run: node scripts/agent-org.mjs board-summary-check.mjs --post --reminder
 
       # 07:45 -- REFUSES. The edition is fifteen minutes away and will refuse anyway; failing here says
       # so while there is still time to act.
@@ -91,4 +93,4 @@ jobs:
         if: steps.hour.outputs.mode == 'refuse'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node packages/agent-org/src/board-summary-check.mjs --post
+        run: node scripts/agent-org.mjs board-summary-check.mjs --post

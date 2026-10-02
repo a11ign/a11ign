@@ -218,6 +218,8 @@ jobs:
       # one predicate (`pr-hold-state.mjs`); a second correct copy would have been the same shape with a
       # longer fuse. It needs a checkout, which this job did not previously have.
       - uses: actions/checkout@v4
+      # THE TOOL IS NOT IN THIS REPOSITORY (a11ign/a11ign#2975): this step puts a11ign/agent-org where `node scripts/agent-org.mjs` finds it.
+      - uses: ./.github/actions/agent-org
       - name: Enable auto-merge (merge commit) -- unless held. GitHub still withholds until `gate` is green
         env:
           A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
@@ -229,7 +231,7 @@ jobs:
             echo "::warning::A11IGN_BOT_TOKEN is not set -- arming with GITHUB_TOKEN instead. A merge completed with it fires no workflow events (trunk.yml's closeRows, watchdogs and trunkGate/trunkBuildTest/trunkRecheck chain) -- see #416. And arming with it fires no auto_merge_enabled run, so update-branch does not sweep on arming and #1094 returns with no log line -- see #1094."
             export GH_TOKEN="$FALLBACK_TOKEN"
           fi
-          node packages/agent-org/src/arm-pr.mjs --pr="${{ github.event.pull_request.number }}" --repo="${{ github.repository }}"
+          node scripts/agent-org.mjs arm-pr.mjs --pr="${{ github.event.pull_request.number }}" --repo="${{ github.repository }}"
 
   sweep:
     # ARM EVERY PR THE `arm` JOB ABOVE CANNOT SEE -- the ones already open, #344.
@@ -308,6 +310,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # THE TOOL IS NOT IN THIS REPOSITORY (a11ign/a11ign#2975): this step puts a11ign/agent-org where `node scripts/agent-org.mjs` finds it.
+      - uses: ./.github/actions/agent-org
       - name: Arm every open, non-draft, unheld, tested PR against main that nothing has armed
         env:
           A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
@@ -323,7 +327,7 @@ jobs:
           # `|| status=$?` and not a bare call: the default shell is `bash -e`, which would abort the step
           # before this can read the code. A command on the left of `||` does not trigger errexit.
           status=0
-          node packages/agent-org/src/auto-arm-sweep.mjs || status=$?
+          node scripts/agent-org.mjs auto-arm-sweep.mjs || status=$?
           # 2 is EXIT.CANNOT_ASK, whose meaning `auto-arm-sweep.mjs`'s header states as a contract:
           # `2  a lookup failed. INCONCLUSIVE, never "fine"`. The CODE is read, never the message -- see
           # this job's own comment above for why matching the text would re-import the defect.
@@ -374,11 +378,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      # THE TOOL IS NOT IN THIS REPOSITORY (a11ign/a11ign#2975): this step puts a11ign/agent-org where `node scripts/agent-org.mjs` finds it.
+      - uses: ./.github/actions/agent-org
       - name: Report every armed, green PR that cannot merge as-is against main
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: node packages/agent-org/src/queue-stalled.mjs
+        run: node scripts/agent-org.mjs queue-stalled.mjs
 
   update-branch:
     # PUSH EVERY ARMED, GREEN-OR-RUNNING PR UP TO main's NEW TIP -- C2, #416's sibling.
@@ -424,6 +430,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      # THE TOOL IS NOT IN THIS REPOSITORY (a11ign/a11ign#2975): this step puts a11ign/agent-org where `node scripts/agent-org.mjs` finds it.
+      - uses: ./.github/actions/agent-org
       - name: Update every armed, green-or-running, behind PR to main's current tip
         env:
           A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
@@ -446,4 +454,4 @@ jobs:
             exit 0
           fi
           export GH_TOKEN="$A11IGN_BOT_TOKEN"
-          node packages/agent-org/src/update-branch-sweep.mjs
+          node scripts/agent-org.mjs update-branch-sweep.mjs

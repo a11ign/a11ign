@@ -81,6 +81,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      # THE TOOL IS NOT IN THIS REPOSITORY (a11ign/a11ign#2975): this step puts a11ign/agent-org where `node scripts/agent-org.mjs` finds it.
+      - uses: ./.github/actions/agent-org
       - name: Close the rows the merged PR declared, naming the merge sha on each
         env:
           GH_TOKEN: ${{ github.token }}
@@ -88,9 +90,9 @@ jobs:
           DISPATCH_PR: ${{ github.event.inputs.pr }}
         run: |
           if [ -n "$DISPATCH_PR" ]; then
-            node packages/agent-org/src/close-rows-for-merged-pr.mjs "$DISPATCH_PR"
+            node scripts/agent-org.mjs close-rows-for-merged-pr.mjs "$DISPATCH_PR"
           else
-            node packages/agent-org/src/close-rows-sweep.mjs --window=60
+            node scripts/agent-org.mjs close-rows-sweep.mjs --window=60
           fi
   # #394 UPDATE, 2026-09-08: A `closeRowsSweep` JOB USED TO STAND HERE, RIDING THIS WORKFLOW'S OWN
   # `push: branches: [main]` TRIGGER. IT WAS DEAD ON ARRIVAL AND HAS BEEN REMOVED.
@@ -121,6 +123,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { ref: main }
+      # THE TOOL IS NOT IN THIS REPOSITORY (a11ign/a11ign#2975): this step puts a11ign/agent-org where `node scripts/agent-org.mjs` finds it.
+      - uses: ./.github/actions/agent-org
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
@@ -128,13 +132,13 @@ jobs:
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node packages/agent-org/src/workflow-run-liveness.mjs --sha=${{ github.sha }}
+        run: node scripts/agent-org.mjs workflow-run-liveness.mjs --sha=${{ github.sha }}
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Are the board editions still arriving? (#272, #590)
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node packages/agent-org/src/board-schedule-liveness.mjs --post --issue=20
+        run: node scripts/agent-org.mjs board-schedule-liveness.mjs --post --issue=20
       - name: Is NPM_TOKEN still there? (#73)
         continue-on-error: true
         env:
@@ -149,6 +153,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
+      # THE TOOL IS NOT IN THIS REPOSITORY (a11ign/a11ign#2975): this step puts a11ign/agent-org where `node scripts/agent-org.mjs` finds it.
+      - uses: ./.github/actions/agent-org
       # #411: A MERGE CAN DELETE WORK ALREADY ON `main` WHILE EVERY OTHER CHECK STAYS GREEN -- see
       # trunk-revert-guard.mjs's own header for the incident and why the obvious instruments (git
       # merge-tree on the merge's two parents, GitHub's own PR file list) both fail to catch it. Pure git,
@@ -157,7 +163,7 @@ jobs:
       # already gives it everything it needs: the merge's own parents are both within `main`'s full
       # history, unlike a case needing another PR's unrelated branch tip.
       - name: This push did not silently revert work already on main (#411)
-        run: node packages/agent-org/src/trunk-revert-guard.mjs --merge=${{ github.sha }}
+        run: node scripts/agent-org.mjs trunk-revert-guard.mjs --merge=${{ github.sha }}
 
   # A1 (#452): CALLS `reusable-build-test.yml` -- see that file's own header for why (it used to duplicate
   # `ci.yml`'s `ts`+`python` jobs independently; chairman's own comment on `ci.yml` had measured the two
@@ -207,6 +213,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
+      # THE TOOL IS NOT IN THIS REPOSITORY (a11ign/a11ign#2975): this step puts a11ign/agent-org where `node scripts/agent-org.mjs` finds it.
+      - uses: ./.github/actions/agent-org
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
@@ -287,7 +295,7 @@ jobs:
             # the `# fail N` summary, wherever they sit in the log, and reports `unknown` rather than `fail`
             # when it cannot name a real failing subtest.
             cd - >/dev/null
-            node packages/agent-org/src/parent-recheck-summary.mjs /tmp/parent-test.log | tee /tmp/parent-summary.log
+            node scripts/agent-org.mjs parent-recheck-summary.mjs /tmp/parent-test.log | tee /tmp/parent-summary.log
             RECHECK_RESULT="$(grep -oE 'RECHECK_RESULT=(fail|unknown)' /tmp/parent-summary.log | tail -1 | cut -d= -f2)"
             echo "result=${RECHECK_RESULT:-unknown}" >> "$GITHUB_OUTPUT"
           fi

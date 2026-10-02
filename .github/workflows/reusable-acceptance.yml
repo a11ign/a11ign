@@ -40,6 +40,8 @@ jobs:
       # default shallow clone (depth 1) is correct and unchanged from the original job. Recorded because
       # the asymmetry is easy to "fix" by copy-pasting `ts`'s checkout without noticing why it differs.
       - uses: actions/checkout@v4
+      # THE TOOL IS NOT IN THIS REPOSITORY (a11ign/a11ign#2975): this step puts a11ign/agent-org where `node scripts/agent-org.mjs` finds it.
+      - uses: ./.github/actions/agent-org
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
@@ -56,10 +58,10 @@ jobs:
         env:
           PR_BODY: ${{ inputs.pr-body }}
         run: |
-          if node -e "
-            import('./packages/agent-org/src/acceptance-commands.mjs').then((m) => {
-              process.exit(m.hasFullHistoryDeclaration(process.env.PR_BODY) ? 0 : 1);
-            });
+          if node --input-type=module -e "
+            import { importFromTool } from './scripts/agent-org.mjs';
+            const m = await importFromTool('acceptance-commands.mjs');
+            process.exit(m.hasFullHistoryDeclaration(process.env.PR_BODY) ? 0 : 1);
           "; then
             git fetch --unshallow origin main
           fi
@@ -69,7 +71,11 @@ jobs:
       # NO GH_TOKEN AND NO OTHER SECRET IS PASSED TO THIS STEP -- ruled explicitly (#382-adjacent, restated
       # 2026-09-08 on worker-capture's refusal): an author-written command in a PR body runs read-only and
       # tracker-less, always. That constraint moves with the job, not just with the file.
+      # NODE_PATH, BECAUSE THE TOOL IS NOT UNDER THIS WORKSPACE (a11ign/a11ign#2975): `acceptance-commands.mjs` loads `typescript` with
+      # `createRequire(import.meta.url)`, which looks beside the TOOL, finds nothing, and falls back to a full-text scan that
+      # OVER-CHARGES (its own header says so) -- a silent change of answer, not an error. This points the lookup at the workspace's install.
       - name: Run the PR's own stated Acceptance command(s)
         env:
           PR_BODY: ${{ inputs.pr-body }}
-        run: node packages/agent-org/src/acceptance-commands.mjs
+          NODE_PATH: ${{ github.workspace }}/node_modules
+        run: node scripts/agent-org.mjs acceptance-commands.mjs

@@ -86,6 +86,8 @@ jobs:
           # whatever the depth happened to include, which is a number that looks right and is not.
           fetch-depth: 0
           ref: main
+      # THE TOOL IS NOT IN THIS REPOSITORY (a11ign/a11ign#2975): this step puts a11ign/agent-org where `node scripts/agent-org.mjs` finds it.
+      - uses: ./.github/actions/agent-org
 
       - name: Set up node
         if: steps.hour.outputs.london == '08' || (github.event_name == 'workflow_dispatch' && inputs.republish)
@@ -120,7 +122,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if node packages/agent-org/src/board-discussion.mjs --exists; then
+          if node scripts/agent-org.mjs board-discussion.mjs --exists; then
             echo "ok=true" >> "$GITHUB_OUTPUT"
             echo "Today's edition exists - republishing over it."
           else
@@ -137,5 +139,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          node packages/agent-org/src/board-report.mjs --post --issue=20
-          node packages/agent-org/src/board-document.mjs --discussion
+          node scripts/agent-org.mjs board-report.mjs --post --issue=20
+          node scripts/agent-org.mjs board-document.mjs --discussion

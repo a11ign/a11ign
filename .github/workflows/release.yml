@@ -143,6 +143,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
+      # THE TOOL IS NOT IN THIS REPOSITORY (a11ign/a11ign#2975): this step puts a11ign/agent-org where `node scripts/agent-org.mjs` finds it.
+      - uses: ./.github/actions/agent-org
 
       # #1452: `changeset status`'s divergence check (`@changesets/git`'s `getDivergedCommit`) runs
       # `git merge-base main HEAD` -- a literal LOCAL branch named `main`, never `origin/main`. Dispatched on
