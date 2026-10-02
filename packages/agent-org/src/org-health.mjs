@@ -40,10 +40,12 @@
 // A LEAF, RELATIVE IMPORTS ONLY, like `repeating-lines.mjs`: `work-gate.mjs` imports this, and it runs before any `npm ci`/build.
 import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { sandboxGitEnv } from "./lib/git-env.mjs";
 // A LEAF (`claim-labels.mjs` imports nothing), so the label is read from where it is declared, as `repeating-lines.mjs` does.
 import { READY_LABEL } from "./claim-labels.mjs";
+// The checkout the tool serves and the project's own words are read from where they are declared (`standalone-roots.test.ts`, `project-vocabulary.test.ts`).
+import { HOME_CHECKOUT } from "./project-config.mjs";
+import { ANSWER_PREFIX } from "./project-vocabulary.mjs";
 
 /** No PR merged for this long, with work that could merge, is the idle org the chairman found. See the table above. */
 export const NO_MERGE_HOURS = 3;
@@ -70,8 +72,8 @@ const MAX_NAMED = 5;
 export const FLEET_IDLE_HOURS = 24;
 /** Where the declared copies sit, relative to the checkout: the tool's own `lib/`, each file headed by what it was copied from. */
 const COPIES_DIR = "packages/agent-org/src/lib";
-/** The checkout this file runs from, when the caller names none: `packages/agent-org/src` is three levels down. In an extracted tree it is not a checkout, and no original is found. */
-const DEFAULT_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
+/** The checkout the tool serves, when the caller names none. Where it holds no `COPIES_DIR` no copy is found, and the reading says so. */
+const DEFAULT_ROOT = HOME_CHECKOUT;
 const COPY_HEADER_START = /^\/\/ COPIED FROM `([^`]+)` at /;
 const COPY_HEADER_END = "// ==== end of copy header ====";
 /** What a header says it changed: `NOTHING`, `ONE LINE`, or `N NAMED LINES`. */
@@ -450,7 +452,7 @@ const REMEDY = /** @type {Readonly<Record<string, string>>} */ (Object.freeze({
     + "primary's code, so the org has been running stale for this long: follow `primary-stale`'s own steps (save the diff first).",
   [SIGNALS.FLEET_IDLE]: "The fleet has captured nothing for a day and something needs it. Read why before anything else (`pnpm run fleet:status` is "
     + "`orchestrator`'s to run, not yours): a worker that cannot capture, a lab job that never started, or a row nobody dispatched. "
-    + "`orchestrator` owns fleet and lab questions, so put the finding on the row and `answer:orchestrator` on it rather than running the fleet yourself.",
+    + "`orchestrator` owns fleet and lab questions, so put the finding on the row and `" + ANSWER_PREFIX + "orchestrator` on it rather than running the fleet yourself.",
   [SIGNALS.COPIES]: "A declared copy no longer matches its original. Neither is known to be the right one: read both (`git log -3 -- <path>` for each), "
     + "then carry the change to the other side and move the commit in the copy's header. `agent-org-outward-edges.test.ts` is the exact check "
     + "and will go red on `main`'s next PR until you do.",
