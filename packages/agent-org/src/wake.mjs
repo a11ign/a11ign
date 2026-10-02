@@ -41,12 +41,12 @@ import { refuseUnknownFlags, flagValue } from "./lib/cli-flags.mjs";
 import { profileFor, agentArgs } from "./worker-profile.mjs";
 import { JUDGMENT_CAUSES, ANSWER_PREFIX, LAUNCH_PLACEHOLDER, REVIEWER_REGISTRY_FILE, readReviewerRegistry, scopesOf }
   from "./work-gate.mjs";
-import { reviewerInstance, reviewerInstanceNumber, subjectMention } from "./review-attribution.mjs";
+import { reviewerInstance, subjectMention } from "./review-attribution.mjs";
 // #2688: THE SAME INSTRUMENT #928's OFFLINE REPORT IS BUILT FROM, READ LIVE INSTEAD OF ONLY REPORTED --
 // no new metric, only this one read at delivery time.
 import { claudeTurns, transcriptFiles } from "./token-audit.mjs";
 import { HOME_CHECKOUT, homeProjectDeclaration } from "./project-config.mjs";
-import { stateEntryPath, hostConfigPath } from "./host-config.mjs"; // #2799; `hostConfigPath` for #2969's `clones`
+import { stateEntryPath, hostConfigPath, readHostConfig } from "./host-config.mjs"; // #2799; the other two for #2969's `clones`, read by host-config since #2991
 import { REPO } from "./project-identity.mjs";
 import { roleBriefPath } from "./project-roles.mjs";
 // #2619 (child 3d of #69): `session:`/`ready` -- `answer:` already arrives via `work-gate.mjs`'s
@@ -1084,22 +1084,20 @@ const reviewRef = (pr, key = "") => (key === "" ? `refs/review/pr-${pr}` : `refs
  * with a declaration of its own that `host-units.mjs` reads a `beforeTick` from, and a keyed code repository has none. EVERY failure
  * is a refusal naming the host file and what is wrong -- an unreadable file is never read as "no clone declared", and a clone is
  * never defaulted to the primary's checkout, whose `origin` would put the wrong repository's pull request in front of a reviewer.
+ * The reading is `host-config.mjs`'s (#2991), so a relative clone is refused with the whole file, naming `clones.<key>`.
  * @param {string} key @param {{ path?: string, read?: typeof readFileSync }} [from]
  * @returns {{ clone: string } | { refusal: string }}
  */
 export function reviewCloneOf(key, { path = hostConfigPath(), read = readFileSync } = {}) {
-  /** @type {any} */
+  /** @type {Readonly<import("./host-config.mjs").HostConfig>} */
   let host;
   try {
-    host = JSON.parse(read(path, "utf8"));
+    host = readHostConfig(path, read);
   } catch (err) {
     return { refusal: `${path} cannot be read as the host declaration (${firstLine(err)})` };
   }
-  const clone = host?.clones?.[key];
-  if (typeof clone !== "string" || !clone.startsWith("/")) {
-    return { refusal: `${path} declares no absolute \`clones.${key}\` path` };
-  }
-  return { clone };
+  const clone = host.clones !== undefined && Object.hasOwn(host.clones, key) ? host.clones[key] : undefined;
+  return clone === undefined ? { refusal: `${path} declares no absolute \`clones.${key}\` path` } : { clone };
 }
 
 /**
@@ -1356,15 +1354,17 @@ function doorRepositoryNote(session) {
  *
  * A REFUSAL DOES NOT SWALLOW THE ORDER: the author's words may exist nowhere else. The text says instead that the tree may be
  * STALE and how to tell, because the verdict header a reviewer writes from the network names the true head and is exactly what
- * makes a stale tree look fine. A session that is no instance of the tick's own repository is returned unchanged
- * ({@link noReviewCheckoutFor} says why: the tick's checkout serves one repository).
+ * makes a stale tree look fine. A session that is no instance of a repository the project DECLARES is returned unchanged: nothing
+ * is fetched for it, because no tree of it was ever made (#2991: a KEYED instance of a declared key IS re-pointed, from its clone
+ * into its keyed ref, and a declared key whose clone the host does not name gets the refusal text, not silence).
  *
  * @param {{session: string, prompt: string}} order @param {CheckoutDeps} [checkout]
  * @returns {{prompt: string}}
  */
 export function repointedForReviewer(order, checkout = {}) {
-  const pr = reviewerInstanceNumber(order.session);
-  if (pr === null) return { prompt: order.prompt };
+  const instance = reviewerInstance(order.session);
+  if (instance === null || (instance.key !== "" && codeRepositoryOf(instance.key) === null)) return { prompt: order.prompt };
+  const pr = instance.number;
   const prepared = prepareReviewCheckout({ pr, session: order.session, ...checkout });
   if ("refusal" in prepared) {
     return { prompt: `${order.prompt}\n\nYOUR CHECKOUT WAS NOT RE-POINTED (${prepared.refusal}). It may be at an OLDER head than `
