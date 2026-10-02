@@ -1,0 +1,5 @@
+---
+"@a11ign/control": patch
+---
+
+**`fleet-watch` no longer counts `unreachable` as a fault (#3023).** It posted "N worker(s) non-`ready` past the threshold" on #928 every hour for a fleet powered off on purpose by `fleet:auto-off` (73 comments, the last reading 15 workers "unreachable for 2d06h"), and `product-manager` spent an org round asking whether the fleet was off or broken. `/health` cannot tell a powered-off box from a dead one and the auto-off stamp lives on the control host, so the watch cannot be silent for the fleet's normal state while counting `unreachable`. `advance()` now treats `unreachable` like `ready`/`busy` (absent from the ledger), and does so there rather than only in `overdue()` because the ledger keeps `since` across state changes: a box waking `warming` after two days off would otherwise arrive already "warming for 2d". A reachable non-`ready` worker (warming, a blocking dialog, a foreground holder) still fires, which is the #1815 fault. A genuinely dead box is found when a capture window wakes it and it does not return (`fleet:wake`).
