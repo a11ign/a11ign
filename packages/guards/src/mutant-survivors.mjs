@@ -437,7 +437,7 @@ function runCommand(argv) {
 async function main() {
   // Imported here and not at the top: only the command line needs the flag guard, and only it needs `dist`, so a
   // checkout with no build can still import this file's functions.
-  const { refuseUnknownFlags } = await import("@a11ign/worker-fleet/cli-flags");
+  const { refuseUnknownFlags } = await import("@a11ign/screenreader-fleet/cli-flags");
   refuseUnknownFlags(["--file", "--line", "--operator", "--occurrence", "--base", "--test", "--budget", "--cap", "--json"],
     { entry: import.meta.url, command: "node packages/guards/src/mutant-survivors.mjs" });
   const [verb, ...rest] = process.argv.slice(2);

@@ -27,7 +27,7 @@ import { readFileSync, readdirSync, writeFileSync, existsSync } from "node:fs";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { realpathSync } from "node:fs";
 import { resolve, join } from "node:path";
-import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
+import { refuseUnknownFlags } from "@a11ign/screenreader-fleet/cli-flags";
 import { TOOLING_ROOTS } from "../packages/guards/src/tooling-roots.mjs";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));

@@ -1,5 +1,5 @@
 ---
-"@a11ign/worker-fleet": minor
+"@a11ign/screenreader-fleet": minor
 ---
 
 **`fleetConsistency` now reports how many guests reported each field, not only whether any did (#2019).**

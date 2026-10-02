@@ -1,5 +1,5 @@
 ---
-"@a11ign/worker-fleet": patch
+"@a11ign/screenreader-fleet": patch
 ---
 
 **`doctor`'s fleet line no longer states agreement about a field one guest of three reported (#2034).**

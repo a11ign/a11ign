@@ -69,7 +69,7 @@ import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
+import { refuseUnknownFlags } from "@a11ign/screenreader-fleet/cli-flags";
 import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 import { REPO as ACTION_REPO, PRODUCT_REPO } from "./repo-identity.mjs";
 

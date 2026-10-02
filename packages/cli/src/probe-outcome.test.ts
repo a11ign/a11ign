@@ -14,7 +14,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { WAKE_HINT, WORKER_PROBE_TIMEOUT_MS, describeProbe, probeHealth } from "@a11ign/worker-fleet/probe-outcome";
+import { WAKE_HINT, WORKER_PROBE_TIMEOUT_MS, describeProbe, probeHealth } from "@a11ign/screenreader-fleet/probe-outcome";
 import { refuseIfNothingListening } from "./worker-probe.js";
 import { workerProblem } from "../../../scripts/auth-leak-worker-probe.mjs";
 import { refuseIfBusy, sampleVitals } from "../../worker-fleet/src/measure-guard.mjs";

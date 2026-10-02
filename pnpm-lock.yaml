@@ -17,12 +17,12 @@ importers:
       '@a11ign/scorer':
         specifier: 0.0.0
         version: link:packages/scorer
+      '@a11ign/screenreader-fleet':
+        specifier: 0.0.0
+        version: link:packages/worker-fleet
       '@a11ign/screenreader-worker':
         specifier: 0.0.0
         version: link:packages/nvda-worker
-      '@a11ign/worker-fleet':
-        specifier: 0.0.0
-        version: link:packages/worker-fleet
       '@anthropic-ai/sdk':
         specifier: ^0.106.0
         version: 0.106.0
@@ -90,7 +90,7 @@ importers:
       '@a11ign/scorer':
         specifier: 0.0.0
         version: link:../scorer
-      '@a11ign/worker-fleet':
+      '@a11ign/screenreader-fleet':
         specifier: 0.0.0
         version: link:../worker-fleet
       yaml:
@@ -134,12 +134,12 @@ importers:
       '@a11ign/scorer':
         specifier: 0.0.0
         version: link:../scorer
+      '@a11ign/screenreader-fleet':
+        specifier: 0.0.0
+        version: link:../worker-fleet
       '@a11ign/screenreader-worker':
         specifier: 0.0.0
         version: link:../nvda-worker
-      '@a11ign/worker-fleet':
-        specifier: 0.0.0
-        version: link:../worker-fleet
     devDependencies:
       '@a11ign/control':
         specifier: 0.1.0

@@ -1,5 +1,5 @@
 ---
-"@a11ign/nvda-worker": patch
+"@a11ign/screenreader-worker": patch
 "@a11ign/evidence": minor
 "@a11ign/judge": patch
 "@a11ign/scorer": patch

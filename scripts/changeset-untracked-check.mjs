@@ -31,7 +31,7 @@ import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
 import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
-// RELATIVE, NOT `@a11ign/worker-fleet/cli-flags` -- this script is a root script, matching
+// RELATIVE, NOT `@a11ign/screenreader-fleet/cli-flags` -- this script is a root script, matching
 // `ci-changed.mjs`'s own rule: the package specifier resolves to `dist/`, which a fresh checkout
 // does not have built yet.
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";

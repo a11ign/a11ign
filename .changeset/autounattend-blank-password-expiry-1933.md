@@ -1,5 +1,5 @@
 ---
-"@a11ign/worker-fleet": patch
+"@a11ign/screenreader-fleet": patch
 ---
 
 **The shipped bare-metal `autounattend.xml` now stops the worker account's blank password from expiring, and the file is now well-formed XML.**

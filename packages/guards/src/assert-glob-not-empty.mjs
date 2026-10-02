@@ -36,7 +36,7 @@
 // command's own argv, not only to prose. `--run` makes the two uses of the pattern the same JS array.
 import { globSync, realpathSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { refuseUnknownFlags, flagValue } from "@a11ign/worker-fleet/cli-flags";
+import { refuseUnknownFlags, flagValue } from "@a11ign/screenreader-fleet/cli-flags";
 import { pnpmCliInvocation } from "../../../scripts/npm-cli-executable.mjs";
 import { suiteStartVerdict } from "./worktree-resolution.mjs";
 import { runUnderCap } from "./test-memory-cap.mjs";
