@@ -22,7 +22,7 @@
 //   fleet-idle-while-work-waits  24 h        zero captures for a day while a `fleet-gated` row or a lab job waits for the fleet. THE
 //                                            24 h IS THE CHAIRMAN'S, not a percentile: the 2026-09 incidents of a worker unable to
 //                                            capture ran 4.9 days and were found by a human reading a terminal.
-//   copies-drifted               any         a declared copy (`packages/agent-org/src/lib/*`, each headed `COPIED FROM <original>`) whose
+//   copies-drifted               any         a declared copy (every file in `packages/agent-org/src/lib`, each headed `COPIED FROM <original>`) whose
 //                                            body no longer matches its original beyond the lines its own header names
 // WHAT `host-units-stale` AND `primary-not-at-main` ALREADY COVER, so this does not repeat them: the first asks about the systemd UNIT
 // files against the installed ones, the second about the primary checkout the work-tick unit runs from (its code IS that working
@@ -46,6 +46,8 @@ import { READY_LABEL } from "./claim-labels.mjs";
 // The checkout the tool serves and the project's own words are read from where they are declared (`standalone-roots.test.ts`, `project-vocabulary.test.ts`).
 import { HOME_CHECKOUT } from "./project-config.mjs";
 import { ANSWER_PREFIX } from "./project-vocabulary.mjs";
+// A LEAF too (it imports `newest-check-run.mjs` and `pr-hold-state.mjs`, which import nothing): the ONE decider of what counts as red.
+import { brokenChecks } from "./red-pr.mjs";
 
 /** No PR merged for this long, with work that could merge, is the idle org the chairman found. See the table above. */
 export const NO_MERGE_HOURS = 3;
@@ -146,6 +148,20 @@ export function noMergeReading({ now, lastMergedAt, work }) {
  * `redSince` is when the head's first failing check finished, `null` when no check carried a time. `ownerCommentAts` are the
  * times of comments from the account that opened the PR, all of them: the leaf asks which fall after the red began.
  */
+
+/**
+ * WHEN DID THIS PULL REQUEST'S BREAKAGE BEGIN, or `null` when it has none to date (#2956). RED IS DECIDED ONCE, BY `red-pr.mjs`
+ * (`isBrokenRed`, #2954), and the question is asked of it here and not re-answered: `pr-checks-failing` excuses a hold only when the
+ * hold is its ADDRESSEE's own (#2400), so a PR a worker owns and `ceo` holds is still ordered, and a count built from those orders
+ * alone offered `ceo` its own freeze every day of it (#2883). THE HOLD'S OWN TWO JOBS ARE LEFT OUT and every other red is dated by
+ * ITSELF: a held PR with a real `ts / run` failure is red since THAT check finished, not since the hold's `gate` did.
+ * @param {{ labels?: any[], statusCheckRollup?: any[] }} pr
+ * @returns {number | null} epoch ms of the earliest broken check, `null` for none or for a broken check GitHub gave no time
+ */
+export function redSinceOf(pr) {
+  const times = brokenChecks(pr).map((check) => check.failedAt).filter(Number.isFinite);
+  return times.length > 0 ? Math.min(...times) : null;
+}
 
 /**
  * Is this red PR UNATTENDED once `RED_PR_MINUTES` have passed?
