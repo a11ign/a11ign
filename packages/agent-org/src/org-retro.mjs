@@ -23,7 +23,9 @@ import { pathToFileURL } from "node:url";
 import { stateEntryPath } from "./host-config.mjs";
 // A LEAF (`claim-labels.mjs` imports nothing): the label is read from where it is declared, `repeating-lines.mjs`'s own reason.
 import { READY_LABEL } from "./claim-labels.mjs";
-import { newestPerName } from "./newest-check-run.mjs";
+import { brokenChecks, redChecks as redChecksOf, isBrokenRed, isHeldRed, holdsOn } from "./red-pr.mjs";
+// THE SIBLING ROW'S MODULE (#2939): it DERIVES the count from git and gh and writes no file, so the report calls it rather than reading a path.
+import { gatherChanges, readLedger as readHandFixLedger, ledgerLine as handFixLine } from "./hand-fix-ledger.mjs";
 import { claudeTurns, codexTurns, transcriptFiles } from "./token-audit.mjs";
 import { refuseUnknownFlags, flagValue } from "./lib/cli-flags.mjs";
 
@@ -32,9 +34,6 @@ export const RETRO_CAUSE = "org-retrospective";
 
 /** What an unreadable source prints. Never `0`: "could not read" and "none" are different states and never share a value. */
 export const UNKNOWN = "unknown";
-
-/** What the hand-fix line prints until the sibling row's ledger (#2939) exists. Not `0`, for the same reason. */
-export const LEDGER_ABSENT = "ledger absent";
 
 /** The window every number covers. */
 export const WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -187,28 +186,32 @@ export function ledgerStats(entries) {
   return { orgStalled, claimStalled, healthBySignal };
 }
 
-/** The conclusions that make a check red. A check still running, skipped or neutral is not red. */
-const RED = new Set(["FAILURE", "TIMED_OUT", "STARTUP_FAILURE", "ACTION_REQUIRED"]);
-
 /**
- * How long each open PR has been red, as of `now`: from the EARLIEST completion among its failing checks, narrowed to the newest
- * run of each check name (a superseded run is unioned into `statusCheckRollup` and a re-run that passed must clear the red).
- * @param {{ number: number, statusCheckRollup?: { name?: string, conclusion?: string, completedAt?: string }[] }[] | null} openPrs
+ * How long each BROKEN open PR has been red, as of `now`, from the EARLIEST completion among the red checks that make it broken (`red-pr.mjs`:
+ * a held PR's own two jobs do not). A PR red only because it is held is not counted: it is returned in `held`, with who holds it and for how
+ * long, so the hold is reported and never silently dropped.
+ * @param {{ number: number, labels?: any[], statusCheckRollup?: { name?: string, conclusion?: string, completedAt?: string }[] }[] | null} openPrs
  * @param {number} now
- * @returns {{ count: number, medianMinutes: number | null, oldest: { number: number, minutes: number } | null } | null}
+ * @returns {{ count: number, medianMinutes: number | null, oldest: { number: number, minutes: number } | null,
+ *   held: { number: number, holders: string[], minutes: number | null }[] } | null}
  */
 export function redPrStats(openPrs, now) {
   if (openPrs === null) return null;
   /** @type {{ number: number, minutes: number }[]} */
   const reds = [];
-  for (const pr of openPrs) {
-    const newest = newestPerName(pr.statusCheckRollup ?? []);
-    const failedAt = newest.filter((c) => RED.has(c.conclusion ?? "")).map((c) => Date.parse(c.completedAt ?? ""))
-      .filter(Number.isFinite);
-    if (failedAt.length > 0) reds.push({ number: pr.number, minutes: (now - Math.min(...failedAt)) / MS_PER_MINUTE });
+  for (const pr of openPrs.filter(isBrokenRed)) {
+    const minutes = minutesRed(brokenChecks(pr), now);
+    if (minutes !== null) reds.push({ number: pr.number, minutes });
   }
+  const held = openPrs.filter(isHeldRed).map((pr) => ({ number: pr.number, holders: holdsOn(pr), minutes: minutesRed(redChecksOf(pr), now) }));
   const oldest = reds.reduce((top, red) => (top === null || red.minutes > top.minutes ? red : top), /** @type {typeof reds[number] | null} */ (null));
-  return { count: reds.length, medianMinutes: median(reds.map((r) => r.minutes)), oldest };
+  return { count: reds.length, medianMinutes: median(reds.map((r) => r.minutes)), oldest, held };
+}
+
+/** @param {{ failedAt: number }[]} checks @param {number} now @returns {number | null} null when no check says when it failed */
+function minutesRed(checks, now) {
+  const failedAt = checks.map((c) => c.failedAt).filter(Number.isFinite);
+  return failedAt.length === 0 ? null : (now - Math.min(...failedAt)) / MS_PER_MINUTE;
 }
 
 /**
@@ -229,7 +232,7 @@ export function tokenStats(turns, { since, until }) {
  * Every number, each `unknown` when its source was refused. `reads` holds the RAW reads (`null` for a refused one), so what is
  * computed here is pure and a test drives it with a fixture window whose answers are checked by hand.
  * @param {{ merged: any[] | null, openPrs: any[] | null, journal: string | null, ledger: string | null,
- *   turns: any[] | null, handFixLedger: "absent" | "present" | null }} reads
+ *   turns: any[] | null, handFixes: ReturnType<typeof readHandFixLedger> | null }} reads
  * @param {number} now
  */
 export function buildReport(reads, now) {
@@ -244,7 +247,7 @@ export function buildReport(reads, now) {
     stalls: reads.ledger === null ? null : ledgerStats(ledgerEntries(reads.ledger, window)),
     red: redPrStats(reads.openPrs, now),
     tokens: tokenStats(reads.turns, window),
-    handFixes: reads.handFixLedger,
+    handFixes: reads.handFixes,
   };
 }
 
@@ -281,8 +284,20 @@ function stallLines({ merged, idle }) {
 /** @param {ReturnType<typeof buildReport>["red"]} red @returns {string[]} */
 function redLines(red) {
   if (red === null) return [`- Red PRs now: ${UNKNOWN} (the open-PR list could not be read)`];
-  if (red.count === 0 || red.oldest === null) return ["- Red PRs now: 0"];
-  return [`- Red PRs now: ${red.count}; age median ${duration(red.medianMinutes ?? 0)}, max ${duration(red.oldest.minutes)} (#${red.oldest.number})`];
+  const broken = red.count === 0 || red.oldest === null ? "- Red PRs now: 0"
+    : `- Red PRs now: ${red.count}; age median ${duration(red.medianMinutes ?? 0)}, max ${duration(red.oldest.minutes)} (#${red.oldest.number})`;
+  return [broken, ...heldLines(red.held)];
+}
+
+/**
+ * A PR red ONLY because it carries a hold is not a breakage, and is never silently dropped either: it is named here with its holder and for how
+ * long it has been held red. Printed only when there is one, so an ordinary day's report does not grow a line of zeros.
+ * @param {NonNullable<ReturnType<typeof redPrStats>>["held"]} held @returns {string[]}
+ */
+function heldLines(held) {
+  if (held.length === 0) return [];
+  const each = held.map((h) => `#${h.number} (${h.holders.join(", ")}${h.minutes === null ? "" : `, red ${duration(h.minutes)}`})`);
+  return [`- Red PRs held on purpose (not counted above): ${held.length}: ${each.join("; ")}`];
 }
 
 /** @param {ReturnType<typeof buildReport>} report @returns {string[]} */
@@ -302,11 +317,12 @@ function journalDerivedLines(report) {
 
 /** @param {ReturnType<typeof buildReport>} report @returns {string[]} */
 function spendLines({ tokens, merged, handFixes }) {
-  const handFix = handFixes === null ? UNKNOWN : handFixes === "absent" ? LEDGER_ABSENT : `${UNKNOWN} (the ledger exists and this script does not yet read its format)`;
-  if (tokens === null) return [`- Tokens per merged PR: ${UNKNOWN} (no transcript could be read)`, `- Hand fixes by the chairman's session: ${handFix}`];
+  // `ledgerLine` IS the line, wording and all: it says the window, the target, the trend and what was left out, and a refused read says UNKNOWN and "not zero".
+  const handFix = handFixes === null ? `- HAND FIXES: ${UNKNOWN} (the hand-fix ledger could not be run)` : `- ${handFixLine(handFixes)}`;
+  if (tokens === null) return [`- Tokens per merged PR: ${UNKNOWN} (no transcript could be read)`, handFix];
   const perPr = merged === null ? UNKNOWN : merged.count === 0 ? "n/a, no PR merged" : grouped(Math.round(tokens.total / merged.count));
   return [`- Tokens per merged PR: ${perPr} (${grouped(tokens.total)} tokens over ${grouped(tokens.turns)} turns; the transcripts' own usage fields via token-audit.mjs, cache reads included)`,
-    `- Hand fixes by the chairman's session: ${handFix}`];
+    handFix];
 }
 
 /**
@@ -426,19 +442,20 @@ function readJournal(unit) {
 }
 
 /**
- * Every read the report wants, once. `stateDir` holds the wake ledger and (when the sibling row lands) the hand-fix ledger.
- * @param {{ now: number, stateDir: string, unit?: string }} where
+ * Every read the report wants, once. `stateDir` holds the wake ledger. THE HAND-FIX COUNT IS NOT A FILE IN IT: `hand-fix-ledger.mjs` derives
+ * it from git and gh (#2939), and this line read a path nothing wrote for as long as the report existed (#2954). `readHandFixes` is the seam.
+ * @param {{ now: number, stateDir: string, unit?: string, readHandFixes?: (now: number) => ReturnType<typeof readHandFixLedger> }} where
  */
-export function readAll({ now, stateDir, unit = "a11ign-work-tick.service" }) {
+export function readAll({ now, stateDir, unit = "a11ign-work-tick.service",
+  readHandFixes = (at) => readHandFixLedger({ read: gatherChanges(), now: new Date(at) }) }) {
   const since = now - WINDOW_MS;
   return {
     merged: ghJson(["pr", "list", "--state", "merged", "--search", `merged:>=${new Date(since).toISOString()}`, "--limit", "200", "--json", "number,createdAt,mergedAt"]),
-    openPrs: ghJson(["pr", "list", "--state", "open", "--limit", "100", "--json", "number,statusCheckRollup"]),
+    openPrs: ghJson(["pr", "list", "--state", "open", "--limit", "100", "--json", "number,labels,statusCheckRollup"]),
     journal: readJournal(unit),
     ledger: readText(`${stateDir}/wake-ledger`),
     turns: readTurns(since),
-    // THE SIBLING ROW'S LEDGER (#2939). Until it exists the line says so, and it must never print 0.
-    handFixLedger: readText(`${stateDir}/hand-fix-ledger`) === null ? /** @type {const} */ ("absent") : /** @type {const} */ ("present"),
+    handFixes: readHandFixes(now), // a refused read is a reading that says so (`status: "unknown"`), never a throw and never a 0
   };
 }
 
