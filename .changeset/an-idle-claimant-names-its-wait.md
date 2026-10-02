@@ -1,0 +1,5 @@
+---
+"@a11ign/agent-org": minor
+---
+
+**An idle claimant that declared no wait is a stall: its wait is a FIELD or it is nudged, and a second reading later released (#2999).** Twelve sessions sat idle for hours on 2026-10-02 and each named its wait in a terminal nobody reads; `claimReading` returned `pr-owned` before any clock for a holder with an open pull request (#2968 and #2969 sat behind it 171 and 233 minutes) and never asked a session's own status. `idle-claimant.mjs` (a leaf) reads the host listing the gate already reads: a holder `idle` or `done` for `IDLE_CLAIMANT_MINUTES` (45, derived from the claim-to-first-PR gap of the morning's claims) with none of `WAIT_FIELDS` is nudged under the existing `claim-stalled` cause and key, so `claim-stall`'s own second reading releases a holder with no pull request that neither sets a field nor moves (the work is kept). A holder with an open pull request is nudged and never released. A partial listing is `unknown` and never a stall (#2465). The nudge text spells every field, and the row-wait kinds come from the same `declaredWait` decision the clock reading uses.
