@@ -60,6 +60,8 @@ Public npmjs.com, scope `@a11ign`. Rejected alternatives:
 - **A private registry** — premature; ADR 0003's hosted layer is Phase 4 and does
   not need one now.
 
+**Amended 2026-10-02 (chairman, #928; [ADR 0040](./0040-agent-org-is-a-standalone-project-agnostic-tool.md)): `agent-org` is outside this section.** It is published to NO registry, public npm included: a project installs it as a git dependency pinned to a release tag (`github:a11ign/agent-org#semver:^0.1.0`). It is meant to leave the a11ign organisation in the long run, a GitHub Packages entry is named after its GitHub owner, and an `@a11ign` npm name is a11ign-branded and cannot be renamed, so a registry entry under a11ign would tie the tool to a11ign; a git dependency ties it only to a URL. The tool's package name is the unscoped `agent-org`. If it ever needs a public registry, that is a later decision under a neutral name the chairman owns. The libraries named above are unaffected.
+
 Two operational requirements that are easy to forget and expensive to retrofit:
 reserve the `@a11ign` scope **and** the unscoped `a11ign` name before
 M2 publishes anything, and enable npm **provenance** (`--provenance` from a trusted
