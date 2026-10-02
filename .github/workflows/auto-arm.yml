@@ -121,27 +121,24 @@ name: auto-arm
 # repository already tracks dated obligations once the token exists; this workflow cannot see its own
 # secret's expiry date to warn about it in advance.
 #
-# ## `push: [main]`, AND `update-branch` BELOW -- C2, #416's sibling
+# ## `push: [main]` -- and NO job here pushes `main` into a PR branch (#3046)
 #
-# Arming a PR does not keep it current: `main`'s branch protection runs with `strict=false` (#277), so an
-# armed PR merges the instant its OWN `gate` is green, with no requirement that its head still contains
-# whatever landed on `main` since. Every merge this pipeline completes therefore leaves every OTHER open,
-# armed PR one merge further behind -- and nothing was pushing them back up, which is `queue-stalled.mjs`'s
-# entire subject: it REPORTS a PR that has drifted into a real conflict, it does not fix one. `update-branch`
-# is the fix half, riding the one event that means "the queue just moved": a push to `main`.
+# Arming a PR does not keep it current, and nothing needs to: the merge queue (`merge_group:` in `ci.yml`,
+# ruleset `merge-queue-main`) builds every PR ON TOP OF `main` and runs `ci` on that merge commit, so "up to
+# date with main" added only a new head, a new CI run and a new reason to re-review (49% of 250 recent commits
+# were `Merge branch 'main' into ...`). The `update-branch` job that did this was deleted for that reason, and
+# `push: [main]` stays for `sweep` and `stalled`: both ask what the queue just left behind, and `stalled`
+# REPORTS a PR that has drifted into a real conflict (`queue-stalled.mjs`), which is the one case that needs a person.
 on:
   pull_request:
-    # #1094: `auto_merge_enabled` is the event on which update-branch's second input (is it armed) flips,
-    # whoever armed it -- the arm job, pr:open at creation, or a hand `gh pr merge --auto`.
+    # #1094: `auto_merge_enabled` is the event on which a PR becomes armed, whoever armed it -- the arm job,
+    # pr:open at creation, or a hand `gh pr merge --auto`. `arm` excludes it; `sweep` and `stalled` read it.
     types: [opened, ready_for_review, reopened, synchronize, auto_merge_enabled]
   push:
     branches: [main]
-  # #1103: the third input of update-branch's decision -- QUIET -- flips when a PR's gate settles, and
-  # nothing observed that: the push sweep skipped a PR whose head had moved inside the 300s window while
-  # its gate ran, and no later event re-asked. Five armed, green, behind PRs were hand-updated in one day.
-  # `ci` completing IS the gate concluding (`gate` lives in ci.yml), so this is the event, not a clock.
-  # `workflows:` matches the workflow's NAME (ci.yml's `name: ci`), never its filename; the test pins the
-  # two equal. Only `update-branch` admits this event; `sweep` and `stalled` exclude it below.
+  # #1103: `ci` completing IS a PR's gate concluding (`gate` lives in ci.yml), so this is the event, not a
+  # clock. `workflows:` matches the workflow's NAME (ci.yml's `name: ci`), never its filename; the test pins
+  # the two equal. Only `stalled` admits this event (#1633); `arm` and `sweep` exclude it below.
   workflow_run:
     workflows: [ci]
     types: [completed]
@@ -264,9 +261,8 @@ jobs:
     # The script cannot fix this. It is handed no event, no triggering PR number and no notion that it is
     # running inside a check context at all; the misattribution is a property of a repo-wide job running in
     # a PER-PR CHECK context, which is a fact only THIS FILE holds (ceo's ruling on #1970, 2026-09-22 --
-    # `auto-arm-sweep.mjs` comes out of that row unchanged). `sweep` meets every clause of the
-    # `update-branch` category below but the trigger: it acts on OTHER open PRs, never on the triggering
-    # PR's own head, and it gates nothing -- `main`'s protection requires exactly one context, `gate`, and
+    # `auto-arm-sweep.mjs` comes out of that row unchanged). `sweep` is the "followup job" category of
+    # `push-trigger-allowlist.test.ts`: it acts on OTHER open PRs, never on the triggering PR's own head, and it gates nothing -- `main`'s protection requires exactly one context, `gate`, and
     # `sweep` is not in it. So a red run here withholds nothing, and charging one to a diff that did not
     # earn it is the worst possible input to #600's absorbing state, where the train carries only green PRs
     # and a PR red for one merge cycle can never catch up.
@@ -282,8 +278,9 @@ jobs:
     # `sweep` runs in a per-PR check context, 13 named a set that did not include the PR whose event
     # triggered them (and most of the 28 that did named others in the same breath). A check colour is one
     # bit and cannot be partially about PR #N, so a set-membership test would fix 13 and keep mis-stating
-    # 28. `ceo` ruled (2026-09-23T18:26Z): `continue-on-error: true` on the JOB, the category `update-branch`
-    # below already names -- a job that acts on OTHER open PRs and can never gate anything.
+    # 28. `ceo` ruled (2026-09-23T18:26Z): `continue-on-error: true` on the JOB, the category
+    # `push-trigger-allowlist.test.ts` already names -- a job that acts on OTHER open PRs and can never
+    # gate anything.
     #
     # THE STEP STILL EXITS 1, and that is the point of shielding the JOB rather than the step: the
     # finding stays a non-zero exit with the `SWEEP: could not arm` line in the log, `auto-arm-sweep.test.ts`
@@ -379,71 +376,3 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: node packages/agent-org/src/queue-stalled.mjs
-
-  update-branch:
-    # PUSH EVERY ARMED, GREEN-OR-RUNNING PR UP TO main's NEW TIP -- C2, #416's sibling.
-    #
-    # `arm` and `sweep` above get a PR INTO the queue; nothing pushed one back up once `main` moved past
-    # it, which is `queue-stalled.mjs`'s entire subject one step further along -- it only ever REPORTS a
-    # drifted PR. This job runs `gh pr update-branch` itself, on the one event that means "the queue just
-    # moved": a merge landing on `main`. `packages/agent-org/src/update-branch-sweep.mjs` has the full decision and why
-    # `git merge-base --is-ancestor` is used instead of GitHub's lazily-computed `mergeStateStatus`.
-    #
-    # ONLY ON `push`, never on the `pull_request` events the jobs above ride -- a fresh PR being opened or
-    # synchronized has not moved `main`, so there is nothing here for it to do.
-    #
-    # NO `GITHUB_TOKEN` FALLBACK, unlike `arm`/`sweep` -- see the script's own header. GitHub does not fire
-    # `pull_request: synchronize` for a push made with `GITHUB_TOKEN`, so updating a branch under it would
-    # give a PR a new head with no check run ever triggered for it and its required checks waiting forever
-    # -- worse than leaving it alone at its old, already-checked head. The step SKIPS outright rather than
-    # degrading, the one case in this file where a missing secret means "do nothing" instead of "do it
-    # anyway and warn". Failing loudly and doing nothing beats succeeding quietly -- and it means this job
-    # degrades SAFELY if the token is ever revoked: PRs simply stay visibly behind, rather than
-    # accumulating untested heads nobody can see.
-    #
-    # `TRUNK_FOLLOWUP_ALLOWLIST` (`push-trigger-allowlist.test.ts`) -- ceo's ruling, 2026-09-08. This is
-    # neither of the two shapes that file's chairman-derived rule already recognised: not a schedule
-    # watchdog (there is no cron here for GitHub to silently disable), and not `trunk.yml`'s reactive
-    # check on main's OWN tip. It is a third, narrower shape: a push-to-main job that acts on OTHER open
-    # PRs after a merge, never on main's own tip, and can never gate anything because the merge it reacts
-    # to already happened. `continue-on-error: true` is REQUIRED by that category's own definition, not
-    # optional here -- a red run must never read as a gate failure when nothing downstream waits on it.
-    # #1094: ALSO on `auto_merge_enabled`. The decision has two inputs -- has main moved, and is this PR
-    # armed -- and the push-only gate reasoned about the first alone. Measured 2026-09-12: a merge landed
-    # 10:27:07Z, the sweep read #1080 as "not armed" at 10:27:15Z, ReadyForReview 10:28:13Z, AutoMergeEnabled
-    # 10:28:23Z, and with every other PR a draft no push could come; #1080 sat green, armed and BEHIND for
-    # 57 minutes until a person ran `gh pr update-branch`. `auto_merge_enabled` is the event on which the
-    # second input flips, whoever armed it; `ready_for_review` is NOT enough (ten seconds too early, and a
-    # PR readied earlier and armed by hand never fires it). `opened` and `synchronize` stay excluded:
-    # neither moves main nor arms anything. The token contract below is unchanged: no GITHUB_TOKEN
-    # fallback on any event.
-    if: github.event_name == 'push' || github.event_name == 'workflow_run' || (github.event_name == 'pull_request' && github.event.action == 'auto_merge_enabled')
-    continue-on-error: true
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Update every armed, green-or-running, behind PR to main's current tip
-        env:
-          A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          EVENT_NAME: ${{ github.event_name }}
-          EVENT_PR: ${{ github.event.pull_request.number }}
-          # workflow_run carries the PRs the completed run belonged to; empty for a fork's PR.
-          EVENT_GATE_PR: ${{ github.event.workflow_run.pull_requests[0].number }}
-        run: |
-          # #1094 item 3 / #1103 clause 4: the three causes of this sweep must not render the same sentence.
-          if [ "$EVENT_NAME" = "push" ]; then
-            echo "UPDATE-BRANCH: ran because main moved (push)"
-          elif [ "$EVENT_NAME" = "workflow_run" ]; then
-            echo "UPDATE-BRANCH: ran because a gate completed for #${EVENT_GATE_PR:-?} (workflow_run)"
-          else
-            echo "UPDATE-BRANCH: ran because #${EVENT_PR} armed (auto_merge_enabled)"
-          fi
-          if [ -z "$A11IGN_BOT_TOKEN" ]; then
-            echo "::warning::A11IGN_BOT_TOKEN is not set -- SKIPPING update-branch entirely, not falling back to GITHUB_TOKEN. A push made with GITHUB_TOKEN fires no pull_request: synchronize, so an updated PR would get a new head with no check run ever triggered for it -- worse than leaving it alone. See #416/C2."
-            exit 0
-          fi
-          export GH_TOKEN="$A11IGN_BOT_TOKEN"
-          node packages/agent-org/src/update-branch-sweep.mjs
