@@ -41,8 +41,8 @@ assumed standing seats. The org has ruled since, so what follows replaces it.
   them. A commit, a push or a row comment resets the clock. A spawned engineer whose pull request MERGES with nothing
   else held is ended too (and the row asks `product-manager` what is left), whether or not the row closed.
 - **Check, then claim, from a linked worktree, never the primary checkout:**
-  `node packages/agent-org/src/row-claim.mjs check <n>`, then
-  `node packages/agent-org/src/row-claim.mjs claim <n> --session=<you> --branch=agent/<slug>-<n> --worktree=../wt-<n>`.
+  `pnpm run row-claim check <n>`, then
+  `pnpm run row-claim claim <n> --session=<you> --branch=agent/<slug>-<n> --worktree=../wt-<n>`.
   **`claim` CREATES and stamps the worktree, so never make it first:** a pre-made path or branch is refused
   before any write (`NOT CLAIMED: --worktree=<path> ALREADY EXISTS … Refusing before any write`). The new
   tree has no `node_modules`; the remedy is a hybrid link, not a symlink of the whole directory
@@ -217,5 +217,7 @@ moving it needs no permission; where prose asserts it, it does.**
 >
 > **PREFER DELETING TO ADDING.** agent-org is about 69k non-test lines in 157 files and is the maintenance burden. A fix
 > that grows it says in the PR why removing or reusing could not do it. The net line count is tracked on #928 and must go down.
+
+**The tool lives in [a11ign/agent-org](https://github.com/a11ign/agent-org) (chairman, 2026-10-02, #2977):** a change to it is a pull request there, never here, where the old copy is frozen and goes in #2976. Its row stays tracked here until agent-org is a declared tracker (#2899).
 
 A turn does not end on a background job it still needs: wait for it, or hand its result to a row, before you stop (`ceo`).

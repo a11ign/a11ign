@@ -16,7 +16,7 @@
   subsequent write is attributed to, and that disposition is `ceo`'s (`lane:ceo`, #916) rather than yours.
   Wait out your own reset.
 - **You may already be spending an account you did not pick, so name it before you read its pool.**
-  `/home/agent/.local/bin/gh` (shipped: `packages/agent-org/host/gh`) is a ROUTING WRAPPER ahead of
+  `/home/agent/.local/bin/gh` (shipped as agent-org's `host/gh`) is a ROUTING WRAPPER ahead of
   `/usr/bin/gh`, and `git push` goes through it: with `GH_CONFIG_DIR` unset an agent workspace gets the
   workers config, or the leads config when it is in `~/leads/workspaces.txt` (w6 w2 w5); NO agent gets the
   person's. No workspace id means a person, so a systemd unit must DECLARE `GH_CONFIG_DIR`. **Run `gh api user

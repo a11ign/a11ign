@@ -102,7 +102,7 @@ the git log is where the "why" survives after the diff stops being interesting. 
 
 **A fix you make by hand, that the org should have made itself, is counted (#2939).** Put one line in the PR body,
 `Hand-fix: <what the org should have done> — <which gate or brief would have done it>` (an em dash; `pr:open`
-refuses a malformed one), and `node packages/agent-org/src/hand-fix-ledger.mjs` prints the count, target zero. A
+refuses a malformed one), and `node src/hand-fix-ledger.mjs`, run in the [a11ign/agent-org](https://github.com/a11ign/agent-org) checkout, prints the count, target zero. A
 decision, a credential or a publish is not a hand fix: `Not-a-hand-fix: <decision|credential|publish> — <reason>`.
 
 ## Two things that will surprise you
