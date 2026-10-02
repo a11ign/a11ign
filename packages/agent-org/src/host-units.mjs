@@ -40,6 +40,7 @@ import { refuseUnknownFlags } from "./lib/cli-flags.mjs";
 import { localImports, stripComments } from "./lib/local-import-closure.mjs";
 import { sandboxGitEnv } from "./lib/git-env.mjs";
 import { SPAWNS_GH } from "./acceptance-commands.mjs";
+import { HOME_CHECKOUT } from "./project-config.mjs";
 import { CLAUDE_EFFORTS, DECLARED_CLAUDE_MODELS } from "./worker-profile.mjs";
 import { HostConfigRefusal, TEMPLATE_SUFFIX, homeHostConfig, leadsWorkspacesText, readBeforeTick, readUnitsDeclaration,
   renderTemplate, renderedName, templateValues } from "./host-config.mjs";
@@ -50,8 +51,12 @@ import { HostConfigRefusal, TEMPLATE_SUFFIX, homeHostConfig, leadsWorkspacesText
  */
 export const SHIPPED_DIR = fileURLToPath(new URL("../host/", import.meta.url));
 
-/** The checkout every shipped unit names as its `WorkingDirectory`, so an `ExecStart` path resolves. */
-export const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
+/**
+ * The checkout every shipped unit names as its `WorkingDirectory`, so an `ExecStart` path resolves. It is the PROJECT's (`HOME_CHECKOUT`), not
+ * the tool's: the units, the `package.json` scripts and the git history it reads all live there, and they are where the tool is installed
+ * beside the project it serves only when `$AGENT_ORG_HOST` says so (#2879).
+ */
+export const REPO_ROOT = HOME_CHECKOUT;
 
 /**
  * Where the PROJECT keeps the units that are its own -- a11ign's corpus and fleet clocks -- read beside the tool's, so `host:check`
@@ -765,7 +770,7 @@ function undeclaredIdentity(deps) {
       detail: `${opaque
         ? `it starts \`${via}\`, which this repository does not ship and cannot read, so whether it `
           + "spawns `gh` is UNKNOWN rather than no (#1993)"
-        : `it reaches a \`gh\` spawn (via ${via.replace(REPO_ROOT, "")})`}`
+        : `it reaches a \`gh\` spawn (via ${via.replace(`${REPO_ROOT}/`, "")})`}`
         + " and carries no `Environment=GH_CONFIG_DIR=...` line. A systemd unit has no "
         + "`HERDR_WORKSPACE_ID`, so the `gh` wrapper falls back to `~/.config/gh` -- a person's "
         + "account -- and the unit spends a human's rate limit until it runs out, then refuses "
