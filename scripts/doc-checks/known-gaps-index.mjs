@@ -23,7 +23,7 @@ export function check(root) {
     ? [{ where: KNOWN_GAPS_FILE, reference: "known-gaps-index block", why: "the file has no index block at all" }]
     : [
       ...fresh.filter((line) => !current.includes(line)).map((line) => ({ where: KNOWN_GAPS_FILE, reference: line,
-        why: "an open section the committed index does not list -- run `npm run docs:known-gaps-index -- --write`" })),
+        why: "an open section the committed index does not list -- run `pnpm run docs:known-gaps-index --write`" })),
       ...current.filter((line) => !fresh.includes(line)).map((line) => ({ where: KNOWN_GAPS_FILE, reference: line,
         why: "the committed index lists this, and the headings no longer produce it (closed, renamed or gone)" })),
     ];
