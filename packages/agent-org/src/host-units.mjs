@@ -75,7 +75,34 @@ export const TOOL_ENTRIES = Object.freeze([
   "work-tick.service.in", "work-tick.timer.in", "worktree-prune.service.in", "worktree-prune.timer.in",
   // #2867: the shadow window's own pair, installed BESIDE the work-tick unit and sharing none of its text.
   "shadow-window.service.in", "shadow-window.timer.in",
+  // #2901: the chairman-messaging watcher's pair, OPTIONAL (`OPTIONAL_UNITS`): classified here so it is never "unclassified", listed and installed only when asked for.
+  "chairman-watch.service.in", "chairman-watch.timer.in",
 ]);
+
+/**
+ * TEMPLATES THAT SHIP ONLY FOR A PROJECT THAT ASKS FOR THEM (#2901; docs/messaging.md decision 1, "Optional and off by default"): template -> the
+ * top-level key of `.agent-org/project.json` whose PRESENCE turns it on. Absent, the unit is not in `shippedUnits`, so `host:check` neither lists
+ * nor misses it, `host:install` does not write it, and an installed copy is an orphan that the install removes -- deleting the key is the off switch.
+ * Presence only: whether the key is VALID is `messaging/config.mjs`'s refusal, and an invalid one still installs the clock, which then refuses.
+ */
+export const OPTIONAL_UNITS = /** @type {Readonly<Record<string, string>>} */ (Object.freeze({
+  "chairman-watch.service.in": "messaging", "chairman-watch.timer.in": "messaging",
+}));
+
+/**
+ * The top-level keys the project's declaration holds. UNREADABLE IS A THROW, never "none": an optional unit silently dropped because the file that
+ * says whether to install it could not be read is the failure this module exists to refuse.
+ * @param {string} [root] @param {typeof readFileSync} [read] @returns {Set<string>}
+ */
+export function declaredProjectKeys(root = REPO_ROOT, read = readFileSync) {
+  const path = join(root, ".agent-org/project.json");
+  try {
+    const parsed = JSON.parse(String(read(path, "utf8")));
+    return new Set(typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? Object.keys(parsed) : []);
+  } catch (cause) {
+    throw new Error(`${path}: cannot tell which optional units it asks for (${/** @type {Error} */ (cause).message})`, { cause });
+  }
+}
 
 /** The host-data entry that is no longer a file, and where its content lives now. */
 export const HOST_DATA_ENTRIES = /** @type {Readonly<Record<string, string>>} */ (Object.freeze({ "gh-leads-workspaces.txt": "gh.leadsWorkspaces" }));
@@ -87,8 +114,8 @@ export const INSTALLED_DIR = `${process.env.HOME ?? ""}/.config/systemd/user`;
 
 /**
  * @typedef {{ shippedDir?: string, projectUnitsDir?: string | null, readDir?: typeof readdirSync, read?: typeof readFileSync,
- *   host?: HostConfig, units?: UnitsDeclaration }} ShippedDeps
- * `projectUnitsDir` is the project's own units: the real one when `shippedDir` is left to default, and NONE when a test hands its own
+ *   host?: HostConfig, units?: UnitsDeclaration, declaredKeys?: ReadonlySet<string> }} ShippedDeps
+ * `declaredKeys` stands in for the project's top-level keys, which decide `OPTIONAL_UNITS`; a fixture directory declares none. `projectUnitsDir` is the project's own units: the real one when `shippedDir` is left to default, and NONE when a test hands its own
  * `shippedDir`, so a fixture directory is never silently joined by a11ign's eight units. `host` and `units` stand in for the two
  * declarations a template is rendered from.
  */
@@ -96,12 +123,21 @@ export const INSTALLED_DIR = `${process.env.HOME ?? ""}/.config/systemd/user`;
 /**
  * The unit files this repository ships, sorted so a report reads the same way twice: the tool's (templates listed under the name
  * they install as) and, when there is one, the project's.
- * @param {string} [dir] @param {{ read?: typeof readdirSync, projectUnitsDir?: string | null, prefix?: string }} [deps]
+ * An `OPTIONAL_UNITS` template is listed only when `declaredKeys` holds its key: the real project's, read on first need, for the real directory,
+ * and none for a fixture's, so a test directory is never switched on by a11ign's own declaration.
+ * @param {string} [dir] @param {{ read?: typeof readdirSync, projectUnitsDir?: string | null, prefix?: string, declaredKeys?: ReadonlySet<string> }} [deps]
  * @returns {string[]}
  */
-export function shippedUnits(dir = SHIPPED_DIR, { read = readdirSync, projectUnitsDir, prefix } = {}) {
+export function shippedUnits(dir = SHIPPED_DIR, { read = readdirSync, projectUnitsDir, prefix, declaredKeys } = {}) {
   const projectDir = projectUnitsDir !== undefined ? projectUnitsDir : dir === SHIPPED_DIR ? PROJECT_UNITS_DIR : null;
-  const own = namesIn(dir, read).flatMap((name) => {
+  /** @type {ReadonlySet<string> | undefined} */
+  let keys = declaredKeys;
+  const asked = (/** @type {string} */ name) => {
+    if (!Object.hasOwn(OPTIONAL_UNITS, name)) return true;
+    keys ??= dir === SHIPPED_DIR ? declaredProjectKeys() : new Set();
+    return keys.has(OPTIONAL_UNITS[name]);
+  };
+  const own = namesIn(dir, read).filter(asked).flatMap((name) => {
     if (!name.endsWith(TEMPLATE_SUFFIX)) return isUnit(name) ? [name] : [];
     const rendered = renderedName(name, prefix ?? readUnitsDeclaration().prefix);
     return isUnit(rendered) ? [rendered] : [];
@@ -201,8 +237,8 @@ function replaceOnce(text, anchor, line) {
  * The shipped unit names, for a caller holding the whole `deps` bag its own function takes.
  * @param {ShippedDeps} [deps]
  */
-function shippedUnitNames({ shippedDir = SHIPPED_DIR, readDir = readdirSync, projectUnitsDir, units } = {}) {
-  return shippedUnits(shippedDir, { read: readDir, projectUnitsDir, prefix: units?.prefix });
+function shippedUnitNames({ shippedDir = SHIPPED_DIR, readDir = readdirSync, projectUnitsDir, units, declaredKeys } = {}) {
+  return shippedUnits(shippedDir, { read: readDir, projectUnitsDir, prefix: units?.prefix, declaredKeys });
 }
 
 /** The unit-name prefix of the project this tool serves: the project's own declaration says it. @param {ShippedDeps} [deps] */
