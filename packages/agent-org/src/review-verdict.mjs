@@ -224,3 +224,20 @@ export function headMatches(stated, actual) {
   const b = actual.toLowerCase();
   return a.startsWith(b) || b.startsWith(a);
 }
+
+/**
+ * The verdict this pull request carries, looked for at EVERY head an update-branch made equivalent, newest
+ * first. A reviewer who wrote `at <head8>` after the last update-branch wrote it at THAT sha, so reading
+ * only the authored one would re-summon a reviewer who had answered.
+ * @param {any} pr @param {string[]} heads
+ */
+export function verdictAmong(pr, heads) {
+  // #3030: comments AND review bodies, since the door posts the verdict as a review alone.
+  const bearers = verdictBearers(pr);
+  let found = verdictAtHead({ comments: bearers, head: heads[0], prAuthor: pr.author?.login ?? null });
+  for (const head of heads.slice(1)) {
+    if (found.verdict !== null) break;
+    found = verdictAtHead({ comments: bearers, head, prAuthor: pr.author?.login ?? null });
+  }
+  return found;
+}
