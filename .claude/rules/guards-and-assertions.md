@@ -1,8 +1,7 @@
 ## An approval prompt a human learns to click through is worse than no prompt (2026-09-23, #2076)
 
 - **Write `rm -f "${D:?}"/*.md`, never `rm -f $D/*.md`.** `:?` makes the shell abort on an unset or empty
-  variable, so the expansion that would become `rm -f /*.md` is impossible; the quotes stop a path with a
-  space re-splitting. **The prompt stops firing because the danger is gone, not because the guard was
+  variable, so the expansion that would become `rm -f /*.md` is impossible. **The prompt stops firing because the danger is gone, not because the guard was
   overridden** — the only version of "stop asking me" worth having, and one of the few guards
   `--dangerously-skip-permissions` does not disable, so it reaches a human every time.
 - **The cost is not the seconds:** one such line reached the chairman **several times in one morning**.
