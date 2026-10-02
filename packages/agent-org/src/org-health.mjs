@@ -314,9 +314,11 @@ function linesWithoutCounterpart(lines, against) {
 /**
  * @param {CopyPair} pair
  * @returns {{ verdict: "same" | "drifted" | "unknown", why: string }}
- * A copy drifts when more lines differ than its OWN HEADER names, in either direction. THE HEADER'S COUNT IS THE ALLOWANCE, which is
- * what lets the pair list be discovered rather than declared a second time -- and its price is stated here: a one-byte change ON a
- * line the header already names is inside the allowance. `agent-org-outward-edges.test.ts` applies each sanctioned edit exactly and
+ * A copy drifts when more of the ORIGINAL'S lines are changed or gone than its OWN HEADER names, or when a header that names NOTHING
+ * sits above a copy with lines the original lacks. THE HEADER'S COUNT IS THE ALLOWANCE, which is what lets the pair list be discovered
+ * rather than declared a second time -- and its price is stated here: a one-byte change ON a line the header already names is inside
+ * the allowance, and so are the copy's own extra lines once the header names any change, because the header counts the original's
+ * lines it changed and ONE of them can become several (`changed-packages.mjs`'s `REPO` became four lines under "3 NAMED LINES", #2884). `agent-org-outward-edges.test.ts` applies each sanctioned edit exactly and
  * is the exact check; this is the cheap one that runs on every tick.
  */
 function judgePair(pair) {
@@ -328,7 +330,7 @@ function judgePair(pair) {
   const originalLines = pair.originalText.split("\n");
   const extra = linesWithoutCounterpart(copyLines, originalLines);
   const missing = linesWithoutCounterpart(originalLines, copyLines);
-  if (Math.max(extra, missing) <= pair.allowedLines) return { verdict: "same", why: "" };
+  if (missing <= pair.allowedLines && (extra === 0 || pair.allowedLines > 0)) return { verdict: "same", why: "" };
   return { verdict: "drifted", why: `${extra} line(s) only in the copy, ${missing} only in the original, and its header names ${pair.allowedLines}` };
 }
 
