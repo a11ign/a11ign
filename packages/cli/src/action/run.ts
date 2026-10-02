@@ -17,7 +17,7 @@ import {
 } from "./summary.js";
 import { taskVerdictLabel } from "@a11ign/judge";
 import { announcedStateChanges } from "@a11ign/judge/rules";
-import { flagValue } from "@a11ign/worker-fleet/cli-flags";
+import { flagValue } from "@a11ign/screenreader-fleet/cli-flags";
 
 // audit §9 "argv parsing": this was its own copy of the fifteen-file idiom. `flagValue` is the shared,
 // tested extraction; `?? fallback` stays here because defaulting is this call site's business, not the

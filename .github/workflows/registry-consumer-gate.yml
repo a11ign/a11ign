@@ -15,7 +15,7 @@
 #   `combination`  (windows-2022)     installs into a clean directory AGAIN and runs `npx a11ign <url>` from it, with
 #                  a worker started from THE INSTALLED `@a11ign/screenreader-worker`, the scorer's requirements and encoder
 #                  fetch taken from THE INSTALLED `@a11ign/scorer`, and the foreground-lock script from THE INSTALLED
-#                  `@a11ign/worker-fleet`. This is `ceo`'s Acceptance line, and it is what makes this a combination
+#                  `@a11ign/screenreader-fleet`. This is `ceo`'s Acceptance line, and it is what makes this a combination
 #                  gate and not an install check: every layer here is the published one, at the published version.
 #
 # WHERE EACH TRIGGER LIVES (the row asked the claimant to say). ALL THREE ARE IN THIS FILE, and `release.yml` is not
@@ -134,7 +134,7 @@ jobs:
         shell: pwsh
         working-directory: ${{ runner.temp }}/clean
         run: |
-          ./node_modules/@a11ign/worker-fleet/src/provisioning/apply-foreground-lock-timeout.ps1
+          ./node_modules/@a11ign/screenreader-fleet/src/provisioning/apply-foreground-lock-timeout.ps1
           $v = (Get-ItemProperty 'HKCU:\Control Panel\Desktop' -Name ForegroundLockTimeout -ErrorAction SilentlyContinue).ForegroundLockTimeout
           if ($v -ne 0) { throw "ForegroundLockTimeout is '$v', not 0 - the capture would return 0 phrases with no error." }
 

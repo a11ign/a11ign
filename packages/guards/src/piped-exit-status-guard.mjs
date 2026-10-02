@@ -15,7 +15,7 @@
  * head/tail/grep sites across .sh/.mjs/.yml on 2026-09-07, none of them this hazard) rather than shipping
  * a remedy that fires on legitimate use and gets disabled.
  *
- * #535: NO WORKSPACE IMPORT, DELIBERATELY. This file used to import `@a11ign/worker-fleet/cli-flags` for
+ * #535: NO WORKSPACE IMPORT, DELIBERATELY. This file used to import `@a11ign/screenreader-fleet/cli-flags` for
  * its own unknown-flag guard, and that import is exactly what broke it: `pre-commit` invokes this script
  * in EVERY worktree, including one created before `node_modules` is symlinked in, and there the import
  * throws `ERR_MODULE_NOT_FOUND` -- which pre-commit's `>/dev/null 2>&1` swallowed and misread as a hazard

@@ -217,7 +217,7 @@ test("#2218: a tree with NOTHING linked proceeds -- the runner cannot start ther
 });
 
 test("#2218 THE CALLER: `assert-glob-not-empty --run` refuses in a mis-wired tree BEFORE any runner starts", () => {
-  // A copy of the floor inside a constructed tree whose `@a11ign/worker-fleet` reads ANOTHER constructed checkout: the floor
+  // A copy of the floor inside a constructed tree whose `@a11ign/screenreader-fleet` reads ANOTHER constructed checkout: the floor
   // asks about the tree it lives in, so this is the broken shape by construction. The refusal precedes the
   // spawn, so no runner is reached and nothing is measured.
   withScratch((base) => {
@@ -229,13 +229,13 @@ test("#2218 THE CALLER: `assert-glob-not-empty --run` refuses in a mis-wired tre
     }
     mkdirSync(join(tree, "packages", "x"), { recursive: true });
     writeFileSync(join(tree, "packages", "x", "a.test.ts"), "");
-    // The floor imports `@a11ign/worker-fleet/cli-flags`, which the real package serves from `dist/` -- a
+    // The floor imports `@a11ign/screenreader-fleet/cli-flags`, which the real package serves from `dist/` -- a
     // build product a clean checkout does not have. So the OTHER checkout is constructed too, with the one
     // entry the import needs copied from source: the fixture depends on nothing `npm run build` makes.
     const other = join(base, "other-checkout", "packages", "worker-fleet");
     mkdirSync(join(other, "dist"), { recursive: true });
     writeFileSync(join(other, "package.json"), JSON.stringify({
-      name: "@a11ign/worker-fleet", type: "module", exports: { "./cli-flags": "./dist/cli-flags.mjs" },
+      name: "@a11ign/screenreader-fleet", type: "module", exports: { "./cli-flags": "./dist/cli-flags.mjs" },
     }));
     copyFileSync(join(REPO, "packages/worker-fleet/src/cli-flags.mjs"), join(other, "dist", "cli-flags.mjs"));
     mkdirSync(join(tree, "node_modules", "@a11ign"), { recursive: true });
