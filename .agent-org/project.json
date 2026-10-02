@@ -1,13 +1,14 @@
 {
   "_what": "a11ign's per-project declaration: the ONE file `agent-org` reads to learn which repository and which board it serves (ADR 0040, decisions 1 and 2; #2616). Keys starting with an underscore are prose and are not read.",
   "_key": "The EMPTY key belongs to the host's primary project's first code repository and first tracker, so every existing name, ledger line and label keeps its meaning. A key is [a-z0-9-], unique within its list, and never ends in -<digits>.",
-  "_layers": "Both lists hold ONE entry until #2612's layer repositories exist; making a reader enumerate more than one is 3b and 3c.",
+  "_layers": "`tracker` holds ONE entry until #2612's layer repositories exist. `code` holds a second, `agent-org` (#2969): a repository the org opens pull requests in has to be DECLARED or no pull-request cause (review, red, conflict, stall) ever reads it, and the keyed reviewer `reviewer-agent-org-<n>` reviews from the clone `host.json` names under `clones`.",
   "schema": 1,
   "tracker": [
     { "key": "", "repo": "a11ign/a11ign", "board": { "owner": "a11ign", "number": 1 } }
   ],
   "code": [
-    { "key": "", "repo": "a11ign/a11ign" }
+    { "key": "", "repo": "a11ign/a11ign" },
+    { "key": "agent-org", "repo": "a11ign/agent-org" }
   ],
   "_units": "The unit files this project installs from the tool's own templates are named `<prefix><name>`; the project's OWN units (its corpus and fleet clocks) live in `.agent-org/units/` and `own` lists them, which is the project's half of the partition `host-units.mjs` records the tool's half of. `boardReportWorkflow` is the workflow the tool's board-report unit dispatches on the first tracker's repository (#2620, child 3f of #69; ADR 0040, decision 9).",
   "units": {
