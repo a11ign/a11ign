@@ -1,5 +1,5 @@
 ---
-"@a11ign/nvda-worker": patch
+"@a11ign/screenreader-worker": patch
 ---
 
 **A capture that left the site before its focus pass now records `focusReveal` and `focusEvents` as not run.** Before, `observed` named only `focusOrder` and the four opt-in focus probes, so those two channels had no record and did not read as "not examined" (#1575).

@@ -74,7 +74,7 @@ export function travellingLabTestFiles(repoDir) {
     [String.raw`(from|import\().*agent-org/(src|host)`, "--", "packages/lab"]);
   if (tImport.length === 0) return [];
   const tProduct = new Set(gitGrepFiles(repoDir, [
-    String.raw`(\.\./)+(evidence|judge|cli|worker-fleet|nvda-worker|nvda-speech|scorer|control|pdf)/|@a11ign/(evidence|judge|cli|worker-fleet|nvda-worker|scorer|control|pdf)`,
+    String.raw`(\.\./)+(evidence|judge|cli|worker-fleet|nvda-worker|nvda-speech|scorer|control|pdf)/|@a11ign/(evidence|judge|cli|worker-fleet|screenreader-fleet|nvda-worker|scorer|control|pdf)`,
     "--", ...tImport,
   ]));
   return tImport.filter((file) => !tProduct.has(file));

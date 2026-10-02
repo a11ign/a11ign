@@ -1,6 +1,6 @@
 ---
-"@a11ign/worker-fleet": minor
-"@a11ign/nvda-worker": minor
+"@a11ign/screenreader-fleet": minor
+"@a11ign/screenreader-worker": minor
 ---
 
 **A fleet field can now be COMPARED AND REPORTED without gating a capture, and Node is pinned in git (#2063).**
