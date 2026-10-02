@@ -60,6 +60,15 @@ const REPO = fileURLToPath(new URL("../../../", import.meta.url));
  * one. Guarding one means deleting its line.
  */
 const UNGUARDED: Record<string, string> = {
+  // #2975: THE SAME BIND AS `scripts/run.mjs` BELOW, for the tool's launcher. Its argv is `<program>.mjs [everything that program takes]`,
+  // and everything after the program name belongs to the program, which refuses its OWN unknown flags (they are the tool's, and the tool
+  // is not in this repository to be walked). It refuses on its own terms: no program, a name that climbs out of `src/`, or a tool
+  // that is not there each exit 2 naming the cause (`agent-org-launcher.test.ts` pins all three).
+  "scripts/agent-org.mjs":
+    "the launcher for the tool's programs (#2975). Its argv is `<program>.mjs [everything the program takes]`, and everything after "
+    + "the program name belongs to the program, which refuses its own unknown flags -- `refuseUnknownFlags` here would refuse a flag "
+    + "that is valid for the program. It refuses on its own terms instead: a missing or out-of-`src/` program name and a missing "
+    + "tool each exit 2 naming the cause, never running nothing and exiting 0",
   "scripts/run.mjs":
     "the command DISPATCHER (A3). Its argv is `<command name> [everything the command takes]`, and "
     + "everything after the name belongs to the child, not to it -- `refuseUnknownFlags` here would "
