@@ -1,0 +1,6 @@
+---
+"@a11ign/agent-org": patch
+"@a11ign/lab": patch
+---
+
+**`org-retro.mjs` no longer prints two numbers its sources cannot say (#2954, ceo's retrospective of 2026-10-02).** The hand-fix line read `${stateDir}/hand-fix-ledger`, a file nothing in `packages` writes (#2939's ledger derives the count from git and gh), so it printed `ledger absent` on every day, and the chairman's own target number was the one the retrospective never carried; it now prints `hand-fix-ledger.mjs`'s own line (`ledgerLine(readLedger(...))`), and a refused read says `UNKNOWN`, never 0. The red-PR count counted a PR held on purpose: `deliberateRefusals` fails by design on a `hold:*` PR and `gate` with it, so #2883 read as broken for the whole of ceo's freeze. A new leaf `red-pr.mjs` holds the one decider, `isBrokenRed`: a held PR whose only red checks are the hold's own two jobs is not counted and is named on its own `held on purpose` line, while a held PR with a real red, or an unheld PR with a red `deliberateRefusals` (a head-vs-tip race), is still red. The class is pinned: every file the report reads from the state directory must have a writer under `packages/agent-org/src`, with `wake-ledger` as the positive control.
