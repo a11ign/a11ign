@@ -6,6 +6,9 @@
   "type": "module",
   "license": "AGPL-3.0-or-later",
   "packageManager": "pnpm@10.34.5",
+  "engines": {
+    "npm": "use pnpm instead: run pnpm install"
+  },
   "scripts": {
     "mutate": "node packages/guards/src/mutation-check.mjs",
     "guards:sweep": "node packages/guards/src/tree-wide-guards.mjs | xargs node packages/guards/src/assert-glob-not-empty.mjs --min=1 --run --runner=rstest",
