@@ -157,7 +157,7 @@ test("A FAILED AXE SCAN IS NOT '0 violations' — pageContext decides nullness",
  *
  * `captureViaWorker` used to POST synchronously with no `captureId`, so a response lost in transit meant
  * the page was reported as never examined even when the worker had already finished it. It now goes
- * through `captureTolerantly` (`@a11ign/worker-fleet/capture-client`), the same client every lab
+ * through `captureTolerantly` (`@a11ign/screenreader-fleet/capture-client`), the same client every lab
  * capture already uses, which mints its own id and reconciles a lost acknowledgement or poll by asking
  * about that SAME id before ever giving up. Reproduced against a loopback worker exactly like
  * `capture-async.test.ts` does, at the real function this package calls rather than at a lower-level

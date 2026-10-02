@@ -21,7 +21,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
-import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
+import { refuseUnknownFlags } from "@a11ign/screenreader-fleet/cli-flags";
 
 import { LeakCheckUsageError, credentialsFrom, examine, parseLeakCheckArgs, redactionCountIn } from "../packages/cli/src/auth/leak-check.ts";
 import { buildScrubSet } from "../packages/cli/src/auth/scrub.ts";

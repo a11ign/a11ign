@@ -1,5 +1,5 @@
 ---
-"@a11ign/worker-fleet": patch
+"@a11ign/screenreader-fleet": patch
 ---
 
 **`set-display-mode.ps1` now names the display device on every GDI call instead of asking Windows to

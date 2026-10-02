@@ -1,5 +1,5 @@
 ---
-"@a11ign/worker-fleet": patch
+"@a11ign/screenreader-fleet": patch
 ---
 
 Documentation-only: `src/provisioning/README.md` now names which of the four provisioning paths

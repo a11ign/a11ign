@@ -11,7 +11,7 @@
 // of actually posting stay in `main()`, which nothing but `action.yml` invokes.
 //
 // #567: NO WORKSPACE IMPORT, DELIBERATELY -- this file used to import `flagValue` from
-// `@a11ign/worker-fleet/cli-flags`, which needs BOTH `node_modules` and a completed build
+// `@a11ign/screenreader-fleet/cli-flags`, which needs BOTH `node_modules` and a completed build
 // (`pre-install-import-graph.test.ts`'s own header). This step runs `if: always()` in `action.yml`,
 // specifically so it still reports when an EARLIER step failed -- and "Install a11ign" (the step that
 // creates `node_modules` in the action's own checkout) is itself one of the steps that can fail or never

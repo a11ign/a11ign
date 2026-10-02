@@ -203,7 +203,7 @@ jobs:
       test-packages: ${{ needs.changed.outputs.testPackages }}
 
   # A1 (#452): CALLS `reusable-build-test.yml` for the one thing this job ever needed from it -- a real
-  # `dist/`, since `@a11ign/worker-fleet/cli-flags` resolves through `package.json`'s `exports` map and a
+  # `dist/`, since `@a11ign/screenreader-fleet/cli-flags` resolves through `package.json`'s `exports` map and a
   # handful of Python tests (`test_grants_map_is_current.py`, `test_unclosable_map_is_current.py`) shell
   # out to a `node` script that imports it. No lint, no typecheck, no TS tests, no docs:coverage --
   # this job never ran any of those, and the reusable file's defaults are
