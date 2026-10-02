@@ -76,7 +76,7 @@ import { stateEntryPath } from "./host-config.mjs"; // #2799
 // #2848: THE REPEATING-LINE QUESTION, in its own leaf for the reason `disk-headroom.mjs` is one: it reads the journal, not GitHub.
 import { repeatingLinesTick } from "./repeating-lines.mjs";
 // #2936: THE ORG-HEALTH QUESTION, in its own leaf for the same reason: relative imports only, so the gate keeps the property its own header states.
-import { orgHealthTick, readLastMergedAt, primaryStandingSince, redSinceOf } from "./org-health.mjs";
+import { orgHealthTick, readLastMergedAt, primaryStandingSince, redSinceOf, PR_NOT_PROGRESSING_MINUTES, REASONS_THAT_ARE_NOT_A_STALL } from "./org-health.mjs";
 // #2938: THE DAILY RETROSPECTIVE, in its own leaf for the same reason: it reads the journal, the ledger and a day of PRs once, and says what it found.
 import { retrospectiveTick } from "./org-retro.mjs";
 import { isBrokenRed } from "./red-pr.mjs";
@@ -121,7 +121,7 @@ import { readAgents } from "./herdr-agents.mjs";
 // nothing there reads an import at load time (only inside a function), and this file stays the entry point:
 // every name that module exported is re-exported here, so no caller of `work-gate.mjs` changes.
 import { requiredWhenRed, perPullRequestOrders, greenUnarmedOrders, reviewBlockedOrders,
-  stalledPrOrders, STALL_REASONS_WITHOUT_A_CAUSE, HOLD_RED_JOBS, ownerOfPr } from "./work-gate/pr-orders.mjs";
+  stalledPrOrders, stallReasonOf, STALL_REASONS_WITHOUT_A_CAUSE, HOLD_RED_JOBS, ownerOfPr } from "./work-gate/pr-orders.mjs";
 export { redOnlyBySupersededRun, mergeConflictOrders, greenUnarmedOrders, reviewBlockedOrders, HOLD_RED_JOBS,
   stallReasonOf, stallOrderOf, stalledPrOrders, STALL_REASON, STALL_REASONS_WITHOUT_A_CAUSE, ownerOfPr,
   awaitingEvidenceStaleOrders } from "./work-gate/pr-orders.mjs";
@@ -329,6 +329,9 @@ export const GH_READS = Object.freeze({
   // request carries it -- the label's age is not on `pr list`, so the labelled ones are asked and only those.
   conditionalOnAwaitingEvidenceLabel: "api repos/{repo}/issues/{n}/events (readEvidenceLabelledAt -- awaiting-evidence-stale)",
   conditionalOnGreenUnheldPr: "api graphql (open PRs' mergeQueueEntry -- readUnarmed)",
+  // #2970: ONE REST CALL PER OPEN PULL REQUEST that is neither progressing nor held AND whose newest comment, review or creation is already
+  // older than org-health's threshold -- the only ones whose push time could change the answer. `commits` cannot ride on `pr list`.
+  conditionalOnQuietStalledPr: "api repos/{repo}/commits/{headRefOid} (readHeadCommittedAt -- org-health's pr-not-progressing)",
   // #2110, AND IT IS ONE CALL FOR THE WHOLE CLAIMED POPULATION RATHER THAN ONE PER ROW. `--label
   // in-progress` filters server-side, so the page is the claimed rows and nothing else -- 8 of them on
   // 2026-09-23 against 500 open rows -- and asking every one of them for its comments in a single
@@ -6120,6 +6123,53 @@ export function redPrFacts(prs, decided) {
 }
 
 /**
+ * WHEN THIS COMMIT WAS COMMITTED, as epoch ms, or `null`. The PR's PUSH TIME is not on `pr list` (`commits` is refused by GraphQL, see
+ * `readCommitChain`), and the committer date of the head is the best REST has: a rebase, a merge of `main` and GitHub's "Update branch"
+ * all make a head whose committer date is the push. `null` for a refused read, never "long ago".
+ * @param {string} oid @param {(args: string[]) => string} run @returns {number | null}
+ */
+export function readHeadCommittedAt(oid, run = defaultRun) {
+  try {
+    const at = Date.parse(run(["api", `repos/${repoNow()}/commits/${oid}`, "--jq", ".commit.committer.date"]).trim());
+    return Number.isFinite(at) ? at : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * THE NEWEST ACTIVITY ON A PR THAT `pr list` ALREADY CARRIES: its creation, its comments and its reviews. A push is not here (see
+ * `readHeadCommittedAt`), so this is a FLOOR on the PR's last activity, and a PR it already calls recent needs no further read.
+ * @param {any} pr @returns {number}
+ */
+function listedActivityAt(pr) {
+  const times = [pr.createdAt, ...(pr.comments ?? []).map((/** @type {any} */ c) => c?.createdAt), ...(pr.reviews ?? []).map((/** @type {any} */ r) => r?.submittedAt)]
+    .map((at) => Date.parse(at)).filter(Number.isFinite);
+  return times.length > 0 ? Math.max(...times) : NaN;
+}
+
+/**
+ * #2970: EVERY OPEN PR THE CLASSIFIER DOES NOT CALL `progressing` OR `held-on-purpose`, with the time of its last push, review or
+ * comment, for `org-health.mjs`. THE REASON IS `stallReasonOf`'s -- the same function that decides who is ordered -- so the two cannot
+ * disagree about which PRs are stuck. A PR whose listed activity is already recent pays NO read; only a quiet one is asked for its head
+ * commit's date, which is the push. A PR with nothing dated at all is `lastActivityAt: null`, an unknown and not an age.
+ * @param {any[]} prs @param {string[] | null} required @param {{ now: number, run?: (args: string[]) => string }} io
+ * @returns {{ number: any, reason: string, owner: string | null, lastActivityAt: number | null }[]}
+ */
+export function stalledPrFacts(prs, required, { now, run = defaultRun }) {
+  const quietMs = PR_NOT_PROGRESSING_MINUTES * MS_PER_MINUTE;
+  return prs.map((pr) => ({ pr, reason: stallReasonOf(pr, required) }))
+    .filter(({ reason }) => !REASONS_THAT_ARE_NOT_A_STALL.includes(reason))
+    .map(({ pr, reason }) => {
+      const listed = listedActivityAt(pr);
+      const pushed = Number.isFinite(listed) && now - listed < quietMs ? NaN : readHeadCommittedAt(String(pr.headRefOid ?? ""), run) ?? NaN;
+      const known = [listed, pushed].filter(Number.isFinite);
+      const owner = ownerOfPr(pr);
+      return { number: pr.number, reason, owner: owner.source === "ceo" ? null : owner.session, lastActivityAt: known.length > 0 ? Math.max(...known) : null };
+    });
+}
+
+/**
  * #2936: THE ORG-HEALTH TICK over what `main` already holds. Reads ONE new thing, the last merge (`GH_READS`); every other fact is a
  * value the tick computed for `decide`: the PRs with their owners, `required`, the offered rows, the #2845 streaks and the primary's
  * drift. `prsRead`/`readyRead` are the RAW reads, `null` for a refusal, because `decideArgs` carries them coalesced to `[]` and
@@ -6130,12 +6180,14 @@ export function redPrFacts(prs, decided) {
 function orgHealthNow({ prsRead, readyRead, decideArgs, decided }) {
   const { prs, required, readyRows, prFiles, rowBranches, openRows, primaryDrift, claimRefusals } = decideArgs;
   const asked = prsRead !== null && readyRead !== null;
+  const now = Date.now();
   return orgHealthTick({
-    now: Date.now(),
+    now,
     lastMergedAt: readLastMergedAt(defaultRun, repoNow()),
     work: asked ? { greenPrs: shouldBeMerging(prs, required).length,
       claimableRows: partitionUnclaimed(readyRows, prFiles, { rowBranches, openRows }).offerable.length } : null,
     redPrs: prsRead === null ? null : redPrFacts(prs, decided),
+    stalledPrs: prsRead === null ? null : stalledPrFacts(prs, required, { now }),
     refusals: claimRefusals ?? null,
     drift: primaryDrift ?? null,
     primarySince: primaryStandingSince(primaryDrift ?? null, { root: REPO_CHECKOUT }),
