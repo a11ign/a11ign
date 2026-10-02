@@ -113,6 +113,24 @@ body:
     validations:
       required: false
 
+  - type: input
+    id: finished-in
+    attributes:
+      label: Finished-in — only if the work merges in ANOTHER repository
+      description: >
+        Write the WHOLE LINE, `Finished-in: <owner>/<repo>#<n>` (a comma or `and` list means ALL must
+        merge): the form renders a value under a heading and the gate reads only a line that begins
+        `Finished-in:`, so a bare `owner/repo#n` is not read. `Closes #N` cannot
+        close a row from another repository's pull request, so the gate closes the row itself when each
+        named pull request is MERGED — but only a row that carries this line is read, and the repository
+        must be declared in `.agent-org/project.json` `code`. The pull request number is not known at
+        filing, so usually leave this blank: the claimant adds the line to the row body the moment the
+        pull request exists. Refusals the gate names on the row: `undeclared`, `open`, `closed-unmerged`,
+        `absent`, `malformed`, `reopened-after-merge` (`docs/row-filing.md`).
+      placeholder: "Finished-in: a11ign/agent-org#17"
+    validations:
+      required: false
+
   - type: dropdown
     id: fleet
     attributes:
