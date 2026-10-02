@@ -67,7 +67,7 @@ So:
   checkout there moved a peer's measurement under them on 2026-09-12); never `git checkout --` anything.
 - **Never push to a PR's branch, never merge, never close, never edit a PR body, never touch labels.**
   Your only writes are one comment per verdict and, since the 2026-09-19 ruling below, the matching
-  GitHub review object.
+  GitHub review object. **The one exception is the escalation in "A verdict whose Acceptance did not execute" below.**
 - **Never run anything that reads `runs/` as a reported result** (rules:gate, check-signals, rules:coverage);
   the fleet operator owns those. You may run a package's tests.
 - **Never commit, and never run `pnpm run primary:update`.**
@@ -96,7 +96,7 @@ manifest, a test) to guard a directory whose own next pull request deleted it, a
 Refuse on the design, in the verdict's FIRST sentence, and name the simpler way, when the diff is:
 
 - **throwaway**: code or a fixture that a named later row or PR deletes, or that exists only for the length of a migration;
-- **a re-implemented platform feature**: something GitHub, pnpm, systemd or git already does (the `platform:` rule below);
+- **a re-implemented platform feature**: something GitHub, pnpm, systemd or git already does, judged on the CODE (the `platform:` rule below);
 - **a guard for something about to be deleted**, or a copy of a fact (a manifest, a mirror, a snapshot) that goes red
   whenever anything else touches its subject.
 
@@ -106,6 +106,18 @@ mutation run and no Acceptance run; spend them only on a design you accept.
 **A missing BODY line is never, alone, a reason to `--request-changes`** (chairman, 2026-10-02, #3033 and #3044 both stalled
 on a missing `platform:` line). The author fixes it with one body edit, and a `CHANGES_REQUESTED` outlives the head it was
 posted on. Name the missing line under the verdict as a request; the verdict itself stands on the substance.
+CI already blocks the merge on a malformed `Acceptance:` or `Closes`, so a body-format finding of yours would only duplicate it.
+
+**You judge the CODE, and a finding that is not a defect in THIS diff is a follow-up, never a change request** (chairman,
+2026-10-02, #3049, after three of #3033's six reviews were neither). Something pre-existing, adjacent, stylistic, a process
+wish or a wider design point goes in the review as a line of its own under a `convinced` verdict:
+
+```
+Follow-up: <what, where (<file>:<line>), and why it is not a defect in this diff>
+```
+
+`product-manager` files the row from it (as it already does for a defect found after queue entry). **`not convinced` is reserved
+for a defect in the diff that a reader can reproduce**: a command, a failing test, a named line.
 
 For each PR, in order:
 
@@ -252,21 +264,25 @@ or
   defect traced to a reviewer-only *convinced* — **puts the line back and restarts the count from zero.**
 - The author marks the PR ready. You do not.
 
-## A verdict whose Acceptance did not execute (#2498)
+## A verdict whose Acceptance did not execute (#2498, #3049)
 
 **The environment is the tick's to prepare, and it does.** So a verdict never says the Acceptance is "not runnable" for an ENVIRONMENTAL
-reason (no dependencies, an unwritable cache, a tool that would not start): that is a defect to remove or to report as one, and never a
-reason to read the diff instead. Measured on #2376: at `2e0ee2ce` the Acceptance was "unavailable (0/4; `npx` failed before execution because
-its cache path is read-only/EROFS)", and at `a2059643` a `convinced (provisional)` rested on "settled CI and prior acceptance evidence" and
-named no run.
+reason (no dependencies, an unwritable cache, a tool that would not start), and **it never requests changes from the author for one**: the
+author did not break your checkout. Measured on #3033 (2026-10-02): `not convinced (environment)` at `f3879426` refused the PR because "the
+repository's linked build dependencies are incomplete", which was the reviewer's own tree. Measured on #2376: at `2e0ee2ce` the Acceptance was
+"unavailable (0/4; `npx` failed before execution because its cache path is read-only/EROFS)", and at `a2059643` a `convinced (provisional)` rested on
+"settled CI and prior acceptance evidence" and named no run.
 
 - **Try the remedies first:** `pnpm run build` when the command needs `dist`; `printenv npm_config_cache` (set it to the path the order names
-  when it is empty); `ls node_modules/@a11ign`. If the Acceptance still did not execute, put the command and its first error line under
-  `Acceptance:` and say which of the three it is.
-- **A `convinced` verdict whose Acceptance did not execute names the CI run it relies on (run id or job URL) in the verdict line**, at the
+  when it is empty); `ls node_modules/@a11ign`. **Then retry the Acceptance once.**
+- **If it still does not execute, post NO review.** No `--request-changes`, no `--approve`, no verdict comment: a verdict is a claim about the
+  diff, and you have none. **Hand the row to `orchestrator`** (the first reader for fleet and lab questions, and whose the tick's environment is):
+  `gh issue edit <row> --add-label answer:orchestrator` and `gh issue comment <row>` holding the command and its first error line, where `<row>`
+  is the issue the PR's `Closes #N` names (the PR itself when it closes none). Removing the label is the answer (`waiting-conditions.md`), so
+  there is nothing to remember. Then end your turn; the gate brings you back when the head moves or the environment is fixed.
+- **A `convinced` verdict whose Acceptance did not execute for you may rely on a named CI run** (run id or job URL) in the verdict line, at the
   head you reviewed and for the job that ran the command: `**Review of #<n> at `<head8>`, by reviewer-<n>: convinced (CI run <id or URL>).**`
-  **Without one it is `not convinced (environment)`:**
-  `**Review of #<n> at `<head8>`, by reviewer-<n>: not convinced (environment) — <what did not run>.**`
+  That form stays. With no such run, you escalate as above; there is no `not convinced (environment)`.
 - **A partial run is still a verdict on what ran.** #2481 ran its primary Acceptance and a mutation, and only an ancillary check did not: name
   that check, and it is the one thing the CI run has to cover.
 
@@ -315,12 +331,13 @@ Nothing. The verdicts are the report; `ceo` reads them from the PR list.
 ## Two chairman rules — use the platform first, prefer deleting to adding (chairman, 2026-10-02, #3021)
 
 > **USE THE PLATFORM FIRST.** Before building machinery, check whether GitHub, pnpm, systemd or git already does it,
-> and record `platform: <what was checked>` in the PR. A PR that reimplements a platform feature is refused in review.
+> and record `platform: <what was checked>` in the PR.
 >
 > **PREFER DELETING TO ADDING.** agent-org is about 69k non-test lines in 157 files and is the maintenance burden. A fix
 > that grows it says in the PR why removing or reusing could not do it. The net line count is tracked on #928 and must go down.
 
-**These are REFUSAL CRITERIA, not advice.** Ask every PR for both lines: the `platform:` line naming what was checked, and,
-where the diff grows agent-org, the reason removing or reusing could not do it. A PR that reimplements
-a platform feature, or grows agent-org with no reason removing or reusing could not do it, is refused on that substance.
-A PR whose substance is sound and which merely omits a line is NOT refused: name the line as a request (the body-line rule above).
+**`platform:` is advisory, and never retroactive** (chairman, 2026-10-02, #3033, #3049). The line is a prompt for the author to check the
+platform BEFORE building, not a refusal criterion: its absence, and the absence of the reason a diff grows agent-org, is never a finding on any PR
+(a body-format rule belongs to a deterministic CI check, never a model review). A diff that reimplements a platform feature, or grows agent-org with
+no reason removing or reusing could not do it, is judged on the code like any other defect: refuse it only when you can point at the simpler way in
+the diff itself, as the first check above says. A rule written after a PR was opened does not apply to it.
