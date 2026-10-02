@@ -28,7 +28,7 @@
 // EXCLUDED FROM ITS OWN COVERAGE MEASUREMENT (`.c8rc.json`, which already names this file) for the same
 // reason `scripts/build-packages.mjs` is: it spawns the test runner, so measuring the measurer is circular.
 //
-// RELATIVE IMPORTS, NOT `@a11ign/worker-fleet/cli-flags` -- a root script, the same rule `build-packages.mjs`
+// RELATIVE IMPORTS, NOT `@a11ign/screenreader-fleet/cli-flags` -- a root script, the same rule `build-packages.mjs`
 // and `coverage-failure-classifier.mjs` give for their own identical choice.
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { spawnSync } from "node:child_process";

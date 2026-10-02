@@ -1,5 +1,5 @@
 ---
-"@a11ign/nvda-worker": patch
+"@a11ign/screenreader-worker": patch
 "@a11ign/judge": patch
 ---
 

@@ -74,7 +74,7 @@ export function travellingLabTestFiles(repoDir) {
     [String.raw`(from|import\().*agent-org/(src|host)`, "--", "packages/lab"]);
   if (tImport.length === 0) return [];
   const tProduct = new Set(gitGrepFiles(repoDir, [
-    String.raw`(\.\./)+(evidence|judge|cli|worker-fleet|nvda-worker|nvda-speech|scorer|control|pdf)/|@a11ign/(evidence|judge|cli|worker-fleet|nvda-worker|scorer|control|pdf)`,
+    String.raw`(\.\./)+(evidence|judge|cli|worker-fleet|nvda-worker|nvda-speech|scorer|control|pdf)/|@a11ign/(evidence|judge|cli|worker-fleet|screenreader-fleet|nvda-worker|scorer|control|pdf)`,
     "--", ...tImport,
   ]));
   return tImport.filter((file) => !tProduct.has(file));
@@ -154,7 +154,7 @@ export function replaceTextFileContent(rewrites) {
  * the same walk `agent-org-outward-edges.test.ts` runs over the UN-renamed tree, re-rooted here to run over
  * what the REHEARSAL clone actually produced, so a rename that forgot to also fix an import is caught by the
  * rehearsal and not discovered live. Node built-ins and bare package specifiers (nothing here should have
- * one but `@a11ign/worker-fleet/cli-flags`'s pre-copy shape, which this refuses like any other) are the only
+ * one but `@a11ign/screenreader-fleet/cli-flags`'s pre-copy shape, which this refuses like any other) are the only
  * exemption. @param {string} root
  */
 export async function outwardImportsOf(root) {

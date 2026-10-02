@@ -1,5 +1,5 @@
 ---
-"@a11ign/nvda-worker": patch
+"@a11ign/screenreader-worker": patch
 ---
 
 **The DOM census no longer counts headings the page does not render.** A capture's census `heading` count used to include every `h1`–`h6` and `role="heading"` element not marked `aria-hidden`. That included an `h1` styled `display: none` below a breakpoint, and headings inside closed menu panels. On `weather.metoffice.gov.uk`'s warnings page the census read 40 headings while the accessibility tree and NVDA's heading sweep read 0. That reads as "forty headings the tree cannot see", when a visitor meets none of them.

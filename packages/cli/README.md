@@ -80,7 +80,7 @@ around, it is what makes the evidence real. Point the CLI at one:
 A11Y_WORKER=http://REDACTED-INTERNAL-ADDRESS:8765 npx a11ign <url> --task "..."
 ```
 
-**UTM is DEPRECATED — it was a testing path, not the fleet.** `@a11ign/worker-fleet` can still lease a
+**UTM is DEPRECATED — it was a testing path, not the fleet.** `@a11ign/screenreader-fleet` can still lease a
 local UTM VM on macOS and put it back as it found it, and every UTM entry point now says so at runtime. Point
 `A11Y_WORKER` at a Windows machine you have, or use the GitHub Action if you have none. See
 `docs/getting-started.md` for setting a worker up, and `@a11ign/nvda-worker` for the worker itself.
@@ -137,4 +137,4 @@ them — perceive, then navigate, then interact — because a finding about oper
 someone who could not perceive it.
 
 The pieces underneath are packages in their own right: `@a11ign/judge` for the judgment,
-`@a11ign/evidence` for the capture contract, `@a11ign/worker-fleet` for the VM lifecycle.
+`@a11ign/evidence` for the capture contract, `@a11ign/screenreader-fleet` for the VM lifecycle.

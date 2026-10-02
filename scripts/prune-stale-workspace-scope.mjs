@@ -18,7 +18,7 @@
 import { readFileSync, readdirSync, lstatSync, realpathSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-// RELATIVE, NOT `@a11ign/worker-fleet/cli-flags`: this is a `prepare`-time script, which npm runs on every
+// RELATIVE, NOT `@a11ign/screenreader-fleet/cli-flags`: this is a `prepare`-time script, which npm runs on every
 // plain `npm install` before any package's `dist/` exists -- the same reason `install-git-hooks.mjs`
 // imports the same file the same way. `pre-install-import-graph.test.ts` derives this file from
 // `package.json`'s `prepare` and enforces it.

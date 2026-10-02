@@ -3,16 +3,16 @@
  *
  * Its own module so a test can import it without `cli.ts`, which reaches a corpus reader (`row-file` flagged
  * `cli.ts:851`, #2683) and would put the corpus closure under `probe-outcome.test.ts`. It imports only
- * `@a11ign/worker-fleet`.
+ * `@a11ign/screenreader-fleet`.
  *
- * `witness` does NOT wake a worker (ADR 0012: `@a11ign/worker-fleet` and `a11ign` are published and
+ * `witness` does NOT wake a worker (ADR 0012: `@a11ign/screenreader-fleet` and `a11ign` are published and
  * `@a11ign/control` never is; ruled by product-manager 2026-09-26). It says which of three things happened --
  * refused, no answer, answered-but-not-ready -- and names the command that wakes a box.
  */
-import { workerIsUsable } from "@a11ign/worker-fleet/health";
+import { workerIsUsable } from "@a11ign/screenreader-fleet/health";
 import {
   WORKER_PROBE_TIMEOUT_MS, describeProbe, probeHealth, type Probe, type ProbeRequest,
-} from "@a11ign/worker-fleet/probe-outcome";
+} from "@a11ign/screenreader-fleet/probe-outcome";
 
 
 /**

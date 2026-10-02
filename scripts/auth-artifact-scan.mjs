@@ -15,7 +15,7 @@
 // Run it with `tsx` (the npm script does): it imports the CLI's TypeScript directly, so the machine needs no build.
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { refuseUnknownFlags } from "@a11ign/worker-fleet/cli-flags";
+import { refuseUnknownFlags } from "@a11ign/screenreader-fleet/cli-flags";
 
 import { parseArtifactScanArgs, scanArtifacts } from "../packages/cli/src/auth/artifact-scan.ts";
 
