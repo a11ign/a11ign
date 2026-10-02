@@ -213,10 +213,13 @@ moving it needs no permission; where prose asserts it, it does.**
 ## Two chairman rules — use the platform first, prefer deleting to adding (chairman, 2026-10-02, #3021)
 
 > **USE THE PLATFORM FIRST.** Before building machinery, check whether GitHub, pnpm, systemd or git already does it,
-> and record `platform: <what was checked>` in the PR. A PR that reimplements a platform feature is refused in review.
+> and record `platform: <what was checked>` in the PR.
 >
 > **PREFER DELETING TO ADDING.** agent-org is about 69k non-test lines in 157 files and is the maintenance burden. A fix
 > that grows it says in the PR why removing or reusing could not do it. The net line count is tracked on #928 and must go down.
+
+**The `platform:` line is a prompt, not a gate (chairman, 2026-10-02, #3049):** it is there so you check the platform BEFORE building. It is
+optional, and its absence is never a finding; a diff that reimplements a platform feature is judged on the code like any other defect.
 
 **The tool lives in [a11ign/agent-org](https://github.com/a11ign/agent-org) (chairman, 2026-10-02, #2977):** a change to it is a pull request there, never here, where the old copy is frozen and goes in #2976. Its row stays tracked here until agent-org is a declared tracker (#2899).
 

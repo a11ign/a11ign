@@ -104,11 +104,11 @@ Mutation:
 
 ## Platform first, deleting first
 
-<!-- Two chairman rules (2026-10-02, #3021). A PR that reimplements a platform feature is refused, and so is one that grows agent-org without a reason. -->
+<!-- Two chairman rules (2026-10-02, #3021). Both lines are OPTIONAL prompts to check BEFORE you build; leaving one empty is never a finding (#3049). -->
 
-platform: <!-- what you checked: does GitHub, pnpm, systemd or git already do this? -->
+platform: <!-- optional. What you checked: does GitHub, pnpm, systemd or git already do this? -->
 
-Net lines: <!-- agent-org non-test lines added minus removed; if positive, why removing or reusing could not do it -->
+Net lines: <!-- optional. agent-org non-test lines added minus removed; if positive, why removing or reusing could not do it -->
 
 ## How you verified it
 
