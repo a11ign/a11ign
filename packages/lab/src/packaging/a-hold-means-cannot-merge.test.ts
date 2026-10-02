@@ -115,7 +115,7 @@ test("ONE PREDICATE, TWO CALLERS -- the hole opened because `is this PR held` wa
 test("THE PER-PR ARM PATH GOES THROUGH THE PREDICATE -- it is the path that merged #625, and it ran "
   + "`gh pr merge --auto` from three lines of bash that read nothing", () => {
   const workflow = read(".github/workflows/auto-arm.yml");
-  assert.match(workflow, /node packages\/agent-org\/src\/arm-pr\.mjs/,
+  assert.match(workflow, /node scripts\/agent-org\.mjs arm-pr\.mjs/,
     "the `arm` job must call the script that reads the hold");
   assert.equal(/gh pr merge --auto --merge "\$\{\{ github\.event\.pull_request\.number/.test(workflow), false,
     "the unconditional bash arm must be gone, not merely accompanied");

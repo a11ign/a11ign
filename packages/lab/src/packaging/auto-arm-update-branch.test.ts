@@ -158,7 +158,7 @@ test("the skip warning names the concrete consequence -- synchronize, and #416/C
 test("update-branch runs the real script, and nowhere else in the workflow duplicates its decision", () => {
   const doc = loadDoc();
   const runText = (doc.jobs["update-branch"]?.steps ?? []).map((s) => s.run ?? "").join("\n");
-  assert.match(runText, /node packages\/agent-org\/src\/update-branch-sweep\.mjs/);
+  assert.match(runText, /node scripts\/agent-org\.mjs update-branch-sweep\.mjs/);
 });
 
 test("A11IGN_BOT_TOKEN never appears as a bare CLI argument in update-branch's steps", () => {

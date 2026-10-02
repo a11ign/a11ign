@@ -171,8 +171,9 @@ test("the watchdog allowlist is EMPTY since #901 -- a watchdog is a step in trun
   for (const script of ["board-schedule-liveness.mjs", "npm-token-liveness.mjs", "workflow-run-liveness.mjs"]) {
     // Matched on the BASENAME: the watchdogs no longer share one directory -- board-schedule-liveness and
     // workflow-run-liveness moved to @a11ign/agent-org while npm-token-liveness stayed in scripts/, and
-    // pinning a directory here would assert where each lives rather than that it still runs.
-    assert.match(runLines, new RegExp(`/${script.replace(".", "\\.")}`),
+    // pinning a directory here would assert where each lives rather than that it still runs. THE TOOL'S TWO ARE RUN THROUGH THE LAUNCHER
+    // since a11ign/a11ign#2975 (`node scripts/agent-org.mjs <script>`), so the name follows a space there and a slash for `scripts/`.
+    assert.match(runLines, new RegExp(`[/ ]${script.replace(".", "\\.")}`),
       `${script} is no longer a workflow of its own and must therefore be a step in trunk.yml's `
       + "watchdogs job -- a watchdog that is in neither place has silently stopped running");
   }

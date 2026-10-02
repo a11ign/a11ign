@@ -306,7 +306,7 @@ test("trunk.yml runs trunk-revert-guard.mjs INSIDE trunkGate, not as a separate 
     jobs: Record<string, { steps: Array<Record<string, unknown>> }>,
   };
   const trunkGateRuns = (doc.jobs.trunkGate.steps ?? []).map((s) => String(s.run ?? "")).join("\n");
-  assert.match(trunkGateRuns, /node packages\/agent-org\/src\/trunk-revert-guard\.mjs/,
+  assert.match(trunkGateRuns, /node scripts\/agent-org\.mjs trunk-revert-guard\.mjs/,
     "the guard must run as a step inside trunkGate -- a refusal there is what makes trunkRecheck's own "
     + "`if: needs.trunkGate.result == 'failure'` fire and the gate's `trunk-red` cause wake a fixer. A "
     + "separate job would need its own wiring, which ceo's ruling says not to build.");
