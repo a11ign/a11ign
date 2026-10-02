@@ -1,6 +1,6 @@
 ---
-"@a11ign/nvda-worker": patch
-"@a11ign/worker-fleet": patch
+"@a11ign/screenreader-worker": patch
+"@a11ign/screenreader-fleet": patch
 "@a11ign/evidence": patch
 ---
 

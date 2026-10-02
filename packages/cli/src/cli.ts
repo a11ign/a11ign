@@ -14,7 +14,7 @@
  * The worker URL also reads from A11Y_WORKER.
  *
  * With neither set, the run manages a local UTM worker VM on demand: it starts one if
- * needed and puts it back how it found it afterwards. See leaseWorker in @a11ign/worker-fleet.
+ * needed and puts it back how it found it afterwards. See leaseWorker in @a11ign/screenreader-fleet.
  * Set A11Y_SHADOW_MODEL=1 to run the verified local screen-reader scorer beside the existing
  * judge. Shadow output is log-only and never changes findings.
  */
@@ -36,9 +36,9 @@ import { ruleLayerSignIn } from "./auth/rule-layer.js";
 import { pressedByThisRun, resolveAuthentication } from "./auth/resolve.js";
 import { redactionNotice, scrubArtifact, type ScrubSet } from "./auth/scrub.js";
 import { FlowsError } from "./auth/flows.js";
-import { leaseWorker, isAfterRun, type AfterRun, type WorkerLease } from "@a11ign/worker-fleet";
-import { CAPTURE_CLIENT_TIMEOUT_MS } from "@a11ign/worker-fleet/worker-http";
-import { captureTolerantly } from "@a11ign/worker-fleet/capture-client";
+import { leaseWorker, isAfterRun, type AfterRun, type WorkerLease } from "@a11ign/screenreader-fleet";
+import { CAPTURE_CLIENT_TIMEOUT_MS } from "@a11ign/screenreader-fleet/worker-http";
+import { captureTolerantly } from "@a11ign/screenreader-fleet/capture-client";
 import { refuseIfNothingListening } from "./worker-probe.js";
 
 // Re-exported: `docs/try-it.md` quotes its text, and `quoted-cli-output.test.ts` derives the quote from it.
@@ -1382,7 +1382,7 @@ export function earlyContainmentWatcher(): (progress: object) => void {
  * THROUGH `captureTolerantly` NOW, not a bare `requestJson` POST — architecture-audit.md §5, item 6.
  *
  * This was the one caller of ten that sent no `captureId`, so the async-dispatch, poll and lost-response
- * recovery every lab client already had (see `@a11ign/worker-fleet/capture-client`) was unavailable
+ * recovery every lab client already had (see `@a11ign/screenreader-fleet/capture-client`) was unavailable
  * to the one caller that is a real user: a dropped response here used to mean the page was silently never
  * examined, on a capture that may already have completed. `captureTolerantly` mints its own id, so this
  * function's only job is the request BODY and turning a transport failure into a message about the page,
