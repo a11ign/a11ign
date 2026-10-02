@@ -36,7 +36,7 @@ import { dirname, join } from "node:path";
 // `org-watch.mjs` and `build-packages.mjs` state at their own imports.
 import { refuseUnknownFlags } from "./lib/cli-flags.mjs";
 import { READY_LABEL, CLAIM_LABEL, CLAIM_RECORD_MARKER } from "./claim-labels.mjs";
-import { verdictAtHead } from "./review-verdict.mjs";
+import { verdictAtHead, verdictBearers } from "./review-verdict.mjs";
 import { waitingOn, fleetWaitingOn, todayIso, describeWaiting, ANSWER_PREFIX, answersOwedBy, bareAnswerLabel }
   from "./waiting-condition.mjs";
 import { newestPerName } from "./newest-check-run.mjs";
@@ -3986,11 +3986,12 @@ export function reviewableHead(pr) {
  * @param {any} pr @param {string[]} heads
  */
 export function verdictAmong(pr, heads) {
-  const comments = (pr.comments ?? []).map((/** @type {any} */ c) => ({ body: c?.body ?? "", id: c?.id }));
-  let found = verdictAtHead({ comments, head: heads[0], prAuthor: pr.author?.login ?? null });
+  // #3030: comments AND review bodies, since the door posts the verdict as a review alone.
+  const bearers = verdictBearers(pr);
+  let found = verdictAtHead({ comments: bearers, head: heads[0], prAuthor: pr.author?.login ?? null });
   for (const head of heads.slice(1)) {
     if (found.verdict !== null) break;
-    found = verdictAtHead({ comments, head, prAuthor: pr.author?.login ?? null });
+    found = verdictAtHead({ comments: bearers, head, prAuthor: pr.author?.login ?? null });
   }
   return found;
 }
