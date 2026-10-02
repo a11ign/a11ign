@@ -378,7 +378,7 @@ test the queued group once and merge without re-carrying each PR, or this loop s
 
 ## Review verdicts — the convention every session parses
 
-A review is a comment on the pull request whose first line is exactly one of:
+A review is a GitHub review on the pull request (its whole body, #3030; a verdict posted as a comment before then is still read) whose first line is exactly one of:
 
 ```
 **Review of #<n> at `<head8>`, by <session>: convinced.**

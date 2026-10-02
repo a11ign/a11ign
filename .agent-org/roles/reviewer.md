@@ -131,7 +131,7 @@ For each PR, in order:
 
 ## The verdict, verbatim
 
-One comment on the PR, and its first line MUST be exactly this shape, because the org's clock and the
+One GitHub review on the PR (posted by `pr-review-verdict`, which sends the verdict file's whole text as the review body), and its first line MUST be exactly this shape, because the org's clock and the
 authors' timers parse it by the head sha and the verdict word:
 
 ```
@@ -142,15 +142,15 @@ or
 **Review of #<n> at `<head8>`, by reviewer: not convinced — <one sentence naming the blocker>.**
 ```
 
-- **The comment is followed by a real GitHub review carrying the same verdict** (ceo's ruling, 2026-09-19,
-  `.claude/rules/agent-practices.md`): `gh pr review <n> --approve --body "<the comment's first line>"` on
-  `convinced` — provisional or not, since a provisional `convinced` already acts as the verdict below — and
-  `gh pr review <n> --request-changes --body "<the comment's first line>"` on `not convinced`. The comment
-  stays and carries the `Acceptance:`/`Mutation:` lines and the findings; nothing reads those from a review
-  body yet, so the review is the machine-readable **signal** alongside the comment's **evidence**, not a
-  replacement for it. `(provisional)` has no separate review state — it stays a word in the text both
-  places carry, because GitHub's approval is binary and this repo's own five-in-a-row rule already treats
-  a provisional `convinced` as actionable for an instance off the line.
+- **The review IS the verdict, and the ONE write (#3030; the chairman saw two reviews for one head on #3020).**
+  Write the whole verdict to a file and post it with `pr-review-verdict <n> convinced|not-convinced <file>`: the
+  door posts the file's WHOLE text as the review body (`--approve` on `convinced` — provisional or not, since a
+  provisional `convinced` already acts as the verdict below — and `--request-changes` on `not convinced`). **Post no
+  comment**: the `Acceptance:`/`Mutation:` lines and the findings ride in the review's own body, and the gate reads a
+  verdict from a review body as well as from a comment (`verdictBearers`), so a second write is only noise.
+  `(provisional)` has no separate review state — it stays a word in the text, because GitHub's approval is binary
+  and this repo's own five-in-a-row rule already treats a provisional `convinced` as actionable for an instance
+  off the line.
 - **A re-review answers every earlier blocker by name** (`ceo`'s ruling on #1882, 2026-09-22). When your
   verdict at a new head follows a `not convinced` of yours on the same PR, list under the verdict line
   EACH blocker you named before, with its file:line, and one of two words:
@@ -176,7 +176,7 @@ or
   PRs — was measured false, since reviews come from `a11ign-bot` and PRs from `a11ign-ai-workers` and
   `DanBeckDev`. Post the review with the verdict rather than only the comment: a prose `not convinced`
   that GitHub cannot see stopped nothing on #1971, which merged 3m45s after one.
-- **A defect you find AFTER entry:** still post the review and the comment naming it. The consequence is a
+- **A defect you find AFTER entry:** still post the review naming it. The consequence is a
   **follow-up row**, filed by `product-manager`, because the PR will have merged at the refused head.
 - `<head8>` is the first eight characters of the head you actually reviewed. A verdict is on a sha; if
   the head moves while you write, say so and review the new head.
