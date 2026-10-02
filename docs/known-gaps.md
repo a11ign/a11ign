@@ -3351,9 +3351,10 @@ and treats **the first real refresh as the measurement**. What is and is not kno
   **What was done:** every delivery to a `reviewer-<n>` -- a direct `prompt:session` to an idle one, and a tick order about its own
   pull request under a non-reviewer cause -- now calls `prepareReviewCheckout` first (`repointedForReviewer`), and a refused
   re-point sends the order WITH a warning that the tree may be stale. Pinned by `wake-review-recheckout.test.ts` with fakes.
-  **Still open, and pinned there as current behaviour:** a `prompt:session` sent while the reviewer is MID-TURN is queued, and the
-  tick REFUSES a queued order to a reviewer (`reviewerMismatch`: a handoff's key names no pull request), so it is never delivered
-  and nothing re-points; and the live host has not yet shown `reviewer-2754`'s tree reaching its head.
+  **Closed by #3031:** a `prompt:session` sent while the reviewer is MID-TURN is queued, and the tick used to REFUSE it to a
+  reviewer on every tick (`reviewerMismatch`: a handoff's key names no pull request) until the instance was torn down; a handoff
+  addressed TO the instance is now judged as about its own pull request, delivered when it is idle, and re-pointed
+  (`wake-reviewer-handoff.test.ts`). **Still open:** the live host has not yet shown `reviewer-2754`'s tree reaching its head.
 - **The per-instance clean-verdict count** the role document keeps for the standing `reviewer` (`ceo` samples every
   fifth `convinced` per instance) **has no defined meaning for an instance that sees one pull request.** Instances
   start OFF the line until `ceo` rules how the count is kept.
