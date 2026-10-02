@@ -102,6 +102,27 @@ claim-stall voidings; `org-health` offers by signal; tokens per merged PR; and t
 until that ledger exists, never `0`). An `unknown` is a source the script could not read, not a good day.
 
 - **For each number worse than yesterday's, or beyond a bound you state, find the CLASS and file a `ready` row for the class fix whose Acceptance is a test that covers the class and not the instance: a population derived from the tree or the API, with a positive control (#2912 fixed "a closed row names the session" and left every PR with no row falling back to `product-manager`).**
+- **THE REPORT NOW CARRIES YESTERDAY (#2955).** The gate's offer appends one `{date, numbers}` line per UTC date to `org-retro-readings.jsonl`, and each
+  number prints `better | worse | same | no baseline | unknown` against the latest earlier line, with both readings and the delta. **`worse` is your
+  trigger without further judgment; `no baseline` and `unknown` are not good days** (a refused read of the file is `unknown`, a first day is `no baseline`,
+  and neither is ever `same`). **A BOUND is the line past which you file even when the verdict is `same`**, so a number that stopped improving
+  while still bad does not hide. First bounds, taken from the 2026-10-02 reading on #928 (the first baseline) and **yours to move with evidence**:
+
+  | number (`id` in the readings file) | 2026-10-02 baseline | bound: file a row past |
+  |---|---|---|
+  | `prsMerged` (higher is better) | 46 | below 23, and any window of 0 (the report's `STALL:` line) |
+  | `medianOpenToMergeMinutes` | 37 | above 74 |
+  | `idleMinutes` | 470 (235 of 681 ticks) | above 68, your own bound on that reading: 10% of ticks |
+  | `orgStalledWakes` | 1 | above 1 |
+  | `claimStalledWakes` | 4 | above 4 |
+  | `claimStallVoidings` | 4 | above 4 |
+  | `orgHealthOffers` | none (`org-health` did not exist) | above 0: an offer names its signal |
+  | `redPrs` | 1, which was a held PR and a measurement defect (#2954); the true baseline is 0 | above 0 |
+  | `tokensPerMergedPr` | 10,393,972 | above 13,000,000 (about +25%), the one number with no bound before a second reading |
+  | `handFixes` | `ledger absent` (#2954 since fixed; none read) | above 0, the ledger's own target |
+
+  The two-times and +25% figures are judgments from one reading, not measurements of a spread. Replace each with a measured one once the readings file holds
+  a week.
 - **Post the reading and every row you filed on #928** (the RECORD). A day with nothing to file posts **"nothing tripped" WITH the numbers**,
   never silence.
 - **A cause with a known fix that you leave unfiled is the Boy Scout rule broken**, so file it `ready` (never `backlog`), with the fix
