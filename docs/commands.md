@@ -21,10 +21,12 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node packages/agent-org/src/closes-mismatch-check.mjs` — refuse when a PR's declared Closes line disagrees with what GitHub will actually close
 - `node packages/agent-org/src/control-plane-hygiene.mjs` — print every control-plane hygiene number fresh, measured by command, never typed once
 - `node packages/agent-org/src/fleet-gated-nightly.mjs` — fleet-gated-nightly -- gather the open fleet-gated rows (no model), post the
+- `node packages/agent-org/src/hand-fix-ledger.mjs` — count the hand fixes on `main` -- changes the org should have made itself and a human-side session made
 - `node packages/agent-org/src/host-units.mjs` — compare the systemd units this repo SHIPS against the ones the agent host actually runs
 - `node packages/agent-org/src/mark-primary-checkout.mjs` — mark or query whether this checkout is the fleet-driving primary, which the hooks read
 - `node packages/agent-org/src/merge-guard.mjs` — ask whether a PR's checks actually ran and passed, never trusting mergeStateStatus alone
 - `node packages/agent-org/src/merge-queue.mjs` — refuse any route onto main other than the open-PR merge queue
+- `node packages/agent-org/src/org-retro.mjs` — org-retro -- the last 24 hours of the org, as numbers, for `ceo`'s daily retrospective (#2938).
 - `node packages/agent-org/src/org-watch.mjs` — org-watch -- the org's clock. Hourly by default; `--weekly` renders the cost table.
 - `node packages/agent-org/src/owned-path-signoff.mjs` — check a PR touching a corpus-invalidating path named the facts its own body must state
 - `node packages/agent-org/src/parent-recheck-summary.mjs` — read a node:test TAP log and print its failing subtests by name -- #744, never a fixed tail
@@ -70,6 +72,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node packages/guards/src/test-memory-cap.mjs` — run a test runner under a per-process memory cap (systemd-run MemoryMax) and say what the cap did
 - `node packages/guards/src/tree-wide-guards.mjs` — every tracked *.test.ts file that DECLARES ITSELF a TREE-WIDE GUARD by importing and calling
 - `node scripts/agent-org-extraction-rehearsal.mjs` — rehearse the history-preserving extraction of agent-org (and its travelling tests) into its own repository
+- `node scripts/agent-org.mjs` — run one of the agent-org tool's programs from the tool's own checkout, e.g. `node scripts/agent-org.mjs row-file.mjs --help`
 - `node scripts/auth-artifact-scan.mjs` — prove no credential is in what a REAL run produced -- scans every text file under a path (markdown, comment, log, JSON, whatever the extension) for the values of two environment variables. Exit 0 clean, 1 a leak, 2 could not examine.
 - `node scripts/auth-leak-check.mjs` — prove a login's credential never reaches what a run writes (ADR 0038) -- drives a real capture on THIS machine's worker with a fake credential, then searches for it. Exit 0 clean, 1 a leak, 2 could not examine.
 - `node scripts/build-packages.mjs` — run tsc --build across every package under packages/ in dependency order
@@ -90,6 +93,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/manifest-repository-check.mjs` — refuse a publish whose manifests name a different repository than the run publishing them
 - `node scripts/npm-token-liveness.mjs` — say whether the first-publish npm token is still present after it should have been revoked
 - `node scripts/prune-stale-workspace-scope.mjs` — remove a stale workspace-scope's node_modules symlinks a rename left behind
+- `node scripts/refuse-other-installers.mjs` — the root `preinstall`: refuses any installer that is not pnpm (#2897, row 10 of 10 of "Finish the move to pnpm")
 - `node scripts/registry-consumer-gate.mjs` — install what is PUBLISHED (a11ign from the registry) into an empty directory and refuse what a consumer could not run
 - `node scripts/release-commit-version-bump.mjs` — commit changeset version's manifest bump and consumed changesets back to main after a real publish
 - `node scripts/release-gate-scope.mjs` — warn which release:gate stages release:gate:ci does not run, and how many

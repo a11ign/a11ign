@@ -1,4 +1,5 @@
 // @ts-check
+// command: run one of the agent-org tool's programs from the tool's own checkout, e.g. `node scripts/agent-org.mjs row-file.mjs --help`
 /**
  * RUN ONE OF THE TOOL'S PROGRAMS FROM WHERE THE TOOL LIVES NOW: `node scripts/agent-org.mjs <program>.mjs [args...]`.
  *
