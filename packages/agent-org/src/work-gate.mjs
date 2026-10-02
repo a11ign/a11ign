@@ -105,6 +105,8 @@ import { PROJECT_NUMBER } from "./board-snapshot-scope.mjs";
 import { readTrunkRed, trunkRedOrders } from "./trunk-red.mjs";
 // #2163: FREE BYTES AND FREE INODES. Imports only `node:*`, so the gate keeps the property its own header states.
 import { diskHeadroom, MIN_FREE_FRACTION } from "./disk-headroom.mjs";
+// #2998: A ROW WHOSE WORK LANDED IN ANOTHER REPOSITORY. A leaf too; `claim-stall.mjs` imports its `landedReading`.
+import { landedElsewhereOrders, splitRef } from "./landed-elsewhere.mjs";
 // #2470: A CLAIM THAT DOES NOT MOVE. A leaf, like every import above, so the gate keeps the property its own header states.
 import { STALL_STATE_FILE, claimFactsFrom, readClaim, claimStalledOrders, nextStallState, readStallState,
   writeStallState, readHerdrRestart, gitRun, pathExists, statMtime, nudgeKey, nudgeDeliveredAt,
@@ -352,6 +354,9 @@ export const GH_READS = Object.freeze({
   // seen only after the gate was down for longer, is missed, not guessed.
   conditionalOnClaimedBranches: "pr list --state merged --limit 100 --json number,headRefName,mergedAt"
     + " (readMergedPrs -- claim-stalled's merged release)",
+  // #2998: ONE CALL PER PULL REQUEST A CLAIMANT NAMED IN A `Landed-in:` LINE, and none when no claimed row's completion names one (few, today: no
+  // completion wrote one before this). Aimed at the named repository by `GH_REPO`, restricted to the repositories the host declares.
+  conditionalOnLandedInLine: "pr view <n> --json state,mergedAt, GH_REPO=<named repository> (lookupLandedPr -- landed-elsewhere)",
   // #2286, WIDENED BY #2741: ONE CALL FOR EVERY BLOCKER, paid only when some unclaimed row OR some
   // claimed one has a cleared blocker to ask about. `gh`'s `blockedBy` nodes carry no closing time, and a
   // per-blocker read would make the tick's cost a function of how many rows are waiting.
@@ -2787,10 +2792,10 @@ function declaredWait(row, holder) {
  *
  * @param {{ rows: any[], claimedComments: any[] | null, openPrs: any[], mergedPrs: any[] | null,
  *   io?: import("./claim-stall.mjs").HostReads, repo?: string, now?: number, restartAt?: number | null,
- *   agents?: {label: string, status: string}[] | null,
+ *   agents?: {label: string, status: string}[] | null, lookup?: Parameters<typeof landedElsewhereOrders>[1]["lookup"],
  *   stateDir?: string, log?: (line: string) => void, ledger?: () => string,
  *   read?: typeof readStallState, write?: typeof writeStallState }} args
- * @returns {import("./claim-stall.mjs").StallOrder[]}
+ * @returns {(import("./claim-stall.mjs").StallOrder | import("./landed-elsewhere.mjs").LandedOrder)[]}
  */
 export function claimStallTick({ io = { git: gitRun, exists: pathExists, mtime: statMtime }, repo = REPO_CHECKOUT, now = Date.now(),
   stateDir = REVIEWER_STATE_DIR, log = (line) => process.stderr.write(line), read = readStallState, write = writeStallState, ...inputs }) {
@@ -2805,11 +2810,12 @@ export function claimStallTick({ io = { git: gitRun, exists: pathExists, mtime: 
 /**
  * `claimStallTick`'s body, with every default resolved by its caller. NEVER CALLED WITHOUT THE CATCH ABOVE: a throw here is the tick's to report.
  * @param {{ rows: any[], claimedComments: any[] | null, openPrs: any[], mergedPrs: any[] | null, restartAt?: number | null,
- *   agents?: {label: string, status: string}[] | null,
+ *   agents?: {label: string, status: string}[] | null, lookup?: Parameters<typeof landedElsewhereOrders>[1]["lookup"],
  *   ledger?: () => string, io: import("./claim-stall.mjs").HostReads, repo: string, now: number, stateDir: string,
  *   log: (line: string) => void, read: typeof readStallState, write: typeof writeStallState }} args
  */
-function evaluateClaims({ rows, claimedComments, openPrs, mergedPrs, restartAt, agents, ledger, io, repo, now, stateDir, log, read, write }) {
+function evaluateClaims({ rows, claimedComments, openPrs, mergedPrs, restartAt, agents, ledger, io, repo, now, stateDir, log, read, write,
+  lookup = (ref) => lookupLandedPr(ref) }) {
   const held = rows.filter((r) => labelsOf(r).includes(CLAIM_LABEL));
   if (held.length > 0 && claimedComments === null) {
     log("claim-stall: the comments on the claimed rows could not be read -- NO claim was evaluated this tick.\n");
@@ -2823,7 +2829,52 @@ function evaluateClaims({ rows, claimedComments, openPrs, mergedPrs, restartAt, 
     agents: agentsFor(held, agents) });
   const after = nextStallState(before, readings, now);
   if (after !== before) write(statePath, after);
-  return claimStalledOrders(readings, now);
+  return [...claimStalledOrders(readings, now), ...landedElsewhereNow({ readings, byRow, rows: held, now, log, lookup })];
+}
+
+/**
+ * #2998: THE CLAIMED ROWS WHOSE CLAIMANT DECLARED A LANDING (`Landed-in: owner/repo#n` in its own comment), as orders -- the offer to the row's closer,
+ * then, past the grace, the close. A row `claimReading` already has an answer for (a release, a pull request open here) is DEFERRED to that answer:
+ * the two must not both act on one row.
+ * @param {{ readings: { facts: import("./claim-stall.mjs").ClaimFacts, reading: import("./claim-stall.mjs").Reading }[], byRow: Map<number, any[]>,
+ *   rows: any[], now: number, log: (line: string) => void, lookup: Parameters<typeof landedElsewhereOrders>[1]["lookup"] }} args
+ */
+function landedElsewhereNow({ readings, byRow, rows, now, log, lookup }) {
+  const rowOf = new Map(rows.map((r) => [Number(r.number), r]));
+  const candidates = readings.flatMap(({ facts, reading }) => {
+    const comments = byRow.get(facts.row) ?? [];
+    const record = claimRecordOf(comments);
+    if (record === null) return [];
+    return [{ row: facts.row, title: facts.title, body: rowOf.get(facts.row)?.body, session: facts.session, comments, record, work: facts.work,
+      deferred: reading.kind === "release" || reading.kind === "pr-owned" }];
+  });
+  return landedElsewhereOrders(candidates, { now, lookup, log });
+}
+
+/**
+ * The merge state of ONE pull request a claimant named, or `null` for "could not ask" -- a refusal, a repository the host does not declare, a number that is
+ * not a pull request. `null` is never read as "open": it leaves the row as it is. Aimed at the named repository with `GH_REPO` (`defaultRun`'s second argument).
+ * @param {string} ref `owner/repo#n` @param {(args: string[], repo?: string) => string} [run]
+ * @param {string[]} [declared] the repositories the host declares (#2618), the primary's first
+ * @returns {{ merged: boolean, mergedAt?: number } | null}
+ */
+export function lookupLandedPr(ref, run = defaultRun, declared = declaredRepositories()) {
+  const { repo, number } = splitRef(ref);
+  if (!declared.includes(repo)) return null;
+  try {
+    const got = JSON.parse(run(["pr", "view", String(number), "--json", "state,mergedAt"], repo));
+    if (got?.state !== "MERGED") return { merged: false };
+    const mergedAt = Date.parse(String(got.mergedAt ?? ""));
+    return Number.isNaN(mergedAt) ? null : { merged: true, mergedAt };
+  } catch {
+    return null;
+  }
+}
+
+/** Every repository the host declares, code or tracker, the primary's own first: the ones a `Landed-in:` line may name. @returns {string[]} */
+function declaredRepositories() {
+  const scopes = scopesOf([homeProjectDeclaration()]);
+  return [...new Set([REPO, ...scopes.flatMap((s) => [s.code?.repo, s.tracker?.repo])].filter((r) => typeof r === "string"))];
 }
 
 /**
@@ -5136,17 +5187,33 @@ export function performActions(orders, run = defaultRun, log = (line) => process
     const { action, ...rest } = order;
     if (!action) { delivered.push(order); continue; }
     try {
-      // A pull request in another repository is ready-flipped THERE: `repo` rides on the action only when it is not the primary's.
-      run(["pr", "ready", String(action.pr), ...(action.repo === undefined ? [] : ["--repo", action.repo])]);
+      performAction(action, run);
       performed += 1;
-      log(`DID ${action.kind} pr-${action.pr} (${order.cause}) -- no session woken\n`);
+      log(`DID ${action.kind} ${actionSubject(action)} (${order.cause}) -- no session woken\n`);
     } catch (/** @type {any} */ error) {
-      log(`COULD NOT ${action.kind} pr-${action.pr}: ${error?.message ?? error} `
+      log(`COULD NOT ${action.kind} ${actionSubject(action)}: ${error?.message ?? error} `
         + `-- delivering to ${rest.session} instead\n`);
       delivered.push(rest);
     }
   }
   return { delivered, performed };
+}
+
+/** What an action is about, as the log line names it. @param {{ kind: string, pr?: number, row?: number }} action */
+const actionSubject = (action) => (action.kind === "close-landed" ? `row-${action.row}` : `pr-${action.pr}`);
+
+/**
+ * ONE ACTION THE GATE PERFORMS ITSELF. `ready` flips a draft (a pull request in another repository is ready-flipped THERE:
+ * `repo` rides on the action only when it is not the primary's); `close-landed` (#2998) closes a row whose claimant declared its work landed elsewhere, the
+ * comment being what the gate read it against. THROWS on a refused call, which the caller turns into a delivery to the order's session.
+ * @param {{ kind: string, pr?: number, repo?: string, row?: number, comment?: string }} action @param {(args: string[]) => string} run
+ */
+function performAction(action, run) {
+  if (action.kind === "close-landed") {
+    run(["issue", "close", String(action.row), "--reason", "completed", "--comment", String(action.comment)]);
+    return;
+  }
+  run(["pr", "ready", String(action.pr), ...(action.repo === undefined ? [] : ["--repo", action.repo])]);
 }
 
 /**

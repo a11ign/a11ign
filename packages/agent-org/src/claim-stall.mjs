@@ -31,6 +31,9 @@ import { ANSWER_PREFIX } from "./project-vocabulary.mjs";
 // this file stays one. A listing that lacks `ceo`/`orchestrator` is a PARTIAL one and proves nothing about who else
 // it left out; a session absent from a COMPLETE listing is real evidence, not yet a verdict (see `goneReading`).
 import { listingIsComplete } from "./herdr-agents.mjs";
+// #2998: THE ONE DECIDER OF "LANDED". Release (10) below and the named-elsewhere close (`landed-elsewhere.mjs`) both ask it, so a second
+// spelling of "the work landed and the holder holds nothing" cannot appear. A leaf: it imports nothing from this file.
+import { landedReading } from "./landed-elsewhere.mjs";
 
 const MINUTE_MS = 60_000;
 
@@ -404,11 +407,10 @@ export function claimReading(facts, ctx) {
  */
 function mergedReading(facts) {
   if (facts.mergedPr === null) return null;
-  const work = facts.work();
-  if (work.state !== "none") {
-    return { kind: "holding", expected: work.state !== "unknown",
-      why: `#${facts.mergedPr.number} merged, but ${work.state === "unknown" ? "the worktree could not be read" : `the holder still has ${work.dirty} dirty file(s) and ${work.unpushed} unpushed commit(s)`}` };
-  }
+  const ref = `#${facts.mergedPr.number}`;
+  const landed = landedReading({ named: [ref], merged: [{ ref, mergedAt: facts.mergedPr.mergedAt }], work: facts.work });
+  if (landed === null) return null;
+  if (landed.kind === "holding") return landed;
   return { kind: "release", why: "merged", lastMoveAt: null, idleMs: null, nudgedAt: null, mergedPr: facts.mergedPr.number };
 }
 
@@ -622,8 +624,11 @@ export function writeStallState(path, state, writer = writeFileSync) {
 /** @param {number} ms */
 const minutes = (ms) => Math.round(ms / MINUTE_MS);
 
+/** #2998: every kind of release, as a LIST, so a test can derive the population instead of restating it (a new kind then has to be answered for). */
+export const RELEASE_KINDS = /** @type {const} */ (["stalled", "blocked", "merged", "gone"]);
+
 /**
- * @typedef {{ row: number, session: string, why: "stalled" | "blocked" | "merged" | "gone", branch: string | null,
+ * @typedef {{ row: number, session: string, why: (typeof RELEASE_KINDS)[number], branch: string | null,
  *   worktree: string | null, idleMinutes: number | null, nudgedAt: number | null, edges?: number[],
  *   mergedPr?: number, answer?: string }} ReleaseRequest
  * @typedef {{ session: string, cause: string, subject: string, discriminator: string, prompt: string, causeKey: string,

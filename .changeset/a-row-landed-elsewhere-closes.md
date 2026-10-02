@@ -1,0 +1,5 @@
+---
+"@a11ign/agent-org": patch
+---
+
+**A row whose work landed in another repository now closes, or orders its closer with a deadline, instead of waiting on a session that is itself waiting (#2998).** #2972 and #2906 stayed open three hours after `agent-org#8` and `#6` merged, because release (10) reads only THIS repository's merged list and `product-manager`, the one closer, was waiting on `ceo`. A claimant's completion comment may now carry `Landed-in: owner/repo#n` (one line per pull request); when every named pull request is MERGED (looked up in the named repository, only one the host declares) and the claimant holds nothing, the gate offers the close to `product-manager` with the merged pull request and the row's done-when in the prompt, and past `LANDED_ELSEWHERE_GRACE_MINUTES` (30) with no `Objection:` comment closes the row itself, quoting both. A merged pull request nobody named never closes a row. ONE `landedReading` decides "landed" for release (10) and for this, so the two cannot disagree; `RELEASE_KINDS` is exported so a new release kind has to be answered for in the test. The row's `blockedBy` dependents fall when it closes.
