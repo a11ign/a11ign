@@ -120,9 +120,10 @@ import { readAgents } from "./herdr-agents.mjs";
 // `work-gate/pr-orders.mjs`, which imports the shared PR facts BACK from this file. The cycle is safe because
 // nothing there reads an import at load time (only inside a function), and this file stays the entry point:
 // every name that module exported is re-exported here, so no caller of `work-gate.mjs` changes.
-import { requiredWhenRed, perPullRequestOrders, mergeConflictOrders, greenUnarmedOrders, reviewBlockedOrders,
-  HOLD_RED_JOBS, ownerOfPr } from "./work-gate/pr-orders.mjs";
+import { requiredWhenRed, perPullRequestOrders, greenUnarmedOrders, reviewBlockedOrders,
+  stalledPrOrders, STALL_REASONS_WITHOUT_A_CAUSE, HOLD_RED_JOBS, ownerOfPr } from "./work-gate/pr-orders.mjs";
 export { redOnlyBySupersededRun, mergeConflictOrders, greenUnarmedOrders, reviewBlockedOrders, HOLD_RED_JOBS,
+  stallReasonOf, stallOrderOf, stalledPrOrders, STALL_REASON, STALL_REASONS_WITHOUT_A_CAUSE, ownerOfPr,
   awaitingEvidenceStaleOrders } from "./work-gate/pr-orders.mjs";
 import { labJobFinishedOrders, readLabJobRecords } from "./work-gate/lab-job-orders.mjs"; // #2729
 // #2691: THE LIVE CALL-COUNT SIGNAL, reusing the parser rather than a second one -- `split-baseline.mjs`
@@ -3470,7 +3471,7 @@ export const REVIEW_STATE = Object.freeze({
 });
 
 /** The states that stop a pull request merging, however green and armed it looks. @type {readonly string[]} */
-const BLOCKING_REVIEW_STATES = Object.freeze([
+export const BLOCKING_REVIEW_STATES = Object.freeze([
   REVIEW_STATE.AWAITING_REVIEW, REVIEW_STATE.REFUSED, REVIEW_STATE.UNRECOGNISED]);
 
 /**
@@ -5269,9 +5270,9 @@ export function decide({ prs, readyRows, promotableRows = [], chairmanBlocked = 
   // supply question, less urgent than a named red build, and never withheld by a drain, because a drain
   // stops the org TAKING ON work rather than finishing what is in flight.
   orders.push(...reviewBlockedOrders(reviewBlocked(prs, required)));
-  // #2209: `mergeCandidates` no longer holds a conflicting PR, so without this line it is reported nowhere
-  // -- worse than before, when `pr-green-unarmed` at least named it. To its author; a drain keeps it.
-  orders.push(...mergeConflictOrders(conflictedPrs(prs, required)));
+  // #2209: a conflicting PR is in no other cause's population, so it is told to its author here; a drain keeps it.
+  // #2968: FED BY THE TOTAL CLASSIFIER, NOT BY "GREEN AND UNHELD": #2950, a conflicted draft, sat 7.5 h unheard.
+  orders.push(...stalledPrOrders(prs, { required, reasons: STALL_REASONS_WITHOUT_A_CAUSE }));
   orders.push(...pipelineCodeownerReviewOrders(pipelineCodeownerReviewMissing(prs, prFiles))); // #1959: beside the two above
 
   // #2174: AFTER the per-PR and per-row causes and BEFORE the chairman's, for `pr-green-unarmed`'s

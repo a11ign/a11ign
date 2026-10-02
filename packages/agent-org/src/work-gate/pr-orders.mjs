@@ -26,7 +26,7 @@ import { REPO } from "../project-identity.mjs";
 // declared vocabulary. (The `"ready"` action `kind` a few lines below is `gh pr ready`'s draft-status
 // flip -- a built-in GitHub PR field, not this project's `ready` row label -- so it stays a literal.)
 import { SESSION_PREFIX, BLOCKED_LABEL } from "../project-vocabulary.mjs";
-import { labelsOf, sessionOf, checksSettledGreen, conclusionOf, stillRunning, anyChecksRed, requiredCheckNames,
+import { labelsOf, sessionOf, conflictStateOf, CONFLICT_STATE, reviewStateOf, BLOCKING_REVIEW_STATES, checksSettledGreen, conclusionOf, stillRunning, anyChecksRed, requiredCheckNames,
   blockingChecks, reviewableHead, verdictAmong, awaitingEvidence, AWAITING_EVIDENCE_LABEL,
   AWAITING_EVIDENCE_QUIET_HOURS, AWAITING_EVIDENCE_QUIET_MS, HOUR_MS, REVIEW_STATE } from "../work-gate.mjs";
 
@@ -93,24 +93,218 @@ export function requiredWhenRed(prs) {
 export function mergeConflictOrders(conflicted) {
   return conflicted.map((pr) => {
     const owner = sessionOf(pr);
-    const session = owner ?? "product-manager";
-    const head8 = String(pr.headRefOid ?? "").slice(0, 8) || "no-head";
-    return {
-      session,
-      cause: "pr-merge-conflict",
-      subject: `pr-${subjectRef(pr.repoKey, pr.number)}`,
-      discriminator: head8,
-      prompt: `${subjectMention(pr)} at \`${head8}\` is green on every required check and NOT held, and it `
-        + "CONFLICTS with `main`: GitHub reports it cannot merge as it stands, whatever its review "
-        + "decision or arming.\n"
-        + `${owner ? "It carries your session label, so the rebase is yours." : "It names no session, so find whose it is."} `
-        + "Merge or rebase `main` into the branch, resolve the conflicts, re-run the gate and push.\n"
-        + "DO NOT ARM IT: `gh pr merge --auto` exits non-zero for an unmergeable pull request, so "
-        + "`arm-pr.mjs` cannot succeed here. Until this is resolved it is also holding every Ready row "
-        + "that shares a file with it (B4) -- #2203 held six.",
-      causeKey: `${session}/pr-merge-conflict/pr-${subjectRef(pr.repoKey, pr.number)}/${head8}`,
-    };
+    return conflictOrder(pr, {
+      session: owner ?? "product-manager",
+      standing: "is green on every required check and NOT held",
+      ownership: owner ? "It carries your session label, so the rebase is yours." : "It names no session, so find whose it is.",
+    });
   });
+}
+
+/**
+ * One `pr-merge-conflict` order. THE WORDS THAT DIFFER BETWEEN THE TWO CALLERS ARE ARGUMENTS and the rest is one
+ * text, so the rebase advice and the `arm-pr.mjs` warning cannot drift between the green-only order and the
+ * total one (#2968).
+ *
+ * @param {any} pr
+ * @param {{session: string, standing: string, ownership: string}} says `standing`: what the pull request IS besides conflicting
+ */
+function conflictOrder(pr, { session, standing, ownership }) {
+  const head8 = String(pr.headRefOid ?? "").slice(0, 8) || "no-head";
+  const ref = `pr-${subjectRef(pr.repoKey, pr.number)}`;
+  return {
+    session,
+    cause: "pr-merge-conflict",
+    subject: ref,
+    discriminator: head8,
+    prompt: `${subjectMention(pr)} at \`${head8}\` ${standing}, and it `
+      + "CONFLICTS with `main`: GitHub reports it cannot merge as it stands, whatever its review "
+      + "decision or arming.\n"
+      + `${ownership} `
+      + "Merge or rebase `main` into the branch, resolve the conflicts, re-run the gate and push.\n"
+      + "DO NOT ARM IT: `gh pr merge --auto` exits non-zero for an unmergeable pull request, so "
+      + "`arm-pr.mjs` cannot succeed here. Until this is resolved it is also holding every Ready row "
+      + "that shares a file with it (B4) -- #2203 held six.",
+    causeKey: `${session}/pr-merge-conflict/${ref}/${head8}`,
+  };
+}
+
+/**
+ * #2968: THE REASON A PULL REQUEST IS NOT MERGING, as a TOTAL classifier -- every open pull request gets exactly one
+ * of seven answers, and there is no "other".
+ *
+ * WHY IT EXISTS. #2950 sat a DRAFT, `DIRTY`, with an EMPTY `statusCheckRollup` for 7.5 hours and no order of any kind
+ * reached its owner: the conflict order was fed by `greenUnheldPrs` ("not a draft, settled GREEN"), and a branch that
+ * conflicts gets no `pull_request` run, so the one state a conflict produces was the one state that population could
+ * not see. The red order needs red, the review order needs green, `pr-green-unarmed` needs green. THE CLASS is a
+ * pull request that cannot merge for any reason but red having no owner signal, so the question is asked of EVERY
+ * pull request and a new state falls into a named answer rather than between four populations.
+ *
+ * THE ORDER OF THE QUESTIONS IS THE DESIGN:
+ *   1. `held-on-purpose`   a `hold:*` label (`armabilityOf`, the predicate arming itself reads) or `awaiting-evidence`:
+ *                          somebody said not yet, so nobody is told it is stalled.
+ *   2. `red`               blocking checks SETTLED red (not a superseded run: `failingChecksOrder`'s own test). BEFORE
+ *                          `conflicted`, because a red pull request already reaches its owner under `pr-checks-failing`
+ *                          and `work-gate.test.ts` pins that a conflicted red one is that cause's subject alone (#2209).
+ *   3. `conflicted`        BEFORE the green/pending/none question, which is the point: a conflict is code work whether
+ *                          or not CI ran, and a conflicted head has stale or absent checks, so requiring green first is
+ *                          how #2950 was missed.
+ *   4. `progressing`       no settled-green check yet -- none, or still running -- so the next tick asks again.
+ *                          A pull request whose CI never starts also reads here; that is an AGE question this pure
+ *                          classifier cannot answer, and the health signal that wakes `ceo` (#2936's sibling) is the
+ *                          reader of age.
+ *   5. `awaiting-author-draft`  green, but still a draft: the author owes "ready", or the rework a verdict named.
+ *   6. `awaiting-review`   green, ready, and GitHub's own `reviewDecision` blocks (`reviewStateOf`; an ABSENT field
+ *                          is not accused, which is that function's rule).
+ *   7. `unarmed`           green, ready, review not blocking, and `pr.armed === false`. `armed` is stamped by the
+ *                          caller from a queue read; ABSENT IS NOT `false`, so an unread arming is never an accusation.
+ *
+ * A reason is not an order: `STALL_REASONS_WITHOUT_A_CAUSE` says which ones `decide` sends, and why only that one.
+ *
+ * @param {any} pr @param {string[] | null} [required]
+ * @returns {string} a `STALL_REASON` value
+ */
+export function stallReasonOf(pr, required = null) {
+  if (!armabilityOf({ labels: labelsOf(pr) }).arm || awaitingEvidence(pr)) return STALL_REASON.HELD_ON_PURPOSE;
+  const settled = settledChecksOf(pr, required);
+  if (settled === false) return STALL_REASON.RED;
+  if (conflictStateOf(pr) === CONFLICT_STATE.CONFLICTING) return STALL_REASON.CONFLICTED;
+  if (settled !== true) return STALL_REASON.PROGRESSING;
+  if (pr?.isDraft === true) return STALL_REASON.AWAITING_AUTHOR_DRAFT;
+  if (BLOCKING_REVIEW_STATES.includes(reviewStateOf(pr).code)) return STALL_REASON.AWAITING_REVIEW;
+  return pr?.armed === false ? STALL_REASON.UNARMED : STALL_REASON.PROGRESSING;
+}
+
+/** The seven answers of `stallReasonOf`. Only `PROGRESSING` and `HELD_ON_PURPOSE` produce no order. */
+export const STALL_REASON = Object.freeze({
+  PROGRESSING: "progressing",
+  RED: "red",
+  CONFLICTED: "conflicted",
+  AWAITING_REVIEW: "awaiting-review",
+  AWAITING_AUTHOR_DRAFT: "awaiting-author-draft",
+  UNARMED: "unarmed",
+  HELD_ON_PURPOSE: "held-on-purpose",
+});
+
+/**
+ * `true` settled green, `false` settled red, `null` nothing settled (none, or still running) -- on the checks that can
+ * hold the pull request. A red that exists only because a superseded run is cancelled while another still runs is
+ * NOT red, exactly as in `failingChecksOrder`: the two must agree or `red` would name a pull request that order skips.
+ *
+ * @param {any} pr @param {string[] | null} required
+ * @returns {boolean | null}
+ */
+function settledChecksOf(pr, required) {
+  const onHead = newestPerName(pr?.statusCheckRollup ?? []);
+  const blocking = blockingChecks(onHead, required);
+  const settled = checksSettledGreen(blocking);
+  return settled === false && redOnlyBySupersededRun(blocking, onHead) ? null : settled;
+}
+
+/**
+ * The `stallReasonOf` answers that have NO dedicated cause already reaching the owner, and so the only ones `decide`
+ * sends. `red` has `pr-checks-failing` (to `ownerOfPr`), `awaiting-review` has `pr-review-blocked`, `unarmed` has
+ * `pr-green-unarmed` (deliberately to `product-manager`, #1969) and a green draft has `draft-awaiting-verdict`; a second
+ * order for each would wake one session twice about one fact. `conflicted` had a cause and no way to reach a draft or a
+ * pull request with no checks, which is what #2968 closes.
+ */
+export const STALL_REASONS_WITHOUT_A_CAUSE = Object.freeze([STALL_REASON.CONFLICTED]);
+
+/**
+ * The cause a stalled pull request's order is filed under. NO NEW CAUSE, on purpose: a cause is declared in
+ * `cause-declaration.mjs` and pinned by name in several guards, so a `pr-stalled` cause is a separate change. Each
+ * reason is filed under the cause that already owns that state, and wiring one into `decide` means checking that
+ * cause's liveness reader (`wake.mjs`) still agrees the order is live.
+ */
+const CAUSE_OF_STALL = Object.freeze({
+  [STALL_REASON.RED]: "pr-checks-failing",
+  [STALL_REASON.CONFLICTED]: "pr-merge-conflict",
+  [STALL_REASON.AWAITING_REVIEW]: "pr-review-blocked",
+  [STALL_REASON.AWAITING_AUTHOR_DRAFT]: "draft-awaiting-verdict",
+  [STALL_REASON.UNARMED]: "pr-green-unarmed",
+});
+
+/**
+ * PURE. #2968: ONE ORDER FOR A STALLED PULL REQUEST, ADDRESSED TO `ownerOfPr(pr).session` -- never `product-manager`, and
+ * `null` for `progressing` and `held-on-purpose`, which are not stalls.
+ *
+ * `conflicted` KEEPS #2209's text and its key (`<owner>/pr-merge-conflict/pr-<n>/<head8>`), so an order already
+ * delivered is not sent twice; what changes is the POPULATION (a draft, and a pull request with no checks, now reach
+ * their owner) and the unlabelled fallback (`ownerOfPr`'s `ceo`, not `product-manager`, #2941). The other reasons are
+ * keyed on the reason and never the head: a push that did not clear a stall must not re-wake the owner.
+ *
+ * @param {any} pr @param {string[] | null} [required]
+ * @returns {{session: string, cause: string, subject: string, discriminator: string, prompt: string, causeKey: string} | null}
+ */
+export function stallOrderOf(pr, required = null) {
+  const reason = stallReasonOf(pr, required);
+  const cause = /** @type {Record<string, string>} */ (CAUSE_OF_STALL)[reason];
+  if (!cause) return null;
+  const owner = ownerOfPr(pr);
+  if (reason === STALL_REASON.CONFLICTED) {
+    return conflictOrder(pr, { session: owner.session, standing: standingOf(pr, required), ownership: ownershipOf(pr, owner.source, "rebase") });
+  }
+  const ref = `pr-${subjectRef(pr.repoKey, pr.number)}`;
+  return {
+    session: owner.session,
+    cause,
+    subject: ref,
+    discriminator: reason,
+    prompt: `${subjectMention(pr)} is STALLED: ${/** @type {Record<string, string>} */ (REASON_SENTENCE)[reason]} ${ownershipOf(pr, owner.source, "fix")}`,
+    causeKey: `${owner.session}/${cause}/${ref}/${reason}`,
+  };
+}
+
+/** What each non-conflict stall means, in the one sentence an owner needs. */
+const REASON_SENTENCE = Object.freeze({
+  [STALL_REASON.RED]: "a required check has settled RED on its head and nothing is fixing it.",
+  [STALL_REASON.AWAITING_REVIEW]: "it is green and ready, and GitHub's `reviewDecision` is holding it for a review nobody has posted or a refusal nothing has answered.",
+  [STALL_REASON.AWAITING_AUTHOR_DRAFT]: "it is green and still a DRAFT, so it can merge only after its author marks it ready.",
+  [STALL_REASON.UNARMED]: "it is green, ready and NOT held, and nothing has armed it.",
+});
+
+/**
+ * The clause after "and it" in a `conflicted` order: what the pull request is besides conflicting, from the facts that
+ * DISTINGUISH the states #2950 fell between. Never claims a check state the payload did not carry.
+ * @param {any} pr @param {string[] | null} required
+ */
+function standingOf(pr, required) {
+  const settled = settledChecksOf(pr, required);
+  const checks = settled === true ? "green on every required check"
+    : settled === false ? "red on a required check"
+      : newestPerName(pr?.statusCheckRollup ?? []).length === 0
+        ? "carrying NO CHECKS (a branch that conflicts with `main` gets no `pull_request` run, so none will start until it is rebased)"
+        : "still running its checks";
+  return `is ${pr?.isDraft === true ? "a DRAFT, " : ""}${checks} and NOT held`;
+}
+
+/**
+ * Who `task` belongs to, and on whose authority -- `ownerOfPr`'s rungs in words. The `ceo` rung says nobody could
+ * be named, because an owner order that does not say so reads as the owner's own work and gets done by the wrong hands.
+ * @param {any} pr @param {string} source one of `ownerOfPr`'s sources @param {string} task "rebase" or "fix"
+ */
+function ownershipOf(pr, source, task) {
+  if (source === "ceo") {
+    return "NOBODY COULD BE NAMED as its owner (no session label, no live session holding a row it closes or its branch names, "
+      + `and none stamped its worktree). You are the last answer: re-lane it to the session that should ${task} it (\`${SESSION_PREFIX}<name>\` on the PR), or close it if it was abandoned.`;
+  }
+  if (source === "label") return `It carries your session label, so the ${task} is yours.`;
+  return `The ${task} is yours: ${notConvincedBasis(pr, source)}.`;
+}
+
+/**
+ * PURE. #2968: the orders for every stalled pull request among `prs`, ascending by number. `reasons` narrows which
+ * stall reasons are SENT (`STALL_REASONS_WITHOUT_A_CAUSE` is what `decide` passes); the default is all of them.
+ *
+ * @param {any[]} prs @param {{required?: string[] | null, reasons?: readonly string[] | null}} [asked]
+ */
+export function stalledPrOrders(prs, { required = null, reasons = null } = {}) {
+  return (prs ?? [])
+    .filter((pr) => pr && Number.isFinite(Number(pr.number)))
+    .filter((pr) => reasons === null || reasons.includes(stallReasonOf(pr, required)))
+    .sort((a, b) => Number(a.number) - Number(b.number))
+    .map((pr) => stallOrderOf(pr, required))
+    .filter((order) => order !== null);
 }
 
 /**
