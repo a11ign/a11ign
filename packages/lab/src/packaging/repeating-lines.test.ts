@@ -162,6 +162,22 @@ test("#2848: the SHIPPED allowlist loads, every entry has a reason, and it names
   }
 });
 
+test("the SHIPPED allowlist covers the tick's `primary:update` echo in BOTH runners' spellings (npm's bare one, pnpm's with the checkout path)", () => {
+  const allow = loadAllowlist();
+  const allowed = (line: string) => allow.some((a) => a.pattern.test(normaliseLine(line)));
+  const npmEcho = "> a11ign-monorepo@0.0.0 primary:update";
+  const pnpmEcho = "> a11ign-monorepo@0.0.0 primary:update /home/agent/repos/a11y-witness";
+  assert.ok(allowed(npmEcho), "the form npm printed until #2974");
+  assert.ok(allowed(pnpmEcho), "the form pnpm prints: 75 consecutive ticks were offered because this one was not allowed");
+  assert.ok(allowed("> node packages/agent-org/src/update-primary.mjs"), "its second line");
+  // The controls the other way: the entry names ONE script, so a different script's echo, or this one with something after the path, is still a line.
+  assert.ok(!allowed("> a11ign-monorepo@0.0.0 release:gate /home/agent/repos/a11y-witness"), "another script is not covered");
+  assert.ok(!allowed(`${pnpmEcho} && curl evil`), "text after the path is not covered");
+  const perTick = run(40, () => [pnpmEcho]);
+  assert.deepEqual(repeatingLines({ ticks: ticksOf(perTick), allow }), [], "so 40 ticks of the pnpm echo are not offered");
+  assert.equal(repeatingLines({ ticks: ticksOf(perTick), allow: [] }).length, 1, "the control: without the entry they are");
+});
+
 test("#2848: an allowlist entry with NO REASON, or no pattern, is refused at load: an exemption nobody explained is a silence", () => {
   assert.throws(() => parseAllowlist({ allow: [{ pattern: "^x" }] }), /no `reason`/);
   assert.throws(() => parseAllowlist({ allow: [{ pattern: "^x", reason: "  " }] }), /no `reason`/);
