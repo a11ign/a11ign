@@ -4708,6 +4708,35 @@ function backlogOrders(owner, mine) {
   })));
 }
 
+/** The chairman reminder's grid: one window opens at each multiple of this since the epoch (the UTC day). */
+export const CHAIRMAN_REMINDER_PERIOD_MS = 24 * HOUR_MS;
+
+/**
+ * PURE. The UTC day the chairman reminder is open in at `nowMs`, or `null` outside its window -- #2989.
+ *
+ * WHY THE KEY IS THE CALENDAR DAY AND NOT AN AGE READ OFF THE ROWS. The order used to key on
+ * `daysSince(oldest updatedAt)`, and `ceo` answers it by COMMENTING on the rows, which writes `updatedAt`: the
+ * age read 0 for ever, the key never moved, `wake` re-delivered it every `JUDGMENT_TTL_MS` until
+ * `MAX_DELIVERIES`, and then the tick printed `STUCK ceo/chairman-blocked/0` on every run (31 ticks in an hour;
+ * 89 by the time an engineer picked the row up). A discriminator derived from a field the ANSWER writes cannot
+ * advance, so the cap was reached by the answerer's own diligence. The label's own time would fix that but costs
+ * a timeline read per row; the grid costs nothing and is not written by anybody.
+ *
+ * A DAILY KEY ALONE WOULD NOT HAVE BEEN ENOUGH: `wake` re-delivers an unchanged key every two hours, so one day's
+ * key reaches the cap of six in ten hours and is `STUCK` for the other fourteen. So the order is emitted only
+ * inside a window exactly `PROMOTION_ASK_WINDOW_MS` (= `JUDGMENT_TTL_MS`) long at the start of each day --
+ * `promotionAskWindow`'s mechanism (#2286): one delivery per window with no state kept, and the cause going
+ * unemitted between windows is what lets the ledger write its `RESET`. A window whose order was never
+ * delivered is retried every tick until it closes, then not until tomorrow: the stated cost.
+ *
+ * @param {number} nowMs @returns {{day: number} | null} `day` is whole days since the epoch
+ */
+export function chairmanReminderWindow(nowMs) {
+  const day = Math.floor(Math.max(0, nowMs) / CHAIRMAN_REMINDER_PERIOD_MS);
+  const opened = day * CHAIRMAN_REMINDER_PERIOD_MS;
+  return nowMs - opened >= PROMOTION_ASK_WINDOW_MS ? null : { day };
+}
+
 /**
  * The one order for work only the chairman can do, or none.
  *
@@ -4716,32 +4745,35 @@ function backlogOrders(owner, mine) {
  * queue needs, each helper asks one narrower question.
  *
  * @param {any[]} chairmanBlocked rows waiting on the chairman, oldest first
+ * @param {number} [nowMs] injectable so a test is not wall-clock dependent
  */
-function chairmanOrders(chairmanBlocked) {
+function chairmanOrders(chairmanBlocked, nowMs = Date.now()) {
   // THE ORG CANNOT WAKE A HUMAN, so this wakes the session whose brief says it briefs one. `ceo` is the
   // only onward route the escalation path has, and until now that route was a sentence rather than a
   // mechanism -- #63 sat four days blocking eight publish-gated rows because nothing carried it.
   //
-  // THE DISCRIMINATOR IS THE AGE IN DAYS, which is what makes this bearable. Keyed on the row set it
-  // would fire once and fall silent for ever -- the permanent-ledger bug again. Keyed on the age, `ceo`
-  // is reminded once a DAY and the reminder grows, which is the right cadence for a question only a
-  // person outside the org can answer and the wrong one to repeat every twenty minutes.
-  if (chairmanBlocked.length === 0) return [];
-  const oldest = daysSince(chairmanBlocked[0]?.updatedAt);
+  // A STANDING DAILY REMINDER, keyed on the UTC day and emitted only in that day's window
+  // (`chairmanReminderWindow`). Keyed on the row set it would fire once and fall silent for ever -- the
+  // permanent-ledger bug again; keyed on the rows' `updatedAt` it never advanced (#2989).
+  const open = chairmanBlocked.length === 0 ? null : chairmanReminderWindow(nowMs);
+  if (!open) return [];
   const rows = chairmanBlocked.slice(0, 6).map((/** @type {any} */ r) => subjectMention(r)).join(", ");
+  const date = new Date(open.day * CHAIRMAN_REMINDER_PERIOD_MS).toISOString().slice(0, 10);
   return [{
     session: "ceo",
     cause: "chairman-blocked",
     subject: "chairman",
-    discriminator: subjectRef(chairmanBlocked[0].repoKey, oldest),
+    discriminator: `day-${open.day}`,
     prompt: `${chairmanBlocked.length} row(s) are labelled \`${CHAIRMAN_LABEL}\` and can only move by the `
-      + `chairman's own hands: ${rows}${chairmanBlocked.length > 6 ? ", ..." : ""}. The quietest has had `
-      + `NO ACTIVITY OF ANY KIND for ${oldest} day(s) -- not time spent waiting, which is longer: any `
-      + "comment or label resets this, so read the row for when the chairman was last actually asked.\n"
+      + `chairman's own hands: ${rows}${chairmanBlocked.length > 6 ? ", ..." : ""}.\n`
+      + `This is the STANDING DAILY REMINDER for ${date} (UTC), sent once a day for as long as the label `
+      + "stands: it does not say anything new happened, and it is NOT keyed on the rows' activity -- your own "
+      + "comments on them do not silence or repeat it. Read each row for when the chairman was last "
+      + "actually asked.\n"
       + "Brief the chairman: what is waiting, what it blocks downstream, and the single next action in "
       + "their hands. If a row no longer needs them, take the label off -- a stale one here makes the "
       + "count meaningless, which is how the last escalation went four days unread.",
-    causeKey: `ceo/chairman-blocked/${subjectRef(chairmanBlocked[0].repoKey, oldest)}`,
+    causeKey: `ceo/chairman-blocked/day-${open.day}`,
   }];
 }
 
@@ -5125,7 +5157,7 @@ export function performActions(orders, run = defaultRun, log = (line) => process
  * at that head" rather than "check whether there is work" -- a woken turn that has to survey the queue is
  * a tick with extra steps, which is the cost this file exists to remove.
  *
- * @param {{ prs: any[], readyRows: any[], promotableRows?: any[], chairmanBlocked?: any[],
+ * @param {{ prs: any[], readyRows: any[], promotableRows?: any[], chairmanBlocked?: any[], nowMs?: number,
  *           prFiles?: { number: number, files: string[], changedFiles: number }[],
  *           drain?: boolean, required?: string[] | null, epics?: any[], answerOwed?: any[],
  *           key?: string, repo?: string, openRows?: any[], unarmed?: number[] | null,
@@ -5196,12 +5228,13 @@ export function performActions(orders, run = defaultRun, log = (line) => process
  *        of 15, and `bareAnswerOrdersOrNone` carries the `?? []` instead.
  *        `claimRefusals` is `claimRefusalStreaksNow(offerable)` (#2845) -- each offered row's consecutive-refusal streak. OMITTED MEANS
  *        NOT ASKED, so no `ready-row-unclaimable` order, and `unclaimableRowOrders` carries the absence handling for `rowBranches`'s reason.
+ *        `nowMs` is the clock `chairmanOrders` windows on (#2989); omitted is `Date.now()`, so only a test passes it.
  * @returns {{session: string, cause: string, subject: string, discriminator: string,
  *            prompt: string, causeKey: string}[]}
  */
 export function decide({ prs, readyRows, promotableRows = [], chairmanBlocked = [], prFiles = [],
   drain = false, required = null, epics = [], answerOwed = [], openRows = [], unarmed = null,
-  claimedComments = [], rowBranches, hostDrift, primaryDrift, closings, trunkRed, baseTip, claimStalls, offBoard, key, repo, callCountSignals, bareAnswerLabels, labJobs, claimRefusals }) {
+  claimedComments = [], rowBranches, hostDrift, primaryDrift, closings, trunkRed, baseTip, claimStalls, offBoard, key, repo, callCountSignals, bareAnswerLabels, labJobs, claimRefusals, nowMs }) {
   // FIRST, BEFORE EVERY OTHER CAUSE (#2356): a red `main` outranks even `answer-owed` -- see `trunkRedOrders`.
   // `answer-owed` says another session is ALREADY STOPPED waiting on them, which outranks any standing question.
   const orders = [...trunkRedOrders(trunkRed), ...primaryStaleOrders(primaryDrift), ...answerOrders(answerOwed)]; // #2781: a stale primary next, every order below is given from its code
@@ -5281,7 +5314,7 @@ export function decide({ prs, readyRows, promotableRows = [], chairmanBlocked = 
   // deliberately NOT withheld by a drain: see `START_CAUSES`.
   orders.push(...hostDriftOrders(hostDrift), ...rowOffBoardOrders(offBoard)); // #2075: beside it; see `rowOffBoardOrders`
 
-  orders.push(...chairmanOrders(chairmanBlocked));
+  orders.push(...chairmanOrders(chairmanBlocked, nowMs));
 
 
   // DRAIN WITHHOLDS, IT DOES NOT STOP. Filtering here rather than at each producer keeps the partition
