@@ -59,6 +59,27 @@ export const KEY_FILENAME_RE =
  */
 export const TEMPLATE_SUFFIX_RE = /\.(example|sample|template|dist)$/i;
 
+/** An `.npmrc` is a credential file by what it SETS, not by its name: most hold only `engine-strict=true`. */
+const NPMRC_NAME_RE = /(^|\/)\.npmrc$/i;
+
+/**
+ * An npm credential key at the start of a line -- `_auth`, `_authToken`, `_password`, bare or scoped to a
+ * registry (`//registry.npmjs.org/:_authToken=`). A commented-out line starts with `#` or `;` and so
+ * does not match, which is right: it sets nothing.
+ */
+export const NPMRC_CREDENTIAL_RE = /^[ \t]*(?:\/\/[^\s=]*:)?_(?:auth|authToken|password)[ \t]*=/im;
+
+/**
+ * Whether `path` is key-shaped FOR THIS CONTENT: every key-shaped name counts, except a credential-free `.npmrc`.
+ * @param {string} content
+ * @param {string} path
+ * @returns {boolean}
+ */
+function isKeyFilename(content, path) {
+  if (!KEY_FILENAME_RE.test(path) || TEMPLATE_SUFFIX_RE.test(path)) return false;
+  return !NPMRC_NAME_RE.test(path) || NPMRC_CREDENTIAL_RE.test(content);
+}
+
 /**
  * Every finding in one blob's text content, at one path. PURE -- given content and a path, no git call,
  * no filesystem, no network -- so this is what `history-secret-scan.test.ts` drives directly.
@@ -72,7 +93,7 @@ export function scanBlob(content, path) {
     const matches = content.match(new RegExp(pattern, "g"));
     if (matches && matches.length > 0) findings.push({ pattern: name, count: matches.length, why, path });
   }
-  if (KEY_FILENAME_RE.test(path) && !TEMPLATE_SUFFIX_RE.test(path)) {
+  if (isKeyFilename(content, path)) {
     findings.push({ pattern: "keyFilename", count: 1,
       why: "filename shaped like a private key or credential file", path });
   }
