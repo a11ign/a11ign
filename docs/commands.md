@@ -50,7 +50,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node packages/agent-org/src/tracker-comment.mjs` — read and edit a tracker comment safely -- the one place, so no edit is improvised again
 - `node packages/agent-org/src/trunk-revert-guard.mjs` — compare main's before/after state on a merge and refuse one that silently deletes prior work
 - `node packages/agent-org/src/trunk-sweep.mjs` — sweep main for a gate failure while GITHUB_TOKEN-authored merges suppress every triggering event
-- `node packages/agent-org/src/update-branch-sweep.mjs` — push every armed, green-or-running PR up to main's new tip after a merge lands
+- `node packages/agent-org/src/update-branch-sweep.mjs` — retired (#3046): nothing runs it any more, and the script is deleted by #2976
 - `node packages/agent-org/src/update-primary.mjs` — the one sanctioned way to move the primary checkout: fetch, detach at origin/main, install if the lockfile moved, rebuild
 - `node packages/agent-org/src/update-tool.mjs` — the one way to move the tool's own checkout: fetch, refuse a dirty tree, detach at origin/main
 - `node packages/agent-org/src/wake.mjs` — wake -- deliver work-gate's orders to the sessions that can take them. The other half of #912.

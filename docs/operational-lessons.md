@@ -1161,8 +1161,8 @@ needs telling. One measured here was 89 hours old.
 board guards instead of lint and typecheck, and never ran the sweep — so it never ran the leak guards, on
 the one kind of diff (`docs/board/summaries/*.md`) made entirely of the prose they scan.
 
-**The git-only refusals stay** and are outside the "three checks" claim by name: the stale-base check,
-`resolve-toward-main`, the 300-deletion warning, the armed-PR lookup and the `A11Y_SKIP_VERIFY` gate. None
+**The git-only refusals stay** and are outside the "three checks" claim by name: `resolve-toward-main`,
+the 300-deletion warning, the armed-PR lookup and the `A11Y_SKIP_VERIFY` gate. None
 is a copy of CI, each costs milliseconds, and each is push SAFETY rather than verification.
 `A11Y_SKIP_VERIFY_REASON="<why>" A11Y_SKIP_VERIFY=1 git push` overrides the checks and prints the reason; a
 bare `=1` is refused. The worker- and Codex-dependent gates stay release-time: a 75-minute check on
@@ -1842,7 +1842,7 @@ evidence, and with what would reopen it.
   every official surface rather than a quoted denial — and #2049's own seven hours agree with it.
 - **It would have stalled 15 of this repository's last 40 merges.** GitHub documents the *Update branch*
   button as a dismissal trigger **by name**, with no carve-out for base-originated updates, and
-  `update-branch-sweep.mjs` runs exactly that on every armed, green pull request after every merge.
+  `update-branch-sweep.mjs` ran exactly that on every armed, green pull request after every merge, until #3046.
   Measured TWICE over the 40 most recently merged pull requests, from
   `gh pr list --state merged --limit 40 --json number,mergedAt,headRefOid,reviews`: **all 40 carried an
   APPROVED review and all 40 were approved AT the head that merged**, so a content push would have cost

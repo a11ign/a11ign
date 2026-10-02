@@ -7,7 +7,7 @@ name: trunk
 # here: a schedule on this file would expose the watchdogs and the recheck to GitHub's 60-day schedule-disable,
 # which the header below explains is the one thing they must never be exposed to. `auto-arm.yml` was NOT
 # collapsed: drafts cannot be armed, so arming on ready_for_review stays an event this push cannot see, and it
-# hosts the update-branch train's three non-push triggers (#1094, #1100, #1103).
+# hosts the non-push triggers of the arming sweep (#1094, #1100, #1103).
 
 # THE MERGE COMMIT THAT LANDS ON `main` HAS NEVER ITSELF BEEN TESTED -- pipeline unit 3, #316. Unit 1
 # (#298) made this real by turning branch protection's `strict` off: `ci.yml`'s `pull_request` trigger

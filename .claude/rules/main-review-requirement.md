@@ -31,6 +31,7 @@
 - **`main` KEEPS stale reviews on BOTH surfaces; the defect is closed by READING `reviewDecision`, not by
   dismissing reviews.** `dismiss_stale_reviews` covers APPROVING reviews only, so it could not have
   cleared the `CHANGES_REQUESTED` that stalled #2049 for seven hours — and *Update branch*, which
-  `update-branch-sweep.mjs` runs after every merge, would have stalled 15 of the last 40 merges.
+  `update-branch-sweep.mjs` ran after every merge until #3046, would have stalled 15 of the last 40
+  merges.
 - **A refusal posted AFTER queue entry does NOT stop the merge (#2206):** post it BEFORE the arming approval.
 - **A grep count in a row body is a reading at a moment: re-run it at YOUR commit.**

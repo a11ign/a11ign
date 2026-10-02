@@ -146,9 +146,9 @@ queue moving every four minutes. Their PR went **fully green on four separate he
 their last sync. They reported it as a race they kept losing and asked for a faster path.
 
 There was no race. The PR was **armed**, so GitHub merges it the moment the required context is green and
-the branch is current — the merge was never theirs to invoke. And `update-branch` was already carrying
-it: the *"two merge commits pushed directly onto my branch"* they attributed to another session was the
-sweep doing their carry while they carried by hand. **Two actors on one branch**, clean only because
+the branch is current — the merge was never theirs to invoke. And the `update-branch` sweep (deleted
+since, #3046) was already carrying it: the *"two merge commits pushed directly onto my branch"* they
+attributed to another session was the sweep doing their carry while they carried by hand. **Two actors on one branch**, clean only because
 their merges were no-ops on top of the sweep's.
 
 So: **push when your content changes, then leave it alone.** The `CLEAN → BEHIND` flip is the train
@@ -163,52 +163,6 @@ the dispatcher's own PRs without saying so in the same message.
 
 **A remedy used before its condition is met is how a remedy stops being believed**, so the third
 green-then-behind is the condition rather than the impatience.
-
-## `update-branch` moves your branch under you — a non-fast-forward is the train, not a violation
-
-The `update-branch` job in `.github/workflows/auto-arm.yml` runs `packages/agent-org/src/update-branch-sweep.mjs` on
-**every push to `main`**, and it pushes to *other people's branches*: every merge leaves every other open
-PR one commit further behind, and something has to close that gap.
-
-> **THIS PARAGRAPH SAID `strict=false` (#277) UNTIL 2026-09-09, AND THE PROTECTION IS NOW STRICT.**
-> Measured: `gh api repos/<owner>/<repo>/branches/main/protection` returns
-> `{"contexts": ["gate"], "strict": true}`. Under `strict=false` the reasoning was that an armed PR
-> merges the instant its own `gate` is green **without** containing what landed since, so the sweep
-> existed to stop PRs drifting. Under `strict=true` GitHub itself refuses the merge until the branch
-> contains `main`'s tip — so the sweep is not preventing drift, it is **the only thing that makes an
-> armed PR mergeable at all**. Same job, and it matters more than it did, not less. The other
-> `strict=false` mentions in this file are stale for the same reason and are corrected where they are
-> load-bearing.
-`queue-stalled.mjs` only ever REPORTS that drift; this job is the half that fixes it.
-
-**So a `git push` to your own branch can be rejected as non-fast-forward while you did nothing wrong.**
-The sequence is: `main` moves, the sweep merges it into your branch and pushes, and meanwhile you were
-doing the identical merge locally. Two independent merge commits, usually with identical trees, and your
-push is refused. Measured 2026-09-08 on #486 — the author reconciled with a merge-of-merges (no
-conflicts) at `fa29ea00`, and by the time they re-verified, the sweep's push had already carried the PR
-to green and it had merged. `main` moves fast enough for this to recur inside one branch's life:
-`agent/commands-doc-478` carries two `Merge origin/main` commits 4m45s apart (`7e9fcc1d` 06:58:18Z,
-`41567103` 07:03:03Z), with different trees, because `main` moved twice while the branch was being
-prepared.
-
-**The recovery is `git pull` and merge, never `git push --force`.** Both trees are real work: the
-sweep's push is what keeps your PR mergeable under strict protection, and force-pushing over it silently
-discards a merge the pipeline made on your behalf, putting the PR back behind `main` with a head no
-check run has seen. `--force-with-lease` is not the fix either, but it is not the hazard — it REFUSES,
-because the remote moved, which is the same answer a plain `push` already gave you. Merge the two, push, and let the sweep and your own
-merge coexist — a duplicated merge of `main` with an identical tree costs a commit in the graph and
-nothing else.
-
-Two consequences worth knowing before they surprise you:
-
-- **The job is `continue-on-error: true` by category, not by accident** — it is a push-to-`main` job
-  acting on OTHER open PRs after a merge that already happened, so it can never gate anything, and a red
-  run of it must never read as a gate failure. It is allowlisted in `push-trigger-allowlist.test.ts` as
-  `TRUNK_FOLLOWUP_ALLOWLIST` for that reason (ceo's ruling, 2026-09-08).
-- **With no `A11IGN_BOT_TOKEN` the job SKIPS outright and does not fall back to `GITHUB_TOKEN`.** A push
-  made with `GITHUB_TOKEN` fires no `pull_request: synchronize`, so an updated branch would get a new head
-  with no check run ever triggered for it and its required checks waiting forever — worse than leaving it
-  visibly behind. If PRs stop being pushed up, check the secret before suspecting the sweep's decision.
 
 ## The `acceptance` job is SHALLOW and its token reads CONTENTS ONLY — name a command it can actually run
 
@@ -645,13 +599,14 @@ instruction its author held. It merged with every check green and every rule fol
 | **the queue** | a ruling that changes an open PR's required shape **takes `pr:hold` in the same act** — `merge-guard` already refuses a held PR, so the record lands on the object | #645 |
 
 The citation is the half that makes the first checkable rather than remembered. The third exists because
-the queue **cannot read at all**: `auto-arm` arms a non-draft, green, unheld PR and `update-branch`
-carries it, and neither looks at the row the PR declares.
+the queue **cannot read at all**: `auto-arm` arms a non-draft, green, unheld PR, and it does not look at
+the row the PR declares.
 
-**The queue has two members, and both write.** `auto-arm` merges and `update-branch` pushes to a PR's own
-branch, so "the queue reads a green PR and not a row's comments" is true of the arming and of the
-carrying. That second half has its own benign collision: a hand-carry and the sweep can act on one branch
-at once, with no shared view of who is mid-flight. Measured 2026-09-09, the push was refused —
+**The queue used to have two members, and both wrote; it has one.** `auto-arm` merges, and until #3046 the
+`update-branch` sweep also pushed to a PR's own branch, so "the queue reads a green PR and not a row's
+comments" was true of the arming and of the carrying. That second half had its own benign collision: a
+hand-carry and the sweep could act on one branch at once, with no shared view of who was mid-flight.
+Measured 2026-09-09, the push was refused —
 
 ```
 cannot lock ref ... is at c9d164ba but expected d73d0baf
