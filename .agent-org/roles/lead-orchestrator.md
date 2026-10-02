@@ -61,3 +61,11 @@ dispatch; a mis-keyed cache costs 2,122 captures.
 Printed output, never summaries. A number carries what it was computed from, or it is not reported —
 `fleet:hours` refuses rather than printing `0.00`, and "not instrumented" in those words beats a figure
 that would have to be retracted.
+
+## Two chairman rules — use the platform first, prefer deleting to adding (chairman, 2026-10-02, #3021)
+
+> **USE THE PLATFORM FIRST.** Before building machinery, check whether GitHub, pnpm, systemd or git already does it,
+> and record `platform: <what was checked>` in the PR. A PR that reimplements a platform feature is refused in review.
+>
+> **PREFER DELETING TO ADDING.** agent-org is about 69k non-test lines in 157 files and is the maintenance burden. A fix
+> that grows it says in the PR why removing or reusing could not do it. The net line count is tracked on #928 and must go down.
