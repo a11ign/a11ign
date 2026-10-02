@@ -12,20 +12,20 @@ directory it works in. [What moved →](docs/operational-lessons.md#the-nested-c
 | [`packages/lab/CLAUDE.md`](packages/lab/CLAUDE.md) | the corpus: `gate:stability`, and who may report a gate reading `runs/` |
 | [`.github/CLAUDE.md`](.github/CLAUDE.md) | verifying changes, the hooks, sharing this checkout |
 
-This file is for working ON the repo: **rules only, each linking to its incident in `docs/`** (#458 cut
-it from 228k chars). These came first and are not duplicated here:
+This file is for working ON the repo: **rules only, each linking to its incident in `docs/`**. These came first and are not duplicated here:
 
 | | |
 |---|---|
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | the 60-second orientation, and the question that decides everything: **does your change need a Windows worker?** |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | the question that decides everything: **does your change need a Windows worker?** |
 | [`SECURITY.md`](SECURITY.md) | what somebody must know before running it — `probeForms` presses buttons, the worker has no authentication |
-| [`docs/README.md`](docs/README.md) | every guide and runbook, with [`docs/adr/README.md`](docs/adr/README.md) for the decision records |
+| [`docs/README.md`](docs/README.md) | every guide and runbook, with [`docs/adr/`](docs/adr/README.md) for decisions |
+| [`a11ign/agent-org`](https://github.com/a11ign/agent-org) | the agent org's tool: changes are PRs THERE; its rows stay tracked here |
 | [`docs/backlog.md`](docs/backlog.md) | **The RECORD of what was found and what it cost**; [GitHub Issues](https://github.com/a11ign/a11ign/issues) answers "what is open". [Why both →](docs/operational-lessons.md#the-record-files-beside-github-issues) |
 | [`docs/known-gaps.md`](docs/known-gaps.md) | **what this project does NOT do, or does not yet know.** Read it before claiming a thing is finished: **"all gates pass" and "everything is validated" are different claims** |
 ## What this is
 
 a11y-witness drives a **real screen reader (NVDA)** through real navigation, **alongside** axe-core (the
-rule/visual layer) rather than instead of it. See `README.md`, `PLAN.md`, `docs/adr/`.
+rule/visual layer) rather than instead of it. See `README.md`, `PLAN.md`.
 
 **A finding is either ASSERTED or REFERRED, and knowing which is decided by which layer owns the subtype.**
 Measured 2026-09-24 on the calibration set at protocol 21: **0 criteria asserted wrongly, 395 referred** — a reading at
@@ -49,7 +49,7 @@ The applicable subset of *Clean Code* (Martin), in two halves, enforced differen
 - Small functions doing one thing at one level of abstraction; the top-level reads as a top-down narrative (the Stepdown Rule). Gated by `max-lines-per-function` (70), `complexity` (15), `max-depth` (3).
 - Few arguments, and **no boolean flag arguments** — bundle cohesive arguments into an object instead. Gated by `max-params` (4).
 - **Never swallow an error** with an empty `catch {}` — record a diagnostic or rethrow with `{ cause }`. Gated by `no-empty`.
-- `no-magic-numbers` is a non-blocking **warning**: name a number that is not self-explanatory (timeouts, budgets, limits); status codes and slice lengths are fine inline.
+- `no-magic-numbers` is a non-blocking **warning**: name a number that is not self-explanatory (timeouts, budgets, limits).
 
 **Judgment — not machine-checkable, so honor these by hand:**
 - Does the function *really* do one thing? A helper whose name restates its code is not progress.
