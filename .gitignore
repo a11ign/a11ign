@@ -7,6 +7,13 @@
 # nothing to weigh up. `packages/lab/src/packaging/gitignore-covers-symlinks.test.ts` drives every entry
 # below through a real `git check-ignore`, as a symlink and as a directory, and fails on a new `name/`.
 node_modules
+# THE OTHER MANAGER'S LOCKFILES (#2897, row 10 of 10 of "Finish the move to pnpm"). This repository is pnpm's, so
+# `pnpm-lock.yaml` is the only lock and these two are never wanted. An untracked `package-lock.json` sat in the primary
+# checkout after the move because someone ran `npm install`; `scripts/refuse-other-installers.mjs` (the root `preinstall`)
+# now refuses that, and these lines are the second half: a stray one is ignored rather than left for a person to decide
+# about, and `one-package-manager.test.ts` fails if either is ever TRACKED, which an ignore alone does not prevent.
+package-lock.json
+npm-shrinkwrap.json
 dist
 .env
 .venv
