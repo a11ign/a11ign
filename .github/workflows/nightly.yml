@@ -231,7 +231,7 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
       # The guard itself imports nothing built, but the step below reads `RSTEST_CONFIG` out of
-      # `assert-glob-not-empty.mjs`, which imports `@a11ign/worker-fleet/cli-flags` -- a package export
+      # `assert-glob-not-empty.mjs`, which imports `@a11ign/screenreader-fleet/cli-flags` -- a package export
       # resolving to `dist/`, which `--ignore-scripts` does not produce and which this repo does not track.
       # Every other nightly job that runs tests (`coverage`, `nightly-only`, `doc-report`) builds for the
       # same reason.

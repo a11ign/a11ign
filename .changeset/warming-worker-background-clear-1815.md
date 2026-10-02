@@ -1,5 +1,5 @@
 ---
-"@a11ign/nvda-worker": patch
+"@a11ign/screenreader-worker": patch
 ---
 
 **A worker held by a stray foreground dialog (`ShellExperienceHost`, a notification toast) now clears itself in the background instead of needing a console login or a reboot.** Before, the self-heal added by #1733 only ran at the start of a capture, and a held worker reports `not ready` -- so a capture, and the self-heal it carries, was never dispatched to it. Three real incidents (`a11y-worker-4`, `a11y-worker-10`, `a11y-worker-3`) each ended only in a manual console clear or a reboot.

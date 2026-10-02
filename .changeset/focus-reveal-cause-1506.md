@@ -1,5 +1,5 @@
 ---
-"@a11ign/nvda-worker": patch
+"@a11ign/screenreader-worker": patch
 ---
 
 **The focus-reveal probe (1.4.13) now separates a reveal caused by focus from content that arrived on its own.**

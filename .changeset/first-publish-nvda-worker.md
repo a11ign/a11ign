@@ -1,5 +1,5 @@
 ---
-"@a11ign/nvda-worker": minor
+"@a11ign/screenreader-worker": minor
 ---
 
 The first published version of `@a11ign/nvda-worker`. Everything below landed before it: the rename first, then oldest first.

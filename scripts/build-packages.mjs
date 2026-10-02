@@ -18,7 +18,7 @@ import { join } from "node:path";
 
 import { allPackages } from "../packages/guards/src/isolation-gate.mjs";
 import { pnpmCliInvocation } from "./npm-cli-executable.mjs";
-// RELATIVE, NOT `@a11ign/worker-fleet/cli-flags` -- same rule `ci-changed.mjs`'s header already
+// RELATIVE, NOT `@a11ign/screenreader-fleet/cli-flags` -- same rule `ci-changed.mjs`'s header already
 // states, and `isolation-gate.mjs` (imported above) already follows: this script IS the thing that
 // builds every package's `dist/`, so it cannot depend on a build having already happened. The package
 // specifier resolves to `dist/cli-flags.mjs`, which does not exist on a genuinely fresh checkout --

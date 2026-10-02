@@ -30,7 +30,7 @@ jobs:
       # A BUILD IS STILL NEEDED, though the first version of this job shipped without one on the strength
       # of a grep that checked only these test files' own top-level imports: `board-liveness.test.ts`,
       # `board-markdown.test.ts`, `board-style.test.ts` and `board-summary-origin.test.ts` all drive a real
-      # `scripts/board-*.mjs` script, and those scripts import `@a11ign/worker-fleet/cli-flags` -- exactly
+      # `scripts/board-*.mjs` script, and those scripts import `@a11ign/screenreader-fleet/cli-flags` -- exactly
       # the stale-dist trap CLAUDE.md names for every other job in this repo's CI, reached one hop further
       # than the grep looked. Caught by actually RUNNING the job's real command with no build present, not
       # by reading the imports.

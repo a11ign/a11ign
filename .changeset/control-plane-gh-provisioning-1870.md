@@ -1,5 +1,5 @@
 ---
-"@a11ign/worker-fleet": patch
+"@a11ign/screenreader-fleet": patch
 ---
 
 `bootstrap-control-plane.sh` now provisions `gh` (GitHub CLI) on the control role, idempotently,
