@@ -2,7 +2,7 @@
 // module: the pull-request orders -- what `work-gate.mjs` says to a session about a PR's own state (#2542)
 //
 // MOVED OUT OF `work-gate.mjs`, NOT REWRITTEN (#2542, the first split of #928's lever 2a): `draftOrder`,
-// `failingChecksOrder`, `settledVerdictOrder`, `requiredWhenRed`, `redOnlyFromHoldOf` and the order builders
+// `failingChecksOrder`, `settledVerdictOrder`, `requiredWhenRed`, `redOnlyFromAHold` and the order builders
 // for `pr-green-unarmed`, `pr-review-blocked`, `pr-merge-conflict` and `awaiting-evidence-stale`, with the
 // helpers only they use. Sixty-two of 417 merges edited that one file and B4 serialised them; a fix to one
 // of these orders now names THIS file in its Region.
@@ -20,7 +20,8 @@
 import { newestPerName } from "../newest-check-run.mjs";
 import { reviewerSeat, subjectMention, subjectRef } from "../review-attribution.mjs";
 import { NO_VERDICT } from "../merge-guard/checks-rule.mjs";
-import { armabilityOf, holdersOf, HOLD_PREFIX } from "../pr-hold-state.mjs";
+import { armabilityOf } from "../pr-hold-state.mjs";
+import { isHeldRed } from "../red-pr.mjs";
 import { REPO } from "../project-identity.mjs";
 // #2619 (child 3d of #69): the `session:` prefix and the `blocked` label, moved to the project's
 // declared vocabulary. (The `"ready"` action `kind` a few lines below is `gh pr ready`'s draft-status
@@ -543,50 +544,30 @@ function refusedPrompt(b) {
  */
 export const HOLD_RED_JOBS = ["deliberateRefusals", "gate"];
 
-/** The session that places a hold on a PR it does not own: before #2882 an unlabelled PR was addressed to it. */
-const HOLDING_SESSION = "product-manager";
-
 /**
- * PURE. Is this pull request red ONLY because its addressee holds it?
+ * PURE. Is this pull request red ONLY because somebody holds it? A HOLD IS AN ANSWER (#2400), and it was read as an unanswered question.
+ * #2376 carried `hold:product-manager` on purpose; the hold made `deliberateRefusals` red and `gate` with it, and the order asking
+ * `product-manager` to fix the cause went to the very session that had placed the hold 35 times, each answered "nothing to fix".
+ * `MAX_DELIVERIES` then labelled the PR `needs:chairman`, and clearing the label did not hold: the order was still emitted, so the count
+ * stayed at the cap and the breaker re-added it (`escalateStuck` reads only what `deliver` sees, so an order never emitted can never
+ * escalate -- which is why the fix is here and not in `wake.mjs`).
  *
- * A HOLD IS AN ANSWER (#2400), and it was read as an unanswered question. #2376 carried
- * `hold:product-manager` on purpose until a Windows run was recorded; the hold made `deliberateRefusals` red and
- * `gate` with it, and the order that asks `product-manager` to fix the cause was delivered 35 times to the very
- * session that had placed the hold and answered "nothing to fix" each time. `MAX_DELIVERIES` then labelled the PR
- * `needs:chairman`, and clearing the label did not hold: the order was still emitted, so the count stayed at the
- * cap and the breaker re-added it (`escalateStuck` reads only what `deliver` sees, so an order never emitted can
- * never escalate -- which is why the fix is here and not in `wake.mjs`).
+ * WHO PLACED THE HOLD DOES NOT MATTER (#2993). #2400's clause 1 ("a hold by anyone else is not an answer from the session being asked") was
+ * written for a hold the ADDRESSEE placed. For a hold the addressee is the SUBJECT of it was wrong: the order asks "fix your build", nothing in
+ * the build is broken, and #2990's owner was asked five times at one head, each answered "no fix needed". So the question is `red-pr.mjs`'s
+ * `isHeldRed`, the decider `org-health` already asks (#2956): at least one red check, every one of them the hold's own two jobs, and the PR
+ * carries ANY `hold:*`. THE EXEMPTION ENDS WITH EITHER KEY: remove the hold or let a third job go red (a real `ts / run` failure under a
+ * foreign hold still reaches its owner) and the order is emitted again, and the run of deliveries it earned while suppressed starts from
+ * nothing (`endedRuns` writes `RESET` for the key that stopped being emitted).
  *
- * TWO KEYS, AND BOTH MUST HOLD. (1) Every settled-red job on the head is one of `HOLD_RED_JOBS`. It reads
- * `head`, not the blocking set: with `gate` the only required check the blocking set is `[gate]` whatever else is
- * red, so a real `ts / run` failure would have read as the hold's own. (2) The hold is the ADDRESSEE's own
- * (`hold:<session>`): a hold by somebody else is not an answer from the session being asked, so the order still
- * goes. #2941: FOR A PR NOBODY OWNS (`ownerOfPr`'s `ceo` rung) THERE IS NO ADDRESSEE WITH A STAKE, so a hold by ANY session is
- * the answer -- the hold is the only statement of who is dealing with it, and #2376's `hold:product-manager` must stay quiet
- * now that its order goes to `ceo` and not to the session that placed the hold. THE EXEMPTION ENDS WITH EITHER KEY: remove the hold or let a third job go red and the order is emitted
- * again, and the run of deliveries it earned while suppressed starts from nothing (`endedRuns` writes `RESET` for
- * the key that stopped being emitted).
+ * WHAT IT CANNOT SEE: `deliberateRefusals` also carries #549's `Closes` comparison, and a rollup names the JOB, not the step. A held PR whose
+ * body ALSO declares the wrong `Closes` is red for two reasons and silent about one of them until the hold is released, when the refusal
+ * reappears with nothing else red.
  *
- * A ROW-ROUTED ORDER ACCEPTS THE FALLBACK'S HOLD TOO (#2935). #2882 addressed an unlabelled red PR to the session
- * holding its row, so `hold:product-manager` -- the hold of the session the order went to BEFORE that change -- stopped
- * matching: five identical orders in an hour for #2883, each answered "nothing to fix: held". When the addressee came
- * from a row, a branch or a stamp and not from a `session:` label, the PR names nobody, and `product-manager`'s hold is an
- * answer as well. A labelled PR keeps #2400's rule: a hold by somebody else still goes.
- *
- * WHAT IT CANNOT SEE: `deliberateRefusals` also carries #549's `Closes` comparison, and a rollup names the JOB, not
- * the step. A held PR whose body ALSO declares the wrong `Closes` is red for two reasons and silent about one of
- * them until the hold is released, when the refusal reappears with nothing else red.
- *
- * @param {any} pr @param {any[]} onHead every check on the head, narrowed
- * @param {ReturnType<typeof ownerOfPr>} addressee who the order would go to, and on which rung
+ * @param {any} pr
  */
-function redOnlyFromHoldOf(pr, onHead, { session, source }) {
-  const holders = holdersOf(labelsOf(pr));
-  const answerers = source === "label" ? [session] : [session, HOLDING_SESSION];
-  const answered = source === "ceo" ? holders.length > 0 : answerers.some((a) => holders.includes(`${HOLD_PREFIX}${a}`));
-  if (!answered) return false;
-  const red = onHead.filter((c) => checksSettledGreen([c]) === false);
-  return red.length > 0 && red.every((c) => HOLD_RED_JOBS.includes(String(c?.name ?? c?.context)));
+function redOnlyFromAHold(pr) {
+  return isHeldRed(pr);
 }
 
 const MS_PER_MINUTE = 60_000;
@@ -693,9 +674,8 @@ function failingChecksOrder(pr, required = null, baseTip = null) {
   if (!head) return null;
   const head8 = head.slice(0, 8);
   // `ownerOfPr` IS TOTAL (#2941): an unlabelled red PR is still a stalled PR, and its last answer is a session that can act.
-  const owner = ownerOfPr(pr);
-  const { session } = owner;
-  if (redOnlyFromHoldOf(pr, onHead, owner)) return null;
+  const { session } = ownerOfPr(pr);
+  if (redOnlyFromAHold(pr)) return null;
   return {
     session,
     cause: "pr-checks-failing",
