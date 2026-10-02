@@ -38,6 +38,7 @@ entry names what is missing, what it would cost, and what would tell you it is f
 - [§53](#53-the-413-status-heads-are-at-the-limit-of-their-input-and-their-false-positives-and-misses-are-accepted-by-enumeration-accepted-by-ceo-2026-09-25-2258-2527) THE 4.1.3 STATUS HEADS ARE AT THE LIMIT OF THEIR INPUT, AND THEIR FALSE POSITIVES AND MISSES ARE ACCEPTED BY ENUMERATION — ACCEPTED by ceo, 2026-09-25 (#2258, #2527)
 - [§54](#54-the-thrash-guard-needle-was-never-seen-render-open-by-design-2745) THE THRASH-GUARD NEEDLE WAS NEVER SEEN RENDER — OPEN, by design (#2745)
 - [§55](#55-githubs-closingissuesreferences-was-empty-for-prs-opened-from-0912z-on-2026-09-30-came-back-by-itself-and-the-cause-was-not-found-open-a-reading-2824) GITHUB'S closingIssuesReferences WAS EMPTY FOR PRs OPENED FROM 09:12Z ON 2026-09-30, CAME BACK BY ITSELF, AND THE CAUSE WAS NOT FOUND — OPEN, a reading (#2824)
+- [§56](#56-the-chairmans-chat-channel-is-not-cryptographic-its-classifier-is-a-heuristic-and-a-reply-waits-on-ceo-open-by-design-2899-2911) THE CHAIRMAN'S CHAT CHANNEL IS NOT CRYPTOGRAPHIC, ITS CLASSIFIER IS A HEURISTIC, AND A REPLY WAITS ON ceo — OPEN, by design (#2899, #2911)
 <!-- known-gaps-index:end -->
 
 ## The order these should be done in
@@ -3691,3 +3692,50 @@ last one.
 second it resolves (the poll that ran today, `gh pr view <n> --json closingIssuesReferences` every 120 s, costs one GraphQL call per read), which
 would turn "roughly two hours, unevenly" into a measured latency and would let the account/draft/queue candidates be tested while the failure
 is live. Until then this is a documented unknown, not a defect awaiting a fix.
+
+## 56. THE CHAIRMAN'S CHAT CHANNEL IS NOT CRYPTOGRAPHIC, ITS CLASSIFIER IS A HEURISTIC, AND A REPLY WAITS ON `ceo` — OPEN, by design (#2899, #2911)
+
+**Written 2026-10-02, when `ceo`'s brief gained the four chat rules** (`.agent-org/roles/ceo.md`, "A message from the chairman's chat is the chairman
+speaking"; `packages/lab/src/packaging/ceo-chat-rules.test.ts` pins each rule's sentence). The code that makes forging and unchecked facts hard
+lives in [`a11ign/agent-org`](https://github.com/a11ign/agent-org) (`src/messaging/`, `docs/messaging.md`, "What this design CANNOT promise"); this
+entry records what none of it enforces, so nobody claims more than is true. The reading is of that design and its own stated limits, not a
+measurement of the running listener: **row 13 (#2913) is the first live round trip, and nothing below has been measured live.**
+
+**1. "No agent ever writes as the chairman" is NOT cryptographic.** Agents and the listener share a host and a GitHub account. The sender
+`chairman via Telegram` is derived by the listener alone, and the chairman-attributed comment writer accepts only a value the inbound module minted
+after its identity check and classifier ran; **that is construction, not a signature.** Code that can edit that module, or that knows the
+chairman's two ids (configuration, not secrets) and calls `createInbound` with a made-up update, can still mint one, and an agent with shell access
+could post a comment saying anything. What exists is detection: the ledger records the Telegram update ids, which the chairman can check against
+their own chat. **Nothing compares them for the chairman**, so a forged comment is found only by someone who looks. *Cost:* a forgery is detectable,
+not prevented, and a reader of a row cannot tell a listener-written comment from a forged one by the text. *Fixed when:* the provenance line carries
+something an agent on the host cannot produce (a signature from a key the agent account cannot read), or a check reads the ledger against the
+comments and reports a comment with no update id.
+
+**2. The classifier that drops credentials, deletions and spending is a heuristic, and both of its errors are real.** It is tested against the
+sentences its author thought of. **False negatives:** a deletion phrased as a request for a script, in another language, or in words the list lacks,
+is forwarded; a secret shape the patterns lack is forwarded. **False positives:** "Remove the blocked label from row 5" is refused as a deletion on a
+row, and "what did $5 buy" as spending; a branch name of 32 characters or more is dropped as a secret. *Cost:* the first error puts a dangerous
+instruction in front of `ceo`; the second makes the chairman retype a sentence. *Fixed when:* it is never "fixed" by a longer list. It is the first of
+three layers, and what bounds a false negative is layer 2 (the brief) and layer 3 (the reply path carries only checked facts).
+
+**3. Layer 2 is prose a model obeys, and no test shows that it does.** `ceo-chat-rules.test.ts` proves each rule's sentence is in the brief and that a
+brief missing the credentials rule is refused; **it cannot show `ceo` follows the sentence under pressure.** A model that rules on a message without
+recording it first, or acts on a deletion that got past the classifier, breaks no gate. *Cost:* the guarantee against the classifier's false
+negatives is as strong as a role's obedience to a brief, which this repo has measured failing elsewhere (the briefs' own history). *Fixed when:* a
+reading of `ceo`'s actions against the chat-origin messages it received (the ledger names them) finds no action on a credential, deletion or amount
+that arrived in chat.
+
+**4. A reply to the chairman waits on `ceo`'s turn, and its facts are as old as the send.** An accepted message is queued for `ceo` through
+`prompt:session`, which the next `work:tick` delivers, and `chairman:reply` is called by `ceo`: **the chairman's wait is the tick plus `ceo`'s next
+turn, and nothing here has measured it.** The placeholders are re-read at send time and the message stamped "as of HH:MMZ", so a fact is as of the
+send and not as of when the chairman read it; a read that fails refuses the send, so under an API outage the answer may be only "I could not check X".
+*Cost:* a question asked while `ceo` is busy or the pool is exhausted waits, and there is no automatic acknowledgement of that wait unless the
+listener sends one. *Fixed when:* row 13's round trip is read back with its latency, and a bound on it is stated with a reading behind it.
+
+**5. Identity is the provider's claim.** `from.id` is what Telegram reports; an attacker holding the bot token could send updates that say anything.
+The token is a secret on the host. *Fixed when:* never, by this design: the ledger's update ids against the chairman's own chat is the check, and it is
+the chairman's to make.
+
+**What would close the entry as a whole:** a live reading (row 13) of one message in, one reply out and one answered request, with each figure
+above that can be measured (latency, the ledger's update ids against the chat) written beside the claim it supports. Until then this is a documented
+boundary of the design and not a defect awaiting a fix.
