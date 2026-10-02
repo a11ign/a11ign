@@ -5,6 +5,8 @@
   "home": "/home/agent",
   "binDir": "/home/agent/.local/bin",
   "primary": "a11ign",
+  "_tool": "Where the TOOL runs from (ADR 0040, decision 3; cut-over 3 of 6, #2974): the checkout of a11ign/agent-org, beside the projects it serves and never inside one. Set on 2026-10-02 by the cut, NO rollback copy. The work-tick unit then runs `update-tool` first, so the tool is live within two minutes of a merge to agent-org's main.",
+  "tool": "/home/agent/repos/agent-org",
   "projects": [
     { "id": "a11ign", "checkout": "/home/agent/repos/a11y-witness" }
   ],
