@@ -355,6 +355,11 @@ const DOCUMENTED: Record<string, string> = {
     + "inventory code); 1 a shutdown held back because the checkout differs from main, or any worker's "
     + "wake proof is lapsing or lapsed (#3309); 0 otherwise regardless of what any worker was decided — "
     + "the decision itself is the output, never a pass/fail verdict",
+  "packages/control/src/post-qualification-status.mjs":
+    "0 the status was POSTED; 1 refused (bad flag or malformed sha) or GitHub did not accept the post; 3 NOT "
+    + "POSTED because the token file is absent -- 'not yet', never a success and never a silent skip. A "
+    + "poster, not a gate: the verdict it posts is `qualificationStatus`'s, and a missing or unreadable one "
+    + "is posted as `failure` rather than exiting (#3289)",
   "packages/worker-fleet/src/guest-run.mjs":
     "2 usage error; 1 via a top-level catch for ANY thrown error, including the polling-timeout path whose "
     + "own message reads 'the script may still be running' — a confirmed 'gave up observing' instance "
