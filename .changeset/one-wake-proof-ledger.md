@@ -1,0 +1,5 @@
+---
+"@a11ign/control": patch
+---
+
+**The wake-proof ledger has one address, the control plane's, so a proof earned from any checkout is the one auto-off reads (#3269).** `DEFAULT_PROOF_PATH` was `runs/fleet-wake-proof.json` relative to the cwd, so `fleet:wake` run from the agents host, a laptop or a `role-*` tree wrote a ledger no timer read, and the box stayed on with no error (#3255: worker 15 `woken`, auto-off still `keep wake-unproven`). It is now `/root/a11y-witness/runs/fleet-wake-proof.json`, built on `CONTROL_PLANE_CHECKOUT_PATH`, and `fleet-wake.mjs` and `fleet-auto-off.mjs` both reach it through `sshToControlPlane`. The write is one remote step under `flock` that applies a delta (who proved, who failed) to the ledger it finds there, so two wakes finishing together leave both proofs. A transport that fails leaves the worker unproven and says so through `log`; the wake's own result is unchanged. `fleet:auto-off` now prints which ledger it read. The remote reader needs the control plane's address on the machine that runs it (`A11Y_CONTROL_HOST` or `/etc/a11ign/control-host`); without it the ledger reads empty and the timer keeps every box on, loudly.

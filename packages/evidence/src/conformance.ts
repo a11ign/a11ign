@@ -679,18 +679,39 @@ export function sweepOutcomes(diagnostics: readonly unknown[] = []): SweepOutcom
   return out;
 }
 
+const NO_ALTERNATE_VERSION = "A conforming alternate version, if this page has one, is not detected.";
+
+/**
+ * `assessedCriteria` is the screen-reader layer's REACH (what it and the scorer can return a finding for), not a
+ * tally of this run, and the pull-request comment counts something else: every criterion any layer covered. Run
+ * 37134253796 printed "Assessed N of 55 ... NOT assessed" for the screen-reader count beside "30 referred, 25 not covered" (W40, #3296);
+ * the other ten referred criteria were axe-core's. This function never sees the rule layer's per-criterion
+ * verdicts, so it states which count it is and points at `outcomes`, which does, instead of guessing a total.
+ */
 function conformanceLevel(input: ConformanceScopeInput): ConformanceRequirement {
   const assessed = new Set(input.assessedCriteria);
-  const missing = WCAG_22_AA.filter((c) => !assessed.has(c.num));
+  const total = WCAG_22_AA.length;
+  const outside = total - WCAG_22_AA.filter((c) => assessed.has(c.num)).length;
+  // Deliberately blunt. A report that names a level is the single most damaging thing this tool could
+  // do, because "no findings" plus a level reads as certification.
+  const noLevel = "No conformance level is claimed or established.";
+  if (!input.ruleLayerRan) {
+    return {
+      number: 1,
+      name: "Conformance Level",
+      establishes: `Assessed ${assessed.size} of ${total} WCAG 2.2 A/AA success criteria.`,
+      limitation: `${noLevel} ${outside} criteria were NOT assessed and are unchecked, not clean. ${NO_ALTERNATE_VERSION}`,
+    };
+  }
   return {
     number: 1,
     name: "Conformance Level",
-    establishes: `Assessed ${assessed.size} of ${WCAG_22_AA.length} WCAG 2.2 A/AA success criteria.`,
-    // Deliberately blunt. A report that names a level is the single most damaging thing this tool could
-    // do, because "no findings" plus a level reads as certification.
-    limitation: `No conformance level is claimed or established. ${missing.length} criteria were NOT `
-      + "assessed and are unchecked, not clean. A conforming alternate version, if this page has one, "
-      + "is not detected.",
+    establishes: `The screen-reader layer and scorer can return a finding for ${assessed.size} of ${total} WCAG 2.2 `
+      + "A/AA success criteria; that is their reach, not a count of what this run examined. The rule layer "
+      + "(axe-core) ran and covers further criteria, so the per-criterion outcomes give the run's own split.",
+    limitation: `${noLevel} ${outside} criteria are outside the screen-reader layer's reach: those the rule layer `
+      + "covered are not shown to fail, and any neither layer covered are unchecked, not clean. "
+      + NO_ALTERNATE_VERSION,
   };
 }
 

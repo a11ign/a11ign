@@ -242,6 +242,25 @@ test("an empty findings list says so rather than rendering an empty table", () =
   assert.match(renderSummary(result()), /No lived-experience findings/);
 });
 
+test("an ABSTAINED verdict does not render the clean-page headline (2026-W40, run 37134253796)", () => {
+  // gov.uk: nearest training similarity 0.6476 against a 0.6557 floor, zero findings, `taskCompletable` true. The summary
+  // sentence said NOT scored, and the bold line under it said "No lived-experience findings".
+  const abstained = {
+    taskCompletable: true, confidence: 0, findings: [], abstained: true,
+    summary: "This page is unlike anything the trained scorer was validated on, so it was NOT scored. These criteria are unchecked, not clean.",
+  };
+  for (const isTaskClaim of [false, true]) {
+    const out = renderSummary(result({ verdict: abstained }), { isTaskClaim });
+    assert.match(out, /\*\*Not scored: no lived-experience verdict for this page\.\*\*/);
+    assert.match(out, /nothing was assessed, not that nothing was found/);
+    assert.doesNotMatch(out, /No lived-experience findings/, "the clean-page headline must not appear");
+    assert.doesNotMatch(out, /No blocking findings:\*\* none/, "nor a blocker count of none");
+    assert.doesNotMatch(out, /\*\*Yes\b|\*\* Yes/, "nor a task answer built from a constant");
+  }
+  // The positive control: the same empty list WITHOUT abstention is still the real clean read.
+  assert.match(renderSummary(result({ verdict: { ...abstained, abstained: false } })), /No lived-experience findings/);
+});
+
 test("an UNVERIFIED capture reports no findings at all", () => {
   // On gov.uk the capture read Edge's image-magnifier overlay ("Image Magnify, document"), the retry fired
   // three times and warned — and the run still reported a 4.1.2 finding about the browser's own Zoom In and
@@ -404,6 +423,33 @@ test("#1387: rehearsal 3's real result leads its summary AND its log with the tw
   }
   const [first] = logLines(rehearsal3, "never");
   assert.match(first, /more than one document/i, "the log is what a reader sees without opening the summary");
+});
+
+/**
+ * #3293, weekly review W40: run 37134253796 on `https://www.gov.uk/`. The transcript is the home page, but the default
+ * `probe-forms` submitted the search form (`navigatedOnSubmit` to `/search/all`) and the one title mark was read after
+ * it ("Search - GOV dot UK"), so every component had a single value and the sentence above stayed silent over
+ * evidence from two pages. The capture below has that run's shape; the sentence comes from the real producer.
+ */
+const govUkRun = {
+  diagnostics: [
+    { event: "domCensus", targetUrl: "https://www.gov.uk/", targetMatch: "matched", formField: 4 },
+    { event: "titleSource", title: "Search - GOV dot UK", source: "spoken" },
+  ],
+  interaction: { navigatedOnSubmit: {
+    checked: true, navigated: true, from: "https://www.gov.uk/search/all?keywords=", to: "https://www.gov.uk/search/all?" } },
+};
+
+test("#3293: a run whose probe submitted the search form leads its summary AND its log with the two documents", () => {
+  const conformance = conformanceScope({
+    assessedCriteria: [], screenReader: "NVDA", ruleLayerRan: true, documentIdentity: documentIdentity(govUkRun as never),
+  });
+  const sentence = producerSentence(conformance);
+  assert.ok(sentence, "the positive control: the producer writes the sentence for this run's shape");
+  assert.match(sentence, /https:\/\/www\.gov\.uk\/search\/all/, "and names the page the submit went to");
+  const gov = result({ conformance });
+  assert.ok(renderSummary(gov).includes(sentence), "the comment carries it");
+  assert.match(logLines(gov, "never")[0], /more than one document/i, "and so does the log");
 });
 
 /**

@@ -26,15 +26,13 @@ jobs:
         with:
           url: https://example.com/contact
           task: Send an enquiry
-      # Keep the evidence: the rendered report and the full result, transcript included. Guarded on the
-      # output existing, so a run that failed does not also fail the upload.
+      # Keep the evidence: the full result, transcript included. Guarded on the output existing, so a run
+      # that failed does not also fail the upload. v0.1.0 has no `summary-md` output (see the Outputs table).
       - uses: actions/upload-artifact@v4
         if: always() && steps.a11ign.outputs.result-json != ''
         with:
           name: a11ign-result
-          path: |
-            ${{ steps.a11ign.outputs.result-json }}
-            ${{ steps.a11ign.outputs.summary-md }}
+          path: ${{ steps.a11ign.outputs.result-json }}
           if-no-files-found: warn
 ```
 
@@ -103,7 +101,7 @@ new ignore rule with a negation under it.
 so a busy PR gets one comment that changes rather than one per push. The comment step runs `always()`, so
 the report still arrives when the check is failing — which is precisely when someone wants to read it.
 
-**Not on a pull request, no comment.** A run started by hand or by a push has nothing to comment on: the log's last line is the count (`a11ign: N finding(s)`), with a line before it for anything that bounds that count (an examination that ended early, a capture spanning more than one document, criteria resting on an examination known to be partial), and the report is in the `a11ign-result` artifact the upload step saves above — both the rendered report (`summary-md`) and the full result, transcript included (`result-json`).
+**Not on a pull request, no comment.** A run started by hand or by a push has nothing to comment on: the log's last line is the count (`a11ign: N finding(s)`), with a line before it for anything that bounds that count (an examination that ended early, a capture spanning more than one document, criteria resting on an examination known to be partial), and the full result, transcript included, is in the `a11ign-result` artifact the upload step saves above (`result-json`). The rendered report is in the pull-request comment and the run's job summary; the `v0.1.0` tag cannot put it in the artifact, because it has no `summary-md` output (see the Outputs table).
 
 **The same rendered report is also written to the run's job summary, but a CI-only consumer — no browser,
 nothing rendered — cannot reach that.** GitHub exposes Actions job summaries (`$GITHUB_STEP_SUMMARY`,
@@ -116,7 +114,7 @@ response for that run. The only route to the job summary itself is the browser's
 the run page — the artifact below is what a CLI-only reader uses instead.
 
 **The artifact is the route that works headlessly — it is an ordinary REST download.** The workflow
-above already uploads `a11ign-result` with both files in it, guarded on `result-json` existing so a run
+above already uploads `a11ign-result` with the result file in it, guarded on `result-json` existing so a run
 that failed before producing one cannot upload nothing. Fetch it the same way any CI-only consumer
 fetches any artifact:
 
@@ -130,9 +128,9 @@ artifact_id=$(gh api "repos/<owner>/<repo>/actions/runs/<run-id>/artifacts" \
 gh api "repos/<owner>/<repo>/actions/artifacts/$artifact_id/zip" > result.zip
 ```
 
-Either way what comes back is a directory holding both files: `a11ign-summary.md`, the exact rendered
-report the job summary carries, readable in a terminal with no further processing; and the file
-`result-json` names, the schema below (`verdict.findings`, `verdict.taskCompletable`,
+Either way what comes back is a directory holding the file
+`result-json` names (and, from the first tag that has the `summary-md` output, `a11ign-summary.md`, the exact rendered
+report the job summary carries, once the upload step adds it), the schema below (`verdict.findings`, `verdict.taskCompletable`,
 `captureVerified`, ...) — the transcript behind every finding. Neither needs a browser or
 `pull-requests: write` permission.
 
@@ -579,7 +577,7 @@ browsers. [The reading, with run ids →](adr/0038-authenticated-capture.md)
 | `findings` | Count of lived-experience findings (summed over the captured pages, for `urls`). |
 | `task-completable` | Whether the judge thinks a screen-reader user could finish the stated task. On the default `local` backend this only means nothing scored as a blocker, a coarse proxy. |
 | `result-json` | Path to the full result, including the transcript. Worth uploading as an artifact — the transcript is the evidence behind every finding. |
-| `summary-md` | Path to the rendered report — the same markdown written to the job summary. Worth uploading alongside `result-json`: it is the route a CI-only consumer, with no access to the job summary, has to the human-readable report. |
+| `summary-md` | Path to the rendered report — the same markdown written to the job summary. **Not in `v0.1.0`**: a workflow pinned to that tag reads it as an empty string, and an artifact upload that lists it silently drops it. It is on `main` (#1369), so a SHA pin from there has it, and the first tag after `v0.1.0` will. Where the pinned ref has it, upload it alongside `result-json`: it is the route a CI-only consumer, with no access to the job summary, has to the human-readable report. |
 
 `findings` counts every lived-experience finding, referred ones included; `fail-on` counts only the asserted ones. The log's count line splits them:
 `a11ign: 3 finding(s) (2 asserted: 1 serious, 1 moderate; 1 referred); fail-on=<your fail-on>`.

@@ -59,7 +59,11 @@ export interface RunResult {
     summary: string;
     findings: RunFinding[];
     confidence: number;
-    /** The trained scorer declined to score this page (`@a11ign/judge`'s `abstained`); absent on older results. */
+    /**
+     * True when the trained scorer DECLINED to score the page (`@a11ign/judge`'s `abstained`, which `--json` emits on
+     * the verdict). `findings` is then empty because nothing was scored, which is the opposite of a page that was
+     * read and found fine. Absent on older results, which render as scored: they never said otherwise.
+     */
     abstained?: boolean;
   };
   /**
@@ -244,6 +248,16 @@ function findingsSection(findings: RunFinding[], limit: number): string[] {
  */
 const REFERRED_NOTE = "_A finding marked **referred** is worth a person's eyes: the tool cannot decide it on its own, so "
   + "it is not an assertion that the criterion fails, however its severity reads._";
+
+/**
+ * The headline for a page the trained scorer declined to score -- 2026-W40 review, run 37134253796 on gov.uk.
+ *
+ * The empty findings list is the SAME bytes as a page that was read and found fine, so the bold line that used to
+ * answer it ("No lived-experience findings") told a reader who stopped there that the page was assessed. It was not;
+ * the scorer's own summary says so one paragraph up, and a bold line outweighs a plain one.
+ */
+const NOT_SCORED_HEADLINE = "**Not scored: no lived-experience verdict for this page.** The trained scorer declined to score it, "
+  + "so zero findings here means nothing was assessed, not that nothing was found.";
 
 /**
  * What was NOT determined, as a count — the half a findings list cannot express.
@@ -626,6 +640,29 @@ export function pressedSummaryLines(pressed: readonly string[] | undefined): str
   ];
 }
 
+/**
+ * The task line, the scorer's summary and the findings, which an abstained verdict replaces as a unit: its
+ * `taskCompletable` is a constant and its empty list means "none scored", so neither answers the line above them.
+ * See SummaryOptions.taskQuestion/isTaskClaim for the scored case.
+ */
+function verdictLines(
+  verdict: RunResult["verdict"],
+  { taskQuestion, isTaskClaim, limit }: { taskQuestion: string; isTaskClaim: boolean; limit: number },
+): string[] {
+  if (verdict.abstained) {
+    return [`**${taskQuestion.replace(/[?:]$/, "")}:** not scored`, "", verdict.summary, "", NOT_SCORED_HEADLINE];
+  }
+  return [
+    isTaskClaim
+      ? `**${taskQuestion}** ${verdict.taskCompletable ? "Yes" : "**No**"}`
+      : blockerCountLine(taskQuestion, verdict.findings),
+    "",
+    verdict.summary,
+    "",
+    ...findingsSection(verdict.findings, limit),
+  ];
+}
+
 export function renderSummary(result: RunResult, options: SummaryOptions = {}): string {
   const taskQuestion = options.taskQuestion ?? DEFAULT_TASK_QUESTION;
   const isTaskClaim = options.isTaskClaim ?? false;
@@ -680,13 +717,7 @@ export function renderSummary(result: RunResult, options: SummaryOptions = {}): 
     // the shipped local scorer it used to ask "could a screen-reader user complete the task?" (or claim
     // "No blocking findings") and answer from a signal that never saw the task -- a report of six SERIOUS
     // findings once read "**No blocking findings** Yes" above the very table listing them.
-    isTaskClaim
-      ? `**${taskQuestion}** ${verdict.taskCompletable ? "Yes" : "**No**"}`
-      : blockerCountLine(taskQuestion, verdict.findings),
-    "",
-    verdict.summary,
-    "",
-    ...findingsSection(verdict.findings, limit),
+    ...verdictLines(verdict, { taskQuestion, isTaskClaim, limit }),
     ...outcomeSection(result.outcomes),
     ...stateChangeSection(options.stateChangesObserved),
     "",

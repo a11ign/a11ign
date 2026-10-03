@@ -1,0 +1,117 @@
+name: Mutation comment
+
+# THE SURVIVORS OF A PULL REQUEST'S OWN CHANGED LINES, AS A COMMENT, NEVER AS A GATE (#3282, decided on #3213 by the rule
+# `ceo` wrote before the result). `MUTATION: MISSING` used to fail a pull request on paperwork; this is what replaced it:
+# `packages/guards/src/mutate-diff.mjs` mutates the lines the pull request ADDED, runs the tests it CHANGED, and says
+# which changes no changed test pinned. Its header says what a survivor is (not a score) and why the budget is printed.
+#
+# TWO JOBS, AND THE SPLIT IS THE POINT (done-when 5). `mutate` RUNS THE PULL REQUEST'S CODE (the build, the tests, the
+# mutants) so it holds `contents: read` and nothing else: no write token for that code to find. `comment` holds
+# `pull-requests: write` and runs NO pull request code: it checks nothing out, installs nothing, and reads one file from
+# an artifact as DATA. `mutate-diff.test.ts` pins both halves.
+#
+# THE JOB SUMMARY IS THE FIRST SURFACE AND THE COMMENT THE SECOND. A write to `GITHUB_STEP_SUMMARY` needs no token
+# (documented Actions behaviour; not exercised by anything in this repository's tests), so the full list is always
+# somewhere, even for a fork's pull request, whose token is read-only whatever this file asks for and which therefore
+# skips `comment`.
+#
+# `pull_request` ONLY, never `pull_request_target`: the code under test is the pull request's, so the only safe token is
+# the one this trigger gives a fork anyway. NOT A REQUIRED CHECK and not in `gate`'s `needs`: the tool step is
+# `continue-on-error`, so a crash of the tool is a warning in the summary rather than a red pull request.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  # A new push supersedes the run for the old head: its survivors describe lines that no longer exist.
+  group: mutation-comment-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  mutate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # The ONLY permission this job has. It runs the pull request's code; see the header.
+    permissions:
+      contents: read
+    outputs:
+      reported: ${{ steps.mutate.outcome == 'success' }}
+    steps:
+      # Full history: the tool diffs `origin/<base>...HEAD`, and a shallow clone has no merge base. The checkout is
+      # the MERGE commit (what `ci.yml` tests), so the diff is the pull request as it would land. No credential is
+      # left in `.git/config` for the code below to read.
+      - name: Check out the pull request merged into its base (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm run build
+
+      - name: Mutate the added lines and run the changed tests
+        id: mutate
+        # A crash of the tool is a warning below, not a red pull request: nothing here is a gate.
+        continue-on-error: true
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: >
+          node packages/guards/src/mutate-diff.mjs "origin/$BASE_REF" HEAD
+          --comment="$RUNNER_TEMP/mutation-comment.md" --summary="$RUNNER_TEMP/mutation-summary.md"
+
+      - name: Job summary (no token needed)
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/mutation-summary.md" ]; then
+            cat "$RUNNER_TEMP/mutation-summary.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "## Mutation (non-blocking)" >> "$GITHUB_STEP_SUMMARY"
+            echo "mutate-diff itself failed before it wrote a report; see the step log. Nothing about this pull request is implied." >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::mutate-diff failed before it wrote a report"
+          fi
+
+      - name: Hand the comment to the job that may post it
+        if: steps.mutate.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-comment
+          path: ${{ runner.temp }}/mutation-comment.md
+          retention-days: 1
+
+  comment:
+    needs: mutate
+    # A fork's token is read-only and a post would fail; its summary is the surface.
+    if: needs.mutate.outputs.reported == 'true' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # The ONLY write this workflow holds, and the job holding it runs none of the pull request's code.
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Fetch the comment as data
+        uses: actions/download-artifact@v4
+        with:
+          name: mutation-comment
+          path: ${{ runner.temp }}/mutation
+
+      - name: Post it, or update the one already there
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          body="$RUNNER_TEMP/mutation/mutation-comment.md"
+          existing=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+            --jq '.[] | select(.user.login == "github-actions[bot]") | select(.body | startswith("<!-- mutation-comment -->")) | .id' | sed -n 1p)
+          if [ -n "$existing" ]; then
+            gh api --method PATCH "repos/$REPO/issues/comments/$existing" -F body=@"$body" > /dev/null
+          elif grep -q 'mutation-comment:quiet' "$body"; then
+            echo "Nothing to mutate and no earlier comment to update: not posting."
+          else
+            gh api --method POST "repos/$REPO/issues/$PR/comments" -F body=@"$body" > /dev/null
+          fi
