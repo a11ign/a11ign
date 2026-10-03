@@ -28,7 +28,7 @@ jobs:
       pull-requests: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # No tagged release exists yet, so `@main` is the only ref that resolves — and it moves.
       # Pin the full commit SHA instead if your CI must not change under you.
@@ -92,7 +92,7 @@ jobs:
       # two and hiding the report exactly when it is wanted. The identical bug was live in this repo's own
       # `action-smoke.yml` for 85 consecutive runs, each of which discarded the evidence that would have
       # explained it. Do not copy the unguarded form.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always() && steps.witness.outputs.result-json != ''
         with:
           name: a11ign-result
