@@ -80,7 +80,7 @@ jobs:
       # published until the precondition below says yes.
       - name: Check out main
         if: steps.hour.outputs.london == '08' || (github.event_name == 'workflow_dispatch' && inputs.republish)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # THE MERGE COUNT NEEDS HISTORY. A shallow checkout makes `git log --merges --since` report
           # whatever the depth happened to include, which is a number that looks right and is not.
@@ -89,7 +89,7 @@ jobs:
 
       - name: Set up node
         if: steps.hour.outputs.london == '08' || (github.event_name == 'workflow_dispatch' && inputs.republish)
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
 

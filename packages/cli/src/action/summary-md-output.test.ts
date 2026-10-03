@@ -161,7 +161,7 @@ test("#3292 CONTROL: the shape that emptied the outsider's artifact IS flagged, 
 
 test("#3292 CONTROL: the example parser reads an id, its outputs and a placeholder ref", () => {
   const fixture = "```yaml\nsteps:\n  - uses: a11ign/a11ign@v9.9.9\n    id: scan\n    with:\n      url: x\n"
-    + "  - uses: actions/upload-artifact@v4\n    with:\n      path: ${{ steps.scan.outputs.summary-md }}\n"
+    + "  - uses: actions/upload-artifact@v7\n    with:\n      path: ${{ steps.scan.outputs.summary-md }}\n"
     + "  - uses: a11ign/a11ign@<a full commit SHA>\n    id: other\n```";
   assert.deepEqual(examplesIn("fixture", fixture), [{ file: "fixture", ref: "v9.9.9", id: "scan", reads: ["summary-md"] }]);
 });

@@ -177,7 +177,7 @@ export function extractDocumentedJobsBlock(markdown) {
 
 /**
  * Pins the Action's `uses: <identity>@<ref>` step to `sha`, keeping the identity the fence carries (#1555) -- and ONLY that line. A workflow snippet may
- * carry other `uses:` steps (`actions/checkout@v4`) that must not be touched.
+ * carry other `uses:` steps (`actions/checkout@v7`) that must not be touched.
  *
  * @param {string} yamlText
  * @param {string} sha
@@ -410,7 +410,7 @@ function buildCheckPinJob(pinnedSha) {
     "  check-pin:",
     "    runs-on: ubuntu-latest",
     "    steps:",
-    "      - uses: actions/checkout@v4",
+    "      - uses: actions/checkout@v7",
     "        with:",
     "          fetch-depth: 0",
     "      - name: Refuse a pin that is not an ancestor of the commit this run is executing at",

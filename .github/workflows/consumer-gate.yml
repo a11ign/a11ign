@@ -17,7 +17,7 @@ jobs:
   check-pin:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Refuse a pin that is not an ancestor of the commit this run is executing at

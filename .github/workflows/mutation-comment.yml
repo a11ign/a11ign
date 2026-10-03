@@ -44,12 +44,12 @@ jobs:
       # the MERGE commit (what `ci.yml` tests), so the diff is the pull request as it would land. No credential is
       # left in `.git/config` for the code below to read.
       - name: Check out the pull request merged into its base (full history)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: pnpm run build
@@ -77,7 +77,7 @@ jobs:
 
       - name: Hand the comment to the job that may post it
         if: steps.mutate.outcome == 'success'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mutation-comment
           path: ${{ runner.temp }}/mutation-comment.md
@@ -94,7 +94,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Fetch the comment as data
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: mutation-comment
           path: ${{ runner.temp }}/mutation

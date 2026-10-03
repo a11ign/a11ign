@@ -168,9 +168,9 @@ jobs:
     steps:
       # FULL HISTORY. A shallow clone fails `git diff <base>...HEAD` with "no commits in common" --
       # `changeset-check.yml`'s own comment already named this trap.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22 }
       # `github.base_ref` is EMPTY on a merge_group event -- it exists only for pull_request. The base
       # there is `github.event.merge_group.base_ref`, and GitHub's own payload documents that as the FULL
@@ -231,7 +231,7 @@ jobs:
     if: needs.changed.outputs.ansible == 'true' && !contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
       # `ansible-core`, not the full `ansible` metapackage -- the metapackage bundles hundreds of
@@ -274,9 +274,9 @@ jobs:
     if: needs.changed.outputs.rulesFitness == 'true' && !contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: pnpm run build
@@ -292,10 +292,10 @@ jobs:
     if: needs.changed.outputs.changeset == 'true' && !contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       # PRECISE, now that the install has made `npm pack` safe to call. `orchestrator` reproduced the crash
@@ -397,11 +397,11 @@ jobs:
     steps:
       # Full history for the same reason as every job that reads git: several guards spawn git against the
       # checkout, and a shallow one answers differently from trunk-guard's full-history run.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: pnpm run build
@@ -483,11 +483,11 @@ jobs:
       # first PR and the refusal was nothing to do with lanes. `ownedPaths` already carries this for the
       # identical reason and is the shape copied here -- a check that cannot ask must say so, and one that
       # cannot even start says something worse: a real-sounding failure with the wrong cause on it.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: pnpm run build
@@ -587,11 +587,11 @@ jobs:
     if: github.event_name == 'pull_request' && github.event.pull_request.state == 'open'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       # The tool is a pinned dependency (#2975), so this job installs it. `--filter .` is the root project only.
       - run: pnpm install --frozen-lockfile --ignore-scripts --filter .
@@ -639,7 +639,7 @@ jobs:
       AGENT_ORG_REF: main
     steps:
       # Full history: the suite reads the project's merge-base, branch tips and recorded commits, so a shallow clone fails it for the wrong reason.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       # pnpm on the PATH is also what `packaging/installed-layout.test.ts` installs the tool through, as a project would. The tool's own
@@ -647,11 +647,11 @@ jobs:
       # project's lockfile already holds all three.
       - uses: pnpm/action-setup@v4
       # NOT the `22` the other jobs use: agent-org pins 22.22.1 because on 22.23.3 its tree-walking observer fails a test (see its `ci.yml`).
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22.22.1, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts --filter .
       - name: The tool under test -- a11ign/agent-org at AGENT_ORG_REF, read-only, no token beyond the job's own read-only one
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: a11ign/agent-org
           ref: ${{ env.AGENT_ORG_REF }}
