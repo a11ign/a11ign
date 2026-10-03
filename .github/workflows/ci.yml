@@ -301,13 +301,14 @@ jobs:
       # accepted as empty; a major, a 0.x minor, an owned path or anything outside the manifests is REFUSED here, and
       # the log names which, so that pull request waits for a human who looks. Recognised by the `deps:` prefix
       # `dependabot.yml` pins, on the pull request AND on its queue entry (the merge group has no title, only the
-      # squash message), or the queue would eject what this job passed. Every other pull request keeps the step below.
+      # squash message), or the queue would eject what this job passed; and the entry is diffed against its own parent
+      # (`merge_group.base_sha`, empty on a pull request), because up to 5 are built and entry 2 contains entry 1. Every other pull request keeps the step below.
       # The title is read by an expression, never interpolated into a shell line.
       - id: dependency
         name: A dependency pull request owes the entry its diff derives
         if: steps.precise.outputs.changeset == 'true' && startsWith(github.event.pull_request.title || github.event.merge_group.head_commit.message, 'deps:')
         run: |
-          node scripts/dependency-changeset.mjs check --base=${{ needs.changed.outputs.base }}
+          node scripts/dependency-changeset.mjs check --base=${{ needs.changed.outputs.base }} --since=${{ github.event.merge_group.base_sha }}
           echo "settled=true" >> "$GITHUB_OUTPUT"
       - name: A consumer-visible change must say what it does to a consumer
         if: steps.precise.outputs.changeset == 'true' && steps.dependency.outputs.settled != 'true'

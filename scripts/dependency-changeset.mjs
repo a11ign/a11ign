@@ -23,6 +23,10 @@
  * measuring means pushing to a bot's open pull request; the choice does not depend on it, since B pushes nothing.
  * So the job ACCEPTS from the diff (`check`) and the entry is WRITTEN when the version is made (`compile`).
  *
+ * LIMIT, accepted by ceo's review of #3169: the job runs this script from the pull request's OWN head, so a `deps:` pull
+ * request that edits this file is judged by its edited copy. That can only skip a changeset requirement, and the pull
+ * request still needs a human approval; the "not a manifest" refusal above does NOT guard against it.
+ *
  * `compile` reads the manifest each published package had at its last release tag, so it needs no memory of which
  * pull requests were dependency ones. Wiring it into the version pull request waits for #3131's `version-pr` job.
  */
@@ -230,13 +234,18 @@ function manifestAt(ref, path) {
 /**
  * The check a pull request's `changeset` job runs: accept from the diff or refuse, naming why.
  * @param {string} base
+ * @param {string} [since] a queue entry's own parent (`merge_group.base_sha`), which replaces `base` when given
  */
-function check(base) {
-  const files = changedFiles([`${base}...HEAD`]);
+function check(base, since) {
+  // A QUEUE ENTRY IS DIFFED AGAINST ITS OWN PARENT. Entry 2's head contains entry 1, so `origin/main...HEAD` lists entry 1's
+  // files too, they fail `pathReasons`, and the pull request this job passed is ejected from the queue (ceo's review of
+  // #3169). `merge_group.base_sha` is the entry ahead's head, or `main`'s tip when this entry is first.
+  const from = since || base;
+  const files = changedFiles([`${from}...HEAD`]);
   // THE MERGE-BASE, NOT THE BASE'S TIP: `base...HEAD` lists what the branch changed since it left `main`, so the "before"
   // side must be where it left. Reading the tip blamed the pull request for everything `main` had moved since (measured on
   // #3157's head against today's `main`: the root manifest read as "changes something other than a dependency range").
-  const forkPoint = git(["merge-base", base, "HEAD"]).trim();
+  const forkPoint = git(["merge-base", from, "HEAD"]).trim();
   const manifests = Object.fromEntries(files.filter((f) => MANIFEST_PATH.test(f)).map((f) => [f, { before: manifestAt(forkPoint, f), after: manifestAt("HEAD", f) }]));
   const owned = JSON.parse(readFileSync("docs/owned-path-facts.json", "utf8")).owned;
   const derived = deriveDependencyChangeset({ files, manifests, owned });
@@ -290,11 +299,11 @@ export function compile({ dryRun }) {
 /** @param {string[]} argv */
 function main(argv) {
   const [command, ...rest] = argv;
-  refuseUnknownFlags(["--base", "--dry-run"], { entry: import.meta.url, command: "dependency-changeset" });
+  refuseUnknownFlags(["--base", "--since", "--dry-run"], { entry: import.meta.url, command: "dependency-changeset" });
   const base = flagValue(rest, "base");
-  if (command === "check" && base) process.exit(check(base) ? 0 : 1);
+  if (command === "check" && base) process.exit(check(base, flagValue(rest, "since")) ? 0 : 1);
   if (command === "compile") return compile({ dryRun: rest.includes("--dry-run") });
-  console.error("usage: dependency-changeset.mjs check --base=<ref> | compile [--dry-run]");
+  console.error("usage: dependency-changeset.mjs check --base=<ref> [--since=<sha>] | compile [--dry-run]");
   process.exit(2);
 }
 
