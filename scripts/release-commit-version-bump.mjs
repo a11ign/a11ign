@@ -71,10 +71,18 @@ export function versionBumpPaths(repoRoot) {
 // `sandboxGitEnv()`, not an inherited `env` -- git exports GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE into every
 // hook environment, and this script's own commit step is exactly the kind of git-spawning code
 // `git-env.mjs`'s header requires to strip through it rather than trust `cwd` alone.
-/** @param {string[]} args @returns {string} */
-function git(args) {
-  return execFileSync("git", args, { cwd: REPO, encoding: "utf8", env: sandboxGitEnv() });
+/** @param {string[]} args @param {Record<string, string>} [extraEnv] @returns {string} */
+function git(args, extraEnv = {}) {
+  return execFileSync("git", args, { cwd: REPO, encoding: "utf8", env: sandboxGitEnv(extraEnv) });
 }
+
+// #3346: THE COMMIT'S BREADTH IS DELIBERATE, and only the commit's. A version bump touches one manifest and one
+// changelog per package plus the root manifest and the lockfile (17 paths against the pre-commit hook's limit of
+// 12), and the hook's refusal is aimed at a SHARED checkout sweeping up another session's files -- this is a
+// throwaway runner checkout and `versionBumpPaths` names exactly what is staged. The hook is NOT disabled
+// (`core.hooksPath`, `--no-verify`): the variable travels in the env of the one `git commit` call, so the
+// refusal stays in force for every other commit and every other git call here.
+const DELIBERATE_BREADTH = { A11Y_COMMIT_ALL: "1" };
 
 function main() {
   refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/release-commit-version-bump.mjs" });
@@ -91,7 +99,7 @@ function main() {
   git(["config", "user.email", "github-actions[bot]@users.noreply.github.com"]);
   git(["add", "-A", "--", ...paths]);
   const basedOn = git(["rev-parse", "--short", "HEAD"]).trim();
-  git(["commit", "-m", `release: version packages (main at ${basedOn})`]);
+  git(["commit", "-m", `release: version packages (main at ${basedOn})`], DELIBERATE_BREADTH);
   git(["push", "--force", "origin", `HEAD:refs/heads/${VERSION_BRANCH}`]);
   console.log(`release-commit-version-bump: pushed ${VERSION_BRANCH}.`);
 }

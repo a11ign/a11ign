@@ -31,7 +31,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync,
-  writeFileSync, writeSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -239,18 +239,6 @@ function runOwnedPaths({ body, files }) {
   }
 }
 
-/**
- * Files of the agent-org suite that CI SKIPS and this host does not, each with the reason. `live-tree-independence`
- * clones `/home/agent/repos/a11y-witness` at two fixed commits and skips itself when that clone is absent, which it
- * is on a CI runner and is not here, so on this host it runs, and it fails (measured 2026-10-03, alone and with the
- * suite, at a head it cannot read: 4 `acceptance-commands` tests red at both commits). Leaving it in would make
- * `verify` red for every author for a reason CI never sees, and a gate people learn to ignore teaches them to
- * ignore the next one. It is left out of the STAGED COPY only, named on every run, and filed as #3329.
- */
-export const HOST_ONLY_AGENT_ORG_TESTS = {
-  "live-tree-independence.test.ts": "CI has no /home/agent/repos/a11y-witness clone and skips it; here it runs and fails",
-};
-
 /** Where CI's second checkout comes from, and the name of the clone `verify` makes when no checkout is to hand. */
 const AGENT_ORG_REMOTE = "a11ign/agent-org";
 const AGENT_ORG_CACHE = "verify-agent-org";
@@ -292,7 +280,11 @@ function provisionAgentOrg() {
   return dir;
 }
 
-const AGENT_ORG_FIXTURE = "packages/lab/src/packaging/board-document-chrome-resolver.test.ts";
+/** What the staging step writes, under `root`: the tool's directory, and the one fixture whose import it respells. */
+const agentOrgPaths = (/** @type {string} */ root) => ({
+  toolDir: join(root, "packages/agent-org"),
+  fixture: join(root, "packages/lab/src/packaging/board-document-chrome-resolver.test.ts"),
+});
 
 /**
  * WHERE THE `agentOrg` STEP WORKS: a detached worktree of the author's head, in a scratch directory OUTSIDE the author's
@@ -303,7 +295,31 @@ const AGENT_ORG_FIXTURE = "packages/lab/src/packaging/board-document-chrome-reso
  */
 export function agentOrgLayout(scratch) {
   const clone = join(scratch, "tree");
-  return { clone, toolDir: join(clone, "packages/agent-org"), fixture: join(clone, AGENT_ORG_FIXTURE) };
+  return { clone, ...agentOrgPaths(clone) };
+}
+
+/**
+ * Lays the tool out as `packages/agent-org` under `root`, the way CI's `agentOrg` job does, and leaves NOTHING of its
+ * test suite out: what the staged copy runs is what the tool's own tests are, so a file dropped here is a test CI runs
+ * and `verify` does not. `root` is a parameter so a test can stage into a throwaway tree and read the result (#3329).
+ * @param {{ toolRepo: string, scratch: string, copied: string[], root?: string, stdio?: import("node:child_process").StdioOptions }} staging
+ */
+export function stageAgentOrg({ toolRepo, scratch, copied, root = REPO, stdio = "inherit" }) {
+  const tarball = join(scratch, "tool.tar");
+  const { toolDir: dest, fixture } = agentOrgPaths(root);
+  const here = (/** @type {string} */ command, /** @type {string[]} */ args) => sh(command, args, { cwd: root, stdio });
+  rmSync(dest, { recursive: true, force: true });
+  const steps = [
+    () => here("git", ["-C", toolRepo, "archive", "--format=tar", `--output=${tarball}`, "FETCH_HEAD", ...copied]),
+    () => here("mkdir", ["-p", dest]),
+    () => here("tar", ["-xf", tarball, "-C", dest]),
+    () => here("rsync", ["-a", "--ignore-existing", "--exclude=*.test.ts", "--exclude=*.test.mjs",
+      "packages/lab/src/packaging/", "packages/agent-org/src/packaging/"]),
+    () => here("sed", ["-i", "s#from \"agent-org/src/board-document.mjs\"#from \"../../../agent-org/src/board-document.mjs\"#",
+      fixture]),
+    () => here("git", ["add", "--force", "--intent-to-add", "packages/agent-org"]),
+  ];
+  return { status: inOrder(steps) === "pass" ? 0 : 1 };
 }
 
 /**
@@ -351,40 +367,20 @@ async function inOrderAsync(commands) {
 }
 
 /**
- * Removes the staged copy's host-only files and says so, so the omission is read on every run and not remembered.
- * @param {{ toolDir: string, log: number }} where
- */
-function leaveOutHostOnlyTests({ toolDir, log }) {
-  for (const [file, reason] of Object.entries(HOST_ONLY_AGENT_ORG_TESTS)) {
-    rmSync(join(toolDir, "src/packaging", file), { force: true });
-    writeSync(log, `verify: agentOrg leaves out ${file} -- ${reason}\n`);
-  }
-  return { status: 0 };
-}
-
-/**
  * CI's `agentOrg` job, step for step, in a clone of `repo`'s head: the tool at the ref `ci.yml` names laid at
  * `packages/agent-org`, the project's packaging siblings beside its tests, one fixture's import respelled, and the
  * tool's own runner. Nothing is written under `repo`. `repo` is a parameter so a test can run it on a throwaway one.
  * @param {{ repo: string, toolRepo: string, ref: string, copied: string[], scratch: string, log: number }} job
  */
 export async function runAgentOrgInClone({ repo, toolRepo, ref, copied, scratch, log }) {
-  const { clone, toolDir, fixture } = agentOrgLayout(scratch);
-  const tarball = join(scratch, "tool.tar");
+  const { clone } = agentOrgLayout(scratch);
   const at = (/** @type {string} */ cwd) => ({ cwd, log });
   try {
     return await inOrderAsync([
       () => shAsync("git", ["-C", toolRepo, "fetch", "--quiet", "origin", ref], at(repo)),
       () => shAsync("git", ["worktree", "add", "--quiet", "--detach", clone, "HEAD"], at(repo)),
       () => linkNodeModules({ from: join(repo, "node_modules"), to: join(clone, "node_modules") }),
-      () => shAsync("git", ["-C", toolRepo, "archive", "--format=tar", `--output=${tarball}`, "FETCH_HEAD", ...copied], at(repo)),
-      () => (mkdirSync(toolDir, { recursive: true }), shAsync("tar", ["-xf", tarball, "-C", toolDir], at(clone))),
-      () => leaveOutHostOnlyTests({ toolDir, log }),
-      () => shAsync("rsync", ["-a", "--ignore-existing", "--exclude=*.test.ts", "--exclude=*.test.mjs",
-        "packages/lab/src/packaging/", "packages/agent-org/src/packaging/"], at(clone)),
-      () => shAsync("sed", ["-i", "s#from \"agent-org/src/board-document.mjs\"#from \"../../../agent-org/src/board-document.mjs\"#",
-        fixture], at(clone)),
-      () => shAsync("git", ["add", "--force", "--intent-to-add", "packages/agent-org"], at(clone)),
+      () => stageAgentOrg({ toolRepo, scratch, copied, root: clone, stdio: ["ignore", log, log] }),
       () => shAsync("node", ["--import", "tsx", "--test", "packages/agent-org/src/**/*.test.ts",
         "packages/agent-org/src/**/*.test.mjs"], at(clone)),
     ]);
