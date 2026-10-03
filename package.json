@@ -45,7 +45,7 @@
     "worker": "node packages/nvda-worker/src/server.mjs",
     "eval": "A11Y_PYTHON=.venv/bin/python tsx packages/lab/src/eval/run.ts",
     "rules-check": "tsx packages/lab/src/eval/rules-check.ts",
-    "test": "node scripts/pnpm.mjs run test:ts && node scripts/pnpm.mjs run test:python",
+    "test": "pnpm run test:ts && pnpm run test:python",
     "test:ts": "node packages/guards/src/assert-glob-not-empty.mjs \"packages/{evidence,judge,scorer,cli,nvda-worker,worker-fleet,nvda-speech,pdf}/src/**/*.test.ts\" --min=180 --run --runner=rstest ${A11Y_TEST_CONCURRENCY:+--test-concurrency=$A11Y_TEST_CONCURRENCY}",
     "test:nightly": "node packages/guards/src/assert-glob-not-empty.mjs \"packages/*/nightly/**/*.test.ts\" --min=1 --run",
     "test:python": "if [ -x .venv/bin/pytest ]; then PYTHONDONTWRITEBYTECODE=1 .venv/bin/pytest -p no:cacheprovider packages/*/tests -q; else echo \"SKIPPED: no .venv/bin/pytest — python tests need it. This is an honest skip, not a pass.\"; fi",
