@@ -80,11 +80,11 @@ jobs:
       pull-requests: read
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # The tool is a pinned dependency now (#2975): `pnpm exec agent-org` needs `node_modules`. `--filter .` installs the
       # ROOT project only, which is all the tool needs, not every workspace package's dependencies.
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts --filter .
       - name: Close the rows the merged PR declared, naming the merge sha on each
@@ -125,10 +125,10 @@ jobs:
       contents: read
       issues: write          # one comment per stale spell, on the report issue (#20) or on #73
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { ref: main }
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       # Moved ABOVE the first liveness step (#2975): that step now runs the tool from `node_modules`, so the install comes first.
       - run: pnpm install --frozen-lockfile --ignore-scripts
@@ -154,12 +154,12 @@ jobs:
   trunkGate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
       # The tool is a pinned dependency now (#2975): `pnpm exec agent-org` needs `node_modules`. `--filter .` installs the
       # ROOT project only, which is all the tool needs, not every workspace package's dependencies.
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts --filter .
       # #411: A MERGE CAN DELETE WORK ALREADY ON `main` WHILE EVERY OTHER CHECK STAYS GREEN -- see
@@ -218,10 +218,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: pnpm run build

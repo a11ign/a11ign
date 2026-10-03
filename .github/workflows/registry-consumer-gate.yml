@@ -57,8 +57,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with: { node-version: 22 }
 
       # `npm publish` returns before every registry edge serves the new version, and a consumer's `npm install`
@@ -82,8 +82,8 @@ jobs:
     steps:
       # The checkout is for `scripts/registry-consumer-gate.mjs` ONLY. The a11ign that runs below is the registry's,
       # installed into `$RUNNER_TEMP/clean`, a directory with nothing else in it and no repository above it.
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with: { node-version: 22 }
 
       # `--require-imports`: on THIS platform `@a11ign/screenreader-worker` must import, so a throw at evaluation is a
@@ -217,7 +217,7 @@ jobs:
 
       - name: Keep the report and the worker's logs when this fails
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: registry-consumer-gate-logs
           path: |

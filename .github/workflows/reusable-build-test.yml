@@ -100,11 +100,11 @@ jobs:
       # each later push declined as INHERITED. Full history costs one ~30 MiB pack fetch per run, which is
       # cheaper than a test suite that cannot run its own acceptance on the one job that runs it unscoped.
       - name: Checkout (full history -- the scoped selector needs git diff <base>...HEAD, and the revert-guard acceptance needs the real merges)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       # #2298: NO DEDICATED `node_modules` CACHE. `ts` used to restore `node_modules` itself, keyed on the npm
       # lockfile, and skip the install on a hit. What is cached now is pnpm's STORE (setup-node's `cache: pnpm`,
@@ -142,7 +142,7 @@ jobs:
       # config; rstest's own invalidation handles a changed source file inside a hit. HIT or MISS is printed so a run
       # log can be quoted, and the step after the tests fails the job if the cache is empty.
       - if: inputs.run-ts-tests
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         id: rstest-build-cache
         with:
           path: node_modules/.cache/rstest-*

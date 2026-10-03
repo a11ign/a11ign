@@ -29,7 +29,7 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # TWO runs, each guarding one DIRECTION, because for an accessibility tool the two failures are not
       # symmetrical. A missed finding costs a user; an invented one is an accusation someone may be
@@ -101,7 +101,7 @@ jobs:
       # on `action.yml`, which is a consumer-facing change and does not belong in a workflow fix.
       - name: Keep the report when this fails
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: action-smoke-report
           path: |
