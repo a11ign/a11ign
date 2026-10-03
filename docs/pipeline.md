@@ -393,10 +393,12 @@ Four things, and each one has been wrong here:
   a run against the commit the sweep has since replaced.
 - **Name the workflow.** `ci` is the one that gates; `auto-arm` answers seconds after any push and
   will happily satisfy a loose condition on its own.
-- **Drop `cancelled` runs.** `ci.yml`'s concurrency group is `ci-${{ github.ref }}` with
-  `cancel-in-progress: true`, so two events in quick succession — a `synchronize` and an `edited`,
-  which is what a push plus a body fix produces — leave a cancelled run beside the live one. A
-  cancelled run is not a verdict, and `statusCheckRollup` unions it into the rollup anyway (#500).
+- **Drop `cancelled` runs.** `ci.yml`'s concurrency group is `ci-${{ github.ref }}-<kind>` with
+  `cancel-in-progress: true` (#3211), so two events of the SAME kind in quick succession — two pushes, or two
+  body edits — leave a cancelled run beside the live one. A push and a body edit no longer do: a body edit or a
+  label is a `meta` run, in its own group, and cancels only an earlier `meta` run. A cancelled run is not a
+  verdict, and `statusCheckRollup` unions it into the rollup anyway (#500). **A `meta` run reports on the same
+  head**, so "the live run" can now be two: the `gate` of each waits for the other kind (see `gate`'s last step).
 - **Require at least one COMPLETED run.** `length > 0` is the half that stops an empty result — no
   runs created yet — from reading as "all of them finished".
 

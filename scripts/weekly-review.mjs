@@ -216,8 +216,8 @@ export function buildBody(input) {
   return [
     "## What it is", "",
     `The weekly outsider review for ${input.label}, filed by \`.github/workflows/weekly-review.yml\`. How a reviewer `
-      + "works is in `docs/weekly-review.md`. **It is a review and never a gate**: nothing waits on it and releases "
-      + "keep flowing; its findings are filed as rows, never fixed in place.", "",
+      + "works is in `docs/weekly-review.md`. **It is a review and never a gate**: no release depends on it and "
+      + "releases keep flowing; its findings are filed as rows, never fixed in place.", "",
     windowSection(input), "",
     `## The requirements, read from RELEASE.md at \`${input.commit}\``, "",
     numbered(input.requirements), "",
@@ -333,6 +333,15 @@ function recheck(last) {
   process.stdout.write(`re-check commented on #${last.number}\n`);
 }
 
+/**
+ * The arguments `agent-org row-file` is given. `--label out-of-release` is the release declaration the filing contract
+ * demands (a review never blocks a publish, so it is out of release by the board's own test); row-file adds the
+ * `Out of release` milestone beside the label itself.
+ * @param {string} title @param {string} bodyFile
+ */
+export const rowFileArgs = (title, bodyFile) => ["exec", "agent-org", "row-file", `--session=${FILING_SESSION}`, "--ready",
+  "--label", "out-of-release", "--title", title, "--body-file", bodyFile];
+
 /** @param {string} title @param {string} body */
 function fileThroughRowFile(title, body) {
   const leak = leakRefusalReason(body); // row-file reads a FILE, which `assertNoLeakInArgv` cannot see, so the text is checked here
@@ -341,8 +350,7 @@ function fileThroughRowFile(title, body) {
   try {
     const file = join(dir, "body.md");
     writeFileSync(file, body);
-    const { command, args } = pnpmCliInvocation(["exec", "agent-org", "row-file", `--session=${FILING_SESSION}`, "--ready",
-      "--title", title, "--body-file", file]);
+    const { command, args } = pnpmCliInvocation(rowFileArgs(title, file));
     execFileSync(command, args, { cwd: REPO_ROOT, stdio: "inherit" });
   } finally {
     rmSync(dir, { recursive: true, force: true });
