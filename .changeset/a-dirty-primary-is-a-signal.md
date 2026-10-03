@@ -1,5 +1,0 @@
----
-"@a11ign/agent-org": patch
----
-
-**A primary that is not at `origin/main` is a signal to `ceo`, not a journal line (#2781).** `a11ign-work-tick.service` runs `primary:update` as `ExecStartPre=-`, so when a dirty primary made `git checkout --detach origin/main` refuse on 2026-09-28T12:01Z the tick went on and gave orders from 22-hour-old code (2,652 journal lines, no signal). `update-primary.mjs` gains `readPrimaryDrift` (and a read-only `--drift` flag): HEAD against `origin/main`, the commits behind and ahead, and the TRACKED dirty paths, `null` for anything it cannot ask. `work-gate.mjs` spawns it after the update, wakes `ceo` with `primary-stale` (an action cause, so it is re-offered until it clears) naming the dirty paths, and heads every other order with the stale sha and the count while the primary is behind. A dirty primary already at `origin/main` is reported the tick the edit appears, before any update fails. `update-primary.test.ts` drives real repositories, including a tracked edit that conflicts with a newer `origin/main`, and pins that the `-` may stay only while the gate reads the primary.

@@ -1,5 +1,5 @@
 {
-  "_what": "a11ign's HOST declaration: the machine's facts, which no project's repository can know (ADR 0040, decision 3; #2620, child 3f of #69). `packages/agent-org/src/host-config.mjs` is the one reader. Keys starting with an underscore are prose and are not read.",
+  "_what": "a11ign's HOST declaration: the machine's facts, which no project's repository can know (ADR 0040, decision 3; #2620, child 3f of #69). `src/host-config.mjs` of a11ign/agent-org is the one reader. Keys starting with an underscore are prose and are not read.",
   "_where": "The path is `$AGENT_ORG_HOST`, and until a unit sets it (the shadow-run and extraction rows, 4 and 5) it is this file, beside the project's own declaration. NO UNIT IS RENAMED OR REINSTALLED BY THE ROW THAT ADDED THIS FILE: every value below is the one the units, the routing wrapper and the readers already named.",
   "schema": 1,
   "home": "/home/agent",

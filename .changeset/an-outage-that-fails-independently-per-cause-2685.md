@@ -1,5 +1,0 @@
----
-"@a11ign/agent-org": patch
----
-
-**Several causes reaching the delivery cap in the same run for a SHARED GitHub-reads outage no longer escalate as N unrelated stuck rows (#2685).** `outageOf` (#2256) already asks whether a causeKey's own addressed session is unavailable; nothing asked whether GitHub itself refused the tick's OWN reads. `work-gate.mjs` now counts how many of a tick's own reads (the pull-request list, the Ready rows, the promotable rows, the chairman-blocked read, the open rows, the claimed-row comments and the board read) came back refused, and two or more refused together (`sharedReadOutage`, `SHARED_OUTAGE_READS = 2`) marks every order that tick `outageNow`. `wake.mjs`'s `deliver` now names a capped `outageNow` cause in a new `outaged` list instead of `stuck`, so `finishTick` reports the whole batch once ("OUTAGE: N cause(s) reached the delivery cap while this tick's own GitHub reads were refused") and never hands it to `escalateStuck`, which would otherwise label as many rows `answer:ceo` as there are causes for what is really one shared outage. An ordinary capped cause, unmarked, escalates exactly as it always has.
