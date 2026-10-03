@@ -58,11 +58,28 @@ test("no conformance LEVEL is ever claimed", () => {
   assert.match(conformanceScope(CLEAN)[0].limitation, /No conformance level is claimed/i);
 });
 
-test("requirement 1 counts the criteria it did NOT assess, and calls them unchecked", () => {
-  const [level] = conformanceScope(CLEAN);
-  assert.match(level.establishes, /Assessed 8 of 55/);
+test("requirement 1 counts the criteria it did NOT assess, and calls them unchecked, when no rule layer ran", () => {
+  // Nothing else examined the other 47, so "NOT assessed ... unchecked" is exactly true here.
+  const [level] = conformanceScope({ ...CLEAN, ruleLayerRan: false });
+  assert.match(level.establishes, /8 of 55/);
   assert.match(level.limitation, /47 criteria were NOT assessed/);
   assert.match(level.limitation, /unchecked, not clean/i);
+});
+
+test("requirement 1 says its count is the screen-reader layer's REACH, not this run's examined total (W40, #3296)", () => {
+  // Measured on run 37134253796: the PR comment said 30 referred + 25 not covered, while this requirement said
+  // "Assessed N of 55 ... NOT assessed". N is what the screen-reader layer and scorer CAN judge; the other 10
+  // referred criteria were covered by axe-core alone. The sentence must say which count it is, and must not call
+  // criteria "unchecked" that the rule layer did check.
+  const [level] = conformanceScope(CLEAN);
+  assert.match(level.establishes, /screen-reader layer and scorer can return a finding for 8 of 55/);
+  assert.match(level.establishes, /not a count of what this run examined/i);
+  assert.match(level.establishes, /rule layer \(axe-core\) ran/);
+  assert.match(level.establishes, /per-criterion outcomes/);
+  assert.match(level.limitation, /47 criteria are outside the screen-reader layer's reach/);
+  assert.match(level.limitation, /neither layer covered .* unchecked, not clean/i);
+  assert.doesNotMatch(level.limitation, /were NOT assessed/,
+    "with the rule layer run, 'NOT assessed' would contradict the criteria axe-core did examine");
 });
 
 test("a truncated sweep makes requirement 2 report INCOMPLETE examination", () => {
