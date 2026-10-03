@@ -407,6 +407,42 @@ test("#1387: rehearsal 3's real result leads its summary AND its log with the tw
 });
 
 /**
+ * #3295: AN INCOMPLETE EXAMINATION AND AN ABSTENTION BOUND THE COUNT, so the log says so before it.
+ *
+ * Weekly review W40 (run 37134253796, gov.uk): the result's `conformance` said "Examination was INCOMPLETE" and the
+ * scorer abstained on every criterion, and the log read `0 finding(s) (none)` -- a clean zero to a CI-only reader.
+ * The conformance is built by the real producer, never retyped, so a reworded sentence fails here.
+ */
+const incompleteConformance = () => conformanceScope({
+  assessedCriteria: [], screenReader: "NVDA", ruleLayerRan: true,
+  sweeps: [{ type: "focusOrder", stop: "cap" }] as never,
+});
+
+test("#3295: an INCOMPLETE Full-pages entry prints a bounding line before the count", () => {
+  const conformance = incompleteConformance();
+  assert.ok(conformance.some((r) => /Examination was INCOMPLETE/.test(r.limitation)), "the positive control: the producer says it");
+  const lines = logLines(result({ conformance }), "never");
+  assert.equal(lines.length, 2, lines.join("\n"));
+  assert.match(lines[0], /examination INCOMPLETE.*focusOrder \(cap/);
+  assert.match(lines[1], /^a11ign: 0 finding\(s\)/, "the count stays the last line");
+});
+
+test("#3295: an abstention prints a bounding line before the count", () => {
+  const abstaining = result({ verdict: { ...result().verdict, abstained: true } });
+  const lines = logLines(abstaining, "never");
+  assert.equal(lines.length, 2, lines.join("\n"));
+  assert.match(lines[0], /ABSTAINED/);
+  assert.match(lines[1], /^a11ign: 0 finding\(s\)/);
+});
+
+test("#3295: a complete examination that did not abstain adds no line -- the control for the absence", () => {
+  const complete = conformanceScope({ assessedCriteria: [], screenReader: "NVDA", ruleLayerRan: true });
+  assert.ok(!complete.some((r) => /INCOMPLETE/.test(r.limitation)), "the producer is silent for a complete examination");
+  const lines = logLines(result({ conformance: complete, verdict: { ...result().verdict, abstained: false } }), "never");
+  assert.equal(lines.length, 1, lines.join("\n"));
+});
+
+/**
  * #1563: AN EXAMINATION KNOWN TO BE PARTIAL IS COUNTED IN THE LOG AND THE SUMMARY, not only in the JSON.
  *
  * Rehearsal 2's real result carries eight `cantTell` reasons saying the examination was partial, and its log read
