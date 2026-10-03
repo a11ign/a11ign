@@ -652,6 +652,9 @@ jobs:
           ref: ${{ env.AGENT_ORG_REF }}
           path: agent-org
           persist-credentials: false
+          # #3276: the tool's `gate` judges its pinned populations as a RATCHET against the base of its own checkout (agent-org#111, #3245),
+          # and a shallow clone has no base. A strict reading in `GITHUB_ACTIONS` is a test failure there, red on every pull request.
+          fetch-depth: 0
       - name: Put the tool where the tool lives in a project, and the tests' siblings beside the tests
         run: |
           rm -rf packages/agent-org
@@ -660,8 +663,11 @@ jobs:
           cp -r src host .github CHANGELOG.md package.json LICENSE README.md ../packages/agent-org/
           cd ..
           rsync -a --ignore-existing --exclude='*.test.ts' --exclude='*.test.mjs' packages/lab/src/packaging/ packages/agent-org/src/packaging/
-          # The tool's checkout is not part of the project the suite walks; leave only the laid-out copy.
-          rm -rf agent-org
+          # The tool's checkout is not part of the project the suite walks; leave only the laid-out copy. It is MOVED, not deleted (#3276):
+          # `AGENT_ORG_TOOL_REPO` names it, and the tool's ratchet reads its base there. Inside the workspace it would be the project's
+          # own repository, whose base holds no `src` (measured: `git archive <sha> src` fails), so the variable must name a clone outside it.
+          mv agent-org "$RUNNER_TEMP/agent-org-checkout"
+          echo "AGENT_ORG_TOOL_REPO=$RUNNER_TEMP/agent-org-checkout" >> "$GITHUB_ENV"
           # The project imports the tool by name, as a dependency. The tool's own tests read this fixture's imports as relative paths into
           # `packages/agent-org`, where the tool lived when #2976 removed it, so this runner (and no committed file) spells the import that way.
           fixture=packages/lab/src/packaging/board-document-chrome-resolver.test.ts
