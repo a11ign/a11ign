@@ -949,7 +949,7 @@ async function runWitness(
     ...oracleCounts(examined),
   });
 
-  const conformance = conformanceFor(examined, ruleFindings, left && { control: left.control, notExamined });
+  const conformance = conformanceFor(examined, ruleFindings, left && { control: left.control, notExamined }, axe.coverage);
   // Per-criterion ACT outcomes. `truncatedSweeps` is what turns Conformance Requirement 2 into something
   // per-criterion: a link sweep that stopped at its cap makes 2.4.4 `cantTell`, not `passed`.
   const outcomes = criterionOutcomes({
@@ -983,6 +983,10 @@ async function runWitness(
   }
 }
 
+/** The criteria the rule layer returned a verdict for; `undefined` (not empty) when the caller held no coverage at all. */
+const criteriaCovered = (ruleLayer: RuleLayerCoverage | undefined): string[] | undefined =>
+  ruleLayer && Object.keys(ruleLayer);
+
 /**
  * What this run establishes against WCAG's five conformance requirements (§5.2).
  *
@@ -1002,7 +1006,8 @@ async function runWitness(
  * are on the lab and never in this repo; the figure moves, so read it there rather than from this comment.
  */
 export function conformanceFor(cap: CaptureResponse, axe: AxeFinding[] | null,
-  left?: { control: string; notExamined: readonly string[] } | null): ConformanceRequirement[] {
+  left?: { control: string; notExamined: readonly string[] } | null,
+  ruleLayer?: RuleLayerCoverage): ConformanceRequirement[] {
   const env = (cap as { environment?: Record<string, string> }).environment ?? {};
   const version = (name: string, ver: string): string | null =>
     env[name] ? `${env[name]}${env[ver] ? ` ${env[ver]}` : ""}` : null;
@@ -1036,6 +1041,8 @@ export function conformanceFor(cap: CaptureResponse, axe: AxeFinding[] | null,
     screenReader: version("screenReader", "screenReaderVersion") ?? cap.screenReader,
     browser: version("browser", "browserVersion"),
     ruleLayerRan: axe !== null,
+    // The same coverage `criterionOutcomes` reads below, so requirement 1's examined count and the outcomes agree.
+    ruleLayerCovered: criteriaCovered(ruleLayer),
     census: census ?? null,
     // THE RAW COUNTS TOO (#677). `censusFromDiagnostics` overlays `distinct`, which is right for reach and
     // wrong for "how much went unlooked-at"; both readers now exist and both are supplied.
