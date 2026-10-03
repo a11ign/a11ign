@@ -201,18 +201,13 @@ function relativeImportersOfAgentOrg(): string[] {
  * rehearsal.mjs`, landed on `main` afterward (#2765, decision 6's own rehearsal script) -- same category
  * as the other four `scripts/*.mjs` entries here, so added rather than treated as a new class of finding.
  */
-const KNOWN_RELATIVE_IMPORTERS = [
-  "packages/control/src/fleet-playbook.mjs",
-  "scripts/agent-org-extraction-rehearsal.mjs",
-  "scripts/npm-token-liveness.mjs",
-  "scripts/release-reuses-verdict.mjs",
-  "scripts/repo-identity.mjs",
-  "scripts/split-baseline.mjs",
-].sort();
+const KNOWN_RELATIVE_IMPORTERS: string[] = [];
+// #2975 (cut-over 4 of 6) took the list to EMPTY: all six import the tool through the pinned dependency (`agent-org/src/...`) now. An empty list is the
+// right reading and not a scan that found nothing: the CONTROL below drives the same scan over a fixture violator and must find it.
 
 test("nothing outside packages/agent-org and packages/lab imports the package by a relative path, beyond the named exception", () => {
   const found = relativeImportersOfAgentOrg();
-  assert.ok(found.length > 0, "the scan found nothing: POSITIVE CONTROL below proves it can, so an empty real reading here is suspicious");
+  // The positive control lives in the next test (`control: the relative-import scan finds a fixture violator ...`).
   assert.deepEqual(found, KNOWN_RELATIVE_IMPORTERS, `a NEW relative importer appeared, or the known one was fixed: ${found.join(", ")}`);
 });
 
@@ -519,7 +514,11 @@ function decision4Counts(): { total: number; divided: number } {
 // readings and the gate) and matches no product pattern -- the same reason as #2793's line above. Re-derived by running this test, not inferred.
 // 2026-10-02, #2975 (cut-over 4 of 6, the travelled tests deleted; `work-gate.test.ts` KEPT, because #3088 added a test to it that a11ign/agent-org's copy does not have): 91 total, 18 divided. Seventy-one FEWER totals and the same divided: each deleted file had a same-named test in
 // a11ign/agent-org and imported `agent-org/src` (t-import) with no product pattern. Re-derived by running this test, not inferred.
-const RECORDED_DECISION_4 = { total: 91, divided: 18 };
+// 2026-10-03, #2975 (cut-over 4 of 6, the repoint): 95 total, 19 divided, from 91/18. FOUR MORE totals, each re-derived with `git grep` against the parent commit: `project-roles-a11ign-plugin.test.ts`
+// (imports `agent-org/src/cause-shape.mjs` to run the real `declareCause` over the plugin, which became plain data), `primary-checkout-mark.test.ts` (imports the tool's command table),
+// `tracker-writer-population.test.ts` (a REGEX naming `agent-org/src` that follows the dependency edge, matched by this scan as an import) and `fleet-hold-readers-agree.test.ts`, which is the one
+// MORE DIVIDED: it imports `agent-org/src` AND `control/src/fleet-playbook.mjs`, the two packages that cannot import each other.
+const RECORDED_DECISION_4 = { total: 95, divided: 19 };
 
 test("decision 4's total/divided counts, re-derived, match the row's currently-amended reading", () => {
   const counts = decision4Counts();

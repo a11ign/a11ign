@@ -27,8 +27,8 @@ import { basename, dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
-import { claudeTurns, transcriptFiles } from "../packages/agent-org/src/token-audit.mjs";
-import { extractRegionSection, regionPathsFromBody } from "../packages/agent-org/src/region-paths.mjs";
+import { claudeTurns, transcriptFiles } from "agent-org/src/token-audit.mjs";
+import { extractRegionSection, regionPathsFromBody } from "agent-org/src/region-paths.mjs";
 import {
   selectionFor, alwaysRunTests, narrowByDeclaredScope, testFilesToRun, packageIndex, sourceClosure, discoverTestFiles,
 } from "./select-changed-tests.mjs";
@@ -265,7 +265,9 @@ export function regionPaths(body) {
 
 /**
  * @typedef {{ dir: string, text: string }} Transcript
- * @typedef {{ session: string | null, row: number | null, calls: import("../packages/agent-org/src/token-audit.mjs").Turn[] }} Attributed
+ * @typedef {{ session: string, model: string, day: string, at: number, fresh: number, cacheRead: number, cacheWrite: number,
+ *             output: number, thinking: number }} Turn the tool's `token-audit.mjs` `Turn`, restated: its modules are untyped here (`scripts/test-support/agent-org-modules.d.ts`)
+ * @typedef {{ session: string | null, row: number | null, calls: Turn[] }} Attributed
  */
 
 /**
@@ -276,6 +278,7 @@ export function regionPaths(body) {
  */
 export function attribute(transcripts, { since, until }) {
   return transcripts.map(({ dir, text }) => {
+    /** @type {Turn[]} */
     const turns = claudeTurns(text, "unattributed");
     const session = turns[0]?.session ?? null;
     const named = session === "unattributed" ? null : session;
@@ -300,7 +303,7 @@ export function rowsNeeded(attributed) {
  */
 export function groupReading(members) {
   const calls = members.flatMap((m) => m.calls);
-  const column = (/** @type {(t: import("../packages/agent-org/src/token-audit.mjs").Turn) => number} */ pick) => spread(calls.map(pick));
+  const column = (/** @type {(t: Turn) => number} */ pick) => spread(calls.map(pick));
   return {
     // A transcript that names no session has no session to count; it is a transcript and its calls, nothing more.
     sessions: new Set(members.flatMap((m) => (m.session === null ? [] : [m.session]))).size,
@@ -607,7 +610,7 @@ function runSelection(repoRoot) {
 
 /** @param {string} root @returns {Transcript[]} */
 function readTranscripts(root) {
-  return transcriptFiles(root).map((file) => ({ dir: basename(dirname(file)), text: readFileSync(file, "utf8") }));
+  return transcriptFiles(root).map((/** @type {string} */ file) => ({ dir: basename(dirname(file)), text: readFileSync(file, "utf8") }));
 }
 
 /** One row's Region paths from its body, or null when the row cannot be read. @param {number} row */

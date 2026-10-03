@@ -57,7 +57,7 @@ jobs:
           PR_BODY: ${{ inputs.pr-body }}
         run: |
           if node -e "
-            import('./packages/agent-org/src/acceptance-commands.mjs').then((m) => {
+            import('agent-org/src/acceptance-commands.mjs').then((m) => {
               process.exit(m.hasFullHistoryDeclaration(process.env.PR_BODY) ? 0 : 1);
             });
           "; then
@@ -72,4 +72,4 @@ jobs:
       - name: Run the PR's own stated Acceptance command(s)
         env:
           PR_BODY: ${{ inputs.pr-body }}
-        run: node packages/agent-org/src/acceptance-commands.mjs
+        run: pnpm exec agent-org acceptance-commands

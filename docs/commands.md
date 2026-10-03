@@ -21,10 +21,12 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node packages/agent-org/src/closes-mismatch-check.mjs` — refuse when a PR's declared Closes line disagrees with what GitHub will actually close
 - `node packages/agent-org/src/control-plane-hygiene.mjs` — print every control-plane hygiene number fresh, measured by command, never typed once
 - `node packages/agent-org/src/fleet-gated-nightly.mjs` — fleet-gated-nightly -- gather the open fleet-gated rows (no model), post the
+- `node packages/agent-org/src/hand-fix-ledger.mjs` — count the hand fixes on `main` -- changes the org should have made itself and a human-side session made
 - `node packages/agent-org/src/host-units.mjs` — compare the systemd units this repo SHIPS against the ones the agent host actually runs
 - `node packages/agent-org/src/mark-primary-checkout.mjs` — mark or query whether this checkout is the fleet-driving primary, which the hooks read
 - `node packages/agent-org/src/merge-guard.mjs` — ask whether a PR's checks actually ran and passed, never trusting mergeStateStatus alone
 - `node packages/agent-org/src/merge-queue.mjs` — refuse any route onto main other than the open-PR merge queue
+- `node packages/agent-org/src/org-retro.mjs` — org-retro -- the last 24 hours of the org, as numbers, for `ceo`'s daily retrospective (#2938).
 - `node packages/agent-org/src/org-watch.mjs` — org-watch -- the org's clock. Hourly by default; `--weekly` renders the cost table.
 - `node packages/agent-org/src/owned-path-signoff.mjs` — check a PR touching a corpus-invalidating path named the facts its own body must state
 - `node packages/agent-org/src/parent-recheck-summary.mjs` — read a node:test TAP log and print its failing subtests by name -- #744, never a fixed tail
@@ -50,7 +52,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node packages/agent-org/src/tracker-comment.mjs` — read and edit a tracker comment safely -- the one place, so no edit is improvised again
 - `node packages/agent-org/src/trunk-revert-guard.mjs` — compare main's before/after state on a merge and refuse one that silently deletes prior work
 - `node packages/agent-org/src/trunk-sweep.mjs` — sweep main for a gate failure while GITHUB_TOKEN-authored merges suppress every triggering event
-- `node packages/agent-org/src/update-branch-sweep.mjs` — retired (#3046): nothing runs it any more, and the script is deleted by #2976
+- `node packages/agent-org/src/update-branch-sweep.mjs` — push every armed, green-or-running PR up to main's new tip after a merge lands
 - `node packages/agent-org/src/update-primary.mjs` — the one sanctioned way to move the primary checkout: fetch, detach at origin/main, install if the lockfile moved, rebuild
 - `node packages/agent-org/src/update-tool.mjs` — the one way to move the tool's own checkout: fetch, refuse a dirty tree, detach at origin/main
 - `node packages/agent-org/src/wake.mjs` — wake -- deliver work-gate's orders to the sessions that can take them. The other half of #912.
@@ -90,6 +92,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/manifest-repository-check.mjs` — refuse a publish whose manifests name a different repository than the run publishing them
 - `node scripts/npm-token-liveness.mjs` — say whether the first-publish npm token is still present after it should have been revoked
 - `node scripts/prune-stale-workspace-scope.mjs` — remove a stale workspace-scope's node_modules symlinks a rename left behind
+- `node scripts/refuse-other-installers.mjs` — the root `preinstall`: refuses any installer that is not pnpm (#2897, row 10 of 10 of "Finish the move to pnpm")
 - `node scripts/registry-consumer-gate.mjs` — install what is PUBLISHED (a11ign from the registry) into an empty directory and refuse what a consumer could not run
 - `node scripts/release-commit-version-bump.mjs` — commit changeset version's manifest bump and consumed changesets back to main after a real publish
 - `node scripts/release-gate-scope.mjs` — warn which release:gate stages release:gate:ci does not run, and how many

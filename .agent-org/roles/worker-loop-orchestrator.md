@@ -422,7 +422,7 @@ earlier**. Both sentences were true — nothing held the region, every symbol wa
 work was done and merged.**
 
 ```
-$ node packages/agent-org/src/row-claim.mjs check 83
+$ pnpm exec agent-org row-claim check 83
 UNCLAIMED -- #83 …    STARTABLE: no unmerged branch is in its region
 
 $ gh issue view 83 --json state,closedAt

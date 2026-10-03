@@ -420,7 +420,7 @@ jobs:
       - name: This head matches what GitHub recorded (#294)
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node packages/agent-org/src/merge-guard.mjs --ci-gate ${{ github.event.pull_request.number }}
+        run: pnpm exec agent-org merge-guard --ci-gate ${{ github.event.pull_request.number }}
       # #549: WHAT THE BODY DECLARES MUST MATCH WHAT GITHUB WILL ACTUALLY CLOSE. `Closes: none` in the
       # body and a real closure of two issues both merged the same day -- neither the acceptance job (no
       # GH_TOKEN, by design) nor anything else compared the two. This is a NEW step, not folded into
@@ -433,7 +433,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_BODY: ${{ github.event.pull_request.body }}
-        run: node packages/agent-org/src/closes-mismatch-check.mjs ${{ github.event.pull_request.number }}
+        run: pnpm exec agent-org closes-mismatch-check ${{ github.event.pull_request.number }}
       # THE LANE CHECK WAS HERE, AND IS RETIRED (#916's date, 2026-09-15, passed without its CODEOWNERS
       # replacement being built -- built afterward, in #916 itself). It refused any PR touching
       # `.github/workflows/` unless it came from a `ceo/` branch or carried a `Lane-exception:` line naming
@@ -511,18 +511,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      # No install: this script imports `cli-flags` RELATIVELY for exactly that reason, and
-      # `pre-install-import-graph.test.ts` derives this job's entry into its population automatically.
+        with: { node-version: 22, cache: pnpm }
+      # The tool is a pinned dependency (#2975), so this job installs it. `--filter .` is the root project only.
+      - run: pnpm install --frozen-lockfile --ignore-scripts --filter .
       - name: Which paths did this PR change, and does its body sign them off?
         env:
           BODY: ${{ github.event.pull_request.body }}
         run: |
           git diff --name-only origin/${{ github.base_ref }}...HEAD > /tmp/changed.txt
           printf '%s' "$BODY" > /tmp/body.txt
-          node packages/agent-org/src/owned-path-signoff.mjs --diff=/tmp/changed.txt --body=/tmp/body.txt
+          pnpm exec agent-org owned-path-signoff --diff=/tmp/changed.txt --body=/tmp/body.txt
 
   # #902, step 2 of the CI Reset (chairman-approved): THE REQUIRED CHECK IS THE PRODUCT, NOT THE PROCESS.
   # Of the last forty red `ci` runs on pull requests, 13 were `ts` -- a real test, lint or typecheck

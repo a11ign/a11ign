@@ -22,7 +22,7 @@ import { pathToFileURL } from "node:url";
 import { realpathSync, appendFileSync } from "node:fs";
 import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { REPO } from "./repo-identity.mjs";
-import { gh } from "../packages/agent-org/src/merge-guard/lookups.mjs";
+import { gh } from "agent-org/src/merge-guard/lookups.mjs";
 import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 
 const NIGHTLY_RUN_LIMIT = 30; // ~a month of daily runs -- plenty of margin over "was there one today"
