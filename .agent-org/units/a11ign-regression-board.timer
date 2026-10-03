@@ -1,0 +1,15 @@
+[Unit]
+# THE CLOCK BEHIND a11ign-regression-board.service -- #3328. See that file for what it sweeps and why a clock.
+Description=Every quarter hour: board open `regression` rows that have no Project item (#3328)
+
+[Timer]
+# EVERY 15 MINUTES, AT :03, :18, :33 AND :48 -- off the top of the hour (#965). A `regression` row is a release's verdict
+# going red, so it should not wait an hour for a Status; a fire with nothing to board is one `gh issue list`.
+OnCalendar=*-*-* *:03/15:00
+
+# A HOST ASLEEP OR REBOOTING STILL SWEEPS ON WAKING. The sweep is idempotent, so a catch-up cannot board a row twice.
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

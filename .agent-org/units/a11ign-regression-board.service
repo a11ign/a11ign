@@ -1,0 +1,53 @@
+[Unit]
+# THE BOARDING OF A `regression` ROW -- #3328 (follow-up to #3184). The outsider verdict job files ONE `regression` row per
+# version under `github.token`, and `row-file`'s board step cannot resolve organization Project 1 under that token (run
+# 37133463643 filed #3287 and failed at `gh project item-add 1 --owner a11ign`), so the row EXISTS with no Project item, no
+# Status, no `ready` and no lane label, and nobody is woken for it. This unit boards it, under the workers account, which
+# already writes this org's rows (`a11ign-weekly-review.service` is the same shape, #3319).
+#
+# A SWEEP ON A CLOCK, AND WHY THAT IS RIGHT HERE (`org-routing-and-timers.md`): the filer runs on GitHub's side under a token
+# that cannot see the board, so there is no gate question this host could ask that sees the row first. The clock is the only
+# thing that reaches it. It does nothing to a row that is already boarded, so a fire with nothing to do costs one listing.
+Description=a11ign: board open `regression` rows the outsider job filed without a Project item (#3328)
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/agent/repos/a11y-witness
+
+# A systemd unit gets no login shell's PATH. The wrapper at ~/.local/bin/gh is first so the unit and an interactive session
+# run the same `gh`.
+Environment=PATH=/home/agent/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=HOME=/home/agent
+
+# V8'S COMPILE CACHE GOES UNDER THE HOME, NOT /tmp -- #2458. See a11ign-lab-watch.service.
+Environment=NODE_COMPILE_CACHE=%h/.cache/node-compile-cache
+
+# WHICH ACCOUNT THIS BOARDS AS, DECLARED (#1974): the workers account. A unit that does not say gets `~/.config/gh`, a person's.
+# The row's last Status event reads `a11ign-ai-workers`, which is what the Done-when of #3328 reads back.
+Environment=GH_CONFIG_DIR=/home/agent/workers/gh
+
+# THE COMMAND THIS RUNS IS THE LIVE TOOL'S, NOT `pnpm exec agent-org`. `row-file --board=<n>` (a11ign/agent-org#121, #3330) is the
+# one command that boards an issue that ALREADY EXISTS, and this checkout's pinned install predates it: read live
+# 2026-10-03, `node node_modules/agent-org/src/bin.mjs row-file --board=` answers "unknown flag --board". The tool's own
+# checkout (`host.json`'s `tool`) carries it, and the work-tick unit's `update-tool` keeps that checkout current. When the
+# pin moves past the flag this line may go back to `pnpm exec`; nothing else here changes.
+# The tool resolves the project it serves from this variable and refuses to guess (`resolveHomeCheckout`).
+Environment=AGENT_ORG_HOST=%h/repos/a11y-witness/.agent-org/host.json
+
+# THE ONE OVERRIDE `row-file` NEEDS HERE, AND WHY ITS REASON IS TRUE (#1352): `row-file` refuses a launch from a checkout whose
+# `.git` is a directory, which this host's primary is, because what a policy script writes lands "in a tree other sessions
+# share". What this writes there is `runs/board-snapshots/<time>-issue-<n>.json` (the tool's #1275 snapshot before it
+# mutates a row), under `runs/`, which git ignores. It writes no tracked file.
+Environment="A11Y_POLICY_LAUNCH_REASON=host timer: row-file --board= calls gh, and writes only an untracked runs/board-snapshots file in this shared checkout"
+
+# THE LISTING IS THE SELECTION: only an open row labelled `regression` is ever handed to the tool, so a row without the label
+# is never touched. A failed listing exits 1 BEFORE the loop (an empty list is not a failed one), and one row's refusal
+# does not stop the rest: `rc` carries the failure out, so the journal shows a red line for THAT row and a red unit.
+# `--board=` leaves a row already on the board alone, in any Status, and exits 0 saying so. `--limit 200` is far above the
+# one-row-per-version rate this serves. `$$` is systemd's spelling of a literal `$`.
+ExecStart=/usr/bin/sh -c 'rows="$$(gh issue list --repo a11ign/a11ign --label regression --state open --limit 200 --json number --jq ".[].number")" || exit 1; rc=0; for n in $$rows; do /usr/bin/node %h/repos/agent-org/src/bin.mjs row-file --board="$$n" --lane=any || rc=1; done; exit "$$rc"'
+
+TimeoutStartSec=300
+
+# NO [Install] SECTION, as a11ign-lab-watch.service: `WantedBy=default.target` would run this at every boot, and the timer is
+# the only thing that may start it.
