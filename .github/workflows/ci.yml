@@ -300,13 +300,33 @@ jobs:
       # of a published package's runtime range is accepted as a `patch`; a diff that moves only devDependencies is
       # accepted as empty; a major, a 0.x minor, an owned path or anything outside the manifests is REFUSED here, and
       # the log names which, so that pull request waits for a human who looks. Recognised by the `deps:` prefix
-      # `dependabot.yml` pins, on the pull request AND on its queue entry (the merge group has no title, only the
-      # squash message), or the queue would eject what this job passed; and the entry is diffed against its own parent
+      # `dependabot.yml` pins, on the pull request AND on its queue entry (the merge group has no title), or the queue
+      # would eject what this job passed; and the entry is diffed against its own parent
       # (`merge_group.base_sha`, empty on a pull request), because up to 5 are built and entry 2 contains entry 1. Every other pull request keeps the step below.
       # The title is read by an expression, never interpolated into a shell line.
+      #
+      # #3220: THE QUEUE ENTRY'S MESSAGE IS A MERGE COMMIT'S, NOT A SQUASH'S. The `merge-queue-main` ruleset (23681721) has
+      # `merge_method: MERGE` (`gh api repos/a11ign/a11ign/rulesets/23681721`), so `head_commit.message` is `Merge pull
+      # request #N from <owner>/<branch>`, a blank line, then the title: `startsWith(..., 'deps:')` was false on it, the
+      # derivation was skipped, the generic `changeset status --since` ran and exited 1, and #3155's entry was ejected twice
+      # (run 37120613262). The step below reads the TITLE LINE (the third) in shell, since a newline cannot be written inside
+      # an expression string, and it is the same prefix the pull request was passed on, so the queue never judges a pull
+      # request by something other than what the pull request was judged by. A switch to SQUASH changes the message and
+      # is the moment this step changes (the `version` step below says the same).
+      - id: dependencyQueue
+        name: A dependency pull request's queue entry is recognised by the title on its merge commit
+        if: github.event_name == 'merge_group'
+        env:
+          QUEUE_MESSAGE: ${{ github.event.merge_group.head_commit.message }}
+        run: |
+          first=$(printf '%s\n' "$QUEUE_MESSAGE" | sed -n 1p)
+          title=$(printf '%s\n' "$QUEUE_MESSAGE" | sed -n 3p)
+          if [[ "$first" =~ ^Merge\ pull\ request\ \#[0-9]+\ from\  && "$title" == deps:* ]]; then
+            echo "queue=true" >> "$GITHUB_OUTPUT"
+          fi
       - id: dependency
         name: A dependency pull request owes the entry its diff derives
-        if: steps.precise.outputs.changeset == 'true' && startsWith(github.event.pull_request.title || github.event.merge_group.head_commit.message, 'deps:')
+        if: steps.precise.outputs.changeset == 'true' && (startsWith(github.event.pull_request.title, 'deps:') || steps.dependencyQueue.outputs.queue == 'true')
         run: |
           node scripts/dependency-changeset.mjs check --base=${{ needs.changed.outputs.base }} --since=${{ github.event.merge_group.base_sha }}
           echo "settled=true" >> "$GITHUB_OUTPUT"
