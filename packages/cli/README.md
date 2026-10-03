@@ -31,11 +31,11 @@ npm run witness -- https://example.com --task "Find the opening hours"
 **See the [top-level README](../../README.md) for which of those two paths is yours** — this file does not
 repeat that decision.
 
-> **`npx a11ign` does NOT work yet, and that is why it is not the first thing on this page.**
-> `npx a11ign https://example.com --task "Find the opening hours"` is what the CLI *is*, and it
-> works from a checkout — but no package has been pushed to npm, so run as typed it returns `E404` and
-> teaches a reader only that the tool is broken. The name is still undecided (PLAN.md, B5); publishing is
-> tracked as PLAN.md B7. It will move to the top of this file on the day it is true.
+> **`npx a11ign` works — `a11ign` is published to npm — and it still needs a Windows machine with NVDA.**
+> `npx a11ign https://example.com --task "Find the opening hours"` is what the CLI *is*. It is not the first
+> thing on this page because the machine it drives is the hard part, and which of the two ways in above is
+> yours is decided in the [top-level README](../../README.md), not here. Check the current version with
+> `npm view a11ign dist-tags.latest`.
 
 ## What "a rule scanner cannot see" means, concretely
 
