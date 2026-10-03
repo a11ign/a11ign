@@ -40,8 +40,8 @@ import { stripComments } from "./local-import-closure.mjs";
 // RELATIVE, for the reason `changed-files.mjs` records above its own identical import.
 import { flagValue, refuseUnknownFlags } from "../../worker-fleet/src/cli-flags.mjs";
 
-/** The packages that are to leave, by directory name under `packages/`. Two today; a third is a one-word edit here. */
-export const LAYER_PACKAGES = Object.freeze(["nvda-worker", "nvda-speech"]);
+/** The packages that are to leave, by directory name under `packages/`. `agent-org` is declared AFTER it left (#2976): the real tree must show zero edges into it. */
+export const LAYER_PACKAGES = Object.freeze(["nvda-worker", "nvda-speech", "agent-org"]);
 
 export const BASELINE_PATH = "packages/guards/layer-edges.baseline.json";
 

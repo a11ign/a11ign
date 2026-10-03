@@ -1,5 +1,4 @@
 ---
-"@a11ign/agent-org": patch
 "@a11ign/control": patch
 "@a11ign/lab": patch
 ---
