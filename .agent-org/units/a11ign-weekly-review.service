@@ -1,0 +1,58 @@
+[Unit]
+# THE WEEKLY OUTSIDER REVIEW'S FILING -- #3183, scheduled here by #3319 (ceo, #3183, 2026-10-03). ONE row a week
+# for a session that built none of the recent work to take; `scripts/weekly-review.mjs` says what the row holds.
+#
+# A HOST UNIT AND NOT weekly-review.yml's `schedule`: the board step (`gh project item-add 1 --owner a11ign`) cannot
+# resolve an organization Project v2 under `github.token` ("Could not resolve to a ProjectV2 with the number 1",
+# run 37133463643, which filed #3287 with no Status and no `ready`), and the only wider credential is the
+# chairman's personal token. The workers account already writes this org's rows, so the unit spends that and
+# nothing in a public repository's Actions scope is widened.
+#
+# A WALL-CLOCK EVENT, NOT A CHECK FOR WORK (`org-routing-and-timers.md`): it files one row a week and looks for
+# nothing. A second run in the same ISO week files nothing and says so, so a `Persistent=true` catch-up is safe.
+Description=a11ign: file this week's outsider review row (#3183, #3319)
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/agent/repos/a11y-witness
+
+# A systemd unit gets no login shell's PATH, and the script spawns `gh` and `pnpm`. The wrapper at ~/.local/bin/gh
+# is first so the unit and an interactive session run the same `gh`; the pnpm shim is there too.
+Environment=PATH=/home/agent/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=HOME=/home/agent
+
+# V8'S COMPILE CACHE GOES UNDER THE HOME, NOT /tmp -- #2458. See a11ign-lab-watch.service.
+Environment=NODE_COMPILE_CACHE=%h/.cache/node-compile-cache
+
+# WHICH ACCOUNT THIS FILES AS, DECLARED (#1974): the workers account. A unit that does not say gets `~/.config/gh`,
+# a person's, because the routing wrapper keys on a workspace id no unit has. The filed row's author reads
+# `a11ign-ai-workers`, and that is the whole point of moving off the workflow.
+Environment=GH_CONFIG_DIR=/home/agent/workers/gh
+
+# THE ONE OVERRIDE `row-file` NEEDS HERE, AND WHY ITS REASON IS TRUE (#1352). `row-file` refuses a launch from a checkout
+# whose `.git` is a directory, which this host's primary is; the refusal exists because what a policy script writes
+# lands "in a tree other sessions share". Read live 2026-10-03 from a plain clone: the refusal fires, and with this
+# variable set it prints the reason and carries on. Nothing here writes that tree: `row-file` only calls `gh`, and
+# the script's one file is a body under a `mkdtemp` directory it removes. The alternative was a linked worktree this
+# timer owns, which needs its own node_modules and a prune the worktree-prune unit would race. NOT the workflow's
+# "ephemeral runner" wording, which is untrue on a host that keeps this checkout.
+Environment="A11Y_POLICY_LAUNCH_REASON=host timer: row-file only calls gh and writes nothing in this shared checkout"
+
+# UPDATED FIRST, and non-fatal, as every unit that runs this checkout's code does. The script reads RELEASE.md and
+# docs/try-it.md from THIS checkout and builds the row from them, so a stale checkout files a body made from last
+# week's requirements.
+ExecStartPre=-%h/.local/bin/pnpm run primary:update
+
+# `GITHUB_SHA` IS THE COMMIT THE DOCUMENTS WERE READ AT, and the script REFUSES to run without it (`checkedOutCommit`):
+# a runner sets it, a unit does not. This line supplies the checkout's own HEAD, which is what that name means here
+# after the update above. `$$` is systemd's spelling of a literal `$`. The program is still the repository-relative
+# script, as a11ign-corpus-release-nightly.service's is, so `unitEntryPoints` resolves it from any checkout.
+#
+# `pnpm exec agent-org row-file` RESOLVES THROUGH THE PRIMARY'S REAL node_modules (`.bin/agent-org`, installed by
+# pnpm there), not a symlinked tree; `npm-cli-executable.mjs` finds the shim on the PATH above.
+ExecStart=/usr/bin/sh -c 'GITHUB_SHA="$$(git rev-parse HEAD)" exec /usr/bin/node scripts/weekly-review.mjs'
+
+TimeoutStartSec=300
+
+# NO [Install] SECTION, as a11ign-lab-watch.service: `WantedBy=default.target` would run this at every boot, and the
+# timer is the only thing that may start it.
