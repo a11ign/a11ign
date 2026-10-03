@@ -13,8 +13,8 @@ Nothing had been published under the old name, so this is a rename, not a migrat
 
 > **Which path is yours? If you have no Windows machine, start with the [GitHub Action](#quickstart) —
 > it needs none.** If you have one, or don't mind building a VM, the [local path](#quickstart) is likely
-> yours instead. (`npx a11ign` is not published yet — see
-> [`packages/cli/README.md`](./packages/cli/README.md) for why and what to use instead.) This is the one
+> yours instead. (`npx a11ign` works — the package is on npm — and still needs that Windows machine; see
+> [`packages/cli/README.md`](./packages/cli/README.md).) This is the one
 > decision every other doc in this repo defers to.
 
 The findings it is *for* are the ones a rule scanner structurally cannot produce, because they need a screen reader and an interaction — not markup analysis:
