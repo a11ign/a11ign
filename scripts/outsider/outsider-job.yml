@@ -50,6 +50,9 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4   # this repository's own workflow file, which holds the one copy of the pin
+        with:
+          persist-credentials: false
       - name: Refuse a run whose pin is not the release it is named for
         env:
           VERSION: ${{ inputs.version }}
@@ -60,7 +63,14 @@ jobs:
           tag_sha=$(git ls-remote https://github.com/a11ign/a11ign "refs/tags/v${version}^{}" | cut -f1)
           [ -n "$tag_sha" ] || tag_sha=$(git ls-remote https://github.com/a11ign/a11ign "refs/tags/v${version}" | cut -f1)
           [ -n "$tag_sha" ] || { echo "::error::no release tag v${version} on https://github.com/a11ign/a11ign"; exit 1; }
-          pinned=021d6f6fd3123f6a63cfbc46d39f492fe595cfd5
+          workflow_file="${GITHUB_WORKFLOW_REF#"${GITHUB_REPOSITORY}/"}"
+          workflow_file="${workflow_file%%@*}"
+          pinned=$(sed -nE 's#^[[:space:]]*(- )?uses:[[:space:]]*a11ign/a11ign@([0-9a-f]{40})([[:space:]].*)?$#\2#p' "$workflow_file")
+          case "$pinned" in
+            "" | *$'\n'*)
+              echo "::error::${workflow_file} has no single line pinning the Action to a full commit sha, so there is no pin to read"
+              exit 1 ;;
+          esac
           if [ "$SHA" != "$tag_sha" ]; then
             echo "::error::this run is named for ${SHA}, but v${version} is ${tag_sha}"
             exit 1
@@ -126,7 +136,7 @@ jobs:
           - docs/try-it.md: "The other route: run it from the repository", and the authenticated run behind a login
 
           ### Substitutions: every line that differs from README.md's fence
-          - README.md line 178: `- uses: a11ign/a11ign@v0.1.0` became `- uses: a11ign/a11ign@021d6f6fd3123f6a63cfbc46d39f492fe595cfd5`
+          - README.md line 178: `- uses: a11ign/a11ign@v0.1.0` became `- uses: a11ign/a11ign@<the release's full commit sha, as pinned on that line of this file>`
           - README.md line 183: `url: https://example.com/contact` became `url: https://www.w3.org/WAI/demos/bad/before/home.html`
           - README.md line 184: `task: Send an enquiry` became `task: Find the main navigation and reach the survey.`
           - added: `needs: [pin]` under the job's key, so it waits for the pin check
