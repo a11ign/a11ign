@@ -311,3 +311,53 @@ test("a SAME_DOCUMENT verdict says when it rests on origin and path only", () =>
   // NOT SET when no path was compared at all: a caveat about a comparison nobody made is noise.
   assert.equal(compareIdentity(documentIdentity({ diagnostics: [] }), clean).queryDropped, false);
 });
+
+/**
+ * #3293: A SUBMIT THAT MOVED THE DOCUMENT IS A SECOND DOCUMENT, even when no mark names it.
+ *
+ * Weekly review W40, run 37134253796 (`https://www.gov.uk/`): the census was read from the home page before the
+ * probe, `probe-forms` then submitted gov.uk's empty search, and the only `titleSource` mark was read afterwards
+ * ("Search - GOV dot UK", spoken). Each component had exactly ONE value, so neither was `unstable` and the
+ * sentence stayed silent over a record holding two pages. The submit's own `navigatedOnSubmit` is the third
+ * reading, and it names the document the probe left for.
+ */
+const govUkMarks = [
+  { event: "domCensus", targetUrl: "https://www.gov.uk/", targetMatch: "matched", formField: 4 },
+  { event: "titleSource", title: "Search - GOV dot UK", source: "spoken" },
+];
+const govUkSubmit = {
+  checked: true, navigated: true, from: "https://www.gov.uk/search/all?keywords=", to: "https://www.gov.uk/search/all?",
+};
+const govUkCapture = (navigatedOnSubmit: unknown) => ({ diagnostics: govUkMarks, interaction: { navigatedOnSubmit } });
+
+test("#3293: a submit that left the census page makes the served path unstable, and says so", () => {
+  const identity = documentIdentity(govUkCapture(govUkSubmit));
+  assert.deepEqual(identity.unstable.servedPath, ["https://www.gov.uk/", "https://www.gov.uk/search/all"]);
+  assert.equal(identity.components.servedPath, undefined, "a contradicted component is not presented as read");
+  assert.match(identitySentence(identity), /NAMED MORE THAN ONE DOCUMENT.*servedPath "https:\/\/www\.gov\.uk\/" then "https:\/\/www\.gov\.uk\/search\/all"/);
+});
+
+test("#3293: the controls -- a submit that stayed put, did not run, or never happened names one document", () => {
+  const silent = (navigatedOnSubmit: unknown) => documentIdentity(govUkCapture(navigatedOnSubmit));
+  // Both carry a URL on ANOTHER path, so only the `checked`/`navigated` gate keeps them silent (mutation-checked).
+  const stayed = { ...govUkSubmit, navigated: false };
+  const notAsked = { ...govUkSubmit, checked: false, navigated: undefined };
+  const selfReload = { checked: true, navigated: true, from: "https://www.gov.uk/?a=1", to: "https://www.gov.uk/?a=2" };
+  for (const [name, nav] of Object.entries({ stayed, notAsked, selfReload, absent: undefined })) {
+    const identity = silent(nav);
+    assert.deepEqual(identity.unstable, {}, `${name}: no second document`);
+    assert.equal(identity.components.servedPath, "https://www.gov.uk/", `${name}: the census path stands`);
+  }
+  assert.equal(documentIdentity({ diagnostics: govUkMarks }).components.servedPath, "https://www.gov.uk/");
+});
+
+test("#3293: the pre-fix navigatedOnSubmit shape, whose presence meant 'navigated', is read too", () => {
+  const identity = documentIdentity(govUkCapture({ from: "https://www.gov.uk/", to: "https://www.gov.uk/search/all" }));
+  assert.deepEqual(identity.unstable.servedPath, ["https://www.gov.uk/", "https://www.gov.uk/search/all"]);
+});
+
+test("#3293: a submit alone never becomes the identity -- it can contradict a census read, not replace one", () => {
+  const identity = documentIdentity({ diagnostics: [], interaction: { navigatedOnSubmit: govUkSubmit } });
+  assert.deepEqual(identity.read, []);
+  assert.deepEqual(identity.unstable, {});
+});
