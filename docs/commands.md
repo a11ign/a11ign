@@ -33,6 +33,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/known-gaps-index.mjs` — regenerate docs/known-gaps.md's own index of open sections from its headings
 - `node scripts/manifest-repository-check.mjs` — refuse a publish whose manifests name a different repository than the run publishing them
 - `node scripts/npm-token-liveness.mjs` — say whether the first-publish npm token is still present after it should have been revoked
+- `node scripts/pnpm.mjs` — run pnpm with the arguments given, for a package script's chain on a box with no `pnpm` on PATH
 - `node scripts/prune-stale-workspace-scope.mjs` — remove a stale workspace-scope's node_modules symlinks a rename left behind
 - `node scripts/refuse-other-installers.mjs` — the root `preinstall`: refuses any installer that is not pnpm (#2897, row 10 of 10 of "Finish the move to pnpm")
 - `node scripts/registry-consumer-gate.mjs` — install what is PUBLISHED (a11ign from the registry) into an empty directory and refuse what a consumer could not run
