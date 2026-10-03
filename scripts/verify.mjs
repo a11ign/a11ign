@@ -242,6 +242,47 @@ export const HOST_ONLY_AGENT_ORG_TESTS = {
   "live-tree-independence.test.ts": "CI has no /home/agent/repos/a11y-witness clone and skips it; here it runs and fails",
 };
 
+/** Where CI's second checkout comes from, and the name of the clone `verify` makes when no checkout is to hand. */
+const AGENT_ORG_REMOTE = "a11ign/agent-org";
+const AGENT_ORG_CACHE = "verify-agent-org";
+
+/**
+ * WHICH CHECKOUT OF THE TOOL THE `agentOrg` STEP READS, in order: `A11Y_AGENT_ORG_REPO` (explicit, and never
+ * replaced by a guess), a sibling `../agent-org`, and otherwise a clone `verify` makes itself in the repository's
+ * common git dir, shared by every worktree and never tracked. CI clones the tool with full history too (the suite
+ * reads its merge-base), so the clone is full. A normal checkout has the linked `agent-org` PACKAGE and not a Git
+ * checkout of the tool, which is why the first of these cannot be the only way (review of #3342).
+ * @param {{ env: Record<string, string | undefined>, sibling: string, cache: string, isCheckout: (dir: string) => boolean }} where
+ * @returns {{ dir: string, clone: boolean }}
+ */
+export function agentOrgSource({ env, sibling, cache, isCheckout }) {
+  if (env.A11Y_AGENT_ORG_REPO) return { dir: env.A11Y_AGENT_ORG_REPO, clone: false };
+  if (isCheckout(sibling)) return { dir: sibling, clone: false };
+  return { dir: cache, clone: !isCheckout(cache) };
+}
+
+/** The checkout to stage the tool from, cloning it once if none is to hand; null (said aloud) when it cannot be had. */
+function provisionAgentOrg() {
+  const isCheckout = (/** @type {string} */ dir) => existsSync(join(dir, ".git"));
+  const cache = resolve(REPO, git(["rev-parse", "--git-common-dir"]), AGENT_ORG_CACHE);
+  const { dir, clone } = agentOrgSource({
+    env: process.env, sibling: resolve(REPO, "..", "agent-org"), cache, isCheckout,
+  });
+  if (clone) {
+    console.log(`verify: no a11ign/agent-org checkout beside this one; cloning ${AGENT_ORG_REMOTE} into ${dir} (once)`);
+    rmSync(dir, { recursive: true, force: true });
+    if (sh("gh", ["repo", "clone", AGENT_ORG_REMOTE, dir]).status !== 0) {
+      console.error(`verify: could not clone ${AGENT_ORG_REMOTE}; clone it yourself and set A11Y_AGENT_ORG_REPO`);
+      return null;
+    }
+  }
+  if (!isCheckout(dir)) {
+    console.error(`verify: A11Y_AGENT_ORG_REPO=${dir} is not a git checkout of ${AGENT_ORG_REMOTE}`);
+    return null;
+  }
+  return dir;
+}
+
 const AGENT_ORG_DIR = join(REPO, "packages/agent-org");
 const AGENT_ORG_FIXTURE = join(REPO, "packages/lab/src/packaging/board-document-chrome-resolver.test.ts");
 
@@ -254,12 +295,12 @@ const AGENT_ORG_FIXTURE = join(REPO, "packages/lab/src/packaging/board-document-
  */
 function runAgentOrg(ciYml) {
   const staging = agentOrgStaging(ciYml);
-  const toolRepo = process.env.A11Y_AGENT_ORG_REPO ?? resolve(REPO, "..", "agent-org");
-  if (!staging || !existsSync(join(toolRepo, ".git"))) {
-    console.error(staging ? `verify: no a11ign/agent-org checkout at ${toolRepo} (set A11Y_AGENT_ORG_REPO)`
-      : "verify: ci.yml's agentOrg job no longer has the AGENT_ORG_REF and `cp -r` lines this step reads");
+  if (!staging) {
+    console.error("verify: ci.yml's agentOrg job no longer has the AGENT_ORG_REF and `cp -r` lines this step reads");
     return "fail";
   }
+  const toolRepo = provisionAgentOrg();
+  if (!toolRepo) return "fail";
   const scratch = mkdtempSync(join(tmpdir(), "verify-agent-org-"));
   const fixtureCopy = join(scratch, "fixture.test.ts");
   cpSync(AGENT_ORG_FIXTURE, fixtureCopy);
