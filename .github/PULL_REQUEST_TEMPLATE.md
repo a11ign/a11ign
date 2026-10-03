@@ -56,14 +56,18 @@ RULES WORTH KNOWING BEFORE YOU WRITE ONE
   - Genuinely nothing to run? `Acceptance: none — <reason>`. The em dash matters: `none -- reason` parses the reason as "- reason". The reason is REQUIRED, because "nobody wrote
     one" and "this one deliberately has none" must stay different states.
 
-`Mutation:` is NOT executed by CI -- a mutation edits a real file and a shared runner must not. It is the RECORD:
-what you broke, and that the guard bit. `npm run mutate` makes it cheap, and `pr:open` RUNS a `npm run mutate` line
-here on YOUR machine and WARNS (never refuses) when it reports the guard did not bite (#2307). Other lines are not run.
+`Mutation:` is OPTIONAL, and a missing one no longer fails anything (#3282, decided on #3213). `mutation-comment.yml` runs
+`packages/guards/src/mutate-diff.mjs` on every pull request: it mutates the lines the diff ADDED, in the non-test files a
+CHANGED test names, runs the changed tests, and CI POSTS THE SURVIVORS as a comment (at most 20; the rest are in the job
+summary). A survivor is a change no changed test pinned, some are equivalent, and none of it is a score or a gate.
 
-  - **REQUIRED WHEN THE DIFF ADDS OR CHANGES A TEST FILE (#2305).** CI reads the diff, and a PR that touches a
-    `*.test.ts`/`*.test.mjs` (or a `test_*.py`) with an empty `Mutation:` reports `MUTATION: MISSING` and fails,
-    exactly as a missing `Closes:` does. It checks that the line EXISTS, not that a mutant ran -- the cheap half.
-  - NOTHING TO BREAK (a rename, a fixture-only edit)? Write `Mutation: none -- <reason>`. The reason is REQUIRED.
+`Mutation:` stays the RECORD of what YOU broke and that the guard bit: CI never executes it -- a mutation edits a real
+file and a shared runner must not. `npm run mutate` makes it cheap, and `pr:open` RUNS a `npm run mutate` line here on
+YOUR machine and WARNS (never refuses) when it reports the guard did not bite (#2307). Other lines are not run.
+
+  - Worth writing when you changed a test or a guard: it is the one mutant YOU chose, and the comment's are the ones a
+    machine chose. Leaving it empty is never a finding.
+  - NOTHING TO BREAK (a rename, a fixture-only edit)? `Mutation: none -- <reason>` is still the way to say so.
 
 A NUMBER IN THIS BODY SITS UNDER A `## Measured` HEADING (#2308) -- a count or population claim ("25 merged
 pull requests", "every package.json is 0.0.0"), with the COMMAND and the OUTPUT it printed, at the head you are
