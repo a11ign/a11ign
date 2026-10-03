@@ -91,8 +91,8 @@ jobs:
       contents: read
       pull-requests: write         # for the PR comment below; omit it and the report still runs, only quieter
     steps:
-      - uses: actions/checkout@v4
-      - uses: a11ign/a11ign@021d6f6fd3123f6a63cfbc46d39f492fe595cfd5
+      - uses: actions/checkout@v7
+      - uses: a11ign/a11ign@11ac493646c4cbb2147bcc08f053a2255f18c823
         # Pinned to v0.1.0, the first tagged release. Use the full commit SHA instead if your CI must
         # not move even across a release.
         id: a11ign
@@ -101,7 +101,7 @@ jobs:
           task: Find the main navigation and reach the survey.
       # Keep the evidence: the full result, including the transcript behind every finding. Guarded on the
       # output existing, so a run that failed does not also fail the upload.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always() && steps.a11ign.outputs.result-json != ''
         with:
           name: a11ign-result

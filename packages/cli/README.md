@@ -11,7 +11,7 @@ workflow:
 ```yaml
 runs-on: windows-2022          # NVDA is Windows-only; the action fails fast and says so otherwise
 steps:
-  - uses: actions/checkout@v4
+  - uses: actions/checkout@v7
   - uses: a11ign/a11ign@main
     with:
       url: https://example.com/contact

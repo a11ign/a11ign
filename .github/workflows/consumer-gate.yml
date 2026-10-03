@@ -22,8 +22,8 @@ jobs:
           fetch-depth: 0
       - name: Refuse a pin that is not an ancestor of the commit this run is executing at
         run: |
-          if ! git merge-base --is-ancestor 5db1c00ef5fd5e3323a3777b36b8aec29789d679 "${{ github.sha }}"; then
-            echo "::error::consumer-gate.yml's uses: step is pinned to 5db1c00ef5fd5e3323a3777b36b8aec29789d679, which is not an"
+          if ! git merge-base --is-ancestor 11ac493646c4cbb2147bcc08f053a2255f18c823 "${{ github.sha }}"; then
+            echo "::error::consumer-gate.yml's uses: step is pinned to 11ac493646c4cbb2147bcc08f053a2255f18c823, which is not an"
             echo "::error::ancestor of the commit this run is executing at, ${{ github.sha }} (ref"
             echo "::error::${{ github.ref_name }}, ${{ github.event_name }}) -- regenerate (node"
             echo "::error::scripts/generate-consumer-gate.mjs) against a commit in this history"
@@ -31,9 +31,9 @@ jobs:
           fi
       - name: Refuse a pin that predates a change to what it pins
         run: |
-          changed=$(git diff --name-only --no-renames 5db1c00ef5fd5e3323a3777b36b8aec29789d679 "${{ github.sha }}" -- README.md scripts/generate-consumer-gate.mjs)
+          changed=$(git diff --name-only --no-renames 11ac493646c4cbb2147bcc08f053a2255f18c823 "${{ github.sha }}" -- README.md scripts/generate-consumer-gate.mjs)
           if [ -n "$changed" ]; then
-            echo "::error::consumer-gate.yml is pinned to 5db1c00ef5fd5e3323a3777b36b8aec29789d679, but this changed since:"
+            echo "::error::consumer-gate.yml is pinned to 11ac493646c4cbb2147bcc08f053a2255f18c823, but this changed since:"
             echo "::error::$changed"
             echo "::error::regenerate (node scripts/generate-consumer-gate.mjs) and dispatch again"
             exit 1
@@ -47,8 +47,8 @@ jobs:
       contents: read
       pull-requests: write         # for the PR comment below; omit it and the report still runs, only quieter
     steps:
-      - uses: actions/checkout@v4
-      - uses: a11ign/a11ign@5db1c00ef5fd5e3323a3777b36b8aec29789d679
+      - uses: actions/checkout@v7
+      - uses: a11ign/a11ign@11ac493646c4cbb2147bcc08f053a2255f18c823
         # Pinned to v0.1.0, the first tagged release. Use the full commit SHA instead if your CI must
         # not move even across a release.
         id: a11ign
@@ -57,7 +57,7 @@ jobs:
           task: Find the main navigation and reach the survey.
       # Keep the evidence: the full result, including the transcript behind every finding. Guarded on the
       # output existing, so a run that failed does not also fail the upload.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always() && steps.a11ign.outputs.result-json != ''
         with:
           name: a11ign-result
