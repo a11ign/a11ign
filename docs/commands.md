@@ -22,8 +22,10 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/check-schema-migration.mjs` — refuse a release while a declared schema migration is still open
 - `node scripts/check-transfer-urls.mjs` — check-transfer-urls -- walk the tree for every URL naming PRODUCT_REPO (a11ign/a11ign) and
 - `node scripts/ci-changed.mjs` — classify what a PR's diff touches, so CI's conditional jobs know whether to run
+- `node scripts/ci-health.mjs` — read CI health per repository against docs/ci-targets.json and, with --post, comment the table on #928
 - `node scripts/coverage-failure-classifier.mjs` — turn a nightly coverage.yml failure comment into an actual finding, not just 'it failed'
 - `node scripts/coverage.mjs` — the whole-repo coverage gate `pnpm run coverage` runs, now through rstest, not c8
+- `node scripts/dependency-changeset.mjs` — read what a dependency pull request owes the changelog from its manifests' diff, and compile it at version time
 - `node scripts/doc-cross-reference-report.mjs` — print the nightly doc cross-reference report -- every doc-to-doc and doc-to-tree check, as markdown
 - `node scripts/generate-commands-doc.mjs` — regenerate docs/commands.md from every script's own `// command:` header
 - `node scripts/generate-consumer-gate.mjs` — regenerate .github/workflows/consumer-gate.yml from README.md's own documented workflow

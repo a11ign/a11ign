@@ -1,0 +1,47 @@
+name: CI health
+
+# THE CHAIRMAN'S CI TARGETS, READ WEEKLY AND POSTED ON #928 (chairman's direction 2026-10-03; row #3212). A target nobody
+# re-reads is decoration, so a schedule re-reads it. `scripts/ci-health.mjs` says what each figure means and
+# `docs/ci-targets.json` holds the targets as data; this file only runs the one and hands it the token.
+#
+# THE ACTIONS JOB'S OWN TOKEN, so the org's API pool is untouched (both repositories are public; nothing broader is
+# needed to read their runs). `schedule` AND `workflow_dispatch` ONLY: no `pull_request`, so nothing in this file can be
+# tripped by a change, and a dispatch is idempotent (a second run of the same week posts nothing and says so).
+on:
+  schedule:
+    # Monday, OFF THE HOUR (#965: the :00 starts were ~5 h late four days running), after weekly-review's 06:17.
+    - cron: "43 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  issues: write           # the one comment on #928. Nothing broader: the runs are read from public repositories.
+
+concurrency:
+  # Two runs of the same week would race the already-posted check; the second waits and then posts nothing.
+  group: ci-health
+  cancel-in-progress: false
+
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Read CI health and post it
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci-health.mjs --post
