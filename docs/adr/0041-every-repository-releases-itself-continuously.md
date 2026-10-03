@@ -2,6 +2,8 @@
 
 ## Status
 
+**EXTENDED 2026-10-03 BY [ADR 0042](./0042-the-v1-rehearsal-splits-into-an-automated-outsider-job-and-a-weekly-review.md) -- THE V1 REHEARSAL SPLITS INTO AN AUTOMATED OUTSIDER JOB AND A WEEKLY REVIEW (chairman's direction on #928, #3185).** Decision 3 below says the gate is never softened; 0042 says what moved (WHEN a stranger reads, and who: the hand rehearsal stops being a block before a publish) and what did not (the runner-provable gates, and that a stranger reads at all). Nothing in this ADR is withdrawn.
+
 **Proposed, 2026-10-03.** Row #3129, child of #69 and of the chairman's standing direction of 2026-10-03 on #928. It
 records seven decisions that `ceo` ruled on the chairman's direction; **this ADR writes them down with their readings
 and does not reopen them.** It changes no workflow, no release and no registry: the rows that carry it out are the
