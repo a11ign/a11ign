@@ -307,19 +307,27 @@ function runAgentOrg(ciYml) {
   }
 }
 
-/** @param {{ toolRepo: string, scratch: string, copied: string[] }} staging */
-function stageAgentOrg({ toolRepo, scratch, copied }) {
+/**
+ * Lays the tool out as `packages/agent-org` under `root`, the way CI's `agentOrg` job does, and leaves NOTHING of its
+ * test suite out: what the staged copy runs is what the tool's own tests are, so a file dropped here is a test CI runs
+ * and `verify` does not. `root` is a parameter so a test can stage into a throwaway tree and read the result (#3329).
+ * @param {{ toolRepo: string, scratch: string, copied: string[], root?: string }} staging
+ */
+export function stageAgentOrg({ toolRepo, scratch, copied, root = REPO }) {
   const tarball = join(scratch, "tool.tar");
-  rmSync(AGENT_ORG_DIR, { recursive: true, force: true });
+  const dest = join(root, "packages/agent-org");
+  const fixture = join(root, "packages/lab/src/packaging/board-document-chrome-resolver.test.ts");
+  const here = (/** @type {string} */ command, /** @type {string[]} */ args) => sh(command, args, { cwd: root });
+  rmSync(dest, { recursive: true, force: true });
   const steps = [
-    () => sh("git", ["-C", toolRepo, "archive", "--format=tar", `--output=${tarball}`, "FETCH_HEAD", ...copied]),
-    () => sh("mkdir", ["-p", AGENT_ORG_DIR]),
-    () => sh("tar", ["-xf", tarball, "-C", AGENT_ORG_DIR]),
-    () => sh("rsync", ["-a", "--ignore-existing", "--exclude=*.test.ts", "--exclude=*.test.mjs",
+    () => here("git", ["-C", toolRepo, "archive", "--format=tar", `--output=${tarball}`, "FETCH_HEAD", ...copied]),
+    () => here("mkdir", ["-p", dest]),
+    () => here("tar", ["-xf", tarball, "-C", dest]),
+    () => here("rsync", ["-a", "--ignore-existing", "--exclude=*.test.ts", "--exclude=*.test.mjs",
       "packages/lab/src/packaging/", "packages/agent-org/src/packaging/"]),
-    () => sh("sed", ["-i", "s#from \"agent-org/src/board-document.mjs\"#from \"../../../agent-org/src/board-document.mjs\"#",
-      AGENT_ORG_FIXTURE]),
-    () => sh("git", ["add", "--force", "--intent-to-add", "packages/agent-org"]),
+    () => here("sed", ["-i", "s#from \"agent-org/src/board-document.mjs\"#from \"../../../agent-org/src/board-document.mjs\"#",
+      fixture]),
+    () => here("git", ["add", "--force", "--intent-to-add", "packages/agent-org"]),
   ];
   return { status: inOrder(steps) === "pass" ? 0 : 1 };
 }
