@@ -30,6 +30,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { changedFiles } from "../packages/guards/src/changed-files.mjs";
 import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
+import { checkBody } from "agent-org/src/pr-open.mjs";
 import { classify, knownPackages, packedFiles, readWorkspaceDependencyGraph } from "./ci-changed.mjs";
 // NEVER a bare `pnpm` spawn -- unsafe on Windows (CVE-2024-27980), and this repo's own guard refuses one.
 import { pnpmCliInvocation } from "./npm-cli-executable.mjs";
@@ -197,17 +198,22 @@ function runChangeset({ base, branch }) {
 }
 
 /**
- * CI's `acceptance` job: `agent-org acceptance-commands` over the body, taken from the environment as CI does (a body
- * is adversarial input and never goes on a command line). No body is not a pass: there is nothing to lint.
- * @param {{ body: string | null }} ctx
+ * CI's `acceptance` job: every report in agent-org's `CI_BODY_REPORTS` over the body, through `checkBody`, the call
+ * `pr:open` makes, so the two cannot be spelled apart (#3209). It takes the diff rather than reading it from a merge
+ * commit as the CLI does, and a plain branch has none: the CLI would print `MUTATION: UNCHECKED` here where CI refuses.
+ * No body is not a pass: there is nothing to lint.
+ * @param {{ body: string | null, files: string[] }} ctx
  */
-function runAcceptance({ body }) {
+function runAcceptance({ body, files }) {
   if (body === null) {
     console.error("verify: no body to lint -- pass --body-file=<the draft body>. A stamp without one is not green.");
     return "fail";
   }
-  return pnpm(["exec", "agent-org", "acceptance-commands"], { env: { ...process.env, PR_BODY: body } }).status === 0
-    ? "pass" : "fail";
+  // Deleted files, and the old side of a rename, are in `files` and owe no mutant: CI's own reading excludes them.
+  const present = files.filter((file) => existsSync(join(REPO, file)));
+  const checked = checkBody(body, { diff: { ok: true, files: present } });
+  for (const line of checked.lines) console.log(line);
+  return checked.ok ? "pass" : "fail";
 }
 
 /** @param {{ body: string | null, files: string[] }} ctx */
