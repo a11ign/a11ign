@@ -24,7 +24,7 @@ import { parse as parseYaml } from "yaml";
 
 import {
   LISTED_SURVIVORS, affordable, chooseSubjects, codeSpan, editsOf, hunt, kindOf, mutantsOfSubject, mutateDiff,
-  mutatedText, parses, renderComment, renderSummary, sampleByStride, scopeOf,
+  mutatedText, parses, positive, renderComment, renderSummary, runChangedTests, sampleByStride, scopeOf,
 } from "./mutate-diff.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { tempDir } from "./test-tmp.mjs";
@@ -244,6 +244,34 @@ test("with no changed test naming a changed file there is nothing to mutate, and
 });
 
 
+test("hunt counts a timeout as neither a survivor nor a plain kill, and counts each verdict once", async () => {
+  const cwd = repoWith(WEAK);
+  const { mutants } = mutantsOfSubject({ file: "src/lib.mjs", text: LIB, lines: new Set([2]) });
+  const verdicts = [{ code: 0, timedOut: false }, { code: 1, timedOut: false }, { code: null, timedOut: true }];
+  let next = 0;
+  const result = await hunt({ mutants: mutants.slice(0, 3), cwd, run: async () => verdicts[next++], budgetSeconds: BUDGET });
+  assert.deepEqual({ ran: result.ran, killed: result.killed, timedOut: result.timedOut, survivors: result.survivors.length },
+    { ran: 3, killed: 1, timedOut: 1, survivors: 1 });
+});
+
+test("a red run's output tail keeps what the tests wrote to stderr, and a run past its limit is killed and says so", async () => {
+  const cwd = tempDir("mutate-diff-run-");
+  const red = await runChangedTests({ cwd, tests: [], argv: ["-e", "process.stderr.write('assertion went red'); process.stdout.write(' and stdout too'); process.exit(3)"] });
+  assert.equal(red.code, 3);
+  assert.equal(red.timedOut, false);
+  assert.match(red.tail, /assertion went red/, "stderr is kept");
+  assert.match(red.tail, /and stdout too/, "and stdout");
+  const slow = await runChangedTests({ cwd, tests: [], argv: ["-e", "setTimeout(() => {}, 60000)"], timeoutMs: 300 });
+  assert.equal(slow.timedOut, true);
+  assert.ok(slow.ms < 30_000, `the group was killed at the limit, not waited out: ${slow.ms} ms`);
+});
+
+test("a flag value is a positive integer, the fallback when absent, and a refusal otherwise", () => {
+  assert.equal(positive(undefined, 100), 100);
+  assert.equal(positive("7", 100), 7);
+  for (const bad of ["0", "-3", "1.5", "many", ""]) assert.throws(() => positive(bad, 100), /positive integer/, bad);
+});
+
 // ---- 6. the comment --------------------------------------------------------------------------------------------
 
 /** A report with `n` survivors across two files, none of it from a real run. */
@@ -293,7 +321,7 @@ test("a line of source cannot close the code span it is quoted in, and the comme
 
 // ---- 7. the workflow ---------------------------------------------------------------------------------------------
 
-interface Step { uses?: string; run?: string; env?: Record<string, string>; id?: string; if?: string }
+interface Step { uses?: string; run?: string; env?: Record<string, string>; id?: string; if?: string; with?: Record<string, string> }
 interface Job { permissions?: Record<string, string>; needs?: string; steps?: Step[]; if?: string }
 interface Workflow { on?: Record<string, unknown>; permissions?: Record<string, string>; jobs?: Record<string, Job> }
 
@@ -324,6 +352,9 @@ const BREAKS: [string, (w: Workflow) => boolean][] = [
   ["`mutate` must run mutate-diff.mjs", (w) => !runs(jobsOf(w).mutate, "packages/guards/src/mutate-diff.mjs")],
   ["`mutate` must write the job summary, the surface that needs no token", (w) => !runs(jobsOf(w).mutate, "GITHUB_STEP_SUMMARY")],
   ["`comment` needs `mutate`", (w) => jobsOf(w).comment?.needs !== "mutate"],
+  ["`mutate` must upload the comment as the artifact `comment` downloads",
+    (w) => !stepsOf(jobsOf(w).mutate).some((s) => /^actions\/upload-artifact@/.test(s.uses ?? "") && s.with?.name === "mutation-comment")
+      || !stepsOf(jobsOf(w).comment).some((s) => /^actions\/download-artifact@/.test(s.uses ?? "") && s.with?.name === "mutation-comment")],
   ["a `run:` line interpolates an expression (put it in env)",
     (w) => Object.values(w.jobs ?? {}).some((job) => stepsOf(job).some((s) => /\$\{\{/.test(s.run ?? "")))],
 ];
@@ -346,6 +377,7 @@ test("violations() refuses each fixture that breaks one property (the positive c
     ["a program in `comment`", (w) => { (w.jobs as Record<string, Job>).comment.steps?.push({ run: "node scripts/x.mjs" }); }],
     ["`comment` with more than the one write", (w) => { (w.jobs as Record<string, Job>).comment.permissions = { "pull-requests": "write", contents: "write" }; }],
     ["an expression in a shell line", (w) => { (w.jobs as Record<string, Job>).comment.steps?.push({ run: "echo ${{ github.event.pull_request.title }}" }); }],
+    ["an artifact `comment` never receives", (w) => { (w.jobs as Record<string, Job>).mutate.steps = (w.jobs as Record<string, Job>).mutate.steps?.filter((s) => !s.uses?.startsWith("actions/upload-artifact")); }],
     ["`comment` not waiting for `mutate`", (w) => { delete (w.jobs as Record<string, Job>).comment.needs; }],
   ];
   for (const [name, mutate] of cases) {

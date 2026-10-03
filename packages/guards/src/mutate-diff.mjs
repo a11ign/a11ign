@@ -20,6 +20,10 @@
 // be equal, a shebang). No kill rate is printed anywhere, because a rate invites a target and a target invites
 // writing tests to the operators.
 //
+// ONE RUN PER TREE. Mutants are written into the working tree and put back from a copy held in memory, so a second
+// run, or a test run by hand, in the same tree reads somebody else's mutant (a baseline that went red for exactly that
+// reason while this file was being written). In CI the tree is the runner's own; locally, use a worktree of your own.
+//
 // Usage:
 //   node packages/guards/src/mutate-diff.mjs <base> <head> [--max-mutants=<n>] [--budget=<seconds>]
 //        [--comment=<file>] [--summary=<file>]
@@ -283,13 +287,14 @@ export function sampleByStride(items, max) {
 /**
  * One run of the changed tests, in its own process group so a timed-out run takes its workers with it. The tail of
  * the output is kept: a RED BASELINE is reported with it, because "the tests were red" is useless without which.
- * @param {{ cwd: string, tests: string[] }} args
+ * `argv` and `timeoutMs` are seams a test replaces; the defaults are the real command and the real limit.
+ * @param {{ cwd: string, tests: string[], argv?: string[], timeoutMs?: number }} args
  * @returns {Promise<{ code: number | null, timedOut: boolean, ms: number, tail: string }>}
  */
-export function runChangedTests({ cwd, tests }) {
+export function runChangedTests({ cwd, tests, argv = [ASSERT_GLOB, ...tests, "--min=1", "--run", "--runner=rstest"], timeoutMs = MUTANT_TIMEOUT_MS }) {
   return new Promise((resolve) => {
     const started = Date.now();
-    const child = spawn(process.execPath, [ASSERT_GLOB, ...tests, "--min=1", "--run", "--runner=rstest"],
+    const child = spawn(process.execPath, argv,
       { cwd, detached: true, env: sandboxGitEnv(), stdio: ["ignore", "pipe", "pipe"] });
     let timedOut = false;
     let tail = "";
@@ -299,7 +304,7 @@ export function runChangedTests({ cwd, tests }) {
     const timer = setTimeout(() => {
       timedOut = true;
       try { process.kill(-(/** @type {number} */ (child.pid)), "SIGKILL"); } catch (error) { console.error(`mutate-diff: the timed-out run had already gone: ${error}`); }
-    }, MUTANT_TIMEOUT_MS);
+    }, timeoutMs);
     child.on("close", (code) => { clearTimeout(timer); resolve({ code, timedOut, ms: Date.now() - started, tail }); });
   });
 }
@@ -491,7 +496,7 @@ export function renderSummary(report) {
 // ---- command line ------------------------------------------------------------------------------------------------
 
 /** @param {string | undefined} value @param {number} fallback @returns {number} */
-function positive(value, fallback) {
+export function positive(value, fallback) {
   if (value === undefined) return fallback;
   const n = Number(value);
   if (!Number.isInteger(n) || n < 1) throw new Error(`expected a positive integer, got ${JSON.stringify(value)}`);
