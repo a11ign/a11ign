@@ -315,18 +315,13 @@ Node 20 or later for both. `pnpm install` builds the workspace, so the clone has
 **Either command needs a capture worker and will not invent one.** A screen reader is a Windows desktop
 application: there is no Docker image, and no flag substitutes for the machine. Run on a Mac or Linux box
 with nothing configured, this is exactly what you get — quoted rather than paraphrased, because it is the
-most likely first result and it is not a crash. It opens with a notice about a local UTM virtual machine:
+most likely first result and it is not a crash. It names the address it fell back to, because you named none:
 
 ```
-DEPRECATED: this run (no worker named, no fleet configured) manages a local UTM worker VM. UTM was a testing path and is not the fleet.
-Capture on the bare-metal fleet instead: npm run fleet:status, npm run fleet:deploy. See CLAUDE.md's
-"Working on a Mac" section.
 Using http://localhost:8765 (default)
 ```
 
-That notice is addressed to the project's own maintainers, and the `CLAUDE.md` it points at is in the repository, not in
-the package you installed. You have no fleet and are not meant to: UTM was a testing path, and nothing on this page uses it.
-The refusal follows:
+Nothing is listening there, so the refusal follows:
 
 ```
 No capture worker answered at http://localhost:8765 (nothing was configured, so this address was a guess).
