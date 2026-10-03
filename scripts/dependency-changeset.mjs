@@ -48,7 +48,6 @@ const MANIFEST_PATH = /^(?:packages\/[^/]+\/)?package\.json$/;
 const ENTRY_PATH = /^\.changeset\/[^/]+\.md$/;
 /** A range this derivation can compare: an exact version, optionally under `^` or `~`. */
 const PLAIN_RANGE = /^[\^~]?(\d+)\.(\d+)\.(\d+)$/;
-export const EMPTY_ENTRY = "---\n---\n";
 
 /**
  * @typedef {{ path: string, package: string, private: boolean, section: string, dependency: string, from: string | null, to: string | null }} Change
