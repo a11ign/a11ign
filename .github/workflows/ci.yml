@@ -89,10 +89,11 @@ on:
     # A job that reads an input no trigger watches cannot be fixed by the person holding the input. That
     # is the general shape, and it costs a whole queue rather than one PR.
     #
-    # The cost of the fix is a full `ci.yml` run per title or body edit. Bounded by the `concurrency`
-    # block below, which cancels the previous run on the same ref, and cheap in this repo because the
-    # `changed` job gates every expensive job behind a real diff -- a body edit changes no files, so the
-    # heavy jobs skip and what actually re-runs is `changed`, `acceptance`, `mergeSafety` and `gate`.
+    # The cost of the fix WAS a full `ci.yml` run per title or body edit, and this paragraph said the heavy jobs
+    # skip because `changed` diffs against the base and a body edit changes no files. THAT WAS NEVER TRUE: the
+    # diff is the whole pull request, so `ts`, `guardSweep` and `agentOrg` ran in full on every body edit and
+    # every label (#3211, three runs of one head: 141 s, 33 s and 146 s of jobs each time). The heavy jobs now
+    # exclude these three types BY NAME, and the `concurrency` block below keeps them from cancelling a test run.
     # `labeled`/`unlabeled` ARE THE HALF THAT MAKES THE HOLD REAL. `gate` refuses a PR carrying a
     # `hold:<session>` label (2026-09-09), and a hold is placed by adding a label -- which changes no file
     # and moves no commit. Without these two types, a hold placed on a GREEN PR never re-runs the check
@@ -102,9 +103,8 @@ on:
     # This is `edited`'s own lesson, one field along. A job reading an input no trigger watches cannot be
     # fixed by the person holding the input -- there, a PR body; here, a label.
     #
-    # Cost is the same shape and the same bound: a label change moves no files, so `changed` gates every
-    # expensive job away and what re-runs is `changed`, `acceptance`, `mergeSafety` and `gate`. The
-    # `concurrency` block cancels the previous run on the same ref.
+    # What re-runs for a label is `changed`, `deliberateRefusals` (it reads the label and the body),
+    # `acceptance`, `ownedPaths` and `gate`.
     types: [opened, synchronize, reopened, edited, labeled, unlabeled]
   # #156: a merge queue CANNOT be turned on without this. GitHub's own docs are explicit -- "You must use
   # the merge_group event to trigger your GitHub Actions workflow when a pull request is added to a merge
@@ -115,8 +115,19 @@ on:
   merge_group:
     branches: [main]
 
+# #3211: A BODY EDIT OR A LABEL IS A `meta` EVENT, AND IT MUST NOT CANCEL A TEST RUN. The chairman's sample (278
+# pull-request runs since 2026-10-01; #3212 reconciles it with a larger count): 158 were on a head SHA that had already
+# been tested, and 134 of those were cancelled -- one group per ref meant a label added while `ts` was running cancelled `ts`, and the run that replaced it
+# started the whole suite again. So the group is keyed by the KIND of event: a code event (`opened`, `synchronize`,
+# `reopened`, and `merge_group`) cancels the previous code run on the ref, which is what `cancel-in-progress` is for; a
+# meta event (`edited`, `labeled`, `unlabeled`) cancels only the previous meta run. They never share a group.
+#
+# THE SPLIT IS SAFE BECAUSE `gate` DOES NOT LET EITHER KIND REPORT GREEN ON ITS OWN -- see its last step. Without that,
+# a meta run would report `gate` green with every heavy job SKIPPED, on a head whose tests have not finished.
+run-name: ${{ contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action) && format('{0} [meta event, {1}]', github.event.pull_request.title, github.event.action) || '' }}
+
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.ref }}-${{ contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action) && 'meta' || 'code' }}
   cancel-in-progress: true
 
 jobs:
@@ -192,7 +203,7 @@ jobs:
   # afford (`select-changed-tests.mjs` needs full history to run `git diff <base>...HEAD`).
   ts:
     needs: changed
-    if: needs.changed.outputs.ts == 'true'
+    if: needs.changed.outputs.ts == 'true' && !contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action)
     uses: ./.github/workflows/reusable-build-test.yml
     with:
       run-lint-typecheck: true
@@ -210,14 +221,14 @@ jobs:
   # deliberately "off" for exactly this reason: opting IN to extra work, never opting OUT of it.
   python:
     needs: changed
-    if: needs.changed.outputs.python == 'true'
+    if: needs.changed.outputs.python == 'true' && !contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action)
     uses: ./.github/workflows/reusable-build-test.yml
     with:
       run-python-tests: true
 
   ansible:
     needs: changed
-    if: needs.changed.outputs.ansible == 'true'
+    if: needs.changed.outputs.ansible == 'true' && !contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -252,7 +263,7 @@ jobs:
 
   board:
     needs: changed
-    if: needs.changed.outputs.board == 'true'
+    if: needs.changed.outputs.board == 'true' && !contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action)
     uses: ./.github/workflows/reusable-board.yml
 
   # THE RULES FITNESS GATE, ITS OWN JOB -- chairman's direction, 2026-09-06. Used to run inside `ts`
@@ -260,7 +271,7 @@ jobs:
   # `packages/judge` or `packages/evidence` changed, the only two paths that can move its answer.
   rulesFitness:
     needs: changed
-    if: needs.changed.outputs.rulesFitness == 'true'
+    if: needs.changed.outputs.rulesFitness == 'true' && !contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -278,7 +289,7 @@ jobs:
     # published package's directory at all", the same blunt shape `changeset-check.yml`'s old regex used
     # before #132. A false positive here costs one job run that then finds nothing to enforce (below); a
     # false negative would skip the real check entirely, which is why the cheap answer only ever widens.
-    if: needs.changed.outputs.changeset == 'true'
+    if: needs.changed.outputs.changeset == 'true' && !contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -375,8 +386,13 @@ jobs:
   # is a second list that drifts, where the population (`tree-wide-guards.mjs`) is derived from the tree.
   # `needs: changed` alone means a closed PR (which skips `changed`) skips this too, and an empty diff is
   # already refused by `changed`. `select-changed-tests.test.ts` pins that this stays unconditional.
+  #
+  # #3211: UNCONDITIONAL ON THE DIFF, NOT ON THE EVENT. A body edit or a label moves no file, and the code run for
+  # this head has already swept this tree, so a `meta` event does not sweep it again (see `gate`, which makes that
+  # safe: it does not report green on a head whose code run has not concluded green).
   guardSweep:
     needs: changed
+    if: ${{ !contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action) }}
     runs-on: ubuntu-latest
     steps:
       # Full history for the same reason as every job that reads git: several guards spawn git against the
@@ -606,8 +622,12 @@ jobs:
   #
   # `agentOrg` IS IN `gate`'s `needs`, so a red suite blocks the merge. `merge_group` runs it too: the queue is where #3097 was
   # tested last, and the ejection there is what keeps a project change from landing on a red tool.
+  #
+  # #3211: NOT ON A `meta` EVENT (a body edit or a label). It tests this tree and the tool, and neither moved; the code
+  # run for the same head ran it. Measured on three runs of one head: about three minutes each, for a label.
   agentOrg:
     needs: changed
+    if: ${{ !contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action) }}
     runs-on: ubuntu-latest
     env:
       # The tool the project is tested against. `main` follows the tool; a commit hash holds it still, to tell a project red from a tool red.
@@ -698,6 +718,9 @@ jobs:
     needs: [changed, ts, python, ansible, changeset, rulesFitness, guardSweep, deliberateRefusals, acceptance, ownedPaths, agentOrg]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
+    # `actions: read` for the one lookup below, and nothing else: this job checks nothing out and writes nothing.
+    permissions:
+      actions: read
     steps:
       - name: Every job that ran, ran clean
         run: |
@@ -719,3 +742,73 @@ jobs:
               exit 1
             fi
           done
+      # #3211: THE TWO KINDS OF RUN ON ONE HEAD MUST AGREE, AND EACH `gate` CHECKS THE OTHER KIND.
+      #
+      # A body or label run (`meta`) skips the heavy jobs above, and the loop reads `skipped` as passing -- so on its own
+      # a label would report `gate` green on a head whose tests are still running, or failed. That is `edited`'s own
+      # lesson inverted: the 2026-09-07 deadlock was a check reading an input no trigger watched; this would be a check
+      # reporting on work it did not do. So a meta run's `gate` waits for the code run of the same head and is green
+      # only if it concluded `success`. It is pending (this step polling), never green and never red, while there is none.
+      #
+      # THE OTHER DIRECTION IS THE ONE THE ROW DID NOT NAME. The kinds run in separate concurrency groups, so a hold
+      # label (or a broken body) can land and be checked while the code run is still going. Its `gate` would be red and
+      # then the code run's `gate`, finishing later, would be green over it: whichever check run counts as the latest
+      # (not documented, and not something to rest a merge on) the answer would depend on which finished last. So a code
+      # run's `gate` also reads the body checks of the newest meta run that started after it did. It reads that run's
+      # JOBS, never its `gate`: the meta `gate` is waiting for this run, and waiting on each other would be a deadlock.
+      #
+      # EITHER WAY BOTH `gate`s COMPUTE ONE ANSWER FROM ONE FACT, so it does not matter which one a reader takes.
+      # The other kind's runs are found by `run-name` (top of this file): meta titles end `[meta event, <action>]`. A PR
+      # title that spoofs the marker makes a code run look like a meta run, which hides it, so the step waits and then
+      # fails: the safe direction.
+      - name: The other kind of run on this head agrees (#3211)
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          KIND: ${{ contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action) && 'meta' || 'code' }}
+          ATTEMPTS: 180
+          POLL_SECONDS: 20
+        run: |
+          # stdin: the listing of this workflow's runs on the head. Prints the id of the run to read, or `none`.
+          other_run() {
+            jq -r --arg self "$GITHUB_RUN_ID" --arg kind "$KIND" '
+              def is_meta: (.display_title // "") | test(" \\[meta event, [a-z]+\\]$");
+              ([.workflow_runs[] | select((.id | tostring) == $self) | .created_at] | first) as $mine
+              | [.workflow_runs[]
+                  | select((.id | tostring) != $self)
+                  | select(if $kind == "meta" then (is_meta | not) else (is_meta and .created_at > $mine) end)]
+              | sort_by(.created_at) | last | if . == null then "none" else (.id | tostring) end'
+          }
+          # stdin: one run object. A meta run is read through its jobs (not `gate`), a code run through its conclusion.
+          run_verdict() {
+            jq -r 'if .status != "completed" then "pending" else (.conclusion // "none") end'
+          }
+          # stdin: a run's jobs. Pending while any non-gate job is unfinished, else the first bad conclusion, else success.
+          jobs_verdict() {
+            jq -r '[.jobs[] | select(.name != "gate")] as $jobs
+              | if ($jobs | length) == 0 or any($jobs[]; .status != "completed") then "pending"
+                else ([$jobs[] | .conclusion | select(. != "success" and . != "skipped")] | first // "success") end'
+          }
+          verdict=none
+          for _ in $(seq 1 "$ATTEMPTS"); do
+            runs=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$HEAD_SHA&event=pull_request&per_page=100")
+            other=$(printf '%s' "$runs" | other_run)
+            if [ "$other" = none ]; then
+              # No meta run after this code run: nothing to agree with. No code run yet for a meta run: pending.
+              if [ "$KIND" = code ]; then echo "no body or label run followed this code run"; exit 0; fi
+              verdict=none
+            elif [ "$KIND" = meta ]; then
+              verdict=$(printf '%s' "$runs" | jq -c --arg id "$other" '.workflow_runs[] | select((.id | tostring) == $id)' | run_verdict)
+            else
+              verdict=$(gh api "repos/$REPO/actions/runs/$other/jobs?per_page=100" | jobs_verdict)
+            fi
+            case "$verdict" in
+              success) echo "the other kind of run on $HEAD_SHA ($other) concluded success"; exit 0 ;;
+              none | pending) sleep "$POLL_SECONDS" ;;
+              *) echo "::error::the other kind of run on $HEAD_SHA ($other) concluded '$verdict', so this run cannot report green"; exit 1 ;;
+            esac
+          done
+          echo "::error::the other kind of run on $HEAD_SHA has no conclusion ('$verdict') after $ATTEMPTS polls; this run is not green on work it did not see"
+          exit 1
