@@ -1,0 +1,36 @@
+# Dependency updates come from the platform (chairman, 2026-10-03, #928 ADR 0041 decision 4; row #3133): a new
+# release of a dependency opens a pull request here, so nobody polls for one. Dependabot, because it is a file
+# and not an app install; Renovate is the fallback only if the first run shows Dependabot cannot read the
+# `agent-org` pin (`github:a11ign/agent-org#semver:^0.1.0`). `dependency-updates-configured.test.ts` pins
+# every choice below.
+version: 2
+updates:
+  - package-ecosystem: npm
+    # ONE entry at the root covers the pnpm workspace: Dependabot reads `pnpm-workspace.yaml` and updates
+    # every `packages/*/package.json` and `pnpm-lock.yaml` from here. A second entry per package would open
+    # the same bump twice.
+    directory: /
+    schedule:
+      # A release a day needs a check at least that often.
+      interval: daily
+    # NO `groups:` ON PURPOSE. Without one, every dependency is its own pull request, which is what makes a
+    # bump small, frequent and mergeable alone. A group that batches unrelated packages is refused by the test.
+    commit-message:
+      # The handle the org's gate recognises a dependency pull request by: every title starts `deps:`.
+      # (Dependabot also labels `dependencies`, creating it on the first pull request, and the author is
+      # `dependabot[bot]`; the prefix is the one of the three this repo controls and can pin.)
+      prefix: deps
+    # Workspace members are pinned "0.0.0" and linked by pnpm (`linkWorkspacePackages`); `changeset version`
+    # owns their ranges. Left alone, Dependabot would offer the registry's 0.1.0 over that pin. The test
+    # derives this list from the manifests, so a package that joins or leaves the workspace moves it
+    # deliberately: remove an entry when its package leaves and is consumed by range instead.
+    ignore:
+      - dependency-name: "@a11ign/control"
+      - dependency-name: "@a11ign/documents"
+      - dependency-name: "@a11ign/evidence"
+      - dependency-name: "@a11ign/judge"
+      - dependency-name: "@a11ign/nvda-speech"
+      - dependency-name: "@a11ign/scorer"
+      - dependency-name: "@a11ign/screenreader-fleet"
+      - dependency-name: "@a11ign/screenreader-worker"
+      - dependency-name: "a11ign"
