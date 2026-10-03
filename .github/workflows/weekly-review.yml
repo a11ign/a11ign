@@ -1,16 +1,17 @@
 name: Weekly outsider review
 
-# THE JUDGEMENT HALF OF THE V1 REHEARSAL: ONE ROW A WEEK, FILED BY A SCHEDULE, NEVER A GATE (chairman's
-# direction, #928; row #3183). A wall-clock event is the one thing a schedule is right for -- this does not
-# look for work, it files the week's review for a session that built none of the recent work to take.
+# THE JUDGEMENT HALF OF THE V1 REHEARSAL: ONE ROW A WEEK, NEVER A GATE (chairman's direction, #928; row #3183).
+# A wall-clock event is the one thing a schedule is right for -- this does not look for work, it files the
+# week's review for a session that built none of the recent work to take.
 # `scripts/weekly-review.mjs` says what the row holds and why; `docs/weekly-review.md` is how a reviewer works.
 #
-# `schedule` AND `workflow_dispatch` ONLY. No `pull_request`: nothing in this file can be tripped by a change,
-# and a dispatch is idempotent (a second run in the same ISO week files nothing and says so).
+# THE SCHEDULE IS A SYSTEMD TIMER ON THE HOST, NOT THIS FILE (ceo, #3183, 2026-10-03; row #3318). The board step
+# cannot run under `github.token` (organization Project 1 does not resolve for it, run 37133463643) and must not
+# run under a widened one, so this file's schedule filed `Weekly outsider review 2026-W40` with no board item, no Status
+# and no `ready`, and ended red. `workflow_dispatch` is the by-hand BACKSTOP and the only trigger: no `schedule`,
+# no `pull_request`, so nothing in this file can be tripped by a change, and a dispatch is idempotent (a second
+# run in the same ISO week files nothing and says so).
 on:
-  schedule:
-    # Monday, OFF THE HOUR (#965: the :00 starts were ~5 h late four days running).
-    - cron: "17 6 * * 1"
   workflow_dispatch:
 
 permissions:
