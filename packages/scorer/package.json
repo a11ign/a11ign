@@ -51,6 +51,6 @@
     "scorer"
   ],
   "dependencies": {
-    "@a11ign/evidence": "0.0.0"
+    "@a11ign/evidence": "0.1.0"
   }
 }

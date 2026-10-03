@@ -204,14 +204,14 @@
     "verify": "node scripts/verify.mjs"
   },
   "dependencies": {
-    "@a11ign/evidence": "0.0.0",
-    "@a11ign/judge": "0.0.0",
-    "@a11ign/scorer": "0.0.0",
+    "@a11ign/evidence": "0.1.0",
+    "@a11ign/judge": "0.1.0",
+    "@a11ign/scorer": "0.1.0",
     "@a11ign/screenreader-fleet": "0.0.0",
     "@a11ign/screenreader-worker": "0.0.0",
     "@anthropic-ai/sdk": "^0.129.0",
     "@guidepup/guidepup": "^0.31.0",
-    "a11ign": "0.0.0"
+    "a11ign": "0.1.0"
   },
   "devDependencies": {
     "@changesets/cli": "3.0.1",

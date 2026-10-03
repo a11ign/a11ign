@@ -40,10 +40,10 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@a11ign/evidence": "0.0.0"
+    "@a11ign/evidence": "0.1.0"
   },
   "peerDependencies": {
-    "@a11ign/scorer": "0.0.0",
+    "@a11ign/scorer": "0.1.0",
     "@anthropic-ai/sdk": ">=0.106.0 <0.130.0",
     "@huggingface/transformers": ">=3.0.0"
   },
