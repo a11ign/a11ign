@@ -68,14 +68,15 @@ jobs:
           FALLBACK_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          title_pattern='^deps: bump ([@A-Za-z0-9._/-]+) from ([0-9]+)\.([0-9]+)[0-9A-Za-z.+-]* to ([0-9]+)\.([0-9]+)[0-9A-Za-z.+-]*( in /[A-Za-z0-9._/-]*)?$'
+          title_pattern='^deps: bump ([@A-Za-z0-9._/-]+) from (([0-9]+)\.([0-9]+)[0-9A-Za-z.+-]*) to (([0-9]+)\.([0-9]+)[0-9A-Za-z.+-]*)( in /[A-Za-z0-9._/-]*)?$'
           allowed_files='^(package\.json|packages/[^/]+/package\.json|pnpm-lock\.yaml)$'
           if [[ ! "$PR_TITLE" =~ $title_pattern ]]; then
             echo "::notice::not auto-declared: the title is not 'deps: bump <package> from <x.y.z> to <x.y.z>', so it waits like any other pull request"
             exit 0
           fi
-          name="${BASH_REMATCH[1]}"; old="${BASH_REMATCH[2]}.${BASH_REMATCH[3]}"; new="${BASH_REMATCH[4]}.${BASH_REMATCH[5]}"
-          if [ "${BASH_REMATCH[2]}" != "${BASH_REMATCH[4]}" ] || { [ "${BASH_REMATCH[2]}" = 0 ] && [ "${BASH_REMATCH[3]}" != "${BASH_REMATCH[5]}" ]; }; then
+          name="${BASH_REMATCH[1]}"; old="${BASH_REMATCH[2]}"; new="${BASH_REMATCH[5]}"
+          old_major="${BASH_REMATCH[3]}"; old_minor="${BASH_REMATCH[4]}"; new_major="${BASH_REMATCH[6]}"; new_minor="${BASH_REMATCH[7]}"
+          if [ "$old_major" != "$new_major" ] || { [ "$old_major" = 0 ] && [ "$old_minor" != "$new_minor" ]; }; then
             echo "::notice::not auto-declared: $name goes from $old to $new, a major bump, so it waits for a human like any other pull request"
             exit 0
           fi
