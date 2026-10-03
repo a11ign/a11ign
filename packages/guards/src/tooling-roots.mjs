@@ -15,7 +15,7 @@
  * -- and a root added here is a root every census gains, which is the property the inline copies could
  * never have.
  *
- * #2975 PR 3: `packages/agent-org/src` LEFT this list. The tool is a pinned dependency this repository cannot edit, a census over `node_modules` would
+ * #2975 PR 3: the tool's own `src` LEFT this list. The tool is a pinned dependency this repository cannot edit, a census over `node_modules` would
  * scan an artefact rather than the tooling the project authors, and the frozen directory could no longer change. The invariants those censuses held
  * over the tool's own source are a11ign/agent-org's to hold (the port is its own row).
  *

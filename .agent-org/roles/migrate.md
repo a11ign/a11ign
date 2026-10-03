@@ -192,7 +192,7 @@ different path on the same host. Concretely: cloned the repo fresh to a second p
 only — the live session was never touched) into the project-key directory Claude Code computes for that
 second path, and resumed it there non-interactively (`claude --resume <id> -p "<question>"`). It answered
 step 4's question correctly on the first attempt. The fallback path (step 2, role file + memory) was also
-exercised via `node packages/agent-org/src/reconstitution-drill.mjs`, which ran clean after `npm install`
+exercised via `node node_modules/agent-org/src/reconstitution-drill.mjs`, which ran clean after `npm install`
 in the fresh clone. Both scratch artefacts (the clone, the copied transcript) were deleted immediately
 after.
 
