@@ -4,3 +4,8 @@
 // of the tool's longest import chain, not a number to pick. So the tool's modules are declared here as untyped (`any`), which is what a
 // dependency that ships no declarations is, and a caller annotates the shape it relies on.
 declare module "agent-org/src/*";
+
+// What a callback parameter is when its callee is one of the untyped modules above: TS7006 otherwise, since `any` gives it no contextual type.
+// One named, justified `any` instead of 180 anonymous ones -- it is exactly the type the declaration above already gives every import.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type UntypedTool = any;
