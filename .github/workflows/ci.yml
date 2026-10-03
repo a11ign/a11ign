@@ -293,8 +293,25 @@ jobs:
       # SHIP this file -- and it is what decides whether the enforcement step below runs anything at all.
       - id: precise
         run: node scripts/ci-changed.mjs --event=${{ github.event_name }} --base=${{ needs.changed.outputs.base }} --precise
+      # #3159 (sibling of #3137, ADR 0041 decision 4): A DEPENDENCY PULL REQUEST IS READ FROM ITS DIFF. This job runs
+      # `changeset status`, which reads files, so #3137's body fragment cannot clear it (#3155 failed here). The entry a
+      # consumer reads is DERIVED from the manifests, never typed and never taken from the title, and it is written when
+      # the version is made (`dependency-changeset.mjs compile`), so nothing is pushed to Dependabot's branch. A bump
+      # of a published package's runtime range is accepted as a `patch`; a diff that moves only devDependencies is
+      # accepted as empty; a major, a 0.x minor, an owned path or anything outside the manifests is REFUSED here, and
+      # the log names which, so that pull request waits for a human who looks. Recognised by the `deps:` prefix
+      # `dependabot.yml` pins, on the pull request AND on its queue entry (the merge group has no title, only the
+      # squash message), or the queue would eject what this job passed; and the entry is diffed against its own parent
+      # (`merge_group.base_sha`, empty on a pull request), because up to 5 are built and entry 2 contains entry 1. Every other pull request keeps the step below.
+      # The title is read by an expression, never interpolated into a shell line.
+      - id: dependency
+        name: A dependency pull request owes the entry its diff derives
+        if: steps.precise.outputs.changeset == 'true' && startsWith(github.event.pull_request.title || github.event.merge_group.head_commit.message, 'deps:')
+        run: |
+          node scripts/dependency-changeset.mjs check --base=${{ needs.changed.outputs.base }} --since=${{ github.event.merge_group.base_sha }}
+          echo "settled=true" >> "$GITHUB_OUTPUT"
       - name: A consumer-visible change must say what it does to a consumer
-        if: steps.precise.outputs.changeset == 'true'
+        if: steps.precise.outputs.changeset == 'true' && steps.dependency.outputs.settled != 'true'
         run: |
           if ! pnpm exec changeset status --since=${{ needs.changed.outputs.base }}; then
             echo "::error::This PR changes a published package and carries no changeset."
