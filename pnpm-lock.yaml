@@ -27,8 +27,8 @@ importers:
         specifier: ^0.106.0
         version: 0.106.0
       '@guidepup/guidepup':
-        specifier: ^0.31.0
-        version: 0.31.0
+        specifier: ^0.33.2
+        version: 0.33.2
       a11ign:
         specifier: 0.0.0
         version: link:packages/cli
@@ -53,7 +53,7 @@ importers:
         version: 26.6.3
       agent-org:
         specifier: github:a11ign/agent-org#semver:^0.2.0
-        version: https://codeload.github.com/a11ign/agent-org/tar.gz/f12b8d63f11b8191dea9c71a64cc1ee0f80e74a5(typescript@6.0.3)
+        version: https://codeload.github.com/a11ign/agent-org/tar.gz/5cf058f7ed9c19c4d2c669c8080770b7588173c9(typescript@6.0.3)
       eslint:
         specifier: ^10.5.0
         version: 10.5.0
@@ -146,8 +146,8 @@ importers:
         specifier: 0.1.0
         version: link:../control
       '@guidepup/guidepup':
-        specifier: 0.31.0
-        version: 0.31.0
+        specifier: 0.33.2
+        version: 0.33.2
       a11ign:
         specifier: 0.0.0
         version: link:../cli
@@ -166,8 +166,8 @@ importers:
   packages/nvda-worker:
     dependencies:
       '@guidepup/guidepup':
-        specifier: 0.31.0
-        version: 0.31.0
+        specifier: 0.33.2
+        version: 0.33.2
     devDependencies:
       '@a11ign/evidence':
         specifier: 0.0.0
@@ -501,8 +501,8 @@ packages:
     resolution: {integrity: sha512-+CNAzxglkrpNf/kKywqQfk74QjtceuOE7Qm+AF8miRvPF/wmmK5+OJOgVh3AVTT3RP2mH3+FOaxlE5v72owk0A==}
     engines: {node: ^20.19.0 || ^22.13.0 || >=24}
 
-  '@guidepup/guidepup@0.31.0':
-    resolution: {integrity: sha512-r3eKTep4fdSajiSGEJI0KHHjKvJ6e4wyMhHIGbr+ztW04CcE91CRMRbTaM5JQwZKvRiOfj3kFVKaYIx+CFJWMw==}
+  '@guidepup/guidepup@0.33.2':
+    resolution: {integrity: sha512-aOoZ7Su9sNBm6hjdrgHC1TTAofU0Dz1+uo9uzWuTD7DMIOWGrbbNaFOHoFWHQr8KHw6dV3UwuHIjhKjQlYpxFQ==}
 
   '@guidepup/record@0.1.0':
     resolution: {integrity: sha512-jtSqZ0CZVdWzWIbLWHYoUi1IbNJVKns20oEYzwcTftw8rY5RXsK1OTXaXFx9Gup5mnmYaFLnON8WwTS+4DYwrQ==}
@@ -778,10 +778,9 @@ packages:
     resolution: {integrity: sha512-CY3uyFSRbcQv3nnSv8S0+lDftMVz6P963PoRlxrV7ew/Md564g9ut60PYzdLM5qW4jFn93GBF+Soi90ISAN+GQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
-  '@xmldom/xmldom@0.9.10':
-    resolution: {integrity: sha512-A9gOqLdi6cV4ibazAjcQufGj0B1y/vDqYrcuP6d/6x8P27gRS8643Dj9o1dEKtB6O7fwxb2FgBmJS2mX7gpvdw==}
+  '@xmldom/xmldom@0.9.12':
+    resolution: {integrity: sha512-5AXjrcMClTryPe9LgZrygpB1lj7s0S9E0+W+AHaVKAVyHanafK86iPSvG5xHVSp/jC+VH1UXu0TAEmY279xH7A==}
     engines: {node: '>=14.6'}
-    deprecated: this version has critical issues, please update to the latest version
 
   '@yuku-parser/binding-android-arm64@0.9.5':
     resolution: {integrity: sha512-A2JCFCSHfnficqYEw4Iujpx7XrkMM3UfFcgJFmYpZSo9zM4nyhmdIIE0FogSduuU60lhM0/UcfuUBXIVNBMlGQ==}
@@ -881,9 +880,9 @@ packages:
     resolution: {integrity: sha512-RZNwNclF7+MS/8bDg70amg32dyeZGZxiDuQmZxKLAlQjr3jGyLx+4Kkk58UO7D2QdgFIQCovuSuZESne6RG6XQ==}
     engines: {node: '>= 6.0.0'}
 
-  agent-org@https://codeload.github.com/a11ign/agent-org/tar.gz/f12b8d63f11b8191dea9c71a64cc1ee0f80e74a5:
-    resolution: {gitHosted: true, tarball: https://codeload.github.com/a11ign/agent-org/tar.gz/f12b8d63f11b8191dea9c71a64cc1ee0f80e74a5}
-    version: 0.2.2
+  agent-org@https://codeload.github.com/a11ign/agent-org/tar.gz/5cf058f7ed9c19c4d2c669c8080770b7588173c9:
+    resolution: {gitHosted: true, tarball: https://codeload.github.com/a11ign/agent-org/tar.gz/5cf058f7ed9c19c4d2c669c8080770b7588173c9}
+    version: 0.2.4
     engines: {node: '>=22'}
     hasBin: true
     peerDependencies:
@@ -1949,9 +1948,12 @@ snapshots:
       '@eslint/core': 1.2.1
       levn: 0.4.1
 
-  '@guidepup/guidepup@0.31.0':
+  '@guidepup/guidepup@0.33.2':
     dependencies:
+      debug: 4.4.3
       plist: 4.0.0
+    transitivePeerDependencies:
+      - supports-color
 
   '@guidepup/record@0.1.0':
     dependencies:
@@ -2246,7 +2248,7 @@ snapshots:
       '@typescript-eslint/types': 8.62.0
       eslint-visitor-keys: 5.0.1
 
-  '@xmldom/xmldom@0.9.10': {}
+  '@xmldom/xmldom@0.9.12': {}
 
   '@yuku-parser/binding-android-arm64@0.9.5':
     optional: true
@@ -2301,7 +2303,7 @@ snapshots:
       - supports-color
     optional: true
 
-  agent-org@https://codeload.github.com/a11ign/agent-org/tar.gz/f12b8d63f11b8191dea9c71a64cc1ee0f80e74a5(typescript@6.0.3):
+  agent-org@https://codeload.github.com/a11ign/agent-org/tar.gz/5cf058f7ed9c19c4d2c669c8080770b7588173c9(typescript@6.0.3):
     dependencies:
       typescript: 6.0.3
 
@@ -2858,7 +2860,7 @@ snapshots:
 
   plist@4.0.0:
     dependencies:
-      '@xmldom/xmldom': 0.9.10
+      '@xmldom/xmldom': 0.9.12
       xmlbuilder: 15.1.1
 
   prelude-ls@1.2.1: {}
