@@ -61,21 +61,19 @@ jobs:
         with:
           url: https://your-site.example/the-page
           task: Send an enquiry
-      # Keep the evidence: the rendered report and the full result, transcript included. Guarded on the
-      # output existing, so a run that failed does not also fail the upload.
+      # Keep the evidence: the full result, transcript included. Guarded on the output existing, so a run
+      # that failed does not also fail the upload. v0.1.0 has no `summary-md` output, so there is no report file.
       - uses: actions/upload-artifact@v4
         if: always() && steps.a11ign.outputs.result-json != ''
         with:
           name: a11ign-result
-          path: |
-            ${{ steps.a11ign.outputs.result-json }}
-            ${{ steps.a11ign.outputs.summary-md }}
+          path: ${{ steps.a11ign.outputs.result-json }}
           if-no-files-found: warn
 ```
 
 Save it as `.github/workflows/a11ign.yml`. It runs on every pull request, and `workflow_dispatch` also lets you start it by hand from the repository's Actions tab (or `gh workflow run a11ign.yml`) — `workflow_dispatch` resolves the workflow from the default branch as GitHub sees it at dispatch time, so trigger it only after the push that changed the workflow has landed, not in the same breath as the push.
 
-**Not on a pull request, no comment.** A run started by hand or by a push has nothing to comment on: the log's last line is the count (`a11ign: N finding(s)`), with a line before it for anything that bounds that count (an examination that ended early, a capture spanning more than one document, criteria resting on an examination known to be partial), and the report is in the `a11ign-result` artifact the upload step saves above — both the rendered report and the full result, transcript included. The same report is also written to the run's job summary, but a CLI-only reader has no route to that; the artifact is the one that works headlessly ([`docs/github-action.md`](./github-action.md#why-it-looks-like-this) has the reason and the `gh` commands).
+**Not on a pull request, no comment.** A run started by hand or by a push has nothing to comment on: the log's last line is the count (`a11ign: N finding(s)`), with a line before it for anything that bounds that count (an examination that ended early, a capture spanning more than one document, criteria resting on an examination known to be partial), and the full result, transcript included, is in the `a11ign-result` artifact the upload step saves above. The rendered report is in the pull-request comment and the run's job summary, and a CLI-only reader has no route to the job summary; the `v0.1.0` tag has no `summary-md` output to put the report in the artifact (the next tag will), so the artifact carries the result alone until then, and it is the one that works headlessly ([`docs/github-action.md`](./github-action.md#why-it-looks-like-this) has the reason and the `gh` commands).
 
 **`task` is load-bearing, but the word match it enables is not the guard on what gets operated.** It is
 what a user is trying to *do*, in plain words. On this shipped default (`probe-forms` on), a run always
@@ -405,9 +403,19 @@ from the repository, the same doubt reaches you as a `WARNING` printed to stderr
 runs underneath it. So a report that runs normally — the usual heading, a non-zero announcement count,
 findings and per-criterion outcomes both printed — and says `0 finding(s)` (the Action's own words for it:
 **"No lived-experience findings. The screen-reader layer found nothing it could evidence"**) is a clean
-read of your page. A "could not read this page" summary, a `WARNING`, or a job that failed instead of
-finished is the tell that it was not — check
+read of your page, **unless the trained scorer abstained.** A "could not read this page" summary, a `WARNING`, or a
+job that failed instead of finished is the tell that it was not — check
 [the consent banner](#the-consent-banner-is-the-real-risk-and-you-can-check-for-it-in-ten-seconds) first.
+
+**Abstention is a fourth tell, and a zero count under it is not yet a clean read.** When the page is unlike
+anything the scorer was validated on (measured on `https://www.gov.uk/`, run 37134253796: nearest training
+similarity 0.6476 against a 0.6557 floor), it declines to score. The page reads fine in every other way, with the
+usual heading and a full announcement count, and the findings are empty because nothing was scored. The Action
+says **"Not scored: no lived-experience verdict for this page"** where the clean wording would be, and the
+scorer's summary line says the page "was NOT scored" and its criteria are "unchecked, not clean". In the
+`a11ign-result` artifact it is `verdict.abstained: true` with `confidence: 0`, and the affected criteria are
+`cantTell` in `outcomes`. `verdict.taskCompletable` stays `true` and means nothing there. Read the rule-based
+(axe-core) table, which still ran, and treat the rest as a page for a person.
 
 ### The contact form needs one thing from you
 

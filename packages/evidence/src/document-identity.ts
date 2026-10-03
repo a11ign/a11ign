@@ -215,7 +215,7 @@ export function servedPathOf(url: unknown): string | null {
  * and recording them would put single-use handshake material into a tracked comparison record for no
  * gain — the count is what says "a caveat applies here", which is the whole of what a reader needs.
  */
-function servedFrom(url: unknown): { path: string, droppedParams: number } | null {
+function servedFrom(url: unknown): ServedRead | null {
   if (typeof url !== "string" || url === "") return null;
   try {
     const parsed = new URL(url);
@@ -282,7 +282,7 @@ function shapeOf(diagnostics: readonly unknown[]):
  */
 export function documentIdentity(capture: CaptureRecord | null | undefined): DocumentIdentity {
   const diagnostics = Array.isArray(capture?.diagnostics) ? capture.diagnostics : [];
-  const { components, unstable, droppedQueryParams } = componentsIn(diagnostics);
+  const { components, unstable, droppedQueryParams } = componentsIn(diagnostics, submitReadsOf(capture));
   const read = IDENTITY_COMPONENTS.filter((name) => components[name] !== undefined);
   // THE COMPONENT NAMES ARE IN THE CANONICAL STRING, not only their values. An identity that read a
   // title and no path must never digest equal to one that read a path and no title.
@@ -299,6 +299,29 @@ export function documentIdentity(capture: CaptureRecord | null | undefined): Doc
 /** Distinct values, in first-seen order. Order is stable so a digest over them is too. */
 const distinct = (values: readonly string[]): string[] => [...new Set(values)];
 
+type ServedRead = { path: string, droppedParams: number };
+
+/**
+ * THE DOCUMENTS A FORM SUBMIT TOOK THE CAPTURE TO — #3293, the third reading beside the two census marks.
+ *
+ * Run 37134253796 (`https://www.gov.uk/`) read its census from the home page, then `probe-forms` submitted the
+ * search form, and the only title mark was read afterwards: ONE served path, ONE title, each internally
+ * consistent, and `unstable` empty over a record holding two pages. `interaction.navigatedOnSubmit` is the probe's
+ * own reading of where the submit went, so its `from` and `to` are served reads like a census mark's `targetUrl`.
+ *
+ * Only a submit that MOVED the document counts. `checked: false` is "could not ask", and `navigated: false` is a
+ * submit that stayed put. A self-reload (same path, new query) is harmless here without a special case:
+ * `servedFrom` drops the query, so it adds no path the census had not already named. The pre-fix shape, a bare
+ * `{ from, to }`, carried no `checked` key and its presence meant the document moved (`submitNavigatedTheDocument`).
+ */
+function submitReadsOf(capture: CaptureRecord | null | undefined): ServedRead[] {
+  const nav = (capture?.interaction as { navigatedOnSubmit?: unknown } | undefined)?.navigatedOnSubmit;
+  if (typeof nav !== "object" || nav === null) return [];
+  const { checked, navigated, from, to } = nav as Record<string, unknown>;
+  const moved = "checked" in nav ? checked === true && navigated === true : true;
+  return moved ? [from, to].map(servedFrom).filter((read): read is ServedRead => read !== null) : [];
+}
+
 /**
  * The identity components a capture's marks carry.
  *
@@ -306,14 +329,18 @@ const distinct = (values: readonly string[]): string[] => [...new Set(values)];
  * marks disagreed) — and `unstable` says which, because those need opposite responses: the first means
  * ask for a better capture, the second means the page moved under the capture you have.
  */
-function componentsIn(diagnostics: readonly unknown[]):
+function componentsIn(diagnostics: readonly unknown[], submitReads: readonly ServedRead[]):
   Pick<DocumentIdentity, "components" | "unstable" | "droppedQueryParams"> {
   // EVERY census mark, both kinds. `structureCensus` and `domCensus` are separate reads of the CDP
   // target and can in principle name different documents; asserting they agree without looking is the
   // assumption this function exists to stop making.
-  const servedReads = [...marksNamed(diagnostics, "structureCensus"), ...marksNamed(diagnostics, "domCensus")]
+  const censusReads = [...marksNamed(diagnostics, "structureCensus"), ...marksNamed(diagnostics, "domCensus")]
     .map((mark) => servedFrom(mark.targetUrl))
-    .filter((read): read is { path: string, droppedParams: number } => read !== null);
+    .filter((read): read is ServedRead => read !== null);
+  // A SUBMIT CAN CONTRADICT A CENSUS READ BUT NEVER STAND IN FOR ONE: where the census read nothing, the submit's
+  // URLs are where the probe ENDED UP, not what the capture was served, and naming that as the identity would
+  // be a reading the module never made. "This check can only ever add a refusal" (header).
+  const servedReads = censusReads.length ? [...censusReads, ...submitReads] : censusReads;
   const served = distinct(servedReads.map((read) => read.path));
   // THE MOST ANY READ DROPPED. Two marks can share a path and differ in their query — that is precisely
   // the nonce case — so the caveat applies if it applied to any of them.
