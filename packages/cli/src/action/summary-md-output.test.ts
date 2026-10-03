@@ -15,14 +15,14 @@
 // `action.yml`: this guards the COPY committed here, not the runtime -- `action-smoke.yml` runs the
 // real thing on every push.
 //
-// requires: history
-// The ref is read with `git show <ref>:action.yml`, so the tag has to be in the clone. The acceptance job is a
-// depth-1 clone with no token; a PR carrying `History: full` makes it `git fetch --unshallow origin main`, which
-// brings every tag reachable from main, `v0.1.0` included (it is an ancestor, verified 2026-10-03 with
-// `git merge-base --is-ancestor v0.1.0 origin/main`). A ref that does not resolve is REFUSED below, never skipped.
+// The ref is read with `git show <ref>:action.yml`. The acceptance job is a depth-1 clone with no tags and no
+// token, and `History: full` does NOT supply the tag: its `git fetch --unshallow origin main` stores no tag
+// (PR #3301's first run: `* branch main -> FETCH_HEAD` and nothing else, then `git show v0.1.0:action.yml`
+// failed). So a ref that is not local is fetched by name, depth 1 -- the repository is public and a read
+// needs no token -- and a ref that cannot be had either way is REFUSED below, never skipped.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, type ExecFileSyncOptionsWithStringEncoding } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -94,14 +94,22 @@ function declaredOutputs(actionYml: string): string[] {
   return [...section.matchAll(/^ {2}([a-z][a-z-]*):/gm)].map((m) => m[1]);
 }
 
-/** `action.yml` as it was at `ref`. An unresolvable ref REFUSES: a test that skipped it would go green by not finding it. */
+const GIT: ExecFileSyncOptionsWithStringEncoding = { cwd: REPO_ROOT, env: sandboxGitEnv(), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] };
+
+/** `action.yml` as it was at `ref`, from the clone if it holds the ref and otherwise from a depth-1 fetch of just that ref. */
 function actionYmlAt(ref: string): string {
   try {
-    return execFileSync("git", ["show", `${ref}:action.yml`],
-      { cwd: REPO_ROOT, env: sandboxGitEnv(), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    return execFileSync("git", ["show", `${ref}:action.yml`], GIT);
+  } catch {
+    // Not local (a shallow CI clone has no tags). Fall through to fetching it, and refuse if that fails too.
+  }
+  try {
+    execFileSync("git", ["fetch", "--depth=1", "--no-tags", "origin", ref], GIT);
+    return execFileSync("git", ["show", `FETCH_HEAD:action.yml`], GIT);
   } catch (cause) {
-    throw new Error(`REFUSED: \`git show ${ref}:action.yml\` failed, so what that ref declares is unknown. A shallow clone `
-      + "without the tag is the usual cause: the PR body needs `History: full`, and this file `// requires: history`.", { cause });
+    throw new Error(`REFUSED: \`${ref}:action.yml\` is neither in this clone nor fetchable from origin, so what that ref `
+      + "declares is unknown. An unresolvable ref is refused rather than skipped: skipping would let this test go green by not finding it.",
+    { cause });
   }
 }
 
