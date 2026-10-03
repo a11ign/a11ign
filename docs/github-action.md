@@ -300,12 +300,21 @@ Less than its name suggests, and worth knowing before you agonise over the wordi
 | `judge-backend: anthropic` / `openai` | **Yes — it changes the verdict.** The LLM reads it and answers "could a screen-reader user finish this?" |
 | `judge-backend: local` (default) | **Not for the verdict.** The scorer has no head for task completion and never sees the task — `docs/local-model.md` bars it as a model feature. It still reports `task-completable`, but on this backend that only means nothing scored as a blocker: a coarse proxy, not a judgement about your task (see above). |
 
-`probe-navigation` is separate from all of the above, has no input to disable it here, and has no
+`probe-navigation` is separate from all of the above, has its own input (`probe-navigation: false` turns it off), and has no
 task-word test either: it follows the first link on the page regardless of what `task` says. Rehearsal 3's
 run against `https://www.w3.org/WAI` with the task `"Learn about web accessibility"` activated five
 controls — one button whose name happened to share the word "Web" with the task (the word-match rule),
 three submissions of the search form (submit-like, no task word needed) and one followed link
 (`probe-navigation`, no task word tested at all). The word match governed exactly one of the five.
+
+### What an unauthenticated run pressed
+
+**The summary lists every control the probes pressed, by name, on every run that took them** (#3297). Weekly review 2026-W40 ran the defaults against gov.uk: the run submitted the search form with an empty query twice and toggled two sort-order radios, and the comment said none of it. Under **What this run pressed on its own** each line is a verb the probe recorded (*submitted*, *toggled*, *followed*, or *pressed* for a button) and the control as the screen reader announced it, from `interaction.formChanges` in `result-json`. Never a value.
+
+- **It is not the authenticated list.** An authenticated run's list ([below](#logging-in-flows-and-login-flow)) is the whole list, because the run presses only what its files name. This one is what `probe-forms` and `probe-navigation` chose, so its heading says they pressed unprompted and names both settings. Set `probe-forms: false` and `probe-navigation: false` to stop it.
+- **A submit that left the page says where it went** (`interaction.navigatedOnSubmit`).
+- **It is bounded.** Past the summary's row limit it counts the rest and points at `interaction.formChanges`.
+- **A run whose probes pressed nothing says "nothing pressed".** A result with no probe record prints no section: it pressed nothing that it can name.
 
 **A run can leave the page you gave it entirely, and this one did** — the followed link landed on a
 second document, and the result says so itself: "THIS CAPTURE NAMED MORE THAN ONE DOCUMENT ... its
@@ -486,7 +495,7 @@ that is a real 4.1.2 failure of your login form, and nothing behind it can be ex
 |---|---|
 | **Use** | A dedicated test account **without MFA or SSO**, on staging. Its username and password must each be **at least 8 characters and not an ordinary word** (`a11y-audit-7f3c`, not `admin`): a shorter value is refused, because hiding it would rewrite your page's own text. MFA, SSO and CAPTCHA are out of v1: a login step that fails on a page showing a reCAPTCHA, hCaptcha or Turnstile widget ends in `auth-challenge-detected`, which names the challenge and never answers it. |
 | **Private repositories only** | A run on a repository that is **not private is refused before NVDA is installed** (`auth-refused-public-repository`), whichever of `comment-on-pr`, the job log and the artifact you meant to use: all of them, and the job summary, are readable by anyone on a public repository. |
-| **What it presses** | Only what your files name. `probe-forms` and `probe-navigation` are turned off for an authenticated run **whatever you set** (an input's default cannot be told from a choice), and the run says so before it starts. The report and `result-json` list **What this run pressed**, by control name. |
+| **What it presses** | Only what your files name. `probe-forms` and `probe-navigation` are turned off for an authenticated run **whatever you set** (an input's default cannot be told from a choice), and the run says so before it starts. The report and `result-json` list **What this run pressed**, by control name, and that list is the whole list. |
 | **The judge** | `judge-backend: local` (the default). `anthropic` or `openai` is refused for an authenticated run unless you also set `send-authenticated-transcript-to-judge-vendor: "true"`, which names the vendor in the log before the judge runs. |
 | **The log** | The Action adds `::add-mask::` for the URL-encoded and base64 forms of every `from-env` value, which GitHub does not derive. Masks do not apply to FILES: every value is also replaced with `‹credential›` in `result-json` and the summary, and the count is disclosed ("2 announcements contained a value from your login and were redacted"). |
 | **The cost** | At least one login per capture and one per capture for the rule layer, **stated before the run starts as a minimum** (a capture repeated because it did not read the page logs in again, up to 3 attempts each) and **reported afterwards as the number actually performed**: a run's `result-json` carries `logins` (`performed`, `workerAttempts`, `ruleLayerScans`, `minimum`), on a single URL and on a page list alike (a single URL with several form states carries it on the last result, the tally being cumulative), and a list's roll-up ends `Logins: N performed` (a single URL's human output says the same line on stderr, beside the notice that stated the minimum). A run whose minimum passes 20 (`MAX_LOGINS`; the default 5-page run is 10, and 25 pages is 50) is refused before any worker is leased, with no override: split the list, or set `axe: false`. **A failed login stops the list**: pages after an authentication fault are reported `NOT ATTEMPTED` and make no login, so a wrong password is tried once and not once per page. Repeated logins can still trip a lockout or bot detection. |
@@ -604,7 +613,7 @@ its top-level fields, and what each one lets you check.
 | `captureVerified`, `captureUnverifiedReason` | `false` when the capture could not be confirmed to have read the requested page. The reason is `wrong-content` (it read something else, such as browser chrome) or `contained` (it read only part of the page, usually a consent dialog). The summary then reports no findings and the run exits 2: a failed measurement, not a clean page. |
 | `leftSite` | Where the examination ended because an activation took the browser off the page's site: the `control` activated, `from` and `to` (`null` when unknown), whether the worker `recorded` it or it was `derived` from the announcements (`source`), and the quoted `evidence`. `null` when every activation stayed on the page. `structure` and `interaction` are then only what was observed before it. |
 | `artifactPath` | Where the capture behind this result was written, or `null` under `--no-keep`. |
-| `pressed` | **Only on an authenticated run** ([below](#logging-in-flows-and-login-flow)): the controls the run pressed, by accessible name, never a value. An authenticated run presses only what its own files name (a login's `press:`, `check:` and `choose:` steps), so this is the whole list. Absent on every other run. |
+| `pressed` | **Only on an authenticated run** ([below](#logging-in-flows-and-login-flow)): the controls the run pressed, by accessible name, never a value. An authenticated run presses only what its own files name (a login's `press:`, `check:` and `choose:` steps), so this is the whole list. Absent on every other run, whose pressed controls are listed in the summary instead, from `interaction.formChanges` ([below](#what-an-unauthenticated-run-pressed)); that list is what the probes chose, never a complete one. |
 
 ### Reading `outcomes`
 
