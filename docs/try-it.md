@@ -31,7 +31,7 @@ the words NVDA spoke.
   trained component only ever says *this is worth a person's look*. A referral on a page you believe is
   fine is expected behaviour, not a bug.
 - **It needs Windows**, because NVDA is Windows-only. That is the real cost of the two hours.
-- **Nothing is published to npm yet.** You install from the repository — [the commands are below](#the-other-route-run-it-from-the-repository), and `npx a11ign` will not work yet.
+- **It is published to npm, and it still needs a Windows machine.** `a11ign@0.1.0` was the registry's `latest` when this was last checked (2026-10-03, `npm view a11ign dist-tags.latest`: a reading at a moment, so check it again). `npx a11ign <url>` saves the clone and the build, not the machine: it needs the same capture worker as a clone does. [The commands are below](#the-other-route-run-it-from-the-repository).
 
 ## The fastest route: a GitHub Actions run
 
@@ -291,19 +291,28 @@ A run that fails outside these (for example a runner that never becomes ready) i
 ## The other route: run it from the repository
 
 **Use this if your app is not on GitHub, or you want to see the output before you commit a workflow file.**
-It is the same tool; the difference is where the Windows machine comes from. **`npx a11ign` does not work
-yet** — nothing is published — so the package comes from a clone.
+It is the same tool; the difference is where the Windows machine comes from. **`npx a11ign` works** — the package
+is on npm — and the repository's own registry check (`registry-consumer-gate.yml`) runs exactly that command on a
+Windows runner, from a clean directory with the published packages and a worker beside it. Typed on a Linux box
+with no worker (2026-10-03), it installs from the registry and stops at the worker message quoted below; the full
+run on Windows is the registry check's, not something this page's author watched.
+
+```bash
+npx a11ign https://www.w3.org/WAI --task "Learn about web accessibility"
+```
+
+**Or from a clone**, if you want the source, or a build of `main` rather than the release:
 
 ```bash
 git clone https://github.com/a11ign/a11ign.git
-cd a11y-witness
+cd a11ign
 pnpm install
 pnpm run witness https://www.w3.org/WAI --task "Learn about web accessibility"
 ```
 
-Node 20 or later. `pnpm install` builds the workspace, so there is no separate build step.
+Node 20 or later for both. `pnpm install` builds the workspace, so the clone has no separate build step.
 
-**The last command needs a capture worker and will not invent one.** A screen reader is a Windows desktop
+**Either command needs a capture worker and will not invent one.** A screen reader is a Windows desktop
 application: there is no Docker image, and no flag substitutes for the machine. Run on a Mac or Linux box
 with nothing configured, this is exactly what you get — quoted rather than paraphrased, because it is the
 most likely first result and it is not a crash:
