@@ -175,6 +175,13 @@ jobs:
   # approving-review requirement had never once run except by hand. The guard needs no change for this;
   # what was missing was a caller.
   #
+  # ONCE PER LISTED REPOSITORY (#3123, ADR 0039 item 5). The guard used to read one repository from five
+  # literals, so a second code repository could carry no protection at all with this job green. The list is
+  # `.agent-org/project.json`'s `code` array (the one declared list), each repository's default branch comes
+  # from `docs/code-repository-protection.json`, and the guard takes its repository from
+  # `A11Y_PROTECTION_REPO`. EVERY repository is read before the job fails, and the pass line it greps for
+  # NAMES the repository, so a run that ignored the variable and read the primary cannot certify another.
+  #
   # WHICH IDENTITY, AND WHY IT IS NOT `github.token` (#2120's "settle this before building").
   # `BINDS_ME` is identity-scoped by construction -- `current_user_can_bypass` answers FOR THE ASKING
   # IDENTITY ONLY. So the read is worth exactly as much as the subject it asks about. `${{ github.token }}`
@@ -236,7 +243,7 @@ jobs:
       # Every other nightly job that runs tests (`coverage`, `nightly-only`, `doc-report`) builds for the
       # same reason.
       - run: pnpm run build
-      - name: Ask GitHub whether main's `pull_request` rule binds the identity that merges here
+      - name: Ask GitHub, once per code repository, whether the default branch's `pull_request` rule binds the identity that merges here
         env:
           A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
         run: |
@@ -261,18 +268,45 @@ jobs:
             echo '::error::CANNOT_TELL: could not read RSTEST_CONFIG from packages/guards/src/assert-glob-not-empty.mjs, so the runner was never started and NOTHING WAS READ. The export was renamed, or the build did not run. This is not a pass. See #2120.'
             exit 1
           fi
-          A11Y_CHECK_MAIN_RULESET=1 pnpm exec rstest run --config "$RSTEST_CONFIG" \
-            --include packages/lab/src/packaging/branch-protection.test.ts \
-            --disableConsoleIntercept 2>&1 | tee ruleset-read.log
-          # A GREEN EXIT IS NOT A PASS, and that is the defect this job exists to end one layer up. Every
-          # "could not ask" arm inside that guard logs its reason and RETURNS, so an unreadable
-          # `rules/branches/main` -- or the flag never reaching the test at all -- exits 0 having
-          # established nothing. The LIVE PASS line is printed only on the far side of the BINDS_ME
-          # assertion, so requiring it is what makes a skip red.
-          grep -q 'LIVE PASS (no admin required)' ruleset-read.log || {
-            echo '::error::CANNOT_TELL: the run exited green but never printed its LIVE PASS line, so the live ruleset read did not happen and nothing was certified. The log above names which read was unavailable -- look for a "could not be read" line naming the endpoint, or a "SKIPPED" line. This is not a pass. See #2120.'
+          # The repositories to read, out of the file the `agent-org` tool owns, so this list and the tool's cannot
+          # drift. Same convention as the config above: a non-zero exit becomes the empty string the refusal is
+          # written for, and an EMPTY list is refused rather than read as "nothing to check".
+          REPOS="$(node -e 'const p = JSON.parse(require("fs").readFileSync(".agent-org/project.json", "utf8")); console.log(p.code.map((c) => c.repo).join(" "))')" || REPOS=""
+          if [ -z "$REPOS" ]; then
+            echo '::error::CANNOT_TELL: could not read the code repositories out of .agent-org/project.json, so NOTHING WAS READ. An empty list certifies no repository. This is not a pass. See #3123.'
             exit 1
-          }
+          fi
+          FAILED=""
+          for repo in $REPOS; do
+            LOG="ruleset-read-${repo//\//-}.log"
+            # `set +e` for the one pipeline only: a repository that fails must not stop the others being read,
+            # and `bash -e` would end the loop at the first. `$?` is the runner's own status under pipefail.
+            set +e
+            A11Y_CHECK_MAIN_RULESET=1 A11Y_PROTECTION_REPO="$repo" pnpm exec rstest run --config "$RSTEST_CONFIG" \
+              --include packages/lab/src/packaging/branch-protection.test.ts \
+              --disableConsoleIntercept 2>&1 | tee "$LOG"
+            STATUS=$?
+            set -e
+            if [ "$STATUS" -ne 0 ]; then
+              echo "::error::CANNOT_TELL: the live ruleset read FAILED for $repo (exit $STATUS), so nothing is certified about it. The log above names which read. This is not a pass. See #3123."
+              FAILED="$FAILED $repo"
+              continue
+            fi
+            # A GREEN EXIT IS NOT A PASS, and that is the defect this job exists to end one layer up. Every
+            # "could not ask" arm inside that guard logs its reason and RETURNS, so an unreadable
+            # `rules/branches/<branch>` -- or the flag never reaching the test at all -- exits 0 having
+            # established nothing. The LIVE PASS line is printed only on the far side of the BINDS_ME
+            # assertion, so requiring it is what makes a skip red. It carries `<repo>@`, so it must be THIS
+            # repository's pass, not another's.
+            grep -qF "LIVE PASS (no admin required) on ${repo}@" "$LOG" || {
+              echo "::error::CANNOT_TELL: the run for $repo exited green but never printed its LIVE PASS line, so the live ruleset read did not happen and nothing was certified. The log above names which read was unavailable -- look for a \"could not be read\" line naming the endpoint, or a \"SKIPPED\" line. This is not a pass. See #2120."
+              FAILED="$FAILED $repo"
+            }
+          done
+          if [ -n "$FAILED" ]; then
+            echo "::error::CANNOT_TELL: the live ruleset read did not certify:$FAILED. Every listed repository was read before this job failed. This is not a pass. See #3123."
+            exit 1
+          fi
 
   ready-audit:
     if: github.event.schedule != '37 * * * *'
