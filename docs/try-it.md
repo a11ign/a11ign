@@ -405,9 +405,19 @@ from the repository, the same doubt reaches you as a `WARNING` printed to stderr
 runs underneath it. So a report that runs normally — the usual heading, a non-zero announcement count,
 findings and per-criterion outcomes both printed — and says `0 finding(s)` (the Action's own words for it:
 **"No lived-experience findings. The screen-reader layer found nothing it could evidence"**) is a clean
-read of your page. A "could not read this page" summary, a `WARNING`, or a job that failed instead of
-finished is the tell that it was not — check
+read of your page, **unless the trained scorer abstained.** A "could not read this page" summary, a `WARNING`, or a
+job that failed instead of finished is the tell that it was not — check
 [the consent banner](#the-consent-banner-is-the-real-risk-and-you-can-check-for-it-in-ten-seconds) first.
+
+**Abstention is a fourth tell, and a zero count under it is not yet a clean read.** When the page is unlike
+anything the scorer was validated on (measured on `https://www.gov.uk/`, run 37134253796: nearest training
+similarity 0.6476 against a 0.6557 floor), it declines to score. The page reads fine in every other way, with the
+usual heading and a full announcement count, and the findings are empty because nothing was scored. The Action
+says **"Not scored: no lived-experience verdict for this page"** where the clean wording would be, and the
+scorer's summary line says the page "was NOT scored" and its criteria are "unchecked, not clean". In the
+`a11ign-result` artifact it is `verdict.abstained: true` with `confidence: 0`, and the affected criteria are
+`cantTell` in `outcomes`. `verdict.taskCompletable` stays `true` and means nothing there. Read the rule-based
+(axe-core) table, which still ran, and treat the rest as a page for a person.
 
 ### The contact form needs one thing from you
 

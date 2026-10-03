@@ -242,6 +242,25 @@ test("an empty findings list says so rather than rendering an empty table", () =
   assert.match(renderSummary(result()), /No lived-experience findings/);
 });
 
+test("an ABSTAINED verdict does not render the clean-page headline (2026-W40, run 37134253796)", () => {
+  // gov.uk: nearest training similarity 0.6476 against a 0.6557 floor, zero findings, `taskCompletable` true. The summary
+  // sentence said NOT scored, and the bold line under it said "No lived-experience findings".
+  const abstained = {
+    taskCompletable: true, confidence: 0, findings: [], abstained: true,
+    summary: "This page is unlike anything the trained scorer was validated on, so it was NOT scored. These criteria are unchecked, not clean.",
+  };
+  for (const isTaskClaim of [false, true]) {
+    const out = renderSummary(result({ verdict: abstained }), { isTaskClaim });
+    assert.match(out, /\*\*Not scored: no lived-experience verdict for this page\.\*\*/);
+    assert.match(out, /nothing was assessed, not that nothing was found/);
+    assert.doesNotMatch(out, /No lived-experience findings/, "the clean-page headline must not appear");
+    assert.doesNotMatch(out, /No blocking findings:\*\* none/, "nor a blocker count of none");
+    assert.doesNotMatch(out, /\*\*Yes\b|\*\* Yes/, "nor a task answer built from a constant");
+  }
+  // The positive control: the same empty list WITHOUT abstention is still the real clean read.
+  assert.match(renderSummary(result({ verdict: { ...abstained, abstained: false } })), /No lived-experience findings/);
+});
+
 test("an UNVERIFIED capture reports no findings at all", () => {
   // On gov.uk the capture read Edge's image-magnifier overlay ("Image Magnify, document"), the retry fired
   // three times and warned — and the run still reported a 4.1.2 finding about the browser's own Zoom In and
