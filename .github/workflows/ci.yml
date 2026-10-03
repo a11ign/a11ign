@@ -539,16 +539,21 @@ jobs:
   # which files changed, and a missing `Acceptance:` line must fail even a docs-only PR.
   # A1 (#452): CALLS `reusable-acceptance.yml` -- see that file for the full reasoning, restated there
   # because after this split it is the ONLY place a reader would think to look for this job's blast
-  # radius (no GH_TOKEN, contents:read only, pull_request never pull_request_target).
+  # radius (the author's command gets no token, contents:read + pull-requests:read for the one step that reads the live
+  # body, pull_request never pull_request_target).
   #
   # EXEMPT ON `merge_group`, RECORDED (#1109) -- `gate-needs.test.ts`'s `EXEMPT_ON_MERGE_GROUP` pins the
   # same reason. This job runs a command out of `github.event.pull_request.body`; a `merge_group` event has
   # no pull request and no body to run. Not widened: there is nothing here left to execute on a queue entry.
   acceptance:
     if: github.event_name == 'pull_request' && github.event.pull_request.state == 'open'
+    # A CALLED WORKFLOW CAN ONLY NARROW ITS CALLER'S TOKEN, so `pull-requests: read` is granted here too (#3286): the
+    # called job reads the LIVE body with it, in the one step that holds a token. No `with:` -- the body is no longer
+    # an input, because the event payload's body is the stale one on a Dependabot `opened` run.
+    permissions:
+      contents: read
+      pull-requests: read
     uses: ./.github/workflows/reusable-acceptance.yml
-    with:
-      pr-body: ${{ github.event.pull_request.body }}
 
   # THE ONE CONTEXT BRANCH PROTECTION REQUIRES. `if: always()` so this still runs when an upstream job
   # fails or is cancelled -- without it, a failing `ts` would skip `gate` too (the default `if` on a job
