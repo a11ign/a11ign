@@ -23,7 +23,10 @@
 //
 // THE PIN IS A LITERAL, AND THAT IS THE OPEN SEAM. `uses:` takes no expression, so the sha this file pins is
 // baked at generation, and a new release needs the file regenerated with `--sha=<the tag's commit>` and committed
-// to the outside repository. Nothing here can do that without a stored token (`workflows` is not a `GITHUB_TOKEN`
+// to the outside repository. IT IS BAKED ONCE (#3221): the `uses:` line. The `pin` job reads that line out of the
+// checked-out workflow file instead of carrying its own `pinned=` copy, and the summary does not restate it, because
+// Dependabot's bump rewrites the `uses:` line and its `# v` comment and nothing else (#3182 found the other two
+// copies left behind, so the first merged bump turned the `pin` job red for the release it had just refreshed). Nothing here can do that without a stored token (`workflows` is not a `GITHUB_TOKEN`
 // permission). So the `pin` job REFUSES a run whose `sha` input is not the pinned one: a stale pin is a RED run
 // named for the version it did not test, never a green one for a version it did. Who refreshes the pin is the next
 // row's decision (the outside repository), and it is on #3181.
@@ -82,7 +85,8 @@ const POLL_CRON = "23 * * * *";
 const FULL_SHA_SHAPE = /^[0-9a-f]{40}$/;
 
 /** The Action's published repository, read by `git ls-remote` (public, no credential) in `poll` and `pin`. */
-const ACTION_REMOTE = "https://github.com/a11ign/a11ign";
+const ACTION_NAME = "a11ign/a11ign";
+const ACTION_REMOTE = `https://github.com/${ACTION_NAME}`;
 
 /** What the job's own summary says it did not run: routes the documents describe and this job did not take. */
 export const NOT_COVERED = [
@@ -127,6 +131,15 @@ function annotatePin(jobText, version) {
 function pinnedVersionOf(workflowText) {
   return PIN_VERSION_COMMENT.exec(workflowText)?.[2];
 }
+
+/**
+ * What the summary says where the pin line's sha is. Printing the sha would be a second copy that Dependabot's bump
+ * of the `uses:` line leaves stale (#3221); the line itself, in this very file, is the one place that names it.
+ */
+const PIN_IN_SUMMARY = "<the release's full commit sha, as pinned on that line of this file>";
+
+/** @param {string} line @returns {string} the line with a pinned sha, and the `# v<version>` after it, replaced by `PIN_IN_SUMMARY` */
+const withoutBakedPin = (line) => line.replace(/(uses:\s*\S+@)[0-9a-f]{40}(?: # v\S+)?/, `$1${PIN_IN_SUMMARY}`);
 
 /** @param {string} jobText @returns {string} the job with a pin line's `# v<version>` comment removed: a comment is not drift */
 const withoutPinComment = (jobText) => jobText.replace(PIN_VERSION_COMMENT, "$1");
@@ -197,13 +210,32 @@ function buildPollJob() {
   ].join("\n");
 }
 
-/** The job that refuses a run whose pin is not the release it is named for. @param {string} pinnedSha */
-function buildPinJob(pinnedSha) {
+/**
+ * The shell that reads the pin out of the workflow file this run is executing, as `sed` extracts it from the `uses:`
+ * line: exactly one, and a full sha (a tag or branch there is no pin, and is refused by name).
+ * `GITHUB_WORKFLOW_REF` is `<owner>/<repo>/<path>@<ref>`, so the path needs no filename written here. The pattern is
+ * assembled so this file never carries a line `extractPinnedSha` could take for the Action's own `uses:` line.
+ */
+function readPinnedShaCommand() {
+  return [
+    "workflow_file=\"${GITHUB_WORKFLOW_REF#\"${GITHUB_REPOSITORY}/\"}\"",
+    "workflow_file=\"${workflow_file%%@*}\"",
+    `pinned=$(sed -nE 's#^[[:space:]]*(- )?uses:[[:space:]]*${ACTION_NAME}@([0-9a-f]{40})([[:space:]].*)?$#\\2#p' "$workflow_file")`,
+    "case \"$pinned\" in",
+    "  \"\" | *$'\\n'*)",
+    "    echo \"::error::${workflow_file} has no single line pinning the Action to a full commit sha, so there is no pin to read\"",
+    "    exit 1 ;;",
+    "esac",
+  ];
+}
+
+/** The job that refuses a run whose pin is not the release it is named for. */
+function buildPinJob() {
   const script = [
     "set -euo pipefail",
     "version=\"$VERSION\"",
     ...tagShaCommand(),
-    `pinned=${pinnedSha}`,
+    ...readPinnedShaCommand(),
     "if [ \"$SHA\" != \"$tag_sha\" ]; then",
     "  echo \"::error::this run is named for ${SHA}, but v${version} is ${tag_sha}\"",
     "  exit 1",
@@ -220,6 +252,9 @@ function buildPinJob(pinnedSha) {
     "    if: github.event_name == 'workflow_dispatch'",
     "    runs-on: ubuntu-latest",
     "    steps:",
+    "      - uses: actions/checkout@v4   # this repository's own workflow file, which holds the one copy of the pin",
+    "        with:",
+    "          persist-credentials: false",
     "      - name: Refuse a run whose pin is not the release it is named for",
     "        env:",
     "          VERSION: ${{ inputs.version }}",
@@ -242,7 +277,7 @@ const lineNumberOf = (text, fragment) => text.slice(0, text.indexOf(fragment)).s
 export function substitutionList({ readmeText, fence, targeted }) {
   const firstLine = lineNumberOf(readmeText, fence);
   const was = fence.split("\n");
-  const now = targeted.split("\n");
+  const now = targeted.split("\n").map(withoutBakedPin);
   const changed = was.flatMap((line, i) => (line === now[i] ? [] : [
     `README.md line ${firstLine + i}: \`${line.trim()}\` became \`${now[i].trim()}\``,
   ]));
@@ -355,7 +390,7 @@ export function generateOutsiderJob(readmeText, sha, version) {
     "jobs:",
     buildPollJob(),
     "",
-    buildPinJob(extractPinnedSha(targeted)),
+    buildPinJob(),
     "",
     README_JOB_BEGIN,
     ...spliceNeeds(body, jobName),
