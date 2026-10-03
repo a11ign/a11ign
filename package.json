@@ -217,7 +217,7 @@
     "@guidepup/setup": "0.25.2",
     "@rstest/core": "0.11.12",
     "@rstest/coverage-v8": "0.11.12",
-    "@types/node": "^26.0.1",
+    "@types/node": "^26.6.3",
     "agent-org": "github:a11ign/agent-org#semver:^0.1.0",
     "eslint": "^10.5.0",
     "globals": "^17.7.0",
