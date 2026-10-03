@@ -41,7 +41,7 @@ Until then the live read below is EXPECTED to differ on that repository.
 ## The live read
 
 ```bash
-A11Y_CHECK_REPO_ACCESS=1 pnpm exec tsx --test packages/lab/src/packaging/layer-repository-access.test.ts
+A11Y_CHECK_REPO_ACCESS=1 pnpm exec tsx --test packages/lab/src/packaging/layer-repository-access-live.test.ts
 ```
 
 It reads `repos/<r>/collaborators` for each declared repository and prints each difference from the declaration
