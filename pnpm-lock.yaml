@@ -882,7 +882,7 @@ packages:
     engines: {node: '>= 6.0.0'}
 
   agent-org@https://codeload.github.com/a11ign/agent-org/tar.gz/6e71155c9452365fff9bbc603628d85a612cec5e:
-    resolution: {gitHosted: true, tarball: https://codeload.github.com/a11ign/agent-org/tar.gz/6e71155c9452365fff9bbc603628d85a612cec5e}
+    resolution: {gitHosted: true, integrity: sha512-3L/R6N41xC7JT0ByiIFGiYfkVfKeNlbqbe5VNeWtByDJN7/3lMUgk76nbqx0uO5y7GtAW9CEs3jJGBzeWlnxmQ==, tarball: https://codeload.github.com/a11ign/agent-org/tar.gz/6e71155c9452365fff9bbc603628d85a612cec5e}
     version: 0.4.2
     engines: {node: '>=22'}
     hasBin: true
