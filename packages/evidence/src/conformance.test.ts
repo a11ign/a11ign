@@ -82,6 +82,30 @@ test("requirement 1 says its count is the screen-reader layer's REACH, not this 
     "with the rule layer run, 'NOT assessed' would contradict the criteria axe-core did examine");
 });
 
+test("requirement 1 states the examined figure when the rule layer's covered criteria are supplied (#3307)", () => {
+  // 8 screen-reader-reach criteria, and axe-core covering two of them (1.1.1, 4.1.2: already counted) and three
+  // outside it (1.4.3, 1.4.11, 2.4.2). Examined is the UNION -- 8 + 3 -- and an overlap must not count twice.
+  const [level] = conformanceScope({ ...CLEAN, ruleLayerCovered: ["1.1.1", "4.1.2", "1.4.3", "1.4.11", "2.4.2"] });
+  assert.match(level.establishes, /examined 11 of 55/);
+  assert.match(level.establishes, /8 by the screen-reader layer and scorer/);
+  assert.match(level.establishes, /3 further by the rule layer \(axe-core\) alone/);
+  assert.match(level.limitation, /44 criteria were examined by neither layer and are unchecked, not clean/);
+  assert.doesNotMatch(level.establishes, /not a count of what this run examined/,
+    "the figure IS this run's examined count now, so the disclaimer must go");
+});
+
+test("requirement 1 counts only WCAG A/AA criteria the rule layer covered, and an empty coverage still states a figure", () => {
+  const [none] = conformanceScope({ ...CLEAN, ruleLayerCovered: [] });
+  assert.match(none.establishes, /examined 8 of 55 WCAG 2.2 A\/AA success criteria: 8 by the screen-reader layer and scorer \(their reach\) and 0 further/);
+  const [foreign] = conformanceScope({ ...CLEAN, ruleLayerCovered: ["9.9.9"] });
+  assert.match(foreign.establishes, /examined 8 of 55/, "a key outside WCAG 2.2 A/AA is not a criterion of the 55");
+});
+
+test("requirement 1 keeps the no-rule-layer wording even when covered criteria are passed", () => {
+  const [level] = conformanceScope({ ...CLEAN, ruleLayerRan: false, ruleLayerCovered: ["1.4.3"] });
+  assert.match(level.establishes, /Assessed 8 of 55/);
+});
+
 test("a truncated sweep makes requirement 2 report INCOMPLETE examination", () => {
   // The case Requirement 2 exists for: we stopped, the page did not. Reporting that as full-page
   // coverage would be a false claim, and an absence of findings past the cap proves nothing.

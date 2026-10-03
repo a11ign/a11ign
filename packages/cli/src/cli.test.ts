@@ -33,6 +33,8 @@ import { fileURLToPath } from "node:url";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { AddressInfo } from "node:net";
 import { stripComments } from "@a11ign/evidence/source-text";
+import { assessedCriteria } from "@a11ign/judge/coverage";
+import { criterionOutcomes, outcomeTally, type RuleLayerCoverage } from "@a11ign/judge/outcomes";
 
 import {
   applyArg, parseArgs, conformanceFor, captureViaWorker, errorReason, describeWorkerError, warnUnverified,
@@ -125,6 +127,26 @@ test("running WITHOUT axe is reported differently from running with it", () => {
   assert.notEqual(withAxe, without,
     "the conformance scope is identical whether or not the rule layer ran — unchecked is being reported "
     + "as clean");
+});
+
+test("requirement 1's examined figure equals the outcomes' non-untested count, scorer abstained (#3307)", () => {
+  // The two were computed from different sources and disagreed: requirement 1 stated the screen-reader layer's reach
+  // while `outcomes` counted every criterion any layer covered. Axe-core covers criteria outside `assessedCriteria()`
+  // here, and the scorer abstained, so the reach and the examined count differ and only the wiring makes them agree.
+  const reach = new Set(assessedCriteria());
+  const outside = ["1.4.3", "1.4.11", "1.4.4"];
+  assert.ok(outside.every((c) => !reach.has(c)), "the fixture's axe-only criteria must lie outside the reach");
+  const entry = (verdict: "violated" | "needsReview" | "clean") => ({ verdict, rules: [] });
+  const ruleLayer: RuleLayerCoverage = {
+    "1.4.3": entry("violated"), "1.4.11": entry("clean"), "1.4.4": entry("needsReview"),
+    [assessedCriteria()[0]]: entry("clean"),
+  };
+  const capture = { screenReader: "NVDA", transcript: [], structure: {}, diagnostics: [] } as unknown as CaptureResponse;
+  const outcomes = criterionOutcomes({ capture, findings: [], abstained: true, ruleLayer });
+  const examined = outcomes.length - outcomeTally(outcomes).untested;
+  const [level] = conformanceFor(capture, [], null, ruleLayer);
+  assert.match(level.establishes, new RegExp(`examined ${examined} of ${outcomes.length}\\b`));
+  assert.equal(examined, reach.size + outside.length, "union of the reach and axe-only criteria, overlap counted once");
 });
 
 test("A FAILED AXE SCAN IS NOT '0 violations' — pageContext decides nullness", () => {
