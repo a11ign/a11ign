@@ -12,17 +12,19 @@
 // lab access, which is the point. The writer is #3289 (the lab's side, `orchestrator`'s); until it exists every
 // real release lands in `wait`, which is the safe state and the one a user can see.
 //
-// FOUR OUTCOMES, NEVER TWO, and only `proceed` publishes:
+// FOUR OUTCOMES, NEVER TWO, and only `proceed` publishes (a wait past `WAIT_BOUND_MINUTES` also raises a row, #3291):
 //   proceed     `success` on the exact sha, or on an earlier commit with no read path changed since; or no fleet
 //               stage gates any package in this release (the log says so)
 //   rerun       ONE `failure`: a candidate regression, NOT YET A PROVEN ONE. The lab re-runs the fleet part ONCE on a
 //               fresh capture. No threshold moves and no stage is skipped to get a pass; no revert (fix forward)
-//   regression  TWO `failure`s since the last `success`: real. A row is filed (`regression` label)
+//   regression  TWO `failure`s since the last `success`: real. A row is filed (`regression` label) by release.yml's
+//               `qualification-row` job, which holds `issues: write` and nothing else; the publishing job never does (#3291)
 //   wait        absent or `pending`: NOT a pass and NOT a failure. NO NEWS IS NEVER GOOD NEWS -- the absent case is
 //               the one a default of "proceed" would pass, and `release-reads-qualification.test.ts` pins it
 //
 // A FAILURE IS NEVER SOFTENED by an older success: the NEAREST commit that carries a status decides.
 import { realpathSync, appendFileSync, readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
 import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
@@ -235,15 +237,51 @@ function minutesSince(releaseSha) {
   return Math.round((Date.now() / MS_PER_SECOND - committed) / SECONDS_PER_MINUTE);
 }
 
-/** @param {{ outcome: string, reason: string }} verdict */
-function writeOutputs({ outcome, reason }) {
+/**
+ * The ONE row a release raises, or null when the outcome raises none. `regression` (two failures) and an OVERDUE `wait`
+ * each name a row; `proceed`, `rerun` and a wait still inside its bound do not. The title carries the whole sha and is
+ * the row's identity: the filing job looks it up before it files, so a re-run of the failed job finds the row and
+ * files none. NEVER a skip: both bodies say the release stays stopped.
+ * @param {{ outcome: Outcome, reason: string, overdue: boolean }} decision
+ * @param {string} releaseSha
+ * @param {string} [runUrl] the run that stopped, where the log is
+ * @returns {{ title: string, labels: string[], body: string } | null}
+ */
+export function rowToFile({ outcome, reason, overdue }, releaseSha, runUrl) {
+  const found = runUrl ? `Run: ${runUrl}\n` : "";
+  const stop = "The release stays stopped. Nothing is skipped to get a pass, no threshold moves, and there is no revert (fix forward).";
+  if (outcome === "regression") {
+    return { title: `release ${releaseSha}: qualification regression confirmed`, labels: ["regression", "answer:orchestrator"],
+      body: `Release sha: ${releaseSha}\n${found}\nThe fleet part failed TWICE on this sha: ${reason}\n\n${stop} The writer of the \`${QUALIFICATION_CONTEXT}\` status is #3289; the contract is #3136.\n` };
+  }
+  if (outcome === "wait" && overdue) {
+    return { title: `release ${releaseSha}: qualification wait overdue`, labels: ["qualification-overdue", "answer:orchestrator"],
+      body: `Release sha: ${releaseSha}\n${found}\nNo verdict inside the ${WAIT_BOUND_MINUTES} minute bound (#3132's worst observed time to a CLEARED verdict, a measured maximum and not a guarantee): ${reason}\n\n${stop} The writer of the \`${QUALIFICATION_CONTEXT}\` status is #3289, and until it exists every real release lands here. Once the lab has posted, re-run the failed jobs of the run.\n` };
+  }
+  return null;
+}
+
+/** GitHub's multi-line output form, for EVERY value: a reason carries the lab's own description, and a newline in a
+ * plain `name=value` line would write an output nobody named. The delimiter is random so no value can end its own block.
+ * @param {Record<string, string>} values */
+function outputText(values) {
+  const delimiter = `ghadelimiter_${randomUUID()}`;
+  return Object.entries(values).map(([name, value]) => `${name}<<${delimiter}\n${value}\n${delimiter}\n`).join("");
+}
+
+/** @param {Record<string, string>} values */
+function writeOutputs(values) {
   const outFile = process.env.GITHUB_OUTPUT;
-  const lines = [`outcome=${outcome}`, `reason=${reason}`];
   if (!outFile) {
-    console.log(lines.join("\n"));
+    console.log(Object.entries(values).map(([name, value]) => `${name}=${value}`).join("\n"));
     return;
   }
-  appendFileSync(outFile, `${lines.join("\n")}\n`);
+  appendFileSync(outFile, outputText(values));
+}
+
+function currentRunUrl() {
+  const { GITHUB_SERVER_URL: server, GITHUB_REPOSITORY: repository, GITHUB_RUN_ID: run } = process.env;
+  return server && repository && run ? `${server}/${repository}/actions/runs/${run}` : undefined;
 }
 
 function main() {
@@ -254,7 +292,9 @@ function main() {
     waitedMinutes: minutesSince(releaseSha) });
   // THE LOG NAMES, ON EVERY RUN, WHICH OUTCOME THE RELEASE TOOK AND FOR WHICH SHA (#3136 done-when 2).
   process.stdout.write(`release-reads-qualification: outcome=${decision.outcome} sha=${releaseSha} -- ${decision.reason}\n`);
-  writeOutputs(decision);
+  const row = rowToFile(decision, releaseSha, currentRunUrl());
+  writeOutputs({ outcome: decision.outcome, reason: decision.reason, overdue: String(decision.overdue),
+    ...(row ? { "row-title": row.title, "row-labels": row.labels.join(","), "row-body": row.body } : {}) });
   if (decision.outcome !== "proceed") {
     process.stderr.write(`::error::release-reads-qualification: ${decision.outcome} -- ${decision.reason}\n`);
     process.exitCode = 1;
