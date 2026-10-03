@@ -27,8 +27,8 @@ importers:
         specifier: ^0.106.0
         version: 0.106.0
       '@guidepup/guidepup':
-        specifier: ^0.31.0
-        version: 0.31.0
+        specifier: ^0.34.0
+        version: 0.34.0
       a11ign:
         specifier: 0.0.0
         version: link:packages/cli
@@ -146,8 +146,8 @@ importers:
         specifier: 0.1.0
         version: link:../control
       '@guidepup/guidepup':
-        specifier: 0.31.0
-        version: 0.31.0
+        specifier: 0.34.0
+        version: 0.34.0
       a11ign:
         specifier: 0.0.0
         version: link:../cli
@@ -166,8 +166,8 @@ importers:
   packages/nvda-worker:
     dependencies:
       '@guidepup/guidepup':
-        specifier: 0.31.0
-        version: 0.31.0
+        specifier: 0.34.0
+        version: 0.34.0
     devDependencies:
       '@a11ign/evidence':
         specifier: 0.0.0
@@ -501,8 +501,8 @@ packages:
     resolution: {integrity: sha512-+CNAzxglkrpNf/kKywqQfk74QjtceuOE7Qm+AF8miRvPF/wmmK5+OJOgVh3AVTT3RP2mH3+FOaxlE5v72owk0A==}
     engines: {node: ^20.19.0 || ^22.13.0 || >=24}
 
-  '@guidepup/guidepup@0.31.0':
-    resolution: {integrity: sha512-r3eKTep4fdSajiSGEJI0KHHjKvJ6e4wyMhHIGbr+ztW04CcE91CRMRbTaM5JQwZKvRiOfj3kFVKaYIx+CFJWMw==}
+  '@guidepup/guidepup@0.34.0':
+    resolution: {integrity: sha512-nMLsvHXXNZg+/9okHvSOuMEKMGxs0U8o/sT1pKERh37ETB16X4geomIHjXJ/HRTfpue9gs9yRTLK5azHZV92iw==}
 
   '@guidepup/record@0.1.0':
     resolution: {integrity: sha512-jtSqZ0CZVdWzWIbLWHYoUi1IbNJVKns20oEYzwcTftw8rY5RXsK1OTXaXFx9Gup5mnmYaFLnON8WwTS+4DYwrQ==}
@@ -778,76 +778,87 @@ packages:
     resolution: {integrity: sha512-CY3uyFSRbcQv3nnSv8S0+lDftMVz6P963PoRlxrV7ew/Md564g9ut60PYzdLM5qW4jFn93GBF+Soi90ISAN+GQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
-  '@xmldom/xmldom@0.9.10':
-    resolution: {integrity: sha512-A9gOqLdi6cV4ibazAjcQufGj0B1y/vDqYrcuP6d/6x8P27gRS8643Dj9o1dEKtB6O7fwxb2FgBmJS2mX7gpvdw==}
+  '@xmldom/xmldom@0.9.12':
+    resolution: {integrity: sha512-5AXjrcMClTryPe9LgZrygpB1lj7s0S9E0+W+AHaVKAVyHanafK86iPSvG5xHVSp/jC+VH1UXu0TAEmY279xH7A==}
     engines: {node: '>=14.6'}
-    deprecated: this version has critical issues, please update to the latest version
 
   '@yuku-parser/binding-android-arm64@0.9.5':
     resolution: {integrity: sha512-A2JCFCSHfnficqYEw4Iujpx7XrkMM3UfFcgJFmYpZSo9zM4nyhmdIIE0FogSduuU60lhM0/UcfuUBXIVNBMlGQ==}
     cpu: [arm64]
     os: [android]
+    deprecated: yuku-parser runs on yuku-core since 0.14
 
   '@yuku-parser/binding-darwin-arm64@0.9.5':
     resolution: {integrity: sha512-3PiyU+Eare4YuKaQ22N98/yAiROPY5o/NQJHraICzDvk4pgS+m+bgLKOvkGBRn33OnV95Vdv1Mn38b+MQHpULQ==}
     cpu: [arm64]
     os: [darwin]
+    deprecated: yuku-parser runs on yuku-core since 0.14
 
   '@yuku-parser/binding-darwin-x64@0.9.5':
     resolution: {integrity: sha512-blFMAFI7AInI83XaiOF8cIeiRM46Nz9EfpZtZPRLbKxSA9aAr5v8aHYpmfN6NoyXxAv/10pwS4gsAuc1W6fy5Q==}
     cpu: [x64]
     os: [darwin]
+    deprecated: yuku-parser runs on yuku-core since 0.14
 
   '@yuku-parser/binding-freebsd-x64@0.9.5':
     resolution: {integrity: sha512-TsNuL4qsZdO0tHp5GW43Y5fHeLPpPHA675wdcPNTcdq2ZO5AvsQWFFoiDg8CH4oBktfsQ9tdvKhjLnLYwKvp4g==}
     cpu: [x64]
     os: [freebsd]
+    deprecated: yuku-parser runs on yuku-core since 0.14
 
   '@yuku-parser/binding-linux-arm-gnu@0.9.5':
     resolution: {integrity: sha512-b0afYK5gHeV8RdmOcqAlgM8ONsye4cax4DMnIBaoJyPMd1UTGvTbpkqQcPVdhmHlcfcGVGMV1laeVovlr/dscw==}
     cpu: [arm]
     os: [linux]
     libc: [glibc]
+    deprecated: yuku-parser runs on yuku-core since 0.14
 
   '@yuku-parser/binding-linux-arm-musl@0.9.5':
     resolution: {integrity: sha512-fD3lKzl+r6j6n8DwiMY53qnh5DLqD8KJjCp+NbVud54Nnh3Q9Wprqss3YzyMHP3NSJk663Wlg1E1X5qOuFVFig==}
     cpu: [arm]
     os: [linux]
     libc: [musl]
+    deprecated: yuku-parser runs on yuku-core since 0.14
 
   '@yuku-parser/binding-linux-arm64-gnu@0.9.5':
     resolution: {integrity: sha512-aRU/aCphV1MWCl/lvI6NX8LgucHQ68Fx+vz7NBb/5MEr2EuzCxiPOQqeFcMdWh+2AED/p0AvAREch0c+cSnlhA==}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
+    deprecated: yuku-parser runs on yuku-core since 0.14
 
   '@yuku-parser/binding-linux-arm64-musl@0.9.5':
     resolution: {integrity: sha512-5+Guro0l8H473YXlEjVNBRLN/IbPbJdnQh1zo0OLt49xxnON+XMJRRaEyTOTfkn9QSRg0+BhEKGR4W9Gu2uZJQ==}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
+    deprecated: yuku-parser runs on yuku-core since 0.14
 
   '@yuku-parser/binding-linux-x64-gnu@0.9.5':
     resolution: {integrity: sha512-pwwSyV9q+GlvzSXlsMZBMlgk22L5bud714/vqZCdeUTivzeUVltQzUaf3IQXOGXdpc59JYTeuMCtbGquaAUoCA==}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
+    deprecated: yuku-parser runs on yuku-core since 0.14
 
   '@yuku-parser/binding-linux-x64-musl@0.9.5':
     resolution: {integrity: sha512-z18j6JN3lBHH8vzN7gG1M8fI0nlgItSfnC9PfbmUbt97iHViKfw2iA2G9fGwRMe5LyPRZBrejIlapbygPbpdaw==}
     cpu: [x64]
     os: [linux]
     libc: [musl]
+    deprecated: yuku-parser runs on yuku-core since 0.14
 
   '@yuku-parser/binding-win32-arm64@0.9.5':
     resolution: {integrity: sha512-s6Gwttb1dQvtPX6Bgkw+UPC9IO3UBDXc6Zezog8MMgvu3UfJBBB9TQqKBX/2quu0Eyh+lLSAyNlIyyecaagUPg==}
     cpu: [arm64]
     os: [win32]
+    deprecated: yuku-parser runs on yuku-core since 0.14
 
   '@yuku-parser/binding-win32-x64@0.9.5':
     resolution: {integrity: sha512-FrERt9YWatY3bJfSUdi4YWY+6iQcyo3MzCC821BxlWM5TFZEHijnpz/bknR79VHlXY/9CvXz8ZlaAGPsTtN3nw==}
     cpu: [x64]
     os: [win32]
+    deprecated: yuku-parser runs on yuku-core since 0.14
 
   '@yuku-toolchain/types@0.9.5':
     resolution: {integrity: sha512-KiuLNNgX9uNealaWAR+G3/cMXnRk9x4TY2EkYe/KIag+UPdwiA0RRf1hr1WAxzTP8KGzCTkqUdLPvqh32sEO3w==}
@@ -870,7 +881,7 @@ packages:
     engines: {node: '>= 6.0.0'}
 
   agent-org@https://codeload.github.com/a11ign/agent-org/tar.gz/fdb27f9190678ff9ab77806a839915c15011717c:
-    resolution: {gitHosted: true, integrity: sha512-9CkuLO5NHkDdpzC0Jm6TAI7J3ukF2g/FYsIkDQRBc3WxWCu4N5IFz4u+HheloDHXzWiv+CqvSOuX5MlPeFkdmw==, tarball: https://codeload.github.com/a11ign/agent-org/tar.gz/fdb27f9190678ff9ab77806a839915c15011717c}
+    resolution: {gitHosted: true, tarball: https://codeload.github.com/a11ign/agent-org/tar.gz/fdb27f9190678ff9ab77806a839915c15011717c}
     version: 0.1.0
     engines: {node: '>=22'}
     hasBin: true
@@ -1937,9 +1948,12 @@ snapshots:
       '@eslint/core': 1.2.1
       levn: 0.4.1
 
-  '@guidepup/guidepup@0.31.0':
+  '@guidepup/guidepup@0.34.0':
     dependencies:
+      debug: 4.4.3
       plist: 4.0.0
+    transitivePeerDependencies:
+      - supports-color
 
   '@guidepup/record@0.1.0':
     dependencies:
@@ -2234,7 +2248,7 @@ snapshots:
       '@typescript-eslint/types': 8.62.0
       eslint-visitor-keys: 5.0.1
 
-  '@xmldom/xmldom@0.9.10': {}
+  '@xmldom/xmldom@0.9.12': {}
 
   '@yuku-parser/binding-android-arm64@0.9.5':
     optional: true
@@ -2846,7 +2860,7 @@ snapshots:
 
   plist@4.0.0:
     dependencies:
-      '@xmldom/xmldom': 0.9.10
+      '@xmldom/xmldom': 0.9.12
       xmlbuilder: 15.1.1
 
   prelude-ls@1.2.1: {}
