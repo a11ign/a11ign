@@ -646,3 +646,102 @@ test("#1391: a pipe, a newline or a backtick in an announcement cannot break the
   assert.ok(line.includes("A 'x' B, button, focused, expanded"), line);
   assert.equal(line.split("`").length, PIECES_AROUND_TWO_CODE_SPANS, `exactly two code spans on the line: ${line}`);
 });
+
+/**
+ * #3297, weekly review W40: the default run submitted gov.uk's search form empty twice and toggled two sort radios,
+ * and the comment listed none of it. A non-authenticated run now names what its probes pressed, by control name,
+ * under a heading that claims no completeness (the authenticated list is "the whole list"; this one is not).
+ */
+const rehearsal3Real = () => JSON.parse(
+  readFileSync(new URL("../fixtures/rehearsal3-34774183433-a11ign-result.json", import.meta.url), "utf8"),
+) as RunResult;
+const PRESSED_HEADING = "What this run pressed on its own";
+const probed = (formChanges: { control: string; kind?: string; after: string }[], extra: Partial<NonNullable<RunResult["interaction"]>> = {}) =>
+  result({ interaction: { formChanges, ...extra } });
+
+test("#3297: rehearsal 3's real result lists the controls its probes pressed, by name, with the verb the probe recorded", () => {
+  const real = rehearsal3Real();
+  assert.equal(real.pressed, undefined, "the positive control: this is a non-authenticated result");
+  assert.ok((real.interaction?.formChanges?.length ?? 0) >= 5, "and it pressed controls");
+  const out = renderSummary(real);
+  assert.ok(out.includes(PRESSED_HEADING));
+  assert.match(out, /- submitted `Submit Search, graphic, button`/);
+  assert.match(out, /- followed `Change Text Size or Colors, link`/);
+  assert.match(out, /- pressed `Making the Web Accessible, region, Hide Section, –, button, expanded`/);
+});
+
+test("#3297: the heading says the probes pressed unprompted, and never claims the authenticated list's completeness", () => {
+  const out = renderSummary(probed([{ control: "Search, button", kind: "submit", after: "x" }]));
+  assert.match(out, /`probe-forms` submits forms with no valid input/);
+  assert.match(out, /set either to `false` to stop it/);
+  assert.ok(!out.includes("presses only what its files name"));
+});
+
+test("#3297: a submit that left the page says where it went; one that stayed says nothing of the kind", () => {
+  const change = [{ control: "Search, button", kind: "submit", after: "x" }];
+  const left = renderSummary(probed(change, { navigatedOnSubmit: { checked: true, navigated: true, from: "https://a.test/?q=", to: "https://a.test/search" } }));
+  assert.match(left, /A submit took the run from `https:\/\/a\.test\/\?q=` to `https:\/\/a\.test\/search`/);
+  const stayed = renderSummary(probed(change, { navigatedOnSubmit: { checked: true, navigated: false } }));
+  assert.ok(!stayed.includes("A submit took the run"));
+});
+
+test("#3297: past the limit the rest is COUNTED and pointed at, never dropped silently", () => {
+  const many = Array.from({ length: 5 }, (_, index) => ({ control: `Control ${index}, button`, kind: "submit", after: "x" }));
+  const out = renderSummary(probed(many), { limit: 3 });
+  assert.ok(out.includes("Control 2, button") && !out.includes("Control 3, button"));
+  assert.match(out, /and 2 more\. The full list is `interaction\.formChanges` in `result-json`/);
+});
+
+test("#3297: a run whose probes pressed nothing says so; one with no probe record prints no section -- the control for the absence", () => {
+  assert.match(renderSummary(probed([])), /What this run pressed on its own.*\n- nothing pressed/);
+  assert.ok(!renderSummary(result()).includes("What this run pressed"));
+  assert.ok(!renderSummary(result({ interaction: null })).includes("What this run pressed"));
+});
+
+test("#3297: an authenticated result still renders its own `pressed` list, not the probes' list", () => {
+  const out = renderSummary(result({ pressed: ["Sign in"], interaction: { formChanges: [{ control: "Search, button", kind: "submit", after: "x" }] } }));
+  assert.match(out, /\*\*What this run pressed\*\* \(an authenticated run presses only what its files name\):\n- Sign in/);
+  assert.ok(!out.includes(PRESSED_HEADING) && !out.includes("Search, button"));
+});
+
+test("#3297: a backtick, pipe or newline in a control name cannot break the markdown, and the same control is listed once", () => {
+  const out = renderSummary(probed([
+    { control: "Save `draft` | now\nbutton", kind: "submit", after: "x" },
+    { control: "Save `draft` | now\nbutton", kind: "submit", after: "x" },
+  ]));
+  assert.equal(out.split("Save 'draft'").length - 1, 1);
+  assert.ok(!/Save 'draft' \| now\nbutton/.test(out));
+});
+
+test("#3297: a result holding ONLY stateChanges (a disclosure, no form probe) still lists the disclosure it pressed", () => {
+  const out = renderSummary(result({ interaction: { stateChanges: [{ control: "Disclosure, button", after: "open" }] } }));
+  assert.match(out, /What this run pressed on its own.*\n- pressed `Disclosure, button`/);
+  assert.ok(!out.includes("nothing pressed"));
+});
+
+test("#3297: a stateChanges entry is listed beside the form entries, and once when both channels name the control", () => {
+  const out = renderSummary(probed(
+    [{ control: "Search, button", kind: "submit", after: "x" }, { control: "Hide Section, button", kind: "taskButton", after: "y" }],
+    { stateChanges: [{ control: "Hide Section, button", after: "z" }, { control: "Menu, button", after: "open" }] },
+  ));
+  assert.equal(out.split("`Hide Section, button`").length - 1, 1);
+  assert.match(out, /- submitted `Search, button`/);
+  assert.match(out, /- pressed `Menu, button`/);
+});
+
+test("#3297: a toggle reads as toggled; the limit is exclusive, so exactly `limit` entries say nothing more", () => {
+  const toggled = renderSummary(probed([{ control: "Most viewed, radio button", kind: "toggle", after: "x" }]));
+  assert.match(toggled, /- toggled `Most viewed, radio button`/);
+  const exact = Array.from({ length: 3 }, (_, index) => ({ control: `Control ${index}, button`, kind: "submit", after: "x" }));
+  const out = renderSummary(probed(exact), { limit: 3 });
+  assert.ok(out.includes("Control 2, button") && !out.includes("more. The full list"));
+});
+
+test("#3297: the section stands apart from the line above it (a blank line before the heading)", () => {
+  const out = renderSummary(probed([{ control: "Search, button", kind: "submit", after: "x" }]));
+  assert.match(out, /\*\*Screen reader:\*\*[^\n]*\n\n\*\*What this run pressed on its own\*\*/);
+});
+
+test("#3297: an interaction holding neither channel is no probe record, so no section -- the control for the absence", () => {
+  assert.ok(!renderSummary(result({ interaction: {} })).includes("What this run pressed"));
+});

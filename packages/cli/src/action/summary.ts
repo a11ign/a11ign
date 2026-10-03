@@ -89,9 +89,10 @@ export interface RunResult {
    * activated. Declared for #1391 only -- `run.ts` reads it to compute which changes were announced correctly --
    * and TYPED FROM `@a11ign/evidence`'s own `CaptureInteraction`, never restated, so the shape has one definition.
    * The import is `import type`: erased at runtime, so this renderer still imports nothing when it runs. Absent on
-   * results written before the probe.
+   * results written before the probe. `formChanges` and `navigatedOnSubmit` are read for "what this run pressed on
+   * its own" (#3297), by the same rule.
    */
-  interaction?: Partial<Pick<CaptureInteraction, "stateChanges">> | null;
+  interaction?: Partial<Pick<CaptureInteraction, "stateChanges" | "formChanges" | "navigatedOnSubmit">> | null;
   /**
    * WCAG §5.2's five conformance requirements, as `cli.ts --json` emits them (`@a11ign/evidence/conformance`).
    * Declared for one sentence only (#1387): Requirement 2 names a capture that spanned more than one document,
@@ -640,6 +641,52 @@ export function pressedSummaryLines(pressed: readonly string[] | undefined): str
   ];
 }
 
+/** What the probe did, by the `kind` it recorded. An absent or unknown kind says "pressed": the capture cannot say more. */
+const PRESS_VERB: Record<string, string> = { submit: "submitted", toggle: "toggled", route: "followed" };
+
+/**
+ * #3297: WHAT THE DEFAULT RUN OPERATED ON A SITE IT DOES NOT OWN, by control name -- the unauthenticated counterpart of
+ * `pressedSummaryLines`. Weekly review W40 (gov.uk): the run submitted the search form empty twice and toggled two
+ * sort radios, and the comment listed none of it; the reader rebuilt it from `interaction.formChanges` in the JSON.
+ *
+ * DELIBERATELY A DIFFERENT HEADING from the authenticated list. That one is the WHOLE list ("presses only what its
+ * files name"); this one is what the probes chose, so it claims no completeness and says they pressed on their own.
+ * Control names only, never a value. Past `limit` the count of the rest is said, never dropped silently.
+ * Empty (no section) when the capture holds neither `formChanges` nor `stateChanges`: the probes never ran, so nothing can
+ * be named. Either one alone is a probe record, because the disclosure probe writes `stateChanges` with no form probe at all.
+ */
+function automaticPressLines(interaction: RunResult["interaction"], limit: number): string[] {
+  if (!interaction || !(Array.isArray(interaction.formChanges) || Array.isArray(interaction.stateChanges))) return [];
+  const entries = [
+    ...(interaction.formChanges ?? []).map((change) => ({ control: change.control, verb: PRESS_VERB[change.kind ?? ""] ?? "pressed" })),
+    // A disclosure is pressed with no `probe-forms` gate, and records in `stateChanges` (the same control may be in both).
+    ...(interaction.stateChanges ?? []).map((change) => ({ control: change.control, verb: "pressed" })),
+  ];
+  const seen = new Set<string>();
+  const pressed = entries.filter(({ control }) => !seen.has(control) && seen.add(control));
+  const quote = (text: string) => `\`${cell(text).replace(/`/g, "'")}\``;
+  const heading = "**What this run pressed on its own** (`probe-forms` submits forms with no valid input and `probe-navigation` "
+    + "follows a link, unprompted; set either to `false` to stop it):";
+  if (pressed.length === 0) return ["", heading, "- nothing pressed"];
+  const navigated = interaction.navigatedOnSubmit;
+  return [
+    "",
+    heading,
+    ...pressed.slice(0, limit).map(({ control, verb }) => `- ${verb} ${quote(control)}`),
+    ...(pressed.length > limit
+      ? [`- _… and ${pressed.length - limit} more. The full list is \`interaction.formChanges\` in \`result-json\`._`]
+      : []),
+    ...(navigated?.navigated && navigated.from && navigated.to
+      ? [`- _A submit took the run from ${quote(navigated.from)} to ${quote(navigated.to)}._`]
+      : []),
+  ];
+}
+
+/** An authenticated run lists its own files' presses; every other run lists what its probes pressed. */
+function pressedSection(result: RunResult, limit: number): string[] {
+  return result.pressed === undefined ? automaticPressLines(result.interaction, limit) : pressedSummaryLines(result.pressed);
+}
+
 /**
  * The task line, the scorer's summary and the findings, which an abstained verdict replaces as a unit: its
  * `taskCompletable` is a constant and its empty list means "none scored", so neither answers the line above them.
@@ -711,7 +758,7 @@ export function renderSummary(result: RunResult, options: SummaryOptions = {}): 
     `**Page:** ${result.url}`,
     `**Task:** ${result.task} _${TASK_LABEL_NOTE}_`,
     `**Screen reader:** ${result.screenReader}${result.transcript ? ` · ${result.transcript.length} announcements` : ""}`,
-    ...pressedSummaryLines(result.pressed),
+    ...pressedSection(result, limit),
     "",
     // See SummaryOptions.taskQuestion/isTaskClaim. This is posted on a PULL REQUEST in bold, and with
     // the shipped local scorer it used to ask "could a screen-reader user complete the task?" (or claim
