@@ -207,12 +207,20 @@ jobs:
             echo "::error::A11IGN_BOT_TOKEN is not set. A version pull request opened with GITHUB_TOKEN gets no ci run and can never merge, so this does not fall back to it."
             exit 1
           fi
+      # `fetch-depth: 0` brings every tag: `compile` below reads each package's manifest at its `<name>@<version>` release tag,
+      # and a shallow checkout holds none, so it would report "nothing moved" whatever had.
       - uses: actions/checkout@v4
-        with: { token: "${{ secrets.A11IGN_BOT_TOKEN }}" }
+        with: { token: "${{ secrets.A11IGN_BOT_TOKEN }}", fetch-depth: 0 }
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
+      # #3170 (#3159 follow-up): a dependency pull request is ACCEPTED from its diff by ci's `changeset` job, and the entry it
+      # owes is WRITTEN here, so `changeset version` below consumes it with every other pending entry. It must come BEFORE
+      # `release:version`: after it the changesets are already spent. Not folded into `release:version` itself, whose exact
+      # text `pnpm-publish-path.test.ts` and `release-safety.test.ts` pin.
+      - name: Write the entry each dependency pull request owes, from the manifests at the last release tags
+        run: node scripts/dependency-changeset.mjs compile
       # `changeset version` does NOT update the lockfile; `release:version` is that plus the lockfile-only install
       # (see .changeset/README.md), so the version pull request does not break the next frozen install.
       - run: pnpm run release:version
