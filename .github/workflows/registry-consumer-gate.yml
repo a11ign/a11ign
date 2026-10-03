@@ -18,6 +18,15 @@
 #                  `@a11ign/screenreader-fleet`. This is `ceo`'s Acceptance line, and it is what makes this a combination
 #                  gate and not an install check: every layer here is the published one, at the published version.
 #
+# A THIRD JOB, `outsider`, IS THE V1 REHEARSAL'S VERDICT (#3184, ADR 0042 decision 6). It replaced `release:rehearsal-check` as the
+# release check, in the same pull request, so no commit on `main` had neither. A repository OUTSIDE the organisation runs the
+# documented path from an empty workspace for each release (#3181, #3182); `scripts/outsider/verdict-job.mjs` reads its public run
+# list and the registry. `green` passes; `pending` inside the window passes with a notice naming the version and its age; `red`, and
+# `absent` past the window, FAIL the job and file ONE `regression` row per version. IT DOES NOT REFUSE THE NEXT PUBLISH: a fix is
+# itself a release and would deadlock behind its own defect (ADR 0041 decision 3). The outside repository's name is in
+# `scripts/outsider/repository.json` and nowhere in this file. It is its own job and not a step of `install` or `combination`
+# because it asks a different question (did the OUTSIDE run pass?) and must report when those two are red.
+#
 # WHERE EACH TRIGGER LIVES (the row asked the claimant to say). ALL THREE ARE IN THIS FILE, and `release.yml` is not
 # touched: `workflow_run` fires when `release` completes, which is the "after a publish" path, and it needs nothing in
 # the file it watches. That is deliberate. `release-safety.test.ts` pins that `release.yml` calls exactly three local
@@ -73,6 +82,38 @@ jobs:
       # nothing outside the checkout's own files and Node.
       - name: Install the published package into an empty directory and read it
         run: node scripts/registry-consumer-gate.mjs --spec="$SPEC"
+
+  outsider:
+    # The same condition as `install`: a publish that failed published nothing new, so `latest` is what the daily run already read.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # `issues: write` is the ONE scope beyond the workflow's `contents: read`, and it is for the regression row (and its label). The
+    # only token is `github.token`: no secret is read here, so nothing crosses the organisation's boundary (ADR 0042 decision 3).
+    permissions:
+      contents: read
+      issues: write
+    # Two triggers can land together (a dispatch beside the schedule); the second waits and then files nothing.
+    concurrency:
+      group: outsider-verdict
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: pnpm/action-setup@v4
+      # `row-file` is this repository's own filing path and needs its dependencies; the reading itself needs only Node.
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Read the outsider job's verdict
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # `row-file` refuses a plain clone, which is what a runner's checkout is (#3183's first dispatch). Its refusal protects a
+          # tree OTHER SESSIONS SHARE (#1352); a runner's is deleted when the job ends. The override is the one the refusal's own
+          # docs name for "CI's plain clone".
+          A11Y_POLICY_LAUNCH_REASON: ephemeral Actions runner, shares no tree with any session
+        run: pnpm run outsider:verdict
 
   combination:
     needs: [install]

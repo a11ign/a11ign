@@ -116,43 +116,51 @@ name, and "click here" has one. Meanwhile axe found four things a screen reader 
 Neither layer subsumes the other — and the accessible twin is clean on both, which matters more than the
 findings.
 
-### The V1 rehearsal — a standing release gate, not a one-off (#813)
+### The V1 rehearsal — an outsider job on every release and a weekly review, never a gate before a publish (#813, #3184)
 
-**Before a release publishes, a session that built none of the release follows only the public
-documentation, from a fresh clone, against a site we do not own — and the release waits on the reading of
-what came back.** Not a smoke test: a smoke test asks whether the thing runs; this asks whether the report
-is worth a stranger's nine minutes, a judgement only somebody who did not build it can make.
+**What a stranger's run protects, and how it is delivered now (ADR 0042).** The rehearsal protects two different things, and only
+one of them is a command. *Does the documented path RUN from a fresh start?* (the 2026-08-05 class: an untracked scorer no fresh clone
+could run; #494's three publish-blockers) is **automated and runs on every release**. *Is the report worth a stranger's minutes?* is a
+judgement only somebody who did not build it can make, and it is a **review on a weekly rhythm**. Releases keep flowing between
+reviews; **nothing waits on either, and nothing is typed.** What is retired is the rehearsal's being a manual gate on each release
+(ADR 0042 decision 1, [the ADR](docs/adr/0042-the-v1-rehearsal-splits-into-an-automated-outsider-job-and-a-weekly-review.md)).
 
-**What confirms a release now (#3131, ADR 0041).** Nobody types anything. A merge to `main` that carries a
-changeset makes `.github/workflows/release.yml` open the ONE version pull request; that pull request waits
-for the approving review `main` requires (#2022) and the merge queue like any other; **its merge is what
-publishes**, by OIDC with provenance. The review and the queue are the confirmation, and they stand where a
-typed confirmation stood: that confirmation's job was stopping an accident. A `workflow_dispatch` of
-`release.yml` is a rehearsal and never publishes.
+**What confirms a release now (#3131, ADR 0041).** A merge to `main` that carries a changeset makes
+`.github/workflows/release.yml` open the ONE version pull request; that pull request waits for the approving review `main`
+requires (#2022) and the merge queue like any other; **its merge is what publishes**, by OIDC with provenance. The review and
+the queue are the confirmation. A `workflow_dispatch` of `release.yml` is a dry run and never publishes.
 
 **What nobody reads on a publish: the fleet part of the gate.** The runner proves 5 of `release:gate`'s 13
-stages (`release:gate:ci`); the other eight need the Python venv or the corpus. Under the typed
-confirmation a person was asserting those eight passed on the lab. **No person asserts them now, and no
+stages (`release:gate:ci`); the other eight need the Python venv or the corpus. **No person asserts them now, and no
 machine does yet**: `scripts/release-gate-scope.mjs` says so in the publishing run's log, every time, and
 the row that reads the fleet part's verdict by commit sha is #3136. Until it lands, "the release published"
 does not imply "the lab's stages passed"; run `pnpm run lab:job -e job=release-gate` and read it if you need
 that claim.
 
-**This gate still has teeth where a machine can enforce it.** `release:gate:ci` runs
-`check-rehearsal-currency.mjs` on the publishing run and refuses a commit not descended from the marker below,
-or one that changed something the rehearsal exercised since. That refusal comes at the publishing run, AFTER
-the version pull request merged, so the reading has to exist before that merge is approved.
+**The release check is the outsider job's verdict, read AFTER the publish (#3184).** A job in a repository outside the organisation
+installs the just-published package and the Action exactly as `README.md` says, from an empty workspace, against a site we do not
+own (#3181, #3182). `registry-consumer-gate.yml`'s `outsider` job reads its public run list with `pnpm run outsider:verdict` on a
+schedule, after a release and on dispatch. **`green` passes; `pending` inside nine hours passes with a notice naming the version and
+its age; `red`, and no run at all past nine hours, FAIL that job and file ONE `regression` row for the version.** It does not refuse
+the next publish: a fix is itself a release, and a refusal would deadlock it behind its own defect (ADR 0041 decision 3). **It
+cannot prevent the publish it reads**, because the version is already on the registry when it learns of it.
 
-**Owner: whoever approves the version pull request.** Not a role that can be delegated to whoever is free —
-the gate's whole premise is that the runner supplies no context the public docs do not themselves give, and
-the reviewer about to approve the merge that publishes is the one whose judgement the release is actually
-waiting on.
+**What the outsider job covers, and does not.** It covers the first class: the documented path completes and the result has the
+documented shape. It does NOT read what the report SAYS: of the first rehearsal's five defects (table below) it would have caught
+one, and the other four were judgements about the report's content, which is what the weekly review is for. The runner-provable
+gates (`gate:isolation`, the consumer gate, the registry gate) are untouched and still precede a publish.
 
-**Five requirements, and all five must hold or the run is not the gate:**
+**The weekly review is a row, filed by a schedule, never a gate** ([`docs/weekly-review.md`](docs/weekly-review.md);
+[`scripts/weekly-review.mjs`](scripts/weekly-review.mjs) builds the row, and reads the requirements below out of this file, so a
+rewording here is a rewording there). A session that built none of the recent work takes it; the row's `Ineligible:` line names
+the sessions that built the window's work. Its findings arrive up to seven days after a release, which is the price of not
+blocking one (ADR 0042, "THE COST").
 
-1. **A session that built none of the release runs it.** Somebody who wrote the code cannot read its
+**Five requirements, and all five must hold or the run is not the review:**
+
+1. **A session that built none of the window's work runs it.** Somebody who wrote the code cannot read its
    output as a stranger; they supply the missing context without noticing. **This is why a session that
-   built the release cannot satisfy this gate itself, however carefully it tries** — the thing being
+   built the work cannot satisfy this review itself, however carefully it tries** — the thing being
    tested is precisely the knowledge a builder cannot un-know.
 2. **A fresh clone and only the public documentation** — `README.md`, `docs/try-it.md`,
    `docs/github-action.md`. Reaching for internal knowledge is the failure being tested for, not a
@@ -166,14 +174,14 @@ waiting on.
 5. **Everything the reading surfaces is filed, not fixed in place.** Fixing as you go destroys the record
    of what a first reader actually met, which is the one thing no internal test can produce a second time.
 
-**Most recent rehearsal:** 2026-09-20, run [35542705465](https://github.com/DanBeckDev/a11ign-v1-rehearsal/actions/runs/35542705465), against `633c908fe` — main, two days of ordinary merges past rehearsal 6's candidate, 54 paths touched across all five published packages. One completed run on the documents' recommended page and task, job ~6 m; 141 announcements, `jq -c .transcript a11ign-result.json | sha256sum` = `6c040860…`, matching rehearsal-4/5/6's own recorded hash, so the release candidate behaves as the rehearsed one did; 0 lived-experience findings, 3 axe violations inside the YouTube embed (identical set to rehearsal 6's reading: `aria-allowed-attr`/critical, `aria-prohibited-attr`/serious, `button-name`/critical, all inside the embedded YouTube iframe). Reading: ceo, #72.
+**Most recent HAND rehearsal (the last one; the weekly review's rows are the reviews since):** 2026-09-20, run [35542705465](https://github.com/DanBeckDev/a11ign-v1-rehearsal/actions/runs/35542705465), against `633c908fe` — main, two days of ordinary merges past rehearsal 6's candidate, 54 paths touched across all five published packages. One completed run on the documents' recommended page and task, job ~6 m; 141 announcements, `jq -c .transcript a11ign-result.json | sha256sum` = `6c040860…`, matching rehearsal-4/5/6's own recorded hash, so the release candidate behaves as the rehearsed one did; 0 lived-experience findings, 3 axe violations inside the YouTube embed (identical set to rehearsal 6's reading: `aria-allowed-attr`/critical, `aria-prohibited-attr`/serious, `button-name`/critical, all inside the embedded YouTube iframe). Reading: ceo, #72.
 <!-- REHEARSAL:COMMIT 633c908fed2ec6ab3f556dfc7e1dbbe59d6b7acf -->
-<!-- The marker above is what `npm run release:rehearsal-check` reads -- checked by
-     `rehearsal-currency-gate.test.ts` against `check-rehearsal-currency.mjs`'s own regex, so a rewording
-     of the prose above can never silently stop the gate from finding the commit it names. Update BOTH the
-     prose and the marker together when a fresh rehearsal runs. NOTHING checks that the two agree: this
-     comment once named a `rehearsal-currency.test.ts` check for it, and that file holds no such test
-     (checked 2026-09-13, #1291). -->
+<!-- The marker above is what `npm run release:rehearsal-check` READS -- a reading since #3184, never a gate: it prints the
+     commit, its age in days and how many exercised paths changed since, and exits 0 however stale it is. It STAYS as the record
+     of the last hand rehearsal (the weekly review's deliverable is a closed row, not a commit, so there is no sha for a command
+     to read) and is allowed to go stale. `rehearsal-currency-gate.test.ts` checks it against `check-rehearsal-currency.mjs`'s own
+     regex, so a rewording of the prose above can never silently stop the reading from finding the commit it names. Update BOTH
+     the prose and the marker together if a hand rehearsal is ever run again. NOTHING checks that the two agree. -->
 The first rehearsal (2026-09-09, run
 [34364673899](https://github.com/DanBeckDev/a11ign-v1-rehearsal/actions/runs/34364673899), against
 `a11y-witness@8849f92d`; full reading [#324](https://github.com/DanBeckDev/a11y-witness/issues/324)) produced **five** filed
@@ -189,21 +197,20 @@ than a good idea:
 
 **A rehearsal covers what it ran against, and nothing that has changed since.** "A rehearsal was run once"
 and "a rehearsal covers this release" are different claims — the table above is evidence for the first, not
-proof of the second. A later commit is covered only while it descends from the commit named above AND
-nothing the rehearsal exercised has changed since: the three documents in requirement 2, `action.yml`, and
-every package a consumer installs (each `packages/*/package.json` not marked `private`). It is never the
-SAME commit — recording the rehearsal here is itself a later commit (#1265). Whenever that does not hold,
-the entry in **NOT verified** below is not a formality: it is the honest state until a fresh rehearsal
-names a newer commit here.
+proof of the second. `npm run release:rehearsal-check` says how far the marker is behind: whether it is an ancestor of the
+commit about to be released, and how many of the paths the rehearsal exercised have changed since (the three documents in
+requirement 2, `action.yml`, and every package a consumer installs: each `packages/*/package.json` not marked `private`).
+It was 190 at the swap (2026-10-03), and **that number is a reading, not a failure**: since #3184 the check is in neither
+`release:gate` nor `release:gate:ci`, because the outsider job's verdict stands where it stood.
 
 ## NOT verified
 
-- **This release, if anything the rehearsal above exercised has changed since `bc1ebb51`.** A rehearsal
-  does not extend forward by assumption to whatever HEAD has become since. `npm run release:rehearsal-check`
-  is in `release:gate:ci` and REFUSES when the marker above is not an ancestor of the commit being released,
-  or when an exercised document or published package has changed since it, printing the paths — a command
-  failing, not a reader who forgot to check the date. Run the rehearsal again and update the entry above
-  with its date, run URL, commit and marker before treating the outward-facing path as covered.
+- **A stranger's JUDGEMENT of any given release, before it publishes.** It used to precede a publish and now follows one by up
+  to seven days (ADR 0042, "THE COST"). **A release now claims exactly this, and no more: "released with the outsider job's
+  verdict on this version read as `<green|pending|red|absent>`, and the judgement review last read `N` days ago"** — never
+  "rehearsed". Read the first from the newest `outsider` job run of `registry-consumer-gate.yml` (a `pending` inside nine hours is not a
+  `green`), and the second from the newest closed `Weekly outsider review <ISO week>` row. The outsider job runs the documented path; it does not read
+  what the report SAYS, and four of the first rehearsal's five defects were of that kind.
 
 - **The `anthropic` and `openai` judge backends.** Written to their SDK specs and unexercised; this project
   keeps no metered key. They are opt-in, never the default.
