@@ -230,18 +230,6 @@ function runOwnedPaths({ body, files }) {
   }
 }
 
-/**
- * Files of the agent-org suite that CI SKIPS and this host does not, each with the reason. `live-tree-independence`
- * clones `/home/agent/repos/a11y-witness` at two fixed commits and skips itself when that clone is absent, which it
- * is on a CI runner and is not here, so on this host it runs, and it fails (measured 2026-10-03, alone and with the
- * suite, at a head it cannot read: 4 `acceptance-commands` tests red at both commits). Leaving it in would make
- * `verify` red for every author for a reason CI never sees, and a gate people learn to ignore teaches them to
- * ignore the next one. It is left out of the STAGED COPY only, named on every run, and filed as #3329.
- */
-export const HOST_ONLY_AGENT_ORG_TESTS = {
-  "live-tree-independence.test.ts": "CI has no /home/agent/repos/a11y-witness clone and skips it; here it runs and fails",
-};
-
 /** Where CI's second checkout comes from, and the name of the clone `verify` makes when no checkout is to hand. */
 const AGENT_ORG_REMOTE = "a11ign/agent-org";
 const AGENT_ORG_CACHE = "verify-agent-org";
@@ -319,15 +307,6 @@ function runAgentOrg(ciYml) {
   }
 }
 
-/** Removes the staged copy's host-only files and says so, so the omission is read on every run and not remembered. */
-function leaveOutHostOnlyTests() {
-  for (const [file, reason] of Object.entries(HOST_ONLY_AGENT_ORG_TESTS)) {
-    rmSync(join(AGENT_ORG_DIR, "src/packaging", file), { force: true });
-    console.log(`verify: agentOrg leaves out ${file} -- ${reason}`);
-  }
-  return { status: 0 };
-}
-
 /** @param {{ toolRepo: string, scratch: string, copied: string[] }} staging */
 function stageAgentOrg({ toolRepo, scratch, copied }) {
   const tarball = join(scratch, "tool.tar");
@@ -336,7 +315,6 @@ function stageAgentOrg({ toolRepo, scratch, copied }) {
     () => sh("git", ["-C", toolRepo, "archive", "--format=tar", `--output=${tarball}`, "FETCH_HEAD", ...copied]),
     () => sh("mkdir", ["-p", AGENT_ORG_DIR]),
     () => sh("tar", ["-xf", tarball, "-C", AGENT_ORG_DIR]),
-    () => leaveOutHostOnlyTests(),
     () => sh("rsync", ["-a", "--ignore-existing", "--exclude=*.test.ts", "--exclude=*.test.mjs",
       "packages/lab/src/packaging/", "packages/agent-org/src/packaging/"]),
     () => sh("sed", ["-i", "s#from \"agent-org/src/board-document.mjs\"#from \"../../../agent-org/src/board-document.mjs\"#",
