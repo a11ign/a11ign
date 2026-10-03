@@ -1,0 +1,40 @@
+{
+  "_what": "The permission each account must hold on each CODE repository (#3124; ADR 0039, item 7, under #69). Keys starting with an underscore are prose and are not read. `docs/repository-access.md` says what the model is and who may edit GitHub to match it; `packages/lab/src/packaging/layer-repository-access.test.ts` pins this file and, behind `A11Y_CHECK_REPO_ACCESS=1`, `layer-repository-access-live.test.ts` reads `repos/<r>/collaborators` back and names every difference.",
+  "_repositories": "Every `repo` of `.agent-org/project.json`'s `code` array, plus `a11ign/screenreader-worker`, which exists (public, created empty 2026-09-26) and is not in that array until #2701 moves code into it. A test pins the key set equal to that union, so a repository added to `code` without a row here is red.",
+  "_roles": "`admin`, `write`, `read` and `none`. `none` means NO direct collaborator grant: the account may still read a public repository, and holds nothing it could be asked to lose. The names are GitHub's own `role_name` values, so the live read compares them as strings.",
+  "_agentsNeverAdmin": "No agent account is `admin` anywhere. An agent with admin can edit the ruleset and classic protection of the repository whose review requirement `main-review-requirement.md` says nobody may walk past, and the admin-only `branches/main/protection` read then answers as that agent: the two families of access (read the protection, be exempt from it) collapse. ADR 0039, item 7.",
+  "_bots": "The `bots` org team is attached to the layer repositories and is the route by which the agent accounts reach them. Its level on a layer is `push` (write), never `admin`. At the time of filing (2026-10-03) it holds `admin` on `a11ign/screenreader-worker`, which is the one difference from this file; the downgrade is an org-admin act (the chairman's) and is NOT performed by the row that wrote this file.",
+  "accounts": {
+    "person": ["DanBeckDev", "Cemmaw"],
+    "agent": ["a11ign-bot", "a11ign-ai-workers", "a11ign-ai-leads", "a11ign-ci"]
+  },
+  "teams": {
+    "bots": { "layer": "push" }
+  },
+  "repositories": {
+    "a11ign/a11ign": {
+      "DanBeckDev": "admin",
+      "Cemmaw": "write",
+      "a11ign-bot": "write",
+      "a11ign-ai-workers": "write",
+      "a11ign-ai-leads": "write",
+      "a11ign-ci": "write"
+    },
+    "a11ign/agent-org": {
+      "DanBeckDev": "admin",
+      "Cemmaw": "none",
+      "a11ign-bot": "write",
+      "a11ign-ai-workers": "write",
+      "a11ign-ai-leads": "write",
+      "a11ign-ci": "write"
+    },
+    "a11ign/screenreader-worker": {
+      "DanBeckDev": "admin",
+      "Cemmaw": "none",
+      "a11ign-bot": "write",
+      "a11ign-ai-workers": "write",
+      "a11ign-ai-leads": "write",
+      "a11ign-ci": "write"
+    }
+  }
+}
