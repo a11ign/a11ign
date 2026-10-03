@@ -407,6 +407,33 @@ test("#1387: rehearsal 3's real result leads its summary AND its log with the tw
 });
 
 /**
+ * #3293, weekly review W40: run 37134253796 on `https://www.gov.uk/`. The transcript is the home page, but the default
+ * `probe-forms` submitted the search form (`navigatedOnSubmit` to `/search/all`) and the one title mark was read after
+ * it ("Search - GOV dot UK"), so every component had a single value and the sentence above stayed silent over
+ * evidence from two pages. The capture below has that run's shape; the sentence comes from the real producer.
+ */
+const govUkRun = {
+  diagnostics: [
+    { event: "domCensus", targetUrl: "https://www.gov.uk/", targetMatch: "matched", formField: 4 },
+    { event: "titleSource", title: "Search - GOV dot UK", source: "spoken" },
+  ],
+  interaction: { navigatedOnSubmit: {
+    checked: true, navigated: true, from: "https://www.gov.uk/search/all?keywords=", to: "https://www.gov.uk/search/all?" } },
+};
+
+test("#3293: a run whose probe submitted the search form leads its summary AND its log with the two documents", () => {
+  const conformance = conformanceScope({
+    assessedCriteria: [], screenReader: "NVDA", ruleLayerRan: true, documentIdentity: documentIdentity(govUkRun as never),
+  });
+  const sentence = producerSentence(conformance);
+  assert.ok(sentence, "the positive control: the producer writes the sentence for this run's shape");
+  assert.match(sentence, /https:\/\/www\.gov\.uk\/search\/all/, "and names the page the submit went to");
+  const gov = result({ conformance });
+  assert.ok(renderSummary(gov).includes(sentence), "the comment carries it");
+  assert.match(logLines(gov, "never")[0], /more than one document/i, "and so does the log");
+});
+
+/**
  * #1563: AN EXAMINATION KNOWN TO BE PARTIAL IS COUNTED IN THE LOG AND THE SUMMARY, not only in the JSON.
  *
  * Rehearsal 2's real result carries eight `cantTell` reasons saying the examination was partial, and its log read
