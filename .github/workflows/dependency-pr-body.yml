@@ -27,8 +27,13 @@ name: dependency-pr-body
 # close a row here or duplicate the `Acceptance:` section.
 #
 # It writes NOTHING, and says why in the log, for a MAJOR bump (a `0.x` minor counts: below 1.0 it is the breaking
-# one) or for a pull request touching anything but the manifests and the lockfile. That pull request keeps Dependabot's
-# body, `acceptance` refuses it, and it waits like any other (design 3 of the row).
+# one), for a pull request touching anything but the manifests and the lockfile, or for one touching an OWNED path
+# (`packages/nvda-worker/package.json`: the NVDA driver). An owned path's body must state `CAPTURE_PROTOCOL_VERSION`,
+# `provisionRevision`, `environmentKey` and `weights`, and a fixed fragment cannot truthfully say `unchanged` for them, so
+# it states none of the four. The list is `docs/owned-path-facts.json`, the orchestrator's data, read through the API at
+# the BASE commit (never the head, so still nothing of the pull request on the runner) rather than copied here; a list
+# that cannot be read is "could not ask", which writes nothing. That pull request keeps Dependabot's body, `acceptance`
+# refuses it, and it waits like any other (design 3 of the row, as ruled on the row 2026-10-03).
 #
 # The `Acceptance:` command spells `--config=<path>`, not `--config <path>`, on purpose: `entry-points.test.ts` reads every
 # workflow for a whitespace-preceded `scripts/*.mjs` and demands an entry guard of whatever it finds, and
@@ -58,6 +63,7 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
           A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
           FALLBACK_TOKEN: ${{ github.token }}
         run: |
@@ -80,6 +86,19 @@ jobs:
             echo "::notice::not auto-declared: $name touches something other than the manifests and the lockfile, so it waits like any other pull request"
             exit 0
           fi
+          owned="$(gh api "repos/$REPO/contents/docs/owned-path-facts.json?ref=$BASE_SHA" -H 'Accept: application/vnd.github.raw+json' --jq '.owned[]' || true)"
+          if [ -z "$owned" ]; then
+            echo "::notice::not auto-declared: the owned-path list could not be read at the base commit, and not being able to ask is not a pass"
+            exit 0
+          fi
+          while IFS= read -r changed; do
+            while IFS= read -r prefix; do
+              if [[ "$changed" == "${prefix%/}" || "$changed" == "${prefix%/}"/* ]]; then
+                echo "::notice::not auto-declared: $name touches an owned path ($prefix), whose body must state facts a fixed fragment cannot truthfully state, so it waits for a human"
+                exit 0
+              fi
+            done <<< "$owned"
+          done <<< "$files"
           body_file="$(mktemp)"
           cat > "$body_file" <<EOF
           Dependency update by dependabot[bot] (ADR 0041): bump $name from $old to $new.
