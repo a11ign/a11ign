@@ -180,7 +180,7 @@ environment it offers, so authors were discovering it one failed run at a time.
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4          # <- NO fetch-depth. Depth 1.
+      - uses: actions/checkout@v7          # <- NO fetch-depth. Depth 1.
 ```
 
 **Depth 1, and `actions/checkout` fetches the PR ref, not the branch.** So `refs/remotes/origin/main`
