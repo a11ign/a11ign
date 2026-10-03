@@ -333,6 +333,8 @@ jobs:
       # REQUIRED BY PROVENANCE, and only by it. npm signs the attestation with a short-lived OIDC token
       # from this job; without the claim it fails the publish rather than shipping unsigned.
       id-token: write
+      # READ ONLY, for the fleet part's verdict below (#3136): the lab posts a commit status and this job reads it.
+      statuses: read
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
@@ -362,6 +364,29 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
+
+      # #3136 (ADR 0041, decision 3): THE RELEASE READS THE FLEET PART'S VERDICT, by commit sha, instead of ignoring it.
+      # This runner proves what a runner can prove; the stability gate and the NVDA layer need a Windows worker
+      # (`release-gate-scope.mjs` names the nine stages). The lab posts a commit status, context `qualification`, on the
+      # sha, and `release-reads-qualification.mjs` decides one of FOUR outcomes: `proceed` (success, or no fleet stage
+      # gates the packages released), `wait` (absent or pending: NOT a pass), `rerun` (one failure: a candidate regression,
+      # the lab re-runs once) and `regression` (two). ONLY `proceed` lets the steps after this one run, so `Publish` never
+      # starts on anything else, and nothing is skipped to get a pass: no threshold moves, and no revert (fix forward).
+      # THE LOG NAMES THE OUTCOME AND THE SHA ON EVERY RUN. The writer of the status is #3289, so until it lands every real
+      # release stops here at `wait` -- the safe state, and the one a user can see. A wait is RE-RUN (the platform's "re-run
+      # failed jobs") once the lab has posted: the registry is the state, so `plan` reads the same answer again. It is
+      # not polled here: a runner held for the ~92 minutes the worst measured cleared verdict takes would hold the
+      # `release` concurrency group with it.
+      #
+      # A REHEARSAL REPORTS AND CONTINUES, because it publishes nothing and a dispatch on any branch would otherwise
+      # always stop here. It is the one place this step is allowed to fail without stopping the job.
+      - name: Read the fleet part's verdict for this sha
+        id: qualification
+        continue-on-error: ${{ needs.plan.outputs.mode == 'rehearsal' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          READINGS: ${{ needs.plan.outputs.readings }}
+        run: node scripts/release-reads-qualification.mjs --sha=${{ github.sha }} --readings="$READINGS"
 
       # THE WHOLE-REPO COVERAGE THRESHOLD, HERE AND ON A NIGHTLY SCHEDULE (`nightly.yml`'s `coverage`
       # job -- moved there from the now-deleted `coverage.yml`, #901) -- chairman's direction, 2026-09-06,
