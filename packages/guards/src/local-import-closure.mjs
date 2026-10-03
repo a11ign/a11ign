@@ -43,7 +43,7 @@ export function stripComments(text) {
   // With the block pass first, a `//` comment CONTAINING `/*` -- a glob in prose, `--branches='agent/*'`,
   // `@a11ign/*` -- opened a block-comment match that closed at the next `*/` ANYWHERE LATER IN THE FILE,
   // blanking every line between, real code included. Measured across the tree the night this was found:
-  // 10 of 89 `scripts/*.mjs` with relative imports derived NONE, `node_modules/agent-org/src/row-claim.mjs` among them --
+  // 10 of 89 `scripts/*.mjs` with relative imports derived NONE, `packages/agent-org/src/row-claim.mjs` among them --
   // twelve real imports, zero visible -- and with them `select-changed-tests.mjs` and `ci-changed.mjs`,
   // which decide what CI runs.
   //
