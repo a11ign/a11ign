@@ -1,6 +1,6 @@
 {
   "name": "@a11ign/documents",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "The PDF layer (ADR 0036's second layer, #68): reads a PDF's own accessibility tag tree -- tagged/untagged, the document language, alt text on figures -- with no browser, no NVDA and no fleet.",
   "license": "Apache-2.0",
   "type": "module",

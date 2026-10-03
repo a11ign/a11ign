@@ -9,19 +9,19 @@ importers:
   .:
     dependencies:
       '@a11ign/evidence':
-        specifier: 0.1.0
+        specifier: 0.2.0
         version: link:packages/evidence
       '@a11ign/judge':
-        specifier: 0.1.0
+        specifier: 0.2.0
         version: link:packages/judge
       '@a11ign/scorer':
-        specifier: 0.1.0
+        specifier: 0.2.0
         version: link:packages/scorer
       '@a11ign/screenreader-fleet':
-        specifier: 0.0.0
+        specifier: 0.1.0
         version: link:packages/worker-fleet
       '@a11ign/screenreader-worker':
-        specifier: 0.0.0
+        specifier: 0.1.0
         version: link:packages/nvda-worker
       '@anthropic-ai/sdk':
         specifier: ^0.129.0
@@ -30,7 +30,7 @@ importers:
         specifier: ^0.31.0
         version: 0.31.0
       a11ign:
-        specifier: 0.1.0
+        specifier: 0.2.0
         version: link:packages/cli
     devDependencies:
       '@changesets/cli':
@@ -80,19 +80,19 @@ importers:
   packages/cli:
     dependencies:
       '@a11ign/documents':
-        specifier: 0.0.0
+        specifier: 0.1.0
         version: link:../pdf
       '@a11ign/evidence':
-        specifier: 0.1.0
+        specifier: 0.2.0
         version: link:../evidence
       '@a11ign/judge':
-        specifier: 0.1.0
+        specifier: 0.2.0
         version: link:../judge
       '@a11ign/scorer':
-        specifier: 0.1.0
+        specifier: 0.2.0
         version: link:../scorer
       '@a11ign/screenreader-fleet':
-        specifier: 0.0.0
+        specifier: 0.1.0
         version: link:../worker-fleet
       yaml:
         specifier: ^2.9.1
@@ -118,28 +118,28 @@ importers:
   packages/judge:
     dependencies:
       '@a11ign/evidence':
-        specifier: 0.1.0
+        specifier: 0.2.0
         version: link:../evidence
 
   packages/lab:
     dependencies:
       '@a11ign/evidence':
-        specifier: 0.1.0
+        specifier: 0.2.0
         version: link:../evidence
       '@a11ign/judge':
-        specifier: 0.1.0
+        specifier: 0.2.0
         version: link:../judge
       '@a11ign/nvda-speech':
         specifier: 0.0.0
         version: link:../nvda-speech
       '@a11ign/scorer':
-        specifier: 0.1.0
+        specifier: 0.2.0
         version: link:../scorer
       '@a11ign/screenreader-fleet':
-        specifier: 0.0.0
+        specifier: 0.1.0
         version: link:../worker-fleet
       '@a11ign/screenreader-worker':
-        specifier: 0.0.0
+        specifier: 0.1.0
         version: link:../nvda-worker
     devDependencies:
       '@a11ign/control':
@@ -149,7 +149,7 @@ importers:
         specifier: 0.31.0
         version: 0.31.0
       a11ign:
-        specifier: 0.1.0
+        specifier: 0.2.0
         version: link:../cli
       serve:
         specifier: 14.2.6
@@ -170,7 +170,7 @@ importers:
         version: 0.31.0
     devDependencies:
       '@a11ign/evidence':
-        specifier: 0.1.0
+        specifier: 0.2.0
         version: link:../evidence
 
   packages/pdf:
@@ -182,20 +182,20 @@ importers:
   packages/scorer:
     dependencies:
       '@a11ign/evidence':
-        specifier: 0.1.0
+        specifier: 0.2.0
         version: link:../evidence
 
   packages/worker-fleet:
     dependencies:
       '@a11ign/judge':
-        specifier: 0.1.0
+        specifier: 0.2.0
         version: link:../judge
       '@a11ign/screenreader-worker':
-        specifier: 0.0.0
+        specifier: 0.1.0
         version: link:../nvda-worker
     devDependencies:
       '@a11ign/evidence':
-        specifier: 0.1.0
+        specifier: 0.2.0
         version: link:../evidence
       typescript:
         specifier: ^6.0.3
@@ -882,7 +882,7 @@ packages:
     engines: {node: '>= 6.0.0'}
 
   agent-org@https://codeload.github.com/a11ign/agent-org/tar.gz/6e71155c9452365fff9bbc603628d85a612cec5e:
-    resolution: {gitHosted: true, integrity: sha512-3L/R6N41xC7JT0ByiIFGiYfkVfKeNlbqbe5VNeWtByDJN7/3lMUgk76nbqx0uO5y7GtAW9CEs3jJGBzeWlnxmQ==, tarball: https://codeload.github.com/a11ign/agent-org/tar.gz/6e71155c9452365fff9bbc603628d85a612cec5e}
+    resolution: {gitHosted: true, tarball: https://codeload.github.com/a11ign/agent-org/tar.gz/6e71155c9452365fff9bbc603628d85a612cec5e}
     version: 0.4.2
     engines: {node: '>=22'}
     hasBin: true
