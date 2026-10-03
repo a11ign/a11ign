@@ -1,0 +1,93 @@
+name: dependency-pr-body
+
+# A DEPENDENCY PULL REQUEST GETS A NARROW, DECLARED WAY THROUGH THE TWO BODY CHECKS (#3137, ADR 0041 decision 4).
+#
+# `ci.yml`'s `acceptance` job refuses a body with no `Acceptance:` section, and the `Closes` declaration is
+# merge-blocking too; Dependabot writes neither. Neither check is bypassed (the rulings stand): this workflow writes
+# the body they read, so they pass for what they are.
+#
+# ## `pull_request_target`, and why that is safe HERE and nowhere else
+#
+# It is the only trigger whose token may WRITE to a pull request Dependabot opened (`pull_request` gets a read-only
+# token). The danger of the trigger is running the pull request's own code with that token, so this file does not:
+#
+#   - the job runs ONLY for Dependabot (`github.actor` AND the pull request's author), so a stranger's pull request
+#     never reaches it;
+#   - NO step checks anything out, so no byte of the pull request head is ever on the runner;
+#   - the title reaches the shell as an environment variable (`PR_TITLE`), never as `${{ }}` text in the script, and
+#     is read only through the fixed pattern below; the pull request's BODY is not read at all, and is replaced.
+#
+# `dependency-pr-body.test.ts` pins each of these and runs the script below against a stub `gh`.
+#
+# ## What it writes, and what it will not
+#
+# A FIXED fragment: the title's package and versions (through the pattern, nothing else from the title), a
+# `Closes: none` declaration and the repository's own manifest verification as the `Acceptance:` command. Dependabot's
+# original body (release notes quoting `Closes #123` lines of OTHER projects) is deliberately dropped: kept, it could
+# close a row here or duplicate the `Acceptance:` section.
+#
+# It writes NOTHING, and says why in the log, for a MAJOR bump (a `0.x` minor counts: below 1.0 it is the breaking
+# one) or for a pull request touching anything but the manifests and the lockfile. That pull request keeps Dependabot's
+# body, `acceptance` refuses it, and it waits like any other (design 3 of the row).
+#
+# The `Acceptance:` command spells `--config=<path>`, not `--config <path>`, on purpose: `entry-points.test.ts` reads every
+# workflow for a whitespace-preceded `scripts/*.mjs` and demands an entry guard of whatever it finds, and
+# `rstest.config.mjs` is a config file, not an entry point.
+#
+# ## The edit has to be seen by `ci.yml`
+#
+# `acceptance` reads the body in `ci.yml`'s `pull_request` event, whose types include `edited`. An edit made with the
+# default `GITHUB_TOKEN` fires NO workflow, so `acceptance` would keep reporting the body Dependabot opened with.
+# `A11IGN_BOT_TOKEN` (the credential `auto-arm.yml` arms with) fires `edited`; without it the edit still lands and a
+# warning says that CI will not re-read it, the same fallback `auto-arm.yml` takes.
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+
+permissions: {}
+
+jobs:
+  body:
+    if: github.actor == 'dependabot[bot]' && github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Write the fixed body fragment onto a minor or patch bump of the manifests
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
+          FALLBACK_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          title_pattern='^deps: bump ([@A-Za-z0-9._/-]+) from ([0-9]+)\.([0-9]+)[0-9A-Za-z.+-]* to ([0-9]+)\.([0-9]+)[0-9A-Za-z.+-]*( in /[A-Za-z0-9._/-]*)?$'
+          allowed_files='^(package\.json|packages/[^/]+/package\.json|pnpm-lock\.yaml)$'
+          if [[ ! "$PR_TITLE" =~ $title_pattern ]]; then
+            echo "::notice::not auto-declared: the title is not 'deps: bump <package> from <x.y.z> to <x.y.z>', so it waits like any other pull request"
+            exit 0
+          fi
+          name="${BASH_REMATCH[1]}"; old="${BASH_REMATCH[2]}.${BASH_REMATCH[3]}"; new="${BASH_REMATCH[4]}.${BASH_REMATCH[5]}"
+          if [ "${BASH_REMATCH[2]}" != "${BASH_REMATCH[4]}" ] || { [ "${BASH_REMATCH[2]}" = 0 ] && [ "${BASH_REMATCH[3]}" != "${BASH_REMATCH[5]}" ]; }; then
+            echo "::notice::not auto-declared: $name goes from $old to $new, a major bump, so it waits for a human like any other pull request"
+            exit 0
+          fi
+          export GH_TOKEN="${A11IGN_BOT_TOKEN:-$FALLBACK_TOKEN}"
+          [ -n "$A11IGN_BOT_TOKEN" ] || echo "::warning::A11IGN_BOT_TOKEN is not set -- the body is written with GITHUB_TOKEN, which fires no 'edited' event, so ci.yml's acceptance job will not re-read it"
+          files="$(gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/files" --jq '.[].filename')"
+          if [ -z "$files" ] || grep -qvE "$allowed_files" <<< "$files"; then
+            echo "::notice::not auto-declared: $name touches something other than the manifests and the lockfile, so it waits like any other pull request"
+            exit 0
+          fi
+          body_file="$(mktemp)"
+          cat > "$body_file" <<EOF
+          Dependency update by dependabot[bot] (ADR 0041): bump $name from $old to $new.
+
+          Acceptance:
+          pnpm exec rstest run --config=scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/one-package-manager.test.ts
+
+          Closes: none -- dependency update by dependabot[bot] (ADR 0041)
+          EOF
+          gh api --method PATCH "repos/$REPO/pulls/$PR_NUMBER" -F body=@"$body_file" --silent
+          echo "::notice::wrote the fixed body fragment for $name $old -> $new"
