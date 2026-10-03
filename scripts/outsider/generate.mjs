@@ -158,7 +158,7 @@ function buildPollJob() {
     "    steps:",
     "      - name: Start a run for a release this repository has no completed run for",
     "        env:",
-    "          GH_TOKEN: ${{ github.token }}",
+    "          GITHUB_TOKEN: ${{ github.token }}",
     "          GH_REPO: ${{ github.repository }}",
     "        run: |",
     ...asRunBody(script),

@@ -28,7 +28,7 @@ jobs:
     steps:
       - name: Start a run for a release this repository has no completed run for
         env:
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
@@ -60,7 +60,7 @@ jobs:
           tag_sha=$(git ls-remote https://github.com/a11ign/a11ign "refs/tags/v${version}^{}" | cut -f1)
           [ -n "$tag_sha" ] || tag_sha=$(git ls-remote https://github.com/a11ign/a11ign "refs/tags/v${version}" | cut -f1)
           [ -n "$tag_sha" ] || { echo "::error::no release tag v${version} on https://github.com/a11ign/a11ign"; exit 1; }
-          pinned=acf1dd753c62f5cf01c23a2c54274a57f4e05180
+          pinned=021d6f6fd3123f6a63cfbc46d39f492fe595cfd5
           if [ "$SHA" != "$tag_sha" ]; then
             echo "::error::this run is named for ${SHA}, but v${version} is ${tag_sha}"
             exit 1
@@ -82,7 +82,7 @@ jobs:
       pull-requests: write         # for the PR comment below; omit it and the report still runs, only quieter
     steps:
       - uses: actions/checkout@v4
-      - uses: a11ign/a11ign@acf1dd753c62f5cf01c23a2c54274a57f4e05180
+      - uses: a11ign/a11ign@021d6f6fd3123f6a63cfbc46d39f492fe595cfd5
         # Pinned to v0.1.0, the first tagged release. Use the full commit SHA instead if your CI must
         # not move even across a release.
         id: a11ign
@@ -126,7 +126,7 @@ jobs:
           - docs/try-it.md: "The other route: run it from the repository", and the authenticated run behind a login
 
           ### Substitutions: every line that differs from README.md's fence
-          - README.md line 178: `- uses: a11ign/a11ign@v0.1.0` became `- uses: a11ign/a11ign@acf1dd753c62f5cf01c23a2c54274a57f4e05180`
+          - README.md line 178: `- uses: a11ign/a11ign@v0.1.0` became `- uses: a11ign/a11ign@021d6f6fd3123f6a63cfbc46d39f492fe595cfd5`
           - README.md line 183: `url: https://example.com/contact` became `url: https://www.w3.org/WAI/demos/bad/before/home.html`
           - README.md line 184: `task: Send an enquiry` became `task: Find the main navigation and reach the survey.`
           - added: `needs: [pin]` under the job's key, so it waits for the pin check
