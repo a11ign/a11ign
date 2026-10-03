@@ -35,7 +35,9 @@
       "a11ign-fleet-watch.service",
       "a11ign-fleet-watch.timer",
       "a11ign-lab-watch.service",
-      "a11ign-lab-watch.timer"
+      "a11ign-lab-watch.timer",
+      "a11ign-weekly-review.service",
+      "a11ign-weekly-review.timer"
     ]
   },
   "_roles": "Where this project's role briefs live (ADR 0040, decision 1, surface 3; #2621, child 3e of #69), read by `src/project-roles.mjs` of a11ign/agent-org. The tool ships none of its own; `sessions.json` and every `<role>.md` are a11ign's, at `dir`.",

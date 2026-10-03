@@ -1,0 +1,17 @@
+[Unit]
+# THE CLOCK BEHIND weekly-review.mjs -- #3183, scheduled by #3319. See a11ign-weekly-review.service.
+Description=Weekly (Monday) filing of the outsider review row (#3319)
+
+[Timer]
+# MONDAY 06:17 UTC, in UTC and not London: the script reckons the ISO week in UTC (`getUTCDay`), so a fixed UTC hour
+# files into the same week all year and does not drift an hour at each BST boundary. :17 keeps it off the top of
+# the hour (#965). The workflow this replaces was due its first fire at 2026-10-05T06:17Z.
+OnCalendar=Mon *-*-* 06:17:00 UTC
+
+# A HOST ASLEEP OR REBOOTING AT THE HOUR STILL FILES. Without it a missed Monday is simply lost, and no row looks
+# exactly like a week with nothing to review. The filing is idempotent by ISO week, so a late catch-up cannot file twice.
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
