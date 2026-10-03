@@ -3296,7 +3296,7 @@ $ zsh -lc 'tok=$(awk "/oauth_token/{print \$2; exit}" /home/agent/reviewer/gh/ho
   "login": "a11ign-bot",
 ```
 
-**Why the row's first option (a `gh` wrapper earlier on PATH, the shape of `packages/agent-org/host/gh`) was
+**Why the row's first option (a `gh` wrapper earlier on PATH, the shape of `node_modules/agent-org/host/gh`) was
 not built: it is refused by the second probe above, not by argument.** A shim is one program on the path the
 reviewer's shell happens to search. The token sits in `hosts.yml`, readable by the reviewer's own uid, so
 `/usr/bin/gh` by absolute path and `curl` with the token both go around any shim and any execpolicy prefix

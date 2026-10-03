@@ -29,7 +29,7 @@ function withScratch(body: (base: string) => void) {
   try { body(base); } finally { rmSync(base, { recursive: true, force: true }); }
 }
 
-/** A checkout with its own `packages/agent-org`. */
+/** A checkout with its own `packages/<PACKAGE>` directory. */
 function checkout(base: string, name: string) {
   const root = join(base, name);
   mkdirSync(join(root, "packages", PACKAGE), { recursive: true });

@@ -749,7 +749,7 @@ check, and the check then reports on its own prose.
 |---|---|
 | #1002 | a leak-scan pin satisfied by a **commented-out tail** |
 | #1001 | a gate assertion satisfied by prose about itself |
-| #1022 | the row's own open-check, `grep -c 'Merge already in progress\|…' packages/agent-org/src/arm-pr.mjs`, went `0 → 1` **entirely because a JSDoc line quotes the error the fix is about**. The fix deliberately does not match GitHub's message text — keying on prose is what `merge-guard`'s `FAULT.*` rule exists to avoid — so nothing in the code could ever have satisfied it |
+| #1022 | the row's own open-check, `grep -c 'Merge already in progress\|…' node_modules/agent-org/src/arm-pr.mjs`, went `0 → 1` **entirely because a JSDoc line quotes the error the fix is about**. The fix deliberately does not match GitHub's message text — keying on prose is what `merge-guard`'s `FAULT.*` rule exists to avoid — so nothing in the code could ever have satisfied it |
 
 **It fails in BOTH directions and neither is loud.**
 
@@ -1332,7 +1332,7 @@ own §3 gets re-checked rather than trusted forever once written.
 write time when it would displace one, after the word cap incident above cost a red `trunk-guard` until
 reverted.
 
-**`board-report.test.ts`** (#9) -- the detailed render-section test for `packages/agent-org/src/board-report.mjs`,
+**`board-report.test.ts`** (#9) -- the detailed render-section test for `node_modules/agent-org/src/board-report.mjs`,
 replaced by a single smoke test (`board-report-smoke.test.ts`) proving the renderer produces output
 without throwing. The detail this file asserted (individual section wording, pluralisation, edge counts)
 is now a human's read of the rendered document, not a build dependency.
@@ -1354,14 +1354,14 @@ retired label taxonomy:
 - `workflow-lane-check.mjs` runs as its own step inside `ci.yml`'s `mergeSafety` job, right now, on every
   pull request.
 - `merge-guard-pr-hold-rule.test.ts` covers one rule composed into `merge-guard.mjs`'s
-  `mergeSafetyVerdict`, which `mergeSafety` calls directly (`node packages/agent-org/src/merge-guard.mjs --ci-gate`).
+  `mergeSafetyVerdict`, which `mergeSafety` calls directly (`node node_modules/agent-org/src/merge-guard.mjs --ci-gate`).
   `mergeSafety` is removed as a job by #902 -- not yet merged at the time of this row -- and only then
   does this rule's test stop guarding something live.
 - `pr-hold.test.ts` and `a-hold-means-cannot-merge.test.ts` between them are the **only** test coverage
   for `pr-hold-state.mjs`'s `armVerdict`/`armabilityOf`/`disarmVerdict` -- the exact functions
   `auto-arm.yml`'s "Enable auto-merge... unless held" step calls on every arm attempt.
 - `arm-pr.test.ts` covers `arm-pr.mjs`'s `armDecision`, invoked by `auto-arm.yml` on every PR armed
-  (`node packages/agent-org/src/arm-pr.mjs --pr=... --repo=...`). `claim-provenance.mjs` (#848) is a durable *second*
+  (`node node_modules/agent-org/src/arm-pr.mjs --pr=... --repo=...`). `claim-provenance.mjs` (#848) is a durable *second*
   answer to "who worked this row" -- it does not make `arm-pr.mjs` itself dead code today.
 
 Deleting any of the five would leave a live, merge-blocking mechanism with no test at all until the row
@@ -1455,7 +1455,7 @@ Measured 2026-09-13T12:40Z: `npm run branches:inventory` read 208 remote-trackin
 #916's body reads "CODEOWNERS replaces the ownedPaths job" and "the other engineer must approve" — read
 literally, that is the corpus-invalidating fact sign-off (`docs/owned-path-facts.json`, the `ownedPaths`
 job in `ci.yml`, owner `orchestrator`), and ceo's own ruling of 2026-09-07
-(`packages/agent-org/src/owned-path-signoff.mjs`'s header) already rejected turning THAT one into a
+(`node_modules/agent-org/src/owned-path-signoff.mjs`'s header) already rejected turning THAT one into a
 CODEOWNERS review, on measured grounds: a reviewer catches none of the failures those paths have actually
 had, because each was a correct-looking change whose consequence was invisible at the diff. Building #916
 as written would have reversed a ruling it never named.
@@ -1695,7 +1695,7 @@ something this row silently decided either way.
   **WHY THE WRAPPER IS IN THE REPOSITORY.** The identity policy existed only on the host, so no review had ever
   seen it and nothing noticed when it was wrong. `ceo` ruled the shape: **a COPY with a drift check, not a
   symlink** — `gh` is on every agent's PATH, so a link into a working tree that may be mid-rebase would break
-  `gh` for the whole org. `npm run host:install` copies `packages/agent-org/host/gh` (atomically: a rename, never
+  `gh` for the whole org. `npm run host:install` copies `node_modules/agent-org/host/gh` (atomically: a rename, never
   a half-written file), the leads list (`~/leads/workspaces.txt`), and `~/workers/README.md`; `npm run host:check` reports DIVERGED
   when the installed bytes differ, and when the global gitconfig's github.com helper is not the wrapper (which
   `host:install` does NOT fix — it is a person's dotfile). The global `user.name`/`user.email` are reported as a
@@ -1714,7 +1714,7 @@ something this row silently decided either way.
 
 - **Moved from the loaded rule:** if the owner is the only session that can claim a row, its turn budget is the throughput.
 - **A `lane:<owner>` label refuses any OTHER session unconditionally** (`laneReason`,
-  `packages/agent-org/src/row-claim/runner-rule.mjs`) — a `Lane-exception:` line in a PR body, or even a
+  `node_modules/agent-org/src/row-claim/runner-rule.mjs`) — a `Lane-exception:` line in a PR body, or even a
   comment saying "assigned to X", changes nothing at claim time. Only the label does. If the owner is the
   only session that can ever claim the row, the owner's own turn budget is the queue's throughput.
 - **Measured 2026-09-18:** 3 engineers idle all morning behind 4 `lane:ceo` rows clearing at ~1/tick,
@@ -2348,7 +2348,7 @@ incident was #2341: the auto-revert of #2329 would have removed a correct doc fo
 `control-plane-checkout-is-one-fact.test.ts`, and the fix (#2346/#2347) was smaller than the re-land.
 
 **What was deleted:** `trunk.yml`'s `decideRevert` job and its step *"Revert this push, unless the failure is
-inherited or main has already moved on"*, `packages/agent-org/src/trunk-revert.mjs` and its two test files,
+inherited or main has already moved on"*, `src/trunk-revert.mjs` of the tool (now a11ign/agent-org) and its two test files,
 the `A11IGN_BOT_TOKEN` grant the job carried, and `contents: write` / `pull-requests: write`. **What was kept:**
 `trunkGate` and `trunk-revert-guard.mjs` -- despite the name it reverts nothing, it checks that a push did not
 silently UNDO work already on `main` (#411), which fix-forward needs more, not less -- and
