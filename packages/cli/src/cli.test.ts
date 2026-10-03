@@ -33,6 +33,7 @@ import { fileURLToPath } from "node:url";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { AddressInfo } from "node:net";
 import { stripComments } from "@a11ign/evidence/source-text";
+import { WCAG_22_AA } from "@a11ign/evidence/wcag";
 import { assessedCriteria } from "@a11ign/judge/coverage";
 import { criterionOutcomes, outcomeTally, type RuleLayerCoverage } from "@a11ign/judge/outcomes";
 
@@ -134,11 +135,11 @@ test("requirement 1's examined figure equals the outcomes' non-untested count, s
   // while `outcomes` counted every criterion any layer covered. Axe-core covers criteria outside `assessedCriteria()`
   // here, and the scorer abstained, so the reach and the examined count differ and only the wiring makes them agree.
   const reach = new Set(assessedCriteria());
-  const outside = ["1.4.3", "1.4.11", "1.4.4"];
-  assert.ok(outside.every((c) => !reach.has(c)), "the fixture's axe-only criteria must lie outside the reach");
+  const [first, ...axeOnly] = WCAG_22_AA.map((c) => c.num).filter((n) => !reach.has(n));
+  const outside = [first, ...axeOnly.slice(0, 2)];
   const entry = (verdict: "violated" | "needsReview" | "clean") => ({ verdict, rules: [] });
   const ruleLayer: RuleLayerCoverage = {
-    "1.4.3": entry("violated"), "1.4.11": entry("clean"), "1.4.4": entry("needsReview"),
+    [outside[0]]: entry("violated"), [outside[1]]: entry("clean"), [outside[2]]: entry("needsReview"),
     [assessedCriteria()[0]]: entry("clean"),
   };
   const capture = { screenReader: "NVDA", transcript: [], structure: {}, diagnostics: [] } as unknown as CaptureResponse;
