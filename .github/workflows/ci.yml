@@ -314,12 +314,25 @@ jobs:
       # always ships `package.json` and `CHANGELOG.md`, so `changeset status --since` exits 1 on a version commit and
       # that pull request could never merge. `release.yml` opens it from `release/version-packages` (`VERSION_BRANCH`
       # in `release-commit-version-bump.mjs`) and nothing else pushes there; the match is EXACT, not a prefix.
-      # `github.head_ref` is EMPTY on `merge_group`, whose ref is `gh-readonly-queue/...` and names no branch, so the
-      # queue entry is recognised by the squash message it inherits from the pull request title (`Version packages`,
-      # as `release.yml` creates it). That half is safe to key on a title: an entry only exists for a pull request
+      # `github.head_ref` is EMPTY on `merge_group`, whose ref is `gh-readonly-queue/...` and names no branch. The
+      # `merge-queue-main` ruleset (23681721) has `merge_method: MERGE`, read with `gh api repos/a11ign/a11ign/rulesets/23681721`,
+      # so a queue entry's `head_commit.message` is `Merge pull request #N from <owner>/<branch>`, a blank line, then the
+      # title. The step below reads the FIRST LINE exactly, in shell (a newline cannot be written inside an expression
+      # string), so `release/version-packages-x` is still enforced. A switch to SQUASH changes that message and is the
+      # moment this step changes. Keying the queue half on a message is safe: an entry exists only for a pull request
       # that already passed this job on `pull_request`, where only the branch name exempts it.
+      - id: version
+        name: The version pull request's queue entry is recognised by the branch on its merge commit's first line
+        if: github.event_name == 'merge_group'
+        env:
+          QUEUE_MESSAGE: ${{ github.event.merge_group.head_commit.message }}
+        run: |
+          first=$(printf '%s\n' "$QUEUE_MESSAGE" | head -n 1)
+          if [[ "$first" =~ ^Merge\ pull\ request\ \#[0-9]+\ from\ ${GITHUB_REPOSITORY_OWNER}/release/version-packages$ ]]; then
+            echo "queue=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: A consumer-visible change must say what it does to a consumer
-        if: steps.precise.outputs.changeset == 'true' && steps.dependency.outputs.settled != 'true' && github.head_ref != 'release/version-packages' && !(github.event_name == 'merge_group' && startsWith(github.event.merge_group.head_commit.message, 'Version packages'))
+        if: steps.precise.outputs.changeset == 'true' && steps.dependency.outputs.settled != 'true' && github.head_ref != 'release/version-packages' && steps.version.outputs.queue != 'true'
         run: |
           if ! pnpm exec changeset status --since=${{ needs.changed.outputs.base }}; then
             echo "::error::This PR changes a published package and carries no changeset."
