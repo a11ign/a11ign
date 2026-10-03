@@ -214,11 +214,11 @@ jobs:
       # its own next event -- `auto-arm-sweep.mjs` refused a held PR and this path did not. Both now read
       # one predicate (`pr-hold-state.mjs`); a second correct copy would have been the same shape with a
       # longer fuse. It needs a checkout, which this job did not previously have.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # The tool is a pinned dependency now (#2975): `pnpm exec agent-org` needs `node_modules`. `--filter .` installs the
       # ROOT project only, which is all the tool needs, not every workspace package's dependencies.
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts --filter .
       - name: Enable auto-merge (merge commit) -- unless held. GitHub still withholds until `gate` is green
@@ -310,11 +310,11 @@ jobs:
     continue-on-error: true
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # The tool is a pinned dependency now (#2975): `pnpm exec agent-org` needs `node_modules`. `--filter .` installs the
       # ROOT project only, which is all the tool needs, not every workspace package's dependencies.
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts --filter .
       - name: Arm every open, non-draft, unheld, tested PR against main that nothing has armed
@@ -357,7 +357,7 @@ jobs:
     # fails by going quiet after GitHub disables it for 60 days of repo inactivity, and a stall reporter
     # that fails by going quiet has the disease it watches for.
     #
-    # `fetch-depth: 0` (full history), THEN an explicit fetch of every branch tip -- `actions/checkout@v4`
+    # `fetch-depth: 0` (full history), THEN an explicit fetch of every branch tip -- `actions/checkout@v7`
     # only brings the triggering PR's own head, and `git merge-tree` needs a real merge-base with EVERY
     # other open PR's head, which a shallow clone cannot supply. `queue-stalled.mjs`'s own `main()` does
     # the branch-tip fetch; this step only needs enough history depth for `git merge-tree` to find a
@@ -380,13 +380,13 @@ jobs:
     # name the first real run on #1633 once it fires.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       # The tool is a pinned dependency now (#2975): `pnpm exec agent-org` needs `node_modules`. `--filter .` installs the
       # ROOT project only, which is all the tool needs, not every workspace package's dependencies.
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts --filter .
       - name: Report every armed, green PR that cannot merge as-is against main

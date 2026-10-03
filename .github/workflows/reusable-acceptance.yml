@@ -49,11 +49,11 @@ jobs:
       # `persist-credentials: false` (#3286): the default writes this job's token into `.git/config`, where the
       # author's command could read it back -- and with `pull-requests: read` above it would no longer be a
       # `contents: read` token alone. The repository is public, so the unshallow fetch below needs none.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: pnpm run build

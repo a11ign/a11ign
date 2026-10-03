@@ -50,7 +50,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4   # this repository's own workflow file, which holds the one copy of the pin
+      - uses: actions/checkout@v7   # this repository's own workflow file, which holds the one copy of the pin
         with:
           persist-credentials: false
       - name: Refuse a run whose pin is not the release it is named for
@@ -91,7 +91,7 @@ jobs:
       contents: read
       pull-requests: write         # for the PR comment below; omit it and the report still runs, only quieter
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: a11ign/a11ign@021d6f6fd3123f6a63cfbc46d39f492fe595cfd5
         # Pinned to v0.1.0, the first tagged release. Use the full commit SHA instead if your CI must
         # not move even across a release.
@@ -101,7 +101,7 @@ jobs:
           task: Find the main navigation and reach the survey.
       # Keep the evidence: the full result, including the transcript behind every finding. Guarded on the
       # output existing, so a run that failed does not also fail the upload.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always() && steps.a11ign.outputs.result-json != ''
         with:
           name: a11ign-result
@@ -114,7 +114,7 @@ jobs:
     if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         if: needs.a11y.result == 'success'
         with:
           name: a11ign-result

@@ -55,10 +55,10 @@ jobs:
     if: github.event.schedule != '37 * * * *'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { ref: main }
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - id: ci
         run: pnpm install --frozen-lockfile --ignore-scripts
@@ -115,10 +115,10 @@ jobs:
     if: github.event.schedule != '37 * * * *'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { ref: main, fetch-depth: 0 }
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: pnpm run build
@@ -231,10 +231,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { ref: main }
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
       # The guard itself imports nothing built, but the step below reads `RSTEST_CONFIG` out of
@@ -316,10 +316,10 @@ jobs:
       issues: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { ref: main, fetch-depth: 0 }
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Audit the tracker's labels once a day
@@ -351,10 +351,10 @@ jobs:
       contents: read
       issues: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { ref: main }
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: pnpm run build
@@ -383,12 +383,12 @@ jobs:
       actions: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { ref: main }
       # The tool is a pinned dependency now (#2975): `pnpm exec agent-org` needs `node_modules`. `--filter .` installs the
       # ROOT project only, which is all the tool needs, not every workspace package's dependencies.
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts --filter .
       - name: If main's tip has zero check runs, trigger a real gate run against it
@@ -404,12 +404,12 @@ jobs:
       pull-requests: read
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { ref: main }
       # The tool is a pinned dependency now (#2975): `pnpm exec agent-org` needs `node_modules`. `--filter .` installs the
       # ROOT project only, which is all the tool needs, not every workspace package's dependencies.
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts --filter .
       - name: Close any row a merged PR declared that the push-time job missed
@@ -428,10 +428,10 @@ jobs:
       issues: write
       actions: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { ref: main }
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Read the org and post only if something needs attention

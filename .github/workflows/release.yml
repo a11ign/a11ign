@@ -116,7 +116,7 @@ jobs:
       # publishing job's "never older than the registry" step reads it rather than writing a second one (#3167).
       readings: ${{ steps.mode.outputs.readings }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - id: mode
         env:
           EVENT: ${{ github.event_name }}
@@ -220,10 +220,10 @@ jobs:
           fi
       # `fetch-depth: 0` brings every tag: `compile` below reads each package's manifest at its `<name>@<version>` release tag,
       # and a shallow checkout holds none, so it would report "nothing moved" whatever had.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { token: "${{ secrets.A11IGN_BOT_TOKEN }}", fetch-depth: 0 }
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       # #3170 (#3159 follow-up): a dependency pull request is ACCEPTED from its diff by ci's `changeset` job, and the entry it
@@ -385,7 +385,7 @@ jobs:
       # READ ONLY, for the fleet part's verdict below (#3136): the lab posts a commit status and this job reads it.
       statuses: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
 
       # #1452: `changeset status`'s divergence check (`@changesets/git`'s `getDivergedCommit`) runs
@@ -408,7 +408,7 @@ jobs:
       # version out of `packageManager`, and comes before setup-node because `cache: pnpm` shells out to it.
       # `registry-url` stays: it is what writes the `.npmrc` that npm publishes with.
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm, registry-url: https://registry.npmjs.org }
 
       - run: pnpm install --frozen-lockfile

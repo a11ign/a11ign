@@ -373,7 +373,7 @@ test("violations() refuses each fixture that breaks one property (the positive c
     ["a write on `mutate`", (w) => { (w.jobs as Record<string, Job>).mutate.permissions = { contents: "read", "pull-requests": "write" }; }],
     ["a workflow-level write", (w) => { w.permissions = { contents: "write" }; }],
     ["pull_request_target", (w) => { w.on = { pull_request_target: {} }; }],
-    ["a checkout in `comment`", (w) => { (w.jobs as Record<string, Job>).comment.steps?.unshift({ uses: "actions/checkout@v4" }); }],
+    ["a checkout in `comment`", (w) => { (w.jobs as Record<string, Job>).comment.steps?.unshift({ uses: "actions/checkout@v7" }); }],
     ["a program in `comment`", (w) => { (w.jobs as Record<string, Job>).comment.steps?.push({ run: "node scripts/x.mjs" }); }],
     ["`comment` with more than the one write", (w) => { (w.jobs as Record<string, Job>).comment.permissions = { "pull-requests": "write", contents: "write" }; }],
     ["an expression in a shell line", (w) => { (w.jobs as Record<string, Job>).comment.steps?.push({ run: "echo ${{ github.event.pull_request.title }}" }); }],
