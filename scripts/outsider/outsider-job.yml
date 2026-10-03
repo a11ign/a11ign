@@ -92,7 +92,7 @@ jobs:
       pull-requests: write         # for the PR comment below; omit it and the report still runs, only quieter
     steps:
       - uses: actions/checkout@v7
-      - uses: a11ign/a11ign@021d6f6fd3123f6a63cfbc46d39f492fe595cfd5
+      - uses: a11ign/a11ign@2e66b73ad3c20c6a0797cb151dbd5bb6b6eb829e
         # Pinned to v0.1.0, the first tagged release. Use the full commit SHA instead if your CI must
         # not move even across a release.
         id: a11ign

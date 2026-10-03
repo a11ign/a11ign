@@ -174,7 +174,7 @@ jobs:
       contents: read
       pull-requests: write         # for the PR comment below; omit it and the report still runs, only quieter
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: a11ign/a11ign@v0.1.0
         # Pinned to v0.1.0, the first tagged release. Use the full commit SHA instead if your CI must
         # not move even across a release.
@@ -184,7 +184,7 @@ jobs:
           task: Send an enquiry
       # Keep the evidence: the full result, including the transcript behind every finding. Guarded on the
       # output existing, so a run that failed does not also fail the upload.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always() && steps.a11ign.outputs.result-json != ''
         with:
           name: a11ign-result
