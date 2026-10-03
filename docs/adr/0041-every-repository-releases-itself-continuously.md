@@ -175,6 +175,16 @@ $ grep -n '"agent-org":' package.json
 No dependency-update configuration exists. **UNMEASURED:** whether Dependabot reads a `github:owner/repo#semver:` pin. That
 is the one measurement that decides Renovate, and #3133 takes it first.
 
+**Addendum, 2026-10-03 (#3244, ruled by `product-manager` on #3156).** Dependabot's own pnpm run re-resolves the
+`agent-org` `#semver:` pin whenever it re-resolves anything, so an unrelated dependency pull request also moves the
+lockfile entry to a tag inside the range, and no `ignore` entry can prevent it: measured 2026-10-03 on a scratch copy of
+`origin/main`'s manifests and lockfile, `pnpm update tsx@4.23.15 --lockfile-only` moved the resolution from `087e4419`
+(`v0.2.1`) to `5cf058f7` (`v0.2.4`) with `package.json` untouched, while a specifier of `#v0.2.1` or `#semver:0.2.1` left it
+alone. `ignore` only stops a PROPOSED `agent-org` bump. The ruling: that lockfile-only move is ACCEPTED, because every tag
+was reviewed in `a11ign/agent-org` and this decision says consumers upgrade automatically; the `package.json` range moves
+only by a deliberate row. An exact specifier would prevent the hunk and was not chosen: the range admits the next patch
+without a range edit (#3200), and a pin that moves only by hand lags. The reviewer's rule is in `.agent-org/roles/reviewer.md`.
+
 ### DECISION 5 — the split is re-shaped: each move is a vertical slice that ends with its repository RELEASING ON ITS OWN
 
 **Decision:** a move is done when the repository has its CI, its own release workflow (OIDC, or tag plus GitHub Release if
