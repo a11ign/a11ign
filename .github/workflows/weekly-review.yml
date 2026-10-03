@@ -45,4 +45,8 @@ jobs:
       - name: File this week's review row
         env:
           GH_TOKEN: ${{ github.token }}
+          # `row-file` refuses a plain clone, which is what a runner's checkout is (first dispatch, #3183). Its refusal
+          # protects a tree OTHER SESSIONS SHARE (#1352); a runner's is deleted when the job ends. The printed override
+          # is the one the refusal's own docs name for "CI's plain clone", not a way round the filing contract.
+          A11Y_POLICY_LAUNCH_REASON: ephemeral Actions runner, shares no tree with any session
         run: node scripts/weekly-review.mjs
