@@ -52,8 +52,8 @@ importers:
         specifier: ^26.6.3
         version: 26.6.3
       agent-org:
-        specifier: github:a11ign/agent-org#semver:^0.4.2
-        version: https://codeload.github.com/a11ign/agent-org/tar.gz/6e71155c9452365fff9bbc603628d85a612cec5e(typescript@6.0.3)
+        specifier: github:a11ign/agent-org#semver:^0.7.0
+        version: https://codeload.github.com/a11ign/agent-org/tar.gz/4283f7517b88480b61534288a72593ca5e23815f(typescript@6.0.3)
       eslint:
         specifier: ^10.5.0
         version: 10.5.0
@@ -881,9 +881,9 @@ packages:
     resolution: {integrity: sha512-RZNwNclF7+MS/8bDg70amg32dyeZGZxiDuQmZxKLAlQjr3jGyLx+4Kkk58UO7D2QdgFIQCovuSuZESne6RG6XQ==}
     engines: {node: '>= 6.0.0'}
 
-  agent-org@https://codeload.github.com/a11ign/agent-org/tar.gz/6e71155c9452365fff9bbc603628d85a612cec5e:
-    resolution: {gitHosted: true, tarball: https://codeload.github.com/a11ign/agent-org/tar.gz/6e71155c9452365fff9bbc603628d85a612cec5e}
-    version: 0.4.2
+  agent-org@https://codeload.github.com/a11ign/agent-org/tar.gz/4283f7517b88480b61534288a72593ca5e23815f:
+    resolution: {gitHosted: true, tarball: https://codeload.github.com/a11ign/agent-org/tar.gz/4283f7517b88480b61534288a72593ca5e23815f}
+    version: 0.7.0
     engines: {node: '>=22'}
     hasBin: true
     peerDependencies:
@@ -2305,7 +2305,7 @@ snapshots:
       - supports-color
     optional: true
 
-  agent-org@https://codeload.github.com/a11ign/agent-org/tar.gz/6e71155c9452365fff9bbc603628d85a612cec5e(typescript@6.0.3):
+  agent-org@https://codeload.github.com/a11ign/agent-org/tar.gz/4283f7517b88480b61534288a72593ca5e23815f(typescript@6.0.3):
     dependencies:
       typescript: 6.0.3
 

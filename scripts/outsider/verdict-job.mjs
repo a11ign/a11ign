@@ -90,7 +90,7 @@ export function filingPlan({ version, existingTitles }) {
 
 /**
  * The row's body: what failed, which run, and what is NOT being done about it. Born valid under the filing contract (a row that
- * fixes nothing in place declares its Region as none), which is why the diagnosis and the fix are the next row's.
+ * fixes nothing in place declares its Region as none, in the sentence `row-file`'s `declaresNoCommit` looks for), which is why the diagnosis and the fix are the next row's.
  * @param {{ version: string, tagSha: string, result: import("./verdict.mjs").OutsiderVerdict, outsiderRepository: string, runUrl: string }} input
  */
 export function regressionBody({ version, tagSha, result, outsiderRepository, runUrl }) {
@@ -105,7 +105,7 @@ export function regressionBody({ version, tagSha, result, outsiderRepository, ru
     "**This version is already on the registry**: a post-publish check cannot prevent THAT publish, and a version cannot be unpublished "
       + "after 72 hours. **It does not stop the next publish** (a fix is itself a release; ADR 0041 decision 3, ADR 0042 decision 4), "
       + "so the row asks for a diagnosis and a fix-forward, never a revert.", "",
-    "## Region", "", "none -- this row asks for a diagnosis; the fixing row's Region is written when the cause is known", "",
+    "## Region", "", "none -- its deliverable is not a commit: this row asks for a diagnosis; the fixing row's Region is written when the cause is known", "",
     "## Acceptance: none — the deliverable is the diagnosis on this row and the row that fixes it, filed `ready`", "",
     "## Open-check", "", "```",
     `$ gh issue list --repo ${PRODUCT_REPO} --state all --search "${regressionTitle(version)} in:title" --json number --jq length`,
