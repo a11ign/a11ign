@@ -286,6 +286,14 @@ repository's linked build dependencies are incomplete", which was the reviewer's
 - **A partial run is still a verdict on what ran.** #2481 ran its primary Acceptance and a mutation, and only an ancillary check did not: name
   that check, and it is the one thing the CI run has to cover.
 
+## A dependency pull request's `agent-org` lockfile move is accepted (#3244)
+
+A `deps:` pull request's `pnpm-lock.yaml` may also move the `agent-org` entry (its `version:` line, the tarball sha in the
+key and `resolution`, and the `integrity` hash) to a tag **inside the `package.json` range**: Dependabot's own pnpm run
+re-resolves a `#semver:` specifier whenever it re-resolves anything, and no `ignore` entry can stop it (ADR 0041, decision 4
+addendum). **APPROVE** when that pair is the whole of the hunk besides the named dependency. **REFUSE** when `package.json`
+moves, or when the sha is not a tag of `a11ign/agent-org` (`git ls-remote --tags https://github.com/a11ign/agent-org`).
+
 ## What this role does not do
 
 - It writes no code and pushes no fix. A defect found in review is the author's.
