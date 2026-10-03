@@ -27,6 +27,10 @@
 // permission). So the `pin` job REFUSES a run whose `sha` input is not the pinned one: a stale pin is a RED run
 // named for the version it did not test, never a green one for a version it did. Who refreshes the pin is the next
 // row's decision (the outside repository), and it is on #3181.
+// RULED (product-manager, #3182 done-when 7): Dependabot's `github-actions` ecosystem on the outside repository bumps
+// the pin, with no token. It bumps a sha pin reliably only with a trailing `# v<version>` comment, so
+// `--version=<version>` writes one (and no `--version` writes none: a comment naming a release the sha is not the tag
+// of would be false). The drift check, `--check` and `extractPinnedSha` all read past it.
 //
 // MEASURED 2026-10-03 as `a11ign-ai-workers`, and both measurements are READINGS AT A MOMENT:
 //
@@ -55,6 +59,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { VERSION_SHAPE } from "./verdict.mjs";
 import {
   extractDocumentedJobsBlock, pinActionRef, substituteTarget, extractJobName, extractPinnedSha,
   currentHeadSha, README_PATH,
@@ -99,8 +104,35 @@ const RESULT_SHAPE_FILTER = "(.verdict.findings | type == \"array\") and (.verdi
 /** `uses:` ref, `url` and `task` made equal, by the readers that substitute them -- so a comparison ignores only those. */
 const MASK = { ref: "<ref>", target: { url: "<url>", task: "<task>" } };
 
+/** The comment Dependabot reads to name the release a sha pin stands for: `uses: <action>@<sha> # v1.2.3`. */
+const PIN_VERSION_COMMENT = /^(\s*(?:- )?uses:\s*\S+@[0-9a-f]{40}) # v(\S+)$/m;
+
+/**
+ * Appends ` # v<version>` to the Action's pinned `uses:` line, and refuses one that already has a trailing comment
+ * (two would leave Dependabot reading whichever came first).
+ * @param {string} jobText a job whose `uses:` line `pinActionRef` has already pinned
+ * @param {string} version
+ * @returns {string}
+ */
+function annotatePin(jobText, version) {
+  if (!VERSION_SHAPE.test(version)) throw new Error(`${JSON.stringify(version)} is not a version this generator can name a pin for`);
+  const line = new RegExp(`^\\s*(?:- )?uses:\\s*\\S+@${extractPinnedSha(jobText)}(.*)$`, "m").exec(jobText);
+  if (!line) throw new Error("the Action's pinned `uses:` line cannot be found to annotate");
+  const [whole, rest] = line;
+  if (rest.trim()) throw new Error(`the Action's pin line already ends in ${JSON.stringify(rest.trim())}, so \`# v${version}\` cannot be its comment`);
+  return jobText.replace(whole, `${whole} # v${version}`);
+}
+
+/** @param {string} workflowText @returns {string | undefined} the version the committed pin line names, if it names one */
+function pinnedVersionOf(workflowText) {
+  return PIN_VERSION_COMMENT.exec(workflowText)?.[2];
+}
+
+/** @param {string} jobText @returns {string} the job with a pin line's `# v<version>` comment removed: a comment is not drift */
+const withoutPinComment = (jobText) => jobText.replace(PIN_VERSION_COMMENT, "$1");
+
 /** @param {string} jobText @returns {string} */
-const maskVariable = (jobText) => substituteTarget(pinActionRef(jobText, MASK.ref), MASK.target);
+const maskVariable = (jobText) => substituteTarget(pinActionRef(withoutPinComment(jobText), MASK.ref), MASK.target);
 
 /** @param {string} text @returns {string} the text, matched literally inside a RegExp (a YAML job key may hold `.` or `+`) */
 const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -178,7 +210,7 @@ function buildPinJob(pinnedSha) {
     "fi",
     "if [ \"$pinned\" != \"$tag_sha\" ]; then",
     "  echo \"::error::this file pins ${pinned}, which is not v${version} (${tag_sha}): regenerate it with\"",
-    "  echo \"::error::node scripts/outsider/generate.mjs --sha=${tag_sha} and commit it here. The run is red\"",
+    "  echo \"::error::node scripts/outsider/generate.mjs --sha=${tag_sha} --version=${version} and commit it here. The run is red\"",
     "  echo \"::error::rather than green because it would otherwise test a release it is not named for\"",
     "  exit 1",
     "fi",
@@ -303,14 +335,18 @@ function buildHeader() {
  * Pure end-to-end build: README text + the sha to pin -> the whole generated workflow.
  * @param {string} readmeText
  * @param {string} sha the release tag's FULL commit sha (`uses:` accepts no short one)
+ * @param {string} [version] the release that sha is the tag of: written as the pin's `# v<version>` comment, which is
+ *   what lets Dependabot's `github-actions` ecosystem bump the pin. Absent, no comment: a comment naming a version
+ *   the sha is not the tag of would be a false one
  * @returns {string}
  */
-export function generateOutsiderJob(readmeText, sha) {
+export function generateOutsiderJob(readmeText, sha, version) {
   if (!FULL_SHA_SHAPE.test(sha)) {
     throw new Error(`${JSON.stringify(sha)} is not a full 40-character commit sha, which is all \`uses:\` accepts`);
   }
   const fence = extractDocumentedJobsBlock(readmeText);
-  const targeted = substituteTarget(pinActionRef(fence, sha), OUTSIDER_TARGET);
+  const pinned = pinActionRef(fence, sha);
+  const targeted = substituteTarget(version === undefined ? pinned : annotatePin(pinned, version), OUTSIDER_TARGET);
   const jobName = extractJobName(targeted);
   const [, ...body] = targeted.split("\n");
   const substitutions = substitutionList({ readmeText, fence, targeted });
@@ -448,7 +484,7 @@ export function unifiedDiff({ expected, actual }) {
  */
 export function checkCommitted(readmeText, committedText) {
   const sha = readCommittedSha(committedText) ?? currentHeadSha();
-  const expected = generateOutsiderJob(readmeText, sha);
+  const expected = generateOutsiderJob(readmeText, sha, pinnedVersionOf(committedText));
   return committedText === expected ? { ok: true } : { ok: false, diff: unifiedDiff({ expected, actual: committedText }) };
 }
 
@@ -461,11 +497,12 @@ function readCommittedSha(committedText) {
   }
 }
 
-/** @returns {{ sha: string | undefined, check: boolean }} the flags, refusing any this command does not read */
+/** @returns {{ sha: string | undefined, version: string | undefined, check: boolean }} the flags, refusing any this command does not read */
 function flagsFromArgv() {
-  refuseUnknownFlags(["--check", "--sha="], { entry: import.meta.url, command: "node scripts/outsider/generate.mjs" });
+  refuseUnknownFlags(["--check", "--sha=", "--version="], { entry: import.meta.url, command: "node scripts/outsider/generate.mjs" });
   const argv = process.argv.slice(2);
-  return { sha: argv.find((arg) => arg.startsWith("--sha="))?.slice("--sha=".length), check: argv.includes("--check") };
+  const valueOf = (/** @type {string} */ flag) => argv.find((arg) => arg.startsWith(flag))?.slice(flag.length);
+  return { sha: valueOf("--sha="), version: valueOf("--version="), check: argv.includes("--check") };
 }
 
 function main() {
@@ -481,7 +518,7 @@ function main() {
     process.exitCode = 1;
     return;
   }
-  writeFileSync(OUT, generateOutsiderJob(readmeText, flags.sha ?? currentHeadSha()));
+  writeFileSync(OUT, generateOutsiderJob(readmeText, flags.sha ?? currentHeadSha(), flags.version));
   console.log(`WROTE  ${OUT}`);
 }
 

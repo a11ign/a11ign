@@ -67,7 +67,7 @@ jobs:
           fi
           if [ "$pinned" != "$tag_sha" ]; then
             echo "::error::this file pins ${pinned}, which is not v${version} (${tag_sha}): regenerate it with"
-            echo "::error::node scripts/outsider/generate.mjs --sha=${tag_sha} and commit it here. The run is red"
+            echo "::error::node scripts/outsider/generate.mjs --sha=${tag_sha} --version=${version} and commit it here. The run is red"
             echo "::error::rather than green because it would otherwise test a release it is not named for"
             exit 1
           fi

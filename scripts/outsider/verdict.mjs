@@ -34,7 +34,7 @@ export const WINDOW_MS = WINDOW_HOURS * HOUR_MS;
 const GREEN_CONCLUSIONS = ["success"];
 const RED_CONCLUSIONS = ["failure", "timed_out", "startup_failure", "action_required"];
 
-const VERSION_SHAPE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+export const VERSION_SHAPE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 const FULL_SHA_SHAPE = /^[0-9a-f]{40}$/;
 
 /**
