@@ -15,7 +15,7 @@
 // the next rename would split them again.
 //
 // NOT a claim about where the repository lives after any future transfer — it is what the name IS today.
-// `packages/agent-org/src/board-data.mjs` and `packages/agent-org/src/row-claim.mjs` import `REPO` from here rather than declaring their
+// `node_modules/agent-org/src/board-data.mjs` and `node_modules/agent-org/src/row-claim.mjs` import `REPO` from here rather than declaring their
 // own copy; every other reference is a literal (a `package.json` field, a workflow string, prose) that
 // cannot import anything, and `repo-identity-consolidated.test.ts` pins each one against these constants
 // instead.
