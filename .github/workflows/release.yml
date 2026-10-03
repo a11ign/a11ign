@@ -112,6 +112,9 @@ jobs:
       contents: read
     outputs:
       mode: ${{ steps.mode.outputs.mode }}
+      # Every non-private package's reading, as JSON: the SAME comparison that chose the mode, handed on so the
+      # publishing job's "never older than the registry" step reads it rather than writing a second one (#3167).
+      readings: ${{ steps.mode.outputs.readings }}
     steps:
       - uses: actions/checkout@v4
       - id: mode
@@ -147,8 +150,13 @@ jobs:
           # 0.0.0, because it sends any version the registry lacks. A package the registry has never heard of (E404)
           # counts as latest 0.0.0, so the 0.0.0 placeholder is never publishable. Any OTHER failure (a network error, a
           # 5xx) is CANNOT_TELL and fails this job: "could not ask" must never read as "not published", because the
-          # reading that follows from it is a publish. The reasoning goes to stderr (the log); stdout is the count.
-          ahead=$(node -e '
+          # reading that follows from it is a publish. The reasoning goes to stderr (the log); stdout is the readings.
+          # BEHIND is the other half of the same comparison, and it is why `readings` exists: the publish command sends
+          # EVERY package whose manifest version the registry lacks, so a manifest older than latest is published as an
+          # older version and, with no `--tag`, can move `latest` backwards, which cannot be undone (#3167). `plan` does not
+          # refuse on it (a behind manifest on `main` is expected until the move to 0.1.0, and would block the version pull
+          # request too); the publishing job's own step does, from this output.
+          readings=$(node -e '
             const fs = require("fs");
             const { execFileSync } = require("child_process");
             const fail = (message) => { console.error(`::error::CANNOT_TELL: ${message}`); process.exit(1); };
@@ -166,7 +174,7 @@ jobs:
                 return fail(`the registry did not answer for ${name}: ${error.stderr}`);
               }
             };
-            let ahead = 0;
+            const readings = [];
             for (const dir of fs.readdirSync("packages")) {
               const path = `packages/${dir}/package.json`;
               if (!fs.existsSync(path)) continue;
@@ -174,11 +182,14 @@ jobs:
               if (manifest.private) continue;
               const latest = latestOnRegistry(manifest.name);
               const isAhead = newer(triple(manifest.version), triple(latest));
+              const isBehind = newer(triple(latest), triple(manifest.version));
               console.error(`${isAhead ? "AHEAD of" : "not ahead of"} the registry: ${manifest.name}@${manifest.version} (latest there: ${latest})`);
-              if (isAhead) ahead += 1;
+              readings.push({ name: manifest.name, manifest: manifest.version, latest, state: isAhead ? "ahead" : isBehind ? "behind" : "level" });
             }
-            console.log(ahead);
+            console.log(JSON.stringify(readings));
           ')
+          ahead=$(jq '[.[] | select(.state == "ahead")] | length' <<< "$readings")
+          echo "readings=$readings" >> "$GITHUB_OUTPUT"
 
           if [ "$pending" -gt 0 ]; then mode=version-pr
           elif [ "$ahead" -gt 0 ]; then mode=publish
@@ -519,6 +530,31 @@ jobs:
             echo "changed on purpose, change it back in a reviewed commit, not here."
             exit 1
           fi
+
+      # NEVER PUBLISH A VERSION OLDER THAN THE REGISTRY'S LATEST (#3167). `plan` picks `publish` when ONE package is
+      # ahead, but `changeset publish` then sends EVERY package whose manifest version the registry lacks, and with no
+      # `--tag` an older version can move `latest` backwards, which cannot be undone. The readings are `plan`'s own
+      # (same comparison, same registry read, taken in this run under the `release` concurrency group), not a second
+      # one. It runs BEFORE `Publish`, and `release-never-publishes-older.test.ts` pins that order.
+      - name: Refuse to publish a package whose manifest is behind the registry's latest
+        if: needs.plan.outputs.mode == 'publish'
+        env:
+          READINGS: ${{ needs.plan.outputs.readings }}
+        run: |
+          node -e '
+            const readings = JSON.parse(process.env.READINGS || "null");
+            if (!Array.isArray(readings) || readings.length === 0) {
+              console.error("::error::CANNOT_TELL: the plan handed on no registry readings. Nothing published.");
+              process.exit(1);
+            }
+            for (const r of readings) console.log(`${r.state.toUpperCase()}: ${r.name}@${r.manifest} (latest on the registry: ${r.latest}, https://www.npmjs.com/package/${r.name})`);
+            const behind = readings.filter((r) => r.state === "behind");
+            if (behind.length > 0) {
+              const names = behind.map((r) => `${r.name}@${r.manifest} < ${r.latest}`).join(", ");
+              console.error(`::error::Behind the registry: ${names}. The publish step would send an older version and could move latest backwards. Nothing published.`);
+              process.exit(1);
+            }
+          '
 
       # NPM PROVENANCE, which ADR 0006 requires and nothing implemented.
       #
