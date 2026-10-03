@@ -106,6 +106,12 @@ export interface ConformanceScopeInput {
   browser?: string | null;
   /** Did the rule-based (axe) layer run? It owns the visual criteria this one cannot perceive. */
   ruleLayerRan: boolean;
+  /**
+   * The criteria the rule layer returned a verdict for (`axe.coverage`'s entries), when the caller can see them.
+   * With it requirement 1 states the run's own examined count, from the same source `criterionOutcomes` reads;
+   * absent, it can only state the screen-reader layer's reach and point at `outcomes`.
+   */
+  ruleLayerCovered?: readonly string[];
   /** Whether `census` counts distinct NAMES (comparable with the deduplicated sweep) or raw elements. */
   censusCountsDistinctNames?: boolean;
   /**
@@ -703,15 +709,40 @@ function conformanceLevel(input: ConformanceScopeInput): ConformanceRequirement 
       limitation: `${noLevel} ${outside} criteria were NOT assessed and are unchecked, not clean. ${NO_ALTERNATE_VERSION}`,
     };
   }
+  const reach = `The screen-reader layer and scorer can return a finding for ${assessed.size} of ${total} WCAG 2.2 `
+    + "A/AA success criteria; that is their reach, not a count of what this run examined. ";
+  if (input.ruleLayerCovered) return examinedLevel(input, assessed);
   return {
     number: 1,
     name: "Conformance Level",
-    establishes: `The screen-reader layer and scorer can return a finding for ${assessed.size} of ${total} WCAG 2.2 `
-      + "A/AA success criteria; that is their reach, not a count of what this run examined. The rule layer "
-      + "(axe-core) ran and covers further criteria, so the per-criterion outcomes give the run's own split.",
+    establishes: reach + "The rule layer (axe-core) ran and covers further criteria, so the per-criterion outcomes "
+      + "give the run's own split.",
     limitation: `${noLevel} ${outside} criteria are outside the screen-reader layer's reach: those the rule layer `
       + "covered are not shown to fail, and any neither layer covered are unchecked, not clean. "
       + NO_ALTERNATE_VERSION,
+  };
+}
+
+/**
+ * Requirement 1 when the rule layer's covered criteria are known: the exact examined figure. A criterion the
+ * screen-reader layer covers always comes back from `criterionOutcomes` with an outcome other than `untested`, so
+ * examined is that reach plus what only axe-core covered, and agrees with the `outcomes` tally by construction.
+ */
+function examinedLevel(input: ConformanceScopeInput, assessed: ReadonlySet<string>): ConformanceRequirement {
+  const covered = new Set(input.ruleLayerCovered);
+  const all = WCAG_22_AA.map((c) => c.num);
+  const bySrLayer = all.filter((n) => assessed.has(n)).length;
+  const byAxeOnly = all.filter((n) => !assessed.has(n) && covered.has(n)).length;
+  const examined = bySrLayer + byAxeOnly;
+  return {
+    number: 1,
+    name: "Conformance Level",
+    establishes: `This run examined ${examined} of ${all.length} WCAG 2.2 A/AA success criteria: ${bySrLayer} by the `
+      + `screen-reader layer and scorer (their reach) and ${byAxeOnly} further by the rule layer (axe-core) alone. `
+      + "The per-criterion outcomes give each one's result.",
+    limitation: "No conformance level is claimed or established. "
+      + `${all.length - examined} criteria were examined by neither layer and are unchecked, not clean; those only `
+      + `axe-core covered are not shown to fail. ${NO_ALTERNATE_VERSION}`,
   };
 }
 

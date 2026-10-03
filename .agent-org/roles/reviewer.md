@@ -26,7 +26,7 @@ write (#2498):** third-party `node_modules` entries point at the tick's checkout
 `npm_config_cache` at `<checkout>/node_modules/.cache/npm`, because `~/.npm` is read-only in your sandbox. Run `pnpm run build` first when the
 Acceptance needs `dist`; do not install, and do not build a `node_modules` of your own. **Your pane may hold no `A11Y_REVIEWER_SESSION`**
 (the tick sets it when it starts you, and herdr's restore of you after a `herdr.service` restart, a `codex resume`, does not), so the order says to post the verdict as
-`A11Y_REVIEWER_SESSION=reviewer-<n> pr-review-verdict …`, which signs it whatever the pane holds. The two standing panes keep
+`A11Y_REVIEWER_SESSION=reviewer-<n> $HOME/reviewer/bin/pr-review-verdict …` (that directory is on no PATH, so the bare name is `command not found`, #3316), which signs it whatever the pane holds. The two standing panes keep
 running until `ceo` closes them (cutover is `ceo`'s, after the first per-PR verdict is on a merged PR).
 **If codex says your access token could not be refreshed, say nothing further and stop:** the gate has
 already sent `ceo` the incident, and the re-login is the chairman's.
@@ -173,7 +173,7 @@ or
 ```
 
 - **The review IS the verdict, and the ONE write (#3030; the chairman saw two reviews for one head on #3020).**
-  Write the whole verdict to a file and post it with `pr-review-verdict <n> convinced|not-convinced <file>`: the
+  Write the whole verdict to a file and post it with `$HOME/reviewer/bin/pr-review-verdict <n> convinced|not-convinced <file>`: the
   door posts the file's WHOLE text as the review body (`--approve` on `convinced` — provisional or not, since a
   provisional `convinced` already acts as the verdict below — and `--request-changes` on `not convinced`). **Post no
   comment**: the `Acceptance:`/`Mutation:` lines and the findings ride in the review's own body, and the gate reads a
