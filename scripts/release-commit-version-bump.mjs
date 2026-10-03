@@ -18,13 +18,12 @@
  * consumed changeset markdown files already deleted from `.changeset`. This script's only job is to commit
  * exactly that diff and push it to the version branch.
  *
- * IT ADDS ONE EMPTY CHANGESET (`VERSION_NOTE`), because `ci.yml`'s `changeset` job runs `changeset status
- * --since` on every pull request that changes a published package, and `package.json` and `CHANGELOG.md`
- * always ship: measured on a simulated version commit, the bump alone exits 1 ("Some packages have been
- * changed but no changesets were found") and the version pull request could never merge. An empty
- * changeset answers it (`changeset add --empty`, the remedy that job itself names), exits 0, and releases
- * nothing: `release.yml` counts only changesets that name a release as PENDING, so the empty one does not
- * ask for another version pull request, and the next `changeset version` consumes it with the rest.
+ * IT ADDS NO CHANGESET (#3161). `ci.yml`'s `changeset` job runs `changeset status --since` on every pull request
+ * that changes a published package, and a version commit can never pass it on its own: `changeset version` consumes
+ * the changesets and always ships `package.json` and `CHANGELOG.md`. #3131 first answered with ONE EMPTY CHANGESET
+ * left in `.changeset/` after every release, a file whose only job was to satisfy a check. The job now skips its
+ * enforcement step for `VERSION_BRANCH` itself instead (and for that pull request's queue entry), so the version
+ * commit is exactly what `changeset version` made.
  *
  * FORCE-PUSHED, because nothing else writes the version branch and each run regenerates it from `main`'s
  * current tip: a fast-forward-only push would fail the second time `main` moved under an open version pull
@@ -41,7 +40,7 @@
  * rather than working around what it does.
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
@@ -51,10 +50,6 @@ const REPO = fileURLToPath(new URL("../", import.meta.url));
 
 /** The one branch the version pull request is opened from; `release.yml` names it in its `--head`. */
 export const VERSION_BRANCH = "release/version-packages";
-
-/** The empty changeset the version commit carries (see the header: it satisfies `changeset status --since`). */
-export const VERSION_NOTE = ".changeset/version-packages.md";
-const VERSION_NOTE_TEXT = "---\n---\n\nThe version pull request: it applies changesets that already said what they do to a consumer.\n";
 
 /**
  * Every path `release:version` can have touched, filtered to what actually exists right now.
@@ -92,7 +87,6 @@ function main() {
     return;
   }
   console.log(`release-commit-version-bump: committing this version bump to ${VERSION_BRANCH}:\n${pending}`);
-  writeFileSync(join(REPO, VERSION_NOTE), VERSION_NOTE_TEXT);
   git(["config", "user.name", "github-actions[bot]"]);
   git(["config", "user.email", "github-actions[bot]@users.noreply.github.com"]);
   git(["add", "-A", "--", ...paths]);

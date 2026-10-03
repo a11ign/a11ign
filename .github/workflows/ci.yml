@@ -310,8 +310,16 @@ jobs:
         run: |
           node scripts/dependency-changeset.mjs check --base=${{ needs.changed.outputs.base }} --since=${{ github.event.merge_group.base_sha }}
           echo "settled=true" >> "$GITHUB_OUTPUT"
+      # #3161: THE VERSION PULL REQUEST IS EXEMPT, BY ITS ONE BRANCH. `changeset version` consumes the changesets and
+      # always ships `package.json` and `CHANGELOG.md`, so `changeset status --since` exits 1 on a version commit and
+      # that pull request could never merge. `release.yml` opens it from `release/version-packages` (`VERSION_BRANCH`
+      # in `release-commit-version-bump.mjs`) and nothing else pushes there; the match is EXACT, not a prefix.
+      # `github.head_ref` is EMPTY on `merge_group`, whose ref is `gh-readonly-queue/...` and names no branch, so the
+      # queue entry is recognised by the squash message it inherits from the pull request title (`Version packages`,
+      # as `release.yml` creates it). That half is safe to key on a title: an entry only exists for a pull request
+      # that already passed this job on `pull_request`, where only the branch name exempts it.
       - name: A consumer-visible change must say what it does to a consumer
-        if: steps.precise.outputs.changeset == 'true' && steps.dependency.outputs.settled != 'true'
+        if: steps.precise.outputs.changeset == 'true' && steps.dependency.outputs.settled != 'true' && github.head_ref != 'release/version-packages' && !(github.event_name == 'merge_group' && startsWith(github.event.merge_group.head_commit.message, 'Version packages'))
         run: |
           if ! pnpm exec changeset status --since=${{ needs.changed.outputs.base }}; then
             echo "::error::This PR changes a published package and carries no changeset."
