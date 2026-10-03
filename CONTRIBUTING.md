@@ -97,6 +97,8 @@ To override it you must say why: `A11Y_SKIP_VERIFY_REASON="<why>" A11Y_SKIP_VERI
 `A11Y_SKIP_VERIFY=1` is **refused** — the reason is printed, so a deliberate skip is in the log rather
 than in somebody's memory.
 
+**A pull request is ready only when `pnpm run verify` is green, and a partial local run is not "passing" (#3210).** `verify` runs what CI's `gate` waits for: the tests your diff reaches (the selection `ci.yml` itself calls), lint and typecheck, every tree-wide guard, the cross-repo agent-org suite and the lint of your PR body (`--body-file=<draft>`), then writes a stamp for this head and body. `pnpm run test:changed`, `pnpm test` or "the affected files" each cover less, and CI's first run was red on 41 of 63 pull requests for exactly that gap (#928). The CI jobs `verify` cannot run, each with its reason, are `CI_ONLY` in `scripts/verify.mjs`.
+
 Commit messages here are longer than most projects'. They carry the measurement and the reasoning, because
 the git log is where the "why" survives after the diff stops being interesting. Match the surrounding style.
 

@@ -94,6 +94,7 @@ A unit is finished when a COMMAND says so, not when it looks right.
   the tree-walking guards always run). **Run `pnpm test` rather than `pnpm exec tsx --test <file>` when you changed
   another package's source**, since cross-package imports resolve to `dist` and only the `pretest` build keeps
   that honest. A row's own Acceptance command is the exception: run it exactly as written.
+- **A pull request is ready only when `pnpm run verify` is green; a partial local run is not "passing"** (#3210) — it runs what CI's `gate` waits for and stamps the head, so "not rerun: the full `test:org`" is not a completion.
 - `pnpm run lint` and `pnpm run typecheck` — zero errors, and CI gates on both.
 - `node -e "import('./path.mjs')"` for any `.mjs` you touched. Neither lint nor `tsc` catches a
   `ReferenceError` at import in `.mjs`.

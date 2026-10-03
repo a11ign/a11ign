@@ -200,7 +200,8 @@
     "worktree:stamp": "agent-org worktree:stamp",
     "test:org": "node packages/guards/src/assert-glob-not-empty.mjs \"packages/{agent-org,guards,lab,control}/src/**/*.test.ts\" --min=300 --run --runner=rstest ${A11Y_TEST_CONCURRENCY:+--test-concurrency=$A11Y_TEST_CONCURRENCY}",
     "test:all": "node packages/guards/src/assert-glob-not-empty.mjs \"packages/*/src/**/*.test.ts\" --min=500 --run --runner=rstest ${A11Y_TEST_CONCURRENCY:+--test-concurrency=$A11Y_TEST_CONCURRENCY}",
-    "test:changed": "node scripts/test-changed.mjs"
+    "test:changed": "node scripts/test-changed.mjs",
+    "verify": "node scripts/verify.mjs"
   },
   "dependencies": {
     "@a11ign/evidence": "0.0.0",
