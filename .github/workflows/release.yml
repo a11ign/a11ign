@@ -255,7 +255,7 @@ jobs:
           **Merging it IS the release**: on the push it makes, no changeset names a release and a package's version is
           ahead of the registry, so `release.yml` runs every guard and publishes.
 
-          It touches `packages/nvda-worker/{CHANGELOG.md,package.json}`, which `owned-path-signoff` guards. A version bump
+          It touches the NVDA worker package's version and changelog, which `owned-path-signoff` guards. A version bump
           writes a version and a changelog and nothing else, so each owned-path fact is stated as it stands:
 
           CAPTURE_PROTOCOL_VERSION: unchanged
