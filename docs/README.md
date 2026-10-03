@@ -98,6 +98,7 @@ needs them. The tool itself lives in [a11ign/agent-org](https://github.com/a11ig
 | doc | read it when |
 |---|---|
 | [`roles/worker-loop-orchestrator.md`](roles/worker-loop-orchestrator.md) | **who owns the worker loop, what they hand up, and the measurement that decides whether the split was right.** Created because one agent was the serial step and the measurement said which part |
+| [`chairman-messaging.md`](chairman-messaging.md) | you meet `messaging:watch`, `messaging:pair`, `messaging:listen` or `chairman:reply` and want to know whose they are: the optional chat channel to the chairman, **off until `.agent-org/project.json` carries a `messaging` key**, which waits for the bot-token file |
 | [`roles/orchestrator.md`](roles/orchestrator.md) | fleet, lab, `runs/`, gates — and why nothing is checked out in the primary |
 
 <!-- merge-queue proof, #63 step 4: this line is removed by the same PR that proves the queue. -->
