@@ -118,14 +118,35 @@ findings.
 
 ### The V1 rehearsal — a standing release gate, not a one-off (#813)
 
-**Before `publish-for-real` is typed, a session that built none of the release follows only the public
+**Before a release publishes, a session that built none of the release follows only the public
 documentation, from a fresh clone, against a site we do not own — and the release waits on the reading of
 what came back.** Not a smoke test: a smoke test asks whether the thing runs; this asks whether the report
 is worth a stranger's nine minutes, a judgement only somebody who did not build it can make.
 
-**Owner: whoever holds the publish.** Not a role that can be delegated to whoever is free — the gate's
-whole premise is that the runner supplies no context the public docs do not themselves give, and the
-person about to type `publish-for-real` is the one whose judgement the release is actually waiting on.
+**What confirms a release now (#3131, ADR 0041).** Nobody types anything. A merge to `main` that carries a
+changeset makes `.github/workflows/release.yml` open the ONE version pull request; that pull request waits
+for the approving review `main` requires (#2022) and the merge queue like any other; **its merge is what
+publishes**, by OIDC with provenance. The review and the queue are the confirmation, and they stand where a
+typed confirmation stood: that confirmation's job was stopping an accident. A `workflow_dispatch` of
+`release.yml` is a rehearsal and never publishes.
+
+**What nobody reads on a publish: the fleet part of the gate.** The runner proves 5 of `release:gate`'s 13
+stages (`release:gate:ci`); the other eight need the Python venv or the corpus. Under the typed
+confirmation a person was asserting those eight passed on the lab. **No person asserts them now, and no
+machine does yet**: `scripts/release-gate-scope.mjs` says so in the publishing run's log, every time, and
+the row that reads the fleet part's verdict by commit sha is #3136. Until it lands, "the release published"
+does not imply "the lab's stages passed"; run `pnpm run lab:job -e job=release-gate` and read it if you need
+that claim.
+
+**This gate still has teeth where a machine can enforce it.** `release:gate:ci` runs
+`check-rehearsal-currency.mjs` on the publishing run and refuses a commit not descended from the marker below,
+or one that changed something the rehearsal exercised since. That refusal comes at the publishing run, AFTER
+the version pull request merged, so the reading has to exist before that merge is approved.
+
+**Owner: whoever approves the version pull request.** Not a role that can be delegated to whoever is free —
+the gate's whole premise is that the runner supplies no context the public docs do not themselves give, and
+the reviewer about to approve the merge that publishes is the one whose judgement the release is actually
+waiting on.
 
 **Five requirements, and all five must hold or the run is not the gate:**
 

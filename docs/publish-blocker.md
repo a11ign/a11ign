@@ -45,9 +45,10 @@ $ grep -l 'npm publish\|changesets/action' .github/workflows/*.yml
 .github/workflows/release.yml
 ```
 
-Its job is named `release`, triggered only by `workflow_dispatch` (never a push or a schedule), and the
-publish step itself is gated on `inputs.dry-run == false && inputs.confirm == 'publish-for-real'` — see
-the workflow's own comments for why that double gate exists. **A trusted publisher (or a granular token's
+Its job is named `release`. Since #3131 it starts on a push to `main` (a merge carrying a changeset opens the
+version pull request; the push that pull request's merge makes is the one that publishes) and on
+`workflow_dispatch`, which is a rehearsal and never publishes. Nobody types a confirmation: the approving review
+`main` requires and the queue stand where it stood — see the workflow's own header for the seven guards. **A trusted publisher (or a granular token's
 repository restriction) must name `a11ign/a11ign`, workflow `release.yml`** — the POST-transfer, POST-
 rename location, per #72's own body — not the current `a11ign/a11ign`, which is where the
 repository lives only until #63 and #66 land.
