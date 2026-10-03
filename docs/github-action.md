@@ -17,7 +17,7 @@ jobs:
       contents: read
       pull-requests: write       # for the PR comment below; omit it and the report still runs, only quieter
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: a11ign/a11ign@v0.1.0
         # Pinned to v0.1.0, the first tagged release. Use the full 40-character commit SHA instead if
         # your CI must not move even across a release -- GitHub refuses an abbreviated one outright, it
@@ -28,7 +28,7 @@ jobs:
           task: Send an enquiry
       # Keep the evidence: the full result, transcript included. Guarded on the output existing, so a run
       # that failed does not also fail the upload. v0.1.0 has no `summary-md` output (see the Outputs table).
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always() && steps.a11ign.outputs.result-json != ''
         with:
           name: a11ign-result
@@ -447,7 +447,7 @@ jobs:
   a11ign:
     runs-on: windows-2022
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: a11ign/a11ign@c77c1ba0f65e94e0cef4fcdb8d3f3c7ac1be87fa   # a full commit SHA: no tag yet contains the login flow
         env:                                   # the credential enters HERE, from GitHub Secrets, and nowhere else
           APP_TEST_USER: ${{ secrets.APP_TEST_USER }}
@@ -514,7 +514,7 @@ file-writing call to prove it). The file has to exist on the runner, so **your o
 
 ```yaml
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Decode the saved state          # YOUR step: the Action never writes this file
         shell: bash
         env:
