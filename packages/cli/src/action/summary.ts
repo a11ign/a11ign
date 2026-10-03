@@ -140,6 +140,24 @@ export function documentsSpannedSentence(conformance: RunResult["conformance"]):
 const PARTIAL_EXAMINATION = new RegExp("(?:so this criterion rests on an examination known to be partial"
   + "|sweep stopped before the page did, so content past that point was never examined for this criterion)\\.$");
 
+/**
+ * Requirement 2's own sentence for an examination whose sweeps stopped before the page did -- #3295.
+ *
+ * READ, never rephrased, like `DOCUMENTS_SPANNED`: `@a11ign/evidence`'s `conformance.ts` writes it, and `summary.test.ts`
+ * drives the real producer. Capture group 1 is the producer's list of stopped sweeps, e.g. `focusOrder (cap)`.
+ * Run 37134253796 (gov.uk) carried it with a log that read `0 finding(s) (none)`.
+ */
+const EXAMINATION_INCOMPLETE = /Examination was INCOMPLETE — these sweeps stopped before the page did: (.*?)\. Elements beyond/s;
+
+/** The stopped sweeps Requirement 2 names, or null when it records a complete examination or there is no conformance. */
+export function incompleteExaminationSweeps(conformance: RunResult["conformance"]): string | null {
+  for (const requirement of conformance ?? []) {
+    const found = requirement.limitation?.match(EXAMINATION_INCOMPLETE);
+    if (found) return found[1];
+  }
+  return null;
+}
+
 /** How many undetermined criteria rest on an examination known to be partial. Zero with no outcomes at all. */
 export function partialExaminationCount(outcomes: RunResult["outcomes"]): number {
   return (outcomes ?? []).filter((o) => o.outcome === "cantTell" && PARTIAL_EXAMINATION.test(o.reason)).length;
@@ -431,9 +449,19 @@ export function logLines(result: RunResult, failOn: FailOn): string[] {
     lines.push("a11ign: this capture named MORE THAN ONE DOCUMENT -- its evidence was gathered across more "
       + "than one page (see the summary)");
   }
+  // #3295: both bound the count as surely as the lines above, and the docs promise a line before it for each.
+  const stopped = incompleteExaminationSweeps(result.conformance);
+  if (stopped) {
+    lines.push(`a11ign: examination INCOMPLETE -- these sweeps stopped before the page did: ${stopped}; `
+      + "elements beyond that point were never reached, so no finding or absence of one covers them");
+  }
   const partial = partialExaminationCount(result.outcomes);
   if (partial) {
     lines.push(`a11ign: ${partial} criteria rest on an examination known to be partial -- see the artifact`);
+  }
+  if (result.verdict.abstained) {
+    lines.push("a11ign: the scorer ABSTAINED -- this page is unlike the evidence it was validated on, so it scored "
+      + "nothing and the count below is not a clean result");
   }
   lines.push(`a11ign: ${findings.length} finding(s) (${breakdown})${left ? " in what was examined" : ""}; `
     + `fail-on=${failOn}`);
