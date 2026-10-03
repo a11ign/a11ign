@@ -14,37 +14,75 @@ name: reusable-acceptance
 # read-only token, which is the correct blast radius for "run whatever this PR says to run";
 # `pull_request_target` would run those same commands with the BASE repo's token and secrets, turning a
 # line in a PR description into arbitrary code execution with write credentials.
+# NO `pr-body` INPUT, DELIBERATELY (#3286). The caller used to hand in `github.event.pull_request.body`, which is the body
+# the EVENT carried, and a Dependabot pull request's `opened` event carries the body Dependabot opened with:
+# `dependency-pr-body` rewrites it seconds later, and a run that started first failed `ACCEPTANCE: MISSING` on a body
+# that was already fixed, which `gh run rerun` cannot clear because a rerun replays the same payload. The body check is
+# a statement about the body AS IT IS, so this job READS it, in a step of its own below.
 on:
   workflow_call:
-    inputs:
-      pr-body:
-        description: "The PR's own body text, containing its stated Acceptance: command(s). Adversarial input -- an author-controlled string, never trusted with write credentials. NOT required: GitHub's API returns null for an empty PR body, and a required workflow_call input rejects null -- defaulting to '' preserves the original job's MISSING outcome (acceptance-commands.mjs's own three-way contract) instead of failing the call itself before that script ever runs."
-        type: string
-        default: ""
 
-# CONTENTS: READ, AND NOTHING ELSE -- EXPLICITLY, not inherited. A `workflow_call` file that omits
+# CONTENTS: READ, PLUS `pull-requests: read` FOR THE ONE STEP THAT READS THE LIVE BODY (#3286) -- EXPLICITLY, not
+# inherited. A `workflow_call` file that omits
 # `permissions` inherits the CALLER's, which would be a widening invisible in THIS file's own diff -- the
 # sharpest new hazard this split introduces, because before it this job's permissions sat visibly beside
 # its steps in one file; after it they are visible only here, at the one place a reader would think to
 # look for the blast radius of "run whatever a stranger's PR body says". This job never writes anything.
+#
+# A job's `permissions` are the TOKEN's, not a step's, so what keeps the author's command from using `pull-requests: read`
+# is that the token is never handed to it: see the two steps below, and `acceptance-reads-the-live-body.test.ts`.
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   run:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      pull-requests: read
     steps:
       # NO `fetch-depth: 0` HERE, DELIBERATELY -- unlike `ts`, this job never runs `git diff`, so the
       # default shallow clone (depth 1) is correct and unchanged from the original job. Recorded because
       # the asymmetry is easy to "fix" by copy-pasting `ts`'s checkout without noticing why it differs.
+      #
+      # `persist-credentials: false` (#3286): the default writes this job's token into `.git/config`, where the
+      # author's command could read it back -- and with `pull-requests: read` above it would no longer be a
+      # `contents: read` token alone. The repository is public, so the unshallow fetch below needs none.
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: pnpm run build
+      # THE LIVE BODY, READ AS LATE AS THE STEPS BELOW ALLOW (#3286): after the install and the build, so the window
+      # against `dependency-pr-body`'s rewrite is this job's own setup time rather than the seconds after the event.
+      # It narrows the race and does not close it -- a read that precedes the rewrite still sees the old body.
+      #
+      # THIS IS THE ONLY STEP THAT HOLDS A TOKEN. The body is handed on as a step OUTPUT, which the two steps below
+      # take as `PR_BODY` data in `env:` and never as shell text. A failed read, or an empty body, FAILS the job with
+      # the reason: falling back to the event payload's body would reintroduce the stale read silently.
+      - name: Read the PR's LIVE body (#3286)
+        id: live-body
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          body="$(gh api "repos/${REPO}/pulls/${PR_NUMBER}" --jq '.body // ""')" || {
+            echo "::error::could not read the live body of ${REPO}#${PR_NUMBER}; refusing to fall back to the event payload's body"
+            exit 1
+          }
+          if [[ ! "$body" =~ [^[:space:]] ]]; then
+            echo "::error::the live body of ${REPO}#${PR_NUMBER} is empty; refusing to fall back to the event payload's body"
+            exit 1
+          fi
+          # A random delimiter, because the body is adversarial and a line equal to a fixed one would end the
+          # value early and let the rest write other step outputs.
+          delimiter="PR_BODY_$(openssl rand -hex 16)"
+          { echo "body<<${delimiter}"; printf '%s\n' "$body"; echo "${delimiter}"; } >> "$GITHUB_OUTPUT"
       # #497: DEEPEN THE CHECKOUT ONLY WHEN THE PR BODY ASKS FOR IT, via the SAME function
       # `acceptance-commands.mjs` uses to decide what to refuse -- `hasFullHistoryDeclaration`, imported
       # from the already-built module rather than re-typing the `History: full` regex a second time in
@@ -54,7 +92,7 @@ jobs:
       # no more than this job's own `contents: read` -- it never writes anything.
       - name: Deepen the checkout if the PR asks for full history (#497)
         env:
-          PR_BODY: ${{ inputs.pr-body }}
+          PR_BODY: ${{ steps.live-body.outputs.body }}
         run: |
           if node -e "
             import('agent-org/src/acceptance-commands.mjs').then((m) => {
@@ -71,5 +109,5 @@ jobs:
       # tracker-less, always. That constraint moves with the job, not just with the file.
       - name: Run the PR's own stated Acceptance command(s)
         env:
-          PR_BODY: ${{ inputs.pr-body }}
+          PR_BODY: ${{ steps.live-body.outputs.body }}
         run: pnpm exec agent-org acceptance-commands
