@@ -26,6 +26,8 @@ import { join } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { realpathSync } from "node:fs";
 import { refuseUnknownFlags } from "@a11ign/screenreader-fleet/cli-flags";
+import { assertNoLeakInArgv, leakRefusalReason } from "agent-org/src/lib/leak-patterns.mjs";
+import { pnpmCliInvocation } from "./npm-cli-executable.mjs";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const PRODUCT_REPO = "a11ign/a11ign";
@@ -288,7 +290,10 @@ export function recheckLastWeek({ body, comments, closed }) {
 // ---- reading GitHub and filing -------------------------------------------------------------------------
 
 /** @param {string[]} args @returns {string} */
-const gh = (args) => execFileSync("gh", args, { encoding: "utf8", cwd: REPO_ROOT, maxBuffer: MAX_GH_OUTPUT_BYTES });
+const gh = (args) => {
+  assertNoLeakInArgv("gh", args); // #1053: a body this script sends is checked where it is spawned, as every tracker writer's is
+  return execFileSync("gh", args, { encoding: "utf8", cwd: REPO_ROOT, maxBuffer: MAX_GH_OUTPUT_BYTES });
+};
 
 /** @param {string} jq @param {string[]} args */
 const ghJson = (jq, args) => JSON.parse(gh([...args, "--jq", jq]) || "null");
@@ -330,12 +335,15 @@ function recheck(last) {
 
 /** @param {string} title @param {string} body */
 function fileThroughRowFile(title, body) {
+  const leak = leakRefusalReason(body); // row-file reads a FILE, which `assertNoLeakInArgv` cannot see, so the text is checked here
+  if (leak) throw new Error(leak);
   const dir = mkdtempSync(join(tmpdir(), "weekly-review-"));
   try {
     const file = join(dir, "body.md");
     writeFileSync(file, body);
-    execFileSync("pnpm", ["exec", "agent-org", "row-file", `--session=${FILING_SESSION}`, "--ready", "--title", title,
-      "--body-file", file], { cwd: REPO_ROOT, stdio: "inherit" });
+    const { command, args } = pnpmCliInvocation(["exec", "agent-org", "row-file", `--session=${FILING_SESSION}`, "--ready",
+      "--title", title, "--body-file", file]);
+    execFileSync(command, args, { cwd: REPO_ROOT, stdio: "inherit" });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
