@@ -322,7 +322,7 @@ runs:
           exit 1
         fi
 
-    - uses: actions/setup-node@v4
+    - uses: actions/setup-node@v7
       with:
         node-version: ${{ inputs.node-version }}
         # #568: NO `cache:` HERE AT ALL -- two prior attempts at `cache: npm` with a `cache-dependency-path`
@@ -420,7 +420,7 @@ runs:
     # under this run's key would corrupt evidence exactly as silently as the browserVersion memo did.
     - name: Cache the NVDA install
       id: nvda-cache
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: ~\AppData\Local\guidepup
         key: a11ign-nvda-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'node_modules/@guidepup/guidepup/manifest.json') }}
@@ -498,7 +498,7 @@ runs:
     # than repeating them, so this key and that install can never separately drift from it.
     - name: Cache the scorer's Python wheels
       if: ${{ inputs.judge-backend == 'local' }}
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: ~\AppData\Local\pip\Cache
         key: a11ign-pip-${{ runner.os }}-${{ hashFiles('packages/scorer/requirements.txt') }}

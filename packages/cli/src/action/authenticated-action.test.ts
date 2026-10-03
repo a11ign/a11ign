@@ -102,7 +102,7 @@ test("the check runs BEFORE the runner is billed for setup: it precedes setup-no
   const names = action.runs.steps.map((candidate) => candidate.name ?? candidate.uses);
   const at = names.indexOf(CHECK().name);
   assert.ok(at >= 0);
-  for (const later of ["actions/setup-node@v4", "Install a11ign", "Set up NVDA", "Capture and judge"]) assert.ok(names.indexOf(later) > at, `${later} must come after the check`);
+  for (const later of ["actions/setup-node@v7", "Install a11ign", "Set up NVDA", "Capture and judge"]) assert.ok(names.indexOf(later) > at, `${later} must come after the check`);
 });
 
 test("NO new input is interpolated into a step's shell text: they arrive through env, because these are inputs of an action that handles secrets", () => {
