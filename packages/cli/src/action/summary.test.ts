@@ -712,3 +712,36 @@ test("#3297: a backtick, pipe or newline in a control name cannot break the mark
   assert.equal(out.split("Save 'draft'").length - 1, 1);
   assert.ok(!/Save 'draft' \| now\nbutton/.test(out));
 });
+
+test("#3297: a result holding ONLY stateChanges (a disclosure, no form probe) still lists the disclosure it pressed", () => {
+  const out = renderSummary(result({ interaction: { stateChanges: [{ control: "Disclosure, button", after: "open" }] } }));
+  assert.match(out, /What this run pressed on its own.*\n- pressed `Disclosure, button`/);
+  assert.ok(!out.includes("nothing pressed"));
+});
+
+test("#3297: a stateChanges entry is listed beside the form entries, and once when both channels name the control", () => {
+  const out = renderSummary(probed(
+    [{ control: "Search, button", kind: "submit", after: "x" }, { control: "Hide Section, button", kind: "taskButton", after: "y" }],
+    { stateChanges: [{ control: "Hide Section, button", after: "z" }, { control: "Menu, button", after: "open" }] },
+  ));
+  assert.equal(out.split("`Hide Section, button`").length - 1, 1);
+  assert.match(out, /- submitted `Search, button`/);
+  assert.match(out, /- pressed `Menu, button`/);
+});
+
+test("#3297: a toggle reads as toggled; the limit is exclusive, so exactly `limit` entries say nothing more", () => {
+  const toggled = renderSummary(probed([{ control: "Most viewed, radio button", kind: "toggle", after: "x" }]));
+  assert.match(toggled, /- toggled `Most viewed, radio button`/);
+  const exact = Array.from({ length: 3 }, (_, index) => ({ control: `Control ${index}, button`, kind: "submit", after: "x" }));
+  const out = renderSummary(probed(exact), { limit: 3 });
+  assert.ok(out.includes("Control 2, button") && !out.includes("more. The full list"));
+});
+
+test("#3297: the section stands apart from the line above it (a blank line before the heading)", () => {
+  const out = renderSummary(probed([{ control: "Search, button", kind: "submit", after: "x" }]));
+  assert.match(out, /\*\*Screen reader:\*\*[^\n]*\n\n\*\*What this run pressed on its own\*\*/);
+});
+
+test("#3297: an interaction holding neither channel is no probe record, so no section -- the control for the absence", () => {
+  assert.ok(!renderSummary(result({ interaction: {} })).includes("What this run pressed"));
+});

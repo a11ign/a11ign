@@ -652,12 +652,13 @@ const PRESS_VERB: Record<string, string> = { submit: "submitted", toggle: "toggl
  * DELIBERATELY A DIFFERENT HEADING from the authenticated list. That one is the WHOLE list ("presses only what its
  * files name"); this one is what the probes chose, so it claims no completeness and says they pressed on their own.
  * Control names only, never a value. Past `limit` the count of the rest is said, never dropped silently.
- * Empty (no section) when the capture holds no `formChanges` at all: the probes never ran, so nothing can be named.
+ * Empty (no section) when the capture holds neither `formChanges` nor `stateChanges`: the probes never ran, so nothing can
+ * be named. Either one alone is a probe record, because the disclosure probe writes `stateChanges` with no form probe at all.
  */
 function automaticPressLines(interaction: RunResult["interaction"], limit: number): string[] {
-  if (!Array.isArray(interaction?.formChanges)) return [];
+  if (!interaction || !(Array.isArray(interaction.formChanges) || Array.isArray(interaction.stateChanges))) return [];
   const entries = [
-    ...interaction.formChanges.map((change) => ({ control: change.control, verb: PRESS_VERB[change.kind ?? ""] ?? "pressed" })),
+    ...(interaction.formChanges ?? []).map((change) => ({ control: change.control, verb: PRESS_VERB[change.kind ?? ""] ?? "pressed" })),
     // A disclosure is pressed with no `probe-forms` gate, and records in `stateChanges` (the same control may be in both).
     ...(interaction.stateChanges ?? []).map((change) => ({ control: change.control, verb: "pressed" })),
   ];
