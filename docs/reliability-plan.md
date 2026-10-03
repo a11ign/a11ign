@@ -461,9 +461,12 @@ had been written. `release:provenance` still reports `CHANGELOG absent, so nothi
 **since #2162 it says nothing beyond that**, because `existsSync` cannot see a registry. The gloss it used
 to carry, `absent (never published)`, was a conclusion the check had no instrument for, and **the next
 sentence of this very paragraph is the counter-example**: `release.yml` ran `release:version` inside the
-job and nothing committed the result back, so **all seven versioned manifests still read `0.0.0`** — the seven public
-ones under `packages/`, which are exactly the set `changeset version` writes while
-`.changeset/config.json` sets `privatePackages.version` to `false` — and every
+job and nothing committed the result back, so the manifests kept reading `0.0.0` — until #3347 brought the four the
+registry holds to its number. **Four of the seven versioned manifests read `0.1.0`**, the version the registry holds
+(`a11ign`, `@a11ign/evidence`, `@a11ign/judge`, `@a11ign/scorer`), and the three never published
+(`@a11ign/documents`, `@a11ign/screenreader-fleet`, `@a11ign/screenreader-worker`) still read `0.0.0` (#3126 owns
+whether they move). The seven are the public ones under `packages/`, which are exactly the set `changeset version`
+writes while `.changeset/config.json` sets `privatePackages.version` to `false`. Every
 changeset that publish consumed is still in `.changeset/` (#1824; `release-commit-version-bump.mjs` fixes
 it and no real dispatch has exercised it yet).
 
@@ -478,7 +481,7 @@ release does not version and has never versioned.
 ```
 $ ls .changeset/*.md | grep -v README | wc -l   ->  90 pending      (a ROLLING count)
 $ ls .changeset/first-publish-*.md | wc -l      ->   6
-$ npx changeset status --verbose                 ->  7 versioned packages, all 0.0.0 -> 0.1.0
+$ npx changeset version (scratch copy, 2026-10-03) ->  a11ign, evidence, judge, scorer 0.1.0 -> 0.2.0; the three never published 0.0.0 -> 0.1.0
 $ npm view a11ign versions                       ->  0.1.0, live since 2026-09-19
 ```
 
@@ -492,7 +495,7 @@ announcing a first release, the rest describing work that landed after 0.1.0 rea
 `changeset publish` then skips
 the six packages already at 0.1.0, so that changelog would describe a version no consumer ever received.
 Correcting the base first, so the manifests read the versions actually published and the pending set lands
-at 0.2.0, is the other option. **Which of those a first changelog does is a call about what it says, not a
+at 0.2.0, is the other option — and #3347 took it for the four published packages. **Which of those a first changelog does is a call about what it says, not a
 tidy-up** — the same reason the original item 3 was a decision — and only `@a11ign/pdf`, never published,
 is unaffected either way.
 
