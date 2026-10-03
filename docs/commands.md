@@ -37,7 +37,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/prune-stale-workspace-scope.mjs` — remove a stale workspace-scope's node_modules symlinks a rename left behind
 - `node scripts/refuse-other-installers.mjs` — the root `preinstall`: refuses any installer that is not pnpm (#2897, row 10 of 10 of "Finish the move to pnpm")
 - `node scripts/registry-consumer-gate.mjs` — install what is PUBLISHED (a11ign from the registry) into an empty directory and refuse what a consumer could not run
-- `node scripts/release-commit-version-bump.mjs` — commit changeset version's manifest bump and consumed changesets back to main after a real publish
+- `node scripts/release-commit-version-bump.mjs` — commit changeset version's manifest bump and consumed changesets onto the version branch, never main
 - `node scripts/release-gate-scope.mjs` — warn which release:gate stages release:gate:ci does not run, and how many
 - `node scripts/release-print-versions.mjs` — print the version each published package's manifest now holds
 - `node scripts/release-publish-rehearsal.mjs` — rehearse the release's pnpm-to-npm publish hand-off for every published package, publishing nothing
@@ -47,3 +47,4 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/spotlight-exclude.mjs` — stop Spotlight indexing every git worktree on this machine
 - `node scripts/stale-dist-diagnosis.mjs` — augment a resolution failure naming a missing export or module with a stale-dist diagnosis
 - `node scripts/test-changed.mjs` — run only the tests a change can reach -- the local half of CI's scoped selection
+- `node scripts/weekly-review.mjs` — file this ISO week's "Weekly outsider review" row, built from RELEASE.md and docs/try-it.md and naming the sessions that are ineligible to do it

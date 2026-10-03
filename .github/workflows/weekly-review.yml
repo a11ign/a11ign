@@ -1,0 +1,48 @@
+name: Weekly outsider review
+
+# THE JUDGEMENT HALF OF THE V1 REHEARSAL: ONE ROW A WEEK, FILED BY A SCHEDULE, NEVER A GATE (chairman's
+# direction, #928; row #3183). A wall-clock event is the one thing a schedule is right for -- this does not
+# look for work, it files the week's review for a session that built none of the recent work to take.
+# `scripts/weekly-review.mjs` says what the row holds and why; `docs/weekly-review.md` is how a reviewer works.
+#
+# `schedule` AND `workflow_dispatch` ONLY. No `pull_request`: nothing in this file can be tripped by a change,
+# and a dispatch is idempotent (a second run in the same ISO week files nothing and says so).
+on:
+  schedule:
+    # Monday, OFF THE HOUR (#965: the :00 starts were ~5 h late four days running).
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read          # the checkout, which is where RELEASE.md and docs/try-it.md are READ from
+  issues: write           # the row, and the re-check comment on last week's. Nothing broader.
+
+concurrency:
+  # Two runs of the same week would race the idempotency check; the second waits and then files nothing.
+  group: weekly-review
+  cancel-in-progress: false
+
+jobs:
+  file:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: File this week's review row
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/weekly-review.mjs
