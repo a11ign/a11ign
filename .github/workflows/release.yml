@@ -310,10 +310,59 @@ jobs:
       contents: read
       pull-requests: write
 
+  # #3291: THE ROW THE VERDICT STEP'S CONTRACT PROMISES. A wait past the measured bound ("raise a row, do not skip") and a
+  # confirmed `regression` each stop the release, and nothing else would tell anyone: an overdue wait is otherwise a red
+  # run somebody must happen to see. This job files ONE row per release sha, idempotent by title, so a re-run of the failed
+  # `release` job finds the row and files none. It is NOT the publishing job: that one holds `contents: write` and
+  # `id-token: write`, and this one holds `issues: write` and `contents: read` and nothing else. No checkout, no install:
+  # it runs `gh` and nothing from the tree, so the one token that may write an issue never meets code from the repository.
+  # A rehearsal files nothing, because it publishes nothing and a dispatch on a branch has no release sha worth a row.
+  qualification-row:
+    needs: [plan, release]
+    if: failure() && needs.plan.outputs.mode == 'publish' && needs.release.outputs.row-title != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: File the row for this sha, unless it is already filed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ROW_TITLE: ${{ needs.release.outputs.row-title }}
+          ROW_LABELS: ${{ needs.release.outputs.row-labels }}
+          ROW_BODY: ${{ needs.release.outputs.row-body }}
+        run: |
+          set -euo pipefail
+          # The title is the row's identity. The search narrows, the exact comparison decides, and `--state all` means a
+          # row already closed still counts: ONE row per sha, never a second after the first was dealt with.
+          filed=$(gh issue list --state all --limit 100 --search "\"$ROW_TITLE\" in:title" --json title \
+            --jq '[.[] | select(.title == env.ROW_TITLE)] | length')
+          if [ "$filed" != "0" ]; then
+            echo "already filed: $ROW_TITLE"
+            exit 0
+          fi
+          label_args=()
+          IFS=',' read -ra labels <<< "$ROW_LABELS"
+          for label in "${labels[@]}"; do
+            # Create only what is missing: `gh label create --force` would repaint a label that exists.
+            present=$(LABEL="$label" gh label list --limit 1000 --json name --jq '[.[] | select(.name == env.LABEL)] | length')
+            if [ "$present" = "0" ]; then gh label create "$label"; fi
+            label_args+=(--label "$label")
+          done
+          gh issue create --title "$ROW_TITLE" --body "$ROW_BODY" "${label_args[@]}"
+
   release:
     needs: [plan, action-smoke, capture-regression, consumer-gate]
     if: needs.plan.outputs.mode == 'publish' || needs.plan.outputs.mode == 'rehearsal'
     runs-on: ubuntu-latest
+    # What the verdict step below decided, handed to `qualification-row` (#3291): the publishing job holds `contents: write`
+    # and `id-token: write` and must not also hold `issues: write`, so the row is filed by a job that holds nothing else.
+    # Empty `row-*` outputs mean no row.
+    outputs:
+      row-title: ${{ steps.qualification.outputs.row-title }}
+      row-labels: ${{ steps.qualification.outputs.row-labels }}
+      row-body: ${{ steps.qualification.outputs.row-body }}
     permissions:
       # `write` SINCE 2026-09-19, AND THE FIRST PUBLISH IS WHY. This read `read`, scoped deliberately so
       # the job could not push -- and `changeset publish` creates a git tag per published package, which
@@ -377,6 +426,9 @@ jobs:
       # failed jobs") once the lab has posted: the registry is the state, so `plan` reads the same answer again. It is
       # not polled here: a runner held for the ~92 minutes the worst measured cleared verdict takes would hold the
       # `release` concurrency group with it.
+      #
+      # A STOP THAT NEEDS A PERSON RAISES A ROW (#3291): `regression`, and a `wait` past the 92-minute bound. The step writes
+      # the row's title, labels and body as outputs and the `qualification-row` job files it; this job files nothing.
       #
       # A REHEARSAL REPORTS AND CONTINUES, because it publishes nothing and a dispatch on any branch would otherwise
       # always stop here. It is the one place this step is allowed to fail without stopping the job.
