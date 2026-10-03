@@ -564,6 +564,23 @@ jobs:
             }
           '
 
+      # #3180: TRUSTED PUBLISHING NEEDS npm 11.5.1 OR NEWER, and `actions/setup-node` with Node 22 ships npm 10.x. Without this
+      # step the first merge-triggered publish (#3131) has no credential: there is no `NODE_AUTH_TOKEN` below, npm's
+      # documented floor for the OIDC exchange is 11.5.1 (not re-measured here), and it would fail at the registry at
+      # the moment this file's header says nobody can check the result. No publish on record has used OIDC (every `_npmUser` is a person), so nothing had ever
+      # shown the gap. The floor is read back from the npm that is first on PATH, not assumed from the install, because
+      # that is the npm pnpm shells out to; `release-triggers-itself.test.ts` pins this step before `Publish` and runs
+      # the check against a fake npm below the floor.
+      # STAYS npm (#3180, pinned in `workflows-run-pnpm.test.ts`): `npm install -g` is the only way to upgrade npm itself; pnpm cannot.
+      - name: Upgrade npm to the trusted-publishing floor, and refuse below it
+        run: |
+          npm install -g "npm@^11.5.1"
+          have="$(npm --version)"
+          printf '%s\n%s\n' 11.5.1 "$have" | sort -V -C || {
+            echo "::error::npm $have is below 11.5.1, which trusted publishing needs. Nothing published."
+            exit 1
+          }
+
       # NPM PROVENANCE, which ADR 0006 requires and nothing implemented.
       #
       # That ADR lists it as one of "two operational requirements that are easy to forget and expensive to
@@ -583,7 +600,7 @@ jobs:
       # workspace). pnpm packs, then shells out to `npm publish <tarball>` with THE STEP'S environment, so
       # `NPM_CONFIG_PROVENANCE` below reaches the npm that signs -- proved by the rehearsal step after this one,
       # not assumed from the setting.
-      # THE ONE DELIBERATE npm IN THIS FILE (#2891, pinned in `workflows-run-pnpm.test.ts`): no step here spells `npm publish`,
+      # THE DELIBERATE npm HAND-OFF IN THIS FILE (#2891, pinned in `workflows-run-pnpm.test.ts`): no step here spells `npm publish`,
       # the hand-off to it happens inside pnpm, and it stays npm's because trusted publishing is bound to npm's OIDC and the
       # provenance is npm's to sign.
       - name: Publish
