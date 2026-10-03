@@ -301,6 +301,31 @@ jobs:
       - name: Every published manifest names the repository this run publishes from
         run: node scripts/manifest-repository-check.mjs
 
+      # NOT AN EIGHTH GUARD (#3126): a TEMPORARY HOLD that each move row's last step lifts, one package at a time, until
+      # `@a11ign/screenreader-worker`, `-fleet` and `@a11ign/documents` have released from their own repositories (ADR 0040).
+      # Real path only, and before the `access` read-back and `changeset publish`, so it goes red before any byte leaves.
+      - name: Hold -- refuse to publish packages whose own repositories have not released them
+        if: inputs.dry-run == false
+        env:
+          A11Y_CHECK_RELEASE_HOLD: "1"
+        run: |
+          set -o pipefail
+          # The runner's config path is read from its one owner, never spelled here: `entry-points.test.ts` treats any
+          # script path a workflow names as an entry point that must be inert on import, and the config is not one.
+          RSTEST_CONFIG="$(node -e 'import("./packages/guards/src/assert-glob-not-empty.mjs").then((m) => { if (m.RSTEST_CONFIG) console.log(m.RSTEST_CONFIG); else process.exit(1); })')" || RSTEST_CONFIG=""
+          if [ -z "$RSTEST_CONFIG" ]; then
+            echo '::error::CANNOT_TELL: could not read RSTEST_CONFIG, so the hold never ran. Nothing published.'
+            exit 1
+          fi
+          pnpm exec rstest run --config "$RSTEST_CONFIG" \
+            --include packages/lab/src/packaging/release-publishes-only-what-stays.test.ts \
+            --disableConsoleIntercept 2>&1 | tee "$RUNNER_TEMP/release-hold.log"
+          # A green exit is not a pass: the PASS line is printed only on the far side of the assertion.
+          grep -q 'RELEASE HOLD PASS' "$RUNNER_TEMP/release-hold.log" || {
+            echo '::error::CANNOT_TELL: the hold exited green but never printed RELEASE HOLD PASS. Nothing published.'
+            exit 1
+          }
+
       - name: Refuse to publish unless all seven guards agree
         if: inputs.dry-run == false
         run: |
