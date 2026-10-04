@@ -83,12 +83,22 @@
 name: release
 
 on:
-  # `paths` is what keeps `plan` off every merge that carries neither: a changeset is a file under
+  # `paths` is what keeps `plan` off every merge that carries none of the files below: a changeset is a file under
   # `.changeset/`, and the version pull request's merge changes a manifest, so every push this workflow
-  # acts on touches one of the two. Nothing is lost by the filter: the registry, not the push, is the state.
+  # PUBLISHES on touches one of those two. The registry, not the push, is the state, so a merge outside the filter
+  # loses no release.
+  #
+  # #3359: THE FILTER ALSO HAS TO NAME EVERY FILE THE VERSION COMMIT REWRITES, which is a second job. `version-pr`
+  # force-pushes `release/version-packages` as the product of `changeset version`, rebuilt on the head it ran at, and
+  # only a run this filter lets through rewrites it. The version commit changes the root `package.json` and
+  # `pnpm-lock.yaml` as well as each package's manifest (`versionBumpPaths`), so a later merge that moves either (a
+  # Dependabot bump of a root dependency lands daily) left the branch on its old base and the pull request
+  # CONFLICTING: #3353 sat on `931b660ab` through three merges, none of which ran this workflow. `plan` installs
+  # nothing, so the extra runs cost a checkout and two reads. `push-trigger-allowlist.test.ts` pins that every path
+  # `versionBumpPaths` names is matched here and that no catch-all is.
   push:
     branches: [main]
-    paths: [".changeset/**", "packages/*/package.json"]
+    paths: [".changeset/**", "package.json", "pnpm-lock.yaml", "packages/*/package.json"]
   workflow_dispatch:
     inputs:
       dry-run:
