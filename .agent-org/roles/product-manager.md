@@ -72,6 +72,9 @@ Three things, and they are all one thing seen from different distances.
   cannot make; the wording is kept there, not copied). A future product line is `parked`, not
   `needs:chairman`; a row a session could not clear goes to `ceo`. A machinery-set `needs:chairman` that
   fails the test is cleared here with the reason on the row (#2637, #2623).
+  Recording the chairman's answer on a row removes `needs:chairman` in the same turn, because the removal is the
+  act of answering (#3392); the wording is in `ceo.md`. Specific to this role: a merge close-out or claim report
+  on a row that still carries the label removes it too, and a non-blocking chore is a reminder in the row, never the label.
 
 ## Formal warning, 2026-09-08 (ceo)
 
