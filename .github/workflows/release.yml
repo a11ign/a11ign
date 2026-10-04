@@ -195,7 +195,11 @@ jobs:
             const newer = (a, b) => { for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i]; return false; };
             const latestOnRegistry = (name) => {
               try {
-                return execFileSync("npm", ["view", name, "version"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+                const latest = execFileSync("npm", ["view", name, "version"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+                // ADR 0040 reserves the name of each extracted package with `0.0.0-reserved.0`, and until that package releases it
+                // is the latest on the registry. It is a name held, not a release: the same footing as E404, so 0.0.0 stays
+                // unpublishable over it. Only that spelling is understood; any other prerelease is CANNOT_TELL (#3131).
+                return /^0\.0\.0-reserved\.\d+$/.test(latest) ? "0.0.0" : latest;
               } catch (error) {
                 if (/E404/.test(String(error.stderr))) return "0.0.0";
                 return fail(`the registry did not answer for ${name}: ${error.stderr}`);
