@@ -26,12 +26,12 @@ rem reports 0 phrases and reads like a broken capture path when the cause is a f
 rem The reason goes to the log the operator reads, and the exit code is recorded the same way a verdict is.
 if not exist "%FLT%" (
   echo [capture-check] ERROR: %FLT% not found under %CD% -- ForegroundLockTimeout cannot be re-applied, so the check was not run> capture-check.log
-  echo EXITCODE=1>> capture-check.log
+  >> capture-check.log echo EXITCODE=1
   exit /b 1
 )
 if not exist "%CAPTURE_CHECK%" (
   echo [capture-check] ERROR: %CAPTURE_CHECK% not found under %CD% -- the harness is missing, so the check was not run> capture-check.log
-  echo EXITCODE=1>> capture-check.log
+  >> capture-check.log echo EXITCODE=1
   exit /b 1
 )
 powershell -NoProfile -ExecutionPolicy Bypass -File "%FLT%" > capture-check-flt.log 2>&1
@@ -45,4 +45,4 @@ rem NOT %~dp0: capture-check.mjs lives in packages/lab, not beside this launcher
 rem sibling trick that fixes run-server.cmd does not apply here. It is found from the root the
 rem declaration names, which the `cd /d` above has already put us in.
 "%NODE_EXE%" "%CAPTURE_CHECK%" > capture-check.log 2>&1
-echo EXITCODE=%ERRORLEVEL%>> capture-check.log
+>> capture-check.log echo EXITCODE=%ERRORLEVEL%
