@@ -76,6 +76,7 @@ the direction where being wrong costs more.
 | Chief | `ceo` | [`ceo.md`](./ceo.md) | — |
 | Platform owner and code owner | `orchestrator` | [`orchestrator.md`](./orchestrator.md) | `ceo` |
 | Product loop | `product-manager` | [`product-manager.md`](./product-manager.md) | `ceo` |
+| Chairman liaison (persistent, never cleared; Telegram only; decides nothing, #3409) | `liaison` | [`liaison.md`](./liaison.md) | `ceo` |
 | Tracker audit | `tracker-auditor` | [`tracker-auditor.md`](./tracker-auditor.md) | `product-manager` |
 | Reviewer (revived 2026-09-12; external tool, GitHub is its inbox) | `reviewer` | [`reviewer.md`](./reviewer.md) | `ceo` |
 | Worker (retired #913; own file not yet swept) | `worker-audit` | [`worker-audit.md`](./worker-audit.md) | — |
