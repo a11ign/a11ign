@@ -150,8 +150,12 @@ function reportersFor(run) {
   const console = agent ? [["md", trimmed ? { preset: "compact", candidateFiles: false } : { preset: "normal" }]] : ["default"];
   /** @type {unknown[]} */
   const record = run.env.RSTEST_WORKER_ID && !run.env.A11Y_RSTEST_RECORD_DIR ? [] : [["json", { outputPath: runRecordPathFor(run) }]];
+  // #3572: `verify` reads the counts of the run it started from here. TOP-LEVEL RUNS ONLY, and under its own name rather than
+  // `A11Y_RSTEST_RECORD_DIR`: that variable is the switch that makes a run inside a worker record, and a test that spawns rstest
+  // (the suite has dozens) inherited it and left fourteen records beside the one `verify` meant to read.
+  const summary = run.env.A11Y_RSTEST_SUMMARY_FILE && !run.env.RSTEST_WORKER_ID ? [["json", { outputPath: run.env.A11Y_RSTEST_SUMMARY_FILE }]] : [];
   const verdict = agent ? [createVerdictReporter({ hint: trimmed ? `full report: ${FULL_REPORT_FLAG}=1` : undefined })] : [];
-  return /** @type {NonNullable<import("@rstest/core").RstestConfig["reporters"]> & unknown[]} */ ([...console, ...record, ...verdict]);
+  return /** @type {NonNullable<import("@rstest/core").RstestConfig["reporters"]> & unknown[]} */ ([...console, ...record, ...summary, ...verdict]);
 }
 
 /**

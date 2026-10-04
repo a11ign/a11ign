@@ -212,8 +212,8 @@ export function stampWording(base) {
 }
 
 /**
- * WHAT THE AFFECTED RUN MEANS, from the floor, the exit code and rstest's own run record. Pure, so each refusal has a test:
- * an include under its floor is REFUSED before any run; a run that exits non-zero fails; a run with no record is refused,
+ * WHAT THE AFFECTED RUN MEANS, from the floor, the exit code and rstest's own run summary. Pure, so each refusal has a test:
+ * an include under its floor is REFUSED before any run; a run that exits non-zero fails; a run with no summary is refused,
  * because without it "ran nothing" and "did not run" read alike; and ONLY a clean run of zero files is "no test reaches this diff".
  * @param {{ short: Array<{ pattern: string, matched: number }>, exit: number | null,
  *   summary: { testFiles: number, tests: number, failedFiles: number, failedTests: number } | null, base: string }} run
@@ -227,7 +227,7 @@ export function affectedVerdict({ short, exit, summary, base }) {
   }
   if (exit !== 0) return { status: "fail", line: `verify: the affected run exited ${exit} against ${base}` };
   if (summary === null) {
-    return { status: "fail", line: "verify: REFUSED -- the affected run left no run record, so what it ran is unknown" };
+    return { status: "fail", line: "verify: REFUSED -- the affected run left no run summary, so what it ran is unknown" };
   }
   if (summary.failedFiles > 0 || summary.failedTests > 0) {
     return { status: "fail", line: `verify: the run record counts ${summary.failedTests} failed tests in ${summary.failedFiles} files` };
@@ -239,30 +239,30 @@ export function affectedVerdict({ short, exit, summary, base }) {
 }
 
 /**
- * The counts rstest's `json` reporter wrote for a run into `dir` (the config writes one record per run, and
- * `A11Y_RSTEST_RECORD_DIR` points it here), or null, said aloud, when there is not exactly one readable record.
- * @param {string} dir
+ * The counts rstest's `json` reporter wrote to `file` for the run (`A11Y_RSTEST_SUMMARY_FILE`, which the config honours for
+ * the TOP-LEVEL run only: a test that spawns rstest inside a worker would otherwise leave records beside this one, and 14
+ * of them did on the first live run), or null, said aloud, when it is missing or not JSON.
+ * @param {string} file
  */
-export function readRunSummary(dir) {
-  const records = readdirSync(dir).filter((name) => name.endsWith(".json"));
-  if (records.length !== 1) {
-    console.error(`verify: expected one rstest run record in ${dir}, found ${records.length}`);
+export function readRunSummary(file) {
+  if (!existsSync(file)) {
+    console.error(`verify: rstest wrote no run summary to ${file}`);
     return null;
   }
   try {
-    return JSON.parse(readFileSync(join(dir, records[0]), "utf8")).summary ?? null;
+    return JSON.parse(readFileSync(file, "utf8")).summary ?? null;
   } catch (cause) {
-    console.error(`verify: the rstest run record ${records[0]} is not JSON: ${cause instanceof Error ? cause.message : cause}`);
+    console.error(`verify: the rstest run summary ${file} is not JSON: ${cause instanceof Error ? cause.message : cause}`);
     return null;
   }
 }
 
 /**
  * The `ts` step's tests: `rstest run --changed=<base>` through the config every other run uses, under `affectedVerdict`.
- * The floor is read BEFORE the run and the record AFTER it. `run` and `readSummary` are parameters so a test can drive both.
+ * The floor is read BEFORE the run and the summary AFTER it. `run` and `readSummary` are parameters so a test can drive both.
  * @param {{ base: string }} ctx
  * @param {(command: string, args: string[], where: { cwd: string, stdio: import("node:child_process").StdioOptions, env?: Record<string, string> }) => Promise<{ status: number | null }>} run
- * @param {(dir: string) => ReturnType<typeof readRunSummary>} readSummary
+ * @param {(file: string) => ReturnType<typeof readRunSummary>} readSummary
  * @returns {Promise<{ status: number }>}
  */
 export async function runAffectedSet({ base }, run, readSummary = readRunSummary) {
@@ -273,14 +273,15 @@ export async function runAffectedSet({ base }, run, readSummary = readRunSummary
   };
   const short = underFloor([AFFECTED_INCLUDE], AFFECTED_MIN_FILES);
   if (short.length > 0) return settle({ short, exit: null, summary: null, base });
-  const record = mkdtempSync(join(tmpdir(), "verify-affected-"));
+  const scratch = mkdtempSync(join(tmpdir(), "verify-affected-"));
+  const summaryFile = join(scratch, "summary.json");
   try {
     const { command, args } = pnpmCliInvocation(["exec", "rstest", "run", "--config", RSTEST_CONFIG,
       "--include", AFFECTED_INCLUDE, `--changed=${base}`]);
-    const { status } = await run(command, args, { cwd: REPO, stdio: "inherit", env: { A11Y_RSTEST_RECORD_DIR: record } });
-    return settle({ short, exit: status, summary: readSummary(record), base });
+    const { status } = await run(command, args, { cwd: REPO, stdio: "inherit", env: { A11Y_RSTEST_SUMMARY_FILE: summaryFile } });
+    return settle({ short, exit: status, summary: readSummary(summaryFile), base });
   } finally {
-    rmSync(record, { recursive: true, force: true });
+    rmSync(scratch, { recursive: true, force: true });
   }
 }
 
@@ -290,7 +291,7 @@ export async function runAffectedSet({ base }, run, readSummary = readRunSummary
  * (#3333). `run` is a parameter so a test can see that every command goes through the non-blocking runner.
  * @param {{ base: string }} ctx
  * @param {(command: string, args: string[], where: { cwd: string, stdio: import("node:child_process").StdioOptions, env?: Record<string, string> }) => Promise<{ status: number | null }>} [run]
- * @param {(dir: string) => ReturnType<typeof readRunSummary>} [readSummary]
+ * @param {(file: string) => ReturnType<typeof readRunSummary>} [readSummary]
  */
 export function runTs({ base }, run = shAsync, readSummary = readRunSummary) {
   const where = { cwd: REPO, stdio: /** @type {const} */ ("inherit") };
