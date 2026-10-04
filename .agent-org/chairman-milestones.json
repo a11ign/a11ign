@@ -1,6 +1,6 @@
 {
   "_what": "The moments the chairman is told about, once each (a11ign/a11ign#3422, chairman point 2 of #3409; read by `src/milestones.mjs` of a11ign/agent-org, A4). `ceo` owns this file: what counts is a reviewed diff, never an inference from labels or GitHub's own milestones. A moment already true when the file is first read is recorded as seen and NOT told. Each `what` is one plain sentence a person would say, not a row title.",
-  "_notYet": "Two moments the chairman named have no row to anchor to, so they are NOT declared here: the phases of version one, and the fleet proven on its first full green capture. A `when` is a row closed, a pull request merged or a release tagged; add each the day a row or tag defines it.",
+  "_notYet": "Not declared, on purpose (ceo, #3422): per-phase entries for version one, because the chairman ruled version one IS the whole repository split (2026-09-26), so the five moves and the two renames are its phases and `split-complete` is its end; and \"the fleet proven on its first full green capture\", which no row or tag defines. `fleet-first-job` is what IS a row and true on its close. A stronger statement is a NEW row with a definition, not a wording change: `ceo` files it if the chairman asks. A `when` is a row closed, a pull request merged or a release tagged.",
   "milestones": [
     {
       "key": "split-move-1",
@@ -41,6 +41,16 @@
       "key": "first-release",
       "what": "The first a11ign release since the first publish has gone out.",
       "when": { "row": 3130, "closed": true }
+    },
+    {
+      "key": "fleet-first-job",
+      "what": "The fleet has run its first job from the split's layer checkouts.",
+      "when": { "row": 3397, "closed": true }
+    },
+    {
+      "key": "split-complete",
+      "what": "The repository split is complete: version one is done.",
+      "when": { "row": 69, "closed": true }
     }
   ]
 }
