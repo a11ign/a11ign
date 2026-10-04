@@ -142,17 +142,34 @@ jobs:
             exit 0
           fi
 
-          # PENDING means a changeset that NAMES A RELEASE (`"pkg": minor` in its frontmatter). The version pull
-          # request carries one EMPTY changeset (`release-commit-version-bump.mjs` says why), and counting it
-          # would ask for a version pull request after every version pull request, for ever.
-          pending=0
-          for file in .changeset/*.md; do
-            [ "$(basename "$file")" = "README.md" ] && continue
-            if awk '/^---[[:space:]]*$/ { fences++; next } fences == 1' "$file" \
-              | grep -Eq ':[[:space:]]*(major|minor|patch)[[:space:]]*$'; then
-              pending=$((pending + 1))
-            fi
-          done
+          # PENDING means a changeset that NAMES A RELEASE of a package `changeset version` will version
+          # (`"pkg": minor` in its frontmatter, `pkg` not `private`). The version pull request carries one EMPTY
+          # changeset (`release-commit-version-bump.mjs` says why), and counting it would ask for a version pull
+          # request after every version pull request, for ever. A PRIVATE-ONLY changeset is the same trap from the
+          # other side: `privatePackages: { version: false }` makes `changeset version` consume none of them, so
+          # counting them kept `pending > 0` for ever and `mode=publish` was unreachable (#3369: 67 files, run
+          # 37165118081). A name no manifest answers to counts: it is not provably private, and `changeset version`
+          # in the version pull request is where an unknown name fails loudly.
+          pending=$(node -e '
+            const fs = require("fs");
+            const isPrivate = new Map();
+            for (const dir of fs.readdirSync("packages")) {
+              const path = `packages/${dir}/package.json`;
+              if (!fs.existsSync(path)) continue;
+              const manifest = JSON.parse(fs.readFileSync(path, "utf8"));
+              isPrivate.set(manifest.name, manifest.private === true);
+            }
+            const release = /^["\x27]?(.+?)["\x27]?\s*:\s*(major|minor|patch)\s*$/;
+            const namesPublicRelease = (file) => {
+              const [, frontmatter = ""] = fs.readFileSync(`.changeset/${file}`, "utf8").split(/^---[ \t]*$/m);
+              return frontmatter.split("\n").some((line) => {
+                const named = release.exec(line.trim());
+                return named !== null && isPrivate.get(named[1]) !== true;
+              });
+            };
+            const files = fs.readdirSync(".changeset").filter((file) => file.endsWith(".md") && file !== "README.md");
+            console.log(files.filter(namesPublicRelease).length);
+          ')
           echo "changesets naming a release: $pending"
 
           # AHEAD means STRICTLY NEWER than the registry's latest for that package, never merely "not on the registry":
