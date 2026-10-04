@@ -45,7 +45,7 @@ export const QUALIFICATION_CONTEXT = "qualification";
 // every `packages/*` directory is classified, so adding one fails there rather than at a release.
 export const FLEET_GATED_PACKAGES = ["lab", "worker-fleet", "evidence", "nvda-worker", "control"];
 // Gated by runner-only or corpus-only stages that need no worker. `nvda-speech` is private and never published.
-export const RUNNER_ONLY_PACKAGES = ["scorer", "judge", "guards", "cli", "pdf"];
+export const RUNNER_ONLY_PACKAGES = ["scorer", "judge", "guards", "cli"];
 export const PRIVATE_PACKAGES = ["nvda-speech"];
 
 // The wall-clock after which a wait is a problem to raise rather than a state to sit in: #3132's worst observed time

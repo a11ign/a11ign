@@ -80,8 +80,8 @@ importers:
   packages/cli:
     dependencies:
       '@a11ign/documents':
-        specifier: 0.1.0
-        version: link:../pdf
+        specifier: ^0.1.0
+        version: 0.1.0
       '@a11ign/evidence':
         specifier: 0.2.0
         version: link:../evidence
@@ -173,12 +173,6 @@ importers:
         specifier: 0.2.0
         version: link:../evidence
 
-  packages/pdf:
-    dependencies:
-      pdf-lib:
-        specifier: ^1.17.1
-        version: 1.17.1
-
   packages/scorer:
     dependencies:
       '@a11ign/evidence':
@@ -205,6 +199,10 @@ importers:
         version: 2.9.1
 
 packages:
+
+  '@a11ign/documents@0.1.0':
+    resolution: {integrity: sha512-LeL53lM09iXFMKBPtEgevHGM0VMTv+c9HtWwMnCNtJ14f2sSswGFXMO/1i5Q5tKkk0EgVj+Tq5tqeAJN25izSw==}
+    engines: {node: '>=20'}
 
   '@anthropic-ai/sdk@0.129.0':
     resolution: {integrity: sha512-MH7LB20kNpGLUpPTe2OG5XvL/KhX8HUO9XyBaFjgFk6TLS4Xjt0VPIuMKywe7POKKPslX+QxSlVok9e+8kG5Nw==}
@@ -1686,6 +1684,10 @@ packages:
     resolution: {integrity: sha512-CgaU0/PPjCAIEZ3WQroosOxTY3eeKldAN3h+vk8pMNz4+jl1CZzBR4pW+K/rRPF112VooCL5FdjJoiMNjDrL2A==}
 
 snapshots:
+
+  '@a11ign/documents@0.1.0':
+    dependencies:
+      pdf-lib: 1.17.1
 
   '@anthropic-ai/sdk@0.129.0':
     dependencies:
