@@ -19,11 +19,20 @@
 // GREEN only for the head and body it was made for, and only when EVERY step is there and passed. `pr:open` reads
 // it; `--check` prints the same verdict without running anything.
 //
+// THE `agentOrg` STEP RUNS BESIDE `ts` (#3333). CI runs its jobs in parallel and this ran them one after another, which
+// made it slower than CI on all three pull requests measured. The step works in a detached worktree of the head in a
+// scratch directory, so nothing it writes is under the author's tree and the tree-walking guards inside `ts` never read
+// it. The cost: it tests the COMMITTED head, so an author's uncommitted edit is not in it (a stamp on a dirty tree is
+// never green anyway).
+//
 // WALL TIME is printed beside CI's median as a measurement and not a target (chairman, #3210). If this is slower
 // than CI, that is the next row, not a reason to drop a step.
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cpSync, existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -172,13 +181,24 @@ function inOrder(commands) {
   return "pass";
 }
 
-/** @param {{ base: string }} ctx */
-function runTs({ base }) {
-  return inOrder([
-    () => pnpm(["run", "docs:coverage"]),
-    () => pnpm(["run", "lint"]),
-    () => pnpm(["run", "typecheck"]),
-    () => sh("node", ["scripts/test-changed.mjs", `--base=${base}`]),
+/**
+ * `ts` must not block the event loop: `agentOrg` runs beside it as a chain of promises, and a `spawnSync` here freezes
+ * every one of them until `ts` returns, which made the two run one after the other with the step merely STARTED early
+ * (#3333). `run` is a parameter so a test can see that every command goes through the non-blocking runner.
+ * @param {{ base: string }} ctx
+ * @param {(command: string, args: string[], where: { cwd: string, stdio: import("node:child_process").StdioOptions }) => Promise<{ status: number | null }>} [run]
+ */
+export function runTs({ base }, run = shAsync) {
+  const where = { cwd: REPO, stdio: /** @type {const} */ ("inherit") };
+  const pnpmAsync = (/** @type {string[]} */ pnpmArgs) => {
+    const { command, args } = pnpmCliInvocation(pnpmArgs);
+    return run(command, args, where);
+  };
+  return inOrderAsync([
+    () => pnpmAsync(["run", "docs:coverage"]),
+    () => pnpmAsync(["run", "lint"]),
+    () => pnpmAsync(["run", "typecheck"]),
+    () => run("node", ["scripts/test-changed.mjs", `--base=${base}`], where),
   ]);
 }
 
@@ -271,56 +291,37 @@ function provisionAgentOrg() {
   return dir;
 }
 
-const AGENT_ORG_DIR = join(REPO, "packages/agent-org");
-const AGENT_ORG_FIXTURE = join(REPO, "packages/lab/src/packaging/board-document-chrome-resolver.test.ts");
+/** What the staging step writes, under `root`: the tool's directory, and the one fixture whose import it respells. */
+const agentOrgPaths = (/** @type {string} */ root) => ({
+  toolDir: join(root, "packages/agent-org"),
+  fixture: join(root, "packages/lab/src/packaging/board-document-chrome-resolver.test.ts"),
+});
 
 /**
- * CI's `agentOrg` job, step for step, on a throwaway copy of the tool at the ref `ci.yml` names. It is a copy of
- * `a11ign/agent-org` placed at `packages/agent-org` and an edit of one fixture's import, so both are undone in
- * `finally`: the fixture is restored from a byte copy (never `git checkout --`, which would take the author's own
- * uncommitted edit with it) and the staged directory is removed.
- * @param {string} ciYml
+ * WHERE THE `agentOrg` STEP WORKS: a detached worktree of the author's head, in a scratch directory OUTSIDE the author's
+ * tree. The step lays the tool at `packages/agent-org` and edits one fixture's import, and the tree-walking guards
+ * inside `ts` read the author's `packages/`: staged in place the two could not overlap (#3333). Everything it writes is
+ * under `clone`, so `ts` runs beside it, and the `git status --porcelain` read at the end of a run has nothing to find.
+ * @param {string} scratch
  */
-function runAgentOrg(ciYml) {
-  const staging = agentOrgStaging(ciYml);
-  if (!staging) {
-    console.error("verify: ci.yml's agentOrg job no longer has the AGENT_ORG_REF and `cp -r` lines this step reads");
-    return "fail";
-  }
-  const toolRepo = provisionAgentOrg();
-  if (!toolRepo) return "fail";
-  const scratch = mkdtempSync(join(tmpdir(), "verify-agent-org-"));
-  const fixtureCopy = join(scratch, "fixture.test.ts");
-  cpSync(AGENT_ORG_FIXTURE, fixtureCopy);
-  try {
-    return inOrder([
-      () => sh("git", ["-C", toolRepo, "fetch", "--quiet", "origin", staging.ref]),
-      () => stageAgentOrg({ toolRepo, scratch, copied: staging.copied }),
-      () => sh("node", ["--import", "tsx", "--test", "packages/agent-org/src/**/*.test.ts",
-        "packages/agent-org/src/**/*.test.mjs"]),
-    ]);
-  } finally {
-    cpSync(fixtureCopy, AGENT_ORG_FIXTURE);
-    sh("git", ["reset", "-q", "--", "packages/agent-org"], { stdio: "ignore" });
-    rmSync(AGENT_ORG_DIR, { recursive: true, force: true });
-    rmSync(scratch, { recursive: true, force: true });
-  }
+export function agentOrgLayout(scratch) {
+  const clone = join(scratch, "tree");
+  return { clone, ...agentOrgPaths(clone) };
 }
 
 /**
  * Lays the tool out as `packages/agent-org` under `root`, the way CI's `agentOrg` job does, and leaves NOTHING of its
  * test suite out: what the staged copy runs is what the tool's own tests are, so a file dropped here is a test CI runs
  * and `verify` does not. `root` is a parameter so a test can stage into a throwaway tree and read the result (#3329).
- * @param {{ toolRepo: string, scratch: string, copied: string[], root?: string }} staging
+ * @param {{ toolRepo: string, scratch: string, copied: string[], root?: string, stdio?: import("node:child_process").StdioOptions, commit?: string }} staging
  */
-export function stageAgentOrg({ toolRepo, scratch, copied, root = REPO }) {
+export function stageAgentOrg({ toolRepo, scratch, copied, root = REPO, stdio = "inherit", commit = "FETCH_HEAD" }) {
   const tarball = join(scratch, "tool.tar");
-  const dest = join(root, "packages/agent-org");
-  const fixture = join(root, "packages/lab/src/packaging/board-document-chrome-resolver.test.ts");
-  const here = (/** @type {string} */ command, /** @type {string[]} */ args) => sh(command, args, { cwd: root });
+  const { toolDir: dest, fixture } = agentOrgPaths(root);
+  const here = (/** @type {string} */ command, /** @type {string[]} */ args) => sh(command, args, { cwd: root, stdio });
   rmSync(dest, { recursive: true, force: true });
   const steps = [
-    () => here("git", ["-C", toolRepo, "archive", "--format=tar", `--output=${tarball}`, "FETCH_HEAD", ...copied]),
+    () => here("git", ["-C", toolRepo, "archive", "--format=tar", `--output=${tarball}`, commit, ...copied]),
     () => here("mkdir", ["-p", dest]),
     () => here("tar", ["-xf", tarball, "-C", dest]),
     () => here("rsync", ["-a", "--ignore-existing", "--exclude=*.test.ts", "--exclude=*.test.mjs",
@@ -333,19 +334,135 @@ export function stageAgentOrg({ toolRepo, scratch, copied, root = REPO }) {
 }
 
 /**
+ * A hybrid `node_modules` for the clone, which has none: every entry links to where the author's tree gets it, and
+ * `@a11ign/*` is relinked with the SAME relative targets, so inside the clone they reach the clone's own `packages/`
+ * and not the author's (docs/operational-lessons.md#resolves-to-dist-does-not-say-whose). No build runs: CI's job has none.
+ * @param {{ from: string, to: string }} dirs
+ */
+export function linkNodeModules({ from, to }) {
+  mkdirSync(join(to, "@a11ign"), { recursive: true });
+  for (const entry of readdirSync(from, { withFileTypes: true })) {
+    if (entry.name === "@a11ign") continue;
+    const path = join(from, entry.name);
+    symlinkSync(entry.isSymbolicLink() ? resolve(from, readlinkSync(path)) : path, join(to, entry.name));
+  }
+  for (const link of readdirSync(join(from, "@a11ign"))) {
+    symlinkSync(readlinkSync(join(from, "@a11ign", link)), join(to, "@a11ign", link));
+  }
+  return { status: 0 };
+}
+
+/**
+ * Like `sh`, without blocking, and with output into `log`: a step that runs beside another must not interleave its
+ * lines with it, so the output is printed whole at the step's turn.
+ * @param {string} command
+ * @param {string[]} args
+ * @param {{ cwd: string, stdio: import("node:child_process").StdioOptions }} where
+ * @returns {Promise<{ status: number | null }>}
+ */
+export function shAsync(command, args, { cwd, stdio }) {
+  return new Promise((done) => {
+    const child = spawn(command, args, { cwd, env: sandboxGitEnv(), stdio });
+    child.on("error", (cause) => {
+      console.error(`verify: could not start ${command}: ${cause.message}`);
+      done({ status: null });
+    });
+    child.on("close", (status) => done({ status }));
+  });
+}
+
+/** Commands run in order, stopping at the first that fails. @param {Array<() => { status: number | null } | Promise<{ status: number | null }>>} commands */
+async function inOrderAsync(commands) {
+  for (const command of commands) if ((await command()).status !== 0) return "fail";
+  return "pass";
+}
+
+/**
+ * Fetches the tool's `ref` and answers with the COMMIT it was, so what is archived later is that commit and not whatever
+ * `FETCH_HEAD` says by then: the checkout is shared (every session's `verify` and the tool's own workers fetch into
+ * it), a plain `git fetch origin` rewrites `FETCH_HEAD` with its first line a branch, and the archive minutes later
+ * was of an old one -- 39 failures of tests the tool had since deleted. Fetching by the ID is what makes it ours.
+ * @param {{ toolRepo: string, ref: string, log: number }} where
+ * @returns {{ status: number | null, commit: string }}
+ */
+export function pinTool({ toolRepo, ref, log }) {
+  const git = (/** @type {string[]} */ ...args) =>
+    spawnSync("git", ["-C", toolRepo, ...args], { encoding: "utf8", env: sandboxGitEnv(), stdio: ["ignore", "pipe", log] });
+  const commit = git("ls-remote", "origin", ref).stdout.split(/\s/)[0] || ref;
+  return { status: git("fetch", "--quiet", "origin", commit).status, commit };
+}
+
+/**
+ * CI's `agentOrg` job, step for step, in a clone of `repo`'s head: the tool at the ref `ci.yml` names laid at
+ * `packages/agent-org`, the project's packaging siblings beside its tests, one fixture's import respelled, and the
+ * tool's own runner. Nothing is written under `repo`. `repo` is a parameter so a test can run it on a throwaway one.
+ * @param {{ repo: string, toolRepo: string, ref: string, copied: string[], scratch: string, log: number }} job
+ */
+export async function runAgentOrgInClone({ repo, toolRepo, ref, copied, scratch, log }) {
+  const { clone } = agentOrgLayout(scratch);
+  let commit = ref;
+  const at = (/** @type {string} */ cwd) => ({ cwd, stdio: /** @type {import("node:child_process").StdioOptions} */ (["ignore", log, log]) });
+  try {
+    return await inOrderAsync([
+      () => { const pinned = pinTool({ toolRepo, ref, log }); commit = pinned.commit; return pinned; },
+      () => shAsync("git", ["worktree", "add", "--quiet", "--detach", clone, "HEAD"], at(repo)),
+      () => linkNodeModules({ from: join(repo, "node_modules"), to: join(clone, "node_modules") }),
+      () => stageAgentOrg({ toolRepo, scratch, copied, root: clone, stdio: ["ignore", log, log], commit }),
+      () => shAsync("node", ["--import", "tsx", "--test", "packages/agent-org/src/**/*.test.ts",
+        "packages/agent-org/src/**/*.test.mjs"], at(clone)),
+    ]);
+  } finally {
+    await removeClone({ repo, clone, log });
+  }
+}
+
+/**
+ * The link directory goes first and by itself: removing it with the worktree would be asking git not to follow links
+ * into the author's `node_modules`, and what it does there is its own business. `git worktree remove` names OUR clone;
+ * a bare `git worktree prune` would also take every other session's entry whose directory is momentarily away.
+ * @param {{ repo: string, clone: string, log: number }} where
+ */
+async function removeClone({ repo, clone, log }) {
+  rmSync(join(clone, "node_modules"), { recursive: true, force: true });
+  if (existsSync(clone)) await shAsync("git", ["worktree", "remove", "--force", clone], { cwd: repo, stdio: ["ignore", log, log] });
+}
+
+/**
+ * Starts CI's `agentOrg` job and returns at once with a promise for `{ status, output }`, so it runs beside `ts`. Its
+ * output is held and printed at its place in `gate`'s order. @param {string} ciYml
+ */
+async function runAgentOrg(ciYml) {
+  const staging = agentOrgStaging(ciYml);
+  if (!staging) {
+    return { status: "fail", output: "verify: ci.yml's agentOrg job no longer has the AGENT_ORG_REF and `cp -r` lines this step reads\n" };
+  }
+  const toolRepo = provisionAgentOrg();
+  if (!toolRepo) return { status: "fail", output: "" };
+  const scratch = mkdtempSync(join(tmpdir(), "verify-agent-org-"));
+  const logPath = join(scratch, "agentOrg.log");
+  const log = openSync(logPath, "w");
+  try {
+    const status = await runAgentOrgInClone({ repo: REPO, toolRepo, ref: staging.ref, copied: staging.copied, scratch, log });
+    return { status, output: readFileSync(logPath, "utf8") };
+  } finally {
+    closeSync(log);
+    rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
+/**
  * @typedef {{ ciYml: string, base: string, branch: string, body: string | null, files: string[] }} StepContext
  * @param {string} id
  * @param {StepContext} ctx
  */
 function runStep(id, ctx) {
-  const runners = /** @type {Record<string, () => string>} */ ({
+  const runners = /** @type {Record<string, () => string | Promise<string>>} */ ({
     changed: () => "pass",
     ts: () => runTs(ctx),
     python: () => runPython(),
     rulesFitness: () => (pnpm(["run", "rules-check"]).status === 0 ? "pass" : "fail"),
     changeset: () => runChangeset(ctx),
     guardSweep: () => (pnpm(["run", "guards:sweep"]).status === 0 ? "pass" : "fail"),
-    agentOrg: () => runAgentOrg(ctx.ciYml),
     acceptance: () => runAcceptance(ctx),
     ownedPaths: () => runOwnedPaths(ctx),
   });
@@ -377,23 +494,54 @@ function readBody(bodyFile) {
 }
 
 /**
- * The result of every step, run in `gate`'s order, ALL of them, so an author sees every red at once as CI shows them.
+ * `agentOrg` is the one step that runs BESIDE the others (#3333): it works in a clone of the head and writes nothing
+ * the others read, where staged in the author's tree it had to wait for `ts`. Started before the first step and
+ * collected at its own place, with its output held until then. Its `ms` is its own wall time and not the wait.
+ * @param {Array<{ id: string, run: boolean }>} plan
+ * @param {StepContext} ctx
+ * @returns {Map<string, Promise<{ status: string, ms: number, output: string }>>}
+ */
+function startBesideSteps(plan, ctx) {
+  const beside = new Map();
+  if (plan.some((step) => step.id === "agentOrg" && step.run)) {
+    const started = Date.now();
+    // Caught here: nobody awaits it until its turn, and a rejection with no handler would end the run during `ts`.
+    const result = runAgentOrg(ctx.ciYml).catch((cause) => ({ status: "fail", output: `verify: agentOrg threw ${cause.stack}\n` }));
+    beside.set("agentOrg", result.then((outcome) => ({ ...outcome, ms: Date.now() - started })));
+  }
+  return beside;
+}
+
+/**
+ * The result of every step, in `gate`'s order, ALL of them, so an author sees every red at once as CI shows them.
  * @param {{ classification: Record<string, unknown>, ctx: StepContext }} run
  */
-function runAllSteps({ classification, ctx }) {
+async function runAllSteps({ classification, ctx }) {
   /** @type {Stamp["steps"]} */
   const results = {};
-  for (const step of stepsToRun(classification)) {
+  const plan = stepsToRun(classification);
+  const beside = startBesideSteps(plan, ctx);
+  for (const step of plan) {
     const started = Date.now();
-    process.stdout.write(`\nverify: ${step.id} ${step.run ? "..." : "-- CI would skip it for this diff"}\n`);
-    const status = step.run ? runStep(step.id, ctx) : "not-needed";
-    results[step.id] = { status, ms: Date.now() - started };
-    process.stdout.write(`verify: ${step.id} ${status.toUpperCase()} (${minutes(results[step.id].ms)})\n`);
+    const what = !step.run ? "-- CI would skip it for this diff" : beside.has(step.id) ? "... (started beside ts)" : "...";
+    process.stdout.write(`\nverify: ${step.id} ${what}\n`);
+    const outcome = await outcomeOf(step, { beside, ctx, started });
+    process.stdout.write(outcome.output);
+    results[step.id] = { status: outcome.status, ms: outcome.ms };
+    process.stdout.write(`verify: ${step.id} ${outcome.status.toUpperCase()} (${minutes(outcome.ms)})\n`);
   }
   return results;
 }
 
-function main() {
+/** @param {{ id: string, run: boolean }} step @param {{ beside: Map<string, Promise<{ status: string, ms: number, output: string }>>, ctx: StepContext, started: number }} where */
+async function outcomeOf(step, { beside, ctx, started }) {
+  if (!step.run) return { status: "not-needed", ms: 0, output: "" };
+  const apart = beside.get(step.id);
+  if (apart) return apart;
+  return { status: await runStep(step.id, ctx), ms: Date.now() - started, output: "" };
+}
+
+async function main() {
   refuseUnknownFlags(["--base", "--draft-body", "--check"], { entry: import.meta.url, command: "pnpm run verify" });
   const base = flagValue(process.argv, "base") ?? process.env.A11Y_TEST_BASE ?? "origin/main";
   const body = readBody(flagValue(process.argv, "draft-body"));
@@ -412,7 +560,7 @@ function main() {
     { repoRoot: REPO, getPackedFiles: packedFiles });
   const ctx = { ciYml: readFileSync(join(REPO, ".github/workflows/ci.yml"), "utf8"), base, body, files,
     branch: git(["rev-parse", "--abbrev-ref", "HEAD"]) };
-  const steps = runAllSteps({ classification, ctx });
+  const steps = await runAllSteps({ classification, ctx });
   const wallMs = Date.now() - started;
   const endedDirty = dirty || git(["status", "--porcelain"]) !== "";
   const stamp = { head, dirty: endedDirty, bodyHash: bodyHash(body), steps, wallMs, at: new Date().toISOString() };
@@ -430,5 +578,5 @@ function report({ green, reasons }) {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
-  process.exit(main());
+  process.exit(await main());
 }
