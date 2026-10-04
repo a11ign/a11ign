@@ -30,6 +30,18 @@ treats "could not look" as "protected".
 | 7 | **The `bots` downgrade**: the chairman's act (ADR 0039 item 7). The agent accounts hold `admin` on the layer repositories against the documented "write, not admin", and while they do, a read made as one of them is not the read of a bound identity. | **NOT VERIFIED** here: nothing in this row touches team permissions. |
 | 8 | **Only then** the repository's own `ci.yml` (with `merge_group` and a `gate` job), the token secret and `auto-arm.yml`, and the first real pull request. | **NOT VERIFIED** here. The required check `gate` blocks every pull request until a `gate` job exists, so this step is also what makes the first one mergeable. |
 
+## The cut, MEASURED (2026-10-04, #2702): `filter-repo --path` alone LOSES FILES on this history
+
+`git filter-repo --path packages/<dir>` pruned **2 of the 112 files** at the tip of `packages/worker-fleet`, with no error: its default pruning of
+"degenerate" merge commits drops a file a merge carried. A sample of files would not have found it, so **compare the WHOLE tip tree** (every path, every
+blob) of the cut against the source before the seed push.
+
+- **The recipe that kept all 112:** `git subtree split --prefix=packages/<dir>` into a scratch clone first, then `git filter-repo --to-subdirectory-filter packages/<dir> --prune-degenerate never`.
+- **Both `--replace-text` AND `--replace-message`** with `scripts/history-purge-replacements.txt`: the text flag rewrites file contents only, and commit
+  messages carried internal addresses (25 of the 543 messages in this cut). Each extraction test keeps a positive control that raw messages still need it.
+- **The licence:** the cut adds a root `LICENSE` byte-identical to the package's, as a callback on the root commit (it is in no package).
+- Read the result back with the first commit's test (`screenreader-*-extraction.test.ts`): licence, boundary, leak scan.
+
 ## The two unknowns, MEASURED (2026-10-03, throwaway `a11ign/zz-throwaway-protection-3123`)
 
 ADR 0039 listed these as UNKNOWN and said to try them on a throwaway repository first. The verbatim output is on
