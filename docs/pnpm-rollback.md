@@ -196,7 +196,7 @@ $ npm run gate:isolation                                    # SECOND RUN: EXIT 0
   SKIP  @a11ign/worker-fleet  cannot verify the host-capacity read on linux ...
 6/7 package(s) usable when installed, 1 declined on linux — run the gate on macOS for those
 
-$ npm ci        # with `left-pad@1.3.0` added to packages/pdf/package.json and the lockfile untouched (step 2)
+$ npm ci        # with `left-pad@1.3.0` added to packages/scorer/package.json and the lockfile untouched (step 2)
 npm ERR! Missing: left-pad@1.3.0 from lock file
 $ npm install --package-lock-only --no-audit --no-fund      # package-lock.json | 7 +++++++
 $ npm ci        # exit 0; node_modules/left-pad present
