@@ -13,7 +13,7 @@ rem screen reader. capture-check refuses to run while the worker answers /health
 setlocal
 rem WHERE THE REACH IS DECLARED: launcher-reach.cmd, beside this file, sets CHECKOUT_ROOT, FLT and
 rem CAPTURE_CHECK. The provision stamp reads the same file, so the path is stated once. A declaration
-rem that is not there stops the launcher: with no root to cd to, everything below would run from
+rem that is not there stops the launcher: with no root to change into, everything below would run from
 rem wherever the scheduled task started, and find nothing.
 call "%~dp0launcher-reach.cmd" || exit /b 1
 cd /d "%CHECKOUT_ROOT%" || exit /b 1
