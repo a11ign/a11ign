@@ -195,6 +195,19 @@ VM has no stake in.
   moving `provisionRevision` today would invalidate it mid-run. This is the decision and the cost, recorded
   for whoever picks up the retirement — deliberately not executed here.
 
+**The recapture's price, re-measured 2026-10-04 (#3524), beside the 2026-09-05 figure above, which is kept
+because it is a different fleet and population.** Counted on the lab (`/srv/a11y-runs`), not carried:
+5,657 captures carry a `provenance.cacheKey`; 4,506 of them are the live corpus at protocol 21 (3,590
+dataset, `1,795 cases x 2`, plus 916 acceptance). **None matches what the fleet or `main` now holds**: the
+corpus is stamped `b34a5c2eaf541d01` and `e1034797594f6893`, the fleet `c2cf273a96b0591f` (the 2026-10-01
+provision), and `CAPTURE_PROTOCOL_VERSION` is 22 on `main` (#2587) against the corpus's 21. So a
+`fleet:provision` invalidates **no** capture that was still valid; what it decides is the ORDER (provision,
+then recapture once, at the stamp the corpus will keep). Measured occupancy of those 4,506 captures is 62.9
+worker-hours; at the last full run's rate (2,918 captures in 4 h 24 min on 10 workers, 2026-09-23) that is
+about 68 box-hours, **4.5 h on 15 serving boxes or 6.8 h on 10**, before a retry tail the 2026-09-23 run had
+and this reading does not explain. The 15-box figure is arithmetic: no run has used 15. A reading at a
+moment: re-count before quoting.
+
 **What is NOT decided, and is recorded as open work instead of quietly dropped:** the `provisionRevision`
 blind spot to five of six modules and all ten task files is a real gap in the shared measurement, separate
 from the parity question, and worth its own backlog row rather than folding it into "parity is decided" —
