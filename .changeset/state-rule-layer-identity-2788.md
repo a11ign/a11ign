@@ -1,5 +1,0 @@
----
-"a11ign": patch
----
-
-**A saved state that signs the screen reader in is no longer reported as expired because the rule layer's browser was refused it (#2788, #2566, ADR 0038 amendment 8).** On a site that ties a session to the browser that made it, the same `--auth-state` file signed the screen reader's Edge in and was refused by the rule layer's own headless browser, and the run ended `auth-state-expired` with the advice to sign in again, which gives the same result. On a state run the rule layer now launches the system Edge first and presents itself as the worker's browser (its own `User-Agent` without the headless marker, and `Accept-Language: en-US,en;q=0.9`). If the rule layer's browser is still refused a state the screen reader's accepted, the run ends with a new fault, `auth-state-refused-by-rule-layer`, which says the state is not expired and offers `--no-axe` (the Action's `axe: false`) or `--login-flow`; a state both browsers refuse is still `auth-state-expired`. Not yet read on a real runner.
