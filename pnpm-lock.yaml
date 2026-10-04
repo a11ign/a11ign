@@ -53,13 +53,13 @@ importers:
         version: 26.6.3
       agent-org:
         specifier: github:a11ign/agent-org#semver:^0.7.0
-        version: https://codeload.github.com/a11ign/agent-org/tar.gz/ddd05b9f5af3ee84a85707d4334fca04ba1f3314(typescript@6.0.3)
+        version: https://codeload.github.com/a11ign/agent-org/tar.gz/fb68c88211d9e94e709601084d45a4b8a01010e4(typescript@6.0.3)
       eslint:
         specifier: ^10.5.0
         version: 10.5.0
       globals:
-        specifier: ^17.12.0
-        version: 17.12.0
+        specifier: ^17.13.0
+        version: 17.13.0
       tsx:
         specifier: ^4.23.15
         version: 4.23.15
@@ -879,9 +879,9 @@ packages:
     resolution: {integrity: sha512-RZNwNclF7+MS/8bDg70amg32dyeZGZxiDuQmZxKLAlQjr3jGyLx+4Kkk58UO7D2QdgFIQCovuSuZESne6RG6XQ==}
     engines: {node: '>= 6.0.0'}
 
-  agent-org@https://codeload.github.com/a11ign/agent-org/tar.gz/ddd05b9f5af3ee84a85707d4334fca04ba1f3314:
-    resolution: {gitHosted: true, integrity: sha512-NK1OZ7YUV0vPaJ+Mq2Xl8gS9Qy7ja9IyzmO9lgbk8XWJKe38dfHyvVDJLExgMz4Ed1nUTnrMmxhxzhUM4FkI1Q==, tarball: https://codeload.github.com/a11ign/agent-org/tar.gz/ddd05b9f5af3ee84a85707d4334fca04ba1f3314}
-    version: 0.7.8
+  agent-org@https://codeload.github.com/a11ign/agent-org/tar.gz/fb68c88211d9e94e709601084d45a4b8a01010e4:
+    resolution: {gitHosted: true, tarball: https://codeload.github.com/a11ign/agent-org/tar.gz/fb68c88211d9e94e709601084d45a4b8a01010e4}
+    version: 0.7.9
     engines: {node: '>=22'}
     hasBin: true
     peerDependencies:
@@ -1198,8 +1198,8 @@ packages:
     resolution: {integrity: sha512-XxwI8EOhVQgWp6iDL+3b0r86f4d6AX6zSU55HfB4ydCEuXLXc5FcYeOu+nnGftS4TEju/11rt4KJPTMgbfmv4A==}
     engines: {node: '>=10.13.0'}
 
-  globals@17.12.0:
-    resolution: {integrity: sha512-cezEd/DTyyht9cvSSURyygXPfy04GtWO/5e6ZPvH7fCtjKz9PYOmuawphw1Ctd1f6C+5JypXfGD7ahNMXvevBA==}
+  globals@17.13.0:
+    resolution: {integrity: sha512-RwMTC61u7hrG3ZJMkZQOK4JLJrKS8QtoTii63EmWvFXHqycY9FObBJQCbsLxSO8kjKhWE5kV1GC+Vb1g3RI0Zg==}
     engines: {node: '>=18'}
 
   graceful-fs@4.2.11:
@@ -2307,7 +2307,7 @@ snapshots:
       - supports-color
     optional: true
 
-  agent-org@https://codeload.github.com/a11ign/agent-org/tar.gz/ddd05b9f5af3ee84a85707d4334fca04ba1f3314(typescript@6.0.3):
+  agent-org@https://codeload.github.com/a11ign/agent-org/tar.gz/fb68c88211d9e94e709601084d45a4b8a01010e4(typescript@6.0.3):
     dependencies:
       typescript: 6.0.3
 
@@ -2652,7 +2652,7 @@ snapshots:
     dependencies:
       is-glob: 4.0.3
 
-  globals@17.12.0: {}
+  globals@17.13.0: {}
 
   graceful-fs@4.2.11: {}
 
