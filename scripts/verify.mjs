@@ -25,6 +25,10 @@
 // it. The cost: it tests the COMMITTED head, so an author's uncommitted edit is not in it (a stamp on a dirty tree is
 // never green anyway).
 //
+// THE `agentOrg` STEP SEES NO `~/.claude/projects`, AS CI'S RUNNER SEES NONE (#3368). Beside `ts` it took 5m46s where CI took
+// about 4m: the tool's tests read the host's transcripts to find a session (3 GB here; one test spent 90 s in it), and 1m56s is
+// what is left of it. Everything else of the home is linked, so no test sees another machine (`ciLikeHome`).
+//
 // WALL TIME is printed beside CI's median as a measurement and not a target (chairman, #3210). If this is slower
 // than CI, that is the next row, not a reason to drop a step.
 import { spawn, spawnSync } from "node:child_process";
@@ -33,7 +37,7 @@ import {
   closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { changedFiles } from "../packages/guards/src/changed-files.mjs";
@@ -357,12 +361,12 @@ export function linkNodeModules({ from, to }) {
  * lines with it, so the output is printed whole at the step's turn.
  * @param {string} command
  * @param {string[]} args
- * @param {{ cwd: string, stdio: import("node:child_process").StdioOptions }} where
+ * @param {{ cwd: string, stdio: import("node:child_process").StdioOptions, env?: Record<string, string> }} where
  * @returns {Promise<{ status: number | null }>}
  */
-export function shAsync(command, args, { cwd, stdio }) {
+export function shAsync(command, args, { cwd, stdio, env = {} }) {
   return new Promise((done) => {
-    const child = spawn(command, args, { cwd, env: sandboxGitEnv(), stdio });
+    const child = spawn(command, args, { cwd, env: sandboxGitEnv(env), stdio });
     child.on("error", (cause) => {
       console.error(`verify: could not start ${command}: ${cause.message}`);
       done({ status: null });
@@ -375,6 +379,27 @@ export function shAsync(command, args, { cwd, stdio }) {
 async function inOrderAsync(commands) {
   for (const command of commands) if ((await command()).status !== 0) return "fail";
   return "pass";
+}
+
+/**
+ * A HOME THAT HAS EVERYTHING THE REAL ONE HAS EXCEPT THE TRANSCRIPTS, which is what a CI runner's is. The tool's tests read
+ * `~/.claude/projects` for the session they are asked about (`instanceCacheRead`), and on a host that has run agents for
+ * weeks that is 3 GB of JSONL: one test spent 90 s of the step in it (#3368, measured with `--cpu-prof`: `readFileSync` and
+ * the record parser, nothing else). Every other entry is LINKED, so corepack's pnpm, a browser or `codex` are found where
+ * they are today and no test changes from run to run; an empty HOME was tried and failed 8 tests that look there.
+ * @param {{ home: string, into: string }} dirs
+ * @returns {string} `into`, to be the child's HOME
+ */
+export function ciLikeHome({ home, into }) {
+  const claude = join(home, ".claude");
+  mkdirSync(join(into, ".claude"), { recursive: true });
+  const link = (/** @type {string} */ from, /** @type {string} */ to, /** @type {string[]} */ except) => {
+    if (!existsSync(from)) return;
+    for (const entry of readdirSync(from)) if (!except.includes(entry)) symlinkSync(join(from, entry), join(to, entry));
+  };
+  link(home, into, [".claude"]);
+  link(claude, join(into, ".claude"), ["projects"]);
+  return into;
 }
 
 /**
@@ -409,7 +434,7 @@ export async function runAgentOrgInClone({ repo, toolRepo, ref, copied, scratch,
       () => linkNodeModules({ from: join(repo, "node_modules"), to: join(clone, "node_modules") }),
       () => stageAgentOrg({ toolRepo, scratch, copied, root: clone, stdio: ["ignore", log, log], commit }),
       () => shAsync("node", ["--import", "tsx", "--test", "packages/agent-org/src/**/*.test.ts",
-        "packages/agent-org/src/**/*.test.mjs"], at(clone)),
+        "packages/agent-org/src/**/*.test.mjs"], { ...at(clone), env: { HOME: ciLikeHome({ home: homedir(), into: join(scratch, "home") }) } }),
     ]);
   } finally {
     await removeClone({ repo, clone, log });
