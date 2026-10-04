@@ -1,5 +1,0 @@
----
-"@a11ign/lab": patch
----
-
-**The daily retrospective has a yesterday (#2955).** `org-retro.mjs` printed one 24 h window, so `ceo`'s "each number worse than yesterday's" was a judgment made by reading a comment thread for a number a model had transcribed. The gate's `org-retrospective` offer now appends one `{date, numbers}` line per UTC date to `org-retro-readings.jsonl` beside the wake ledger (a manual run reads it and never writes it), and the report prints, per number, the previous reading, the delta and a verdict `better | worse | same | no baseline | unknown`. A first day is `no baseline`; a readings file that cannot be read is `unknown`; neither is ever `same`, and no delta is taken against a 0 that was never read. `NUMBERS` is the one table giving each of the ten numbers its direction (higher for PRs merged, lower for the rest), and a number the report carries with no declared direction prints as a defect rather than defaulting. `.agent-org/roles/ceo.md` states the bound for each number, from the 2026-10-02 reading on #928.

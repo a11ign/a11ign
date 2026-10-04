@@ -1,5 +1,0 @@
----
-"@a11ign/control": patch
----
-
-**The fleet capture ledger counts a worker that worked between two polls (#3205, found on #3132).** `fleet-watch.mjs` recorded a rise only when `/health` `captures` was higher than the last poll's, so a worker woken from the idle auto-off was first seen already holding captures and none were ever counted (two canary jobs did 90 captures while `fleet-idle-while-work-waits` read zero). The row now carries `uptimeMinutes` from `/health`, and: a worker first seen in an existing ledger whose uptime is shorter than the ledger's age records all its captures (a longer uptime, or none, is still a baseline, so a new ledger over a fleet up for weeks does not read as a day of captures); a count that fell is a restart and records the NEW count; a worker whose uptime is shorter than the gap since its last poll is a restart even if its count did not fall; and the ledger is keyed by the worker's name without its address, so a worker that wakes at a new address is the same worker (old keys are folded in on read). No threshold or window moves. A job that starts and ends between two hourly polls is still invisible.
