@@ -1,0 +1,42 @@
+/**
+ * The provision stamp's `$ENVIRONMENT_FILES`, as the stamp itself resolves it (ADR 0039 item 6d, #3397).
+ *
+ * Two of the five entries are READ by the stamp -- the layer's `run-server.cmd` from `layers.json`, the
+ * foreground-lock script from the layer's `launcher-reach.cmd` -- so a test that parsed only the quoted
+ * lines would see three. This returns all five, in the stamp's order, from the SAME two files the script
+ * reads and not from a restated copy of its answer. The order is the contract: the hash is taken over the
+ * entries in sequence.
+ */
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const REPO = fileURLToPath(new URL("../../", import.meta.url));
+
+/** The layer's directory as `layers.json` declares it, forward-slashed. */
+export function declaredLayerPath(layer: string, root = REPO): string {
+  const manifest = JSON.parse(readFileSync(join(root, "packages/control/layers.json"), "utf8"));
+  return manifest.layers[layer].path;
+}
+
+/** One `set "NAME=value"` line of a launcher declaration, forward-slashed; `undefined` when it does not say. */
+export function declaredReach(declaration: string, name: string): string | undefined {
+  const line = declaration.split(/\r?\n/).map((l) => new RegExp(`^set "${name}=(.+)"\\s*$`).exec(l)).find(Boolean);
+  return line?.[1].replaceAll("\\", "/");
+}
+
+/** The stamp's declaration file for a layer, as a path under `root`. */
+export const reachFile = (root = REPO) => join(root, declaredLayerPath("nvda-worker", root), "src/launcher-reach.cmd");
+
+/** `$ENVIRONMENT_FILES` of `stampSource`, with its two read entries resolved from the declarations. */
+export function stampEnvironmentFiles(stampSource: string, root = REPO): string[] {
+  const start = stampSource.indexOf("$ENVIRONMENT_FILES = @(");
+  const end = stampSource.indexOf("\n)", start);
+  if (start === -1 || end <= start) throw new Error("could not find $ENVIRONMENT_FILES in the stamp script");
+  const resolved: Record<string, string | undefined> = {
+    $RUN_SERVER: `${declaredLayerPath("nvda-worker", root)}/src/run-server.cmd`,
+    $FOREGROUND_LOCK: declaredReach(readFileSync(reachFile(root), "utf8"), "FLT"),
+  };
+  return [...stampSource.slice(start, end).matchAll(/^\s*(?:'([^']+)'|(\$[A-Z_]+))\s*$/gm)]
+    .map((m) => m[1] ?? resolved[m[2]] ?? (() => { throw new Error(`the stamp lists ${m[2]}, which nothing resolves`); })());
+}
