@@ -16,7 +16,7 @@ you which arguments have already been tried.
 | [0002](./0002-layered-coverage.md) | Layered coverage — rule-based (axe-core) **plus** lived experience | proposed; axe layer shipped |
 | [0003](./0003-testing-and-distribution.md) | Reproducible testing in CI, GitHub Action as primary distribution | accepted |
 | [0004](./0004-package-boundaries.md) | Package boundaries and per-package public API | accepted |
-| [0005](./0005-workspaces-build-and-linking.md) | npm workspaces, per-package `tsc` build, semver-range linking | accepted |
+| [0005](./0005-workspaces-build-and-linking.md) | npm workspaces, per-package `tsc` build, semver-range linking | accepted; **its per-package `tsc` build is superseded by [0043](./0043-one-toolchain-for-every-repository.md)** (Rslib builds) |
 | [0006](./0006-naming-registry-and-licensing.md) | Naming scheme, public npm as registry, and the licence split | accepted |
 | [0007](./0007-versioning-and-release.md) | Independent semver via Changesets, and the isolation gate | accepted |
 | [0008](./0008-what-stays-internal.md) | What is deliberately **not** split, and what stays internal | accepted |
@@ -42,7 +42,7 @@ you which arguments have already been tried.
 | [0028](./0028-recovery-keyed-on-fault-codes.md) | Recovery is keyed on fault codes, never on message text | accepted |
 | [0029](./0029-two-tier-readiness-ready-vs-ok.md) | Two-tier readiness — dispatch on `ready`, never on `ok` | accepted |
 | [0030](./0030-fleet-code-parity-is-a-precondition-not-a-cache-key.md) | Fleet code-version parity is a deploy precondition, never a capture cache key | accepted |
-| [0031](./0031-the-worker-ships-plain-mjs-with-no-build-step.md) | The capture worker ships as plain, unbuilt `.mjs`; the control plane compiles from `.ts` | accepted |
+| [0031](./0031-the-worker-ships-plain-mjs-with-no-build-step.md) | The capture worker ships as plain, unbuilt `.mjs`; the control plane compiles from `.ts` | accepted; **superseded in part by [0043](./0043-one-toolchain-for-every-repository.md)**: the worker's next release is built, its deploy path is not yet decided |
 | [0032](./0032-the-scorer-runs-as-a-subprocess-in-a-python-venv.md) | The trained scorer runs as a Python subprocess, chosen by `A11Y_PYTHON`, not in-process JS | accepted |
 | [0033](./0033-guidepup-exact-pin-is-evidence-not-dependency-hygiene.md) | guidepup is pinned to an exact version because its version is evidence, not a dependency choice | accepted |
 | [0034](./0034-the-speech-channel-is-a-socket-forced-to-fail-loud.md) | The speech channel is a raw TLS socket, and recovery forces it to fail loud rather than restarting NVDA | accepted |
@@ -54,6 +54,7 @@ you which arguments have already been tried.
 | [0040](./0040-agent-org-is-a-standalone-project-agnostic-tool.md) | `agent-org` is a standalone, project-agnostic tool and a11ign is the first project it is configured for: nine decisions measured, and the eight child rows confirmed or amended, before any extraction | proposed 2026-09-26 (#2615, child 2 of #69) — supersedes 0039's "agent-org and the rows stay" paragraph; files and moves nothing. **Decision 5 was REPLACED on 2026-10-02 by the chairman's ruling:** no shadow window and no rollback copy; sync, cut, delete (#2972–#2977). **Decision 3 was SPLIT on 2026-10-02 (chairman, #928):** a project takes `agent-org` as a devDependency pinned to a release tag (`github:a11ign/agent-org#semver:^0.1.0`) and runs `pnpm exec agent-org <command>`, published to NO registry (#3068, #3069); the host keeps its checkout for the gate |
 | [0041](./0041-every-repository-releases-itself-continuously.md) | Every repository releases itself, continuously: a release per merge through the org's own gate, the release gate never softened, consumers upgraded by the platform, and the four DORA metrics read daily from the registry and GitHub | proposed 2026-10-03 (#3129, child of #69; chairman's direction on #928) — extends 0040's "release per repository"; changes no workflow, release or registry |
 | [0042](./0042-the-v1-rehearsal-splits-into-an-automated-outsider-job-and-a-weekly-review.md) | The V1 rehearsal splits into an automated outsider job on every release and a weekly judgement review, and neither is a gate before a publish: the cost (a stranger's judgement now follows a publish by up to seven days) stated, with its falsifiers | proposed 2026-10-03 (#3185) — records `ceo`'s rulings as decided; the rows that build it are #3181 to #3184 |
+| [0043](./0043-one-toolchain-for-every-repository.md) | One toolchain for every repository: TypeScript source, `tsc --noEmit` required, rstest on one shared config (a package, `@a11ign/toolchain`), Rslib builds to `.mjs` plus `.d.ts`; the CLI's dependencies inlined by measured install size and start time | proposed 2026-10-04 (#3550, the chairman via `ceo`) — the standard is decided, the readings are measured; built by #3551, #3549, #3552, #3553, #3554, #3556, #2702 to #2704, and two rows `product-manager` has yet to file (the package extraction and a11ign's own Rslib move) |
 
 ## If you read only one
 
