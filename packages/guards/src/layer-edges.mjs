@@ -40,8 +40,13 @@ import { stripComments } from "./local-import-closure.mjs";
 // RELATIVE, for the reason `changed-files.mjs` records above its own identical import.
 import { flagValue, refuseUnknownFlags } from "../../worker-fleet/src/cli-flags.mjs";
 
-/** The packages that are to leave, by directory name under `packages/`. `agent-org` is declared AFTER it left (#2976): the real tree must show zero edges into it. */
-export const LAYER_PACKAGES = Object.freeze(["nvda-worker", "nvda-speech", "agent-org"]);
+/**
+ * The packages that are to leave, by directory name under `packages/`. `agent-org` is declared AFTER it left (#2976): the real tree must show
+ * zero edges into it. `worker-fleet`, `lab` and `control` are declared BEFORE they leave (#3501, the fence for moves 2-4 of #69): nothing else
+ * measures the edges between them, so "no edge in either direction" (#2702, #2703, #2704) had no price. An edge from one layer into another
+ * is `out` of the first, as it is of any layer.
+ */
+export const LAYER_PACKAGES = Object.freeze(["nvda-worker", "nvda-speech", "agent-org", "worker-fleet", "lab", "control"]);
 
 export const BASELINE_PATH = "packages/guards/layer-edges.baseline.json";
 
@@ -76,7 +81,13 @@ const MAX_IDENTIFIER_CHARS = 64;
 const PLACEHOLDER = "\uE000";
 
 export const EDGE_KINDS = Object.freeze(["import", "path-literal", "launcher", "workflow", "config"]);
-const DISPOSITION = /^(?:by-name|travels|owned-by:#\d+)$/;
+/**
+ * What an edge in the baseline is to become, and the only words the baseline may use (#3501): `cut` the reach goes; `by-name` it becomes a
+ * published-package import; `checkout-path` it is resolved through `packages/control/layers.json` (ADR 0039 item 6a); `moves-with:<layer>` a test that
+ * goes with the code it reads; `owned-by:#<row>` a row that exists decides it. `cut` is a promise and not an exemption: when the reach is cut the
+ * edge vanishes and the entry becomes STALE, which is how the cut is noticed.
+ */
+const DISPOSITION = /^(?:cut|by-name|checkout-path|moves-with:([\w-]+)|owned-by:#\d+)$/;
 
 /** @typedef {{ declaredLine: number, readLine: number }} Via */
 /** @typedef {{ from: string, to: string, kind: string, direction: "in" | "out", via?: Via }} Edge */
@@ -616,14 +627,19 @@ function reachesOf(path, text) {
 
 /**
  * The longest existing prefix of a launcher/workflow token: `packages/lab/src/x.mjs` if it exists, else
- * the directory above, down to `packages/<pkg>` -- a path that has moved is still a reach.
+ * the directory above, down to `packages/<pkg>` -- a path that has moved is still a reach. `null` when `packages/<pkg>` is neither in
+ * this tree nor a declared layer: a URL's `/packages/githubcli-archive-keyring.gpg` names no directory, and reading it as a reach would
+ * put an edge into the baseline that nothing can cut (#3501). A declared layer that has LEFT (`agent-org`, #2976) stays a reach, which is
+ * what `.github/workflows/ci.yml`'s two baselined lines are.
  * @param {string} literal
  * @param {PathIndex} index
+ * @param {readonly string[]} layers
+ * @returns {string | null}
  */
-function longestExisting(literal, index) {
+function longestExisting(literal, index, layers) {
   const parts = literal.split("/");
   while (parts.length > 2 && !index.has(parts.join("/"))) parts.pop();
-  return parts.join("/");
+  return index.has(parts.slice(0, 2).join("/")) || layers.includes(parts[1] ?? "") ? parts.join("/") : null;
 }
 
 /**
@@ -631,11 +647,12 @@ function longestExisting(literal, index) {
  * @param {Reach} reach
  * @param {string} path
  * @param {PathIndex} index
+ * @param {readonly string[]} layers
  * @returns {string | null}
  */
-function targetOf({ literal, kind }, path, index) {
+function targetOf({ literal, kind }, path, index, layers) {
   if (kind === "import") return resolveSpecifier(literal, path, index);
-  return kind === "path-literal" ? resolveLiteral(literal, path, index) : longestExisting(literal, index);
+  return kind === "path-literal" ? resolveLiteral(literal, path, index) : longestExisting(literal, index, layers);
 }
 
 /**
@@ -651,7 +668,7 @@ function edgesOfFile(path, text, index, layers) {
   /** @type {Edge[]} */
   const edges = [];
   for (const { literal, kind, via } of reachesOf(path, text)) {
-    const to = targetOf({ literal, kind }, path, index);
+    const to = targetOf({ literal, kind }, path, index, layers);
     if (to === null) continue;
     const toPkg = packageOf(to);
     if (toPkg === fromPkg || !(layers.includes(fromPkg ?? "") || layers.includes(toPkg ?? ""))) continue;
@@ -716,8 +733,11 @@ function malformedReasons(entry) {
   const reasons = [];
   if (!EDGE_KINDS.includes(entry.kind)) reasons.push(`kind "${entry.kind}" is not one of ${EDGE_KINDS.join(", ")}`);
   if (entry.direction !== "in" && entry.direction !== "out") reasons.push(`direction "${entry.direction}" is not "in" or "out"`);
-  if (entry.disposition === "cut") reasons.push('disposition "cut" is an edge that still exists: cutting an edge REMOVES its entry');
-  else if (!DISPOSITION.test(entry.disposition)) reasons.push(`disposition "${entry.disposition}" is not by-name, travels or owned-by:#<row>`);
+  const dispositionMatch = DISPOSITION.exec(entry.disposition);
+  if (dispositionMatch === null) reasons.push(`disposition "${entry.disposition}" is not cut, by-name, checkout-path, moves-with:<layer> or owned-by:#<row>`);
+  else if (dispositionMatch[1] !== undefined && !LAYER_PACKAGES.includes(dispositionMatch[1])) {
+    reasons.push(`disposition "${entry.disposition}" moves with "${dispositionMatch[1]}", which is not a declared layer (${LAYER_PACKAGES.join(", ")})`);
+  }
   return reasons;
 }
 
