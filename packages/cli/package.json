@@ -32,7 +32,7 @@
     "playwright": "^1.61.1"
   },
   "devDependencies": {
-    "axe-core": "^4.12.1"
+    "axe-core": "^4.13.0"
   },
   "engines": {
     "node": ">=20"
