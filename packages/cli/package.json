@@ -1,6 +1,6 @@
 {
   "name": "a11ign",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Drives a real screen reader through a real page and reports the WCAG 2.2 AA failures a rule scanner cannot see — alongside axe, never instead of it.",
   "license": "AGPL-3.0-or-later",
   "type": "module",
@@ -21,10 +21,10 @@
   ],
   "dependencies": {
     "@a11ign/evidence": "0.2.0",
-    "@a11ign/judge": "0.2.0",
+    "@a11ign/judge": "0.2.1",
     "@a11ign/documents": "^0.1.0",
     "@a11ign/scorer": "0.2.0",
-    "@a11ign/screenreader-fleet": "0.1.0",
+    "@a11ign/screenreader-fleet": "0.1.1",
     "yaml": "^2.9.1"
   },
   "optionalDependencies": {
