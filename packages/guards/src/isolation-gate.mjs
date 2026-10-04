@@ -226,8 +226,8 @@ function tarballManifest(tarball) {
 
 /**
  * A caret or tilde range is how a package consumes one that PUBLISHES FROM ANOTHER REPOSITORY (#3125: `cli` takes `@a11ign/documents`
- * by `^0.1.0`). A sibling in this workspace is pinned exactly, so such a range names no directory here and npm fetches it from the
- * registry, where it exists. A typo'd one still fails, at the gate's install, with the E404 it would give a consumer.
+ * by `^0.1.0`). With no sibling directory here, such a range names nothing to pack and npm fetches it from the
+ * registry, where it exists; a sibling that DOES exist is packed and range-checked whatever the range's spelling. A typo'd one still fails, at the gate's install, with the E404 it would give a consumer.
  */
 const REGISTRY_RANGE = /^[\^~]\d/;
 
@@ -248,10 +248,10 @@ export function internalDependencies(packageDir, seen = new Set()) {
   const dirs = [];
   for (const dependency of Object.keys(wanted)) {
     if (!dependency.startsWith("@a11ign/") || seen.has(dependency)) continue;
-    if (REGISTRY_RANGE.test(wanted[dependency])) continue;
     if (optional[dependency]?.optional && !existsSync(siblingDir(packageDir, dependency))) continue;
     seen.add(dependency);
     const dir = siblingDir(packageDir, dependency);
+    if (!existsSync(join(dir, "package.json")) && REGISTRY_RANGE.test(wanted[dependency])) continue;
     if (!existsSync(join(dir, "package.json"))) {
       throw new Error(`${manifest.name} depends on ${dependency}, which is not a package in this repo`);
     }
@@ -261,7 +261,7 @@ export function internalDependencies(packageDir, seen = new Set()) {
 }
 
 /** The directory beside the package asking whose manifest NAMES `dependency`. Found by name, not spelled from
- * it: `packages/worker-fleet` is `@a11ign/screenreader-fleet`, and a directory spelled from the name did not exist. A
+ * it: `packages/pdf` is `@a11ign/documents` (#2705), and a directory spelled from the name did not exist. A
  * name matching no directory falls back to the spelled one, so the caller's "not a package in this repo"
  * refusal still fires with the path it would have looked at.
  * @type {(packageDir: string, dependency: string) => string} */
