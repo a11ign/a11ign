@@ -233,7 +233,8 @@ export function affectedVerdict({ short, exit, summary, base }) {
     return { status: "fail", line: `verify: the run record counts ${summary.failedTests} failed tests in ${summary.failedFiles} files` };
   }
   if (summary.testFiles === 0) {
-    return { status: "pass", line: `verify: no test reaches this diff (affected against ${base}); nothing was run, and the include matches files` };
+    return { status: "pass", line: `verify: no test reaches this diff (affected against ${base}); nothing was run. The include matches files, so ` +
+      "this is not a wrong include, whatever rstest's own `VERDICT REFUSED: 0 tests run` line above says of a run that selected nothing" };
   }
   return { status: "pass", line: `verify: the affected set is ${summary.testFiles} test files, ${summary.tests} tests (against ${base})` };
 }
