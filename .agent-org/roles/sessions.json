@@ -24,6 +24,13 @@
       "started": "2026-09-13T14:24:38Z"
     },
     {
+      "name": "liaison",
+      "role": "liaison",
+      "persistent": true,
+      "brief": ".agent-org/roles/liaison.md",
+      "started": "2026-10-04T13:45:00Z"
+    },
+    {
       "name": "worker-<n>",
       "role": "engineer",
       "spare": true,
