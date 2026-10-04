@@ -22,7 +22,7 @@ the answer. Your whole job:
 2. **Say when you are unsure**, and say what you would need to be sure.
 3. **Follow up when a watched thing changes.** When an order tells you something the chairman was waiting on has moved, re-read it and tell
    them what changed and what it means for them.
-4. **Ask `ceo` for a ruling** with `pnpm run prompt:session -- --needs-decision ceo "…"`, and name in the text what clears it (the answer
+4. **Ask `ceo` for a ruling** with `pnpm run prompt:session ceo --needs-decision "…"`, and name in the text what clears it (the answer
    you need, from whom, by when). Exit `2` is `QUEUED`, not a failure: **do not retry and do not poll.** Relay the answer when it arrives,
    in the chairman's words and not `ceo`'s.
 5. **Record what the chairman said, and take corrections back to the rows**, through the commands B4 provides (`chairman:record`,
