@@ -7,12 +7,16 @@
 // transitively, every tree-wide guard and the whole agent-org suite. A partial local run is not "passing", and
 // nothing let an author tell the difference. This runs what CI's `gate` waits for.
 //
-// IT REUSES CI'S CODE AND DOES NOT COPY IT. Which jobs apply is `ci-changed.mjs`'s `classify`, imported. Which
-// tests the `ts` job runs is `select-changed-tests.mjs`, reached through `test-changed.mjs` (the local half of the
-// same selection; it spawns the selector `reusable-build-test.yml` calls). The agentOrg job's ref and the files it
-// copies are READ from `ci.yml` rather than typed here. And the population is `gate`'s own `needs` list, read from
-// `ci.yml`: every job in it is a step below or an entry of CI_ONLY with a reason, and
+// IT REUSES CI'S CODE AND DOES NOT COPY IT. Which jobs apply is `ci-changed.mjs`'s `classify`, imported. The agentOrg
+// job's ref and the files it copies are READ from `ci.yml` rather than typed here. And the population is `gate`'s own
+// `needs` list, read from `ci.yml`: every job in it is a step below or an entry of CI_ONLY with a reason, and
 // `verify-matches-ci.test.ts` fails the day a job is added to CI and to neither.
+//
+// THE TESTS IT RUNS ARE THE MODULE-GRAPH-AFFECTED SET, NOT THE SUITE (#3572, chairman via ceo, 2026-10-04): `rstest run
+// --changed=<base>` runs the test files whose graph reaches a changed file, and `forceRerunTriggers` in the rstest
+// config widens it to every test for an input no graph can see (a lockfile, a tsconfig, a file read by path). The
+// tree-wide guards leave local verify and run once, in CI (`guardSweep` is in CI_ONLY). So the stamp says "the AFFECTED
+// SET passed at this head" and names its base: a stamp that read "passes" over a subset is #3215's misreading again.
 //
 // THE STAMP. `.git/<worktree>/verify-stamp.json` (git's own per-worktree path, so it is never tracked and never
 // shared between worktrees): the head, a hash of the body, the result of every step and the wall time. A stamp is
@@ -41,6 +45,7 @@ import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { changedFiles } from "../packages/guards/src/changed-files.mjs";
+import { underFloor } from "../packages/guards/src/assert-glob-not-empty.mjs";
 import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { checkBody } from "agent-org/src/pr-open.mjs";
@@ -59,8 +64,8 @@ const SHORT_SHA = 9;
 
 /**
  * Every job of `ci.yml` that `gate` needs and that runs here. `runsWhen` is the `classify` key that makes CI run
- * the job, or null when CI runs it on every pull request: `guardSweep` carries no `changed` output at all, so a bare
- * diff of a docs file still runs the whole tree-wide population (#2348), and so does this.
+ * the job, or null when CI runs it on every pull request: the agent-org suite, the body checks and the owned-path
+ * sign-off carry no `changed` output, so a bare diff of a docs file still runs them (#2348), and so does this.
  */
 export const STEPS = [
   { id: "changed", runsWhen: null },
@@ -68,7 +73,6 @@ export const STEPS = [
   { id: "python", runsWhen: "python" },
   { id: "rulesFitness", runsWhen: "rulesFitness" },
   { id: "changeset", runsWhen: "changeset" },
-  { id: "guardSweep", runsWhen: null },
   { id: "agentOrg", runsWhen: null },
   { id: "acceptance", runsWhen: null },
   { id: "ownedPaths", runsWhen: null },
@@ -79,6 +83,9 @@ export const STEPS = [
  * infer it. A job that needs a secret, a runner OS or the merge queue cannot run here; saying so beats a silent gap.
  */
 export const CI_ONLY = {
+  guardSweep: "the tree-wide guards (tests ABOUT the repository, the #2174 class) are not a function of the diff, so no "
+    + "module graph selects them and `--changed` cannot; they run once per pull request in CI, which carries no "
+    + "`changed` condition for them (#3572, chairman via ceo: the same line #3549 draws for the agent-org suite)",
   ansible: "needs ansible-core and the Galaxy collections, which CI installs fresh with pip and ansible-galaxy "
     + "and which are no dependency of this checkout; `changed` skips it for any diff outside packages/control/ansible",
   deliberateRefusals: "needs the pull request's number and a GitHub token: it compares the head with what GitHub "
@@ -122,7 +129,7 @@ export function bodyHash(body) {
 
 /**
  * @typedef {{ head: string, dirty: boolean, bodyHash: string, steps: Record<string, { status: string, ms: number }>,
- *   wallMs: number }} Stamp
+ *   wallMs: number, base?: string }} Stamp
  */
 
 /**
@@ -186,13 +193,106 @@ function inOrder(commands) {
 }
 
 /**
+ * The rstest include of the affected run and the floor under it, ONE pair used for the check and for `--include`: they are
+ * `test:all`'s own glob and `--min` (package.json), so a count that falls is a moved path and not a smaller suite. A
+ * `--changed` run that matches no file exits 0 and says nothing (measured: `--include nothing/**` with `--changed=HEAD~1`),
+ * so a wrong include would read exactly like a diff no test reaches, and this floor is what tells them apart (#2165, #3572).
+ */
+export const AFFECTED_INCLUDE = "packages/*/src/**/*.test.ts";
+export const AFFECTED_MIN_FILES = 500;
+const RSTEST_CONFIG = "scripts/rstest/rstest.config.mjs";
+
+/**
+ * The words the stamp says, in ONE place: the verify output and `--check` both print it, and a test pins that it carries
+ * "affected set" and the base. NOT "the suite passed": the run was a subset.
+ * @param {string} base
+ */
+export function stampWording(base) {
+  return `the affected set passed at this head, affected against ${base}`;
+}
+
+/**
+ * WHAT THE AFFECTED RUN MEANS, from the floor, the exit code and rstest's own run record. Pure, so each refusal has a test:
+ * an include under its floor is REFUSED before any run; a run that exits non-zero fails; a run with no record is refused,
+ * because without it "ran nothing" and "did not run" read alike; and ONLY a clean run of zero files is "no test reaches this diff".
+ * @param {{ short: Array<{ pattern: string, matched: number }>, exit: number | null,
+ *   summary: { testFiles: number, tests: number, failedFiles: number, failedTests: number } | null, base: string }} run
+ * @returns {{ status: "pass" | "fail", line: string }}
+ */
+export function affectedVerdict({ short, exit, summary, base }) {
+  if (short.length > 0) {
+    const named = short.map(({ pattern, matched }) => `${pattern} matched ${matched}, need ${AFFECTED_MIN_FILES}`).join("; ");
+    return { status: "fail", line: `verify: REFUSED -- the include of the affected run is under its floor (${named}); ` +
+      "a `--changed` run over it would select nothing and pass" };
+  }
+  if (exit !== 0) return { status: "fail", line: `verify: the affected run exited ${exit} against ${base}` };
+  if (summary === null) {
+    return { status: "fail", line: "verify: REFUSED -- the affected run left no run record, so what it ran is unknown" };
+  }
+  if (summary.failedFiles > 0 || summary.failedTests > 0) {
+    return { status: "fail", line: `verify: the run record counts ${summary.failedTests} failed tests in ${summary.failedFiles} files` };
+  }
+  if (summary.testFiles === 0) {
+    return { status: "pass", line: `verify: no test reaches this diff (affected against ${base}); nothing was run, and the include matches files` };
+  }
+  return { status: "pass", line: `verify: the affected set is ${summary.testFiles} test files, ${summary.tests} tests (against ${base})` };
+}
+
+/**
+ * The counts rstest's `json` reporter wrote for a run into `dir` (the config writes one record per run, and
+ * `A11Y_RSTEST_RECORD_DIR` points it here), or null, said aloud, when there is not exactly one readable record.
+ * @param {string} dir
+ */
+export function readRunSummary(dir) {
+  const records = readdirSync(dir).filter((name) => name.endsWith(".json"));
+  if (records.length !== 1) {
+    console.error(`verify: expected one rstest run record in ${dir}, found ${records.length}`);
+    return null;
+  }
+  try {
+    return JSON.parse(readFileSync(join(dir, records[0]), "utf8")).summary ?? null;
+  } catch (cause) {
+    console.error(`verify: the rstest run record ${records[0]} is not JSON: ${cause instanceof Error ? cause.message : cause}`);
+    return null;
+  }
+}
+
+/**
+ * The `ts` step's tests: `rstest run --changed=<base>` through the config every other run uses, under `affectedVerdict`.
+ * The floor is read BEFORE the run and the record AFTER it. `run` and `readSummary` are parameters so a test can drive both.
+ * @param {{ base: string }} ctx
+ * @param {(command: string, args: string[], where: { cwd: string, stdio: import("node:child_process").StdioOptions, env?: Record<string, string> }) => Promise<{ status: number | null }>} run
+ * @param {(dir: string) => ReturnType<typeof readRunSummary>} readSummary
+ * @returns {Promise<{ status: number }>}
+ */
+export async function runAffectedSet({ base }, run, readSummary = readRunSummary) {
+  const settle = (/** @type {Parameters<typeof affectedVerdict>[0]} */ reading) => {
+    const verdict = affectedVerdict(reading);
+    console.log(verdict.line);
+    return { status: verdict.status === "pass" ? 0 : 1 };
+  };
+  const short = underFloor([AFFECTED_INCLUDE], AFFECTED_MIN_FILES);
+  if (short.length > 0) return settle({ short, exit: null, summary: null, base });
+  const record = mkdtempSync(join(tmpdir(), "verify-affected-"));
+  try {
+    const { command, args } = pnpmCliInvocation(["exec", "rstest", "run", "--config", RSTEST_CONFIG,
+      "--include", AFFECTED_INCLUDE, `--changed=${base}`]);
+    const { status } = await run(command, args, { cwd: REPO, stdio: "inherit", env: { A11Y_RSTEST_RECORD_DIR: record } });
+    return settle({ short, exit: status, summary: readSummary(record), base });
+  } finally {
+    rmSync(record, { recursive: true, force: true });
+  }
+}
+
+/**
  * `ts` must not block the event loop: `agentOrg` runs beside it as a chain of promises, and a `spawnSync` here freezes
  * every one of them until `ts` returns, which made the two run one after the other with the step merely STARTED early
  * (#3333). `run` is a parameter so a test can see that every command goes through the non-blocking runner.
  * @param {{ base: string }} ctx
- * @param {(command: string, args: string[], where: { cwd: string, stdio: import("node:child_process").StdioOptions }) => Promise<{ status: number | null }>} [run]
+ * @param {(command: string, args: string[], where: { cwd: string, stdio: import("node:child_process").StdioOptions, env?: Record<string, string> }) => Promise<{ status: number | null }>} [run]
+ * @param {(dir: string) => ReturnType<typeof readRunSummary>} [readSummary]
  */
-export function runTs({ base }, run = shAsync) {
+export function runTs({ base }, run = shAsync, readSummary = readRunSummary) {
   const where = { cwd: REPO, stdio: /** @type {const} */ ("inherit") };
   const pnpmAsync = (/** @type {string[]} */ pnpmArgs) => {
     const { command, args } = pnpmCliInvocation(pnpmArgs);
@@ -202,7 +302,7 @@ export function runTs({ base }, run = shAsync) {
     () => pnpmAsync(["run", "docs:coverage"]),
     () => pnpmAsync(["run", "lint"]),
     () => pnpmAsync(["run", "typecheck"]),
-    () => run("node", ["scripts/test-changed.mjs", `--base=${base}`], where),
+    () => runAffectedSet({ base }, run, readSummary),
   ]);
 }
 
@@ -487,7 +587,6 @@ function runStep(id, ctx) {
     python: () => runPython(),
     rulesFitness: () => (pnpm(["run", "rules-check"]).status === 0 ? "pass" : "fail"),
     changeset: () => runChangeset(ctx),
-    guardSweep: () => (pnpm(["run", "guards:sweep"]).status === 0 ? "pass" : "fail"),
     acceptance: () => runAcceptance(ctx),
     ownedPaths: () => runOwnedPaths(ctx),
   });
@@ -571,7 +670,10 @@ async function main() {
   const base = flagValue(process.argv, "base") ?? process.env.A11Y_TEST_BASE ?? "origin/main";
   const body = readBody(flagValue(process.argv, "draft-body"));
   const head = git(["rev-parse", "HEAD"]);
-  if (process.argv.includes("--check")) return report(stampVerdict({ stamp: readStamp(), head, body }));
+  if (process.argv.includes("--check")) {
+    const stamp = readStamp();
+    return report(stampVerdict({ stamp, head, body }), stamp?.base ?? base);
+  }
 
   const files = changedFiles([`${base}...HEAD`], { repoRoot: REPO });
   if (files.length === 0) {
@@ -588,16 +690,16 @@ async function main() {
   const steps = await runAllSteps({ classification, ctx });
   const wallMs = Date.now() - started;
   const endedDirty = dirty || git(["status", "--porcelain"]) !== "";
-  const stamp = { head, dirty: endedDirty, bodyHash: bodyHash(body), steps, wallMs, at: new Date().toISOString() };
+  const stamp = { head, dirty: endedDirty, bodyHash: bodyHash(body), steps, wallMs, base, at: new Date().toISOString() };
   writeFileSync(stampPath(), `${JSON.stringify(stamp, null, 2)}\n`);
   process.stdout.write(`\nverify: ${minutes(wallMs)} wall, against CI's median ${minutes(CI_MEDIAN_MS)} `
     + "(a measurement, not a target)\n");
-  return report(stampVerdict({ stamp, head, body }));
+  return report(stampVerdict({ stamp, head, body }), base);
 }
 
-/** @param {{ green: boolean, reasons: string[] }} verdict */
-function report({ green, reasons }) {
-  process.stdout.write(green ? "verify: GREEN for this head and body\n"
+/** @param {{ green: boolean, reasons: string[] }} verdict @param {string} base */
+function report({ green, reasons }, base) {
+  process.stdout.write(green ? `verify: GREEN for this head and body -- ${stampWording(base)}; the tree-wide guards run in CI only\n`
     : `verify: RED\n${reasons.map((reason) => `  - ${reason}`).join("\n")}\n`);
   return green ? 0 : 1;
 }

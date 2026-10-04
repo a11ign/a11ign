@@ -154,6 +154,168 @@ function reportersFor(run) {
   return /** @type {NonNullable<import("@rstest/core").RstestConfig["reporters"]> & unknown[]} */ ([...console, ...record, ...verdict]);
 }
 
+/**
+ * #3572: WHAT A `--changed` RUN CANNOT SEE, AND SO MUST RERUN EVERYTHING FOR. `rstest run --changed=<rev>` selects the tests whose
+ * module graph reaches a changed file, and nothing else: a file read by PATH, a lockfile, a tsconfig and a preloaded hook are in no
+ * graph. Naming `forceRerunTriggers` REPLACES rstest's default (`config.forceRerunTriggers ?? merged.forceRerunTriggers`, `z~0.js`
+ * in @rstest/core 0.12.3), so the default's two patterns are repeated here and a change to either still widens the run. The list
+ * only applies to a `--changed` run: every other run of this config is unchanged by it.
+ *
+ * WHAT IT LEAVES AT THE DEFAULT: `**\/package.json/**` and `**\/rstest.config.*`, which already widen a run to the whole suite
+ * (measured at `040c643ba`: a 17-file diff holding `package.json` and the lockfile named 699 test files).
+ *
+ * THE BY-PATH HALF IS DERIVED, NOT TRUSTED: `packages/lab/src/packaging/verify-affected-set.test.ts` finds every non-source file
+ * and every data directory a non-tree-wide test names in a string literal, outside its own import closure, and fails on one that no
+ * pattern here covers. A new such read therefore fails that test until a line is added here; the test is the maintainer of this list.
+ * A tree-wide guard (a test about the repository) is not in that population: it does not ride on `--changed` and runs in CI.
+ */
+const REPO_WIDE_TRIGGERS = ["**/package.json/**", "**/rstest.config.*", "pnpm-lock.yaml", "pnpm-workspace.yaml", "**/.npmrc",
+  "**/tsconfig*.json",
+  // What the config loads, and what every worker preloads through `pool.execArgv`: neither is imported by any test.
+  "scripts/rstest/**", "packages/guards/src/walk-scope*.mjs"];
+
+/** #3572: data directories a non-tree-wide test reads by path, whole, because a file added to one is read too. */
+const READ_DIRECTORY_TRIGGERS = [
+  ".agent-org/roles/**",
+  ".agent-org/units/**",
+  ".claude/rules/**",
+  ".github/workflows/**",
+  "docs/adr/**",
+  "docs/board/**",
+  "packages/cli/src/fixtures/**",
+  "packages/control/ansible/**",
+  "packages/lab/baselines/**",
+  "packages/lab/src/eval/fixtures/**",
+  "packages/nvda-speech/**",
+  "packages/scorer/models/screenreader-scorer/**",
+  "packages/scorer/python/**",
+  "packages/scorer/tests/**",
+  "packages/worker-fleet/src/local-worker/**",
+  "packages/worker-fleet/src/provisioning/**",
+  "scripts/git-hooks/**",
+  "scripts/isolation-fixtures/missing-sibling/**",
+];
+
+/** #3572: single files a non-tree-wide test reads by path (a doc, a workflow, a role brief, a fixture), derived as above. */
+const READ_FILE_TRIGGERS = [
+  ".agent-org/project.json",
+  ".agent-org/roles/README.md",
+  ".agent-org/roles/ceo.md",
+  ".agent-org/roles/engineer.md",
+  ".agent-org/roles/liaison.md",
+  ".agent-org/roles/memory/github-is-the-tracker.md",
+  ".agent-org/roles/memory/local-worker-vms-deprecated.md",
+  ".agent-org/roles/memory/merge-worktree-is-not-a-gate-environment.md",
+  ".agent-org/roles/memory/org-shape-second-orchestrator.md",
+  ".agent-org/roles/memory/worktree-resolves-primary-dist.md",
+  ".agent-org/roles/migrate.md",
+  ".agent-org/roles/product-manager.md",
+  ".agent-org/roles/reviewer.md",
+  ".agent-org/roles/sessions.json",
+  ".agent-org/roles/worker-loop-orchestrator.md",
+  ".agent-org/units/a11ign-corpus-release-nightly.service",
+  ".agent-org/units/a11ign-corpus-snapshot.service",
+  ".agent-org/units/a11ign-fleet-watch.service",
+  ".agent-org/units/a11ign-lab-watch.service",
+  ".c8rc.json",
+  ".changeset/README.md",
+  ".changeset/config.json",
+  ".claude/rules/agent-practices.md",
+  ".claude/rules/org-routing-and-timers.md",
+  ".claude/skills/wcag-criterion-check/SKILL.md",
+  ".github/CLAUDE.md",
+  ".github/ISSUE_TEMPLATE/backlog-row.yml",
+  ".github/ISSUE_TEMPLATE/config.yml",
+  ".github/PULL_REQUEST_TEMPLATE.md",
+  ".github/dependabot.yml",
+  ".github/workflows/agent-org-bump.yml",
+  ".github/workflows/auto-arm.yml",
+  ".github/workflows/capture-regression.yml",
+  ".github/workflows/ci-health.yml",
+  ".github/workflows/ci.yml",
+  ".github/workflows/consumer-gate.yml",
+  ".github/workflows/dependency-pr-body.yml",
+  ".github/workflows/nightly.yml",
+  ".github/workflows/registry-consumer-gate.yml",
+  ".github/workflows/release.yml",
+  ".github/workflows/reusable-acceptance.yml",
+  ".github/workflows/reusable-board.yml",
+  ".github/workflows/reusable-build-test.yml",
+  ".github/workflows/trunk.yml",
+  ".gitignore",
+  "CLAUDE.md",
+  "CODEOWNERS",
+  "CONTRIBUTING.md",
+  "LICENSE",
+  "PLAN.md",
+  "README.md",
+  "RELEASE.md",
+  "SECURITY.md",
+  "action.yml",
+  "docs/README.md",
+  "docs/adr/0041-every-repository-releases-itself-continuously.md",
+  "docs/architecture-audit.md",
+  "docs/backlog-ready.md",
+  "docs/backlog.md",
+  "docs/board/summaries/2026-09-07.md",
+  "docs/code-repository-protection.json",
+  "docs/commands.md",
+  "docs/control-plane-hygiene.md",
+  "docs/control-plane-proxmox.md",
+  "docs/gate-exit-codes.md",
+  "docs/getting-started.md",
+  "docs/github-action.md",
+  "docs/history-purge-replacements.md",
+  "docs/known-gaps.md",
+  "docs/lane-ownership.json",
+  "docs/mutant-replay.md",
+  "docs/nvda-worker-runbook.md",
+  "docs/operational-lessons.md",
+  "docs/owned-path-facts.json",
+  "docs/proving-a-gate.md",
+  "docs/publish-blocker.md",
+  "docs/reliability-plan.md",
+  "docs/repository-access.json",
+  "docs/reviewer-instancing.md",
+  "docs/row-filing.md",
+  "docs/screenreader-coverage.md",
+  "docs/try-it.md",
+  "docs/weekly-review.md",
+  "examples/workflow.yml",
+  "packages/README.md",
+  "packages/cli/README.md",
+  "packages/cli/src/auth/fixtures/spelled-out-transcript.json",
+  "packages/control/CLAUDE.md",
+  "packages/control/README.md",
+  "packages/control/layers.json",
+  "packages/evidence/README.md",
+  "packages/evidence/src/fixtures-exhausted-887.json",
+  "packages/evidence/src/fixtures/submit-activation-cases.json",
+  "packages/lab/CLAUDE.md",
+  "packages/lab/README.md",
+  "packages/lab/rule-ownership.json",
+  "packages/lab/scripts/audit-scorer-shortcuts.py",
+  "packages/lab/scripts/check-screenreader-hardening.py",
+  "packages/lab/scripts/compose-multi-defect-probe.py",
+  "packages/lab/scripts/diagnose-false-positives.py",
+  "packages/lab/scripts/evaluate-screenreader-acceptance.py",
+  "packages/lab/scripts/explain-case.py",
+  "packages/lab/scripts/scorer-shortcuts.baseline.json",
+  "packages/lab/scripts/train-screenreader-model.py",
+  "packages/lab/src/eval/recorded-provenance.sha256",
+  "packages/lab/src/packaging/fixtures/broken-continuation.ps1",
+  "packages/lab/src/training/README.md",
+  "packages/lab/src/training/accepted-acceptance-cases.json",
+  "packages/nvda-worker/CLAUDE.md",
+  "packages/nvda-worker/src/run-server.cmd",
+  "packages/scorer/CHANGELOG.md",
+  "packages/scorer/requirements.txt",
+  "packages/worker-fleet/src/display-mode-harness.ps1",
+  "requirements-ci.txt",
+  "scripts/fixtures/calibration-verdicts.json",
+  "scripts/history-purge-replacements.txt",
+];
+
 /** #1319: half the host's cores, at least one -- the most a local run may take of a host other sessions share. */
 const LOCAL_WORKER_CAP = Math.max(1, Math.floor(availableParallelism() / 2));
 
@@ -180,4 +342,5 @@ export default defineConfig({
   hookTimeout: 0,
   performance: { buildCache: buildCacheFor(process.env) },
   reporters: reportersFor({ root, env: process.env, now: new Date(), pid: process.pid }),
+  forceRerunTriggers: [...REPO_WIDE_TRIGGERS, ...READ_DIRECTORY_TRIGGERS, ...READ_FILE_TRIGGERS],
 });
