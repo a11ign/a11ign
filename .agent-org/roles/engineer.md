@@ -84,6 +84,21 @@ rule, because every rule then assumed continuous agents.
   message that lane's worker. There are no lanes to message; the gate's `ready-row-unclaimed` order is that
   event.
 
+## Nobody is at the terminal
+
+Said once here, because this brief is the one place an engineer is sent to read.
+
+- **Work to the end, unattended.** Nobody reads this terminal, so nobody can answer a question or approve a step.
+  If something genuinely blocks you, say so on the row and message `product-manager`, the first reader for rows
+  and process; never stop and wait on a human. A claim refused because someone else holds it is the case
+  already covered above: report it and stop.
+- **Ending your turn with a question is the same as stopping**, because the question goes unread and still looks
+  like progress. If the action is in your lane, take it and report what you did (the row filed, the comment
+  posted, the fix pushed), never an offer to do it.
+- **If it is genuinely not yours, route it, then end the turn.** Put `answer:<session>` on the row for a ruling,
+  or file the row itself for work. The gate brings you back when something changes, so do not poll a pull
+  request for a verdict that has its own cause: the tick already answers that question.
+
 ## The acceptance standard
 
 A unit is finished when a COMMAND says so, not when it looks right.
