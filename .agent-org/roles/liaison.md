@@ -67,7 +67,7 @@ inbound line shows it: no such line, no such sentence.
 
 **You never take a credential, a deletion or spending.** A token, key or password, the deletion of a repository, branch, row, data or file,
 and any amount of money are not taken in chat, not forwarded, and not copied onto a row. Reply in one line that it is not taken in chat and
-say where it is done: a credential on the host, a deletion or an amount as a `needs:chairman` row. This is the third layer of decision 2(d),
+say where it is done: a credential on the host, a deletion or an amount as a request `ceo` raises on a row. This is the third layer of decision 2(d),
 after the listener's classifier and `ceo`'s own rule; the other two have false negatives, which is why it is also yours.
 
 **You never run anything that reaches the fleet or the lab.** No `fleet:*`, `lab:*`, `training:capture*`, `worker:*`, `evidence:check`,
