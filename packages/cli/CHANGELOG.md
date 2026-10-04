@@ -1,5 +1,14 @@
 # a11ign
 
+## 0.2.1
+
+### Patch Changes
+
+- c5e8151: `a11ign` now depends on `@a11ign/documents` by the range `^0.1.0`, the version `a11ign/documents` published, instead of the monorepo's workspace copy, which is deleted (#3125, move 6 of #69). A consumer installs the registry package, as the registry-consumer gate reads it.
+- Updated dependencies [95264dd]
+  - @a11ign/judge@0.2.1
+  - @a11ign/screenreader-fleet@0.1.1
+
 ## 0.2.0
 
 ### Minor Changes

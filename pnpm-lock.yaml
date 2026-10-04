@@ -12,13 +12,13 @@ importers:
         specifier: 0.2.0
         version: link:packages/evidence
       '@a11ign/judge':
-        specifier: 0.2.0
+        specifier: 0.2.1
         version: link:packages/judge
       '@a11ign/scorer':
         specifier: 0.2.0
         version: link:packages/scorer
       '@a11ign/screenreader-fleet':
-        specifier: 0.1.0
+        specifier: 0.1.1
         version: link:packages/worker-fleet
       '@a11ign/screenreader-worker':
         specifier: 0.1.0
@@ -30,7 +30,7 @@ importers:
         specifier: ^0.31.0
         version: 0.31.0
       a11ign:
-        specifier: 0.2.0
+        specifier: 0.2.1
         version: link:packages/cli
     devDependencies:
       '@changesets/cli':
@@ -53,7 +53,7 @@ importers:
         version: 26.6.3
       agent-org:
         specifier: github:a11ign/agent-org#semver:^0.22.0
-        version: https://codeload.github.com/a11ign/agent-org/tar.gz/cdcf4aee1580f1d5701009e66c0debcfaddee1ab(typescript@6.0.3)
+        version: https://codeload.github.com/a11ign/agent-org/tar.gz/f0c1841bc75724643e8d5c599207bf63579f85dc(typescript@6.0.3)
       eslint:
         specifier: ^10.11.0
         version: 10.11.0
@@ -86,13 +86,13 @@ importers:
         specifier: 0.2.0
         version: link:../evidence
       '@a11ign/judge':
-        specifier: 0.2.0
+        specifier: 0.2.1
         version: link:../judge
       '@a11ign/scorer':
         specifier: 0.2.0
         version: link:../scorer
       '@a11ign/screenreader-fleet':
-        specifier: 0.1.0
+        specifier: 0.1.1
         version: link:../worker-fleet
       yaml:
         specifier: ^2.9.1
@@ -127,7 +127,7 @@ importers:
         specifier: 0.2.0
         version: link:../evidence
       '@a11ign/judge':
-        specifier: 0.2.0
+        specifier: 0.2.1
         version: link:../judge
       '@a11ign/nvda-speech':
         specifier: 0.0.0
@@ -136,7 +136,7 @@ importers:
         specifier: 0.2.0
         version: link:../scorer
       '@a11ign/screenreader-fleet':
-        specifier: 0.1.0
+        specifier: 0.1.1
         version: link:../worker-fleet
       '@a11ign/screenreader-worker':
         specifier: 0.1.0
@@ -149,7 +149,7 @@ importers:
         specifier: 0.31.0
         version: 0.31.0
       a11ign:
-        specifier: 0.2.0
+        specifier: 0.2.1
         version: link:../cli
       serve:
         specifier: 14.2.6
@@ -182,7 +182,7 @@ importers:
   packages/worker-fleet:
     dependencies:
       '@a11ign/judge':
-        specifier: 0.2.0
+        specifier: 0.2.1
         version: link:../judge
       '@a11ign/screenreader-worker':
         specifier: 0.1.0
@@ -894,9 +894,9 @@ packages:
     resolution: {integrity: sha512-RZNwNclF7+MS/8bDg70amg32dyeZGZxiDuQmZxKLAlQjr3jGyLx+4Kkk58UO7D2QdgFIQCovuSuZESne6RG6XQ==}
     engines: {node: '>= 6.0.0'}
 
-  agent-org@https://codeload.github.com/a11ign/agent-org/tar.gz/cdcf4aee1580f1d5701009e66c0debcfaddee1ab:
-    resolution: {gitHosted: true, integrity: sha512-re4oU7a0Y+ePR9ipw0gG5idr62HC9AyMe3Wsjvi1dxqM0MXaFlQ5hoWvY7IqNMJ9m/K1K+pmoGCHmzfmb378cw==, tarball: https://codeload.github.com/a11ign/agent-org/tar.gz/cdcf4aee1580f1d5701009e66c0debcfaddee1ab}
-    version: 0.22.1
+  agent-org@https://codeload.github.com/a11ign/agent-org/tar.gz/f0c1841bc75724643e8d5c599207bf63579f85dc:
+    resolution: {gitHosted: true, integrity: sha512-dSd0RlzV57GrHUfJ5E2Zk9ZrMzH8JFp0B8YggINS0/OsfuVb/zMRrkmekX6lByqLlDf07IHkb52o2esawOiXsg==, tarball: https://codeload.github.com/a11ign/agent-org/tar.gz/f0c1841bc75724643e8d5c599207bf63579f85dc}
+    version: 0.22.2
     engines: {node: '>=22'}
     hasBin: true
     peerDependencies:
@@ -2353,7 +2353,7 @@ snapshots:
       - supports-color
     optional: true
 
-  agent-org@https://codeload.github.com/a11ign/agent-org/tar.gz/cdcf4aee1580f1d5701009e66c0debcfaddee1ab(typescript@6.0.3):
+  agent-org@https://codeload.github.com/a11ign/agent-org/tar.gz/f0c1841bc75724643e8d5c599207bf63579f85dc(typescript@6.0.3):
     dependencies:
       typescript: 6.0.3
 
