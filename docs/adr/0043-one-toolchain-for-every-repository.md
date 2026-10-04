@@ -31,13 +31,14 @@ a11ign              380 .mjs   775 .ts (700 *.test.ts)   tsconfig: 5 package + 3
 screenreader-worker  35 .mjs    83 .ts  (83 *.test.ts)   tsconfig: root                      rs* files: 0
 screenreader-fleet   30 .mjs    55 .ts  (53 *.test.ts)   tsconfig: packages/worker-fleet     rs* files: 0
 documents             3 .mjs     4 .ts   (3 *.test.ts)   tsconfig: packages/pdf + base       rs* files: 0
-$ git -C agent-org ls-files '*.mjs' | wc -l; git -C agent-org ls-files '*.ts' | wc -l; git -C agent-org ls-files '*.test.ts' | wc -l; git -C agent-org ls-files '*.test.mjs' | wc -l; git -C agent-org ls-files 'tsconfig*.json' | wc -l
+# in a checkout of agent-org at b404507:
+$ git ls-files '*.mjs' | wc -l; git ls-files '*.ts' | wc -l; git ls-files '*.test.ts' | wc -l; git ls-files '*.test.mjs' | wc -l; git ls-files 'tsconfig*.json' | wc -l
 244
 232
 226
 41
 0
-$ git -C agent-org grep -l '@ts-check' -- '*.mjs' | wc -l
+$ git grep -l '@ts-check' -- '*.mjs' | wc -l
 217
 ```
 
