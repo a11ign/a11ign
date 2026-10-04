@@ -13,6 +13,7 @@
 // `serve` processes would test `npx` more than the rule.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { writeFileSync, existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -29,8 +30,32 @@ function scratchRoot(): string {
 
 /** A pid that is certainly alive and certainly not us: init. `kill(1, 0)` raises EPERM, not ESRCH. */
 const OTHER_LIVE_PID = 1;
-/** Comfortably above any real pid, so it is certainly gone. */
-const DEAD_PID = 4_194_303;
+
+/** A pid is gone if signalling it raises ESRCH -- the same reading `readHolders` takes, and the only one that means dead. */
+function isGone(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "ESRCH";
+  }
+}
+
+/**
+ * A pid this test has SHOWN to be dead: spawn a child, let it exit (`spawnSync` reaps it), and use its pid.
+ *
+ * The first version used a constant, `4_194_303` "comfortably above any real pid". Measured 2026-10-04 (#3374):
+ * under the full suite `readHolders` read it as ALIVE, and the same file alone passed. pid_max here is 4194304
+ * and the host's pids were cycling through the top of the range (pids above 4.1M were in the process table), so
+ * the busiest minutes of 5300 tests hand out exactly that pid -- `pid_max - 1` is a pid a busy host CAN assign.
+ * No constant is safe on any host; a pid that was just reaped is not assigned again until the counter wraps.
+ */
+function deadPid(): number {
+  const child = spawnSync(process.execPath, ["-e", ""]);
+  const pid = child.pid;
+  assert.ok(pid !== undefined && isGone(pid), `a reaped child's pid (${pid}) must be gone, or this test proves nothing`);
+  return pid;
+}
 
 test("a starter that finishes first leaves the server up for a holder still using it", () => {
   const root = scratchRoot();
@@ -64,7 +89,8 @@ test("a crashed holder cannot pin a server forever", () => {
   // The property that makes a crash safe: the file is a hint, the process table is the truth.
   const root = scratchRoot();
   const path = holdersPath(root);
-  writeFileSync(path, JSON.stringify({ serverPid: process.pid, holders: [process.pid, DEAD_PID] }) + "\n", "utf8");
+  const deadPidValue = deadPid();
+  writeFileSync(path, JSON.stringify({ serverPid: process.pid, holders: [process.pid, deadPidValue] }) + "\n", "utf8");
 
   assert.deepEqual(readHolders(path).holders, [process.pid], "a dead pid is not a holder");
   assert.equal(leaveHolders(root).lastOut, true, "the only live holder leaving IS the last one out");
@@ -73,7 +99,8 @@ test("a crashed holder cannot pin a server forever", () => {
 test("a lease whose server has died describes nothing", () => {
   const root = scratchRoot();
   const path = holdersPath(root);
-  writeFileSync(path, JSON.stringify({ serverPid: DEAD_PID, holders: [process.pid] }) + "\n", "utf8");
+  const deadPidValue = deadPid();
+  writeFileSync(path, JSON.stringify({ serverPid: deadPidValue, holders: [process.pid] }) + "\n", "utf8");
 
   // Otherwise a stale file from a crashed run would have a later run signal a pid it does not own -- which
   // after pid reuse is somebody else's process.
