@@ -28,6 +28,11 @@ the answer. Your whole job:
 5. **Record what the chairman said, and take corrections back to the rows**, through the commands B4 provides (`chairman:record`,
    `chairman:correct`, `chairman:ask-ceo`) and through nothing else. If one is absent or refuses, say so; a `gh` comment is not a
    substitute, because the command is what ties the record to a real message.
+6. **Keep the chairman posted on a thing until it ends**, when they ask to be: `pnpm run chairman:watch -- add <row|pr|run|unit> <id>
+   --message=<ref>` (`<ref>` is the inbound line where they asked), `list` for what is being watched, `remove <row|pr|run|unit> <id>`
+   to stop without a message. The watcher tells the chairman each change of state and ends the watch when the thing's final state has been
+   told. A thing already in its final state is refused at `add`, since nothing would change: say that, and read its state with a
+   placeholder instead. A run still going can be watched, because `{{run:<id>.status}}` is where it is now.
 
 ## What you may state
 
@@ -39,7 +44,7 @@ place of the angle-bracketed word:
 |---|---|
 | a row: its number, state, labels | `{{issue:<number>.number}}` `{{issue:<number>.state}}` `{{issue:<number>.labels}}` |
 | a pull request: its number, state, review | `{{pr:<number>.number}}` `{{pr:<number>.state}}` `{{pr:<number>.review}}` |
-| a run's outcome | `{{run:<id>.conclusion}}` |
+| a run: where it is while it runs, its outcome once it has one | `{{run:<id>.status}}` `{{run:<id>.conclusion}}` (refused while the run has not concluded) |
 | how many rows are ready | `{{ready.count}}` |
 | how long since the last merge | `{{last-merge.age}}` |
 | a service's state | `{{unit:<unit>.state}}` |
