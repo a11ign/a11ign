@@ -602,8 +602,13 @@ test("#665/#987 ACCEPTANCE: claimRow given a worktree records it in the claim co
   assert.equal(claimRecordFrom([comment[comment.indexOf("--body") + 1]]).worktree, "/tmp/a11y-wt-665");
 });
 
-test("#987: a claim naming NEITHER a branch nor a worktree posts NO record -- a marker comment with no "
-  + "fields is how a RELEASE is spelled, and the two states must not share a spelling", () => {
+// #3407 (agent-org 0.7.9) REVERSED the first half of #987's rule. A claim naming neither a branch nor a worktree used to post NO
+// record, and the stall check then skipped the row on every tick, so an abandoned claim could not be told from a live one. It now
+// posts `Claimed-nothing: <reason>`. The other half survives: a RELEASE is the marker with no field line, and the two must not
+// share a spelling. The four facts below are each red on the old rule.
+const NOTHING_FIELD = /^Claimed-nothing:\s*\S/m;
+
+function claimNamingNothing() {
   const calls: string[][] = [];
   const run = (cmd: string, args: string[]) => {
     calls.push(args);
@@ -611,7 +616,31 @@ test("#987: a claim naming NEITHER a branch nor a worktree posts NO record -- a 
     return "";
   };
   claimRow(665, "worker-config", { run, moveStatus: () => ({ moved: true }) });
-  assert.equal(calls.filter((a) => a[1] === "comment").length, 0);
+  return calls.filter((a) => a[1] === "comment").map((a) => a[a.indexOf("--body") + 1]);
+}
+
+test("#3407: a claim naming NEITHER a branch nor a worktree posts exactly ONE record", () => {
+  assert.equal(claimNamingNothing().length, 1);
+});
+
+test("#3407: that record carries the claim-record marker and a `Claimed-nothing:` line", () => {
+  const [body] = claimNamingNothing();
+  assert.ok(body.includes(CLAIM_RECORD_MARKER), "the marker is what claimRecordFrom matches on");
+  assert.match(body, NOTHING_FIELD);
+  assert.match(body, /claimed by `worker-config`/, "it is a CLAIM, not a release");
+});
+
+test("#3407: claimRecordFrom reads it as recorded, with no branch, no worktree and the `nothing` flag", () => {
+  assert.deepEqual(claimRecordFrom(claimNamingNothing()),
+    { branch: null, worktree: null, recorded: true, nothing: true });
+});
+
+test("#987/#3407: a RELEASE keeps its own spelling -- no `Claimed-nothing:` line, and no `nothing` flag when read", () => {
+  const release = claimRecordComment({ session: "worker-config", released: true });
+  assert.ok(release.includes(CLAIM_RECORD_MARKER));
+  assert.match(release, /released by `worker-config`/);
+  assert.doesNotMatch(release, NOTHING_FIELD);
+  assert.deepEqual(claimRecordFrom([release]), { branch: null, worktree: null, recorded: true });
 });
 
 // --- #749: a label must EXIST before `gh` can add it, and the removal of `ready` must never apply while
