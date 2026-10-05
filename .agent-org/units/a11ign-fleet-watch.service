@@ -37,7 +37,7 @@ Environment=GH_CONFIG_DIR=/home/agent/workers/gh
 # missing file is left to the script's own CANNOT_ASK.
 EnvironmentFile=-%h/.config/a11ign/fleet.env
 
-ExecStartPre=-%h/.local/bin/pnpm run primary:update
+ExecStartPre=-%h/.local/bin/agent-org primary:update
 
 ExecStart=%h/.local/bin/pnpm run fleet:watch -- --post
 

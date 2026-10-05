@@ -43,7 +43,7 @@ Environment=GH_CONFIG_DIR=/home/agent/workers/gh
 EnvironmentFile=-%h/.config/a11ign/fleet.env
 
 # UPDATED FIRST, and non-fatal, as the other units that run this checkout's code do.
-ExecStartPre=-%h/.local/bin/pnpm run primary:update
+ExecStartPre=-%h/.local/bin/agent-org primary:update
 
 ExecStart=%h/.local/bin/pnpm run lab:watch -- --post
 

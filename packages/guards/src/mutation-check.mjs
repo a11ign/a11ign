@@ -73,7 +73,7 @@
 // removes it: it was one `mutate-*` directory in tmpdir per run, by construction, and nothing else did.
 // `--per-mutant` runs are one process per mutant, so each one makes and removes its own directory.
 //
-// #516: DO NOT NAME THIS SCRIPT ON A `Refutation:` LINE. `Refutation:` (node_modules/agent-org/src/acceptance-commands.mjs)
+// #516: DO NOT NAME THIS SCRIPT ON A `Refutation:` LINE. `Refutation:` (agent-org/src/acceptance-commands.mjs)
 // reads success as any NON-ZERO exit (#438) -- the OPPOSITE of exit 0 above meaning the guard bites. That
 // parser now refuses (rather than misreads) a `Refutation:` line naming `mutate`; paste this script's real
 // output under an unparsed heading instead (#504).

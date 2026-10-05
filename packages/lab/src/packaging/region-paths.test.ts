@@ -14,7 +14,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "@a11ign/evidence/source-text";
 import { sandboxGitEnv } from "../../../guards/src/git-env.mjs";
-import { declaredRegionFiles, directoryReservations, extractLabeledSection, extractRegionSection, hasTemplateField, pathInProse, regionCovers, regionPathsFromBody, rootFilesOnMain, slashlessDirectoryEntries, trackedTopLevelDirs, unrecognisedRegionPaths } from "agent-org/src/region-paths.mjs";
+import { toolModule } from "../../../../scripts/agent-org-newest-tag.mjs";
+const { declaredRegionFiles, directoryReservations, extractLabeledSection, extractRegionSection, hasTemplateField, pathInProse, regionCovers, regionPathsFromBody, rootFilesOnMain, slashlessDirectoryEntries, trackedTopLevelDirs, unrecognisedRegionPaths } = await toolModule("src/region-paths.mjs");
 
 /** #999's fixture lives beside the others this directory already keeps (`pr-584-body.md`, `issue-687-body.txt`). */
 const FIXTURES = fileURLToPath(new URL("./fixtures", import.meta.url));

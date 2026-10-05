@@ -287,7 +287,7 @@ function checkPrimaryCheckoutMark() {
   advise("primary checkout",
     "not marked, so the primary-checkout guards are INERT here. Correct for the lab, a worker or a "
     + "colleague's clone; wrong for the machine that drives the fleet.",
-    "pnpm run primary:mark -- --set   (only on the fleet-driving checkout — see docs/primary-checkout.md)");
+    "agent-org primary:mark --set   (only on the fleet-driving checkout — see docs/primary-checkout.md)");
 }
 
 function checkControlPlaneIsolation() {
@@ -431,7 +431,7 @@ function checkCrossPackageDist() {
   } else {
     const behindNote = behindOriginMainNote(checkoutRootFor(resolvedRealPath));
     advise("dist-resolution", `${specifier} resolves to ${resolvedRealPath} (NOT this checkout${behindNote})`,
-      "pnpm run primary:update && pnpm run build   # if that is the primary checkout");
+      "agent-org primary:update && pnpm run build   # if that is the primary checkout");
   }
 
   // THE HALF A RESOLUTION CHECK ALONE MISSES: resolving to your OWN tree is no protection if your own

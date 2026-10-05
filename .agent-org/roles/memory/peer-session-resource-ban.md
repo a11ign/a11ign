@@ -27,8 +27,8 @@ the ban is still right, the justification was not.
 **Setup, done by me and not by them**, so the fleet-affecting git state stays with one driver:
 
 ```
-pnpm run row-claim check <n>
-pnpm run row-claim claim <n> --session=<name> --branch=agent/<branch> --worktree=../a11y-wt-<name>
+agent-org row-claim check <n>
+agent-org row-claim claim <n> --session=<name> --branch=agent/<branch> --worktree=../a11y-wt-<name>
 cd ../a11y-wt-<name> && pnpm install && ln -s <main>/runs runs && ln -s <main>/.venv .venv
 ```
 

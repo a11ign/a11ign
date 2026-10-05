@@ -56,6 +56,8 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
+        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
       - run: pnpm run build
       # THE LIVE BODY, READ AS LATE AS THE STEPS BELOW ALLOW (#3286): after the install and the build, so the window
       # against `dependency-pr-body`'s rewrite is this job's own setup time rather than the seconds after the event.
@@ -95,7 +97,7 @@ jobs:
           PR_BODY: ${{ steps.live-body.outputs.body }}
         run: |
           if node -e "
-            import('agent-org/src/acceptance-commands.mjs').then((m) => {
+            import('file://' + process.env.AGENT_ORG_TOOL + '/src/acceptance-commands.mjs').then((m) => {
               process.exit(m.hasFullHistoryDeclaration(process.env.PR_BODY) ? 0 : 1);
             });
           "; then
@@ -110,4 +112,4 @@ jobs:
       - name: Run the PR's own stated Acceptance command(s)
         env:
           PR_BODY: ${{ steps.live-body.outputs.body }}
-        run: pnpm exec agent-org acceptance-commands
+        run: agent-org acceptance-commands

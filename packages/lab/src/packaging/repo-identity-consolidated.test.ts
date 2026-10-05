@@ -43,6 +43,7 @@ import path from "node:path";
 import { REPO, REPO_URL, REPO_GIT_URL, PRODUCT_REPO, PRODUCT_REPO_URL, PRODUCT_GIT_URL }
   from "../../../../scripts/repo-identity.mjs";
 import { layerFile } from "../../../guards/src/layer-file.mjs";
+import { toolPath } from "../../../../scripts/agent-org-newest-tag.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..", "..", "..", "..");
 
@@ -204,8 +205,8 @@ test("board-data.mjs and row-claim.mjs DERIVE the name rather than restating it 
   // The two runtime consumers this repo already had. Checked by IMPORT rather than by literal, because
   // that is the whole point of the split: these two no longer carry a copy for repo-identity-drift to
   // catch, and a test asserting a literal here would be re-introducing the duplicate this row removes.
-  for (const file of ["node_modules/agent-org/src/board-data.mjs", "node_modules/agent-org/src/row-claim.mjs"]) {
-    const text = readFileSync(path.join(ROOT, file), "utf8");
+  for (const file of [toolPath("src/board-data.mjs"), toolPath("src/row-claim.mjs")]) {
+    const text = readFileSync(file, "utf8");
     // The specifier is relative to wherever the consumer lives -- these two moved into @a11ign/agent-org,
     // so it is no longer `./`. What matters is that the name is IMPORTED, not which depth the path has.
     //

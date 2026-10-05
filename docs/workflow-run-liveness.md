@@ -14,16 +14,16 @@ caught by a person noticing the check-run list was empty rather than green.
 
 ## The tool
 
-`node_modules/agent-org/src/merge-guard.mjs` (#161) already answers the run-half of this question correctly, for one PR
+`agent-org/src/merge-guard.mjs` (#161) already answers the run-half of this question correctly, for one PR
 given its number — it reads check **runs** for a head sha, never `mergeStateStatus`, because a required
 context that never ran is not a failing check, it is *no check*, and `mergeStateStatus` cannot tell the
 two apart.
 
 ```bash
-pnpm run workflow:liveness --sha=<commit>   # was the PR that produced this commit actually tested?
+agent-org workflow:liveness --sha=<commit>   # was the PR that produced this commit actually tested?
 ```
 
-`node_modules/agent-org/src/workflow-run-liveness.mjs` generalises that into an automatic check for **any commit that has
+`agent-org/src/workflow-run-liveness.mjs` generalises that into an automatic check for **any commit that has
 already reached `main`** — the shape that actually failed silently. Given a commit sha, it asks GitHub
 which pull request produced it (`commits/<sha>/pulls`) and reuses `merge-guard.mjs`'s own
 `lookupRequiredContexts`/`lookupCheckRuns`/`checkReasons` to decide whether that PR's required checks ever

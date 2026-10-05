@@ -1,4 +1,4 @@
-# Filing a backlog row: `npm run row-file`
+# Filing a backlog row: `agent-org row-file`
 
 `.github/ISSUE_TEMPLATE/backlog-row.yml` marks Region, Acceptance and Open-check `required` — but that is a
 GitHub issue **form**, and forms apply only in the web UI. Every row this fleet files goes through
@@ -15,16 +15,16 @@ later, with less context than whoever filed it had.
 ## Use this instead of `gh issue create` directly
 
 ```sh
-pnpm run row-file --title "..." --body "## Region\n\n...\n\n## Acceptance\n\n...\n\n## Open-check\n\n..." --session=<your-session-name> [any other gh issue create flag]
+agent-org row-file --title "..." --body "## Region\n\n...\n\n## Acceptance\n\n...\n\n## Open-check\n\n..." --session=<your-session-name> [any other gh issue create flag]
 # or
-pnpm run row-file --title "..." --body-file /path/to/body.md --session=<your-session-name> [any other gh issue create flag]
+agent-org row-file --title "..." --body-file /path/to/body.md --session=<your-session-name> [any other gh issue create flag]
 ```
 
 `--session=<name>` is **required** — the same flag `row-claim.mjs` already uses for dispatch/claim/decline,
-reused rather than a second, independently-typed one. `node_modules/agent-org/src/row-file.mjs` reads exactly the body this
+reused rather than a second, independently-typed one. `agent-org/src/row-file.mjs` reads exactly the body this
 invocation would file — from `--body`/`--body=` or `--body-file`/`--body-file=` — and checks it against the
 **same rule** `row-claim` already enforces at claim time (`missingTemplateFields`, imported unchanged from
-`node_modules/agent-org/src/row-claim/template-fields-rule.mjs`, #707). If a required section is missing, it refuses and names
+`agent-org/src/row-claim/template-fields-rule.mjs`, #707). If a required section is missing, it refuses and names
 which one, before `gh` ever runs.
 
 If the body is complete, it is filed with a `Filed-by: <session>` line appended (#771) — a body line, never
@@ -177,7 +177,7 @@ grammar will change.** The check is one command, and it is the check to run befo
 region:
 
 ```bash
-node --input-type=module -e "import {declaredRegionFiles} from './node_modules/agent-org/src/region-paths.mjs';
+node --input-type=module -e "const {declaredRegionFiles} = await import(process.env.AGENT_ORG_TOOL + '/src/region-paths.mjs');
   import {readFileSync} from 'node:fs';
   console.log(declaredRegionFiles(readFileSync(process.argv[1],'utf8')))" <a file holding the row body>
 ```
@@ -239,7 +239,7 @@ row field this page used to describe by this form, on `ceo`'s ruling that no clo
 
 Every check above refuses. These print and file anyway, because each is a fact about the body the filer can
 still act on **and** each has a legitimate exception a refusal would block. All are pure functions in
-`node_modules/agent-org/src/row-file.mjs`, gathered by `filingWarnings` and pinned in `row-file.test.ts` in both
+`agent-org/src/row-file.mjs`, gathered by `filingWarnings` and pinned in `row-file.test.ts` in both
 directions — a warning that fires on every filing is noise, and the no-warning direction is its only control.
 Measured 2026-09-24 over 70 open and 80 recently closed rows, at `edf5ec07a`: closure 47 of 150 (29 charged,
 19 unread — one row can be both), count 12 of 150, malformed 5 of 150.
@@ -270,7 +270,7 @@ Measured 2026-09-24 over 70 open and 80 recently closed rows, at `edf5ec07a`: cl
 unimportant. A row that is out of release and worth fixing soon is spelled "out of release, ready" —
 importance is said by the ready order, not by which milestone a row sits on.**
 
-Earned 2026-09-12 on #1161, a defect in `node_modules/agent-org/src/row-claim.mjs`'s refusal message. It was moved **into**
+Earned 2026-09-12 on #1161, a defect in `agent-org/src/row-claim.mjs`'s refusal message. It was moved **into**
 the release on an argument from severity, and `worker-capture`'s objection was that the label had been
 answering its own question correctly all along: `row-claim.mjs` ships in no package, so it cannot block a
 publish however badly it behaves. **`ceo` reversed their own ruling** — no severity axis, because the

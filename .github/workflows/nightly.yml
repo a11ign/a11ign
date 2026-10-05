@@ -7,7 +7,7 @@
 #
 # - `coverage` (below, unchanged) was already nightly; it moved here from `coverage.yml` so there is ONE
 #   scheduled file to read.
-# - `ready-audit` runs `pnpm run ready:audit` once a night instead of hourly plus on every issue event.
+# - `ready-audit` runs `agent-org ready:audit` once a night instead of hourly plus on every issue event.
 #   `ready-label-audit.yml` is DELETED, not renamed: its hourly-plus-event shape was the livelock, and its
 #   findings are the tracker owner's, who reads them once a day and runs the script by hand for a same-day
 #   answer. Do not re-add an `issues:` trigger here; that is the 1,040-run shape.
@@ -62,6 +62,8 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - id: ci
         run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
+        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
       - id: build
         run: pnpm run build
       # GH_TOKEN: `board-style.test.ts` and `row-claim.test.ts`'s live `fetchLabels` shell out to real `gh`
@@ -121,6 +123,8 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
+        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
       - run: pnpm run build
       # CAPTURED TO A FILE, NOT JUST THE ACTIONS LOG (#2576) -- the step below reads it to name the failing
       # test files. `set -o pipefail`, because `| tee` on its own reports the PIPELINE's exit status as
@@ -237,6 +241,8 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
+        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
       # The guard itself imports nothing built, but the step below reads `RSTEST_CONFIG` out of
       # `assert-glob-not-empty.mjs`, which imports `@a11ign/screenreader-fleet/cli-flags` -- a package export
       # resolving to `dist/`, which `--ignore-scripts` does not produce and which this repo does not track.
@@ -322,6 +328,8 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
+        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
       - name: Audit the tracker's labels once a day
         env:
           A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
@@ -333,7 +341,7 @@ jobs:
             export GH_TOKEN="$GITHUB_TOKEN"
             echo "::warning::A11IGN_BOT_TOKEN is not set -- GITHUB_TOKEN cannot resolve a user-owned ProjectV2, so the board-membership check will report as unable to run. See #416."
           fi
-          pnpm run ready:audit
+          agent-org ready:audit
 
   # #948 (The CI Reset, step 3 of the doc-guard triage #905): the doc cross-reference REPORT, once a night,
   # as one comment. Until #954 retires them, the ~14 doc cross-reference guards still run on every PR; this
@@ -357,6 +365,8 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
+        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
       - run: pnpm run build
       - name: Write the doc cross-reference report and post it as one comment
         env:
@@ -385,17 +395,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with: { ref: main }
-      # The tool is a pinned dependency now (#2975): `pnpm exec agent-org` needs `node_modules`. `--filter .` installs the
-      # ROOT project only, which is all the tool needs, not every workspace package's dependencies.
-      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v7
-        with: { node-version: 22, cache: pnpm }
-      - run: pnpm install --frozen-lockfile --ignore-scripts --filter .
+        with: { node-version: 22 }
+      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
+        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
       - name: If main's tip has zero check runs, trigger a real gate run against it
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: pnpm exec agent-org trunk-sweep
+        run: agent-org trunk-sweep
   closeRowsSweep:
     if: github.event.schedule == '37 * * * *' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -406,17 +414,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with: { ref: main }
-      # The tool is a pinned dependency now (#2975): `pnpm exec agent-org` needs `node_modules`. `--filter .` installs the
-      # ROOT project only, which is all the tool needs, not every workspace package's dependencies.
-      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v7
-        with: { node-version: 22, cache: pnpm }
-      - run: pnpm install --frozen-lockfile --ignore-scripts --filter .
+        with: { node-version: 22 }
+      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
+        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
       - name: Close any row a merged PR declared that the push-time job missed
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: pnpm exec agent-org close-rows-sweep --window=120
+        run: agent-org close-rows-sweep --window=120
   watch:
     # Runs on the :37 cron AND on workflow_dispatch, so the one job whose failure mode is silence can be
     # asked to speak by hand (worker-judge's review of #1068).
@@ -434,12 +440,14 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
+        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
       - name: Read the org and post only if something needs attention
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set +e
-          pnpm exec agent-org org-watch > /tmp/org-watch.md 2>&1; rc=$?
+          agent-org org-watch > /tmp/org-watch.md 2>&1; rc=$?
           set -e
           cat /tmp/org-watch.md
           if [ "$rc" -ne 0 ]; then gh issue comment 928 --body-file /tmp/org-watch.md; fi

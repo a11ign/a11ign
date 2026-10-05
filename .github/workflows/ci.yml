@@ -262,6 +262,8 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
+        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
       - run: pnpm run build
       - run: pnpm run rules-check
 
@@ -281,6 +283,8 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
+      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
+        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
       # PRECISE, now that the install has made `npm pack` safe to call. `orchestrator` reproduced the crash
       # this avoids: `classify()` calling the real `packedFiles` inside `changed` (no install at all) fails
       # on every PR touching a published package. This re-derives the real answer -- does npm actually
@@ -392,6 +396,8 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
+        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
       - run: pnpm run build
       # `GH_TOKEN` because the packaging guards in the population shell out to `gh`, as `ts`'s own test step does.
       - name: Every tree-wide guard, on this tree
@@ -478,11 +484,13 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
+        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
       - run: pnpm run build
       - name: This head matches what GitHub recorded (#294)
         env:
           GH_TOKEN: ${{ github.token }}
-        run: pnpm exec agent-org merge-guard --ci-gate ${{ github.event.pull_request.number }}
+        run: agent-org merge-guard --ci-gate ${{ github.event.pull_request.number }}
       # #549: WHAT THE BODY DECLARES MUST MATCH WHAT GITHUB WILL ACTUALLY CLOSE. `Closes: none` in the
       # body and a real closure of two issues both merged the same day -- neither the acceptance job (no
       # GH_TOKEN, by design) nor anything else compared the two. This is a NEW step, not folded into
@@ -495,7 +503,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_BODY: ${{ github.event.pull_request.body }}
-        run: pnpm exec agent-org closes-mismatch-check ${{ github.event.pull_request.number }}
+        run: agent-org closes-mismatch-check ${{ github.event.pull_request.number }}
       # THE LANE CHECK WAS HERE, AND IS RETIRED (#916's date, 2026-09-15, passed without its CODEOWNERS
       # replacement being built -- built afterward, in #916 itself). It refused any PR touching
       # `.github/workflows/` unless it came from a `ceo/` branch or carried a `Lane-exception:` line naming
@@ -578,18 +586,17 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v7
-        with: { node-version: 22, cache: pnpm }
-      # The tool is a pinned dependency (#2975), so this job installs it. `--filter .` is the root project only.
-      - run: pnpm install --frozen-lockfile --ignore-scripts --filter .
+        with: { node-version: 22 }
+      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
+        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
       - name: Which paths did this PR change, and does its body sign them off?
         env:
           BODY: ${{ github.event.pull_request.body }}
         run: |
           git diff --name-only origin/${{ github.base_ref }}...HEAD > /tmp/changed.txt
           printf '%s' "$BODY" > /tmp/body.txt
-          pnpm exec agent-org owned-path-signoff --diff=/tmp/changed.txt --body=/tmp/body.txt
+          agent-org owned-path-signoff --diff=/tmp/changed.txt --body=/tmp/body.txt
 
   # #3105 (found on #3102 done-when 3): THE TOOL'S OWN SUITE RUNS AGAINST THIS PULL REQUEST, so a project change that moves a
   # line an `a11ign/agent-org` test pins is red HERE, before it merges, and not on agent-org's `main` after.
@@ -661,10 +668,10 @@ jobs:
           # own repository, whose base holds no `src` (measured: `git archive <sha> src` fails), so the variable must name a clone outside it.
           mv agent-org "$RUNNER_TEMP/agent-org-checkout"
           echo "AGENT_ORG_TOOL_REPO=$RUNNER_TEMP/agent-org-checkout" >> "$GITHUB_ENV"
-          # The project imports the tool by name, as a dependency. The tool's own tests read this fixture's imports as relative paths into
+          # The project loads the tool by path (`toolModule`, #3534). The tool's own tests read this fixture's STATIC imports, as relative paths into
           # `packages/agent-org`, where the tool lived when #2976 removed it, so this runner (and no committed file) spells the import that way.
           fixture=packages/lab/src/packaging/board-document-chrome-resolver.test.ts
-          sed -i 's#from "agent-org/src/board-document.mjs"#from "../../../agent-org/src/board-document.mjs"#' "$fixture"
+          sed -i 's#^const {\(.*\)} = await toolModule("src/board-document.mjs");#import {\1} from "../../../agent-org/src/board-document.mjs";#' "$fixture"
           grep -q 'from "../../../agent-org/src/board-document.mjs"' "$fixture"
           # The tool's tests list the project's files with `git ls-files`. The laid-out copy joins this runner's index so they see the tool as they did when it was tracked.
           git add --force --intent-to-add packages/agent-org

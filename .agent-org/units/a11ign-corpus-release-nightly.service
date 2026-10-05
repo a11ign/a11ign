@@ -52,7 +52,7 @@ EnvironmentFile=-%h/.config/a11ign/fleet.env
 # UPDATED FIRST, same as a11ign-fleet-gated-nightly.service's own ExecStartPre -- a firing against a stale
 # checkout could release a snapshot fetched by yesterday's `lab-fetch.yml`. The `-` prefix makes a failed
 # update non-fatal: a firing against a slightly stale checkout is worth far more than no firing at all.
-ExecStartPre=-%h/.local/bin/pnpm run primary:update
+ExecStartPre=-%h/.local/bin/agent-org primary:update
 
 ExecStart=/usr/bin/node packages/lab/scripts/corpus-release-nightly.mjs
 

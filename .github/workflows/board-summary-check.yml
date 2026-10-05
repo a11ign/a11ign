@@ -77,13 +77,16 @@ jobs:
         if: steps.hour.outputs.mode != 'none'
         run: pnpm install --frozen-lockfile
 
+      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
+        if: steps.hour.outputs.mode != 'none'
+        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
       # 07:15 -- REPORTS AND EXITS 0. At 07:15 the summary is not late, it is not written yet, and a red
       # mark every morning for a normal working state is how a signal gets ignored.
       - name: 07:15 reminder -- is today's summary written?
         if: steps.hour.outputs.mode == 'reminder'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: pnpm exec agent-org board:summary-check --post --reminder
+        run: agent-org board:summary-check --post --reminder
 
       # 07:45 -- REFUSES. The edition is fifteen minutes away and will refuse anyway; failing here says
       # so while there is still time to act.
@@ -91,4 +94,4 @@ jobs:
         if: steps.hour.outputs.mode == 'refuse'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: pnpm exec agent-org board:summary-check --post
+        run: agent-org board:summary-check --post

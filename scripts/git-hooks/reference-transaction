@@ -30,7 +30,7 @@
 # POP/DROP/CLEAR ARE WARNED, NOT REFUSED, EXCEPT ONE CASE (#1872 first, narrowed by #1896). Git gives
 # this hook no reliable way to know a mismatched pop is WRONG in general -- only that the entry it is
 # about to consume was made on a branch other than the one checked out here, which is exactly the fact
-# `npm run stash:whose` would have shown had someone thought to run it first. That stays a warning: the
+# `agent-org stash:whose` would have shown had someone thought to run it first. That stays a warning: the
 # same false-positive problem that ruled out refusing pop in #305 (a mismatched-but-idle branch could be
 # anything -- renamed, merged, its worktree long gone).
 #
@@ -73,13 +73,13 @@ check_other_branch() {
     echo "REFUSED: this stash was made on '$branch', and that branch is checked out RIGHT NOW in" >&2
     echo "  $live -- not this worktree ('${current:-<detached>}'). Taking it here would pull a live" >&2
     echo "  worktree's own uncommitted work out from under it (#1866/#1896)." >&2
-    echo "  \`npm run stash:whose\` lists what is left in the pile and whose branch it names." >&2
+    echo "  \`agent-org stash:whose\` lists what is left in the pile and whose branch it names." >&2
     return 1
   fi
 
   echo "WARNING: the stash you just removed was made on '$branch', not '${current:-<detached>}'." >&2
   echo "  \`refs/stash\` is shared across every worktree -- this may not have been yours to take." >&2
-  echo "  \`npm run stash:whose\` lists what is left in the pile and whose branch it names." >&2
+  echo "  \`agent-org stash:whose\` lists what is left in the pile and whose branch it names." >&2
 }
 
 while read -r old new ref; do
@@ -111,7 +111,7 @@ while read -r old new ref; do
       echo "  Name it, and \`git stash list\` says whose it is:" >&2
       echo "      git stash push -m \"$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo '<branch>'): what this is\"" >&2
       echo "" >&2
-      echo "  \`npm run stash:whose\` lists every stash with the branch it was made on." >&2
+      echo "  \`agent-org stash:whose\` lists every stash with the branch it was made on." >&2
       echo "  Deliberate exception: A11Y_STASH_ANY=1 git stash push" >&2
       exit 1
       ;;

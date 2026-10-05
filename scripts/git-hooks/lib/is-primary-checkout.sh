@@ -30,7 +30,7 @@
 #
 # An unmarked checkout is not guarded. That is the correct default — a guard that fires on machines it was
 # never meant for is what this fixes — but "unmarked" and "safe" must not read the same, so `npm run
-# doctor` reports an unmarked primary and `npm run primary:mark` sets it. Silence here would be the
+# doctor` reports an unmarked primary and `agent-org primary:mark` sets it. Silence here would be the
 # check-that-examined-nothing shape one layer down.
 #
 #   git config --local a11y.primaryCheckout true     # what `primary:mark` runs
