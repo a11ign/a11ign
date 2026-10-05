@@ -18,6 +18,11 @@ decide across whichever layers exist and so name none of them.
 | `a11ign` (M7) | **`a11ign`, unscoped** — product | AGPL-3.0-or-later | the CLI. Stays unscoped so `npx a11ign` needs no wrapper — ADR 0036 rejected `@a11ign/cli` for exactly this reason. Exports `reportLines` only; the root package was renamed to `a11ign-monorepo` to free the name |
 | `pdf` (renamed `documents`, #2705) | `@a11ign/documents` — the PDF layer | Apache-2.0 | the second layer (#68, `ceo`'s ruling on #1131): reads a PDF's own accessibility tag tree directly — tagged/untagged, document language, alt text on `Figure` elements — with `pdf-lib`, no browser, no NVDA and no fleet |
 
+**`toolchain` joined under [ADR 0043](../docs/adr/0043-one-toolchain-for-every-repository.md) (row 4-0, #3578)**: `@a11ign/toolchain`, product,
+AGPL-3.0-or-later, published. The rstest config as a function of what differs per repository (`./rstest-config`), the `node:test` shim and alias hook, the
+run record and verdict line, the child-coverage merge, the Rslib presets and the helper that derives a package's entries from its own `exports`, and
+the shared `tsconfig.base.json`. a11ign's own `scripts/rstest/rstest.config.mjs` is a thin call into its SOURCE by relative path, so it runs in a tree with no `dist`.
+
 **`pdf` joined after M1–M8 rather than inside them** — the migration above renamed what already existed;
 `pdf` is the first package ADR 0036's "a new layer joins by the same contract" clause was ever tested
 against, added once the contract itself (this document) existed to join.

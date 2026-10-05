@@ -43,8 +43,19 @@ function main() {
     return;
   }
 
+  // A package with an `rslib.config.ts` is built by Rslib, never by `tsc --build`: its `tsconfig.json` is there to CHECK it (ADR 0043,
+  // Decision 4), and `tsc --build` over it would build nothing it ships. Rslib packages go FIRST, because the toolchain is what the
+  // others' builds will be made of once row 4c-a11ign converts them. Its own config imports its source, never its `dist`, so it
+  // builds before anything exists.
+  const rslibPackages = buildable.filter((dir) => existsSync(join(dir, "rslib.config.ts")));
+  const tscPackages = buildable.filter((dir) => !rslibPackages.includes(dir));
+
   process.stdout.write(`building ${buildable.length} package(s)\n`);
-  const { command, args } = pnpmCliInvocation(["exec", "tsc", "--build", ...buildable]);
+  for (const dir of rslibPackages) {
+    const rslib = pnpmCliInvocation(["exec", "rslib", "build"]);
+    execFileSync(rslib.command, rslib.args, { cwd: dir, stdio: "inherit" });
+  }
+  const { command, args } = pnpmCliInvocation(["exec", "tsc", "--build", ...tscPackages]);
   execFileSync(command, args, { cwd: root, stdio: "inherit" });
 }
 

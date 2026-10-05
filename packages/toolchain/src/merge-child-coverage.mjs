@@ -1,6 +1,4 @@
-#!/usr/bin/env node
 // @ts-check
-// command: run the suite under rstest with coverage, then merge in what spawned `node` children covered (#1350)
 
 /**
  * #1350, rstest adoption F2 (BLOCKER), under #1317: COVERAGE OF SCRIPTS THE SUITE RUNS AS CHILD PROCESSES.
@@ -32,9 +30,11 @@
  *   file keeps no second copy of that rule: an earlier filter of its own was redundant with it, and a mutation
  *   removing that filter survived.
  * - **The population comes from `.c8rc.json`, passed on rstest's command line** (`--coverage.include` and
- *   `--coverage.exclude` repeat), so `rstest.config.mjs` is unchanged and the two tools cannot drift apart on it.
+ *   `--coverage.exclude` repeat), so the rstest config is unchanged and the two tools cannot drift apart on it.
  *
- *   node scripts/rstest/merge-child-coverage.mjs
+ * Since #3578 this is a library, not a command: `runChildCoverage` is the whole run, and a repository calls it from its own
+ * coverage script (a11ign's is `scripts/coverage.mjs`). Which flag guard to use and how to start rstest are that repository's,
+ * so they are arguments here and not imports.
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
@@ -42,15 +42,16 @@ import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { CoverageProvider } from "@rstest/coverage-v8";
-// RELATIVE, the reason every other script here gives: the flag guard and the pnpm resolver need no build.
-import { refuseUnknownFlags } from "../../packages/worker-fleet/src/cli-flags.mjs";
-// #492: a bare "pnpm" spawn is ENOENT on windows-2022; `npm-cli-windows-spawn.test.ts` refuses one.
-import { pnpmCliInvocation } from "../npm-cli-executable.mjs";
 
-const ROOT = fileURLToPath(new URL("../../", import.meta.url));
-const REPORTS_DIRECTORY = join(ROOT, "coverage", "rstest");
-
-/** @typedef {ReturnType<CoverageProvider["createCoverageMap"]>} CoverageMap */
+/**
+ * The slice of istanbul's `CoverageMap` this file reads, written out here and NOT `ReturnType<CoverageProvider["createCoverageMap"]>`:
+ * that type reaches `@rstest/coverage-v8`'s own `.d.ts`, which imports `istanbul-lib-coverage` types the package lists only as a
+ * devDependency, so a consumer with `skipLibCheck: false` failed TS7016 inside a package it did not write (measured in a clean
+ * consumer, #3578). `CoverageProvider` is still a runtime import; it just no longer shows in the published declarations.
+ * @typedef {{ getCoverageSummary(): { toJSON(): Record<"lines" | "statements" | "functions" | "branches",
+ *   { covered: number, total: number, pct: number }> }, merge(other: unknown): void, toJSON(): unknown, files(): string[],
+ *   fileCoverageFor(file: string): { toJSON(): unknown } }} CoverageMap
+ */
 /** @typedef {{ include: string[], exclude: string[] }} C8Population */
 /** @typedef {{ url: string, filePath: string, functions: unknown[], scriptId?: string }} ChildEntry */
 
@@ -197,31 +198,41 @@ export function coverageTotals(map) {
     branches: pick(summary.branches) };
 }
 
-async function main() {
-  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/rstest/merge-child-coverage.mjs" });
-  const c8rc = JSON.parse(readFileSync(join(ROOT, ".c8rc.json"), "utf8"));
-  const options = coverageOptionsFromC8rc(c8rc, REPORTS_DIRECTORY);
+/**
+ * What a repository decides about one coverage run: where it is, which population, and how its rstest is started.
+ * `population` is `.c8rc.json`'s parsed `include` and `exclude`; `rstest` is the command and the arguments BEFORE the coverage
+ * flags, e.g. `pnpm exec rstest run --config <path>` (#492: a bare "pnpm" spawn is ENOENT on windows-2022, so the repository
+ * resolves it).
+ * @typedef {{ root: string, population: C8Population, rstest: { command: string, args: string[] } }} ChildCoverageRun
+ */
+
+/**
+ * The whole run: rstest under coverage with `NODE_V8_COVERAGE` set, the children's coverage folded in, the merged report
+ * written beside rstest's own as `coverage-final.merged.json`. Returns rstest's own exit status, or 2 when it wrote no report.
+ * @param {ChildCoverageRun} run
+ * @returns {Promise<number>}
+ */
+export async function runChildCoverage({ root, population, rstest }) {
+  const reportsDirectory = join(root, "coverage", "rstest");
+  const options = coverageOptionsFromC8rc(population, reportsDirectory);
   const rawDir = realpathSync(mkdtempSync(join(tmpdir(), "rstest-child-coverage-")));
-  const rstest = pnpmCliInvocation(
-    ["exec", "rstest", "run", "--config", "scripts/rstest/rstest.config.mjs", ...rstestCoverageArgs(options)]);
-  const run = spawnSync(rstest.command, rstest.args, { cwd: ROOT, stdio: "inherit", env: { ...process.env, NODE_V8_COVERAGE: rawDir } });
-  const reportPath = join(REPORTS_DIRECTORY, "coverage-final.json");
+  const run = spawnSync(rstest.command, [...rstest.args, ...rstestCoverageArgs(options)],
+    { cwd: root, stdio: "inherit", env: { ...process.env, NODE_V8_COVERAGE: rawDir } });
+  const reportPath = join(reportsDirectory, "coverage-final.json");
   if (!existsSync(reportPath)) {
     process.stderr.write(`merge-child-coverage: rstest wrote no ${reportPath} (exit ${run.status}) -- nothing to merge.\n`);
-    process.exit(2);
+    return 2;
   }
   const report = JSON.parse(readFileSync(reportPath, "utf8"));
-  const alone = new CoverageProvider(/** @type {any} */ (options), ROOT).createCoverageMap();
+  const alone = new CoverageProvider(/** @type {any} */ (options), root).createCoverageMap();
   alone.merge(report);
   const before = coverageTotals(alone);
   const { merged, childFiles, unmatched } = await mergeChildCoverage(
-    { report, entries: childCoverageEntries(rawDir, ROOT), options, root: ROOT });
-  writeFileSync(join(REPORTS_DIRECTORY, "coverage-final.merged.json"), JSON.stringify(merged.toJSON()));
+    { report, entries: childCoverageEntries(rawDir, root), options, root });
+  writeFileSync(join(reportsDirectory, "coverage-final.merged.json"), JSON.stringify(merged.toJSON()));
   process.stdout.write(`merge-child-coverage: ${childFiles.length} file(s) gained child-process coverage; `
     + `not folded (no base structure at the start): ${JSON.stringify(unmatched)}.\n`
     + `  rstest alone: ${JSON.stringify(before)}\n  merged:       ${JSON.stringify(coverageTotals(merged))}\n`);
   rmSync(rawDir, { recursive: true, force: true });
-  process.exit(run.status ?? 1);
+  return run.status ?? 1;
 }
-
-if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) await main();

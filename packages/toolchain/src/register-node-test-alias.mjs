@@ -19,7 +19,11 @@
  */
 import { registerHooks } from "node:module";
 
-const shimUrl = new URL("./node-test-shim.mjs", import.meta.url).href;
+// THE SHIM IS THIS FILE'S SIBLING, and the URL is made by string, NOT by `new URL("./node-test-shim.mjs", import.meta.url)`:
+// Rslib reads that shape as an asset reference and copies the target into `dist/static/assets/` instead of leaving it a sibling
+// (measured building this package, #3578). The built hook and the built shim are siblings in `dist`, as the sources are in `src`.
+const selfUrl = import.meta.url;
+const shimUrl = `${selfUrl.slice(0, selfUrl.lastIndexOf("/") + 1)}node-test-shim.mjs`;
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
