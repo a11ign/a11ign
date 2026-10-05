@@ -1,9 +1,9 @@
 /**
  * #1319, STEP 3 OF THE RSTEST ADOPTION (#1317): CI's `ts` job and trunk's unscoped step run rstest, not `tsx --test`.
  *
- * Both jobs run through `reusable-build-test.yml`. Its scoped step ran `npx tsx --test` on the files
- * `select-changed-tests.mjs` picked, and its unscoped step runs `npm run test:all`, which reaches the runner through
- * `assert-glob-not-empty.mjs --run`. So the switch lives in those files, and this one pins it with comments stripped,
+ * Both jobs run through `reusable-build-test.yml`. Its one test step runs `pnpm run test:all`, which reaches the runner
+ * through `assert-glob-not-empty.mjs --run` (before #3573 a second, scoped step ran `npx tsx --test` on the files a
+ * selector picked; it is deleted). So the switch lives in those files, and this one pins it with comments stripped,
  * because a runner named only in a comment runs nothing.
  *
  * The floor `assert-glob-not-empty.mjs` exists for (#355) must still hold under the new runner: a glob or a selected

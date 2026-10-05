@@ -13,17 +13,17 @@ name: reusable-build-test
 # THREE INDEPENDENT AXES, because the two real callers are NOT step-identical -- verified against
 # `origin/main` before writing this, not assumed:
 #
-#   ci.yml's `ts` job:        build, docs:coverage, lint, typecheck, SCOPED tests -- no python
+#   ci.yml's `ts` job:        build, docs:coverage, lint, typecheck, whole-suite tests -- no python
 #   ci.yml's `python` job:    build only (a prerequisite for a python test that shells to node) -- no lint/
 #                             typecheck/ts-tests, no docs:coverage
-#   trunk-guard's `trunkGate`: build, lint, typecheck, UNSCOPED tests, python -- no docs:coverage
+#   trunk-guard's `trunkGate`: build, lint, typecheck, whole-suite tests, python -- no docs:coverage
 #
 # (#2298: these three once differed by a fourth axis, a dedicated `node_modules` cache only the `ts` job
 # carried. pnpm's STORE is what is cached now, by setup-node for every caller alike, so the axis is gone.)
 #
-# So parameterizing on "scope" ALONE would either give trunk-guard `docs:coverage` it never had (new work
+# So parameterizing on the test step ALONE would either give trunk-guard `docs:coverage` it never had (new work
 # on every merge to `main`) or silently drop it from `ci.yml` (a check deleted without anyone deciding to).
-# Each input's default below is chosen to match the ORIGINAL, narrowest-scoped caller (`python`'s job),
+# Each input's default below is chosen to match the ORIGINAL, narrowest caller (`python`'s job),
 # so a caller must opt IN to the extra work rather than opt out of it -- the same "additive, not a silent
 # widening" instinct as `permissions:` below.
 on:

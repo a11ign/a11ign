@@ -45,7 +45,7 @@ name: trunk
 # not depend on this job, so a red watchdog can never be read as a red `main`. `board-liveness.test.ts`,
 # `npm-token-liveness.test.ts` and `workflow-run-liveness.test.ts` pin all of that against this file.
 #
-# UNSCOPED, DELIBERATELY, unlike `ci.yml`'s per-package `ts` job. A push to `main` is a merge, which by
+# UNSCOPED, DELIBERATELY, as `ci.yml`'s `ts` job now is too (#3573); this was once the only whole-suite run. A push to `main` is a merge, which by
 # definition can touch anything, and pushes to `main` are far less frequent than PR commits -- there is no
 # throughput pressure here that would justify the same path-scoping.
 #
@@ -179,7 +179,7 @@ jobs:
   # were sequential steps in one job -- a revert-worthy push still fails fast rather than paying for a full
   # suite that cannot see that class of defect at all.
   #
-  # UNSCOPED + PYTHON, DELIBERATELY, unlike `ci.yml`'s per-package `ts`/`python` jobs -- a push to `main` is
+  # UNSCOPED + PYTHON, DELIBERATELY, unlike `ci.yml`'s `python` job -- a push to `main` is
   # a merge, which by definition can touch anything, and pushes to `main` are far less frequent than PR
   # commits, so there is no throughput pressure here that would justify the same path-scoping.
   trunkBuildTest:
