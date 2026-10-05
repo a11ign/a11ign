@@ -1,5 +1,12 @@
 # @a11ign/judge
 
+## 0.2.2
+
+### Patch Changes
+
+- Updated dependencies [d665b89]
+  - @a11ign/scorer@0.2.1
+
 ## 0.2.1
 
 ### Patch Changes
