@@ -59,6 +59,14 @@
       "a11ign-ai-workers": "write",
       "a11ign-ai-leads": "write",
       "a11ign-ci": "write"
+    },
+    "a11ign/toolchain": {
+      "DanBeckDev": "admin",
+      "Cemmaw": "none",
+      "a11ign-bot": "write",
+      "a11ign-ai-workers": "write",
+      "a11ign-ai-leads": "write",
+      "a11ign-ci": "write"
     }
   }
 }
