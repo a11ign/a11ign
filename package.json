@@ -211,7 +211,7 @@
     "@a11ign/screenreader-worker": "0.1.0",
     "@anthropic-ai/sdk": "^0.131.0",
     "@guidepup/guidepup": "^0.31.0",
-    "a11ign": "0.2.4"
+    "a11ign": "0.2.5"
   },
   "devDependencies": {
     "@changesets/cli": "3.0.1",
