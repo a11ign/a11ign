@@ -778,9 +778,14 @@ jobs:
     #
     # The token's reach used to be learned by the first release that died on it (`toolchain`'s `release`
     # 37356801652, `Resource not accessible by personal access token`, #3578), and its scope is readable only by its owner
-    # (403 for every agent). This job asks the token itself, on every merge to `main`, and `layer-repository-protection.test.ts`'s
+    # (403 for every agent). This job asks the token itself, and `layer-repository-protection.test.ts`'s
     # `token` cell reads the LATEST run of a job NAMED `token-reach` in the workflow `docs/code-repository-protection.json`
     # names (`tokenProbe`), so the job's name is a contract and is the same in every code repository.
+    #
+    # WHAT RUNS IT: a push to `main` that touches one of this workflow's `paths` (`.changeset/**`, `package.json`,
+    # `pnpm-lock.yaml`, `packages/*/package.json`), or a `workflow_dispatch`. NOT every merge: the PR that adds or changes
+    # this job touches none of those paths, so its own merge does not run it. A dispatch of `main` (it runs `plan` as a
+    # rehearsal and publishes nothing) is the way to get a reading on demand, and the cell reads it.
     #
     # A READ OF A REF IS NOT THE INSTRUMENT: every code repository is public and a ref read answers 200 with no credential
     # at all. Two probes that WRITE NOTHING, each measured against four credentials on all eight repositories (runs
