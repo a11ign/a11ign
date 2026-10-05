@@ -850,15 +850,14 @@ test("#3710: everything that is not a TOKEN-REACH reading is CANNOT_TELL, never 
 
 // --- #3710: the probe itself, run as the workflow runs it, against a `curl` that answers with chosen statuses ---
 
-const AUTO_ARM = ".github/workflows/auto-arm.yml";
 type ProbeWorkflow = { jobs?: Record<string, { needs?: string | string[]; steps?: { run?: string }[] }> };
-const autoArm = (): ProbeWorkflow => parseYaml(readFileSync(join(REPO_ROOT, AUTO_ARM), "utf8")) as ProbeWorkflow;
+const releaseWorkflow = (): ProbeWorkflow => parseYaml(readFileSync(join(REPO_ROOT, RELEASE_WORKFLOW), "utf8")) as ProbeWorkflow;
 const PROBE_SECRET = "ghp_probe-secret-must-never-be-printed";
 
 /** The step's script, run under `bash -e` like Actions does, with a `curl` that answers the push probe and the pulls probe separately. */
 function runProbe(answers: { push: string; pulls: string }, token = PROBE_SECRET): { code: number | null; out: string } {
-  const script = autoArm().jobs?.[TOKEN_JOB]?.steps?.find((step) => step.run !== undefined)?.run ?? "";
-  assert.notEqual(script, "", `${AUTO_ARM} has no ${TOKEN_JOB} job with a script: the probe does not exist`);
+  const script = releaseWorkflow().jobs?.[TOKEN_JOB]?.steps?.find((step) => step.run !== undefined)?.run ?? "";
+  assert.notEqual(script, "", `${RELEASE_WORKFLOW} has no ${TOKEN_JOB} job with a script: the probe does not exist`);
   const dir = mkdtempSync(join(tmpdir(), "token-reach-"));
   const curl = join(dir, "curl");
   writeFileSync(curl, '#!/bin/sh\nfor a in "$@"; do case "$a" in *git-receive-pack*) printf %s "$STUB_PUSH"; exit 0;; esac; done\nprintf %s "$STUB_PULLS"\n');
@@ -901,12 +900,12 @@ test("#3710: an unset secret fails with its own cause, and no run ever prints th
 });
 
 test("#3710: the probe is a separate job named for the cell, on merge only, and nothing waits on it", () => {
-  const jobs = autoArm().jobs ?? {};
-  assert.ok(jobs[TOKEN_JOB], `${AUTO_ARM} has no \`${TOKEN_JOB}\` job`);
+  const jobs = releaseWorkflow().jobs ?? {};
+  assert.ok(jobs[TOKEN_JOB], `${RELEASE_WORKFLOW} has no \`${TOKEN_JOB}\` job`);
   assert.equal(jobs[TOKEN_JOB]?.needs, undefined, "the probe waits on nothing");
   const waiting = Object.entries(jobs).filter(([, job]) => [job.needs ?? []].flat().includes(TOKEN_JOB)).map(([name]) => name);
   assert.deepEqual(waiting, [], "no job may need the probe: the arm step keeps its GITHUB_TOKEN fallback");
-  assert.equal(protectionEntries().find((e) => e.repo === FORMER_LITERAL)?.tokenProbe, "auto-arm.yml", "the declaration points where the job lives");
+  assert.equal(protectionEntries().find((e) => e.repo === FORMER_LITERAL)?.tokenProbe, "release.yml", "the declaration points where the job lives");
 });
 
 test("#3705: a declared repository with no row is a failure, and the table renders a cell for every column", () => {
