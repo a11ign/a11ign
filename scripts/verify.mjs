@@ -751,6 +751,37 @@ async function outcomeOf(step, { beside, ctx, started }) {
   return { status: await runStep(step.id, ctx), ms: Date.now() - started, output: "" };
 }
 
+/**
+ * THE WHOLE RUN TAKES ONE OF THE HOST'S 2 SUITE SLOTS, AT `nice -n 15 ionice -c 3`, AND TAKES IT BEFORE ITS FIRST STEP (#3536, chairman via `ceo`, 2026-10-04). Nothing limited how many full
+ * suites ran at once on the agent host: the 1-minute load was over its 16 cores in 26 of 36 samples and one gate tick took 6 min 44 s. `verify` runs ITSELF under the slot, so the one slot
+ * covers `ts` and the `agentOrg` step beside it however many steps run side by side, and the child it starts is `verify` again with `SLOT_ENV` set so it does not queue behind itself.
+ *
+ * THE IMPLEMENTATION IS THE TOOL'S, ONE COPY AND ONE SLOT COUNT, read from the same checkout the `agentOrg` step uses (`provisionAgentOrg`), never copied here and never the linked
+ * package (a pin that predates the module would have no `suite-slots.mjs`). A checkout without it is a REFUSAL naming it, and so is a missing `flock`: a limit that silently does not
+ * apply is worse than none. On a runner (`CI` set) there is no slot and the tool is not even loaded, as CI is not this host.
+ *
+ * @returns {Promise<number | null>} verify's exit code when it ran (or refused) here, or null when THIS process is the one to do the work
+ */
+async function underTheHostsSlot() {
+  if (process.env.CI) return null;
+  const dir = provisionAgentOrg();
+  const file = dir && join(dir, "src/suite-slots.mjs");
+  if (!file || !existsSync(file)) {
+    console.error(`verify: ${file ?? "the agent-org checkout"} is missing, so verify is NOT run: the host-wide limit on concurrent suites (#3536) lives there, and running without it is refused. `
+      + "Update the checkout (`git -C <it> pull`), or set A11Y_AGENT_ORG_REPO to one that has it.");
+    return 2;
+  }
+  const slots = await import(pathToFileURL(file).href);
+  if (slots.insideSlot(process.env)) return null;
+  try {
+    return await slots.runUnderSlot({ command: process.execPath, args: [...process.execArgv, ...process.argv.slice(1)], label: `pnpm run verify (${REPO})` });
+  } catch (cause) {
+    if (!(cause instanceof slots.SuiteSlotRefusal)) throw cause;
+    console.error(cause.message);
+    return 2;
+  }
+}
+
 async function main() {
   refuseUnknownFlags(["--base", "--draft-body", "--check"], { entry: import.meta.url, command: "pnpm run verify" });
   const base = flagValue(process.argv, "base") ?? process.env.A11Y_TEST_BASE ?? "origin/main";
@@ -760,6 +791,8 @@ async function main() {
     const stamp = readStamp();
     return report(stampVerdict({ stamp, head, body }), stamp?.base ?? base);
   }
+  const slotted = await underTheHostsSlot();
+  if (slotted !== null) return slotted;
 
   const files = changedFiles([`${base}...HEAD`], { repoRoot: REPO });
   if (files.length === 0) {
