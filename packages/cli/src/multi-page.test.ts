@@ -28,8 +28,8 @@ import { resolveAuthentication } from "./auth/resolve.js";
 import {
   CEILING_CAP_MINUTES, CEILING_PAGES, COST_DOC, DEFAULT_CAP_MINUTES, DEFAULT_MAX_PAGES, MAX_LOGINS, PageListError,
   captureCount, countLine, loginReport, loginsPerformed, minimumLogins, multiPageJson, newLoginTally, refuseAboveCap,
-  refuseAboveLoginCap, resolveMaxPages, resolvePageList, rollUpLines, runPageList, splitUrlList, worstMinutes,
-  type LoginTally, type PageEntry,
+  ScorerFailure, refuseAboveLoginCap, rejectedScorer, resolveMaxPages, resolvePageList, rollUpLines, runPageList, runSingleUrl,
+  splitUrlList, worstMinutes, type LoginReport, type LoginTally, type PageEntry,
 } from "./multi-page.js";
 import {
   isMultiPage, multiPageExitCode, multiPageLogLines, pageOutcome, pageTripsFailOn, renderMultiSummary,
@@ -538,4 +538,102 @@ test("POSITIVE CONTROL: a capture timeout, a plain Error with no auth fault, STI
   assert.deepEqual(loginsMade, pages(3), "all three pages were tried");
   assert.deepEqual(entries.map((entry) => entry.status), ["failed", "captured", "captured"]);
   assert.ok(entries.every((entry) => entry.notAttempted === undefined && entry.fault === undefined));
+});
+
+// ---- A SCORER FAILURE ON A SINGLE URL (W41, #3614, #3657) ----------------------------------------------------------
+
+const SINGLE_URL = "https://site.example/only";
+const RUN_STEP = resolve(REPO, "packages/cli/src/action/run.ts");
+
+/** `runSingleUrl` with the capture standing in for `runWitness`: what it throws, or the result it sinks. */
+async function singleUrl(capture: () => Promise<object | undefined>) {
+  const emitted: object[] = [];
+  const unmeasured: Array<{ page: PageEntry; logins?: LoginReport }> = [];
+  const outcome = await runSingleUrl({
+    url: SINGLE_URL, states: [], axe: true, emit: (json) => emitted.push(json), say: () => undefined,
+    unmeasured: (page, logins) => unmeasured.push({ page, logins }),
+    capture: async ({ sink }) => { const json = await capture(); if (json) sink(json); },
+  }).then(() => "resolved", (error: Error) => error);
+  return { emitted, unmeasured, outcome };
+}
+
+test("A SCORER THAT REJECTS ON A SINGLE URL IS ONE UNMEASURED PAGE, NOT A THROWN ERROR, and no result is emitted for it", async () => {
+  const { emitted, unmeasured, outcome } = await singleUrl(async () => { throw new ScorerFailure("the scorer could not read the transcript"); });
+  assert.equal(outcome, "resolved", "before the fix this threw out of runSingleUrl and the process ended with exit 1 and no result");
+  assert.deepEqual(emitted, []);
+  assert.deepEqual(unmeasured.map(({ page }) => page),
+    [{ url: SINGLE_URL, status: "failed", results: [], error: "the scorer could not read the transcript" }]);
+  assert.equal(pageOutcome(unmeasured[0].page as PageReport), "failed", "the Action's reading of it: not measured, never clean");
+});
+
+test("THE REPORT STEP'S EXIT CODE FOR THAT RESULT IS 2, by running its own parse on the written file, whatever fail-on is", () => {
+  const dir = mkdtempSync(join(tmpdir(), "a11ign-scorer-"));
+  try {
+    const written = join(dir, "result.json");
+    const page: PageEntry = { url: SINGLE_URL, status: "failed", results: [], error: "the scorer could not read the transcript" };
+    writeFileSync(written, JSON.stringify(multiPageJson([page])));
+    for (const failOn of ["never", "any", "blocker"]) {
+      const summary = join(dir, `summary-${failOn}.md`);
+      const out = spawnSync(process.execPath, ["--import", "tsx", RUN_STEP, `--result=${written}`, `--fail-on=${failOn}`, `--summary-out=${summary}`],
+        { encoding: "utf8", cwd: REPO, env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "" }, timeout: 60_000 });
+      assert.equal(out.status, 2, `fail-on=${failOn}: ${out.stderr}`);
+      assert.match(readFileSync(summary, "utf8"), /could not capture this page[\s\S]*not a clean page/, "a summary is written, not a bare exit");
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("AN AUTHENTICATION FAULT AND A WORKER FAULT STILL THROW out of a single URL, and record nothing", async () => {
+  const auth = new AuthError("auth-login-failed", "the login did not complete");
+  const worker = new Error("The worker answered 500: the browser could not reach the page");
+  for (const thrown of [auth, worker]) {
+    const { emitted, unmeasured, outcome } = await singleUrl(async () => { throw thrown; });
+    assert.equal(outcome, thrown);
+    assert.deepEqual([emitted, unmeasured], [[], []]);
+  }
+});
+
+/** What `rejectedScorer` throws for `rejection`. */
+function thrownBy(rejection: unknown): unknown {
+  try { rejectedScorer(rejection); } catch (error) { return error; }
+  return assert.fail("rejectedScorer returned instead of throwing");
+}
+
+test("rejectedScorer: a rejection naming no fault becomes a ScorerFailure with its cause; one carrying a fault code goes on untouched", () => {
+  const plain = new Error("score.py exited 1");
+  const failure = thrownBy(plain) as ScorerFailure;
+  assert.ok(failure instanceof ScorerFailure);
+  assert.equal(failure.message, "score.py exited 1");
+  assert.equal(failure.cause, plain);
+  const mismatch = Object.assign(new Error("artefact schema mismatch"), { fault: "artifact-schema-mismatch" });
+  const auth = new AuthError("auth-login-failed", "wrong password");
+  for (const named of [mismatch, auth]) assert.equal(thrownBy(named), named);
+  assert.equal((thrownBy("a string") as ScorerFailure).message, "a string", "a non-Error rejection is still one");
+});
+
+test("A SCORER THAT SUCCEEDS RENDERS EXACTLY AS TODAY: the result is emitted once, with no unmeasured page", async () => {
+  const result = { url: SINGLE_URL, verdict: { findings: [] } };
+  const { emitted, unmeasured, outcome } = await singleUrl(async () => result);
+  assert.equal(outcome, "resolved");
+  assert.deepEqual(emitted, [result]);
+  assert.deepEqual(unmeasured, []);
+});
+
+test("A SCORER FAILURE ON AN AUTHENTICATED SINGLE URL STILL COUNTS ITS LOGINS: the report rides the unmeasured page, never lost", async () => {
+  const tally = newLoginTally();
+  const unmeasured: Array<{ page: PageEntry; logins?: LoginReport }> = [];
+  await runSingleUrl({
+    url: SINGLE_URL, states: [], axe: true, tally, emit: () => assert.fail("no result"), say: () => assert.fail("said in the report"),
+    unmeasured: (page, logins) => unmeasured.push({ page, logins }),
+    capture: async () => { tally.workerAttempts += 1; tally.ruleLayerScans += 1; throw new ScorerFailure("rejected"); },
+  });
+  assert.deepEqual(unmeasured[0].logins, { performed: 2, workerAttempts: 1, ruleLayerScans: 1, minimum: 2 });
+  assert.deepEqual(multiPageJson([unmeasured[0].page], unmeasured[0].logins).logins, unmeasured[0].logins);
+});
+
+test("WIRING (read from the source, since runWitness needs a live worker): the judge call alone is wrapped, and the single-URL call site records the page", () => {
+  const source = stripComments(readFileSync(new URL("./cli.ts", import.meta.url), "utf8"));
+  const body = source.slice(source.indexOf("async function runWitness("));
+  assert.match(body, /const verdict = await judge\(\{[\s\S]*?\}\)\.catch\(rejectedScorer\);/);
+  assert.equal(source.match(/\bawait judge\(/g)?.length, 1, "one judge call in cli.ts, so one place that needs the wrapper");
+  assert.match(source, /await runSingleUrl\(\{\s*url: args\.url, unmeasured: recordUnmeasured\(args\),/);
 });

@@ -233,7 +233,10 @@ export interface PageEntry {
   notAttempted?: true;
 }
 
-/** The machine-readable result of a run over several pages. A list of ONE never uses it: it prints as a single URL does. */
+/**
+ * The machine-readable result of a run over several pages. A list of ONE never uses it: it prints as a single URL does --
+ * except a single URL whose scorer failed (`runSingleUrl`), which has no result to print and is this shape with one failed page.
+ */
 export function multiPageJson(pages: readonly PageEntry[], logins?: LoginReport): {
   multiPage: true; pages: readonly PageEntry[]; logins?: LoginReport } {
   return { multiPage: true, pages, ...(logins ? { logins } : {}) };
@@ -255,6 +258,28 @@ export function loginLine(report: LoginReport): string {
 export interface SingleUrlCapture<State> { formState?: State; index: number; sink: (json: object) => void }
 
 /**
+ * The scorer (`judge`) rejected a capture, and nothing about the rejection names a fault: that is a fact about this PAGE's
+ * evidence (W41, #3614: a scorer that raised on one page's transcript), so a run of one URL records it as an unmeasured page
+ * the way `runPageList` does, instead of ending with no result. An authentication fault and a named fault (a worker's, or
+ * the shipped-artefact mismatch of #81) are NOT this: they are facts about the run, and keep their own text and exit code.
+ */
+export class ScorerFailure extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "ScorerFailure";
+  }
+}
+
+/** Throw what a rejected `judge` call is: a `ScorerFailure` unless it carries a fault code, which goes on exactly as it came. */
+export function rejectedScorer(error: unknown): never {
+  if ((error as { fault?: unknown } | null)?.fault !== undefined) throw error;
+  throw new ScorerFailure(error instanceof Error ? error.message : String(error), { cause: error });
+}
+
+/** One capture of a single URL: one form state (or none), and where its `--json` result goes. */
+export interface SingleUrlCapture<State> { formState?: State; index: number; sink: (json: object) => void }
+
+/**
  * A run of ONE URL: one capture per configured form state (else one), and the logins it performed reported afterwards, in the
  * shape a list reports them. The tally is cumulative across the states, so the report is made ONCE, after the last capture:
  * in `--json` it rides the LAST result (each result is held back until the next one or the end, which is why the single-URL
@@ -262,20 +287,29 @@ export interface SingleUrlCapture<State> { formState?: State; index: number; sin
  * report, a draft run, a run that threw) it is one line through `say`. It is made in `finally` because a run that logged in
  * and then failed is the one whose lockout risk a reader most needs counted. An unauthenticated run has no tally and reports
  * nothing.
+ *
+ * A `ScorerFailure` does not throw out of here: the page is handed to `unmeasured` as the failed entry a list would hold
+ * (with the logins, when the run has them), and no result is emitted. Anything else still throws.
  */
-export async function runSingleUrl<State>({ states, tally, axe, auth, capture, emit, say }: {
-  states: readonly State[]; tally?: LoginTally; axe: boolean; auth?: { state?: unknown };
+export async function runSingleUrl<State>({ url, states, tally, axe, auth, capture, emit, say, unmeasured }: {
+  url: string; states: readonly State[]; tally?: LoginTally; axe: boolean; auth?: { state?: unknown };
   capture: (one: SingleUrlCapture<State>) => Promise<void>;
   emit: (json: object) => void; say: (line: string) => void;
+  unmeasured: (page: PageEntry, logins?: LoginReport) => void;
 }): Promise<void> {
   let held: object | undefined;
+  let failure: ScorerFailure | undefined;
   const sink = (json: object): void => { if (held) emit(held); held = json; };
   try {
     if (states.length === 0) await capture({ index: 0, sink });
     for (const [index, formState] of states.entries()) await capture({ formState, index, sink });
+  } catch (error) {
+    if (!(error instanceof ScorerFailure)) throw error;
+    failure = error;
   } finally {
     const report = tally && loginReport({ tally, minimum: minimumLogins({ captures: captureCount({ pages: 1, states: states.length }), axe, auth }) });
-    if (held) emit(report ? { ...held, logins: report } : held);
+    if (failure) unmeasured({ url, status: "failed", results: held ? [held] : [], error: failure.message }, report);
+    else if (held) emit(report ? { ...held, logins: report } : held);
     else if (report) say(loginLine(report));
   }
 }

@@ -66,9 +66,9 @@ import { relative, resolve as resolvePath } from "node:path";
 import { parseFormsConfig, refuseIfWrongOrigin, FormsConfigError } from "./forms/config.js";
 import { submissionPlan, formCoverage } from "./forms/coverage.js";
 import { draftFormsConfig } from "./forms/draft.js";
-import { MAX_CAPTURE_ATTEMPTS, PageListError, captureCount, loginReport, minimumLogins, multiPageJson, newLoginTally, runSingleUrl,
+import { MAX_CAPTURE_ATTEMPTS, PageListError, captureCount, loginReport, minimumLogins, multiPageJson, newLoginTally, rejectedScorer, runSingleUrl,
   refuseMalformedUrls, resolveMaxPages, resolvePageList, rollUpLines, runPageList, surfaceFromEnv,
-  type LoginTally } from "./multi-page.js";
+  type LoginReport, type LoginTally, type PageEntry } from "./multi-page.js";
 
 interface Args {
   /**
@@ -591,7 +591,7 @@ async function main(): Promise<void> {
     // evidence and a report of the same shape, or every consumer downstream needs to know which it is
     // holding — which is the fact-stated-twice defect with a report attached.
     await runSingleUrl({
-      states, tally: args.logins, axe: args.axe, auth: args.auth, emit: printAsJson, say: (line) => process.stderr.write(`${noticeLine(line)}\n`),
+      url: args.url, unmeasured: recordUnmeasured(args), states, tally: args.logins, axe: args.axe, auth: args.auth, emit: printAsJson, say: (line) => process.stderr.write(`${noticeLine(line)}\n`),
       capture: ({ formState, index, sink }) => {
         if (formState) {
           process.stderr.write(`\n=== form state ${index + 1}/${states.length}: `
@@ -603,6 +603,20 @@ async function main(): Promise<void> {
   } finally {
     await lease.release();
   }
+}
+
+/**
+ * A single URL the scorer failed on ends the way a failed page in a list does (W41, #3614): the page is written as unmeasured,
+ * in `--json` the one-page list shape the Report step already reads, and the process exits 1 AFTER the write, as `runPages`
+ * does. The Action tolerates that exit when the result file exists and its Report step turns the failed page into exit 2.
+ */
+function recordUnmeasured(args: Args): (page: PageEntry, logins?: LoginReport) => void {
+  return (page, logins) => {
+    process.stderr.write(`Page FAILED: ${page.url}\n${page.error}\n`);
+    if (args.json) printAsJson(multiPageJson([page], logins));
+    else for (const line of rollUpLines([page], logins)) console.log(line);
+    process.exitCode = 1;
+  };
 }
 
 type RunOptions = Omit<Args, "worker"> & { worker: string; formState?: FormStateRequest; sink?: JsonSink };
@@ -947,7 +961,7 @@ async function runWitness(
     // The oracle counts, so the rules that assert an ABSENCE can corroborate it. Without these a page
     // with no headings and a capture that failed to reach them are the same input.
     ...oracleCounts(examined),
-  });
+  }).catch(rejectedScorer);
 
   const conformance = conformanceFor(examined, ruleFindings, left && { control: left.control, notExamined }, axe.coverage);
   // Per-criterion ACT outcomes. `truncatedSweeps` is what turns Conformance Requirement 2 into something

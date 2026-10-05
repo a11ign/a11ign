@@ -65,8 +65,9 @@ that reports first, and fails when the team decides it should, gets adopted. Mov
 `serious`, as you fix what it finds. A severity means *that or worse*. **fail-on counts asserted findings;
 referrals are listed and never fail the run.** A referral is a person's decision, so no threshold fires on it.
 **`never` does not mean the job cannot go red:** a page that could not be measured exits 2 whatever `fail-on` is,
-because a failure to look is not a clean page. A crash before any result exists (a scorer that raises on one
-page's evidence, measured on a run of a single `url`) exits 1 with no report and no artifact, and `fail-on` does not
+because a failure to look is not a clean page. A scorer that raises on one page's evidence is that case too, on a single `url` as in a list: the page is written as
+not measured and the Report step exits 2 with a summary. A crash before any result exists (a worker that could not capture,
+an authentication fault, a shipped-artefact mismatch) ends the CLI with no report and no artifact, and `fail-on` does not
 govern that either.
 
 An **unrecognised** `fail-on` is a hard error rather than a fallback to `never`. A typo in a workflow file
