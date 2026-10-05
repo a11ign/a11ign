@@ -683,11 +683,17 @@ function describeAlwaysRun(alwaysRun, selectedTests) {
 // and the non-broad branch, unlike the broad one, has no `--drop-empty` to fall back on. Measured on
 // PR #1695 (`ts / run`, run 35335772105): `scripts/release-print-versions.mjs` is a new file no test's
 // declared walk scope reaches, so `fallbackPackages` names all eleven `testPackages`, including these two.
+//
+// #3603: `toolchain` (#3598) is the same shape again -- its one test is
+// `packages/lab/src/packaging/toolchain-package.test.ts` and its own `src/` holds no `*.test.ts`, so a
+// toolchain-only diff no test's import closure reaches matched 0 and refused PR #3602 (the version PR).
+// A new package that is tested from `packaging/` is named HERE when it is added, not when CI refuses it.
 /** @type {Record<string, string>} */
 const FALLBACK_TEST_GLOB = {
   "agent-org": "packages/lab/src/packaging/**/*.test.ts",
   guards: "packages/lab/src/packaging/**/*.test.ts",
   "nvda-speech": "packages/lab/src/packaging/**/*.test.ts",
+  toolchain: "packages/lab/src/packaging/**/*.test.ts",
 };
 
 /**
