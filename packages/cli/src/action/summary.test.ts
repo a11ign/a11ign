@@ -17,7 +17,7 @@ import { conformanceScope } from "@a11ign/evidence/conformance";
 import { documentIdentity } from "@a11ign/evidence/document-identity";
 import { criterionOutcomes } from "@a11ign/judge/outcomes";
 import {
-  logLines, partialExaminationCount, renderSummary, shouldFail, type RunFinding, type RunResult,
+  logLines, partialExaminationCount, renderSummary, ruleLayerFailedCount, shouldFail, type RunFinding, type RunResult,
 } from "./summary.js";
 
 const finding = (severity: RunFinding["severity"], issue = "issue", mapping?: RunFinding["mapping"]): RunFinding => ({
@@ -321,7 +321,7 @@ test("the original wrong-content wording survives for results that carry no reas
  * identically to one where all ten passed — an empty findings table under a bold "No blocking findings".
  * The CLI report prints the tally with "Neither is clean"; this could not.
  */
-const withOutcomes = (outcomes: { criterion: string; outcome: string; reason: string }[]) => ({
+const withOutcomes = (outcomes: { criterion: string; outcome: string; reason: string; assessor?: string }[]) => ({
   url: "https://example.com", task: "Book a ticket", screenReader: "NVDA 2026.1",
   ruleBased: [], verdict: { taskCompletable: true, summary: "", findings: [], confidence: 1 },
   outcomes,
@@ -744,4 +744,31 @@ test("#3297: the section stands apart from the line above it (a blank line befor
 
 test("#3297: an interaction holding neither channel is no probe record, so no section -- the control for the absence", () => {
   assert.ok(!renderSummary(result({ interaction: {} })).includes("What this run pressed"));
+});
+
+/**
+ * W41 (#3616): the consumer-check run's `wikipedia-article` job logged `0 finding(s) (none)` while its outcomes held three
+ * criteria `failed` by axe-core. The count is the screen-reader layer's alone, so the rule layer gets a line before it.
+ */
+const RULE_FAILED_LINE = /^a11ign: (\d+) criteri(?:a|on) FAILED by the rule layer \(axe-core\)/;
+const axeFailed = (criterion: string) => ({ criterion, outcome: "failed", reason: "axe-core: violated", assessor: "axe-core" });
+
+test("#3616: the log says how many criteria the rule layer failed, before a count that leaves them out", () => {
+  const lines = logLines(withOutcomes([axeFailed("1.4.3"), axeFailed("2.4.4"), axeFailed("2.5.8")]), "never");
+  assert.equal(lines.length, 2);
+  assert.match(lines[0], RULE_FAILED_LINE);
+  assert.equal(lines[0].match(RULE_FAILED_LINE)?.[1], "3");
+  assert.equal(lines[1], "a11ign: 0 finding(s) (none); fail-on=never", "the count line is unchanged and stays last");
+  assert.match(logLines(withOutcomes([axeFailed("1.4.3")]), "never")[0], /^a11ign: 1 criterion FAILED/);
+});
+
+test("#3616: a result with no axe-core failure prints no rule-layer line", () => {
+  const screenReaderFailed = { criterion: "4.1.2", outcome: "failed", reason: "unnamed control" };
+  const axePassed = { criterion: "1.4.3", outcome: "passed", reason: "no violation", assessor: "axe-core" };
+  const axeUndetermined = { criterion: "2.4.4", outcome: "cantTell", reason: "?", assessor: "axe-core" };
+  for (const outcomes of [undefined, [], [screenReaderFailed, axePassed, axeUndetermined]]) {
+    const result = outcomes ? withOutcomes(outcomes) : { ...(withOutcomes([]) as object), outcomes: undefined } as never;
+    assert.equal(logLines(result, "never").some((line) => RULE_FAILED_LINE.test(line)), false);
+  }
+  assert.equal(ruleLayerFailedCount(undefined), 0);
 });
