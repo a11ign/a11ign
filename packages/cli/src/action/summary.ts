@@ -9,7 +9,7 @@
 
 export type Severity = "blocker" | "serious" | "moderate" | "minor";
 
-import type { CaptureInteraction } from "@a11ign/evidence";
+import type { CaptureInteraction, CaptureStructure } from "@a11ign/evidence";
 import type { Judgment } from "@a11ign/judge";
 import type { announcedStateChanges } from "@a11ign/judge/rules";
 
@@ -92,7 +92,13 @@ export interface RunResult {
    * results written before the probe. `formChanges` and `navigatedOnSubmit` are read for "what this run pressed on
    * its own" (#3297), by the same rule.
    */
-  interaction?: Partial<Pick<CaptureInteraction, "stateChanges" | "formChanges" | "navigatedOnSubmit">> | null;
+  interaction?: Partial<Pick<CaptureInteraction, "stateChanges" | "formChanges" | "navigatedOnSubmit" | "controls">> | null;
+  /**
+   * The structural sweeps, declared for one thing (#3617): `formFields` is where an asserted 4.1.2 finding's evidence
+   * often came from rather than the transcript, so the row can say which entry. TYPED FROM `@a11ign/evidence`, `import
+   * type` only. Absent on results written before the sweep and on a capture that ran none.
+   */
+  structure?: Partial<Pick<CaptureStructure, "formFields">> | null;
   /**
    * WCAG §5.2's five conformance requirements, as `cli.ts --json` emits them (`@a11ign/evidence/conformance`).
    * Declared for one sentence only (#1387): Requirement 2 names a capture that spanned more than one document,
@@ -219,6 +225,80 @@ function cell(text: string): string {
   return String(text ?? "").replace(/\|/g, "\\|").replace(/\r?\n/g, " ").trim();
 }
 
+/** An inline code span in a table cell. A code span ends at a backtick, so one inside the text is replaced rather than escaped. */
+const code = (text: string): string => `\`${cell(text).replace(/`/g, "'")}\``;
+
+/**
+ * #3617: WHERE IN THE RESULT AN ASSERTED FINDING'S EVIDENCE SITS, so a reader can find the control and not only read its role.
+ *
+ * W41 (run 37273212707): 4.1.2 asserted on `edit`, which names neither of sqlite's two unlabelled inputs nor, on python.org's
+ * two-document capture, the page. The rule layer's evidence IS the verbatim entry of whichever list it read, so the entry is
+ * located by reading those lists back: the JSON path a reader with the artifact can follow, the neighbours that say which
+ * control, and EVERY entry reading exactly this (the rule layer keeps one finding for identical text).
+ *
+ * What it does NOT say is the document, and says so. The sweep presses controls as it walks them, so a submit can move the
+ * document mid-list, and an entry records none: attributing it to "the first document" would be a guess wearing a fact's
+ * clothes. What the result DOES hold is whether a submit was pressed earlier in that same list and whether the run's submit
+ * moved the document, and that is said as "may", never as a reading. Said only when the capture names more than one document
+ * (`documentsSpannedSentence`), because on one there is nothing to be unsure of. Null when the entry is found nowhere and the
+ * capture spans nothing.
+ *
+ * `interaction.controls` mirrors the sweep entry for entry, so it is read only when `structure.formFields` has no match.
+ */
+const NEIGHBOUR_CHARS = 60;
+
+function brief(entry: string): string {
+  return code(entry.length > NEIGHBOUR_CHARS ? `${entry.slice(0, NEIGHBOUR_CHARS)}…` : entry);
+}
+
+function neighbours(list: readonly string[], at: number): string {
+  const sides = [at > 0 ? `after ${brief(list[at - 1])}` : null, at + 1 < list.length ? `before ${brief(list[at + 1])}` : null];
+  return sides.filter(Boolean).join(", ");
+}
+
+interface EvidenceSite { path: string; first: number; text: string }
+
+/** One list's account of an entry: every index reading exactly it, and the neighbours of the first. Null when it has none. */
+function siteIn(path: string, list: readonly string[] | null | undefined, evidence: string): EvidenceSite | null {
+  const entries = list ?? [];
+  const at = entries.flatMap((entry, index) => (entry.trim() === evidence.trim() ? [index] : []));
+  if (at.length === 0) return null;
+  const places = at.map((index) => code(`${path}[${index}]`)).join(", ");
+  const near = neighbours(entries, at[0]);
+  return { path, first: at[0], text: near ? `${places} (${near})` : places };
+}
+
+/** The first sweep entry, before `index`, that the probe pressed as a submit; null when none was, or the run's submit did not move. */
+function submitPressedBefore(result: RunResult, index: number): { at: number; from: string; to: string } | null {
+  const moved = result.interaction?.navigatedOnSubmit;
+  if (!moved?.navigated || !moved.from || !moved.to) return null;
+  const pressed = new Set((result.interaction?.formChanges ?? []).filter((change) => change.kind === "submit").map((change) => change.control));
+  const at = (result.structure?.formFields ?? []).findIndex((entry) => pressed.has(entry));
+  return at !== -1 && at < index ? { at, from: moved.from, to: moved.to } : null;
+}
+
+function documentNote(result: RunResult, site: EvidenceSite | null): string | null {
+  if (!documentsSpannedSentence(result.conformance)) return null;
+  const note = "This capture spans more than one document and does not record which one this control was read on.";
+  const pressed = site?.path === "structure.formFields" ? submitPressedBefore(result, site.first) : null;
+  return pressed
+    ? `${note} The sweep pressed a submit at ${code(`structure.formFields[${pressed.at}]`)} first, and a submit took the run from `
+      + `${code(pressed.from)} to ${code(pressed.to)}, so it may have been read on either.`
+    : note;
+}
+
+export function evidenceLocator(finding: RunFinding, result: RunResult): string | null {
+  const transcript = siteIn("transcript", result.transcript, finding.evidence);
+  const sweep = siteIn("structure.formFields", result.structure?.formFields, finding.evidence)
+    ?? siteIn("interaction.controls", result.interaction?.controls, finding.evidence);
+  const found = [transcript, sweep].flatMap((site) => site?.text ?? []);
+  return [
+    found.length ? `Found at ${found.join("; ")}.` : null,
+    !transcript && sweep && result.transcript ? "Not a line of the transcript." : null,
+    documentNote(result, sweep),
+  ].filter(Boolean).join(" ") || null;
+}
+
 /**
  * The screen-reader layer's section.
  *
@@ -226,7 +306,7 @@ function cell(text: string): string {
  * rule scanner can say "this control has no accessible name", and only this can say "a screen reader
  * announced it as `button` and a user would hear nothing else".
  */
-function findingsSection(findings: RunFinding[], limit: number): string[] {
+function findingsSection(findings: RunFinding[], limit: number, locate: (finding: RunFinding) => string | null): string[] {
   if (findings.length === 0) {
     return ["**No lived-experience findings.** The screen-reader layer found nothing it could evidence."];
   }
@@ -240,7 +320,10 @@ function findingsSection(findings: RunFinding[], limit: number): string[] {
   for (const f of shown) {
     // #1366: a referral says so beside its severity, which is otherwise the most declarative word on the row.
     const kind = isReferral(f) ? ", referred" : "";
-    lines.push(`| ${ICON[f.severity] ?? "•"} ${cell(f.severity)}${kind} | ${cell(f.wcag)} | ${cell(f.issue)} | \`${cell(f.evidence)}\` |`);
+    // #3617: only an ASSERTION is located, since it is the one thing a person acts on. The note is built from `code`, which escapes pipes.
+    const where = isReferral(f) ? null : locate(f);
+    const evidence = `\`${cell(f.evidence)}\`${where ? `<br><sub>${where}</sub>` : ""}`;
+    lines.push(`| ${ICON[f.severity] ?? "•"} ${cell(f.severity)}${kind} | ${cell(f.wcag)} | ${cell(f.issue)} | ${evidence} |`);
   }
   if (shown.some(isReferral)) lines.push("", REFERRED_NOTE);
   // Never a silent cap. A truncated report that looks complete is how a real finding gets missed, and
@@ -336,13 +419,11 @@ const FRAME_CAVEAT = "_A row marked **in a frame** concerns content inside an em
  */
 function stateChangeSection(observed: readonly ObservedStateChange[] | undefined): string[] {
   if (!observed?.length) return [];
-  // A code span ends at a backtick, so one inside an announcement is replaced rather than escaped.
-  const quote = (text: string) => `\`${cell(text).replace(/`/g, "'")}\``;
   return [
     "",
     `**Evidence observed: ${observed.length} state change(s) the screen reader announced after activation**`,
     "",
-    ...observed.map((change) => `- ${quote(change.control)} → ${quote(change.after)} `
+    ...observed.map((change) => `- ${code(change.control)} → ${code(change.after)} `
       + `(${cell(change.from)} → ${cell(change.to)})`),
     "",
     "<sub>What one control said before and after it was activated, not a result for the page.</sub>",
@@ -678,7 +759,6 @@ function automaticPressLines(interaction: RunResult["interaction"], limit: numbe
   ];
   const seen = new Set<string>();
   const pressed = entries.filter(({ control }) => !seen.has(control) && seen.add(control));
-  const quote = (text: string) => `\`${cell(text).replace(/`/g, "'")}\``;
   const heading = "**What this run pressed on its own** (`probe-forms` submits forms with no valid input and `probe-navigation` "
     + "follows a link, unprompted; set either to `false` to stop it):";
   if (pressed.length === 0) return ["", heading, "- nothing pressed"];
@@ -686,12 +766,12 @@ function automaticPressLines(interaction: RunResult["interaction"], limit: numbe
   return [
     "",
     heading,
-    ...pressed.slice(0, limit).map(({ control, verb }) => `- ${verb} ${quote(control)}`),
+    ...pressed.slice(0, limit).map(({ control, verb }) => `- ${verb} ${code(control)}`),
     ...(pressed.length > limit
       ? [`- _… and ${pressed.length - limit} more. The full list is \`interaction.formChanges\` in \`result-json\`._`]
       : []),
     ...(navigated?.navigated && navigated.from && navigated.to
-      ? [`- _A submit took the run from ${quote(navigated.from)} to ${quote(navigated.to)}._`]
+      ? [`- _A submit took the run from ${code(navigated.from)} to ${code(navigated.to)}._`]
       : []),
   ];
 }
@@ -708,7 +788,8 @@ function pressedSection(result: RunResult, limit: number): string[] {
  */
 function verdictLines(
   verdict: RunResult["verdict"],
-  { taskQuestion, isTaskClaim, limit }: { taskQuestion: string; isTaskClaim: boolean; limit: number },
+  { taskQuestion, isTaskClaim, limit, locate }:
+    { taskQuestion: string; isTaskClaim: boolean; limit: number; locate: (finding: RunFinding) => string | null },
 ): string[] {
   if (verdict.abstained) {
     return [`**${taskQuestion.replace(/[?:]$/, "")}:** not scored`, "", verdict.summary, "", NOT_SCORED_HEADLINE];
@@ -720,7 +801,7 @@ function verdictLines(
     "",
     verdict.summary,
     "",
-    ...findingsSection(verdict.findings, limit),
+    ...findingsSection(verdict.findings, limit, locate),
   ];
 }
 
@@ -778,7 +859,7 @@ export function renderSummary(result: RunResult, options: SummaryOptions = {}): 
     // the shipped local scorer it used to ask "could a screen-reader user complete the task?" (or claim
     // "No blocking findings") and answer from a signal that never saw the task -- a report of six SERIOUS
     // findings once read "**No blocking findings** Yes" above the very table listing them.
-    ...verdictLines(verdict, { taskQuestion, isTaskClaim, limit }),
+    ...verdictLines(verdict, { taskQuestion, isTaskClaim, limit, locate: (finding) => evidenceLocator(finding, result) }),
     ...outcomeSection(result.outcomes),
     ...stateChangeSection(options.stateChangesObserved),
     "",
