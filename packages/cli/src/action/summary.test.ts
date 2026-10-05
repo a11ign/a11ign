@@ -453,6 +453,101 @@ test("#3293: a run whose probe submitted the search form leads its summary AND i
 });
 
 /**
+ * #3617, weekly review W41 (run 37273212707, `sqlite-docs` and `python-org`): AN ASSERTED FINDING'S ROW MUST LET A READER FIND
+ * THE CONTROL. 4.1.2 was asserted on evidence `edit` (sqlite) and `main landmark, section, edit` (python.org), and from the
+ * finding alone nobody could say which of a page's inputs it was, nor, on python.org's two-document capture, which page.
+ *
+ * What the result can honestly say is where in ITSELF the entry sits: the sweep walks controls and PRESSES them (a submit moves
+ * the document mid-walk), and an entry records no document, so the row names the JSON path, the neighbours, every identical
+ * entry, and that the capture does not record which of its documents the control was read on. The spanned conformance is the
+ * real producer's, on the gov.uk shape above.
+ */
+const spannedConformance = () => conformanceScope({
+  assessedCriteria: [], screenReader: "NVDA", ruleLayerRan: true, documentIdentity: documentIdentity(govUkRun as never),
+});
+const unnamedEdit = (evidence: string): RunFinding => ({
+  issue: "Control announced with a role but no accessible name", wcag: "4.1.2 Name, Role, Value",
+  severity: "serious", evidence, confidence: 1, mapping: "conformance",
+});
+/** `split("|")` of a four-cell row: the four cells and the two edges. */
+const PIECES_OF_A_FOUR_CELL_ROW = 6;
+const rowFor = (out: string, evidence: string): string => {
+  const rows = out.split("\n").filter((line) => line.startsWith("|") && line.includes(`\`${evidence}\``));
+  assert.equal(rows.length, 1, `exactly one table row quotes ${evidence}: ${out}`);
+  return rows[0];
+};
+const w41 = (over: Partial<RunResult> = {}) => result({
+  conformance: spannedConformance(),
+  transcript: ["heading, level 1, SQLite Documentation", "section, combo box, collapsed, Search Documentation, edit, , button, Go"],
+  structure: { formFields: ["Search Documentation, edit", "edit", "Go, button", "edit"] },
+  verdict: { taskCompletable: true, summary: "A summary.", findings: [unnamedEdit("edit")], confidence: 0.9 },
+  ...over,
+});
+
+test("#3617: an asserted finding read from the form-field sweep names its entries, neighbours and that no document is recorded", () => {
+  assert.ok(producerSentence(spannedConformance()), "the positive control: the producer says this capture spans documents");
+  const row = rowFor(renderSummary(w41()), "edit");
+  assert.match(row, /structure\.formFields\[1\]/, "the first entry that reads exactly this");
+  assert.match(row, /structure\.formFields\[3\]/, "and the second: the finding stands for BOTH, as sqlite's two inputs do");
+  assert.match(row, /after `Search Documentation, edit`, before `Go, button`/, "the neighbours that say which control");
+  assert.match(row, /not a line of the transcript/i, "the sweep and the transcript are different channels");
+  assert.match(row, /does not record which/i, "the document is stated as UNKNOWN, never guessed");
+});
+
+test("#3617: an asserted finding read from the transcript names its index, and a single document claims nothing about documents", () => {
+  const line = "section, combo box, collapsed, Search Documentation, edit, , button, Go";
+  const one = w41({ conformance: undefined, structure: undefined,
+    verdict: { taskCompletable: true, summary: "A summary.", findings: [unnamedEdit(line)], confidence: 0.9 } });
+  const row = rowFor(renderSummary(one), line);
+  assert.match(row, /transcript\[1\]/);
+  assert.match(row, /after `heading, level 1, SQLite Documentation`/);
+  assert.doesNotMatch(row, /more than one document|does not record/i, "one document, so there is no document to say is unrecorded");
+});
+
+test("#3617: a referral's row is unchanged, and an entry found nowhere on one document invents no place", () => {
+  const referred = { ...unnamedEdit("edit"), mapping: "secondary" as const };
+  const referral = renderSummary(w41({ verdict: { taskCompletable: true, summary: "A summary.", findings: [referred], confidence: 0.9 } }));
+  assert.doesNotMatch(rowFor(referral, "edit"), /formFields|transcript\[|more than one document/i, "scoped to ASSERTIONS, the one thing a person acts on");
+  const nowhere = renderSummary(w41({ conformance: undefined, structure: undefined,
+    verdict: { taskCompletable: true, summary: "A summary.", findings: [unnamedEdit("edit")], confidence: 0.9 } }));
+  assert.equal(rowFor(nowhere, "edit").split("|").length, PIECES_OF_A_FOUR_CELL_ROW, "four cells and the table's two edges, nothing appended");
+  assert.doesNotMatch(rowFor(nowhere, "edit"), /formFields|transcript\[|more than one document/i);
+});
+
+/** python-org's shape in run 37273212707: the sweep pressed a submit at entry 0, and the run's submit moved the document. */
+const submitAt = (control: string, over: object = {}) => ({
+  formChanges: [{ control, kind: "submit", after: "", baselineQuiet: true, baselineWaitedMs: 300 }],
+  navigatedOnSubmit: { checked: true, navigated: true, from: "https://example.com/", to: "https://example.com/search/?q=", ...over },
+});
+
+test("#3617: an entry read AFTER a submit that moved the document says it MAY have been read on either, and never which", () => {
+  const out = renderSummary(w41({ structure: { formFields: ["Go, button", "edit"] }, interaction: submitAt("Go, button") as never }));
+  const row = rowFor(out, "edit");
+  assert.match(row, /pressed a submit at `structure\.formFields\[0\]`/);
+  assert.match(row, /from `https:\/\/example\.com\/` to `https:\/\/example\.com\/search\/\?q=`, so it may have been read on either/);
+  assert.doesNotMatch(row, /was read on (the )?(first|second|search)/i, "it never picks one");
+});
+
+test("#3617: no such sentence when the submit came LATER in the list, did not move the document, or was never pressed", () => {
+  const control = { structure: { formFields: ["Go, button", "edit"] }, interaction: submitAt("Go, button") as never };
+  assert.match(rowFor(renderSummary(w41(control)), "edit"), /pressed a submit/, "the positive control: this shape says it");
+  const later = w41({ structure: { formFields: ["edit", "Go, button"] }, interaction: submitAt("Go, button") as never });
+  assert.doesNotMatch(rowFor(renderSummary(later), "edit"), /pressed a submit/, "pressed after this entry, so it cannot have followed it");
+  const stayed = w41({ ...control, interaction: submitAt("Go, button", { navigated: false }) as never });
+  assert.doesNotMatch(rowFor(renderSummary(stayed), "edit"), /pressed a submit/, "a submit that stayed put moved nothing");
+  assert.match(rowFor(renderSummary(stayed), "edit"), /does not record which/, "and the document is still stated as unrecorded");
+  assert.doesNotMatch(rowFor(renderSummary(w41()), "edit"), /pressed a submit/, "no submit recorded, none claimed");
+});
+
+test("#3617: a neighbour containing a pipe or a backtick cannot break the table row", () => {
+  const out = renderSummary(w41({ structure: { formFields: ["Sort | Filter `x`, combo box", "edit"] } }));
+  const row = rowFor(out, "edit");
+  assert.match(row, /structure\.formFields\[1\]/, "the positive control: the entry is located, so there is a note to break the row with");
+  assert.equal(row.replace(/\\\|/g, "").split("|").length, PIECES_OF_A_FOUR_CELL_ROW, `the pipe is escaped and the row stays four cells: ${row}`);
+  assert.ok(!row.includes("`x`"), "the backtick is neutralised, as the pressed list does");
+});
+
+/**
  * #3295: AN INCOMPLETE EXAMINATION AND AN ABSTENTION BOUND THE COUNT, so the log says so before it.
  *
  * Weekly review W40 (run 37134253796, gov.uk): the result's `conformance` said "Examination was INCOMPLETE" and the
