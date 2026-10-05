@@ -77,7 +77,7 @@ export interface RunResult {
    * Optional because an older result JSON has none, and absent must render as SILENCE rather than as a
    * tally of zeroes — a fabricated "0 untested" would be worse than the omission it replaced.
    */
-  outcomes?: { criterion: string; outcome: string; reason: string }[];
+  outcomes?: { criterion: string; outcome: string; reason: string; assessor?: string }[];
   /**
    * Where the examination ENDED because an activation took the browser off the page's site (#1363). Nothing
    * after it was examined and no finding describes it. Absent on results whose activations stayed on the
@@ -157,6 +157,14 @@ export function incompleteExaminationSweeps(conformance: RunResult["conformance"
     if (found) return found[1];
   }
   return null;
+}
+
+/** `@a11ign/judge`'s `outcomes.ts` names the rule layer's assessor this; absent means the screen-reader layer. */
+const RULE_LAYER_ASSESSOR = "axe-core";
+
+/** How many criteria the rule layer failed. Zero with no outcomes at all, and for a result whose outcomes name no assessor. */
+export function ruleLayerFailedCount(outcomes: RunResult["outcomes"]): number {
+  return (outcomes ?? []).filter((o) => o.outcome === "failed" && o.assessor === RULE_LAYER_ASSESSOR).length;
 }
 
 /** How many undetermined criteria rest on an examination known to be partial. Zero with no outcomes at all. */
@@ -463,6 +471,12 @@ export function logLines(result: RunResult, failOn: FailOn): string[] {
   if (result.verdict.abstained) {
     lines.push("a11ign: the scorer ABSTAINED -- this page is unlike the evidence it was validated on, so it scored "
       + "nothing and the count below is not a clean result");
+  }
+  // W41 (#3616): the count below is the screen-reader layer's alone, so a page axe-core failed read "0 finding(s) (none)".
+  const ruleFailed = ruleLayerFailedCount(result.outcomes);
+  if (ruleFailed) {
+    lines.push(`a11ign: ${ruleFailed} ${ruleFailed === 1 ? "criterion" : "criteria"} FAILED by the rule layer `
+      + "(axe-core) -- not in the count below, which is the screen-reader layer's findings only; see the artifact");
   }
   lines.push(`a11ign: ${findings.length} finding(s) (${breakdown})${left ? " in what was examined" : ""}; `
     + `fail-on=${failOn}`);
