@@ -27,8 +27,8 @@ importers:
         specifier: ^0.131.0
         version: 0.131.0
       '@guidepup/guidepup':
-        specifier: ^0.31.0
-        version: 0.31.0
+        specifier: ^0.35.0
+        version: 0.35.0
       a11ign:
         specifier: 0.2.6
         version: link:packages/cli
@@ -149,8 +149,8 @@ importers:
         specifier: 0.1.0
         version: link:../control
       '@guidepup/guidepup':
-        specifier: 0.31.0
-        version: 0.31.0
+        specifier: 0.35.0
+        version: 0.35.0
       a11ign:
         specifier: 0.2.6
         version: link:../cli
@@ -169,8 +169,8 @@ importers:
   packages/nvda-worker:
     dependencies:
       '@guidepup/guidepup':
-        specifier: 0.31.0
-        version: 0.31.0
+        specifier: 0.35.0
+        version: 0.35.0
     devDependencies:
       '@a11ign/evidence':
         specifier: 0.2.0
@@ -572,8 +572,8 @@ packages:
     resolution: {integrity: sha512-IkO+/KEUvwbVpiURZg+P7zF74z5Jxe0UgJxVni+RtoHQ6IZieXaO02kmadomap/q+l6bc/jdPGGqTjhuZnuz1Q==}
     engines: {node: ^20.19.0 || ^22.13.0 || >=24}
 
-  '@guidepup/guidepup@0.31.0':
-    resolution: {integrity: sha512-r3eKTep4fdSajiSGEJI0KHHjKvJ6e4wyMhHIGbr+ztW04CcE91CRMRbTaM5JQwZKvRiOfj3kFVKaYIx+CFJWMw==}
+  '@guidepup/guidepup@0.35.0':
+    resolution: {integrity: sha512-US64a++RucCtLfoq/DqnjzaHYpKzERVYmhtsWViz38MyklICICDpb50AKLn9sbxUwTceK2rS0fjDy7fYpWK/QA==}
 
   '@guidepup/record@0.1.0':
     resolution: {integrity: sha512-jtSqZ0CZVdWzWIbLWHYoUi1IbNJVKns20oEYzwcTftw8rY5RXsK1OTXaXFx9Gup5mnmYaFLnON8WwTS+4DYwrQ==}
@@ -871,10 +871,9 @@ packages:
     resolution: {integrity: sha512-CY3uyFSRbcQv3nnSv8S0+lDftMVz6P963PoRlxrV7ew/Md564g9ut60PYzdLM5qW4jFn93GBF+Soi90ISAN+GQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
-  '@xmldom/xmldom@0.9.10':
-    resolution: {integrity: sha512-A9gOqLdi6cV4ibazAjcQufGj0B1y/vDqYrcuP6d/6x8P27gRS8643Dj9o1dEKtB6O7fwxb2FgBmJS2mX7gpvdw==}
+  '@xmldom/xmldom@0.9.12':
+    resolution: {integrity: sha512-5AXjrcMClTryPe9LgZrygpB1lj7s0S9E0+W+AHaVKAVyHanafK86iPSvG5xHVSp/jC+VH1UXu0TAEmY279xH7A==}
     engines: {node: '>=14.6'}
-    deprecated: this version has critical issues, please update to the latest version
 
   '@yuku-parser/binding-android-arm64@0.10.2':
     resolution: {integrity: sha512-2VPBU9fRGRAQ2xPAvghnec3oou5Nrxm2Bezhf+13UMspAxQSkF/32r+ySKXSwIPA5/RivumDJDxAxc301Sgicw==}
@@ -2124,9 +2123,12 @@ snapshots:
       '@eslint/core': 1.2.1
       levn: 0.4.1
 
-  '@guidepup/guidepup@0.31.0':
+  '@guidepup/guidepup@0.35.0':
     dependencies:
+      debug: 4.4.3
       plist: 4.0.0
+    transitivePeerDependencies:
+      - supports-color
 
   '@guidepup/record@0.1.0':
     dependencies:
@@ -2440,7 +2442,7 @@ snapshots:
       '@typescript-eslint/types': 8.62.0
       eslint-visitor-keys: 5.0.1
 
-  '@xmldom/xmldom@0.9.10': {}
+  '@xmldom/xmldom@0.9.12': {}
 
   '@yuku-parser/binding-android-arm64@0.10.2':
     optional: true
@@ -3067,7 +3069,7 @@ snapshots:
 
   plist@4.0.0:
     dependencies:
-      '@xmldom/xmldom': 0.9.10
+      '@xmldom/xmldom': 0.9.12
       xmlbuilder: 15.1.1
 
   prelude-ls@1.2.1: {}
