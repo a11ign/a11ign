@@ -153,3 +153,6 @@ packages/control/ansible/inventory.yml
 # One pattern for both makers (`.corpus-backup-mutation-*`, `.corpus-snapshot-mutation-*`); no trailing
 # slash, per the header.
 packages/lab/.corpus-*-mutation-*
+# `rstest run --trace` leaves its summary in `.rstest` (ADR 0043, Decision 3: untracked after a trace run). No trailing slash, for
+# the reason the header gives: a slash means DIRECTORY, which a symlink is not.
+.rstest

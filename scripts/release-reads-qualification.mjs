@@ -43,7 +43,9 @@ export const QUALIFICATION_CONTEXT = "qualification";
 // `orchestrator`). Directories under `packages/`. A package named in NEITHER list is treated as GATED: a new package
 // is held to the fleet part until someone says otherwise, never released past it by omission. The test pins that
 // every `packages/*` directory is classified, so adding one fails there rather than at a release.
-export const FLEET_GATED_PACKAGES = ["lab", "worker-fleet", "evidence", "nvda-worker", "control"];
+// `toolchain` (#3578) is here BY THE DEFAULT THE COMMENT ABOVE DESCRIBES, not by a reading of what its release reads: it runs no
+// stage and needs no worker, so RUNNER_ONLY_PACKAGES may be where it belongs. `orchestrator` owns that classification (asked on #3578).
+export const FLEET_GATED_PACKAGES = ["lab", "worker-fleet", "evidence", "nvda-worker", "control", "toolchain"];
 // Gated by runner-only or corpus-only stages that need no worker. `nvda-speech` is private and never published.
 export const RUNNER_ONLY_PACKAGES = ["scorer", "judge", "guards", "cli"];
 export const PRIVATE_PACKAGES = ["nvda-speech"];
