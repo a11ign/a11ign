@@ -41,7 +41,7 @@ Environment="A11Y_POLICY_LAUNCH_REASON=host timer: row-file only calls gh and wr
 # UPDATED FIRST, and non-fatal, as every unit that runs this checkout's code does. The script reads RELEASE.md and
 # docs/try-it.md from THIS checkout and builds the row from them, so a stale checkout files a body made from last
 # week's requirements.
-ExecStartPre=-%h/.local/bin/pnpm run primary:update
+ExecStartPre=-%h/.local/bin/agent-org primary:update
 
 # `GITHUB_SHA` IS THE COMMIT THE DOCUMENTS WERE READ AT, and the script REFUSES to run without it (`checkedOutCommit`):
 # a runner sets it, a unit does not. This line supplies the checkout's own HEAD, which is what that name means here

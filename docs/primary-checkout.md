@@ -9,9 +9,9 @@ Two hooks protect it: `pre-commit` refuses commits there, and `post-checkout` ke
 `origin/main`.
 
 ```bash
-pnpm run primary:mark              # is this checkout marked?
-pnpm run primary:mark --set     # mark it — do this once, on the machine that drives the fleet
-pnpm run primary:mark --unset   # stop treating this checkout as the primary
+agent-org primary:mark              # is this checkout marked?
+agent-org primary:mark --set     # mark it — do this once, on the machine that drives the fleet
+agent-org primary:mark --unset   # stop treating this checkout as the primary
 ```
 
 ## Why it must be told rather than work it out

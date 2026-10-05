@@ -15,7 +15,7 @@
 // the next rename would split them again.
 //
 // NOT a claim about where the repository lives after any future transfer — it is what the name IS today.
-// `node_modules/agent-org/src/board-data.mjs` and `node_modules/agent-org/src/row-claim.mjs` import `REPO` from here rather than declaring their
+// `agent-org/src/board-data.mjs` and `agent-org/src/row-claim.mjs` import `REPO` from here rather than declaring their
 // own copy; every other reference is a literal (a `package.json` field, a workflow string, prose) that
 // cannot import anything, and `repo-identity-consolidated.test.ts` pins each one against these constants
 // instead.
@@ -24,7 +24,9 @@
 // REFUSES a missing or malformed declaration rather than answering `a11ign/a11ign` (a fallback here would make the tool's
 // "project-agnostic" claim decorative). Nothing that imports this file changed: the value is a11ign's own, and every
 // importer still sees a string. The declaration's `code[0]` is the repository `gh`/git resolve.
-import { homeProjectDeclaration } from "agent-org/src/project-config.mjs";
+import { toolModule } from "./agent-org-newest-tag.mjs";
+
+const { homeProjectDeclaration } = await toolModule("src/project-config.mjs");
 
 const PROJECT = homeProjectDeclaration();
 export const REPO = PROJECT.repo;

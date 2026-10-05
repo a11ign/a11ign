@@ -122,7 +122,7 @@ After=network-online.target
 [Service]
 Type=oneshot
 WorkingDirectory=/path/to/a11ign
-ExecStart=/usr/bin/npm run board:report -- --post --issue=20
+ExecStart=%h/.local/bin/agent-org board:report --post --issue=20
 User=<the operator account>
 ```
 

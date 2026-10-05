@@ -215,12 +215,10 @@ jobs:
       # one predicate (`pr-hold-state.mjs`); a second correct copy would have been the same shape with a
       # longer fuse. It needs a checkout, which this job did not previously have.
       - uses: actions/checkout@v7
-      # The tool is a pinned dependency now (#2975): `pnpm exec agent-org` needs `node_modules`. `--filter .` installs the
-      # ROOT project only, which is all the tool needs, not every workspace package's dependencies.
-      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v7
-        with: { node-version: 22, cache: pnpm }
-      - run: pnpm install --frozen-lockfile --ignore-scripts --filter .
+        with: { node-version: 22 }
+      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
+        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
       - name: Enable auto-merge (merge commit) -- unless held. GitHub still withholds until `gate` is green
         env:
           A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
@@ -232,7 +230,7 @@ jobs:
             echo "::warning::A11IGN_BOT_TOKEN is not set -- arming with GITHUB_TOKEN instead. A merge completed with it fires no workflow events (trunk.yml's closeRows, watchdogs and trunkGate/trunkBuildTest/trunkRecheck chain) -- see #416. And arming with it fires no auto_merge_enabled run, so no auto_merge_enabled-triggered sweep ran on arming (the update-branch job, deleted in #3046) and #1094 returns with no log line -- see #1094."
             export GH_TOKEN="$FALLBACK_TOKEN"
           fi
-          pnpm exec agent-org arm-pr --pr="${{ github.event.pull_request.number }}" --repo="${{ github.repository }}"
+          agent-org arm-pr --pr="${{ github.event.pull_request.number }}" --repo="${{ github.repository }}"
 
   sweep:
     # ARM EVERY PR THE `arm` JOB ABOVE CANNOT SEE -- the ones already open, #344.
@@ -311,12 +309,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      # The tool is a pinned dependency now (#2975): `pnpm exec agent-org` needs `node_modules`. `--filter .` installs the
-      # ROOT project only, which is all the tool needs, not every workspace package's dependencies.
-      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v7
-        with: { node-version: 22, cache: pnpm }
-      - run: pnpm install --frozen-lockfile --ignore-scripts --filter .
+        with: { node-version: 22 }
+      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
+        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
       - name: Arm every open, non-draft, unheld, tested PR against main that nothing has armed
         env:
           A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
@@ -332,7 +328,7 @@ jobs:
           # `|| status=$?` and not a bare call: the default shell is `bash -e`, which would abort the step
           # before this can read the code. A command on the left of `||` does not trigger errexit.
           status=0
-          pnpm exec agent-org auto-arm-sweep || status=$?
+          agent-org auto-arm-sweep || status=$?
           # 2 is EXIT.CANNOT_ASK, whose meaning `auto-arm-sweep.mjs`'s header states as a contract:
           # `2  a lookup failed. INCONCLUSIVE, never "fine"`. The CODE is read, never the message -- see
           # this job's own comment above for why matching the text would re-import the defect.
@@ -383,14 +379,12 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      # The tool is a pinned dependency now (#2975): `pnpm exec agent-org` needs `node_modules`. `--filter .` installs the
-      # ROOT project only, which is all the tool needs, not every workspace package's dependencies.
-      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v7
-        with: { node-version: 22, cache: pnpm }
-      - run: pnpm install --frozen-lockfile --ignore-scripts --filter .
+        with: { node-version: 22 }
+      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
+        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
       - name: Report every armed, green PR that cannot merge as-is against main
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: pnpm exec agent-org queue-stalled
+        run: agent-org queue-stalled

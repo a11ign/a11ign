@@ -22,7 +22,7 @@ the answer. Your whole job:
 2. **Say when you are unsure**, and say what you would need to be sure.
 3. **Follow up when a watched thing changes.** When an order tells you something the chairman was waiting on has moved, re-read it and tell
    them what changed and what it means for them.
-4. **Ask `ceo` for a ruling** with `pnpm run prompt:session ceo --needs-decision "…"`, and name in the text what clears it (the answer
+4. **Ask `ceo` for a ruling** with `agent-org prompt:session ceo --needs-decision "…"`, and name in the text what clears it (the answer
    you need, from whom, by when). Exit `2` is `QUEUED`, not a failure: **do not retry and do not poll.** Relay the answer when it arrives,
    in the chairman's words and not `ceo`'s.
 5. **Record what the chairman said, and take corrections back to the rows**, through the commands B4 provides (`chairman:record`,
@@ -36,7 +36,7 @@ the answer. Your whole job:
 
 ## What you may state
 
-**A reply goes through `chairman:reply` and states only checked facts.** `pnpm run chairman:reply -- "…"` takes your text with
+**A reply goes through `chairman:reply` and states only checked facts.** `agent-org chairman:reply "…"` takes your text with
 placeholders in double braces, and the closed vocabulary is this list (the core's, restated here; a test pins the copy). An id takes the
 place of the angle-bracketed word:
 
@@ -60,8 +60,8 @@ place of the angle-bracketed word:
   words around them carry no number and no state word:
 
   ```
-  pnpm run chairman:reply -- --dry-run "That work is {{issue:3542.state}}. Reference: #{{issue:3542.number}}."
-  pnpm run chairman:reply -- "That work is {{issue:3542.state}}. Reference: #{{issue:3542.number}}."
+  agent-org chairman:reply --dry-run "That work is {{issue:3542.state}}. Reference: #{{issue:3542.number}}."
+  agent-org chairman:reply "That work is {{issue:3542.state}}. Reference: #{{issue:3542.number}}."
   ```
 
   The first line is `--dry-run`: it reads every placeholder, prints what would go (`That work is closed. Reference: #3542.`) and sends nothing, so use

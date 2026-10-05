@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { stripComments } from "./source-text.js";
+import { toolPath } from "../../../scripts/agent-org-newest-tag.mjs";
 
 test("a line comment is removed", () => {
   assert.equal(stripComments("const a = 1; // trailing comment\nconst b = 2;"),
@@ -365,7 +365,7 @@ test("a file that was ALREADY stripped correctly still strips to zero surviving 
   // `wake.mjs` read 130 leading-`//` lines before and 0 after, at ec27b8ccb and unchanged by this fix. A
   // FLOOR rather than a pin on 130: the file legitimately gains and loses comments, and what this test is
   // for is the `0`. Read from the repo root the same way `wire-request-describes-the-wire.test.ts` does.
-  const source = readFileSync(resolve(process.cwd(), "node_modules/agent-org/src/wake.mjs"), "utf8");
+  const source = readFileSync(toolPath("src/wake.mjs"), "utf8");
   const leading = (text: string) => text.split("\n").filter((line) => line.trim().startsWith("//")).length;
   assert.ok(leading(source) >= A_DENSELY_COMMENTED_FILE,
     `wake.mjs has only ${leading(source)} leading-// lines, below the 130 measured -- this control has `

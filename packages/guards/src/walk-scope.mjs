@@ -7,7 +7,7 @@
 // else"*. That is right for a guard whose population IS the repository. Measured by running all 131 of them
 // under this module's observer: 38 walk the whole repository and 69 read inside a product package -- but 24
 // read nothing a product diff can touch, and 6 of those nothing outside their own imports at all. Five of the
-// 6 transitively import `node_modules/agent-org/src/ready-label-audit.mjs`, whose `run("git", ["for-each-ref", ...])` the static
+// 6 transitively import `agent-org/src/ready-label-audit.mjs`, whose `run("git", ["for-each-ref", ...])` the static
 // predicate reads as a walk; the tests never take that path. A first observer that saw only the sync `fs`
 // calls and argv `git` counted 17 / 83 / 31: child processes and root listings, which it could not see, are
 // the difference.

@@ -48,10 +48,11 @@ import { changedFiles } from "../packages/guards/src/changed-files.mjs";
 import { underFloor } from "../packages/guards/src/assert-glob-not-empty.mjs";
 import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
-import { checkBody } from "agent-org/src/pr-open.mjs";
+const { checkBody } = await toolModule("src/pr-open.mjs");
 import { classify, knownPackages, packedFiles } from "./ci-changed.mjs";
 // NEVER a bare `pnpm` spawn -- unsafe on Windows (CVE-2024-27980), and this repo's own guard refuses one.
 import { pnpmCliInvocation } from "./npm-cli-executable.mjs";
+import { toolModule, toolPath } from "./agent-org-newest-tag.mjs";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 const STAMP_FILE = "verify-stamp.json";
@@ -433,7 +434,7 @@ function runOwnedPaths({ body, files }) {
     writeFileSync(join(dir, "changed.txt"), files.join("\n"));
     writeFileSync(join(dir, "body.txt"), body ?? "");
     const diff = `--diff=${join(dir, "changed.txt")}`;
-    return pnpm(["exec", "agent-org", "owned-path-signoff", diff, `--body=${join(dir, "body.txt")}`]).status === 0
+    return sh(process.execPath, [toolPath("src/bin.mjs"), "owned-path-signoff", diff, `--body=${join(dir, "body.txt")}`]).status === 0
       ? "pass" : "fail";
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -448,8 +449,8 @@ const AGENT_ORG_CACHE = "verify-agent-org";
  * WHICH CHECKOUT OF THE TOOL THE `agentOrg` STEP READS, in order: `A11Y_AGENT_ORG_REPO` (explicit, and never
  * replaced by a guess), a sibling `../agent-org`, and otherwise a clone `verify` makes itself in the repository's
  * common git dir, shared by every worktree and never tracked. CI clones the tool with full history too (the suite
- * reads its merge-base), so the clone is full. A normal checkout has the linked `agent-org` PACKAGE and not a Git
- * checkout of the tool, which is why the first of these cannot be the only way (review of #3342).
+ * reads its merge-base), so the clone is full. A normal checkout has the tool at `.agent-org/host.json`'s path (a detached
+ * release checkout), which is not a clone to stage from, which is why the first of these cannot be the only way (review of #3342).
  * @param {{ env: Record<string, string | undefined>, sibling: string, cache: string, isCheckout: (dir: string) => boolean }} where
  * @returns {{ dir: string, clone: boolean }}
  */
@@ -516,7 +517,8 @@ export function stageAgentOrg({ toolRepo, scratch, copied, root = REPO, stdio = 
     () => here("tar", ["-xf", tarball, "-C", dest]),
     () => here("rsync", ["-a", "--ignore-existing", "--exclude=*.test.ts", "--exclude=*.test.mjs",
       "packages/lab/src/packaging/", "packages/agent-org/src/packaging/"]),
-    () => here("sed", ["-i", "s#from \"agent-org/src/board-document.mjs\"#from \"../../../agent-org/src/board-document.mjs\"#",
+    // The same `sed` as ci.yml's `agentOrg` job: the project reaches the tool through `toolModule`, the tool's own tests read a static relative import.
+    () => here("sed", ["-i", "s#^const {\\(.*\\)} = await toolModule(\"src/board-document.mjs\");#import {\\1} from \"../../../agent-org/src/board-document.mjs\";#",
       fixture]),
     () => here("git", ["add", "--force", "--intent-to-add", "packages/agent-org"]),
   ];
@@ -758,8 +760,8 @@ async function outcomeOf(step, { beside, ctx, started }) {
  * suites ran at once on the agent host: the 1-minute load was over its 16 cores in 26 of 36 samples and one gate tick took 6 min 44 s. `verify` runs ITSELF under the slot, so the one slot
  * covers `ts` and the `agentOrg` step beside it however many steps run side by side, and the child it starts is `verify` again with `SLOT_ENV` set so it does not queue behind itself.
  *
- * THE IMPLEMENTATION IS THE TOOL'S, ONE COPY AND ONE SLOT COUNT, read from the same checkout the `agentOrg` step uses (`provisionAgentOrg`), never copied here and never the linked
- * package (a pin that predates the module would have no `suite-slots.mjs`). A checkout without it is a REFUSAL naming it, and so is a missing `flock`: a limit that silently does not
+ * THE IMPLEMENTATION IS THE TOOL'S, ONE COPY AND ONE SLOT COUNT, read from the same checkout the `agentOrg` step uses (`provisionAgentOrg`), never copied here and never the tool the host runs
+ * (a release older than the module would have no `suite-slots.mjs`). A checkout without it is a REFUSAL naming it, and so is a missing `flock`: a limit that silently does not
  * apply is worse than none. On a runner (`CI` set) there is no slot and the tool is not even loaded, as CI is not this host.
  *
  * @returns {Promise<number | null>} verify's exit code when it ran (or refused) here, or null when THIS process is the one to do the work

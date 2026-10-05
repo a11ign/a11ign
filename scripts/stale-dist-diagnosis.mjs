@@ -58,7 +58,7 @@ export function staleDistNote(distPath, srcPath) {
     + `    ${distPath}\n    built    ${distMtime.toISOString()}\n`
     + `    ${srcPath}\n    modified ${srcMtime.toISOString()} -- AFTER the build above.\n`
     + "  A dist older than its source can report a missing export or module that exists in the source you "
-    + "are reading. Run `npm run build` (or `npm run primary:update` in a shared checkout with worktrees) "
+    + "are reading. Run `npm run build` (or `agent-org primary:update` in a shared checkout with worktrees) "
     + "and re-run the command that produced the error above before trusting it.";
 }
 

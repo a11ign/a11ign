@@ -1,5 +1,5 @@
 /**
- * `node_modules/agent-org/src/row-claim.mjs` answers "is this row claimed?" by reading the BOARD (issue labels), never git
+ * `agent-org/src/row-claim.mjs` answers "is this row claimed?" by reading the BOARD (issue labels), never git
  * history -- #28 and #30 (2026-09-06) were each pulled twice because the documented collision check
  * (`git log --branches='agent/*' --not origin/main -- <path>`) answers "would I collide in this file",
  * not "is somebody already on this row". See that file's own header for the incident and the reasoning.
@@ -35,24 +35,25 @@ import { dirname, join } from "node:path";
 // filesystem's free space, and the host as the cause. It is this file's first adoption (#2158's Region);
 // the other 103 exposed suites are explicitly a later decision.
 import { EXHAUSTION_MARKER, withSandbox } from "../../../guards/src/sandbox-exhaustion.mjs";
-import {
+const {
   claimStatus, decideClaim, fetchLabels, claimRow, dispatchRow, declineRow, moveProjectStatus,
   CLAIM_LABEL, STARTED_LABEL, BLOCKED_LABEL, recordCheck, recordConflict, latestCheckFor,
-  worktreeStatus, removeClaimedWorktree as removeClaimedWorktreeWithClaims, WORKTREE_LABEL_PREFIX, BRANCH_LABEL_PREFIX,
+  worktreeStatus, removeClaimedWorktree: removeClaimedWorktreeWithClaims, WORKTREE_LABEL_PREFIX, BRANCH_LABEL_PREFIX,
   claimRecordComment, claimRecordFrom, claimedObjects, fetchClaimComments, CLAIM_RECORD_MARKER,
   b4Lines, reportB4, failureReport, landedWritesOf, LANDED_WRITE_EXIT,
   claimWithWorktree,
   worktreeTargetReason,
   worktreeFlagsReason,
   claimRecordSession,
-} from "agent-org/src/row-claim.mjs";
-import { forgetProcessSnapshot, withBoardSnapshot } from "agent-org/src/board-snapshot.mjs";
-import { claimRefusal, REMOVAL_LOG_ENV } from "agent-org/src/worktree-removal.mjs";
-import { refusalCause, PROJECT_UNREADABLE } from "agent-org/src/settle-closed-status.mjs";
-import { laneReason } from "agent-org/src/row-claim/runner-rule.mjs";
+} = await toolModule("src/row-claim.mjs");
+const { forgetProcessSnapshot, withBoardSnapshot } = await toolModule("src/board-snapshot.mjs");
+const { claimRefusal, REMOVAL_LOG_ENV } = await toolModule("src/worktree-removal.mjs");
+const { refusalCause, PROJECT_UNREADABLE } = await toolModule("src/settle-closed-status.mjs");
+const { laneReason } = await toolModule("src/row-claim/runner-rule.mjs");
 import { stripComments } from "@a11ign/evidence/source-text";
-import { READY_LABEL, WAS_READY_LABEL } from "agent-org/src/ready-label-audit.mjs";
+const { READY_LABEL, WAS_READY_LABEL } = await toolModule("src/ready-label-audit.mjs");
 import { sandboxGitEnv } from "../../../guards/src/git-env.mjs";
+import { toolModule, toolUrl } from "../../../../scripts/agent-org-newest-tag.mjs";
 
 // #2782: EVERY REMOVAL WRITES A LINE AND READS THE ROW'S CLAIM, and a fixture must do neither to the host -- a fixture directory
 // named for a row number would otherwise read the real row over `gh`, and every removal would land in the real log. The tests
@@ -123,7 +124,7 @@ test("multiple session labels are all reported -- a race leaves both visible unt
 });
 
 // --- #656: the claim records the BRANCH, so an escalating session can tell a portable row from a held
-// one before it ever offers to take it (see node_modules/agent-org/src/carry-branch.mjs's own header for the incident) ---
+// one before it ever offers to take it (see agent-org/src/carry-branch.mjs's own header for the incident) ---
 
 test("claimStatus reads the recorded branch off a branch: label", () => {
   const status = claimStatus(["in-progress", "session:worker-config", "started",
@@ -1367,7 +1368,7 @@ test("#1464: the live set these tests read is sessions.json's -- non-empty, and 
 });
 
 test("#1464: arm-pr's LIVE_SESSIONS is the same list -- derived from the same file, pinned by its SOURCE line", () => {
-  const source = readFileSync(new URL("../../../../node_modules/agent-org/src/arm-pr.mjs", import.meta.url), "utf8");
+  const source = readFileSync(toolUrl("src/arm-pr.mjs"), "utf8");
   assert.deepEqual(source.split("\n").filter((line) => line.includes("SESSIONS.live.filter(")),
     ["export const LIVE_SESSIONS = SESSIONS.live.filter((s) => s.family === undefined).map((s) => s.name);"],
     "arm-pr derives its list from `.live`'s names in exactly one line, as `LIVE` above does");
@@ -1547,7 +1548,7 @@ test("#1063: `renderStatus`'s UNCLAIMED branch calls reportB4 -- the row's deliv
   // SCOPED TO THE BRANCH, so it fails loudly if the call moves rather than passing vacuously somewhere
   // else in the file.
   const source = stripComments(readFileSync(
-    new URL("../../../../node_modules/agent-org/src/row-claim.mjs", import.meta.url), "utf8"));
+    toolUrl("src/row-claim.mjs"), "utf8"));
   const unclaimedBranch = /if \(!status\.claimed\) \{([\s\S]*?)\n {2}\}/.exec(source);
   assert.ok(unclaimedBranch, "the UNCLAIMED branch must still be findable, or this asserts nothing");
   assert.match(unclaimedBranch[1], /reportB4\(issueNumber\)/,
@@ -1823,7 +1824,7 @@ test("#2746 REGRESSION: a decline label edit that exits CLEAN but does not durab
 });
 
 test("#1399 WIRING: the claim/dispatch and decline CLIs report a thrown error through failureReport", () => {
-  const source = stripComments(readFileSync(new URL("../../../../node_modules/agent-org/src/row-claim.mjs", import.meta.url), "utf8"));
+  const source = stripComments(readFileSync(toolUrl("src/row-claim.mjs"), "utf8"));
   for (const fn of ["runDispatchOrClaim", "runDecline"]) {
     const start = source.indexOf(`function ${fn}(`);
     assert.ok(start >= 0, `${fn} not found`);

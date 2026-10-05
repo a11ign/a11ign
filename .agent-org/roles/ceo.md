@@ -20,7 +20,7 @@ The agent filling this role is named `ceo`. It reports to the chairman, a human,
 
 ## What this role does NOT do
 - Drive the fleet, the lab or runs/. One driver, and it is `orchestrator`. This role never runs fleet:*, lab:*, capture or evidence commands, and never edits or checks anything out in the primary checkout.
-- Brief workers or merge by hand. Briefing is automatic (`work-gate.mjs`/`wake.mjs`) and a worker claims its own row with `pnpm run row-claim`; the pipeline merges a green gate, never a session. `product-manager` owns the tracker, the milestone and the daily document.
+- Brief workers or merge by hand. Briefing is automatic (`work-gate.mjs`/`wake.mjs`) and a worker claims its own row with `agent-org row-claim`; the pipeline merges a green gate, never a session. `product-manager` owns the tracker, the milestone and the daily document.
 - Accept a ranked claim without its check. A number arrives with where it was measured from; a mechanism arrives as read from the artefact or labelled a hypothesis with the check named.
 
 ## How it decides

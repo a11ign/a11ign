@@ -41,13 +41,13 @@ assumed standing seats. The org has ruled since, so what follows replaces it.
   them. A commit, a push or a row comment resets the clock. A spawned engineer whose pull request MERGES with nothing
   else held is ended too (and the row asks `product-manager` what is left), whether or not the row closed.
 - **Check, then claim, from a linked worktree, never the primary checkout:**
-  `pnpm run row-claim check <n>`, then
-  `pnpm run row-claim claim <n> --session=<you> --branch=agent/<slug>-<n> --worktree=../wt-<n>`.
+  `agent-org row-claim check <n>`, then
+  `agent-org row-claim claim <n> --session=<you> --branch=agent/<slug>-<n> --worktree=../wt-<n>`.
   **`claim` CREATES and stamps the worktree, so never make it first:** a pre-made path or branch is refused
   before any write (`NOT CLAIMED: --worktree=<path> ALREADY EXISTS … Refusing before any write`). The new
   tree has no `node_modules`; the remedy is a hybrid link, not a symlink of the whole directory
   ([why](../../../../docs/operational-lessons.md#resolves-to-dist-does-not-say-whose)).
-- **Open the PR with `pnpm run pr:open`, never raw `gh pr create` (#2931).** `pr:open` labels the PR with your
+- **Open the PR with `agent-org pr:open`, never raw `gh pr create` (#2931).** `pr:open` labels the PR with your
   session after creating it, checks the body's `Acceptance:` and `Closes` with the parser CI uses, and refuses a
   diff outside the row's Region before anything is sent; a raw create skips all three (#2925, #2921 and #2919
   carry no session label for that reason).
@@ -191,7 +191,7 @@ against a target of 120k, #928), so keep the large paste out rather than trimmin
   accumulated context again for a partial answer: late in a long session, a handful of separate
   `grep`/`sed`/`cat` calls at ~0.6k of output each still cost ~150k of re-read apiece (#928, 2026-09-27 —
   844 such calls measured across 25 sessions). One command that runs the same greps/reads (and small
-  `gh --jq` projections) and returns them together pays that re-read once — `pnpm run survey --` is that
+  `gh --jq` projections) and returns them together pays that re-read once — `agent-org survey` is that
   command. Reach for this before a second `grep`, `sed`, `cat` or single-file `Read` in the same turn, not
   after.
 

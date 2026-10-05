@@ -51,7 +51,7 @@ complete without it, not in a list you intend to follow.**
 staleness check above asks about rows THIS role already knows are claimed; it says nothing about a branch
 pushed and then never proposed at all — `agent/ssh-key-defaults` carried a finished security fix for
 **eleven hours** with no PR, no CI run, and no merge path, found only because a human happened to read a
-branch list. `pnpm run branches:stranded` is the standing answer: run it alongside the resume checklist
+branch list. `agent-org branches:stranded` is the standing answer: run it alongside the resume checklist
 above, and treat what it names as CANDIDATES needing a look, not an automatic dispatch — see the script's
 own header for why a rebase can produce the identical shape without being stranded.
 
@@ -277,9 +277,9 @@ is reported the same way, naming what was checked**, which costs the dispatcher 
 costing the worker an hour.
 
 1. **A worker takes the top Ready row in its own lane itself.** From a non-primary tree, first
-   `pnpm run row-claim check <n>` — the CLAIM check, reading the board's `in-progress`/`session:*`
+   `agent-org row-claim check <n>` — the CLAIM check, reading the board's `in-progress`/`session:*`
    labels, never git history — and the collision and region rules; then
-   `pnpm run row-claim claim <n> --session=<name> --branch=agent/<branch> --worktree=<path>`. Since
+   `agent-org row-claim claim <n> --session=<name> --branch=agent/<branch> --worktree=<path>`. Since
    #1432 that CREATES and stamps the worktree, so nobody makes it first: a pre-made path or branch is refused
    before any write (`NOT CLAIMED: --worktree=<path> ALREADY EXISTS … Refusing before any write`). The worker
    symlinks `node_modules`, builds in that tree, and says what it took. **The brief becomes a CHECK
@@ -303,12 +303,12 @@ costing the worker an hour.
    progress, then reverted to Ready on seeing another branch, on the reasoning "someone else has it, so it
    is not mine to assign" — which put a claimed row back into the pull queue at the exact moment a second
    worker was looking at it. **The label is the claim; a row you know is taken must show that, whoever
-   holds it.** `pnpm run row-claim check <n>` before touching a row's status, `claim` to take it.
+   holds it.** `agent-org row-claim check <n>` before touching a row's status, `claim` to take it.
    > **#176 (2026-09-07): dispatch a row, don't just mention it.** "No command enforces this half" was
    > true and it cost three real double-dispatches (#156, #158, #159) — a worker's own caution caught each
    > one, not the board, because a row named in a dispatcher/product-manager MESSAGE carried no label at
    > all until the assigned session got around to `claim`, and a second dispatch in that window read
-   > UNCLAIMED. **`pnpm run row-claim dispatch <n> --session=<name>` is now the first act of
+   > UNCLAIMED. **`agent-org row-claim dispatch <n> --session=<name>` is now the first act of
    > handing a row out, not a follow-on to it** — in the SAME turn as the message assigning it, before
    > sending it, exactly the way `claim` is the worker's own first act rather than a follow-on to starting
    > work. It writes `in-progress` + `session:<name>` (not `started` — that stays for the assigned session's
@@ -422,7 +422,7 @@ earlier**. Both sentences were true — nothing held the region, every symbol wa
 work was done and merged.**
 
 ```
-$ pnpm exec agent-org row-claim check 83
+$ agent-org row-claim check 83
 UNCLAIMED -- #83 …    STARTABLE: no unmerged branch is in its region
 
 $ gh issue view 83 --json state,closedAt
@@ -470,7 +470,7 @@ unrelated branch.
 
 ```bash
 git stash push -m "agent/my-branch: what this is"   # required — the message is the only owner record
-pnpm run stash:whose                                 # every stash with the branch it was made on
+agent-org stash:whose                                 # every stash with the branch it was made on
 A11Y_STASH_ANY=1 git stash push                     # deliberate exception, named in the refusal
 ```
 
@@ -510,9 +510,9 @@ real predicate is *"a PR somebody is actively working on"*, and the other party 
 from outside. The collision was invisible, not careless.
 
 ```bash
-pnpm run pr:hold -- <n> --session=<name>      # take it; prints who held it before
-pnpm run pr:release -- <n> --session=<name>   # give it back
-pnpm run pr:hold -- <n>                       # report only, writes nothing
+agent-org pr:hold <n> --session=<name>      # take it; prints who held it before
+agent-org pr:release <n> --session=<name>   # give it back
+agent-org pr:hold <n>                       # report only, writes nothing
 ```
 
 `merge-guard` refuses a PR held by another session and names the holder. **There is deliberately no
