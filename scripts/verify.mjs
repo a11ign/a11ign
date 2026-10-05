@@ -38,11 +38,11 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
-  closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync,
+  closeSync, existsSync, globSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { changedFiles } from "../packages/guards/src/changed-files.mjs";
 import { underFloor } from "../packages/guards/src/assert-glob-not-empty.mjs";
@@ -287,20 +287,104 @@ export async function runAffectedSet({ base }, run, readSummary = readRunSummary
 }
 
 /**
+ * WHERE THE LAST RUN'S FAILURES ARE READ FROM (#3574): the newest RUN RECORD of this worktree (#2199), and not rstest's own
+ * sequence cache (`node_modules/.cache/.rstest-results/results.json`), measured 2026-10-05. That cache is ONE file for every
+ * worktree here (each `node_modules/.cache` is a symlink to the primary's), keeps a `failed` flag per file for 30 days, and
+ * holds failures of scratch fixtures that never existed in this tree, so it says "this file once failed" and never "the last
+ * run failed". A record is per worktree, one per top-level run, green ones too, and says `status` for the run as a whole.
+ * The directory is `rstest.config.mjs`'s, spelled twice because that file is outside this row's Region; a test pins the pair.
+ * @param {Record<string, string | undefined>} [env]
+ */
+export function runRecordDir(env = process.env) {
+  return env.A11Y_RSTEST_RECORD_DIR || join(REPO, "node_modules", ".cache", "rstest-run-records");
+}
+
+/** The shape of a record's name after the worktree: the config's UTC stamp. It tells `wt-1865` from `wt-1865-c`. */
+const RECORD_STAMP = String.raw`-\d{4}-\d{2}-\d{2}T[\d-]+Z-\d+\.json$`;
+
+/**
+ * The newest run record of `worktree` in `dir`, or null when there is none or it cannot be read (said aloud: an unreadable
+ * record is not a green one, but it must not stop a run either, so the run proceeds without a first leg). The stamp in the
+ * name sorts as time, which is why the config can prune oldest-first the same way.
+ * @param {{ dir?: string, worktree?: string }} [where]
+ * @returns {{ name: string, record: { status?: string, files?: Array<{ testPath: string, status: string }> } } | null}
+ */
+export function newestRunRecord({ dir = runRecordDir(), worktree = basename(REPO) } = {}) {
+  if (!existsSync(dir)) return null;
+  const mine = new RegExp(`^${worktree.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)}${RECORD_STAMP}`);
+  const name = readdirSync(dir).filter((entry) => mine.test(entry)).sort().at(-1);
+  if (name === undefined) return null;
+  try {
+    return { name, record: JSON.parse(readFileSync(join(dir, name), "utf8")) };
+  } catch (cause) {
+    console.error(`verify: the last run record ${name} is not JSON (${cause instanceof Error ? cause.message : cause}); no failures-first run`);
+    return null;
+  }
+}
+
+/**
+ * THE FIRST LEG'S FILES: the files the last run failed, minus any that cannot be run again, each dropped file named with its
+ * reason so nothing leaves the list silently. ONLY A RECORD WHOSE RUN FAILED YIELDS ANYTHING: a green, absent or unreadable one
+ * yields no files, and no files means no first leg, because the alternative spelling, `--onlyFailures` with nothing recorded, runs
+ * EVERYTHING (rstest 0.12.3 prints "No failed tests found from the previous run. Running all tests." and does).
+ * @param {{ last: ReturnType<typeof newestRunRecord>, exists: (file: string) => boolean, inInclude: (file: string) => boolean }} reading
+ * @returns {{ name: string | null, files: string[], dropped: Array<{ file: string, why: string }> }}
+ */
+export function failuresFirstPlan({ last, exists, inInclude }) {
+  if (last === null || last.record.status !== "fail") return { name: last?.name ?? null, files: [], dropped: [] };
+  const failed = (last.record.files ?? []).filter((file) => file.status === "fail").map((file) => file.testPath);
+  const files = [];
+  const dropped = [];
+  for (const file of failed) {
+    if (!exists(file)) dropped.push({ file, why: "it no longer exists" });
+    else if (!inInclude(file)) dropped.push({ file, why: `it no longer matches the include ${AFFECTED_INCLUDE}` });
+    else files.push(file);
+  }
+  return { name: last.name, files, dropped };
+}
+
+/** The plan for the tree in hand: the newest record of this worktree, read before anything this run starts can write another. */
+function lastRunFailures() {
+  const included = new Set(globSync(AFFECTED_INCLUDE, { cwd: REPO }));
+  return failuresFirstPlan({ last: newestRunRecord(), exists: (file) => existsSync(join(REPO, file)), inInclude: (file) => included.has(file) });
+}
+
+/**
+ * THE FIRST LEG (#3574): `rstest run` over exactly the files the last run failed, so a session sees the failure it is fixing in
+ * seconds. A red first leg ends the step, as every command in `ts` does. A PASSING one is not the step's result: the affected run
+ * still follows and alone decides the step, so the stamp is never made by a subset of a subset.
+ * @param {ReturnType<typeof lastRunFailures>} plan
+ * @param {(command: string, args: string[], where: { cwd: string, stdio: import("node:child_process").StdioOptions }) => Promise<{ status: number | null }>} run
+ * @returns {Promise<{ status: number | null }>}
+ */
+export async function runFailuresFirst({ name, files, dropped }, run) {
+  for (const { file, why } of dropped) console.log(`verify: ${file} failed in ${name} and is dropped from the failures-first run: ${why}`);
+  if (files.length === 0) return { status: 0 };
+  console.log(`verify: ${name} failed ${files.length} file${files.length === 1 ? "" : "s"}; running ${files.length === 1 ? "it" : "them"} before the affected set`);
+  const { command, args } = pnpmCliInvocation(["exec", "rstest", "run", "--config", RSTEST_CONFIG, ...files.flatMap((file) => ["--include", file])]);
+  const { status } = await run(command, args, { cwd: REPO, stdio: "inherit" });
+  console.log(status === 0 ? "verify: those files pass now; the affected set follows" : "verify: those files still fail; the affected set was not started");
+  return { status };
+}
+
+/**
  * `ts` must not block the event loop: `agentOrg` runs beside it as a chain of promises, and a `spawnSync` here freezes
  * every one of them until `ts` returns, which made the two run one after the other with the step merely STARTED early
- * (#3333). `run` is a parameter so a test can see that every command goes through the non-blocking runner.
+ * (#3333). `run` is a parameter so a test can see that every command goes through the non-blocking runner. THE FAILURES-FIRST LEG
+ * IS FIRST, before `docs:coverage`, lint and typecheck, because what it is for is seconds to the red an author is fixing (#3574).
  * @param {{ base: string }} ctx
  * @param {(command: string, args: string[], where: { cwd: string, stdio: import("node:child_process").StdioOptions, env?: Record<string, string> }) => Promise<{ status: number | null }>} [run]
  * @param {(file: string) => ReturnType<typeof readRunSummary>} [readSummary]
+ * @param {() => ReturnType<typeof lastRunFailures>} [lastRun]
  */
-export function runTs({ base }, run = shAsync, readSummary = readRunSummary) {
+export function runTs({ base }, run = shAsync, readSummary = readRunSummary, lastRun = lastRunFailures) {
   const where = { cwd: REPO, stdio: /** @type {const} */ ("inherit") };
   const pnpmAsync = (/** @type {string[]} */ pnpmArgs) => {
     const { command, args } = pnpmCliInvocation(pnpmArgs);
     return run(command, args, where);
   };
   return inOrderAsync([
+    () => runFailuresFirst(lastRun(), run),
     () => pnpmAsync(["run", "docs:coverage"]),
     () => pnpmAsync(["run", "lint"]),
     () => pnpmAsync(["run", "typecheck"]),
