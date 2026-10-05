@@ -30,7 +30,7 @@ importers:
         specifier: ^0.31.0
         version: 0.31.0
       a11ign:
-        specifier: 0.2.5
+        specifier: 0.2.6
         version: link:packages/cli
     devDependencies:
       '@changesets/cli':
@@ -152,7 +152,7 @@ importers:
         specifier: 0.31.0
         version: 0.31.0
       a11ign:
-        specifier: 0.2.5
+        specifier: 0.2.6
         version: link:../cli
       serve:
         specifier: 14.2.6
