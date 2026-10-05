@@ -112,6 +112,12 @@ const KNOWN_REPORTED_FLOORS: readonly string[] = Object.freeze([
   "git-spawn-classification.test.ts: files.length",
   "git-spawn-classification.test.ts: spawningGit.length",
   "guest-paths-are-measured.test.ts: named.length",
+  // #2703, and both are PRECONDITIONS rather than stand-ins: the tree's file count and the number of
+  // tree-wide guards inside lab change with every row, so there is no right number to assert. Each floor
+  // answers only "did the walk read a population at all"; the verdicts are the equalities after them
+  // (`deepEqual(stay, all.filter(...))`, `deepEqual(…treeRefusals…, [])`), each with its own control.
+  "lab-extraction.test.ts: files.length",
+  "lab-extraction.test.ts: move.length",
   "licence-boundary.test.ts: obliged.length",
   "local-import-closure.test.ts: files.length",
   "local-import-closure.test.ts: walked",
