@@ -40,11 +40,10 @@ test("every entry is a real tracked *.test.ts path, sorted, deduplicated", () =>
   assert.ok(files.every((f) => f.endsWith(".test.ts")), "every entry must be a *.test.ts path");
 });
 
-test("names the four of #716's five that still live here, the fifth having travelled to agent-org", () => {
+test("names those of #716's five that still live here: carry-branch.test.ts travelled to agent-org and select-changed-tests.test.ts was deleted (#3573)", () => {
   const files = new Set(treeWideGuardFiles());
   for (const known of [
     "packages/lab/src/referenced-scripts.test.ts",
-    "packages/lab/src/packaging/select-changed-tests.test.ts",
     "packages/lab/src/packaging/generated-paths.test.ts",
   ]) assert.ok(files.has(known), `${known} was one of #716's own five (carry-branch.test.ts travelled to agent-org in #2975) and must still be discovered`);
 });

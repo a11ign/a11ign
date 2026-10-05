@@ -518,14 +518,12 @@ const CLASSIFICATION: Record<string, { guard: string | null; note: string }> = {
       + "call sites are pinned by name as the non-empty complement.",
   },
   "packages/lab/src/packaging/ci-changed.test.ts": {
-    guard: "walkers.length > 0",
-    note: "guarded -- #2357's drift test spawns `git ls-files packages` and asks whether every test the ts "
-      + "selector's own detector finds walking the tree is in `docsReadingTests`. A clean result is the "
-      + "EXPECTED answer (the two sets agree), so 'no drift' and 'the walk found no walkers' would otherwise "
-      + "be the same observation. The floor is on the population the assertion ranges over -- the walkers "
-      + "`discoversFromTree` finds -- not on the listing, because an empty listing empties it too. The same "
-      + "file's set-non-empty test holds the OTHER population, `docsReadingTests` itself, to a floor and "
-      + "to the #2329 breaker by name.",
+    guard: null,
+    note: "NOT A POPULATION: the only spawn this detector reads is a FIXTURE STRING (`execFileSync(\"git\", [\"ls-files\"])` "
+      + "written into a throwaway repo as the body of a test file whose job is to be one that walks the tree), and the assertion "
+      + "beside it names the three members the fixture's `docsReadingTests` must return, so it cannot pass over an empty "
+      + "set. The test that asked the real tree a git question here, whether the ts selector's own detector and "
+      + "`docsReadingTests` agree, was deleted with the selector (#3573); this entry used to carry its guard, `walkers.length > 0`.",
   },
 };
 

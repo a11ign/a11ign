@@ -43,7 +43,6 @@ export const COMMANDS = {
   "auto-arm-sweep": { argv: ["pnpm", "exec", "agent-org", "auto-arm-sweep"] },
   "close-rows-for-merged-pr": { argv: ["pnpm", "exec", "agent-org", "close-rows-for-merged-pr"] },
   "reconstitution-drill": { argv: ["pnpm", "exec", "agent-org", "reconstitution-drill"] },
-  "select-changed-tests": { argv: ["node", "scripts/select-changed-tests.mjs"] },
   // #478 (A6b): registered here rather than as a new `package.json` script, on purpose -- this file
   // exists so a new command does not mean editing that one. `docs/commands.md` is committed and checked
   // deliberately (see generate-commands-doc.mjs's own header, and generated-paths.test.ts's

@@ -387,7 +387,6 @@ const KNOWN_PLAIN_ENTRY_GUARDS: readonly string[] = Object.freeze([
   "scripts/check-schema-migration.mjs",
   "scripts/ci-changed.mjs",
   "scripts/known-gaps-index.mjs",
-  "scripts/select-changed-tests.mjs",
   "scripts/stale-dist-diagnosis.mjs",
 ]);
 

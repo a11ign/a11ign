@@ -101,17 +101,17 @@ test("a genuine Region-declared file with an extension is still extracted -- the
 // --- #941: a STANDALONE directory line in a Region declares a PREFIX, never nothing ---
 
 /** #941's own three-line block: one file and two directories, fenced the way rows are filed. */
-const THREE_LINE_REGION = "## Region\n\n```\nscripts/select-changed-tests.mjs\npackages/lab/src/packaging/\ndocs/\n```\n\n"
+const THREE_LINE_REGION = "## Region\n\n```\nscripts/ci-changed.mjs\npackages/lab/src/packaging/\ndocs/\n```\n\n"
   + "## Not in scope\n\nnothing\n";
 
 test("#941 REPRODUCED: the file grammar alone reads only the file out of this block -- the defect's own output", () => {
   // What `declaredRegionFiles` returned for this block before #941: the two directory lines vanished.
-  assert.deepEqual(regionPathsFromBody(extractRegionSection(THREE_LINE_REGION) ?? ""), ["scripts/select-changed-tests.mjs"]);
+  assert.deepEqual(regionPathsFromBody(extractRegionSection(THREE_LINE_REGION) ?? ""), ["scripts/ci-changed.mjs"]);
 });
 
 test("#941: a standalone directory line declares a prefix, beside the files the block names", () => {
   assert.deepEqual(declaredRegionFiles(THREE_LINE_REGION),
-    ["scripts/select-changed-tests.mjs", "packages/lab/src/packaging/", "docs/"]);
+    ["scripts/ci-changed.mjs", "packages/lab/src/packaging/", "docs/"]);
 });
 
 test("#941: a Region of ONLY directories no longer declares the empty set -- the five zero-declaration rows' shapes", () => {
