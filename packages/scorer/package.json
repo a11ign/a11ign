@@ -1,6 +1,6 @@
 {
   "name": "@a11ign/scorer",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "The trained screen-reader accessibility scorer as an artefact: 27 KB of heads over a frozen MiniLM encoder, plus the Python program that runs them. The weights are the API.",
   "license": "AGPL-3.0-or-later",
   "type": "module",

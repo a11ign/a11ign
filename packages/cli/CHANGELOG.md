@@ -1,5 +1,15 @@
 # a11ign
 
+## 0.2.2
+
+### Patch Changes
+
+- bc05cfe: The Action's log now says how many criteria the rule layer (axe-core) failed, in a line before the count. The count line is the screen-reader layer's findings only, so a page axe-core failed on three criteria logged `a11ign: 0 finding(s) (none)` with nothing about the rule layer (#3616). No line is added when axe-core failed none.
+- Updated dependencies [d665b89]
+  - @a11ign/scorer@0.2.1
+  - @a11ign/judge@0.2.2
+  - @a11ign/screenreader-fleet@0.1.2
+
 ## 0.2.1
 
 ### Patch Changes
