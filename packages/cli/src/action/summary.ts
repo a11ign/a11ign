@@ -234,7 +234,7 @@ const code = (text: string): string => `\`${cell(text).replace(/`/g, "'")}\``;
  * W41 (run 37273212707): 4.1.2 asserted on `edit`, which names neither of sqlite's two unlabelled inputs nor, on python.org's
  * two-document capture, the page. The rule layer's evidence IS the verbatim entry of whichever list it read, so the entry is
  * located by reading those lists back: the JSON path a reader with the artifact can follow, the neighbours that say which
- * control, and EVERY entry reading exactly this (`ruleFindings` keeps one finding for identical text).
+ * control, and EVERY entry reading exactly this (the rule layer keeps one finding for identical text).
  *
  * What it does NOT say is the document, and says so. The sweep presses controls as it walks them, so a submit can move the
  * document mid-list, and an entry records none: attributing it to "the first document" would be a guess wearing a fact's
