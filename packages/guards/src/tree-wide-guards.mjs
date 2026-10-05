@@ -22,6 +22,7 @@ import { pathToFileURL } from "node:url";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { localImports, stripComments } from "./local-import-closure.mjs";
 import { refuseUnknownFlags } from "../../worker-fleet/src/cli-flags.mjs";
+import { toolPath } from "../../../scripts/agent-org-newest-tag.mjs";
 
 /** Exported so the discovery's own test can construct a fixture that genuinely resolves to this module,
  *  rather than guessing at the path a real `localImports` call would compute. */
@@ -30,7 +31,7 @@ export const MARKER_MODULE = resolve(new URL(".", import.meta.url).pathname, "tr
  *  a travelling guard repointed at the copy must stay discovered, exactly as it was importing the original.
  *  Both are checked, never swapped: `MARKER_MODULE` alone stays exported and correct for anything still
  *  reading it. */
-export const MARKER_MODULES = [MARKER_MODULE, resolve(new URL(".", import.meta.url).pathname, "../../../node_modules/agent-org/src/lib/tree-wide-guard.mjs")];
+export const MARKER_MODULES = [MARKER_MODULE, toolPath("src/lib/tree-wide-guard.mjs")];
 /** Imported is not used -- the same distinction `git-spawn-classification.test.ts`'s own
  *  `usesCanonicalHelper` draws for the identical reason (a canonical helper pulled in and never called). */
 const CALLS_MARKER = /\bdeclareTreeWideGuard\(/;

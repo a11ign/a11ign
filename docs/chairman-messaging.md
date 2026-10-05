@@ -32,25 +32,25 @@ written by `messaging:pair`, so `messaging:check` reports it as *not yet paired*
 
 ## The four commands
 
-**`pnpm run messaging:pair`: run once, in the chairman's own shell.** The chairman's Telegram user and chat ids are personal data
+**`agent-org messaging:pair`: run once, in the chairman's own shell.** The chairman's Telegram user and chat ids are personal data
 and this repository is public, so nobody types them anywhere. The command prints a one-time code, the chairman sends
 `/pair <code>` to the bot from their phone within ten minutes, and the bot records the first sender that proves it in the
 chairman file. A wrong, expired or reused code writes nothing and the bot says nothing back to a stranger. It is a human act and
 not one an agent session runs.
 
-**`pnpm run messaging:watch`: the hourly unit.** One run reads GitHub, asks each source what the chairman should be told
+**`agent-org messaging:watch`: the hourly unit.** One run reads GitHub, asks each source what the chairman should be told
 (rows labelled `needs:chairman`, a stalled queue, an incident, the daily summary), and sends it once per event. It makes read
 calls only, which the code enforces rather than promises, and it runs under the unit's own GitHub account, never a person's.
 It is a one-shot program that a systemd timer runs, so running it by hand is for a test of the wiring, and a second copy does
 not duplicate a message because the delivery log remembers what was sent.
 
-**`pnpm run messaging:listen`: the long-running half.** Where `watch` tells the chairman on a clock, `listen` hears them. It
+**`agent-org messaging:listen`: the long-running half.** Where `watch` tells the chairman on a clock, `listen` hears them. It
 long-polls Telegram (no inbound port is opened), accepts a message only from the paired chairman in a private chat, and hands it
 on: a button press or reply to a request is written to that row as a comment and the label that asked is removed, which is how
 `ceo` is woken with the answer as data; anything else is queued for `ceo` and nobody else. There must be exactly one listener,
 enforced by a lock file on the host and by Telegram's `409 Conflict`; a second one is refused rather than retried.
 
-**`pnpm run chairman:reply -- "text with {{placeholders}}"`: the only way an agent speaks to the chairman.** It is `ceo`'s
+**`agent-org chairman:reply "text with {{placeholders}}"`: the only way an agent speaks to the chairman.** It is `ceo`'s
 command (`.agent-org/roles/ceo.md` is the brief that names it). The text may state a row, PR, run or count only through a
 placeholder such as `{{issue:2885.labels}}`, which is re-read at send time and stamped "as of HH:MMZ"; a bare `#123`, a state
 word or a number outside a placeholder is refused, so an unchecked claim cannot ride in free text. A read that fails refuses the

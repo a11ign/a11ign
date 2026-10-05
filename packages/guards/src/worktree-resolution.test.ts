@@ -19,6 +19,7 @@ import { fileURLToPath } from "node:url";
 import {
   RESOLUTION, OVERRIDE_ENV, worktreeResolution, resolutionLine, classifyResolvedPath, suiteStartVerdict,
 } from "./worktree-resolution.mjs";
+import { toolPath } from "../../../scripts/agent-org-newest-tag.mjs";
 
 const REPO = fileURLToPath(new URL("../../../", import.meta.url));
 const PACKAGE = "agent-org";
@@ -158,7 +159,7 @@ test("#2181 THE CALLER: `worktree:whose` prints the resolution line for the tree
     const primary = checkout(base, "primary");
     const tree = checkout(base, "wt-cli");
     linkScope(tree, join(primary, "packages", PACKAGE));
-    const ran = spawnSync(process.execPath, [join(REPO, "node_modules/agent-org/src/worktree-owner.mjs"), tree],
+    const ran = spawnSync(process.execPath, [toolPath("src/worktree-owner.mjs"), tree],
       { encoding: "utf8", env: { ...process.env, A11Y_SESSION: "worker-capture" } });
     assert.equal(ran.status, 0, ran.stderr);
     assert.match(ran.stdout, /UNSTAMPED/, "control: the ownership answer is still there");

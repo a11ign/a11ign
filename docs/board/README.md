@@ -36,7 +36,7 @@ an edition published into the wrong category looks exactly like success.
 The category is resolved **by slug on every run**, never by id: an id is per-repository and changes when
 the category is created again.
 
-**The PDF is an optional flag, for a day a file is wanted** — `pnpm run board:document --pdf`, with
+**The PDF is an optional flag, for a day a file is wanted** — `agent-org board:document --pdf`, with
 `--release` beside it still attaching it to a draft release. The scheduled job uses neither, and its token
 has `contents: read`, so it cannot create a release draft even if somebody re-adds the flag.
 
@@ -195,8 +195,8 @@ entirely correct and still say nothing to the board because the sentence went in
 ## By hand
 
 ```bash
-pnpm run board:report                          # generate to stdout and read it
-pnpm run board:report --post --issue=20     # publish it
+agent-org board:report                          # generate to stdout and read it
+agent-org board:report --post --issue=20     # publish it
 gh workflow run board-report.yml              # force one edition now
 ```
 
@@ -248,8 +248,8 @@ Actions it is sharper and needs no human error at all: **GitHub disables a sched
 days without repository activity**, silently, producing no run and no red mark.
 
 ```bash
-pnpm run board:liveness                        # have the editions stopped arriving?
-pnpm run board:liveness --post --issue=20   # and comment once on the report issue if they have
+agent-org board:liveness                        # have the editions stopped arriving?
+agent-org board:liveness --post --issue=20   # and comment once on the report issue if they have
 ```
 
 It asks about the **edition**, never about the run, and the distinction is not pedantry: both scheduled

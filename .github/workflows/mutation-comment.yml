@@ -52,6 +52,8 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
+        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
       - run: pnpm run build
 
       - name: Mutate the added lines and run the changed tests

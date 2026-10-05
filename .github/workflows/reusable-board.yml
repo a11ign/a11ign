@@ -27,6 +27,8 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
+        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
       # A BUILD IS STILL NEEDED, though the first version of this job shipped without one on the strength
       # of a grep that checked only these test files' own top-level imports: `board-liveness.test.ts`,
       # `board-markdown.test.ts`, `board-style.test.ts` and `board-summary-origin.test.ts` all drive a real

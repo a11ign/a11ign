@@ -29,9 +29,10 @@ import { pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
 import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { REPO } from "./repo-identity.mjs";
-import { gh } from "agent-org/src/merge-guard/lookups.mjs";
+const { gh } = await toolModule("src/merge-guard/lookups.mjs");
 import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 import { changedFiles } from "../packages/guards/src/changed-files.mjs";
+import { toolModule } from "./agent-org-newest-tag.mjs";
 
 /** @typedef {{ state: string, description?: string }} Status */
 /** @typedef {{ sha: string, changedPaths: string[], statuses: Status[] }} HistoryEntry */

@@ -110,14 +110,14 @@ The shape that matters: **`npm ci` deletes `node_modules` first, so it is clean 
 | `npm ci` | `added 229, removed 29`; 164 entries, **336 MB**, no `.pnpm` — identical to a fresh npm tree |
 | `npm install` | works (`npm ls` reports the same 5 problems as a clean npm tree) but leaves `.pnpm`, `.modules.yaml`, `.pnpm-workspace-state-v1.json`: 164 entries, **529 MB**. None of the entries point into `.pnpm` any more, so the leftovers are dead weight and can be deleted |
 
-**The primary checkout** — `npm run primary:update` (which, after the revert, sees `package-lock.json` move and
+**The primary checkout** — `agent-org primary:update` (which, after the revert, sees `package-lock.json` move and
 runs `npm install`, deliberately **never** `npm ci`: it would delete `node_modules` from under every worktree
 still symlinked to it). Its `node_modules` was npm-shaped when this was written (`ls -a node_modules` showed
 `.package-lock.json` and no `.pnpm`), in which case that is the whole procedure. If it has become pnpm-made:
 
 ```bash
 ls -a node_modules | grep -E '^\.(pnpm|modules\.yaml|pnpm-workspace-state)'   # any hit means pnpm-made
-npm run primary:update
+agent-org primary:update
 P="$(pwd)"; rm -rf "${P:?}/node_modules/.pnpm" "${P:?}/node_modules/.modules.yaml" "${P:?}/node_modules/.pnpm-workspace-state-v1.json"
 npm run build                                                                   # rehearsed: builds, 336 MB
 ```

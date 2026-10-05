@@ -23,7 +23,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { refuseUnknownFlags } from "@a11ign/screenreader-fleet/cli-flags";
-import { assertNoLeakInArgv, leakRefusalReason } from "agent-org/src/lib/leak-patterns.mjs";
+import { toolModule } from "./agent-org-newest-tag.mjs";
+const { assertNoLeakInArgv, leakRefusalReason } = await toolModule("src/lib/leak-patterns.mjs");
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 export const TARGETS_FILE = join(REPO_ROOT, "docs/ci-targets.json");

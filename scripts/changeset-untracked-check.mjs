@@ -21,7 +21,7 @@
 // PURE PARSE, THEN A THIN CLI -- `untrackedChangesetReason` takes `git status --porcelain`'s own text and
 // returns a message or `null`, so it is tested directly against a fixture string with no git process
 // involved, the shape this repo already favours (`parseWorktreeList`, `worktreeStatus` in
-// `node_modules/agent-org/src/prune-worktrees.mjs` / `row-claim.mjs`).
+// `agent-org/src/prune-worktrees.mjs` / `row-claim.mjs`).
 //
 // RETURNS `null` RATHER THAN THROWING WHEN NOTHING IS UNTRACKED, and that is load-bearing: the caller
 // (the pre-push hook) must let the push proceed unchanged in that case. The genuine-absence message from

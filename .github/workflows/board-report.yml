@@ -101,6 +101,9 @@ jobs:
         if: steps.hour.outputs.london == '08' || (github.event_name == 'workflow_dispatch' && inputs.republish)
         run: pnpm install --frozen-lockfile
 
+      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
+        if: steps.hour.outputs.london == '08' || (github.event_name == 'workflow_dispatch' && inputs.republish)
+        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
       # REPUBLISH: THE ONE WAY PAST THE HOUR GATE, AND IT CANNOT CREATE AN EDITION.
       #
       # The hour gate treats two different acts identically: replacing today's already-published document,
@@ -120,7 +123,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if pnpm exec agent-org board-discussion --exists; then
+          if agent-org board-discussion --exists; then
             echo "ok=true" >> "$GITHUB_OUTPUT"
             echo "Today's edition exists - republishing over it."
           else
@@ -137,5 +140,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          pnpm exec agent-org board:report --post --issue=20
-          pnpm exec agent-org board:document --discussion
+          agent-org board:report --post --issue=20
+          agent-org board:document --discussion

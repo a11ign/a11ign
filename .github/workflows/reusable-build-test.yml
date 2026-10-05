@@ -76,6 +76,8 @@ jobs:
       # warm run pays for linking rather than for downloads. A restored `node_modules` keyed on the OLD lockfile
       # would never have invalidated when pnpm-lock.yaml changed.
       - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
+        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
       - run: pnpm run build
       # #168: WHAT THE BUILD ACTUALLY PRODUCED, kept only when something after it fails. See the ORIGINAL
       # comment in ci.yml's history for the full incident (an intermittent cross-package dist race) --

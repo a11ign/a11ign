@@ -33,7 +33,7 @@ Three things, and they are all one thing seen from different distances.
 |---|---|
 | **The tracker** | GitHub Issues, the Project board and the labels are the single answer to *"what is open"*. `docs/backlog.md` and `docs/known-gaps.md` are the RECORD of lessons and link to issues; they stopped being the tracker. |
 | **The release** | One milestone, one date, and **a reason recorded on the milestone for every move of that date**. A milestone takes no comments, so the log is its description. |
-| **The daily board report** | Generated from GitHub and git by `pnpm run board:report`, posted to issue #20 at 08:00 Europe/London. |
+| **The daily board report** | Generated from GitHub and git by `agent-org board:report`, posted to issue #20 at 08:00 Europe/London. |
 
 ## What this role owns
 
@@ -98,7 +98,7 @@ Three constraints from that date, enforced rather than remembered:
 
 A second incident of the same shape moves the role to another session.
 
-**Fifth instance, 2026-09-09 10:20Z (ceo).** `npm run worktrees:prune` was run to read its breakdown; the
+**Fifth instance, 2026-09-09 10:20Z (ceo).** `agent-org worktrees:prune` was run to read its breakdown; the
 tool mutated by default and removed three merged, clean worktrees belonging to other sessions. No work
 was lost, the incident was reported in the same minute as constraint (3) requires, and the tool's default
 now flips to reporting with `--apply` as the mutation (#669). The role's own sentence is the record: the

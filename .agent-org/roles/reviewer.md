@@ -70,7 +70,7 @@ So:
   GitHub review object. **The one exception is the escalation in "A verdict whose Acceptance did not execute" below.**
 - **Never run anything that reads `runs/` as a reported result** (rules:gate, check-signals, rules:coverage);
   the fleet operator owns those. You may run a package's tests.
-- **Never commit, and never run `pnpm run primary:update`.**
+- **Never commit, and never run `agent-org primary:update`.**
 
 ## The lane
 

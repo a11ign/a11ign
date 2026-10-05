@@ -393,7 +393,7 @@ test("#971 ACCEPTANCE: a ref resolving to a different commit on origin is REFUSE
   assert.match(refusal, /^REFUSING:/, "the first word must say what happened");
   assert.match(refusal, /f0d69cb7aaaa/, "the SHA it would have shipped");
   assert.match(refusal, /25a5f680bbbb/, "and the SHA origin holds, so the operator can see which is which");
-  assert.match(refusal, /npm run primary:update/, "the fix the row asked to be named");
+  assert.match(refusal, /agent-org primary:update/, "the fix the row asked to be named");
   // BOTH WAYS OUT, not one. A local tip that differs may be BEHIND origin or AHEAD of it, and telling an
   // operator to fast-forward when they meant to ship unpushed work is a refusal that cannot be followed.
   assert.match(refusal, /push it, and pass --ref=/);

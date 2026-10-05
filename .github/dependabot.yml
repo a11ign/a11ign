@@ -1,8 +1,7 @@
 # Dependency updates come from the platform (chairman, 2026-10-03, #928 ADR 0041 decision 4; row #3133): a new
 # release of a dependency opens a pull request here, so nobody polls for one. Dependabot, because it is a file
-# and not an app install; Renovate is the fallback only if the first run shows Dependabot cannot read the
-# `agent-org` pin (`github:a11ign/agent-org#semver:^0.1.0`). `dependency-updates-configured.test.ts` pins
-# every choice below.
+# and not an app install. `agent-org` is no dependency of this repository (#3534), so there is nothing here for it.
+# `dependency-updates-configured.test.ts` pins every choice below.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -24,11 +23,6 @@ updates:
     # owns their ranges. Left alone, Dependabot would offer the registry's 0.1.0 over that pin. The test
     # derives this list from the manifests, so a package that joins or leaves the workspace moves it
     # deliberately: remove an entry when its package leaves and is consumed by range instead.
-    # `agent-org` is NOT listed, on purpose (#3244): `ignore` only stops Dependabot PROPOSING a bump of it, and the
-    # updater's own pnpm run re-resolves the `#semver:` pin whenever it re-resolves anything, so an unrelated
-    # dependency pull request moves the lockfile entry to a tag inside the range regardless (measured: `pnpm update
-    # tsx@4.23.15 --lockfile-only` moved v0.2.1 to v0.2.4, `package.json` untouched). The reviewer accepts that
-    # in-range move (`.agent-org/roles/reviewer.md`); the test refuses `agent-org` here.
     ignore:
       - dependency-name: "@a11ign/control"
       - dependency-name: "@a11ign/evidence"

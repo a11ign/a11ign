@@ -948,7 +948,7 @@ export function staleRefRefusal({ ref, local, origin }) {
       "its own `git checkout` would fail in git's words, naming neither the flag nor the reason.",
       "",
       `  Push the branch:   git push -u origin ${ref}`,
-      "  Or name one origin already has:   --ref=main   (with `npm run primary:update` run first)",
+      "  Or name one origin already has:   --ref=main   (with `agent-org primary:update` run first)",
       "",
     ].join("\n");
   }
@@ -967,7 +967,7 @@ export function staleRefRefusal({ ref, local, origin }) {
     "use the same stale SHA -- internally consistent and a merge behind. That is how 10 of 10 boxes went",
     "stale on 2026-09-11 with every check green.",
     "",
-    "  To deploy origin's tip:      npm run primary:update   (then re-run this)",
+    "  To deploy origin's tip:      agent-org primary:update   (then re-run this)",
     "  To deploy your own commit:   push it, and pass --ref=<that branch>",
     "",
   ].join("\n");
@@ -993,7 +993,7 @@ function requireCommitIsOnOrigin(ref, expected) {
   process.stderr.write([
     `REFUSING: ${expected.slice(0, 12)} (${ref}) is on no remote-tracking branch, so the control plane`,
     "cannot fetch it and the deploy would fail on a git message naming neither the flag nor the reason.",
-    "  Push the commit first, or `npm run primary:update` if you meant to deploy origin/main.",
+    "  Push the commit first, or `agent-org primary:update` if you meant to deploy origin/main.",
     "",
   ].join("\n"));
   process.exit(2);
