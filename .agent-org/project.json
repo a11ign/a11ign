@@ -57,6 +57,8 @@
     "chairmanFile": "~/.config/agent-org/telegram-chairman",
     "milestones": ".agent-org/chairman-milestones.json"
   },
+  "_teamAccess": "Where this project's declaration of team levels lives (a11ign/agent-org#241, row #3634; this half #3660), read by the `team-access-drifted` signal of `org-health` in a11ign/agent-org. `declaration` is a path inside the project; `docs/repository-access.json` holds the level each org team must have on each code repository (the `bots` team is `push` on a layer, never `admin`). ABSENT reads as nothing, and a tool older than #241 ignores the key. Changing any team's level stays the chairman's.",
+  "teamAccess": { "declaration": "docs/repository-access.json" },
   "_leakPatterns": "What a11ign's public prose must never carry, ON TOP OF the two the tool holds itself (a private LAN IPv4 address, a named SSH key file). Each `pattern` is a regular expression's SOURCE. #1875: the control plane's GitHub token file sits beside the fleet key and is guarded for the same reason -- where a credential sits on a real box is somebody's infrastructure written down. ADR 0013: the retired `pct exec` container-hop idiom. #2658 (child 3g of #69) split these two out of packages/lab/src/packaging/leak-patterns.mjs, which the product keeps.",
   "leakPatterns": [
     { "name": "a named credential file on a fleet host", "pattern": "\\.config/a11y-witness/[\\w.-]+" },
