@@ -18,7 +18,7 @@
     { "key": "lab", "repo": "a11ign/lab" },
     { "key": "toolchain", "repo": "a11ign/toolchain" }
   ],
-  "_dora": "The seven repositories the daily DORA reading measures (ADR 0041, decision 7; #3138), read by `src/dora.mjs` of a11ign/agent-org. Each is listed from the day it exists, EVEN WHEN EMPTY, so the page shows it as unfinished until it has released. `release.kind` is `npm` (the registry's publish time is the release) or `tag` (a GitHub Release is). The reader takes ONE `package` per npm repository, so a11ign names `a11ign`, the command, which releases with the three libraries `evidence`, `judge` and `scorer` in one version pull request; `releasablePaths` are the directories whose change counts as releasable. WHEN A PACKAGE MOVES, ITS MOVE ROW UPDATES ITS ENTRY HERE (packages/lab/src/packaging/dora-declaration.test.ts reads each against this workspace's manifests until then).",
+  "_dora": "The seven repositories the daily DORA reading measures (ADR 0041, decision 7; #3138) and `toolchain` (#3719, ADR 0043), read by `src/dora.mjs` of a11ign/agent-org. Each is listed from the day it exists, EVEN WHEN EMPTY, so the page shows it as unfinished until it has released. `release.kind` is `npm` (the registry's publish time is the release) or `tag` (a GitHub Release is). The reader takes ONE `package` per npm repository, so a11ign names `a11ign`, the command, which releases with the three libraries `evidence`, `judge` and `scorer` in one version pull request; `releasablePaths` are the directories whose change counts as releasable. WHEN A PACKAGE MOVES, ITS MOVE ROW UPDATES ITS ENTRY HERE (packages/lab/src/packaging/dora-declaration.test.ts reads each against this workspace's manifests until then). EVERY `code` repository has an entry here or a reason it has none (dora-declaration.test.ts, #3719).",
   "dora": [
     { "repo": "a11ign/a11ign", "release": { "kind": "npm", "package": "a11ign" }, "releasablePaths": ["packages/cli/", "packages/evidence/", "packages/judge/", "packages/scorer/"] },
     { "repo": "a11ign/agent-org", "release": { "kind": "tag" }, "releasablePaths": ["src/"] },
@@ -26,7 +26,8 @@
     { "repo": "a11ign/screenreader-fleet", "release": { "kind": "npm", "package": "@a11ign/screenreader-fleet" }, "releasablePaths": ["packages/worker-fleet/"] },
     { "repo": "a11ign/documents", "release": { "kind": "npm", "package": "@a11ign/documents" }, "releasablePaths": ["packages/pdf/"] },
     { "repo": "a11ign/lab", "release": { "kind": "tag" }, "releasablePaths": ["packages/lab/"] },
-    { "repo": "a11ign/control", "release": { "kind": "tag" }, "releasablePaths": ["packages/control/"] }
+    { "repo": "a11ign/control", "release": { "kind": "tag" }, "releasablePaths": ["packages/control/"] },
+    { "repo": "a11ign/toolchain", "release": { "kind": "npm", "package": "@a11ign/toolchain" }, "releasablePaths": ["packages/toolchain/"] }
   ],
   "_units": "The unit files this project installs from the tool's own templates are named `<prefix><name>`; the project's OWN units (its corpus and fleet clocks) live in `.agent-org/units/` and `own` lists them, which is the project's half of the partition `host-units.mjs` records the tool's half of. `boardReportWorkflow` is the workflow the tool's board-report unit dispatches on the first tracker's repository (#2620, child 3f of #69; ADR 0040, decision 9).",
   "units": {
