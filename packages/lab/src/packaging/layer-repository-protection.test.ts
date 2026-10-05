@@ -602,6 +602,23 @@ function perMergeEvidence(workflow: Workflow): string | null {
   return null;
 }
 
+const isMapping = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+/**
+ * Why the walk below cannot be trusted to dereference this workflow, or null when it can. A file can parse and still
+ * be unusable (`release: null`, `steps: "make"`, a step that is a bare string); skipping such an entry would hide a
+ * DRIFT signal inside it, so it is CANNOT_TELL, not a crash and not a pass.
+ */
+function structuralProblem(jobs: Record<string, unknown>): string | null {
+  for (const [id, job] of Object.entries(jobs)) {
+    if (!isMapping(job)) return `job \`${id}\` is not a mapping`;
+    if (job.steps === undefined) continue;
+    if (!Array.isArray(job.steps) || !job.steps.every(isMapping)) return `job \`${id}\` has \`steps\` that are not a list of mappings`;
+  }
+  return null;
+}
+
 function releaseShapeOfText(text: string): Cell {
   let workflow: Workflow | null;
   try {
@@ -612,6 +629,9 @@ function releaseShapeOfText(text: string): Cell {
   if (typeof workflow !== "object" || workflow === null || typeof workflow.jobs !== "object" || workflow.jobs === null) {
     return cannotTell(`${RELEASE_WORKFLOW} parses and has no \`jobs\`, so there is no release to read`);
   }
+  if (Array.isArray(workflow.jobs)) return cannotTell(`${RELEASE_WORKFLOW} has \`jobs\` as a list, not a mapping of job ids`);
+  const problem = structuralProblem(workflow.jobs);
+  if (problem !== null) return cannotTell(`${RELEASE_WORKFLOW} parses but cannot be read: ${problem}`);
   const signals = versionPrSignals(workflow);
   if (signals.length > 0) return drift(`opens a version pull request: ${signals.join("; ")}`);
   const evidence = perMergeEvidence(workflow);
@@ -892,6 +912,26 @@ test("#3718: a workflow that is neither shape, or cannot be read, is CANNOT_TELL
     { kind: "ok", value: { encoding: "none", content: "" } }] as Read<ContentsAnswer>[]) {
     assert.equal(releaseShapeCell(read).state, "CANNOT_TELL", JSON.stringify(read));
   }
+});
+
+test("#3718: a workflow that parses but is structurally unusable is CANNOT_TELL, not a crash (reviewer-3722)", () => {
+  const unusable: Record<string, string> = {
+    "a null job": "jobs:\n  release: null\n",
+    "a job that is a string": "jobs:\n  release: make\n",
+    "a job that is a list": "jobs:\n  release:\n    - uses: x\n",
+    "steps that are a string": "jobs:\n  release:\n    steps: make\n",
+    "a null step": "jobs:\n  release:\n    steps:\n      - null\n",
+    "a step that is a bare string": "jobs:\n  release:\n    steps:\n      - git push --tags\n",
+    "jobs as a list": "jobs:\n  - run: git push --tags\n",
+    "a null job beside a good one": "jobs:\n  release:\n    steps:\n      - run: git push origin --tags\n  other: null\n",
+  };
+  for (const [what, text] of Object.entries(unusable)) {
+    const cell = shapeOf(text);
+    assert.equal(cell.state, "CANNOT_TELL", `${what}: ${JSON.stringify(cell)}`);
+    assert.match(cell.detail, /cannot be read|not a mapping/, what);
+  }
+  assert.equal(shapeOf("jobs:\n  release:\n    steps:\n      - run: git push origin --tags\n").state, "OK", "positive control: the same shape, well formed, reads OK");
+  assert.equal(shapeOf("jobs:\n  release:\n    runs-on: ubuntu-latest\n").state, "CANNOT_TELL", "a job with no steps and no uses is still read, as neither shape");
 });
 
 test("#3718: a declared repository with no release-shape cell is a failure, and DRIFT or CANNOT_TELL in it fail the table", () => {
