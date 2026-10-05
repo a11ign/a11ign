@@ -105,8 +105,8 @@ A unit is finished when a COMMAND says so, not when it looks right.
 
 - **The suite that covers what you touched.** `pnpm test` runs `test:ts` and `test:python`, and `test:ts` does
   NOT cover `agent-org`, `guards`, `lab` or `control`: those are `pnpm run test:org`. `pnpm run test:all` is
-  every package, and `pnpm run test:changed` runs the tests your diff can reach (about half of them, because
-  the tree-walking guards always run). **Run `pnpm test` rather than `pnpm exec tsx --test <file>` when you changed
+  every package; the PR `ts` job in CI runs the same whole suite, and the only selector left is rstest's own
+  (`rstest run --changed`, what `pnpm run verify` runs). **Run `pnpm test` rather than `pnpm exec tsx --test <file>` when you changed
   another package's source**, since cross-package imports resolve to `dist` and only the `pretest` build keeps
   that honest. A row's own Acceptance command is the exception: run it exactly as written.
 - **A pull request is ready only when `pnpm run verify` is green; a partial local run is not "passing"** (#3210) — it runs what CI's `gate` waits for, minus the tree-wide guards, which are CI's alone (#3572). The tests it runs are the module-graph-affected set (`rstest run --changed=origin/main`), so its stamp says **"the affected set passed at this head"**, naming the base, and never "the suite passed": say it that way, and "not rerun: the full `test:org`" is still not a completion.

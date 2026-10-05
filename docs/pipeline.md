@@ -29,33 +29,22 @@ while two of two human merges closed theirs (#326, #331). The mechanism — whet
 `GITHUB_TOKEN` can close a referenced issue at all — is a **hypothesis nobody here has confirmed against
 GitHub's documentation**, and unit 1d works whether or not it is true. See #298.
 
-## The PR `ts` job runs only what a diff actually reaches (A1b, A1c)
+## The PR `ts` job runs the whole suite (#3573)
 
-Chairman, verbatim: *"the trunk guard is running all of the unit tests. this takes just as long as the
-pr one. so we should change the pr unit tests to only run on the files changed for pr efficiency and ci
-efficiency."* Measured: PR `ts` 83-155s, `trunk-guard` 144-155s — the same suite, twice, on every merge.
+It used to run only what a diff reaches (A1b and A1c). Chairman, verbatim, 2026-09: *"the trunk guard is running all of the
+unit tests. this takes just as long as the pr one. so we should change the pr unit tests to only run on the files changed for
+pr efficiency and ci efficiency."* A hand-built selector (`select-changed-tests.mjs`, with `ci-changed.mjs`'s package-level
+`testPackages` underneath it) did that for a month, and **chairman, via `ceo`, 2026-10-04, deleted it** once `rstest run
+--changed` covered the same question: a selector this repository wrote and maintained is a second place to be wrong about which
+tests a change reaches, and its failure shape (a selector that picks too few tests reads green) is the one this repository
+names most often.
 
-`scripts/select-changed-tests.mjs` narrows `ci.yml`'s `ts` job to the test files that actually reference
-what changed, by three mechanisms depending on where the changed file lives:
-
-| changed file | reference kind | fallback when zero found |
-|---|---|---|
-| `packages/*/src/*` | by IMPORT (transitive) | that file's own package, full suite |
-| `scripts/*.mjs` | by IMPORT (the SAME reverse index) | every implicated package, full suite |
-| a hook, or a workflow other than `ci.yml` | by PATH STRING, in a real quoted literal (comments stripped first) | every implicated package, full suite |
-| `ci.yml` itself, or a root config (`ci-changed.mjs`'s `ROOT_TS_FILES`) | none — genuinely `BROAD` | (the whole search is skipped) |
-
-`ci-changed.mjs`'s package-level `testPackages` (the transitive closure of dependent packages) stays the
-search scope and the safety net underneath all of this — narrower than before, never wider.
-
-**The zero-tests fallback is the point, not the narrowing.** A changed file with no reference anywhere
-falls back to a named full-package run rather than silently selecting nothing — this is the job that
-gates every PR, and a check that passes having run nothing is this repository's most-recorded defect.
-
-**The path-string search must not match a mere mention in prose.** A doc comment discussing
-`` `scripts/foo.mjs` `` in this repo's own markdown convention is not a quoted JS string literal, so
-comments are stripped (`@a11ign/evidence/source-text`'s `stripComments`) before the search runs — a test
-that DISCUSSES a file is not a test that exercises it.
+Now `ci.yml`'s `ts` job calls `reusable-build-test.yml` with `run-ts-tests: true` and nothing else about scope, so it runs
+`pnpm run test:all`, the same command `trunk-guard` runs on every merge. **`ci-changed.mjs` still decides WHICH JOBS run**
+(`ts`, `python`, `ansible`, `docs`, `board`, `changeset`, `rulesFitness`): that is job gating, it runs before `npm ci`, and it
+is unrelated to which tests a job runs. The one selector left is rstest's own, locally: `pnpm run verify` runs `rstest run
+--changed=<base>` and stamps "the affected set passed at this head", which is a claim about the affected set and never about
+the suite.
 
 ## The environment these scripts read
 
@@ -189,8 +178,8 @@ environment it offers, so authors were discovering it one failed run at a time.
 branch changed will fail with `fatal: invalid object name 'origin/main'` or `no commits in common`.
 
 **Compare `ts`, which declares `fetch-depth: 0`.** The asymmetry is deliberate and both halves are
-load-bearing: `ts` needs full history because A1b's `select-changed-tests.mjs` runs `git diff <base>...HEAD`
-in that same job. So **the identical test can pass in `ts` and fail in `acceptance`**, which is exactly what
+load-bearing: `ts` needs full history because the revert-guard acceptance clones the checkout and needs the real merges in
+it (#901). So **the identical test can pass in `ts` and fail in `acceptance`**, which is exactly what
 happened to A6 (#505): `ok 668` in `ts`, `not ok 3` in `acceptance`, same file, same commit.
 
 **The token is scoped `contents: read` and nothing else.** A test that calls the GitHub API for issues,

@@ -188,7 +188,6 @@ jobs:
     with:
       run-lint-typecheck: true
       run-ts-tests: true
-      ts-test-scope: unscoped
       run-python-tests: true
 
   # #2356, THE CHAIRMAN'S RULING OF 2026-09-24: THE ORG ALWAYS FIXES FORWARD, and this job used to be
@@ -282,7 +281,7 @@ jobs:
             exit 0
           fi
           # #2389 review: THE SAME BATTERY AS `trunkBuildTest`, in the same order (reusable-build-test.yml with
-          # `run-lint-typecheck`, `ts-test-scope: unscoped`, `run-python-tests`). This step ran `npm test`,
+          # `run-lint-typecheck`, `run-ts-tests`, `run-python-tests`). This step ran `npm test`,
           # whose `test:ts` glob EXCLUDES packages/agent-org and packages/lab, so a red there re-checked
           # green at the parent and an inherited failure was recorded as this merge's own. `trunk-revert.test.ts`
           # pins that each command below is one the red job runs. A failure that is not a `not ok` line (lint,

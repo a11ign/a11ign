@@ -144,7 +144,7 @@ test("#939 THE SHAPE: no script or workflow asks git for changed paths without -
 test("#939 THE READERS: each surviving one goes through the helper, and board-data asks origin/main", () => {
   const source = (path: string) => readFileSync(join(REPO, path), "utf8");
   for (const reader of ["scripts/ci-changed.mjs", "packages/guards/src/changed-packages.mjs",
-    "node_modules/agent-org/src/board-data.mjs", "scripts/select-changed-tests.mjs"]) {
+    "node_modules/agent-org/src/board-data.mjs"]) {
     assert.match(source(reader), /import \{ changedFiles \} from "[^"]*changed-files\.mjs"/,
       `${reader} does not import the shared helper`);
   }

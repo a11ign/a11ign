@@ -43,21 +43,11 @@ name: ci
 #     `packages/judge` or `packages/evidence` having changed -- the only two paths that can move its
 #     answer, per `ci-changed.mjs`'s `rulesFitness` category.
 #
-# Unit tests run over `testPackages` (touched packages PLUS every workspace DEPENDENT, transitively,
-# computed from real `package.json` dependencies -- see `ci-changed.mjs`'s own header), never `packages`
-# alone and never the whole suite. A contract change under `packages/evidence` still tests `packages/judge`
-# and everything downstream of it; an unrelated package's PR does not pay for packages it cannot affect.
-#
-# #212 MEASURED THE 60S BUDGET ON A GENUINE LEAF CASE (`packages/lab`, zero dependents post-#206) AND FOUND
-# ~90S, NOT 60S -- two independent CI runs, step-by-step: checkout+setup-node+cache+install 7s (the install fully
-# SKIPPED on the cache hit -- caching already works; measured under npm, before #2298 moved CI to pnpm), build 5s,
-# lint+typecheck 15s (whole-repo, not scoped
-# to `testPackages` -- real, but small), and "Unit tests of the touched package(s) and their workspace
-# dependents" 56s -- ~66% of the step total, on BOTH runs. That is `lab`'s own suite (199 test files, ~1,305
-# `test()` calls, this repo's largest package by test count), not unscoped CI -- `testPackages` resolved to
-# `["lab"]` only. Disposition: accept it. A PR touching `lab` has a measured, understood floor around
-# 85-90s from `lab`'s own suite size; the 60s budget holds for an ordinary single/few-package PR elsewhere.
-# Not a target missed -- a cost named rather than chased.
+# Unit tests run the WHOLE suite (#3573, chairman via ceo, 2026-10-04). They used to run over `testPackages` (touched packages
+# plus every workspace dependent) and then a hand-built selection of test files, to keep a one-package PR near a 60s budget
+# (#212 measured ~90s on a leaf `packages/lab` PR and accepted it). The selection is deleted: `rstest run --changed` is the one
+# selector left, runs locally in `pnpm run verify`, and a PR's own CI run answers the whole-suite question. What a PR now pays in wall
+# time is measured on the row (#3573), not argued here.
 #
 # AGENT/** AND LEAD/** BRANCH PUSHES DO NOT TRIGGER THIS WORKFLOW EITHER, same as before -- every unit ends
 # with `gh pr create` (the standing worker-loop flow), so the PR's own `pull_request` trigger is where a
@@ -160,7 +150,6 @@ jobs:
       changeset: ${{ steps.classify.outputs.changeset }}
       rulesFitness: ${{ steps.classify.outputs.rulesFitness }}
       packages: ${{ steps.classify.outputs.packages }}
-      testPackages: ${{ steps.classify.outputs.testPackages }}
       # EXPOSED so `changeset` (below) does not re-derive it and risk the merge_group trap this step's own
       # comment names -- a second, independent `github.base_ref` read in a different job is exactly the
       # shape that drifted once already (#156).
@@ -197,10 +186,7 @@ jobs:
   # A1 (#452): CALLS `reusable-build-test.yml` rather than carrying its own steps -- see that file's own
   # header for why (its `trunkGate` sibling in trunk.yml used to duplicate most of this job's steps
   # independently, and chairman's own comment here used to note the two ran "the SAME suite" -- now true
-  # by construction, not by two authors keeping two copies equal). The reusable file derives its own
-  # checkout depth from `run-ts-tests`/`ts-test-scope` below rather than taking it as an input -- see that
-  # file's own header for why a `fetch-depth` input here would be a misconfiguration this repo cannot
-  # afford (`select-changed-tests.mjs` needs full history to run `git diff <base>...HEAD`).
+  # by construction, not by two authors keeping two copies equal).
   ts:
     needs: changed
     if: needs.changed.outputs.ts == 'true' && !contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action)
@@ -209,9 +195,6 @@ jobs:
       run-lint-typecheck: true
       run-docs-coverage: true
       run-ts-tests: true
-      ts-test-scope: scoped
-      base-ref: ${{ needs.changed.outputs.base }}
-      test-packages: ${{ needs.changed.outputs.testPackages }}
 
   # A1 (#452): CALLS `reusable-build-test.yml` for the one thing this job ever needed from it -- a real
   # `dist/`, since `@a11ign/screenreader-fleet/cli-flags` resolves through `package.json`'s `exports` map and a
@@ -390,7 +373,7 @@ jobs:
   # UNCONDITIONAL, so this job's `if:` is deliberately NOT `needs.changed.outputs.*`: a path-to-guard table
   # is a second list that drifts, where the population (`tree-wide-guards.mjs`) is derived from the tree.
   # `needs: changed` alone means a closed PR (which skips `changed`) skips this too, and an empty diff is
-  # already refused by `changed`. `select-changed-tests.test.ts` pins that this stays unconditional.
+  # already refused by `changed`. `verify-matches-ci.test.ts` pins that this stays unconditional.
   #
   # #3211: UNCONDITIONAL ON THE DIFF, NOT ON THE EVENT. A body edit or a label moves no file, and the code run for
   # this head has already swept this tree, so a `meta` event does not sweep it again (see `gate`, which makes that
