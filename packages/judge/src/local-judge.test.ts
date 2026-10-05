@@ -14,9 +14,11 @@
  */
 import { strict as assert } from "node:assert";
 import test from "node:test";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-import { evidenceFor, findingsFromScores, hasEvidenceFor, judgeLocally, layerSummary, unrecognisedSubmitRejection } from "./local-judge.js";
+import { evidenceFor, findingsFromScores, hasEvidenceFor, judgeLocally, layerSummary, scoreCapture, unrecognisedSubmitRejection } from "./local-judge.js";
 import { criterionOutcomes } from "./outcomes.js";
 
 /** The real capture that exposed the drift: heading + an unnamed button, nothing else. */
@@ -537,4 +539,41 @@ test("#1918: 3.3.1 applies to a submit named for its task when the capture measu
   // ...and a filter button stays out, measured or not, or 3.3.1 would apply on every silent 4.1.3 page.
   assert.equal(hasEvidenceFor("3.3.1", taskNamed(false)), false);
   assert.equal(hasEvidenceFor("3.3.1", taskNamed()), false, "a pre-21 capture keeps its old reading");
+});
+
+test("a scorer failure's reason names the exception, not the harmless warning printed before it (#3615)", async () => {
+  // The order score.py's stderr really has: the `transformers` import warning on every run, then the
+  // `scorer failed:` line, then a traceback whose LAST line is the exception. Head-truncation kept the first.
+  const warning = "None of PyTorch, TensorFlow >= 2.0, or Flax have been found. Models won't be available and only tokenizers, configuration and file/data utilities can be used.";
+  const frames = Array.from({ length: 6 }, (_, i) => `  File "C:\\scorer\\score.py", line ${i + 1}, in step_${i}\n    do_${i}()`).join("\n");
+  const exception = "TypeError: TextEncodeInput must be Union[TextInputSequence, Tuple[InputSequence, InputSequence]]";
+  const stderr = `${warning}\nscreen-reader scorer failed: TextEncodeInput must be ...\nTraceback (most recent call last):\n${frames}\n${exception}\n`;
+  const dir = mkdtempSync(join(tmpdir(), "local-judge-stderr-"));
+  try {
+    const script = join(dir, "fixture-scorer.mjs");
+    writeFileSync(script, `process.stderr.write(${JSON.stringify(stderr)}); process.exit(1);`);
+    await assert.rejects(scoreCapture({}, { python: process.execPath, script }), (err: Error) => {
+      assert.match(err.message, /^the local scorer exited 1: /);
+      assert.ok(err.message.includes(exception), `the exception line must survive: ${err.message}`);
+      assert.ok(err.message.includes("do_5()"), "the end of the traceback must survive");
+      assert.ok(!err.message.includes("PyTorch"), `the warning must not lead the reason: ${err.message}`);
+      return true;
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a short scorer stderr is reported whole, with no ellipsis added", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "local-judge-stderr-"));
+  try {
+    const script = join(dir, "fixture-scorer.mjs");
+    writeFileSync(script, `process.stderr.write("missing scorer weights: /tmp/nope\\n"); process.exit(1);`);
+    await assert.rejects(scoreCapture({}, { python: process.execPath, script }), (err: Error) => {
+      assert.equal(err.message, "the local scorer exited 1: missing scorer weights: /tmp/nope");
+      return true;
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

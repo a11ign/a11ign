@@ -536,6 +536,26 @@ function parseFaultLine(stdout: string): { fault: string; error?: string } | nul
   }
 }
 
+const STDERR_REASON_LIMIT = 400;
+
+/**
+ * The part of a failed scorer's stderr worth putting in a log line: its END.
+ *
+ * Python prints import-time warnings first (`transformers` says "None of PyTorch, TensorFlow ... have been
+ * found" on every run, harmlessly, because the scorer is ONNX by design) and the traceback LAST, with the
+ * exception on its final line. Keeping the head kept the warning and cut the exception off, and a reader
+ * acts on the first line they see -- here, one that points at installing PyTorch.
+ *
+ * Starts at a line boundary where it can, so the reason never opens mid-line.
+ */
+function stderrTail(stderr: string): string {
+  const text = stderr.trim();
+  if (text.length <= STDERR_REASON_LIMIT) return text;
+  const tail = text.slice(-STDERR_REASON_LIMIT);
+  const firstLineBreak = tail.indexOf("\n");
+  return `...${firstLineBreak === -1 ? tail : tail.slice(firstLineBreak)}`;
+}
+
 /** Run the scorer over one raw witness capture. Separate so the pure logic above needs no subprocess. */
 export async function scoreCapture(capture: unknown, options: { python?: string; script?: string; timeoutMs?: number } = {}):
 Promise<ScorerOutput> {
@@ -578,7 +598,7 @@ Promise<ScorerOutput> {
           return reject(Object.assign(new Error(fault.error ?? `the local scorer reported fault ${fault.fault}`),
             { fault: fault.fault }));
         }
-        return reject(new Error(`the local scorer exited ${code}: ${err.slice(0, 400)}`));
+        return reject(new Error(`the local scorer exited ${code}: ${stderrTail(err)}`));
       }
       const start = out.indexOf("{");
       if (start === -1) return reject(new Error(`the local scorer printed no JSON: ${out.slice(0, 200)}`));
