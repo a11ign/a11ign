@@ -10,6 +10,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node packages/guards/src/isolation-gate.mjs` — prove a published package installs and works standalone, by actually installing and running it
 - `node packages/guards/src/layer-edges.mjs` — `node packages/guards/src/layer-edges.mjs --check` -- every reach across a LAYER package's boundary, by path, against a baseline (#2612)
 - `node packages/guards/src/mutant-survivors.mjs` — choose mutants on a diff's changed lines by machine, run the named tests against each, and list the survivors
+- `node packages/guards/src/mutate-diff.mjs` — mutate the lines a pull request ADDED, run the tests it CHANGED, and report the survivors (#3282, decided on #3213)
 - `node packages/guards/src/mutation-check.mjs` — prove a guard actually bites: mutate a file, confirm its test fails, restore, confirm it passes
 - `node packages/guards/src/piped-exit-status-guard.mjs` — detect a piped command whose exit status was read from the wrong side of the pipe
 - `node packages/guards/src/test-memory-cap.mjs` — run a test runner under a per-process memory cap (systemd-run MemoryMax) and say what the cap did
@@ -47,7 +48,10 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/release-reuses-verdict.mjs` — does the release job need to run coverage itself, or can it reuse nightly's verdict for this sha
 - `node scripts/run.mjs` — the one-line dispatcher: run a named command from commands.mjs, or --list every command declared
 - `node scripts/select-changed-tests.mjs` — pick only the test files that reference a changed file, narrower than package scoping
+- `node scripts/selection-skipped.mjs` — for a CI run id, whether `rstest --changed` skipped the test that failed it; for a merge time, the first-run pass rate 14 days either side
 - `node scripts/spotlight-exclude.mjs` — stop Spotlight indexing every git worktree on this machine
 - `node scripts/stale-dist-diagnosis.mjs` — augment a resolution failure naming a missing export or module with a stale-dist diagnosis
 - `node scripts/test-changed.mjs` — run only the tests a change can reach -- the local half of CI's scoped selection
+- `node scripts/token-cost.mjs` — read calls and dollars per merged pull request from the host's session transcripts and, with --post, add them to the week's CI-health comment on #928
+- `node scripts/verify.mjs` — `pnpm run verify` -- the ONE local command that equals CI, and a stamp that says so for this head (#3210)
 - `node scripts/weekly-review.mjs` — file this ISO week's "Weekly outsider review" row, built from RELEASE.md and docs/try-it.md and naming the sessions that are ineligible to do it
