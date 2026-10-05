@@ -362,10 +362,15 @@ jobs:
           if [[ "$first" =~ ^Merge\ pull\ request\ \#[0-9]+\ from\ ${GITHUB_REPOSITORY_OWNER}/release/version-packages$ ]]; then
             echo "queue=true" >> "$GITHUB_OUTPUT"
           fi
+      # #3584: A QUEUE ENTRY IS DIFFED AGAINST ITS OWN PARENT, as the `deps:` step above does. Up to 5 entries are built and
+      # entry 2 contains entry 1, while `needs.changed.outputs.base` is `origin/main`, which does not yet hold the entry
+      # ahead: behind the version-packages entry, its consumed bumps of `package.json` and `CHANGELOG.md` read as this
+      # entry's own, and `changeset status` ejected #3579 (run 37241009696). `merge_group.base_sha` is EMPTY on a pull
+      # request, so `||` falls through to the base it has always used there.
       - name: A consumer-visible change must say what it does to a consumer
         if: steps.precise.outputs.changeset == 'true' && steps.dependency.outputs.settled != 'true' && github.head_ref != 'release/version-packages' && steps.version.outputs.queue != 'true'
         run: |
-          if ! pnpm exec changeset status --since=${{ needs.changed.outputs.base }}; then
+          if ! pnpm exec changeset status --since=${{ github.event.merge_group.base_sha || needs.changed.outputs.base }}; then
             echo "::error::This PR changes a published package and carries no changeset."
             echo "Run 'pnpm run changeset', pick the packages and bump levels, and write one sentence a"
             echo "CONSUMER would want to read. See .changeset/README.md -- the bump level does NOT follow"
