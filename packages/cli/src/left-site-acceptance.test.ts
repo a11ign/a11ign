@@ -206,7 +206,7 @@ test("#1363 WIRING: runWitness judges, scopes, scores and reports the CUT captur
   const body = source.slice(start, source.indexOf("\n}\n", start));
   assert.match(body, /const \{ left, notExamined, examined \} = examineWithinTheSite\(cap\);/);
   assert.match(body, /await judge\(\{\s*url: examined\.url,[\s\S]*?structure: examined\.structure,\s*interaction: examined\.interaction,/);
-  assert.match(body, /\.\.\.oracleCounts\(examined\),\s*\}\);/);
+  assert.match(body, /\.\.\.oracleCounts\(examined\),\s*\}\)\.catch\(rejectedScorer\);/, "the scorer's rejection, and only that, is recorded as a ScorerFailure (#3657)");
   assert.match(body, /conformanceFor\(examined, ruleFindings, left && \{/);
   assert.match(body,
     /criterionOutcomes\(\{\s*capture: examined, notExamined: left && \{ control: left\.control, channels: notExamined \},/);

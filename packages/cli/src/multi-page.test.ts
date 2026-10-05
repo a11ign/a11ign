@@ -629,3 +629,11 @@ test("A SCORER FAILURE ON AN AUTHENTICATED SINGLE URL STILL COUNTS ITS LOGINS: t
   assert.deepEqual(unmeasured[0].logins, { performed: 2, workerAttempts: 1, ruleLayerScans: 1, minimum: 2 });
   assert.deepEqual(multiPageJson([unmeasured[0].page], unmeasured[0].logins).logins, unmeasured[0].logins);
 });
+
+test("WIRING (read from the source, since runWitness needs a live worker): the judge call alone is wrapped, and the single-URL call site records the page", () => {
+  const source = stripComments(readFileSync(new URL("./cli.ts", import.meta.url), "utf8"));
+  const body = source.slice(source.indexOf("async function runWitness("));
+  assert.match(body, /const verdict = await judge\(\{[\s\S]*?\}\)\.catch\(rejectedScorer\);/);
+  assert.equal(source.match(/\bawait judge\(/g)?.length, 1, "one judge call in cli.ts, so one place that needs the wrapper");
+  assert.match(source, /await runSingleUrl\(\{\s*url: args\.url, unmeasured: recordUnmeasured\(args\),/);
+});
