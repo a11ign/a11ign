@@ -707,7 +707,7 @@ export async function declareWalkScope(testUrl) {
     // Dynamic, not static: the selector's module graph is loaded only when a declaring guard's tests finish,
     // and never ahead of the observer in a declarer's import order.
     const [{ sourceClosure, packageIndex }, { knownPackages }] = await Promise.all(
-      [import("../../../scripts/select-changed-tests.mjs"), import("../../../scripts/ci-changed.mjs")]);
+      [import("./walk-scope-discovery.mjs"), import("../../../scripts/ci-changed.mjs")]);
     const packages = packageIndex(REPO_ROOT, knownPackages(REPO_ROOT));
     const own = new Set([...sourceClosure(testPath, REPO_ROOT, packages)]
       .map((absolute) => relative(REPO_ROOT, absolute)));

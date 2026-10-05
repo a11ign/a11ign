@@ -90,10 +90,9 @@ test("#1019 THE LIVE INSTANCE: row-claim.mjs's local imports are visible, and on
     `raw source spells ${rawSpecifiers} relative specifiers and the walk sees ${walked}: exactly one is `
     + "the `//` comment quoting an import. A gap of 0 means the stripper stopped blanking comments; a gap "
     + "above 1 means it started eating real ones");
-  // The two that decide what CI runs, and a SIGHTED control so this cannot pass by the walk finding
+  // The one that decides what CI runs, and a SIGHTED control so this cannot pass by the walk finding
   // nothing anywhere.
   assert.equal(localImports(`${REPO}scripts/ci-changed.mjs`).length, 5);
-  assert.equal(localImports(`${REPO}scripts/select-changed-tests.mjs`).length, 5);
   // A SIGHTED CONTROL, and the number is incidental to it: it says the walk finds this file's imports
   // rather than nothing. It read `3` until #1969 added `./api-pool.mjs`, and the message then sent the
   // reader after a broken walker for a count that had moved for a perfectly good reason. So it now pins

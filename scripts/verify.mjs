@@ -49,7 +49,7 @@ import { underFloor } from "../packages/guards/src/assert-glob-not-empty.mjs";
 import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
 import { checkBody } from "agent-org/src/pr-open.mjs";
-import { classify, knownPackages, packedFiles, readWorkspaceDependencyGraph } from "./ci-changed.mjs";
+import { classify, knownPackages, packedFiles } from "./ci-changed.mjs";
 // NEVER a bare `pnpm` spawn -- unsafe on Windows (CVE-2024-27980), and this repo's own guard refuses one.
 import { pnpmCliInvocation } from "./npm-cli-executable.mjs";
 
@@ -804,8 +804,7 @@ async function main() {
   const started = Date.now();
   const dirty = git(["status", "--porcelain"]) !== "";
   const packages = knownPackages(REPO);
-  const classification = classify(files, packages, readWorkspaceDependencyGraph(REPO, packages),
-    { repoRoot: REPO, getPackedFiles: packedFiles });
+  const classification = classify(files, packages, { repoRoot: REPO, getPackedFiles: packedFiles });
   const ctx = { ciYml: readFileSync(join(REPO, ".github/workflows/ci.yml"), "utf8"), base, body, files,
     branch: git(["rev-parse", "--abbrev-ref", "HEAD"]) };
   const steps = await runAllSteps({ classification, ctx });

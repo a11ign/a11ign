@@ -467,6 +467,11 @@ const RETIRED_HEADINGS: { file: string; heading: string; reason: string }[] = [
     heading: "## A row that finishes in another repository says so: `Finished-in:` (#2995, #3009)",
     reason: "#3059: the Finished-in field was ruled never to be built (#928), so the section describing it was replaced",
   },
+  {
+    file: "docs/pipeline.md",
+    heading: "## The PR `ts` job runs only what a diff actually reaches (A1b, A1c)",
+    reason: "#3573: the hand-built test selectors were deleted, so the PR ts job runs the whole suite and the section described a scoped run",
+  },
 ];
 
 const isRetired = (file: string, drift: string) =>

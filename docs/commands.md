@@ -46,8 +46,6 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/release-reads-qualification.mjs` — read the fleet part's `qualification` commit status for the release's sha, and say proceed, wait, rerun or regression
 - `node scripts/release-reuses-verdict.mjs` — does the release job need to run coverage itself, or can it reuse nightly's verdict for this sha
 - `node scripts/run.mjs` — the one-line dispatcher: run a named command from commands.mjs, or --list every command declared
-- `node scripts/select-changed-tests.mjs` — pick only the test files that reference a changed file, narrower than package scoping
 - `node scripts/spotlight-exclude.mjs` — stop Spotlight indexing every git worktree on this machine
 - `node scripts/stale-dist-diagnosis.mjs` — augment a resolution failure naming a missing export or module with a stale-dist diagnosis
-- `node scripts/test-changed.mjs` — run only the tests a change can reach -- the local half of CI's scoped selection
 - `node scripts/weekly-review.mjs` — file this ISO week's "Weekly outsider review" row, built from RELEASE.md and docs/try-it.md and naming the sessions that are ineligible to do it

@@ -10,11 +10,9 @@
 // third `paths:` block. Three copies of "what changed", and nothing kept them agreeing — this repo's own
 // most-repeated defect, aimed at its own CI.
 //
-// `classify` is PURE — a file list, a package list and a dependency graph in, a handful of booleans and
-// two package lists out — so the categories are testable without a checkout, a diff, or a runner, and a
+// `classify` is PURE — a file list and a package list in, a handful of booleans and a package list out — so the categories are testable without a checkout, a diff, or a runner, and a
 // category that stops matching anything is a red unit test rather than a silent CI budget regression. The
-// CLI wrapper is the only impure part: it reads `git diff --name-only` against the PR's base and every
-// package's `package.json` to build the dependency graph.
+// CLI wrapper is the only impure part: it reads `git diff --name-only` against the PR's base.
 //
 // PULL_REQUEST AND MERGE_GROUP ONLY, DELIBERATELY -- chairman's direction, 2026-09-06, widened for #156.
 // This file used to also support `--event=push`, unconditionally reporting every category true for a push
@@ -24,14 +22,10 @@
 // is tested against -- and branch protection (checks green AND up to date with `main`) is what makes the
 // tested commit the one that lands.
 //
-// `testPackages` (touched + every workspace DEPENDENT, transitively) IS THE POINT OF THIS FILE'S SECOND
-// PASS -- 2026-09-06, chairman's follow-up measuring `ci/ts` at 269s on a one-package PR. `packages`
-// alone (a PR's directly touched packages) would test the changed code but not its consumers -- a
-// contract change under `packages/evidence` breaking `packages/judge`'s use of it would pass a scoped run
-// that only ever looked at `evidence`. `testPackages` is the transitive closure of dependents, computed
-// from the real `@a11ign/*` `dependencies`/`devDependencies` in every package's own `package.json`
-// -- never a hand-written map, for this file's own stated reason: three independent hand-written copies
-// of "what changed" is the defect this file exists to end.
+// THERE IS NO TEST-SELECTION OUTPUT, AND THAT IS DELIBERATE (#3573, chairman via ceo, 2026-10-04). This file used to
+// emit `testPackages` (the touched packages plus every workspace dependent) for a scoped run of the PR `ts` job; the PR
+// job now runs the whole suite, and `rstest run --changed` is the one selector left (locally, in `verify`). What this
+// file decides is which JOBS run, never which tests.
 import { execFileSync } from "node:child_process";
 import { readFileSync, appendFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
@@ -73,8 +67,8 @@ export function knownPackages(repoRoot) {
     .filter(Boolean)
     // A file tracked directly under `packages/` (`packages/README.md`) has only two path segments and is
     // not a package -- pre-existing and harmless as long as nothing tried to read `packages/<name>/
-    // package.json` for every returned "name". `readWorkspaceDependencyGraph` is the first thing that
-    // does, and crashed on exactly this (`ENOTDIR: not a directory, open './packages/README.md/
+    // package.json` for every returned "name". `readWorkspaceDependencyGraph` (deleted with #3573) was the first
+    // thing that did, and crashed on exactly this (`ENOTDIR: not a directory, open './packages/README.md/
     // package.json'`) the first time it ran against the real repo. A real package always has at least
     // one file NESTED under its directory, so three-or-more segments is what distinguishes it.
     .filter((f) => f.split("/").length > 2)
@@ -83,73 +77,9 @@ export function knownPackages(repoRoot) {
     .sort();
 }
 
-/**
- * Every package directory's own workspace dependencies, as directory names -- not by convention (e.g.
- * assuming `@a11ign/<dir>`), because `packages/cli`'s own `package.json` name is the UNSCOPED
- * `"a11ign"`, and `packages/lab` genuinely depends on it. Each directory's real declared `name` is
- * read and used as the lookup key, so a future package with an unconventional name is still resolved
- * correctly rather than silently dropped from the graph.
- *
- * @param {string} repoRoot
- * @param {string[]} allPackages every package directory name
- * @returns {Record<string, string[]>} directory name -> the directory names of its workspace dependencies
- */
-export function readWorkspaceDependencyGraph(repoRoot, allPackages) {
-  /** @type {Record<string, string>} */
-  const nameToDir = {};
-  /** @type {Record<string, any>} */
-  const manifests = {};
-  for (const dir of allPackages) {
-    const manifest = JSON.parse(readFileSync(`${repoRoot}/packages/${dir}/package.json`, "utf8"));
-    nameToDir[manifest.name] = dir;
-    manifests[dir] = manifest;
-  }
-  /** @type {Record<string, string[]>} */
-  const graph = {};
-  for (const dir of allPackages) {
-    const deps = Object.keys({ ...manifests[dir].dependencies, ...manifests[dir].devDependencies });
-    // `.filter(Boolean)`: a dependency outside this workspace (`@guidepup/guidepup`, `typescript`, ...)
-    // has no entry in `nameToDir` and resolves to `undefined` -- not every declared dependency is a
-    // workspace package, and only workspace packages belong in this graph.
-    graph[dir] = deps.map((name) => nameToDir[name]).filter(Boolean);
-  }
-  return graph;
-}
-
-/**
- * The transitive closure of `changed` plus every package that depends on one, directly or through
- * another dependent -- e.g. `evidence` changing must also test `judge` (depends on `evidence`) AND `lab`
- * (depends on `judge`), not just the packages that import `evidence` directly.
- *
- * @param {string[]} changed
- * @param {Record<string, string[]>} dependencyGraph from `readWorkspaceDependencyGraph`
- * @returns {string[]} sorted, deduplicated
- */
-export function dependentsOf(changed, dependencyGraph) {
-  /** @type {Record<string, Set<string>>} */
-  const reverse = {};
-  for (const [pkg, deps] of Object.entries(dependencyGraph)) {
-    for (const dep of deps) (reverse[dep] ??= new Set()).add(pkg);
-  }
-  const result = new Set(changed);
-  const queue = [...changed];
-  while (queue.length > 0) {
-    const pkg = queue.pop();
-    if (pkg === undefined) continue;
-    for (const dependent of reverse[pkg] ?? []) {
-      if (!result.has(dependent)) {
-        result.add(dependent);
-        queue.push(dependent);
-      }
-    }
-  }
-  return [...result].sort();
-}
-
 /** Root-level files a change to which must be treated as "every TS/JS package changed". */
-// EXPORTED for select-changed-tests.mjs (A1c): "root configuration" is one fact, not two hand-typed
-// lists that could silently disagree about what counts.
-export const ROOT_TS_FILES = new Set([
+// "Root configuration" is one fact, so `classify` below is its only reader rather than a second hand-typed list.
+const ROOT_TS_FILES = new Set([
   "package.json", "pnpm-lock.yaml", "tsconfig.json", "tsconfig.base.json",
   ".eslintrc.json", ".eslintrc.cjs", "eslint.config.js", "eslint.config.mjs",
 ]);
@@ -405,7 +335,7 @@ function docsReadersMustRun({ docs, getDocsReadingTests, repoRoot }) {
  * @returns {string[]} the job names `classify` set true for this file list
  */
 export function jobsFor(files, repoRoot = process.cwd()) {
-  const result = classify(files, knownPackages(repoRoot), {}, { repoRoot });
+  const result = classify(files, knownPackages(repoRoot), { repoRoot });
   /** @type {(keyof ClassifyResult)[]} */
   const jobs = ["ts", "python", "ansible", "docs", "board", "changeset", "rulesFitness"];
   return jobs.filter((job) => result[job]);
@@ -416,9 +346,6 @@ export function jobsFor(files, repoRoot = process.cwd()) {
  *
  * @param {string[]} files
  * @param {string[]} allPackages every package directory name, for the "a root config file changed" case
- * @param {Record<string, string[]>} [dependencyGraph] from `readWorkspaceDependencyGraph`; defaults to
- *   empty, so `testPackages` degrades to exactly `packages` when no graph is supplied (every existing
- *   call site that predates `testPackages` keeps working unchanged)
  * @param {{ repoRoot?: string, getPackedFiles?: (repoRoot: string, pkgName: string) => Set<string>,
  *   getTestDependencyMap?: (repoRoot: string) => Map<string, Set<string>>,
  *   getDocsReadingTests?: (repoRoot: string) => string[] }} [deps]
@@ -426,10 +353,10 @@ export function jobsFor(files, repoRoot = process.cwd()) {
  *   `getTestDependencyMap` to the real `testDependencyMap` above, `getDocsReadingTests` to the real
  *   `docsReadingTests` — all injectable so `classify` itself stays testable without touching disk or git.
  * @typedef {{ ts: boolean, python: boolean, ansible: boolean, docs: boolean, board: boolean,
- *   changeset: boolean, rulesFitness: boolean, packages: string[], testPackages: string[] }} ClassifyResult
+ *   changeset: boolean, rulesFitness: boolean, packages: string[] }} ClassifyResult
  * @returns {ClassifyResult}
  */
-export function classify(files, allPackages, dependencyGraph = {},
+export function classify(files, allPackages,
   { repoRoot = process.cwd(), getPackedFiles = packedFiles, getTestDependencyMap = testDependencyMap,
     getDocsReadingTests = docsReadingTests } = {}) {
   const rootTsChanged = files.some((f) => ROOT_TS_FILES.has(f));
@@ -512,10 +439,6 @@ export function classify(files, allPackages, dependencyGraph = {},
     changeset,
     rulesFitness,
     packages,
-    // The transitive closure of dependents -- see `dependentsOf`'s own doc comment. When `packages` is
-    // every known package already (a root config or scripts/*.mjs change), the closure is a no-op: every
-    // dependent of every package is still every package.
-    testPackages: dependentsOf(packages, dependencyGraph),
   };
 }
 
@@ -531,7 +454,6 @@ function writeOutputs(result) {
     `changeset=${result.changeset}`,
     `rulesFitness=${result.rulesFitness}`,
     `packages=${result.packages.join(" ")}`,
-    `testPackages=${result.testPackages.join(" ")}`,
   ];
   if (!outFile) {
     // Not inside a GitHub Actions job — print rather than fail, so this is also runnable by hand.
@@ -594,9 +516,8 @@ async function main() {
     process.exit(2);
   }
 
-  const dependencyGraph = readWorkspaceDependencyGraph(repoRoot, packages);
   const precise = process.argv.includes("--precise");
-  writeOutputs(classify(files, packages, dependencyGraph,
+  writeOutputs(classify(files, packages,
     { repoRoot, getPackedFiles: precise ? packedFiles : everythingIsPacked }));
 }
 
