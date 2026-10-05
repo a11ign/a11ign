@@ -43,6 +43,8 @@ blob) of the cut against the source before the seed push.
 - **The licence:** the cut adds a root `LICENSE` byte-identical to the package's, as a callback on the root commit (it is in no package).
 - Read the result back with the first commit's test (`screenreader-*-extraction.test.ts`): licence, boundary, leak scan.
 
+**`lab` (#2703), MEASURED 2026-10-05 from `d533ad216`, the same recipe:** `git subtree split -P packages/lab` took 5m40s and gave 4,935 commits (2,357 merges); `filter-repo` with `--prune-degenerate never` took 3.5s. **The whole tip tree, blob id of every path: 752 files, 0 differences, plus the root `LICENSE`**; the non-merge commits are 2,578 on both sides (`--no-merges --full-history`), and three sampled files agree (`package.json` 21/21). `lab` ships no `LICENSE` of its own, so the callback adds the CORE's root blob (`be3f7b28`) to the first commit by its existing blob id: `FileChange(b'M', b'LICENSE', b'<sha>', b'100644')` after `git hash-object -w LICENSE`, which `filter-repo` accepts. The rules rewrote **10 lines of file contents and 7 lines of messages** in the source history and **0** after the cut; credential shapes were 0 before and after. **A repository somebody else created is not the worker's to configure:** `PATCH repos/a11ign/lab` and every protection call answered 404 for `a11ign-ai-workers` (`write`, never `admin`), so steps 1 and 4 were an admin's, asked once on a row (#3693), and the seed push was the only step the worker could run.
+
 ## The two unknowns, MEASURED (2026-10-03, throwaway `a11ign/zz-throwaway-protection-3123`)
 
 ADR 0039 listed these as UNKNOWN and said to try them on a throwaway repository first. The verbatim output is on
