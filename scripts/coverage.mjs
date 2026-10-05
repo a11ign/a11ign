@@ -9,8 +9,8 @@
 //     CHECK ONLY, never `--run`: the real run below is rstest's own, over the population `.c8rc.json`
 //     already declares, and passing that population to the floor a second time would be a second copy of
 //     the same fact typed twice.
-//   - `scripts/rstest/merge-child-coverage.mjs` (#1350), UNCHANGED and run exactly as its own header
-//     documents: it runs the suite under rstest with coverage and folds in what a spawned `node` child
+//   - `runChildCoverage` from `@a11ign/toolchain` (#1350, moved there by #3578), called in this process with a11ign's own
+//     rstest command: it runs the suite under rstest with coverage and folds in what a spawned `node` child
 //     covered, so a script `NODE_V8_COVERAGE` would otherwise miss does not read 0%.
 //   - THE THRESHOLD, CHECKED HERE, AFTER THE MERGE -- never by rstest's own `--coverage.thresholds`. That
 //     would gate the PRE-MERGE report, where every file #1350 exists to fix still reads 0%: exactly the
@@ -36,7 +36,10 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { CoverageProvider } from "@rstest/coverage-v8";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
-import { coverageOptionsFromC8rc, coverageTotals } from "./rstest/merge-child-coverage.mjs";
+// The toolchain's SOURCE by relative path, for the reason `scripts/rstest/rstest.config.mjs` gives: a tree with no `dist` must run this.
+import { coverageOptionsFromC8rc, coverageTotals, runChildCoverage } from "../packages/toolchain/src/merge-child-coverage.mjs";
+// #492: a bare "pnpm" spawn is ENOENT on windows-2022; `npm-cli-windows-spawn.test.ts` refuses one.
+import { pnpmCliInvocation } from "./npm-cli-executable.mjs";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const REPORTS_DIRECTORY = join(ROOT, "coverage", "rstest");
@@ -67,13 +70,14 @@ async function main() {
   const floor = step([join(ROOT, "packages/guards/src/assert-glob-not-empty.mjs"), TEST_GLOB, `--min=${MIN_TEST_FILES}`]);
   if (floor.status !== 0) process.exit(floor.status ?? 1);
 
-  const merge = step([join(ROOT, "scripts/rstest/merge-child-coverage.mjs")]);
+  const c8rc = JSON.parse(readFileSync(join(ROOT, ".c8rc.json"), "utf8"));
+  const rstest = pnpmCliInvocation(["exec", "rstest", "run", "--config", "scripts/rstest/rstest.config.mjs"]);
+  const mergeStatus = await runChildCoverage({ root: ROOT, population: c8rc, rstest: { command: rstest.command, args: rstest.args } });
   if (!existsSync(MERGED_REPORT)) {
-    process.stderr.write(`coverage: no merged report at ${MERGED_REPORT} (merge exited ${merge.status}) -- nothing to check.\n`);
-    process.exit(merge.status ?? 1);
+    process.stderr.write(`coverage: no merged report at ${MERGED_REPORT} (merge exited ${mergeStatus}) -- nothing to check.\n`);
+    process.exit(mergeStatus ?? 1);
   }
 
-  const c8rc = JSON.parse(readFileSync(join(ROOT, ".c8rc.json"), "utf8"));
   const options = coverageOptionsFromC8rc(c8rc, REPORTS_DIRECTORY);
   const map = new CoverageProvider(/** @type {any} */ (options), ROOT).createCoverageMap();
   map.merge(JSON.parse(readFileSync(MERGED_REPORT, "utf8")));
@@ -81,10 +85,10 @@ async function main() {
   process.stdout.write(`coverage: lines ${totals.lines.pct}%  statements ${totals.statements.pct}%  `
     + `(threshold ${c8rc.lines}%/${c8rc.statements}%)\n`);
 
-  if (merge.status !== 0) {
+  if (mergeStatus !== 0) {
     process.stderr.write("coverage: the suite did not pass -- coverage was measured but this is a test "
       + "failure, not a coverage miss.\n");
-    process.exit(merge.status ?? 1);
+    process.exit(mergeStatus ?? 1);
   }
   const misses = thresholdMissLines(totals, c8rc);
   if (misses.length) {

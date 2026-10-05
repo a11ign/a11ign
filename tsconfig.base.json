@@ -9,20 +9,16 @@
   // Emit is mandatory rather than optional, and M0 measured why: Node **refuses** to strip types for files
   // under `node_modules` (`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`), whatever flags a consumer passes.
   // So there is no "ship the sources and let them transpile" fallback — see `docs/isolation-spike.md`.
+  //
+  // THE SHARED PART LIVES IN `@a11ign/toolchain` (#3578, ADR 0043): target, module, strict, `declaration`, and `declarationMap` and
+  // `sourceMap` OFF. This file adds the three settings only a11ign's project references need, and nothing a consumer of the
+  // package should have: `composite`, `outDir` and `rootDir`. Row 4c-a11ign deletes the references, and with them this file.
+  // `declarationMap` and `sourceMap` are switched back ON here, so that a11ign's own `tsc --build` output is byte-for-byte what it was
+  // before the extraction (the published tarballs do not change in this row); the package's base turns them off for a PUBLISHED package. The relative path, not
+  // `@a11ign/toolchain/tsconfig.base.json`, because a tree with no `dist` and no workspace links must still typecheck.
+  "extends": "./packages/toolchain/tsconfig.base.json",
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "types": ["node"],
-
-    // `.mjs` ships verbatim (ADR 0005) and is still type-checked, so JS must be allowed in.
-    "allowJs": true,
-
     "composite": true,
-    "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
     "outDir": "dist",

@@ -55,7 +55,7 @@
 // only reading the output distinguished that from a compile error wearing the same exit code.
 //
 // A GUARD IS "CAUGHT" BY A RUN, AND THE RUN'S SIZE MATTERS (#2541). An agent session's rstest report ends in a
-// `VERDICT` line naming the tests it ran (`scripts/rstest/verdict-reporter.mjs`), and this tool reads it: the CLEAN
+// `VERDICT` line naming the tests it ran (`packages/toolchain/src/verdict-reporter.mjs`), and this tool reads it: the CLEAN
 // run must have run at least one test (a clean run of zero tests exits 0 and reads as a pass, which would make every
 // mutant "survive" a test that never ran), and the report names the count the clean run ran and the tests that
 // failed under the mutant, in place of the first six lines of the report, which were its front matter. A test command
