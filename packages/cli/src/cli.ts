@@ -58,7 +58,7 @@ import { conformanceScope, sweepOutcomes, truncatedSweeps, censusFromDiagnostics
   from "@a11ign/evidence/conformance";
 import { assessedCriteria } from "@a11ign/judge/coverage";
 import { earlReport } from "@a11ign/evidence/earl";
-import { documentIdentity } from "@a11ign/evidence/document-identity";
+import { documentIdentity, servedPathOf } from "@a11ign/evidence/document-identity";
 import { criterionOutcomes, type CriterionOutcome } from "@a11ign/judge/outcomes";
 import { realpathSync, mkdirSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -983,6 +983,28 @@ async function runWitness(
   }
 }
 
+/**
+ * #3629: THE DOCUMENT EACH SWEEP BEGAN ON, read from the `pageState` marks the worker takes before every sweep (`sweep:<label>`, #758).
+ *
+ * The marks reached this function's caller and went no further, so a finding's row could not say which page the form-field
+ * sweep started on though the capture knew. The URL is the served origin and path: the query is where the nonces are, and this
+ * lands in a pull-request comment. A mark that failed to count, or whose CDP target was a `fallback` (it may not be the tab the
+ * sweep walked), is no reading, and a wrong page named is worse than none: it is left out, never filled in.
+ *
+ * It names where a sweep BEGAN and nothing about a later entry: the sweep presses controls as it walks. `[]` when the capture
+ * carries none, and the key is then not emitted at all (`printJson`).
+ */
+export function sweepStartsOf(diagnostics: readonly unknown[] | undefined): { sweep: string; url: string }[] {
+  const prefix = "sweep:";
+  return (diagnostics ?? []).flatMap((mark) => {
+    const m = mark as { event?: unknown; beforeProbe?: unknown; targetUrl?: unknown; targetMatch?: unknown; error?: unknown } | null;
+    if (m?.event !== "pageState" || m.error || m.targetMatch === "fallback") return [];
+    if (typeof m.beforeProbe !== "string" || !m.beforeProbe.startsWith(prefix)) return [];
+    const url = servedPathOf(m.targetUrl);
+    return url === null ? [] : [{ sweep: m.beforeProbe.slice(prefix.length), url }];
+  });
+}
+
 /** The criteria the rule layer returned a verdict for; `undefined` (not empty) when the caller held no coverage at all. */
 const criteriaCovered = (ruleLayer: RuleLayerCoverage | undefined): string[] | undefined =>
   ruleLayer && Object.keys(ruleLayer);
@@ -1118,6 +1140,7 @@ export function printJson(
   sink: JsonSink = printAsJson,
 ): void {
   const layered = { ...verdict, findings: verdict.findings.map((f) => ({ ...f, layer: layerOf(f.wcag) })) };
+  const sweepStarts = sweepStartsOf(cap.diagnostics);
   sink({
     url, task, screenReader: cap.screenReader, transcript: cap.transcript,
     // #1363: where the examination ENDED, as its own field -- `null` when every activation stayed on the page.
@@ -1139,6 +1162,9 @@ export function printJson(
     // An authenticated run's list of what it pressed, by accessible name and never a value (ADR 0038, Constraint 7). Present
     // ONLY on such a run, so a consumer reading an ordinary result sees no new key.
     ...(pressed ? { pressed } : {}),
+    // #3629: where each sweep BEGAN, so a finding can name the page the form-field sweep started on. Present only when the capture
+    // carries the marks: an absent key is "not recorded" (an older worker), which `[]` would turn into "no sweep began anywhere".
+    ...(sweepStarts.length ? { sweepStarts } : {}),
     // WHY it is unverified, because the two causes need different explanations to a reader: reading the
     // wrong thing entirely, versus reading only a modal dialog that sat in front of the right page.
     ...(unverifiedReason ? { captureUnverifiedReason: unverifiedReason } : {}),

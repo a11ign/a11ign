@@ -24,7 +24,7 @@ const GUIDE = new URL("../../../../docs/github-action.md", import.meta.url);
 
 // The only top-level key `printJson` emits CONDITIONALLY (a spread, present only when the capture is
 // unverified). Stated by hand, per the row's own done-when: nothing here infers "conditional" from prose.
-const CONDITIONAL_KEYS = new Set(["captureUnverifiedReason", "pressed"]);
+const CONDITIONAL_KEYS = new Set(["captureUnverifiedReason", "pressed", "sweepStarts"]);
 
 type FixtureResult = {
   url: string; task: string; screenReader: string; transcript: string[];
@@ -41,22 +41,22 @@ type FixtureResult = {
 const fixture = (): FixtureResult => JSON.parse(readFileSync(FIXTURE, "utf8"));
 
 /** The capture half of the fixture: exactly the fields `cli.ts` itself reads off a `CaptureResponse`. */
-function captureOf(result: FixtureResult): CaptureResponse {
+function captureOf(result: FixtureResult, diagnostics?: unknown[]): CaptureResponse {
   return {
     url: result.url, screenReader: result.screenReader, transcript: result.transcript,
-    structure: result.structure, interaction: result.interaction, environment: result.environment,
+    structure: result.structure, interaction: result.interaction, environment: result.environment, diagnostics,
   } as CaptureResponse;
 }
 
 /** Calls the real printer over the real fixture and returns the top-level keys of what it wrote to stdout. */
-function emittedKeys(over: { unverifiedReason?: "wrong-content"; captureVerified?: boolean; pressed?: string[] } = {}): Set<string> {
+function emittedKeys(over: { unverifiedReason?: "wrong-content"; captureVerified?: boolean; pressed?: string[]; diagnostics?: unknown[] } = {}): Set<string> {
   const result = fixture();
   const lines: unknown[] = [];
   const realLog = console.log;
   console.log = ((line: unknown) => { lines.push(line); }) as typeof console.log;
   try {
     printJson({
-      url: result.url, task: result.task, cap: captureOf(result), verdict: result.verdict,
+      url: result.url, task: result.task, cap: captureOf(result, over.diagnostics), verdict: result.verdict,
       ruleFindings: result.ruleBased, captureVerified: over.captureVerified ?? result.captureVerified,
       unverifiedReason: over.unverifiedReason, conformance: result.conformance, outcomes: result.outcomes,
       leftSite: result.leftSite, artifactPath: result.artifactPath, pressed: over.pressed,
@@ -104,12 +104,14 @@ test("#1637: every top-level key the guide documents is one the printer actually
   const withUnverified = emittedKeys({ unverifiedReason: "wrong-content", captureVerified: false });
   // `pressed` is the other conditional key: present only on an AUTHENTICATED run (ADR 0038), so it has its own variation.
   const withPressed = emittedKeys({ pressed: ["Sign in"] });
+  // `sweepStarts` is the third: present only when the capture carries the worker's per-sweep `pageState` marks (#3629).
+  const withMarks = emittedKeys({ diagnostics: [{ event: "pageState", beforeProbe: "sweep:formField", targetUrl: "https://example.com/" }] });
 
   for (const key of CONDITIONAL_KEYS) {
     assert.ok(!baseline.has(key), `${key} is documented as conditional but the baseline run emitted it anyway`);
-    assert.ok(withUnverified.has(key) || withPressed.has(key), `${key} is documented as conditional but never actually appears`);
+    assert.ok(withUnverified.has(key) || withPressed.has(key) || withMarks.has(key), `${key} is documented as conditional but never actually appears`);
   }
-  const emitted = new Set([...baseline, ...withUnverified, ...withPressed]);
+  const emitted = new Set([...baseline, ...withUnverified, ...withPressed, ...withMarks]);
 
   const { documentedNotEmitted, emittedNotDocumented } = compareFieldSets(documented, emitted);
   assert.deepEqual(documentedNotEmitted, [],
@@ -129,7 +131,8 @@ test("#1637 POSITIVE CONTROL: rehearsal 3's own recorded keys are a subset of wh
 
 /** The full emitted set the real test compares against: baseline plus the conditional key's own run. */
 function fullEmittedKeys(): Set<string> {
-  return new Set([...emittedKeys(), ...emittedKeys({ unverifiedReason: "wrong-content", captureVerified: false }), ...emittedKeys({ pressed: [] })]);
+  return new Set([...emittedKeys(), ...emittedKeys({ unverifiedReason: "wrong-content", captureVerified: false }), ...emittedKeys({ pressed: [] }),
+    ...emittedKeys({ diagnostics: [{ event: "pageState", beforeProbe: "sweep:formField", targetUrl: "https://example.com/" }] })]);
 }
 
 test("#1637 PLANTED DRIFT: a field added to a copy of the table is reported on the documented side", () => {

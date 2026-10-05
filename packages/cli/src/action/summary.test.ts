@@ -16,6 +16,7 @@ import test from "node:test";
 import { conformanceScope } from "@a11ign/evidence/conformance";
 import { documentIdentity } from "@a11ign/evidence/document-identity";
 import { criterionOutcomes } from "@a11ign/judge/outcomes";
+import { printJson } from "../cli.js";
 import {
   logLines, partialExaminationCount, renderSummary, ruleLayerFailedCount, shouldFail, type RunFinding, type RunResult,
 } from "./summary.js";
@@ -866,4 +867,89 @@ test("#3616: a result with no axe-core failure prints no rule-layer line", () =>
     assert.equal(logLines(result, "never").some((line) => RULE_FAILED_LINE.test(line)), false);
   }
   assert.equal(ruleLayerFailedCount(undefined), 0);
+});
+
+/**
+ * #3629: THE DOCUMENT THE FORM-FIELD SWEEP BEGAN ON. The worker fingerprints the document at the start of every sweep and
+ * `cli.ts --json` now carries those as `sweepStarts`, so the note can say where the sweep BEGAN and keep "may" for what it cannot
+ * know: an entry after a pressed submit was read on the page the submit left or the one it reached.
+ */
+const formFieldStart = (url: string) => ({ sweepStarts: [{ sweep: "link", url: "https://example.com/other" }, { sweep: "formField", url }] });
+
+test("#3629: a result carrying the form-field sweep's start names it beside the existing 'does not record' sentence", () => {
+  const row = rowFor(renderSummary(w41(formFieldStart("https://example.com/") as never)), "edit");
+  assert.match(row, /form-field sweep began on `https:\/\/example\.com\/`/);
+  assert.match(row, /does not record which one this control was read on/, "the existing sentence stays: a start is not the entry's page");
+  assert.doesNotMatch(row, /other/, "only the form-field sweep's start, never another sweep's");
+});
+
+test("#3629: a result without a start renders exactly as it does today, whether the key is absent, empty or names only other sweeps", () => {
+  const today = renderSummary(w41());
+  assert.match(rowFor(today, "edit"), /does not record which/, "the positive control: this shape renders the note");
+  assert.equal(renderSummary(w41({ sweepStarts: [] } as never)), today);
+  assert.equal(renderSummary(w41({ sweepStarts: [{ sweep: "link", url: "https://example.com/" }] } as never)), today);
+});
+
+test("#3629: an entry after a pressed submit still says MAY, and the sweep's start does not pick a page for it", () => {
+  const after = w41({ ...formFieldStart("https://example.com/"), structure: { formFields: ["Go, button", "edit"] }, interaction: submitAt("Go, button") as never });
+  const row = rowFor(renderSummary(after), "edit");
+  assert.match(row, /form-field sweep began on `https:\/\/example\.com\/`/);
+  assert.match(row, /so it may have been read on either/);
+  assert.doesNotMatch(row, /was read on (the )?(first|second|search)/i);
+});
+
+test("#3629: no start is named on one document, where there is nothing to be unsure of", () => {
+  const one = w41({ ...formFieldStart("https://example.com/"), conformance: undefined });
+  assert.doesNotMatch(rowFor(renderSummary(one), "edit"), /began on|more than one document/i);
+});
+
+test("#3629: a finding found only in the transcript, or nowhere, is not attributed to the form-field sweep's start", () => {
+  const line = "heading, level 1, SQLite Documentation";
+  const transcriptOnly = w41({ ...formFieldStart("https://example.com/"), verdict: { taskCompletable: true, summary: "A summary.", findings: [unnamedEdit(line)], confidence: 0.9 } });
+  assert.match(rowFor(renderSummary(transcriptOnly), line), /transcript\[0\]/, "the positive control: it is located");
+  assert.doesNotMatch(rowFor(renderSummary(transcriptOnly), line), /began on/);
+});
+
+/** The capture's own marks as the worker writes them (`markPageState`, #758); only the keys the reader looks at. */
+const sweepMark = (label: string, targetUrl: string, over: object = {}) =>
+  ({ event: "pageState", beforeProbe: `sweep:${label}`, tookMs: 4, targetUrl, targetMatch: "matched", ...over });
+
+/** What `printJson` writes for a capture carrying `diagnostics`, parsed back as a consumer of `result-json` would. */
+function emittedFor(diagnostics: unknown[] | undefined): Record<string, unknown> {
+  let written: Record<string, unknown> = {};
+  printJson({
+    url: "https://example.com/", task: "t", cap: { screenReader: "NVDA", transcript: [], diagnostics } as never,
+    verdict: { taskCompletable: true, summary: "", findings: [], confidence: 1 } as never, ruleFindings: null, captureVerified: true,
+    conformance: [], outcomes: [], leftSite: null, artifactPath: null,
+  }, (value) => { written = JSON.parse(JSON.stringify(value)); });
+  return written;
+}
+
+test("#3629: --json carries each sweep's starting document, the served origin and path and never the query", () => {
+  const out = emittedFor([
+    sweepMark("link", "https://example.com/?nonce=abc"),
+    sweepMark("formField", "https://example.com/search/?q=secret#frag"),
+    { event: "pageState", beforeProbe: "focus", targetUrl: "https://example.com/focus" },
+  ]);
+  assert.deepEqual(out.sweepStarts, [
+    { sweep: "link", url: "https://example.com/" }, { sweep: "formField", url: "https://example.com/search/" },
+  ], "the sweep marks only, in order, with the query and fragment dropped");
+});
+
+test("#3629: a mark that is no reading is left out, and a capture with none emits no key", () => {
+  const readable = sweepMark("link", "https://example.com/");
+  assert.ok(emittedFor([readable]).sweepStarts, "the positive control: a readable mark is emitted");
+  const unreadable = [
+    sweepMark("formField", "https://example.com/x", { targetMatch: "fallback" }),
+    sweepMark("heading", "https://example.com/x", { error: "not counted" }),
+    sweepMark("landmark", undefined as never),
+  ];
+  assert.ok(!("sweepStarts" in emittedFor(unreadable)), "fallback target, failed count and no URL: nothing to say");
+  assert.ok(!("sweepStarts" in emittedFor(undefined)), "an older capture has no marks, so no key rather than []");
+});
+
+test("#3629: end to end, what printJson emits is what renderSummary names", () => {
+  const out = emittedFor([sweepMark("formField", "https://example.com/")]);
+  const row = rowFor(renderSummary(w41({ sweepStarts: out.sweepStarts } as never)), "edit");
+  assert.match(row, /form-field sweep began on `https:\/\/example\.com\/`/);
 });

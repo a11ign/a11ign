@@ -52,6 +52,11 @@ export interface RunResult {
   task: string;
   screenReader: string;
   transcript?: string[];
+  /**
+   * #3629: the document each sweep BEGAN on, as `cli.ts --json` reads it from the capture's `pageState` marks. Absent on a result
+   * that predates the field, which is "not recorded" and never "began nowhere". `sweep` is the mark's own label (`formField`).
+   */
+  sweepStarts?: { sweep: string; url: string }[];
   /** null when the rule layer did not run — NOT the same as running and finding nothing. */
   ruleBased: { impact: string; wcag: string[]; rule: string; help: string; nodes?: { target?: unknown[] }[] }[] | null;
   verdict: {
@@ -277,9 +282,17 @@ function submitPressedBefore(result: RunResult, index: number): { at: number; fr
   return at !== -1 && at < index ? { at, from: moved.from, to: moved.to } : null;
 }
 
+/** Where the form-field sweep BEGAN, said as a start and never as the page of an entry: the sweep presses controls as it walks. */
+function formFieldStartNote(result: RunResult): string {
+  const start = (result.sweepStarts ?? []).find((s) => s.sweep === "formField");
+  return start ? ` The form-field sweep began on ${code(start.url)}.` : "";
+}
+
 function documentNote(result: RunResult, site: EvidenceSite | null): string | null {
   if (!documentsSpannedSentence(result.conformance)) return null;
-  const note = "This capture spans more than one document and does not record which one this control was read on.";
+  const note = "This capture spans more than one document and does not record which one this control was read on."
+    // Only for an entry of the sweep's own list: a transcript line or an entry found nowhere was not read by that sweep.
+    + (site ? formFieldStartNote(result) : "");
   const pressed = site?.path === "structure.formFields" ? submitPressedBefore(result, site.first) : null;
   return pressed
     ? `${note} The sweep pressed a submit at ${code(`structure.formFields[${pressed.at}]`)} first, and a submit took the run from `
