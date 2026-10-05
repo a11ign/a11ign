@@ -29,7 +29,7 @@ name: ci
 # multiplying the "a required check with no run blocks merge forever" exposure `gate` exists to remove. And
 # enabling the merge queue itself (a ruleset) is `ceo`'s to authorise, not a code change at all.
 #
-# THE `ts` JOB'S COVERAGE AND ISOLATION WORK LEFT IT, AND ITS TESTS NOW RUN THE WHOLE SUITE (below) -- chairman's
+# THE `ts` JOB NO LONGER CARRIES COVERAGE OR ISOLATION, AND ITS TESTS NOW RUN THE WHOLE SUITE (below) -- chairman's
 # follow-up, 2026-09-06, measuring `ci/ts` at 269s on a one-package PR (unit tests 84s, then a 154s step
 # running coverage/rules-check/scorer:verify/gate:isolation over the ENTIRE repository regardless of what
 # the PR actually touched). Budget dropped from four minutes to sixty seconds the same day. Two changes:
