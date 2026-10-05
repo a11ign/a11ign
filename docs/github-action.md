@@ -64,6 +64,10 @@ A longer, commented version of the same workflow is in [`examples/workflow.yml`]
 that reports first, and fails when the team decides it should, gets adopted. Move to `blocker`, then
 `serious`, as you fix what it finds. A severity means *that or worse*. **fail-on counts asserted findings;
 referrals are listed and never fail the run.** A referral is a person's decision, so no threshold fires on it.
+**`never` does not mean the job cannot go red:** a page that could not be measured exits 2 whatever `fail-on` is,
+because a failure to look is not a clean page. A crash before any result exists (a scorer that raises on one
+page's evidence, measured on a run of a single `url`) exits 1 with no report and no artifact, and `fail-on` does not
+govern that either.
 
 An **unrecognised** `fail-on` is a hard error rather than a fallback to `never`. A typo in a workflow file
 that silently produces a permanently green check is the failure nobody notices, because green is exactly

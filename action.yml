@@ -95,7 +95,8 @@ inputs:
       never | any | blocker | serious | moderate | minor. A severity means "that or worse".
       fail-on counts asserted findings; referrals are listed and never fail the run.
       Defaults to `never`: report first, and fail the build when your team asks for it. A tool that
-      breaks builds the day it is installed gets uninstalled.
+      breaks builds the day it is installed gets uninstalled. `never` gates findings only: a page that
+      could not be measured exits 2 whatever `fail-on` is, because a failure to look is not a clean page.
     required: false
     default: never
   probe-forms:
