@@ -43,11 +43,12 @@ export const QUALIFICATION_CONTEXT = "qualification";
 // `orchestrator`). Directories under `packages/`. A package named in NEITHER list is treated as GATED: a new package
 // is held to the fleet part until someone says otherwise, never released past it by omission. The test pins that
 // every `packages/*` directory is classified, so adding one fails there rather than at a release.
-// `toolchain` (#3578) is here BY THE DEFAULT THE COMMENT ABOVE DESCRIBES, not by a reading of what its release reads: it runs no
-// stage and needs no worker, so RUNNER_ONLY_PACKAGES may be where it belongs. `orchestrator` owns that classification (asked on #3578).
-export const FLEET_GATED_PACKAGES = ["lab", "worker-fleet", "evidence", "nvda-worker", "control", "toolchain"];
+// `toolchain` is runner-only by `orchestrator`'s reading (#3578, comment of 2026-10-05T02:30Z): every reader of it is test or
+// build tooling and none is in `gate:stability`'s closure. The limit: template-string dynamic imports are not followed, and if a
+// fleet-side job ever runs its tests through `@a11ign/toolchain`'s rstest config the answer changes.
+export const FLEET_GATED_PACKAGES = ["lab", "worker-fleet", "evidence", "nvda-worker", "control"];
 // Gated by runner-only or corpus-only stages that need no worker. `nvda-speech` is private and never published.
-export const RUNNER_ONLY_PACKAGES = ["scorer", "judge", "guards", "cli"];
+export const RUNNER_ONLY_PACKAGES = ["scorer", "judge", "guards", "cli", "toolchain"];
 export const PRIVATE_PACKAGES = ["nvda-speech"];
 
 // The wall-clock after which a wait is a problem to raise rather than a state to sit in: #3132's worst observed time
