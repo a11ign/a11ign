@@ -1,5 +1,13 @@
 # a11ign
 
+## 0.2.3
+
+### Patch Changes
+
+- Updated dependencies [be0f657]
+  - @a11ign/judge@0.2.3
+  - @a11ign/screenreader-fleet@0.1.3
+
 ## 0.2.2
 
 ### Patch Changes
