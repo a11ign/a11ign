@@ -770,7 +770,7 @@ async function underTheHostsSlot() {
   const file = dir && join(dir, "src/suite-slots.mjs");
   if (!file || !existsSync(file)) {
     console.error(`verify: ${file ?? "the agent-org checkout"} is missing, so verify is NOT run: the host-wide limit on concurrent suites (#3536) lives there, and running without it is refused. `
-      + "Update the checkout (`git -C <it> pull`), or set A11Y_AGENT_ORG_REPO to one that has it.");
+      + "Pull the latest `main` into that checkout, or set A11Y_AGENT_ORG_REPO to one that has it.");
     return 2;
   }
   const slots = await import(pathToFileURL(file).href);
