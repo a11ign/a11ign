@@ -22,6 +22,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 // A relative path, not the workspace name: the tool-only CI jobs run this file with no `pnpm install`, so no workspace link exists yet.
+import { npmCliInvocation } from "./npm-cli-executable.mjs";
 import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -104,7 +105,10 @@ function remoteTags(url) {
  */
 function fetchTool({ url, tag, dest }) {
   execFileSync("git", ["clone", "--quiet", "--depth=1", `--branch=${tag}`, url, dest], { stdio: "inherit", env: sandboxGitEnv() });
-  execFileSync("npm", ["install", "--no-save", "--no-package-lock", "--ignore-scripts", "--no-audit", "--no-fund"], { cwd: dest, stdio: "inherit" });
+  // STAYS npm (`no-npm-spawn.test.ts` pins this file by name): the tool's own repository declares its three dependencies for npm (its `gate` installs them
+  // so), in a clone outside any workspace, and the tool-only CI jobs have no pnpm to install with.
+  const install = npmCliInvocation("npm", ["install", "--no-save", "--no-package-lock", "--ignore-scripts", "--no-audit", "--no-fund"]);
+  execFileSync(install.command, install.args, { cwd: dest, stdio: "inherit" });
 }
 
 /**

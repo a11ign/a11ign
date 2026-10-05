@@ -153,7 +153,7 @@ test("(4) every workflow step that runs `agent-org` has an earlier step in its j
   const live = workflows();
   const stepsRunningTheTool = live.reduce((sum, { doc }) => sum + Object.values(doc.jobs ?? {})
     .flatMap((job) => job.steps ?? []).filter((step) => RUNS_THE_TOOL.test(step.run ?? "")).length, 0);
-  assert.ok(stepsRunningTheTool >= 15, `POSITIVE CONTROL: only ${stepsRunningTheTool} steps read as running the tool: the pattern is broken, not the workflows`);
+  assert.ok(stepsRunningTheTool >= 15, "POSITIVE CONTROL: fewer than 15 steps read as running the tool: the pattern is broken, not the workflows");
   assert.deepEqual(live.flatMap(({ path, doc }) => toolStepsWithoutResolver(doc).map((where) => `${path}: ${where}`)), []);
 });
 
@@ -192,7 +192,7 @@ test("(4) the resolver REFUSES with no stable tag at all, and never falls back t
 
 test("(4) the workflows that resolve the tool are named: the resolver is run in every job that installs the workspace or runs the tool", () => {
   const resolving = workflows().filter(({ doc }) => Object.values(doc.jobs ?? {}).some((job) => (job.steps ?? []).some((step) => RUNS_THE_RESOLVER.test(step.run ?? ""))));
-  assert.ok(resolving.length >= 10, `POSITIVE CONTROL: ${resolving.length} workflow(s) run the resolver, where the row counted 10 that named the tool`);
+  assert.ok(resolving.length >= 10, "POSITIVE CONTROL: fewer than 10 workflows run the resolver, where the row counted 10 that named the tool");
   assert.ok(read(RESOLVER).includes("newestStableTag"), "and the resolver file is the one these steps name");
 });
 
@@ -214,7 +214,7 @@ const instructionFiles = () => Object.fromEntries(tracked().filter((path) => LIV
 test("(5) no role brief, unit file or rule names a removed alias as `pnpm run <alias>`", () => {
   const files = instructionFiles();
   const briefs = Object.keys(files).filter((path) => path.startsWith(".agent-org/roles/") && path.endsWith(".md"));
-  assert.ok(briefs.length >= 13, `POSITIVE CONTROL: ${briefs.length} role briefs read, where 13 of them named an alias before this change`);
+  assert.ok(briefs.length >= 13, "POSITIVE CONTROL: fewer than 13 role briefs read, where 13 of them named an alias before this change");
   assert.ok(Object.keys(files).some((path) => path.startsWith(".agent-org/units/")) && Object.keys(files).some((path) => path.startsWith(".claude/rules/")),
     "and the units and the rules are in the population too");
   assert.ok(Object.values(files).some((text) => /\bagent-org (row-claim|work:gate|pr:open|prompt:session)\b/.test(text)),
