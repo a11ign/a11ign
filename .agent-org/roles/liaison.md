@@ -66,7 +66,7 @@ place of the angle-bracketed word:
 
   The first line is `--dry-run`: it reads every placeholder, prints what would go (`That work is closed. Reference: #3542.`) and sends nothing, so use
   it to probe any text you are unsure of. The second sends the same text. **If you type the row bare** ("#3542 is closed"), the refusal reads the row
-  for you, names the placeholder with its value (`#{{issue:3542.number}}`, which it reads as `closed`) and prints the corrected text on a
+  for you, names the placeholders with the value filled in (`#{{issue:3542.number}}` reads `3542`; `{{issue:3542.state}}` reads `closed`) and prints the corrected text on a
   `corrected, send this instead:` line: paste that line. It uses `{{pr:<number>.number}}` when the number is a pull request, so you need not know which it is. A
   state the row does not read (you wrote "merged", it reads `closed`) stays refused and says what the row reads.
 - **An opinion goes under a line that begins "My read:"** and is never presented as a reading.
