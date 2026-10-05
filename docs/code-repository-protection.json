@@ -8,6 +8,7 @@
     { "repo": "a11ign/agent-org", "defaultBranch": "main", "requiredCheck": "gate" },
     { "repo": "a11ign/screenreader-worker", "defaultBranch": "main", "requiredCheck": "gate" },
     { "repo": "a11ign/screenreader-fleet", "defaultBranch": "main", "requiredCheck": "gate" },
+    { "repo": "a11ign/control", "defaultBranch": "main", "requiredCheck": "gate" },
     { "repo": "a11ign/documents", "defaultBranch": "main", "requiredCheck": "gate" }
   ]
 }
