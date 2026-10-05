@@ -24,8 +24,12 @@ and who may change GitHub to match it.
 never named it before this page** (0 references, ADR 0039, item 7, reading 4); it was live GitHub state only.
 
 - **The level it must hold on a layer is `push` (GitHub's name for `write`), never `admin`.**
-- **Read at filing (2026-10-03), it holds `admin` on `a11ign/screenreader-worker`**, which is why all four agent
-  accounts are `admin` there. That is the one standing difference between GitHub and the declaration.
+- **Read at filing (2026-10-03), it held `admin` on `a11ign/screenreader-worker`**, which is why all four agent
+  accounts were `admin` there. **Standing reading, 2026-10-05 (#3587): no difference remains.** The chairman's
+  session set `bots` to `push` on `screenreader-fleet`, `documents`, `control` and `lab` (`admin` before, the same
+  class: every split repository was created at `admin`), `screenreader-worker`, `toolchain` and `agent-org` already
+  being `push`; the live collaborators read is green across all six code repositories. The `bots` team level itself is
+  readable only with org admin (a non-admin token gets 404), so the chairman's read-back on #3587 is the evidence for it.
 - The team's level on the tracker is its own and is not changed: an org-level `bots` change was rejected in the
   ADR because it would move the tracker's permission too.
 
