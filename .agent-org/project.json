@@ -30,6 +30,7 @@
   "units": {
     "prefix": "a11ign-",
     "boardReportWorkflow": "board-report.yml",
+    "traceWeeklyIssue": 928,
     "own": [
       "a11ign-corpus-release-nightly.service",
       "a11ign-corpus-release-nightly.timer",
