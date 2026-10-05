@@ -52,8 +52,8 @@ importers:
         specifier: 0.12.3
         version: 0.12.3(@rstest/core@0.12.3)
       '@types/node':
-        specifier: ^26.6.3
-        version: 26.6.3
+        specifier: ^26.6.4
+        version: 26.6.4
       agent-org:
         specifier: github:a11ign/agent-org#semver:^0.22.0
         version: https://codeload.github.com/a11ign/agent-org/tar.gz/f0c1841bc75724643e8d5c599207bf63579f85dc(typescript@6.0.3)
@@ -809,8 +809,8 @@ packages:
   '@types/node@10.17.60':
     resolution: {integrity: sha512-F0KIgDJfy2nA3zMLmWGKxcH2ZVEtCZXHHdOQs2gSaQ27+lNeEfGxzkIw90aXswATX7AZ33tahPbzy6KAfUreVw==}
 
-  '@types/node@26.6.3':
-    resolution: {integrity: sha512-dsqMQQoeTLqu9wynDD00q573mNzso3IdQOAfHRJqLCcmCFPoGo9A1bDpUcv/9tnKpErQWv9uKeGfl37EIS02Yg==}
+  '@types/node@26.6.4':
+    resolution: {integrity: sha512-ldVPDCzj7fsaGZrLB0NuHuTvJcsNasysBAqMolr/cgxrLd1xbqxIr3XJiPnHHJUCxj5sNF1vnRj9aWnrVh5Jcg==}
 
   '@typescript-eslint/eslint-plugin@8.71.0':
     resolution: {integrity: sha512-pqcS9c1HxZTHt7End4nXqd0s5lJrrFzrgCkKFJrsbUnaL6M3+6oBFZaslg6Gjsl3argl2DDRFROnXARaZ2e4Nw==}
@@ -2345,7 +2345,7 @@ snapshots:
   '@types/node@10.17.60':
     optional: true
 
-  '@types/node@26.6.3':
+  '@types/node@26.6.4':
     dependencies:
       undici-types: 8.9.0
 
