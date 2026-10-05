@@ -10,7 +10,16 @@ name: CI health
 on:
   schedule:
     # Monday, OFF THE HOUR (#965: the :00 starts were ~5 h late four days running), after weekly-review's 06:17.
+    #
+    # THREE SLOTS, because GitHub drops or delays scheduled starts here and a weekly cron with one slot has no second
+    # chance: the week of 2026-09-28 produced no run at all (#3678). The script is idempotent per week (a later slot finds
+    # the heading on #928 and posts nothing), and `concurrency` below serializes them. EVERY SLOT STAYS ON MONDAY:
+    # `weeklyWindow` reads the window from the run's own UTC day, so a slot on another day would read another window and post
+    # under another heading. They are spread across the day, the last at 16:43, so a start up to ~7 h late (the lateness
+    # measured in #965 and #3678) still lands before Tuesday's midnight. `ci-health.test.ts` pins all of it.
     - cron: "43 6 * * 1"
+    - cron: "43 11 * * 1"
+    - cron: "43 16 * * 1"
   workflow_dispatch:
 
 permissions:
