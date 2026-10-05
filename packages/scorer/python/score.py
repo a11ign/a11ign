@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -148,9 +149,34 @@ def evidence_units(capture: dict[str, Any]) -> list[dict[str, str]]:
     return units
 
 
+#: `json.loads` joins an escaped surrogate PAIR into one character, so any surrogate left in a `str` is lone.
+LONE_SURROGATE = re.compile("[\ud800-\udfff]")
+
+
+def without_lone_surrogates(value: Any) -> Any:
+    """`value` with every lone UTF-16 surrogate in any string replaced by U+FFFD.
+
+    NVDA speaks Windows UTF-16, and JavaScript's `JSON.stringify` writes a lone surrogate as the escape
+    `"\\ud83d"`, which Python's `json` reads back as a `str` that holds it. That `str` cannot be encoded to
+    UTF-8, so the Rust tokenizer cannot extract it, and `tokenizers` reports THAT as `TextEncodeInput must
+    be Union[...]` -- a message that reads as "not a string" when the input is one. The whole capture is
+    scrubbed here, at the one place a raw capture enters, so the transcript, the units, `evidenceText` and
+    `parsed` all carry the same replacement and `candidate_unit_flags` still matches a unit to its line.
+    `evidence_units` is left alone: `evidence-units-parity.test.ts` pins it against the TypeScript copy.
+    """
+    if isinstance(value, str):
+        return LONE_SURROGATE.sub("\ufffd", value)
+    if isinstance(value, list):
+        return [without_lone_surrogates(item) for item in value]
+    if isinstance(value, dict):
+        return {key: without_lone_surrogates(item) for key, item in value.items()}
+    return value
+
+
 def raw_capture_record(capture: dict[str, Any], source_id: str) -> dict[str, Any]:
     if not isinstance(capture, dict):
         raise RuntimeError("capture JSON must contain one object")
+    capture = without_lone_surrogates(capture)
     screen_reader = capture.get("screenReader", "unknown")
     if screen_reader != SUPPORTED_SCREEN_READER:
         raise RuntimeError(
