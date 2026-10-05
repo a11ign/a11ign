@@ -607,6 +607,8 @@ export function pinTool({ toolRepo, ref, log }) {
  * CI's `agentOrg` job, step for step, in a clone of `repo`'s head: the tool at the ref `ci.yml` names laid at
  * `packages/agent-org`, the project's packaging siblings beside its tests, one fixture's import respelled, and the
  * tool's own runner. Nothing is written under `repo`. `repo` is a parameter so a test can run it on a throwaway one.
+ * The runner gets `AGENT_ORG_TOOL_REPO` = the checkout the tool was laid out FROM, as `ci.yml` exports it: the laid-out copy sits inside the clone's
+ * own repository, and the tool's pin ratchets refuse a directory that is not a repository of its own (#3536: without it `agentOrg` was red here).
  * @param {{ repo: string, toolRepo: string, ref: string, copied: string[], scratch: string, log: number }} job
  */
 export async function runAgentOrgInClone({ repo, toolRepo, ref, copied, scratch, log }) {
@@ -620,7 +622,7 @@ export async function runAgentOrgInClone({ repo, toolRepo, ref, copied, scratch,
       () => linkNodeModules({ from: join(repo, "node_modules"), to: join(clone, "node_modules") }),
       () => stageAgentOrg({ toolRepo, scratch, copied, root: clone, stdio: ["ignore", log, log], commit }),
       () => shAsync("node", ["--import", "tsx", "--test", "packages/agent-org/src/**/*.test.ts",
-        "packages/agent-org/src/**/*.test.mjs"], { ...at(clone), env: { HOME: ciLikeHome({ home: homedir(), into: join(scratch, "home") }) } }),
+        "packages/agent-org/src/**/*.test.mjs"], { ...at(clone), env: { HOME: ciLikeHome({ home: homedir(), into: join(scratch, "home") }), AGENT_ORG_TOOL_REPO: toolRepo } }),
     ]);
   } finally {
     await removeClone({ repo, clone, log });
