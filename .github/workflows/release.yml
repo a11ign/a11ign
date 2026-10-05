@@ -395,6 +395,10 @@ jobs:
     needs: [plan, action-smoke, capture-regression, consumer-gate]
     if: needs.plan.outputs.mode == 'publish' || needs.plan.outputs.mode == 'rehearsal'
     runs-on: ubuntu-latest
+    # The one job that publishes, and so the only one under the environment (ADR 0043: every repository's publish job runs
+    # under `npm-publish`). The name is part of the OIDC claim npm checks against the package's trusted publisher, so it
+    # is set there too; `release-triggers-itself.test.ts` pins both this and that no other job takes it.
+    environment: npm-publish
     # What the verdict step below decided, handed to `qualification-row` (#3291): the publishing job holds `contents: write`
     # and `id-token: write` and must not also hold `issues: write`, so the row is filed by a job that holds nothing else.
     # Empty `row-*` outputs mean no row.

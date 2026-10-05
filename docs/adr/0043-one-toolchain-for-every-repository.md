@@ -292,6 +292,8 @@ bundle before this form is kept.
 It changes no release mechanism (ADR 0041), no package boundary (ADR 0004), and no repository's CI beyond the two named jobs
 (`typecheck`, and `rstest run --trace` once). **ADR 0031's deploy path is untouched and is Consequence 3.**
 
+**The one release standard it does state, for every repository: the publish job runs under `environment: npm-publish`** (screenreader-worker, documents and screenreader-fleet do; a11ign's `release` job does since #3624, pinned in `release-triggers-itself.test.ts`). The name is part of the OIDC claim npm checks, so each package's trusted publisher carries it.
+
 ## Consequences (including the ones the chairman will not like)
 
 **1. A required typecheck finds 198 errors in agent-org today, in 68 files.** Measured: `git archive` of agent-org at `b404507`, `node_modules`
