@@ -779,7 +779,7 @@ async function underTheHostsSlot() {
     return await slots.runUnderSlot({ command: process.execPath, args: [...process.execArgv, ...process.argv.slice(1)], label: `pnpm run verify (${REPO})` });
   } catch (cause) {
     if (!(cause instanceof slots.SuiteSlotRefusal)) throw cause;
-    console.error(cause.message);
+    console.error(cause instanceof Error ? cause.message : String(cause));
     return 2;
   }
 }
