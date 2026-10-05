@@ -27,7 +27,8 @@ async function run({ states, tally, axe = true, auth, asks, emitsResult = true, 
   const emitted: object[] = [];
   const said: string[] = [];
   const outcome = await runSingleUrl({
-    states, tally, axe, auth, emit: (json) => emitted.push(json), say: (line) => said.push(line),
+    url: RESULT.url, states, tally, axe, auth, emit: (json) => emitted.push(json), say: (line) => said.push(line),
+    unmeasured: () => { throw new Error("no scorer failure in this file"); },
     capture: async ({ index, sink }) => {
       // The worker seam: a login is counted when it is ASKED for, so a capture repeated because it did not read the page counts again.
       const counts = tally && auth?.state === undefined; // and a state load is not a login: neither site counts it (#2787)
