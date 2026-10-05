@@ -2,15 +2,16 @@
   "_what": "The two facts about each code repository that `.agent-org/project.json` does not hold, keyed by `repo` (#3123, ADR 0039 item 5). `.agent-org/project.json`'s `code` array is THE list of code repositories and the `agent-org` tool owns its schema, so this file adds a default branch and a required check name beside it and never a second list: `layer-repository-protection.test.ts` fails when a listed repository has no entry here.",
   "_read": "`branch-protection.test.ts` takes its repository and branch from here (`A11Y_PROTECTION_REPO=<owner/name>`, else the primary's), `layer-repository-protection.test.ts` reads every entry, and `nightly.yml` runs the read once per listed repository. A repository that is declared but unreadable is CANNOT_TELL and never a pass. The order a new one is created in is `docs/new-code-repository.md`.",
   "_requiredCheck": "`gate` on both: `ci.yml`'s single job that every path-scoped result rolls up into (a required check with no run blocks a merge for ever), and the context `a11ign/agent-org`'s own ruleset requires.",
+  "_publishes": "Whether the repository publishes to the npm registry (#3705). It decides what the `npm-publish` environment cell reads: a publisher must carry the environment, restricted to its default branch (`docs/new-code-repository.md`), and a repository that does not publish must carry none. `agent-org`, `control` and `lab` release a tag and a GitHub Release only, with no registry token by design (each `release.yml` says so, read 2026-10-05).",
   "schema": 1,
   "repositories": [
-    { "repo": "a11ign/a11ign", "defaultBranch": "main", "requiredCheck": "gate" },
-    { "repo": "a11ign/agent-org", "defaultBranch": "main", "requiredCheck": "gate" },
-    { "repo": "a11ign/screenreader-worker", "defaultBranch": "main", "requiredCheck": "gate" },
-    { "repo": "a11ign/screenreader-fleet", "defaultBranch": "main", "requiredCheck": "gate" },
-    { "repo": "a11ign/control", "defaultBranch": "main", "requiredCheck": "gate" },
-    { "repo": "a11ign/lab", "defaultBranch": "main", "requiredCheck": "gate" },
-    { "repo": "a11ign/toolchain", "defaultBranch": "main", "requiredCheck": "gate" },
-    { "repo": "a11ign/documents", "defaultBranch": "main", "requiredCheck": "gate" }
+    { "repo": "a11ign/a11ign", "defaultBranch": "main", "requiredCheck": "gate", "publishes": true },
+    { "repo": "a11ign/agent-org", "defaultBranch": "main", "requiredCheck": "gate", "publishes": false },
+    { "repo": "a11ign/screenreader-worker", "defaultBranch": "main", "requiredCheck": "gate", "publishes": true },
+    { "repo": "a11ign/screenreader-fleet", "defaultBranch": "main", "requiredCheck": "gate", "publishes": true },
+    { "repo": "a11ign/control", "defaultBranch": "main", "requiredCheck": "gate", "publishes": false },
+    { "repo": "a11ign/lab", "defaultBranch": "main", "requiredCheck": "gate", "publishes": false },
+    { "repo": "a11ign/toolchain", "defaultBranch": "main", "requiredCheck": "gate", "publishes": true },
+    { "repo": "a11ign/documents", "defaultBranch": "main", "requiredCheck": "gate", "publishes": true }
   ]
 }
