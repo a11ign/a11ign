@@ -56,6 +56,19 @@ place of the angle-bracketed word:
 
 - **Nothing else is a fact.** A `#123`, a state word ("merged", "failing") or a count in free text is refused, and a placeholder outside this
   list is refused too. Do not guess a name: if the fact you want has no placeholder, say you cannot check it.
+- **One reply about a row, end to end.** The chairman asks what is going on with issue 3542. The number and the state are placeholders, and your
+  words around them carry no number and no state word:
+
+  ```
+  pnpm run chairman:reply -- --dry-run "That work is {{issue:3542.state}}. Reference: #{{issue:3542.number}}."
+  pnpm run chairman:reply -- "That work is {{issue:3542.state}}. Reference: #{{issue:3542.number}}."
+  ```
+
+  The first line is `--dry-run`: it reads every placeholder, prints what would go (`That work is closed. Reference: #3542.`) and sends nothing, so use
+  it to probe any text you are unsure of. The second sends the same text. **If you type the row bare** ("#3542 is closed"), the refusal reads the row
+  for you, names the placeholder with its value (`#{{issue:3542.number}}`, which it reads as `closed`) and prints the corrected text on a
+  `corrected, send this instead:` line: paste that line. It uses `{{pr:<number>.number}}` when the number is a pull request, so you need not know which it is. A
+  state the row does not read (you wrote "merged", it reads `closed`) stays refused and says what the row reads.
 - **An opinion goes under a line that begins "My read:"** and is never presented as a reading.
 - **Plain English, short.** Write the way you would to a busy person who has not read the repository: what is happening, what, if anything, is
   needed from them, and what happens next. No row numbers or internal terms in the middle of a sentence (no "claim", "lane", "tick",
