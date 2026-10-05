@@ -40,6 +40,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
+import { parse as parseYaml } from "yaml";
 import { ghApiRead } from "./gh-api-read.mjs";
 import { SECRET_HOLDER } from "./auto-arm-identity.ts";
 
@@ -521,9 +522,121 @@ function tokenCell(pulls: Read<PullSummary[]>, authored: Read<Authored>): Cell {
       + "the token's reach is not evidenced, and its scope is NOT readable without org admin");
 }
 
+// --- #3718: the release shape, read from the workflow's STRUCTURE ---------------------------------------------
+
+/**
+ * The chairman's direction (#928, 2026-10-05) is one per-merge release workflow and no version pull request
+ * anywhere. This reads which a repository has, from its `release.yml` on the default branch, PARSED: agent-org's
+ * own file describes the version pull request it used to open, at length, in comments, and a grep for the
+ * phrase reads it as the thing it replaced. The rule, in the order it is applied:
+ *
+ *   DRIFT        any job uses `changesets/action`, is NAMED `version-pr`, requests `pull-requests: write`
+ *                (job or workflow level), runs `gh pr create`, or pushes a BRANCH (`git push` that is not a tag push);
+ *   OK           otherwise, a job calls the reusable per-merge workflow, or a step pushes the merge's TAG;
+ *   CANNOT_TELL  the file could not be read or parsed, or it is neither (nothing releases, or only a local
+ *                composite action does, and that is not followed).
+ *
+ * A tag push is `--tags` or a refspec under `refs/tags/`: agent-org, control and lab push `HEAD:refs/tags/$TAG`,
+ * which is the merge being tagged and not a branch being offered for review. The three DRIFT signals are the
+ * row's; `version-pr` as a job name and `gh pr create` are added because `a11ign`'s version job carries neither
+ * the action nor the permission (its script pushes the branch, out of this file's sight).
+ */
+const RELEASE_COLUMN = "release-shape";
+const RELEASE_WORKFLOW = ".github/workflows/release.yml";
+const VERSION_PR_JOB = "version-pr";
+/**
+ * The reusable per-merge workflow lives in `a11ign/toolchain` (#3712). NOT VERIFIED: that row has not named the
+ * file, no repository calls it yet (read 2026-10-05), so this matches any `release*` workflow there. When #3712
+ * names it, tighten this to the name.
+ */
+const PER_MERGE_CALL = /^a11ign\/toolchain\/\.github\/workflows\/[^@]*release[^@]*\.ya?ml@/;
+
+type WorkflowStep = { uses?: unknown; run?: unknown };
+type WorkflowJob = { uses?: unknown; permissions?: unknown; steps?: WorkflowStep[] };
+type Workflow = { permissions?: unknown; jobs?: Record<string, WorkflowJob> };
+type ContentsAnswer = { content?: string; encoding?: string };
+
+const grantsPullRequestWrite = (permissions: unknown): boolean =>
+  permissions === "write-all"
+  || (typeof permissions === "object" && permissions !== null && (permissions as Record<string, unknown>)["pull-requests"] === "write");
+
+/** The shell commands of one `run:` block, comment lines dropped and `\` continuations joined. */
+const shellCommands = (run: unknown): string[] => typeof run !== "string" ? []
+  : run.split("\n").filter((line) => !line.trim().startsWith("#")).join("\n").replace(/\\\n/g, " ").split("\n");
+
+/** The arguments of every `git push` on a line, up to the next command separator. */
+const gitPushArguments = (command: string): string[] =>
+  [...command.matchAll(/\bgit\s+push\b([^;&|\n]*)/g)].map((m) => m[1] ?? "");
+
+const pushesTag = (args: string): boolean => /--tags\b|refs\/tags\//.test(args);
+
+function stepSignals(step: WorkflowStep): string[] {
+  const found: string[] = [];
+  if (typeof step.uses === "string" && /^changesets\/action(@|$)/.test(step.uses)) found.push("uses `changesets/action`");
+  for (const command of shellCommands(step.run)) {
+    if (/\bgh\s+pr\s+create\b/.test(command)) found.push("runs `gh pr create`");
+    if (gitPushArguments(command).some((args) => !pushesTag(args))) found.push("pushes a branch (`git push` that is not a tag push)");
+  }
+  return found;
+}
+
+function jobSignals(id: string, job: WorkflowJob): string[] {
+  const found = (id === VERSION_PR_JOB ? [`has the version pull request job's name, \`${VERSION_PR_JOB}\``] : [])
+    .concat(grantsPullRequestWrite(job.permissions) ? ["requests `pull-requests: write`"] : [])
+    .concat((job.steps ?? []).flatMap(stepSignals));
+  return found.map((what) => `job \`${id}\` ${what}`);
+}
+
+const versionPrSignals = (workflow: Workflow): string[] => [
+  ...(grantsPullRequestWrite(workflow.permissions) ? ["the workflow requests `pull-requests: write`"] : []),
+  ...Object.entries(workflow.jobs ?? {}).flatMap(([id, job]) => jobSignals(id, job)),
+];
+
+/** What makes a workflow per-merge: a call to the reusable one, or a step that tags the merge itself. */
+function perMergeEvidence(workflow: Workflow): string | null {
+  for (const [id, job] of Object.entries(workflow.jobs ?? {})) {
+    if (typeof job.uses === "string" && PER_MERGE_CALL.test(job.uses)) return `job \`${id}\` calls ${job.uses}`;
+    const tags = (job.steps ?? []).some((s) => shellCommands(s.run).some((c) => gitPushArguments(c).some(pushesTag)));
+    if (tags) return `job \`${id}\` pushes the merge's tag`;
+  }
+  return null;
+}
+
+function releaseShapeOfText(text: string): Cell {
+  let workflow: Workflow | null;
+  try {
+    workflow = parseYaml(text) as Workflow | null;
+  } catch (cause) {
+    return cannotTell(`${RELEASE_WORKFLOW} does not parse: ${cause instanceof Error ? cause.message.split("\n")[0] : String(cause)}`);
+  }
+  if (typeof workflow !== "object" || workflow === null || typeof workflow.jobs !== "object" || workflow.jobs === null) {
+    return cannotTell(`${RELEASE_WORKFLOW} parses and has no \`jobs\`, so there is no release to read`);
+  }
+  const signals = versionPrSignals(workflow);
+  if (signals.length > 0) return drift(`opens a version pull request: ${signals.join("; ")}`);
+  const evidence = perMergeEvidence(workflow);
+  return evidence === null
+    ? cannotTell(`${RELEASE_WORKFLOW} reads as neither shape: no version-pull-request signal, no call to the reusable per-merge workflow and no tag push`)
+    : ok(`releases per merge: ${evidence}`);
+}
+
+/** The contents endpoint answers base64 wrapped at 60 columns; a directory answers an array and a big file no content. */
+function releaseShapeCell(read: Read<ContentsAnswer>): Cell {
+  if (read.kind !== "ok") return cannotTell(`${RELEASE_WORKFLOW}: ${unreadWhy(read)}`);
+  const { content, encoding } = read.value;
+  if (typeof content !== "string" || encoding !== "base64") {
+    return cannotTell(`${RELEASE_WORKFLOW} came back without base64 content (a directory, or over the API's 1 MB): not a pass`);
+  }
+  return releaseShapeOfText(Buffer.from(content, "base64").toString("utf8"));
+}
+
+/** Every column of a row. `tableProblems` fails a row that lacks one, so a new cell cannot be dropped silently. */
+const TABLE_COLUMNS = [...SETTING_COLUMNS.map((s) => s.column), "issues", "protection", PUBLISH_ENV, "bots", "token", RELEASE_COLUMN];
+
 type RepoReads = {
   settings: Read<RepoSettings>; protection: RepoRead; envs: Read<EnvironmentList>;
   policies: Read<PolicyList> | null; pulls: Read<PullSummary[]>; authored: Read<Authored>;
+  workflow: Read<ContentsAnswer>;
 };
 type OrgReads = { bots: Read<TeamRepo[]>; trackers: string[] };
 
@@ -536,26 +649,29 @@ function tableRow(entry: Entry, reads: RepoReads, org: OrgReads): Row {
       [PUBLISH_ENV]: publishCell(entry, reads.envs, reads.policies),
       bots: botsCell(entry.repo, org.bots),
       token: tokenCell(reads.pulls, reads.authored),
+      [RELEASE_COLUMN]: releaseShapeCell(reads.workflow),
     },
   };
 }
 
-/** Every failure, one line each: a declared repository with no row, then every cell that is not `OK`. */
+/** Every failure, one line each: a declared repository with no row, a row with no cell for a column, then every cell that is not `OK`. */
 function tableProblems(rows: Row[], declared: string[]): string[] {
   const shown = new Set(rows.map((r) => r.repo));
   const unrowed = declared.filter((repo) => !shown.has(repo)).map((repo) => `${repo}: DECLARED and has no row in the table`);
+  const uncelled = rows.flatMap((r) => TABLE_COLUMNS.filter((column) => r.cells[column] === undefined)
+    .map((column) => `${r.repo} ${column}: NO CELL, the table did not read it`));
   const bad = rows.flatMap((r) => Object.entries(r.cells).filter(([, c]) => c.state !== "OK")
     .map(([column, c]) => `${r.repo} ${column}: ${c.state} ${c.detail}`));
-  return [...unrowed, ...bad];
+  return [...unrowed, ...uncelled, ...bad];
 }
 
 /** The matrix, then the detail of each cell that is not `OK`. */
 function renderTable(rows: Row[]): string[] {
   const columns = Object.keys(rows[0]?.cells ?? {});
   const width = Math.max(...rows.map((r) => r.repo.length), "repository".length);
-  const cellWidth = "CANNOT_TELL".length;
-  const header = `${"repository".padEnd(width)}  ${columns.map((c) => c.padEnd(cellWidth)).join("  ")}`;
-  const lines = rows.map((r) => `${r.repo.padEnd(width)}  ${columns.map((c) => (r.cells[c]?.state ?? "NO CELL").padEnd(cellWidth)).join("  ")}`);
+  const cellWidth = (column: string): number => Math.max("CANNOT_TELL".length, column.length);
+  const header = `${"repository".padEnd(width)}  ${columns.map((c) => c.padEnd(cellWidth(c))).join("  ")}`;
+  const lines = rows.map((r) => `${r.repo.padEnd(width)}  ${columns.map((c) => (r.cells[c]?.state ?? "NO CELL").padEnd(cellWidth(c))).join("  ")}`);
   return [header, ...lines];
 }
 
@@ -569,14 +685,24 @@ const RESTRICTED_ENV: Read<EnvironmentList> = { kind: "ok", value: { environment
 const MAIN_ONLY: Read<PolicyList> = { kind: "ok", value: { branch_policies: [{ name: "main", type: "branch" }] } };
 const CI_OPENED: Read<Authored> = { kind: "ok", value: { total_count: 2 } };
 const NO_PULLS: Read<PullSummary[]> = { kind: "ok", value: [] };
+/** A `release.yml` as the contents endpoint returns it: base64, wrapped at 60 columns. */
+const releaseFile = (yaml: string): Read<ContentsAnswer> =>
+  ({ kind: "ok", value: { encoding: "base64", content: Buffer.from(yaml).toString("base64").replace(/(.{60})/g, "$1\n") } });
+const PER_MERGE_CALLER = releaseFile(`name: release
+on: { push: { branches: [main] } }
+jobs:
+  release:
+    uses: a11ign/toolchain/.github/workflows/release.yml@v1
+    secrets: inherit
+`);
 const GOOD_READS: RepoReads = { settings: { kind: "ok", value: GOOD_SETTINGS }, protection: withClassic({ kind: "ok", value: FULL_CLASSIC }),
-  envs: RESTRICTED_ENV, policies: MAIN_ONLY, pulls: NO_PULLS, authored: CI_OPENED };
+  envs: RESTRICTED_ENV, policies: MAIN_ONLY, pulls: NO_PULLS, authored: CI_OPENED, workflow: PER_MERGE_CALLER };
 const columnsNotOk = (row: Row, state: CellState): string[] => Object.entries(row.cells).filter(([, c]) => c.state === state).map(([k]) => k);
 
 test("#3705: a repository that satisfies the page reads OK in every cell -- the table can be green", () => {
   const row = tableRow(PUBLISHER, GOOD_READS, NO_ORG);
   assert.deepEqual(tableProblems([row], [PUBLISHER.repo]), []);
-  assert.equal(Object.keys(row.cells).length, 10, "the columns the page's steps 1, 1b, 4 and 8 name, and the `issues` line of step 1");
+  assert.deepEqual(Object.keys(row.cells).sort(), [...TABLE_COLUMNS].sort(), "the columns the page's steps 1, 1b, 4, 8 and 9 name, and the `issues` line of step 1");
 });
 
 test("#3705 POSITIVE CONTROL: a repository whose settings DRIFT prints DRIFT for exactly those cells", () => {
@@ -609,6 +735,7 @@ test("#3705: a setting GitHub did not return, or a read that failed, is CANNOT_T
   assert.deepEqual(columnsNotOk(row, "CANNOT_TELL"), ["merge-commit", "squash", "rebase", "delete-branch", "issues"]);
   const refused = tableRow(PUBLISHER, { ...GOOD_READS, settings: { kind: "refused" }, envs: { kind: "unreadable", why: "HTTP 502" } }, { ...NO_ORG, bots: { kind: "refused" } });
   assert.deepEqual(columnsNotOk(refused, "CANNOT_TELL"), [...SETTING_COLUMNS.map((s) => s.column), "issues", PUBLISH_ENV, "bots"]);
+  assert.equal(refused.cells[RELEASE_COLUMN]?.state, "OK", "the release shape is its own read: the workflow was readable here");
 });
 
 test("#3705: the protection cell reuses the existing verdict: MISSING is DRIFT, unreadable is CANNOT_TELL, PARTLY_READ is OK and says so", () => {
@@ -676,6 +803,111 @@ test("#3705: a declared repository with no row is a failure, and the table rende
   assert.match(line ?? "", /^a11ign\/fixture-publisher +OK/);
 });
 
+// --- #3718: a release workflow of each shape, and what the reading does with it ---------------------------------
+
+const shapeOf = (yaml: string): Cell => releaseShapeCell(releaseFile(yaml));
+
+/** `screenreader-worker`'s shape, 2026-10-05: a `plan` job, a `version-pr` job that runs the action, a `publish` job that pushes tags. */
+const ACTION_STEP = `name: release
+on: { push: { branches: [main] } }
+jobs:
+  version-pr:
+    permissions: { contents: read }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51
+        with: { commit-message: "Version packages" }
+`;
+/** `a11ign`'s: the job opens the pull request itself, so no action and no permission names it; only the job and the command do. */
+const VERSION_PR_JOB_ONLY = `name: release
+on: { push: { branches: [main] } }
+jobs:
+  version-pr:
+    steps:
+      - run: pnpm run release:version
+`;
+/** `agent-org`'s: the comments say, at length, everything a grep would read as DRIFT; the structure is a tag push on the merge. */
+const COMMENTS_DESCRIBE_A_VERSION_PR = `# Releases on every merge. It used to open a version pull request with changesets/action, which needed
+# pull-requests: write and ran git push origin release/version-packages. It does none of those now.
+name: release
+on: { push: { branches: [main] } }
+permissions: { contents: read }
+jobs:
+  release:
+    permissions: { contents: write }
+    steps:
+      - name: Tag the merge
+        run: |
+          # was: git push origin release/version-packages, and gh pr create
+          git push origin "HEAD:refs/tags/$TAG"
+`;
+
+test("#3718 POSITIVE CONTROLS: the action step reads DRIFT, a `version-pr` job reads DRIFT, the per-merge call reads OK, comments describing a version pull request read OK", () => {
+  const action = shapeOf(ACTION_STEP);
+  assert.equal(action.state, "DRIFT");
+  assert.match(action.detail, /job `version-pr` uses `changesets\/action`/);
+  const jobOnly = shapeOf(VERSION_PR_JOB_ONLY);
+  assert.equal(jobOnly.state, "DRIFT");
+  assert.match(jobOnly.detail, /job `version-pr` has the version pull request job's name/);
+  assert.doesNotMatch(jobOnly.detail, /changesets/, "this fixture has no action step: the job name alone reads it");
+  assert.equal(releaseShapeCell(PER_MERGE_CALLER).state, "OK");
+  assert.match(releaseShapeCell(PER_MERGE_CALLER).detail, /calls a11ign\/toolchain\/\.github\/workflows\/release\.yml@v1/);
+  const commented = shapeOf(COMMENTS_DESCRIBE_A_VERSION_PR);
+  assert.equal(commented.state, "OK", commented.detail);
+  assert.match(commented.detail, /pushes the merge's tag/);
+});
+
+test("#3718 POSITIVE CONTROL OF THE COMMENT FIXTURE: a grep over its words reads every DRIFT marker, so only the parse can have read it as OK", () => {
+  for (const words of [/changesets\/action/, /pull-requests: write/, /git push origin release\/version-packages/, /gh pr create/, /version pull request/]) {
+    assert.match(COMMENTS_DESCRIBE_A_VERSION_PR, words);
+  }
+});
+
+test("#3718: each DRIFT signal fires on its own, and a tag push is not a branch push", () => {
+  const job = (body: string): string => `jobs:\n  release:\n${body}`;
+  const permission = shapeOf(job("    permissions: { pull-requests: write }\n    uses: a11ign/toolchain/.github/workflows/release.yml@v1\n"));
+  assert.equal(permission.state, "DRIFT", "a per-merge call that also asks for pull-requests: write is not per-merge");
+  assert.match(permission.detail, /requests `pull-requests: write`/);
+  assert.match(shapeOf(`permissions: write-all\n${job("    steps:\n      - run: git push origin --tags\n")}`).detail, /the workflow requests/);
+  const branch = shapeOf(job("    steps:\n      - run: git tag v1 && git push origin HEAD:release/next\n"));
+  assert.equal(branch.state, "DRIFT");
+  assert.match(branch.detail, /pushes a branch/);
+  assert.equal(shapeOf(job("    steps:\n      - run: git push\n")).state, "DRIFT", "a bare push offers the current branch");
+  assert.match(shapeOf(job("    steps:\n      - run: gh pr create --title x\n")).detail, /runs `gh pr create`/);
+  assert.equal(shapeOf(job("    steps:\n      - run: git push origin --tags\n")).state, "OK");
+  assert.equal(shapeOf(job("    steps:\n      - run: |\n          git push origin \\\n            \"HEAD:refs/tags/$TAG\"\n")).state, "OK", "a continued line is one command");
+});
+
+test("#3718: a workflow that is neither shape, or cannot be read, is CANNOT_TELL and never OK", () => {
+  const neither = shapeOf("jobs:\n  publish:\n    steps:\n      - run: npm publish\n");
+  assert.equal(neither.state, "CANNOT_TELL");
+  assert.match(neither.detail, /neither shape/);
+  assert.equal(shapeOf("jobs:\n  release:\n    uses: ./.github/workflows/local.yml\n").state, "CANNOT_TELL", "a local call is not the reusable per-merge workflow");
+  assert.equal(shapeOf("jobs:\n  release:\n    uses: a11ign/toolchain/.github/workflows/test.yml@v1\n").state, "CANNOT_TELL", "another toolchain workflow is not the release");
+  assert.equal(shapeOf("jobs: [unclosed\n").state, "CANNOT_TELL");
+  assert.match(shapeOf("jobs: [unclosed\n").detail, /does not parse/);
+  assert.match(shapeOf("name: release\n").detail, /no `jobs`/);
+  assert.match(shapeOf("").detail, /no `jobs`/, "an empty file is not a release");
+  for (const read of [{ kind: "refused" }, { kind: "unreadable", why: "HTTP 502" }, { kind: "ok", value: {} },
+    { kind: "ok", value: { encoding: "none", content: "" } }] as Read<ContentsAnswer>[]) {
+    assert.equal(releaseShapeCell(read).state, "CANNOT_TELL", JSON.stringify(read));
+  }
+});
+
+test("#3718: a declared repository with no release-shape cell is a failure, and DRIFT or CANNOT_TELL in it fail the table", () => {
+  const row = tableRow(PUBLISHER, GOOD_READS, NO_ORG);
+  assert.deepEqual(tableProblems([row], [PUBLISHER.repo]), []);
+  const without = Object.fromEntries(Object.entries(row.cells).filter(([column]) => column !== RELEASE_COLUMN));
+  assert.deepEqual(tableProblems([{ ...row, cells: without }], [PUBLISHER.repo]), [`${PUBLISHER.repo} ${RELEASE_COLUMN}: NO CELL, the table did not read it`]);
+  for (const [workflow, state] of [[releaseFile(ACTION_STEP), "DRIFT"], [{ kind: "refused" }, "CANNOT_TELL"]] as [Read<ContentsAnswer>, CellState][]) {
+    const failing = tableRow(PUBLISHER, { ...GOOD_READS, workflow }, NO_ORG);
+    assert.deepEqual(columnsNotOk(failing, state), [RELEASE_COLUMN]);
+    assert.equal(tableProblems([failing], [PUBLISHER.repo]).length, 1);
+  }
+  const [header] = renderTable([row]);
+  assert.match(header ?? "", /token +release-shape$/, "the header is as wide as its longest name, so the columns stay aligned");
+});
+
 // --- the live table, over every declared repository -------------------------------------------------------
 
 function readRepo(entry: Entry): RepoReads {
@@ -688,6 +920,7 @@ function readRepo(entry: Entry): RepoReads {
     policies: hasEnv ? ghRead(`repos/${entry.repo}/environments/${PUBLISH_ENV}/deployment-branch-policies`) : null,
     pulls: ghRead(`repos/${entry.repo}/pulls?state=all&per_page=${PULLS_WINDOW}`),
     authored: ghRead(`search/issues?q=repo:${entry.repo}+is:pr+author:${SECRET_HOLDER}&per_page=1`),
+    workflow: ghRead(`repos/${entry.repo}/contents/${RELEASE_WORKFLOW}?ref=${entry.defaultBranch}`),
   };
 }
 
@@ -706,6 +939,7 @@ test("#3705 LIVE: every code repository is read against docs/new-code-repository
   assert.ok(rows.length >= 1, "no repository to read: the declared list was empty, and an empty read certifies nothing");
   const lines = renderTable(rows);
   console.log(lines.join("\n"));
+  for (const r of rows) console.log(`  ${RELEASE_COLUMN} ${r.repo}: ${r.cells[RELEASE_COLUMN]?.state ?? "NO CELL"} ${r.cells[RELEASE_COLUMN]?.detail ?? ""}`);
   const problems = tableProblems(rows, declared);
   for (const p of problems) console.log(`  ${p}`);
   assert.deepEqual(problems, [], "a repository drifts from docs/new-code-repository.md, or a setting could not be read: neither is a pass");
