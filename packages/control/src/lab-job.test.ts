@@ -1142,3 +1142,12 @@ test("#3289: readRecordFrom reads THIS run's record: right job, right row, writt
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("#3289: there is no token file and no second credential: the poster never names one, and passes `gh` the environment untouched", () => {
+  // The host's AMBIENT `gh`: it must not pick an account (`GH_CONFIG_DIR`, `GH_TOKEN`, `gh-api-budget.md`) or read a token file.
+  const poster = readFileSync(fileURLToPath(new URL("./post-qualification-status.mjs", import.meta.url)), "utf8");
+  assert.doesNotMatch(poster, /GH_CONFIG_DIR\s*[:=]|GH_TOKEN\s*[:=]|process\.env\.GH_|qualification-status-token/);
+  assert.doesNotMatch(poster, /spawnSync\("gh", args, \{[^}]*\benv\b/, "the default runner must pass the environment through untouched");
+  // POSITIVE CONTROL: the patterns above are looking at the right file -- it does spawn `gh`.
+  assert.match(poster, /spawnSync\("gh", args,/);
+});

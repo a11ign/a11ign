@@ -425,6 +425,7 @@ export async function run(argv, deps = {}) {
   return runQualified({
     attempt: (announce) => runOnce(request.argv, { ...deps, dispatch: announce(deps.dispatch ?? dispatchToAnsible) }),
     announce: (dispatch, seen) => announcingDispatch({ sha: request.sha, row: request.row, dispatch }, qualify, seen),
+    say: qualify.say,
   });
 }
 
