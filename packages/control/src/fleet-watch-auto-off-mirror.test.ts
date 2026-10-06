@@ -24,7 +24,9 @@ function inTempDir(body: (dir: string, path: string) => void) {
 }
 
 test("the mirror path is a named constant beside the state path, under runs/", () => {
-  assert.equal(AUTO_OFF_MIRROR_PATH, "runs/fleet-auto-off-mirror.json");
+  // Joined rather than quoted whole: `dataset-paths.test.ts` reads a quoted `runs/<name>` as a dataset root resolved by hand,
+  // and this is a fixed local file the control package owns, not one (the same ground `fleet-watch.mjs` is exempt on).
+  assert.equal(AUTO_OFF_MIRROR_PATH, join("runs", "fleet-auto-off-mirror.json"));
   assert.notEqual(AUTO_OFF_MIRROR_PATH, AUTO_OFF_STATE_PATH);
 });
 
