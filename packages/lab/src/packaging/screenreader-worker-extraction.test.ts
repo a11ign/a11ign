@@ -23,7 +23,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -231,11 +231,25 @@ test("the harness reads nvda-speech through the layer checkout, never the worksp
   assert.doesNotMatch(source, /@a11ign\/nvda-speech|packages\/nvda-speech|createRequire/, "the harness still names the workspace package or resolves it as a module");
 });
 
-test("the path the harness builds finds labels.py in a checkout laid out as the layer's repository is, and is refused where there is none", () => {
-  const labels = "packages/nvda-speech/nvda_speech/labels.py";
-  withFixture({ [labels]: "NAMES = {'edit': 1}\n", "packages/nvda-worker/package.json": "{}" }, (root) => {
-    const found = join(layerCheckoutAt(root).layerRoot("nvda-worker"), "..", "nvda-speech", "nvda_speech", "labels.py");
+/** The segments the harness joins to the layer's root, read from ITS source: a typed copy here is the bug this test exists to catch (#3748). */
+const harnessLabelsPath = (): string[] => {
+  const declared = /^const LABELS_PATH = (\[.*\]);$/m.exec(read(REPO_ROOT, HARNESS));
+  assert.ok(declared, "the harness no longer declares LABELS_PATH as one array literal");
+  return JSON.parse(declared[1]) as string[];
+};
+
+test("the path the harness builds finds labels.py INSIDE a checkout laid out as the layer's repository is, and is refused where there is none", () => {
+  // The layer repository holds the worker's `src/` at its root and the speech package at `packages/nvda-speech`, so a clone at
+  // `packages/nvda-worker` has labels.py at `packages/nvda-worker/packages/nvda-speech/nvda_speech/labels.py`, not BESIDE the clone.
+  const inClone = "packages/nvda-worker/packages/nvda-speech/nvda_speech/labels.py";
+  withFixture({ [inClone]: "NAMES = {'edit': 1}\n", "packages/nvda-worker/package.json": "{}" }, (root) => {
+    const found = join(layerCheckoutAt(root).layerRoot("nvda-worker"), ...harnessLabelsPath());
     assert.equal(readFileSync(found, "utf8"), "NAMES = {'edit': 1}\n");
+  });
+  const beside = { "packages/nvda-speech/nvda_speech/labels.py": "NAMES = {}\n", "packages/nvda-worker/package.json": "{}" };
+  withFixture(beside, (root) => {
+    const found = join(layerCheckoutAt(root).layerRoot("nvda-worker"), ...harnessLabelsPath());
+    assert.equal(existsSync(found), false, "a labels.py BESIDE the clone is not where the layer repository puts it");
   });
   withFixture({ "unrelated.txt": "x" }, (root) => {
     assert.throws(() => layerCheckoutAt(root).layerRoot("nvda-worker"), /layer "nvda-worker" is declared at packages\/nvda-worker, and .* does not exist/);

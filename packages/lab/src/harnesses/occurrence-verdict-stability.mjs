@@ -57,10 +57,11 @@ const PAGES = fileURLToPath(new URL("../../../../runs/screenreader-dataset/pages
  * and state chrome ("edit", "button", "invalid entry") names a control; it does not tell you what to do.
  */
 // THROUGH THE LAYER CHECKOUT (#3447): `nvda-speech` left this workspace with the worker and is not a package a registry
-// serves (it is private), so it is found where its repository's checkout puts it: BESIDE `nvda-worker`, which
-// `layers.json` declares and the resolver locates. The resolver REFUSES where the checkout is not there, rather than guessing
-// a monorepo path, so a host with no layer checkout stops here saying so and not on a vocabulary read from nowhere.
-const LABELS_PATH = ["..", "nvda-speech", "nvda_speech", "labels.py"];
+// serves (it is private), so it is found where its repository's checkout puts it: INSIDE the clone `layers.json` declares for
+// `nvda-worker`, at `packages/nvda-speech` (the layer repository's root holds `src/` for the worker and `packages/` for the speech
+// package, #3748). The resolver REFUSES where the checkout is not there, rather than guessing a monorepo path, so a host with no
+// layer checkout stops here saying so and not on a vocabulary read from nowhere.
+const LABELS_PATH = ["packages", "nvda-speech", "nvda_speech", "labels.py"];
 /** @type {Set<string> | undefined} */
 let vocabulary;
 /** The words NVDA's labels use, read on first need so that importing this module never touches the checkout. */
