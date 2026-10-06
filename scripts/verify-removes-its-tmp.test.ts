@@ -34,7 +34,9 @@ const POLL_MS = 50;
 type Mode = "affected" | "agentOrg" | "private";
 type Tree = { dir: string; author: string; tool: string; tmp: string; home: string; ready: string; release: string };
 
-const git = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, encoding: "utf8", stdio: "pipe", env: sandboxGitEnv() }).trim();
+// A CI runner has no `user.name`, so the commits of the throwaway repositories carry their own identity rather than the host's (the first push of this test failed there, "empty ident name").
+const IDENTITY = { GIT_AUTHOR_NAME: "test", GIT_AUTHOR_EMAIL: "test@example.invalid", GIT_COMMITTER_NAME: "test", GIT_COMMITTER_EMAIL: "test@example.invalid" };
+const git = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, encoding: "utf8", stdio: "pipe", env: { ...sandboxGitEnv(), ...IDENTITY } }).trim();
 
 const writeAll = (root: string, files: Record<string, string>) => {
   for (const [file, text] of Object.entries(files)) {
