@@ -239,13 +239,29 @@ export async function probeIdle(url, { timeoutMs = PROBE_TIMEOUT_MS, request = r
 /** @typedef {Record<string, number>} SinceState */
 
 /**
- * @typedef {{ reason: string, detail: string, at: number }} Refusal why a shutdown was held back, and when
+ * @typedef {{ reason: string, detail: string, at: number, since?: number }} Refusal why a shutdown was held back, `at` the
+ *   tick that last said so (seconds old for as long as it stands) and `since` the FIRST tick of the unbroken run, which is
+ *   the only one of the two that can date a standing refusal (#3859). Absent on a record written before the field existed.
  * @typedef {{ idleSince: SinceState, shutdownRequestedAt: SinceState, fetchedAt: number | null,
  *   refusal: Refusal | null }} AutoOffState
  */
 
 /** @param {unknown} value @returns {Record<string, number>} */
 const recordOf = (value) => (value && typeof value === "object" && !Array.isArray(value) ? /** @type {any} */ (value) : {});
+
+/**
+ * A recorded refusal, with `since` kept only when it is a time: a string there would otherwise be carried forward and
+ * read as a date by whoever ages the refusal.
+ *
+ * @param {any} refusal
+ * @returns {Refusal | null}
+ */
+function readRefusal(refusal) {
+  if (!refusal || typeof refusal.reason !== "string") return null;
+  const { since, ...rest } = refusal;
+  const time = finiteNumber(since);
+  return time === undefined ? rest : { ...rest, since: time };
+}
 
 /**
  * The persisted state: idle-since, shutdown-requested-at, when `origin/main` was last fetched, and the refusal the
@@ -259,12 +275,11 @@ const recordOf = (value) => (value && typeof value === "object" && !Array.isArra
 export function readState(path, read = readFileSync) {
   try {
     const parsed = JSON.parse(read(path, "utf8"));
-    const refusal = parsed?.refusal;
     return {
       idleSince: recordOf(parsed?.idleSince),
       shutdownRequestedAt: recordOf(parsed?.shutdownRequestedAt),
       fetchedAt: finiteNumber(parsed?.fetchedAt) ?? null,
-      refusal: refusal && typeof refusal.reason === "string" ? refusal : null,
+      refusal: readRefusal(parsed?.refusal),
     };
   } catch {
     return { idleSince: {}, shutdownRequestedAt: {}, fetchedAt: null, refusal: null };
@@ -804,12 +819,16 @@ function dispatchOff(decisions, { dispatch, shutdownRequestedAt, now }) {
  * powered off, so an idle fleet costs no fetch; the held workers read `keep <reason>` in the report, which is where an
  * operator looks.
  *
+ * `since` is when the refusal BEGAN (#3859): the previous tick's refusal's `since`, or its `at` for a record from before
+ * the field, else `now`. Every path that does not refuse returns `refusal: null`, and that ends the run, so a tick that
+ * proceeds in between restarts the age with no further code.
+ *
  * @template {{ decision: Decision }} T
  * @param {T[]} decisions
- * @param {{ now: number, fetchedAt: number | null,
+ * @param {{ now: number, fetchedAt: number | null, previousRefusal: Refusal | null,
  *   checkout: (where: { now: number, fetchedAt: number | null }) => ReturnType<typeof checkAgainstMain> }} where
  */
-function holdBackIfStale(decisions, { now, fetchedAt, checkout }) {
+function holdBackIfStale(decisions, { now, fetchedAt, previousRefusal, checkout }) {
   if (!decisions.some(({ decision }) => decision.action === "off")) return { decisions, refusal: null, fetchedAt };
   const checked = checkout({ now, fetchedAt });
   if (checked.verdict.action === "proceed") return { decisions, refusal: null, fetchedAt: checked.fetchedAt };
@@ -818,7 +837,7 @@ function holdBackIfStale(decisions, { now, fetchedAt, checkout }) {
     decisions: decisions.map(({ decision, ...rest }) => ({
       ...rest, decision: decision.action === "off" ? { action: /** @type {const} */ ("keep"), reason } : decision,
     })),
-    refusal: { reason, detail, at: now },
+    refusal: { reason, detail, at: now, since: previousRefusal?.since ?? previousRefusal?.at ?? now },
     fetchedAt: checked.fetchedAt,
   };
 }
@@ -891,7 +910,7 @@ export async function tick(deps = {}) {
     };
   });
   const { decisions, refusal, fetchedAt } = apply
-    ? holdBackIfStale(decided, { now, fetchedAt: previous.fetchedAt, checkout })
+    ? holdBackIfStale(decided, { now, fetchedAt: previous.fetchedAt, previousRefusal: previous.refusal, checkout })
     : { decisions: decided, refusal: null, fetchedAt: previous.fetchedAt };
 
   if (apply) dispatchOff(decisions, { dispatch, shutdownRequestedAt, now });

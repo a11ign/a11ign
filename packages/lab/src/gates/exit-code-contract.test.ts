@@ -354,6 +354,11 @@ const DOCUMENTED: Record<string, string> = {
     + "inventory code); 1 a shutdown held back because the checkout differs from main, or any worker's "
     + "wake proof is lapsing or lapsed (#3309); 0 otherwise regardless of what any worker was decided — "
     + "the decision itself is the output, never a pass/fail verdict",
+  "packages/control/src/gate-heartbeat.mjs":
+    "1 a message the verdict called for could NOT be sent (no Telegram route, or Telegram refused or timed "
+    + "out) — the standing verdict is then not recorded and the next run retries; 0 otherwise, INCLUDING a "
+    + "stale or unreadable tick that WAS messaged (the verdict is the output and the message is the alarm, "
+    + "never a pass/fail exit)",
   "packages/control/src/post-qualification-status.mjs":
     "0 the status was POSTED; 1 refused (bad flag or malformed sha) or GitHub did not accept the post; 3 NOT "
     + "POSTED because the token file is absent -- 'not yet', never a success and never a silent skip. A "

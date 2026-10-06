@@ -1364,6 +1364,12 @@ reading, not by a pattern that will catch the next one automatically; a future i
 needs the same discipline; `git-population-vacuity.test.ts` catches new instances only within its
 specific, narrower slice.
 
+## Closed rows kept their claim labels, 2026-10-06 (#3866)
+
+**Measured 2026-10-06 with `gh issue list --state closed --label in-progress --limit 1000`: 270 closed rows carried `in-progress`/`started`/`session:*`** (264 when #3866 was filed, six more closed while it was built). A one-off stripped those three labels from every closed row whose `session:<name>` herdr (`herdr agent list`) does not list: 245 edits, 0 failures, plus #3724 and #3867, whose holders ended while it ran. **Read back, the count is 26, not 0, and each remainder is a holder still listed:** 24 `session:orchestrator`, `session:ceo` on #3164, and `session:worker-3868`, which closed while this ran and whose holder herdr still lists. `answer:*` and `was-ready` were left alone, as `labelsToStrip` leaves them.
+
+**The close path should NOT carry the rest; a periodic read in the gate should (filed as #3883).** `labelsToStrip`/`stripClaimLabels` already strip in the same act as a MERGE-driven close, and `close-rows-sweep.mjs` backstops it by walking merged PRs, so a row closed any other way (by hand, as not planned, or by a `Closes` GitHub resolved with `a11ign-ci` as actor) is in neither list; and the live-holder test cannot be made at a hand close. The platform for a recurring question is `work-gate.mjs` (`.claude/rules/org-routing-and-timers.md`), not a new cron or sweep. *Not established:* how many of the 178 PR-closed rows were closed by the strip-carrying path, since the timelines of only a handful were read.
+
 ## How an item leaves this page
 
 **CORRECTED 2026-09-06 — the rule below said "delete" while 51 closed rows sat here, struck through and
