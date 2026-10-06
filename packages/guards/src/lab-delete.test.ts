@@ -283,7 +283,7 @@ test("lab is taken as a pinned tag of a11ign/lab, laid by build and prepare, and
   const { manifest, scripts, gitignore } = pinInputs(REPO_ROOT);
   assert.deepEqual(pinRefusals({ manifest, scripts, gitignore }), []);
   // The parts to lay are what the rest of the tree reads by path, so a part dropped from the declaration is a read that stops resolving.
-  assert.deepEqual([...(manifest.pinned?.lab.lays ?? [])].sort(), ["baselines", "rule-ownership.json", "scripts", "src"]);
+  assert.deepEqual([...(manifest.pinned?.lab.lays ?? [])].sort(), ["CLAUDE.md", "baselines", "rule-ownership.json", "scripts", "src"]);
 });
 
 test("POSITIVE CONTROL: a branch for a tag, a missing layer, a layer a deploy would demand a pin for, a build that does not lay it and an unignored laid copy are each REFUSED", () => {

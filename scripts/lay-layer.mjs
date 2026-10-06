@@ -17,7 +17,7 @@
 // to read and the pin is the `tag` field of its own declaration in `layers.json`: still ONE place, and still a tag, never a branch. It is declared
 // under `pinned`, not `layers`: `layers` are the ones a guest and a lab job must hold a pinned checkout of, and nothing on a worker runs the lab. A declaration
 // with a `tag` is never answered from the lockfile, and a declaration whose tag is not a `v<semver>` is REFUSED (a branch name moves under a
-// checkout that did not touch it). `lays` names what to lay when it is more than `src/`: `lab`'s root scripts, its baselines and `rule-ownership.json`
+// checkout that did not touch it). `lays` names what to lay when it is more than `src/`: `lab`'s root scripts, its baselines, `rule-ownership.json` and `CLAUDE.md`
 // are read by path from the rest of the tree.
 //
 // THE SOURCE IS LAID, NOT THE PACKAGE: `src/` (less its own tests) and nothing that names it a package (`package.json`, `tsconfig.json`, the build config). Every walker
