@@ -65,6 +65,12 @@
  * against `origin/main`, and `staleCheckoutVerdict` refuses on any difference. NOT all of `packages/control/`: 192
  * first-parent merges touched that in 30 days, the closure 7, and a refusal on the former would idle the timer most days.
  *
+ * THE CLOSURE REACHES INTO A LAYER THIS REPOSITORY DOES NOT TRACK (#3845). The files of `packages/worker-fleet` (the wake
+ * proof's and the busy check's readers) are laid from `a11ign/screenreader-fleet` (#3504), so `git` has no opinion of them
+ * and the comparison above refused on `main` itself for hours. Those files are held to the layer's PIN instead: the tag
+ * `origin/main`'s lockfile names, which the laid tree's `.layer-ref` must equal (`judgeLaidLayer`). Same tag or refusal, naming
+ * the layer; a layer that cannot be read is `cannot-tell`.
+ *
  * It fails CLOSED, the only direction auto-off may err in: a failed fetch, an unresolvable `origin/main`, an errored
  * diff or an empty closure each refuse (`CANNOT_TELL` is never `identical`). The fetch moves only the remote-tracking
  * ref, never the working tree, so it cannot race a running play; it is throttled to once a minute by a stamp in the
@@ -112,11 +118,12 @@
  * directly, positive and negative) so that the day a producer exists, only `main()` changes.
  */
 import { spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync, realpathSync } from "node:fs";
-import { posix } from "node:path";
+import { existsSync, readFileSync, writeFileSync, realpathSync } from "node:fs";
+import { join, posix } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { sandboxGitEnv } from "../../worker-fleet/src/git-safe-env.mjs";
 import { requestJson } from "../../worker-fleet/src/worker-http.mjs";
+import { layerDeclaration, layerOwning, layerPinTag } from "./layer-checkouts.mjs";
 import { refuseUnknownFlags } from "../../worker-fleet/src/cli-flags.mjs";
 import { inventoryHosts } from "./fleet-discover.mjs";
 import { inventoryPathFor } from "./control-plane-fleet.mjs";
@@ -526,18 +533,19 @@ const FETCH_TIMEOUT_MS = 20_000;
 
 /**
  * THE DECISION, PURE. `differing` is the repo-relative files whose content differs from `origin/main`, or `null`
- * when that could not be established (unresolvable `origin/main`, errored diff, empty closure): "could not tell" and
- * "identical" never share a value. `fetchOk` is whether `origin/main` is known to be at most `FETCH_THROTTLE_MS`
- * old. Only a fresh ref and an empty difference proceed.
+ * when that could not be established (unresolvable `origin/main`, errored diff, empty closure, a layer that cannot be
+ * read): "could not tell" and "identical" never share a value. `why` names what could not be read, when the caller
+ * knows. `fetchOk` is whether `origin/main` is known to be at most `FETCH_THROTTLE_MS` old. Only a fresh ref and an
+ * empty difference proceed.
  *
- * @param {{ differing: string[] | null, fetchOk: boolean }} input
+ * @param {{ differing: string[] | null, fetchOk: boolean, why?: string }} input
  * @returns {{ action: "proceed" } | { action: "refuse", reason: "fetch-failed" | "cannot-tell" | "stale-checkout",
  *   detail: string }}
  */
-export function staleCheckoutVerdict({ differing, fetchOk }) {
+export function staleCheckoutVerdict({ differing, fetchOk, why }) {
   if (!fetchOk) return { action: "refuse", reason: "fetch-failed", detail: "`git fetch origin main` did not succeed" };
   if (differing === null) {
-    return { action: "refuse", reason: "cannot-tell", detail: "origin/main could not be compared with the files that run" };
+    return { action: "refuse", reason: "cannot-tell", detail: why ?? "origin/main could not be compared with the files that run" };
   }
   if (differing.length) {
     return { action: "refuse", reason: "stale-checkout",
@@ -564,27 +572,86 @@ function filesDifferingFromMain(paths, git) {
 }
 
 /**
+ * @typedef {{ name: string, dir: string, path: string, tag: string }} LayerAtItsPin a separate layer, where this host holds it, and the
+ *   tag `origin/main`'s lockfile pins it at
+ * @typedef {(layer: LayerAtItsPin) => { differing: string[] } | { cannotTell: string }} JudgeLayer
+ */
+
+/**
+ * A LAYER'S FILES ARE JUDGED AGAINST ITS PIN, NOT AGAINST `origin/main` (#3845). `packages/worker-fleet` is laid from
+ * `a11ign/screenreader-fleet` and tracked by no ref here (#3504), so `git ls-files` lists none of it and every checkout, `main`
+ * itself included, read as six files differing: the timer refused every tick for hours. Dropping those files from the
+ * comparison would blind it to the wake proof and the busy check, which live in them (#3275). What `main` says about a layer is the
+ * release its lockfile pins, so that is what the laid tree is held to: same tag or refusal, and a layer that cannot be read
+ * is CANNOT_TELL, never "same". The laid copy is the tag's `src/` and nothing else (`scripts/lay-layer.mjs`), so equal tags
+ * are equal files.
+ *
+ * Only the laid shape (`.layer-ref` beside `src/`) is judged: a clone at the layer's path holds the layer repository's own
+ * layout (`packages/worker-fleet/src` under it), which `../../worker-fleet/src/` cannot import from, so it is not a tree that runs.
+ *
+ * @type {JudgeLayer}
+ */
+export function judgeLaidLayer({ name, dir, path, tag }) {
+  const refFile = join(dir, ".layer-ref");
+  if (existsSync(join(dir, ".git")) || !existsSync(refFile) || !existsSync(join(dir, "src"))) {
+    return { cannotTell: `layer ${name} at ${path} is not a laid tree (\`.layer-ref\` beside \`src/\`, no \`.git\`): run \`node scripts/lay-layer.mjs ${name}\`` };
+  }
+  const laid = readFileSync(refFile, "utf8").trim();
+  return { differing: laid === tag ? [] : [`${path} (layer ${name} is laid at ${laid}, main pins ${tag})`] };
+}
+
+/**
+ * The comparison with `origin/main`: the core's files by content, each separate layer's files by its pin.
+ *
+ * @param {{ paths: string[], git: Git, judgeLayer: JudgeLayer }} input
+ * @returns {{ differing: string[] | null, why?: string }}
+ */
+function compareWithMain({ paths, git, judgeLayer }) {
+  /** @type {Map<string, string[]>} */
+  const ofLayer = new Map();
+  const ofCore = paths.filter((path) => {
+    const layer = layerOwning(path);
+    if (layer !== null) ofLayer.set(layer, [...(ofLayer.get(layer) ?? []), path]);
+    return layer === null;
+  });
+  const differing = filesDifferingFromMain(ofCore, git);
+  if (differing === null || ofLayer.size === 0) return { differing };
+  const lockfile = git(["show", "origin/main:pnpm-lock.yaml"]);
+  if (lockfile.status !== 0) return { differing: null, why: "origin/main's pnpm-lock.yaml, which pins the layers, could not be read" };
+  for (const name of ofLayer.keys()) {
+    const pin = layerPinTag(lockfile.stdout, name);
+    if ("refusal" in pin) return { differing: null, why: `layer ${name} has no pin on main: ${pin.refusal}` };
+    const { path, dir } = layerDeclaration(name);
+    const judged = judgeLayer({ name, dir, path, tag: pin.tag });
+    if ("cannotTell" in judged) return { differing: null, why: judged.cannotTell };
+    differing.push(...judged.differing);
+  }
+  return { differing: differing.sort() };
+}
+
+/**
  * Is the checkout this program runs from the same, where it matters, as `origin/main`?
  *
- * @param {{ now: number, fetchedAt: number | null, git: Git, readSource: (path: string) => string }} where
+ * @param {{ now: number, fetchedAt: number | null, git: Git, readSource: (path: string) => string, judgeLayer?: JudgeLayer }} where
  * @returns {{ verdict: ReturnType<typeof staleCheckoutVerdict>, fetchedAt: number | null }}
  */
-export function checkAgainstMain({ now, fetchedAt, git, readSource }) {
+export function checkAgainstMain({ now, fetchedAt, git, readSource, judgeLayer = judgeLaidLayer }) {
   // A stamp from the future is a clock fault, not a fresh fetch.
   const fresh = fetchedAt !== null && fetchedAt <= now && now - fetchedAt < FETCH_THROTTLE_MS;
   const fetchOk = fresh || git(["fetch", "--quiet", "origin", "+refs/heads/main:refs/remotes/origin/main"]).status === 0;
   const stamp = fetchOk && !fresh ? now : fetchedAt;
-  let differing = null;
+  /** @type {{ differing: string[] | null, why?: string }} */
+  let compared = { differing: null };
   if (fetchOk) {
     try {
       const closure = importClosure(THIS_FILE, readSource);
       // This file imports plenty; a closure of just itself means the walk found nothing, which is not "no differences".
-      differing = closure.length > 1 ? filesDifferingFromMain([...closure, ...RUN_BESIDE_THE_CODE], git) : null;
+      if (closure.length > 1) compared = compareWithMain({ paths: [...closure, ...RUN_BESIDE_THE_CODE], git, judgeLayer });
     } catch {
-      differing = null;
+      compared = { differing: null };
     }
   }
-  return { verdict: staleCheckoutVerdict({ differing, fetchOk }), fetchedAt: stamp };
+  return { verdict: staleCheckoutVerdict({ ...compared, fetchOk }), fetchedAt: stamp };
 }
 
 /** @type {Git} */

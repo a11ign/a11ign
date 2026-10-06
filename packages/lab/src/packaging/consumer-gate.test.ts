@@ -361,6 +361,52 @@ test("#3788: check-pin asks whether the CONTENT is stale, not whether a path tha
   assert.match(checkPinBlock, /pnpm install --frozen-lockfile/, "--check imports the workspace, so it must be installed first");
 });
 
+// --- #3828: `--check` imports repo-identity.mjs, which needs $AGENT_ORG_TOOL, and only the resolver sets it on a runner ---
+
+const CHECK_PIN_RESOLVER = /node scripts\/agent-org-newest-tag\.mjs --dest="\$RUNNER_TEMP\/agent-org"/;
+const CHECK_PIN_CHECK = /node scripts\/generate-consumer-gate\.mjs --check/;
+
+function checkPinBlockOf(workflow: string): string {
+  return workflow.slice(workflow.indexOf("  check-pin:"), workflow.indexOf("  a11y:"));
+}
+
+/** The index of the first step of `block` whose text matches, or -1: `-1` is "no such step", never "first". */
+function stepIndexMatching(block: string, pattern: RegExp): number {
+  return block.split(/^ {6}- /m).findIndex((step) => pattern.test(step));
+}
+
+/** Both orderings are answered by this one question, so the real job and the mutant are judged by the same code. */
+function resolverRunsBeforeCheck(block: string): boolean {
+  const resolver = stepIndexMatching(block, CHECK_PIN_RESOLVER);
+  const check = stepIndexMatching(block, CHECK_PIN_CHECK);
+  return resolver !== -1 && check !== -1 && resolver < check;
+}
+
+const GENERATED_JOBS = `jobs:\n  a11y:\n    runs-on: windows-2022\n    steps:\n${PINNED_STEP}`;
+
+test("#3828: the generated check-pin job runs the tool resolver BEFORE the step that imports repo-identity.mjs", () => {
+  const block = checkPinBlockOf(buildConsumerGateWorkflow(GENERATED_JOBS));
+  assert.ok(resolverRunsBeforeCheck(block), "AGENT_ORG_TOOL must be exported by an earlier step than `--check`");
+});
+
+test("#3828 CONTROL: the ordering question answers NO for a job with the resolver missing, and for one with it AFTER", () => {
+  const block = checkPinBlockOf(buildConsumerGateWorkflow(GENERATED_JOBS));
+  const resolverStep = block.split(/^ {6}- /m).find((step) => CHECK_PIN_RESOLVER.test(step));
+  assert.ok(resolverStep, "the real job has a resolver step to remove, or this control proves nothing");
+  const withoutResolver = block.replace(`      - ${resolverStep}`, "");
+  assert.ok(!CHECK_PIN_RESOLVER.test(withoutResolver), "the mutant really has no resolver");
+  assert.ok(!resolverRunsBeforeCheck(withoutResolver), "no resolver: the job fails on a runner");
+  const resolverLast = `${withoutResolver.trimEnd()}\n      - ${resolverStep}`;
+  assert.ok(!resolverRunsBeforeCheck(resolverLast), "resolver after `--check`: too late to help it");
+});
+
+test("#3828: `--check` is not wrapped in a message that claims a mismatch the run did not measure", () => {
+  const block = checkPinBlockOf(buildConsumerGateWorkflow(GENERATED_JOBS));
+  assert.match(block, /^ {8}run: node scripts\/generate-consumer-gate\.mjs --check$/m,
+    "the step is the bare command, so a crash reaches the log as itself and the step fails with its exit code");
+  assert.doesNotMatch(block, /does not match what README/, "only `--check`'s own STALE line may say the file is stale");
+});
+
 test("buildConsumerGateWorkflow: check-pin's refusal names the ref and how the run was triggered, "
   + "not just the two shas -- a bare mismatch cannot tell a stale pin from a dispatch against an "
   + "unexpected ref", () => {

@@ -434,13 +434,16 @@ function buildCheckPinJob(pinnedSha) {
     "      - uses: actions/setup-node@v7",
     "        with: { node-version: 22, cache: pnpm }",
     "      - run: pnpm install --frozen-lockfile",
+    // #3828: `--check` imports `repo-identity.mjs`, which reads the project declaration through the tool and so needs
+    // `$AGENT_ORG_TOOL`. On a runner nothing sets it but this step (the other workflows run it for the same reason), so
+    // without it the import died with ERR_MODULE_NOT_FOUND on a host path, in the last two release runs.
+    "      - name: The tool at the newest release tag, cloned for this run, so `--check` can read the project declaration",
+    '        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"',
+    // #3828: NO `if ! ... ; then echo "does not match"` AROUND `--check`. That wrapper turned every non-zero exit, a
+    // crash at import included, into a claim about the file that nothing had measured, and sent the reader to
+    // regenerate, which cannot help. `--check` prints its own `STALE` line when it HAS measured a mismatch.
     "      - name: Refuse a file that no longer matches what README.md's documented workflow produces",
-    "        run: |",
-    "          if ! node scripts/generate-consumer-gate.mjs --check; then",
-    `            echo "::error::consumer-gate.yml (pinned to ${pinnedSha}) does not match what README.md's Quickstart fence produces"`,
-    '            echo "::error::regenerate (node scripts/generate-consumer-gate.mjs) and dispatch again"',
-    "            exit 1",
-    "          fi",
+    "        run: node scripts/generate-consumer-gate.mjs --check",
     "",
     "",
   ].join("\n");

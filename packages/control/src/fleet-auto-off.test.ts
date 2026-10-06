@@ -21,11 +21,13 @@ import { captureTimes, readCapturesState, writeCapturesState, withFileLock, read
 import { sandboxGitEnv } from "../../worker-fleet/src/git-safe-env.mjs";
 import { DEFAULT_PROOF_PATH, PROOF_WINDOW_MS } from "./fleet-wake.mjs";
 import { CONTROL_PLANE_CHECKOUT_PATH } from "./control-plane-checkout.mjs";
+import { layerDeclaration, layerOwning, layerPinTag } from "./layer-checkouts.mjs";
+import { layingPlan } from "../../../scripts/lay-layer.mjs";
 import {
   IDLE_THRESHOLD_MS, PROBE_TIMEOUT_MS, POLL_INTERVAL_MS,
   hasWakeableMac, probeIdle, advance, advanceShutdownRequested, autoOffDecision,
   readState, writeState, dispatchShutdown, reportLine, tick, ledgerLine, DEFAULT_STATE_PATH,
-  importClosure, staleCheckoutVerdict, checkAgainstMain, FETCH_THROTTLE_MS,
+  importClosure, staleCheckoutVerdict, checkAgainstMain, judgeLaidLayer, FETCH_THROTTLE_MS,
   LAPSE_WARNING_MS, proofStanding, renewalFooter, renderReport, readPlaysInFlight, LAUNCHABLE_PLAYBOOK_NAMES,
 } from "./fleet-auto-off.mjs";
 
@@ -798,11 +800,13 @@ test("#3275 importClosure on the real program: every file it names exists, and t
 
 type GitCall = string[];
 /** A scripted `git`: records every call, answers `fetch` with `fetchStatus`, `diff` with `diffOut`, `ls-files` with all paths. */
-function scriptedGit(opts: { fetchStatus?: number; diffStatus?: number; diffOut?: string; tracked?: (paths: string[]) => string[] }) {
+function scriptedGit(opts: { fetchStatus?: number; diffStatus?: number; diffOut?: string; tracked?: (paths: string[]) => string[]; lockfile?: string }) {
   const calls: GitCall[] = [];
   const git = (args: string[]) => {
     calls.push(args);
     if (args[0] === "fetch") return { status: opts.fetchStatus ?? 0, stdout: "", stderr: "" };
+    // `git show origin/main:pnpm-lock.yaml`, which pins the layers: absent unless the test gives one.
+    if (args[0] === "show") return opts.lockfile === undefined ? { status: 128, stdout: "", stderr: "" } : { status: 0, stdout: opts.lockfile, stderr: "" };
     const paths = args.slice(args.indexOf("--") + 1);
     if (args[0] === "diff") return { status: opts.diffStatus ?? 0, stdout: opts.diffOut ?? "", stderr: "" };
     return { status: 0, stdout: (opts.tracked ? opts.tracked(paths) : paths).join("\n"), stderr: "" };
@@ -829,6 +833,120 @@ test("#3275 checkAgainstMain: a file the checkout does not track counts as diffe
   const { verdict } = checkAgainstMain({ now: 1, fetchedAt: null, git: git.git, readSource: fakeSource });
   assert.equal(verdict.action, "refuse");
   assert.match((verdict as { detail: string }).detail, /sleep\.yml/);
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// #3845: the closure reaches into `packages/worker-fleet`, which this repository does not track. Its files are held to
+// the layer's PIN (the tag main's lockfile names), not to `git ls-files`, which listed none of them and refused on main.
+// ---------------------------------------------------------------------------------------------------------
+
+const LAYER = "screenreader-fleet";
+const LAYER_PATH = "packages/worker-fleet";
+const FLEET_FILE = `${LAYER_PATH}/src/worker-http.mjs`;
+const TAG = `@a11ign/${LAYER}@0.5.1`;
+const lockfileAt = (version: string) => `importers:\n\n  .:\n    dependencies:\n      '@a11ign/${LAYER}':\n        specifier: ^0.5.1\n        version: ${version}(@a11ign/scorer@packages+scorer)\n`;
+/** The program as it really is: it imports a file of the layer, which is what makes the layer part of the comparison. */
+const sourceWithLayer = (path: string) => (path === THIS ? `import "./other.mjs";\nimport "../../worker-fleet/src/worker-http.mjs";\n` : "");
+const laidAt = (tag: string) => ({ differing: tag === TAG ? [] : [`${LAYER_PATH} (layer ${LAYER} is laid at ${tag}, main pins ${TAG})`] });
+
+test("#3845 layerPinTag reads the lockfile as scripts/lay-layer.mjs does, on the REAL lockfile, CRLF and the refusals", () => {
+  const real = readFileSync(join(REPO, "pnpm-lock.yaml"), "utf8");
+  const manifest = JSON.parse(readFileSync(join(REPO, "packages/control/layers.json"), "utf8"));
+  for (const [text, label] of [[real, "the real lockfile"], [real.replace(/\n/g, "\r\n"), "the same with CRLF"]]) {
+    const ours = layerPinTag(text, LAYER) as { tag: string };
+    const theirs = layingPlan(manifest, text, LAYER) as { tag: string };
+    assert.match(ours.tag, /^@a11ign\/screenreader-fleet@\d+\.\d+\.\d+$/, `${label}: positive control, a tag was found`);
+    assert.equal(ours.tag, theirs.tag, `${label}: control and the script that lays the layer name one build`);
+  }
+  assert.deepEqual(layerPinTag(lockfileAt("0.5.1"), LAYER), { tag: TAG }, "a peer-suffixed version is cut at the parenthesis");
+  assert.match((layerPinTag(lockfileAt("link:packages/x").replace("(@a11ign/scorer@packages+scorer)", ""), LAYER) as { refusal: string }).refusal, /not a registry release/);
+  assert.match((layerPinTag("importers: {}\n", LAYER) as { refusal: string }).refusal, /no importer entry/);
+  assert.match((layerPinTag(lockfileAt("0.5.1"), "nvda-worker") as { refusal: string }).refusal, /no importer entry/, "a layer the lockfile does not pin is refused, not defaulted");
+});
+
+test("#3845 layerOwning: a file under a separate layer's path is the layer's, the core's own files are not", () => {
+  assert.equal(layerOwning(FLEET_FILE), LAYER);
+  assert.equal(layerOwning(LAYER_PATH), LAYER);
+  assert.equal(layerOwning("packages/worker-fleet-extra/src/a.mjs"), null, "a sibling that shares a prefix is not inside the layer");
+  assert.equal(layerOwning(THIS), null);
+  assert.equal(layerDeclaration(LAYER).path, LAYER_PATH);
+});
+
+test("#3845 checkAgainstMain: the layer's files go to its pin and NEVER to git's diff or ls-files", () => {
+  const git = scriptedGit({ lockfile: lockfileAt("0.5.1") });
+  const judged: unknown[] = [];
+  const judgeLayer = (layer: { name: string; tag: string }) => { judged.push(layer); return laidAt(TAG); };
+  const { verdict } = checkAgainstMain({ now: 1, fetchedAt: null, git: git.git, readSource: sourceWithLayer, judgeLayer });
+  assert.deepEqual(verdict, { action: "proceed" }, "a layer laid at its pin proceeds: the defect, fixed");
+  assert.equal(judged.length, 1, "positive control: the layer WAS judged");
+  assert.equal((judged[0] as { tag: string }).tag, TAG, "at the tag main's lockfile names");
+  for (const call of git.calls.filter((c) => c[0] === "diff" || c[0] === "ls-files")) {
+    assert.ok(!call.includes(FLEET_FILE), `git ${call[0]} was asked about a file it cannot track`);
+    assert.ok(call.includes("packages/control/src/other.mjs"), "and the core's files still are compared");
+  }
+  assert.ok(git.calls.some((c) => c[0] === "show" && c[1] === "origin/main:pnpm-lock.yaml"), "the pin is main's, not the working tree's");
+});
+
+test("#3845 checkAgainstMain: a layer laid at another tag refuses, NAMING the layer; a core difference is still reported beside it", () => {
+  const git = scriptedGit({ lockfile: lockfileAt("0.5.1"), diffOut: "packages/control/src/other.mjs\n" });
+  const judgeLayer = () => laidAt("@a11ign/screenreader-fleet@0.4.0");
+  const { verdict } = checkAgainstMain({ now: 1, fetchedAt: null, git: git.git, readSource: sourceWithLayer, judgeLayer });
+  assert.deepEqual(verdict, { action: "refuse", reason: "stale-checkout",
+    detail: `2 files differ: packages/control/src/other.mjs, ${LAYER_PATH} (layer ${LAYER} is laid at @a11ign/screenreader-fleet@0.4.0, main pins ${TAG})` });
+});
+
+test("#3845 checkAgainstMain: a layer that cannot be read, or has no pin on main, is CANNOT_TELL and says which", () => {
+  const readSource = sourceWithLayer;
+  const proceeds = () => laidAt(TAG);
+  const noLockfile = checkAgainstMain({ now: 1, fetchedAt: null, git: scriptedGit({}).git, readSource, judgeLayer: proceeds }).verdict;
+  assert.deepEqual([(noLockfile as { reason: string }).reason, (noLockfile as { detail: string }).detail],
+    ["cannot-tell", "origin/main's pnpm-lock.yaml, which pins the layers, could not be read"]);
+
+  const unpinned = checkAgainstMain({ now: 1, fetchedAt: null, git: scriptedGit({ lockfile: "importers: {}\n" }).git, readSource, judgeLayer: proceeds }).verdict;
+  assert.equal((unpinned as { reason: string }).reason, "cannot-tell");
+  assert.match((unpinned as { detail: string }).detail, new RegExp(`layer ${LAYER} has no pin on main`));
+
+  const unreadable = checkAgainstMain({ now: 1, fetchedAt: null, git: scriptedGit({ lockfile: lockfileAt("0.5.1") }).git, readSource,
+    judgeLayer: () => ({ cannotTell: `layer ${LAYER} at ${LAYER_PATH} is not a laid tree` }) }).verdict;
+  assert.deepEqual(unreadable, { action: "refuse", reason: "cannot-tell", detail: `layer ${LAYER} at ${LAYER_PATH} is not a laid tree` });
+});
+
+test("#3845 judgeLaidLayer on real directories: laid at the pin passes; another tag, no marker, a marker without src/, and a clone do not", () => {
+  const root = mkdtempSync(join(tmpdir(), "auto-off-3845-"));
+  const layerAt = (name: string, make: (dir: string) => void) => {
+    const dir = join(root, name);
+    mkdirSync(dir, { recursive: true });
+    make(dir);
+    return judgeLaidLayer({ name: LAYER, dir, path: LAYER_PATH, tag: TAG });
+  };
+  const laid = (tag: string) => (dir: string) => { mkdirSync(join(dir, "src")); writeFileSync(join(dir, ".layer-ref"), `${tag}\n`); };
+  try {
+    assert.deepEqual(layerAt("at-pin", laid(TAG)), { differing: [] });
+    const behind = layerAt("behind", laid("@a11ign/screenreader-fleet@0.4.0")) as { differing: string[] };
+    assert.equal(behind.differing.length, 1);
+    assert.match(behind.differing[0], new RegExp(`${LAYER_PATH}.*${LAYER}.*0\\.4\\.0.*${TAG}`), "names the layer, what is laid and what main pins");
+    for (const [name, make] of [
+      ["empty", () => {}],
+      ["marker-only", (dir: string) => writeFileSync(join(dir, ".layer-ref"), `${TAG}\n`)],
+      ["src-only", (dir: string) => mkdirSync(join(dir, "src"))],
+      ["clone", (dir: string) => { laid(TAG)(dir); mkdirSync(join(dir, ".git")); }],
+    ] as [string, (dir: string) => void][]) {
+      const judged = layerAt(name, make);
+      assert.ok("cannotTell" in judged, `${name}: could not be read, so it must not read as the pin`);
+      assert.match((judged as { cannotTell: string }).cannotTell, /node scripts\/lay-layer\.mjs screenreader-fleet/, `${name}: names the remedy`);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("#3845 the REAL checkout: the laid layer is at the tag main's lockfile pins, so the guard no longer refuses a current tree", () => {
+  const pin = layerPinTag(readFileSync(join(REPO, "pnpm-lock.yaml"), "utf8"), LAYER) as { tag: string };
+  const { path, dir } = layerDeclaration(LAYER);
+  const judged = judgeLaidLayer({ name: LAYER, dir, path, tag: pin.tag });
+  assert.deepEqual(judged, { differing: [] }, "the layer this tree holds is the one its own lockfile pins (the install lays it: `prepare`)");
+  const closure = importClosure(THIS, (file) => readFileSync(join(REPO, file), "utf8"));
+  assert.ok(closure.some((file) => layerOwning(file) === LAYER), "positive control: the real program still imports the layer, so the judgment above is the one that matters");
 });
 
 test("#3275 checkAgainstMain: a failed fetch, an unresolvable origin/main and an empty closure each REFUSE", () => {

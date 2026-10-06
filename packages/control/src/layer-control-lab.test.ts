@@ -253,8 +253,9 @@ function laidFixture() {
       writeFileSync(join(made.layerDir, name), text);
     }
   };
-  const play = (extra: string[]) => playLabFile({ file: "tasks/lab-layer-checkouts.yml", manifest: SEPARATE, labDir: join(made.root, "core"), extra, env });
-  return { ...made, lay, play };
+  const playOn = (file: string, extra: string[]) => playLabFile({ file, manifest: SEPARATE, labDir: join(made.root, "core"), extra, env });
+  const play = (extra: string[]) => playOn("tasks/lab-layer-checkouts.yml", extra);
+  return { ...made, lay, play, playOn };
 }
 
 test("a layer the lab holds laid is ACCEPTED at the commit its tag names, annotated or lightweight, and nothing is moved", (t) => {
@@ -347,6 +348,262 @@ test("the guest accepts a LAID layer, leaves it alone, and still refuses the cor
   assert.notEqual(run().status, 0, "the marker alone, with no `src/`, is not a laid tree");
   rmSync(layerDir, { recursive: true });
   assert.equal(run().stdout.trim(), "cloned", "an ABSENT layer is still cloned: the control for the three above");
+});
+
+test("the lab's reset ACCEPTS a laid layer and never lets git walk up from it into the core, and still refuses the core's own tree", (t) => {
+  if (!ansibleAvailable) return t.skip("ansible-playbook is not on PATH here. Not run, and not counted as a pass.");
+  const { core, layerDir, lay, playOn } = laidFixture();
+  const reset = (extra: string[]) => playOn("tasks/lab-layer-reset.yml", extra);
+  // The core is DIRTY: a `git status` or `git checkout -- .` run in the laid directory would find the core's repository above it.
+  writeFileSync(join(core, "core-file"), "one\n");
+  git(core, "add", "core-file");
+  git(core, "commit", "-qm", "core file");
+  writeFileSync(join(core, "core-file"), "edited\n");
+  lay({ ".layer-ref": `${TAG_ANNOTATED}\n`, "src/index.mjs": "export {};\n" });
+  const report = reset([]);
+  assert.equal(report.status, 0, report.output);
+  assert.doesNotMatch(report.output, /is not a git checkout/);
+  const applied = reset(["-e", "apply=true"]);
+  assert.equal(applied.status, 0, applied.output);
+  assert.equal(readFileSync(join(core, "core-file"), "utf8"), "edited\n", "no git ran in the laid layer, so none reached the core's tree");
+  assert.equal(spawnSync("test", ["-e", join(layerDir, ".git")]).status, 1, "the laid tree is left laid");
+  // POSITIVE CONTROL: the refusals this file made before still stand, so the pass above is the shape being accepted, not the check gone.
+  rmSync(join(layerDir, ".layer-ref"));
+  const coreTree = reset([]);
+  assert.notEqual(coreTree.status, 0, "`src/` with no `.layer-ref` is the core's tree, laid by nobody");
+  assert.match(coreTree.output, /not a git checkout and not a laid tree/);
+  rmSync(join(layerDir, "src"), { recursive: true });
+  lay({ ".layer-ref": `${TAG_ANNOTATED}\n` });
+  assert.notEqual(reset([]).status, 0, "the marker alone, with no `src/`, is the wreckage of a rebase");
+  rmSync(layerDir, { recursive: true });
+  assert.notEqual(reset([]).status, 0, "an ABSENT layer still refuses");
+});
+
+// ---- the guest's OTHER readers of a laid layer: the role run, the origin rewrite, the post-install pin (#3826) --------
+// They run PowerShell through `ansible.windows.win_shell`, which cannot run here. A stand-in module of the same name runs the
+// task's own script under `pwsh`, so the REAL task text, loop, `register` and `assert` execute against a fixture, rather than
+// a script cut out of the file with the variables swapped in by hand.
+
+const WIN_SHELL_STUB = [
+  "from ansible.module_utils.basic import AnsibleModule", "import subprocess", "",
+  "def main():",
+  "    m = AnsibleModule(argument_spec=dict(_raw_params=dict(type='str'), chdir=dict(type='path')))",
+  "    p = subprocess.run(['pwsh', '-NoProfile', '-NonInteractive', '-Command', m.params['_raw_params']],",
+  "                       cwd=m.params['chdir'], capture_output=True, text=True)",
+  "    out = dict(rc=p.returncode, stdout=p.stdout, stdout_lines=p.stdout.splitlines(), stderr=p.stderr, changed=True)",
+  "    if p.returncode != 0:",
+  "        m.fail_json(msg='non-zero return code', **out)",
+  "    m.exit_json(**out)", "", "main()", "",
+].join("\n");
+
+function stubCollections() {
+  const modules = join(newDir(), "ansible_collections/ansible/windows/plugins/modules");
+  mkdirSync(modules, { recursive: true });
+  writeFileSync(join(modules, "win_shell.py"), WIN_SHELL_STUB);
+  return resolve(modules, "../../../../..");
+}
+
+/** The named tasks of a YAML task list, in the order given, dedented so they can stand alone in a tasks file. */
+function tasksNamed(file: string, ...names: string[]) {
+  const lines = readFileSync(resolve(ANSIBLE, file), "utf8").split("\n");
+  return names.map((name) => {
+    const start = lines.findIndex((line) => [`- name: ${name}`, `- name: "${name}"`].includes(line.trim()));
+    assert.ok(start >= 0, `${file} has no task named "${name}"`);
+    const indent = /^ */.exec(lines[start])![0].length;
+    const length = lines.slice(start + 1).findIndex((line) => line.trim() !== "" && /^ */.exec(line)![0].length <= indent && !line.trimStart().startsWith("#"));
+    return lines.slice(start, length < 0 ? undefined : start + 1 + length).map((line) => line.slice(indent)).join("\n");
+  }).join("\n\n");
+}
+
+/** Tasks that run `win_shell`, played on localhost against a fixture core checkout, with `layers.json` beside them as in the repository. */
+function playGuestTasks({ tasks, vars, extra = [], env }: { tasks: string, vars: object, extra?: string[], env?: Record<string, string> }) {
+  const play = newDir();
+  mkdirSync(join(play, "ansible/tasks"), { recursive: true });
+  copyFileSync(resolve(ANSIBLE, "tasks/read-layer-checkouts.yml"), join(play, "ansible/tasks/read-layer-checkouts.yml"));
+  writeFileSync(join(play, "layers.json"), JSON.stringify(SEPARATE));
+  writeFileSync(join(play, "ansible/tasks/under-test.yml"), `${tasks}\n`);
+  writeFileSync(join(play, "ansible/play.yml"), [
+    "- hosts: localhost", "  gather_facts: false", `  vars: ${JSON.stringify(vars)}`, "  tasks:",
+    "    - ansible.builtin.include_tasks: tasks/under-test.yml", "",
+  ].join("\n"));
+  // `-v` so a task's stdout (`laid`, `cloned`) is in the output the test reads.
+  const result = spawnSync("ansible-playbook", ["play.yml", "-v", ...extra], {
+    cwd: join(play, "ansible"), encoding: "utf8",
+    env: { ...sandboxGitEnv(), PATH: process.env.PATH, ANSIBLE_NOCOLOR: "1", ANSIBLE_LOCALHOST_WARNING: "False", HOME: play,
+      ANSIBLE_COLLECTIONS_PATH: stubCollections(), ...env },
+  });
+  return { status: result.status, output: `${result.stdout}${result.stderr}` };
+}
+
+const guestPlayable = ansibleAvailable && pwshAvailable;
+const SKIP_GUEST = "ansible-playbook and pwsh are both needed to run a guest's task here, and one is not on PATH. Not run, and not counted as a pass.";
+const LAID_FILES = { ".layer-ref": `${TAG_ANNOTATED}\n`, "src/index.mjs": "export {};\n" };
+const CORE_TREE = { "src/index.mjs": "the core's own copy\n" };
+
+/** A guest's fixture: the core checkout and a layer repository with annotated and lightweight tags, files laid at the layer's path on request. */
+function guestFixture() {
+  const made = laidFixture();
+  const layOnly = (files: Record<string, string>) => { rmSync(made.layerDir, { recursive: true, force: true }); made.lay(files); };
+  const cloneIt = () => { rmSync(made.layerDir, { recursive: true, force: true }); git(made.core, "clone", "-q", made.origin, made.layerDir); };
+  return { ...made, layOnly, cloneIt, vars: { a11y_repo_path: made.core, worker_repo_path: made.core } };
+}
+
+test("a role run LEAVES a laid layer alone and still refuses the core's copy of it (roles/worker/tasks/packages.yml)", (t) => {
+  if (!guestPlayable) return t.skip(SKIP_GUEST);
+  const { origin, layerDir, layOnly, cloneIt, vars } = guestFixture();
+  const tasks = tasksNamed("roles/worker/tasks/packages.yml", "Each layer that has its own repository exists on the box")
+    .replace("& 'C:\\Program Files\\MinGit\\cmd\\git.exe' clone", "& git clone");
+  assert.ok(tasks.includes("& git clone"), "the fixture stands in for the box's git, so the swap must have found the call");
+  const play = () => playGuestTasks({ tasks, vars: { ...vars, worker_layer_checkouts: [{ key: LAYER, value: { path: LAYER_PATH, remote: origin } }] } });
+  layOnly(LAID_FILES);
+  const laid = play();
+  assert.equal(laid.status, 0, laid.output);
+  assert.match(laid.output, /laid/);
+  assert.equal(spawnSync("test", ["-e", join(layerDir, ".git")]).status, 1, "nothing was cloned over it");
+  layOnly(CORE_TREE);
+  const coreTree = play();
+  assert.notEqual(coreTree.status, 0, "`src/` with no `.layer-ref` is the core's copy, not the layer");
+  assert.match(coreTree.output, /exists and is not a clone of/);
+  layOnly({ ".layer-ref": `${TAG_ANNOTATED}\n` });
+  assert.notEqual(play().status, 0, "the marker alone, with no `src/`, is not a laid tree");
+  cloneIt();
+  assert.match(play().output, /present/, "a clone is still `present`: the control for the laid case");
+  rmSync(layerDir, { recursive: true });
+  assert.match(play().output, /cloned/, "an ABSENT layer is still cloned");
+});
+
+/** The origin rewrite for the one named layer, at `address`, through the real task file. */
+const originRewrite = (vars: object, address: string) => ({
+  tasks: read("packages/control/ansible/tasks/layer-origins.yml"),
+  vars: { ...vars, new_layer_repo_urls: { [LAYER]: address } },
+});
+
+test("the origin rewrite leaves a laid layer alone, rewrites a clone's, and refuses the core's copy before git can reach the core", (t) => {
+  if (!guestPlayable) return t.skip(SKIP_GUEST);
+  const { origin, core, layerDir, layOnly, cloneIt, vars } = guestFixture();
+  git(core, "remote", "add", "origin", "https://example.test/the-core.git");
+  const coreOrigin = () => git(core, "remote", "get-url", "origin");
+  const rewrite = () => playGuestTasks(originRewrite(vars, origin));
+  layOnly(LAID_FILES);
+  const laid = rewrite();
+  assert.equal(laid.status, 0, laid.output);
+  assert.equal(coreOrigin(), "https://example.test/the-core.git", "the CORE's origin was not rewritten to the layer's address");
+  layOnly(CORE_TREE);
+  const coreTree = rewrite();
+  assert.notEqual(coreTree.status, 0, "`src/` with no `.layer-ref` is not the layer");
+  assert.match(coreTree.output, /neither a clone of fixture-layer nor a laid tree/);
+  assert.equal(coreOrigin(), "https://example.test/the-core.git");
+  layOnly({ ".layer-ref": `${TAG_ANNOTATED}\n` });
+  assert.notEqual(rewrite().status, 0, "the marker alone, with no `src/`, is not a laid tree");
+  rmSync(layerDir, { recursive: true });
+  assert.notEqual(rewrite().status, 0, "an ABSENT layer refuses too, and git is not asked");
+  // POSITIVE CONTROL, and the reason for all of it: set-url run in a directory with no `.git` of its own does not fail, it
+  // rewrites the repository above. Without the check, the laid cases above would have changed the core's origin.
+  layOnly(LAID_FILES);
+  git(layerDir, "remote", "set-url", "origin", origin);
+  assert.equal(coreOrigin(), origin, "git walked up from the laid directory and rewrote the core's origin");
+  git(core, "remote", "set-url", "origin", "https://example.test/the-core.git");
+  cloneIt();
+  git(layerDir, "remote", "set-url", "origin", "https://example.test/old-layer.git");
+  const cloned = rewrite();
+  assert.equal(cloned.status, 0, cloned.output);
+  assert.equal(git(layerDir, "remote", "get-url", "origin"), origin, "a clone's origin is rewritten, so the filter is not a skip that always fires");
+  assert.equal(coreOrigin(), "https://example.test/the-core.git");
+});
+
+const DEPLOY_AFTER_INSTALL = ["Read each layer's commit AFTER the install", "Each layer is ON its pin after the install, laid or cloned"];
+
+test("the deploy checks a laid layer against its pin AFTER the install, and refuses a laid tree at another tag, the core's copy, or a tag nobody holds", (t) => {
+  if (!guestPlayable) return t.skip(SKIP_GUEST);
+  const { origin, first, second, layerDir, layOnly, cloneIt, vars } = guestFixture();
+  const tasks = tasksNamed("deploy.yml", ...DEPLOY_AFTER_INSTALL);
+  const check = (pin: string) => playGuestTasks({ tasks, vars: { ...vars, inventory_hostname: "a11y-worker-fixture",
+    a11y_layer_checkouts: [{ key: LAYER, value: { path: LAYER_PATH, remote: origin } }], a11y_layer_commits: { [LAYER]: pin } } });
+  layOnly(LAID_FILES);
+  const atPin = check(first);
+  assert.equal(atPin.status, 0, atPin.output);
+  const wrongPin = check(second);
+  assert.notEqual(wrongPin.status, 0, "laid at 1.0.0 (the first commit), pinned to the second");
+  assert.match(wrongPin.output, new RegExp(`layer ${LAYER} is at '${first}' after the\\s+install, not ${second}`));
+  layOnly({ ".layer-ref": `${TAG_LIGHTWEIGHT}\n`, "src/index.mjs": "export {};\n" });
+  assert.equal(check(second).status, 0, "a lightweight tag names its commit directly");
+  layOnly({ ".layer-ref": `@a11ign/${LAYER}@9.9.9\n`, "src/index.mjs": "export {};\n" });
+  const noTag = check(first);
+  assert.notEqual(noTag.status, 0, "a tag the layer's repository does not hold names no commit");
+  assert.match(noTag.output, /at '' after the\s+install/);
+  layOnly({ ".layer-ref": "../../etc/passwd\n", "src/index.mjs": "export {};\n" });
+  assert.match(check(first).output, /does not hold a tag/);
+  layOnly(CORE_TREE);
+  const coreTree = check(first);
+  assert.notEqual(coreTree.status, 0, "`src/` with no `.layer-ref` is the core's copy: no pin can be read from it");
+  assert.match(coreTree.output, /neither a clone of fixture-layer nor a laid tree/);
+  cloneIt();
+  git(layerDir, "checkout", "-q", "--detach", first);
+  assert.equal(check(first).status, 0, "a layer still held as a clone is read at HEAD: the control for the laid cases");
+  assert.notEqual(check(second).status, 0);
+});
+
+test("the deploy's post-install read sits AFTER the install and BEFORE the worker restarts, and reads the same pin the merge asserted", () => {
+  const code = codeText(read("packages/control/ansible/deploy.yml"));
+  const order = [/- name: Install dependencies/, /- name: Read each layer's commit AFTER the install/, /- name: Restart the worker task/]
+    .map((marker) => code.search(marker));
+  assert.ok(order.every((at) => at >= 0), "a task this test names has moved");
+  assert.deepEqual(order, [...order].sort((a, b) => a - b), "install, then the post-install read, then the restart");
+  assert.match(code, /that: \(item\.stdout \| default\(''\) \| trim\) == a11y_layer_commits\[item\.item\.key\]/);
+});
+
+const LAB_AFTER_INSTALL = ["Read each layer's commit AFTER the install", "Each layer is ON its pin after the install, laid or cloned"];
+
+test("the lab's job checks a laid layer against its pin AFTER the install it ran, and refuses another tag, the core's copy, or a tag nobody holds", (t) => {
+  if (!ansibleAvailable) return t.skip("ansible-playbook is not on PATH here. Not run, and not counted as a pass.");
+  const { root, origin, first, second, layerDir, layOnly, cloneIt } = guestFixture();
+  const tasks = tasksNamed("tasks/run-job.yml", ...LAB_AFTER_INSTALL);
+  const check = ({ pin, moved = true, commits = {} }: { pin: string, moved?: boolean, commits?: object }) => playGuestTasks({ tasks, vars: {
+    lab_repo_path: join(root, "core"), lab_pull: { changed: moved }, layer_refs: { [LAYER]: pin }, lab_layer_commits: commits,
+    a11y_layer_checkouts: [{ key: LAYER, value: { path: LAYER_PATH, remote: origin } }] } });
+  layOnly(LAID_FILES);
+  const atPin = check({ pin: first });
+  assert.equal(atPin.status, 0, atPin.output);
+  const wrongPin = check({ pin: second });
+  assert.notEqual(wrongPin.status, 0, "laid at 1.0.0 (the first commit), the job named the second");
+  assert.match(wrongPin.output, new RegExp(`layer ${LAYER} is at '${first}' after the\\s+install, not ${second}`));
+  assert.notEqual(check({ pin: "main" }).status, 0, "a branch name cannot equal a commit a laid tree names");
+  layOnly({ ".layer-ref": `${TAG_LIGHTWEIGHT}\n`, "src/index.mjs": "export {};\n" });
+  assert.equal(check({ pin: second }).status, 0, "a lightweight tag names its commit directly");
+  layOnly({ ".layer-ref": `@a11ign/${LAYER}@9.9.9\n`, "src/index.mjs": "export {};\n" });
+  assert.match(check({ pin: first }).output, /at '' after the\s+install/, "a tag the layer's repository does not hold names no commit");
+  layOnly({ ".layer-ref": "../../etc/passwd\n", "src/index.mjs": "export {};\n" });
+  // `-v` echoes the command's argv, and the script's own messages are in it: these match the RENDERED text (a path, a tag), which is not.
+  assert.match(check({ pin: first }).output, /\.layer-ref does not hold a tag: \.\.\/\.\.\/etc\/passwd/);
+  // Each half of the tag's validation alone: `*` passes the `..` test and would be an `ls-remote` pattern matching every tag; `a..b` passes the pattern.
+  for (const tag of ["*", "a..b"]) {
+    layOnly({ ".layer-ref": `${tag}\n`, "src/index.mjs": "export {};\n" });
+    const odd = check({ pin: second });
+    assert.notEqual(odd.status, 0, `a .layer-ref holding ${tag} is not a tag`);
+    assert.match(odd.output, new RegExp(`\\.layer-ref does not hold a tag: ${tag.replace("*", "\\*").replaceAll(".", "\\.")}`));
+  }
+  layOnly(CORE_TREE);
+  const coreTree = check({ pin: first });
+  assert.notEqual(coreTree.status, 0, "`src/` with no `.layer-ref` is the core's copy: no pin can be read from it");
+  assert.match(coreTree.output, new RegExp(`${LAYER_PATH} is neither a clone nor a laid tree`));
+  cloneIt();
+  git(layerDir, "checkout", "-q", "--detach", first);
+  assert.equal(check({ pin: first, commits: { [LAYER]: first } }).status, 0, "a clone is read at HEAD against the commit it was moved to");
+  assert.notEqual(check({ pin: first, commits: { [LAYER]: second } }).status, 0);
+  layOnly(LAID_FILES);
+  assert.equal(check({ pin: second, moved: false }).status, 0, "no install ran, so `lab-layer-checkouts.yml` judged the tree that will run: nothing is read twice");
+});
+
+test("the lab's post-install read sits AFTER the install and BEFORE the build, gated on the install's own register", () => {
+  const code = codeText(read("packages/control/ansible/tasks/run-job.yml"));
+  const order = [/- name: "Install dependencies/, /- name: "Read each layer's commit AFTER the install"/, /- name: "Rebuild the compiled packages"/]
+    .map((marker) => code.search(marker));
+  assert.ok(order.every((at) => at >= 0), "a task this test names has moved");
+  assert.deepEqual(order, [...order].sort((a, b) => a - b), "install, then the post-install read, then the build");
+  for (const name of LAB_AFTER_INSTALL) {
+    const task = code.split("\n- name:").find((chunk) => chunk.startsWith(` "${name}"`))!;
+    assert.match(task, /when: lab_pull is defined and lab_pull is changed/, `${name}: gated as the install is`);
+  }
 });
 
 test("the guest's git moves loop over the clones only, and the clones are the layers its script did not report `laid`", () => {
