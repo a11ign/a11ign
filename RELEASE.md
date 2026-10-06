@@ -125,10 +125,20 @@ judgement only somebody who did not build it can make, and it is a **review on a
 reviews; **nothing waits on either, and nothing is typed.** What is retired is the rehearsal's being a manual gate on each release
 (ADR 0042 decision 1, [the ADR](docs/adr/0042-the-v1-rehearsal-splits-into-an-automated-outsider-job-and-a-weekly-review.md)).
 
-**What confirms a release now (#3131, ADR 0041).** A merge to `main` that carries a changeset makes
-`.github/workflows/release.yml` open the ONE version pull request; that pull request waits for the approving review `main`
-requires (#2022) and the merge queue like any other; **its merge is what publishes**, by OIDC with provenance. The review and
-the queue are the confirmation. A `workflow_dispatch` of `release.yml` is a dry run and never publishes.
+**What confirms a release now (#3717, ADR 0041; it was a version pull request, #3131).** A merge to `main` that carries a
+changeset makes `.github/workflows/release.yml` run its `guards` job (every check on WHAT is published, below) and then call
+`a11ign/toolchain`'s reusable `release-per-merge.yml`, **pinned by full sha**: it versions on a detached release commit,
+publishes by OIDC with provenance from the `npm-publish` environment, and tags the merge. **No version pull request exists,
+no branch is pushed, and `release.yml` holds no `A11IGN_BOT_TOKEN`:** the merge of the change that carries the changeset IS
+the release, and the review and the queue that merge already passed are the confirmation. The reusable workflow subtracts
+what release tags already consumed, so a merge that carries no unreleased changeset publishes nothing. **The `guards` job
+runs on the merged tree, not on the release commit,** because a guard cannot be a step inside a called workflow; the call
+`needs` it, so a guard that goes red stops the publish before the call starts. The packages that moved out of this
+repository are kept out of the publish by the #3126 hold, a `guards` step on a push; **`changeset publish` publishes every
+non-private package whose version the registry lacks, so a package still in the workspace and not named in the hold is
+published**. A `workflow_dispatch` of `release.yml` runs the guards and the provenance rehearsal and stops: it does not call
+the reusable workflow and never publishes. The daily token-reach probe that used to live in this file is
+`.github/workflows/token-reach.yml`.
 
 **What nobody reads on a publish: the fleet part of the gate.** The runner proves 5 of `release:gate`'s 13
 stages (`release:gate:ci`); the other eight need the Python venv or the corpus. **No person asserts them now, and no

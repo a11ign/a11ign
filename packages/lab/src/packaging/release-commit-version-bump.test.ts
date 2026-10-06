@@ -4,7 +4,7 @@
  * at `0.0.0`, so a second dispatch recomputed the identical already-published target version and
  * `changeset publish` silently no-op'd every already-shipped package.
  *
- * #3131: the script no longer pushes `main` (its required review refuses it). `release.yml`'s `version-pr` job runs it
+ * #3131: the script no longer pushes `main` (its required review refuses it). Until #3717 `release.yml`'s `version-pr` job ran it
  * right after `release:version`, and it force-pushes `VERSION_BRANCH`, from which the ONE version pull request is
  * opened. It writes NO changeset (#3161): `ci.yml`'s `changeset` job exempts that branch instead.
  * This file pins three things: the pure path-selection logic (`versionBumpPaths`), which
@@ -50,7 +50,6 @@ import { execFileSync } from "node:child_process";
 import { withGitSandbox, sandboxGitEnv } from "../../../../scripts/test-support/git-sandbox.ts";
 import type { GitSandbox } from "../../../../scripts/test-support/git-sandbox.ts";
 import { localImports } from "../../../guards/src/local-import-closure.mjs";
-import { parse as parseYaml } from "yaml";
 import { versionBumpPaths, VERSION_BRANCH } from "../../../../scripts/release-commit-version-bump.mjs";
 
 const REPO = fileURLToPath(new URL("../../../../", import.meta.url));
@@ -268,23 +267,22 @@ test("#3131: the version branch is FORCE-pushed, so a second run after main move
   });
 });
 
-test("#1824/#3131 THE WORKFLOW CALLS IT: in the version-pr job, after release:version, and NOT in the publishing job", () => {
-  const doc = parseYaml(WORKFLOW) as { jobs: Record<string, { steps?: { name?: string; run?: string }[]; if?: string }> };
-  const steps = doc.jobs["version-pr"]?.steps ?? [];
-  const version = steps.findIndex((step) => step.run === "pnpm run release:version");
-  const commit = steps.findIndex((step) => step.run === "node scripts/release-commit-version-bump.mjs");
-  assert.ok(version !== -1 && commit !== -1, "release.yml's version-pr job lost its release:version or commit step; re-read this test");
-  assert.ok(version < commit, "the commit must run AFTER release:version, or it commits nothing");
-  assert.match(doc.jobs["version-pr"].if ?? "", /mode == 'version-pr'/, "it runs only when a changeset is pending");
-  const inPublishing = (doc.jobs.release.steps ?? []).filter((step) => /release-commit-version-bump/.test(step.run ?? ""));
-  assert.deepEqual(inPublishing, [], "the publishing job must not commit a bump: it publishes a version already merged to main");
+// #3717: THE SCRIPT HAS NO CALLER. `release.yml` calls the reusable per-merge workflow, which versions on a detached release
+// commit and never writes a branch, so the version pull request this script fed is gone. The script and the tests above stay
+// until a row deletes them with the `ci.yml` exemption that named its branch; what is pinned here is that nothing runs it.
+test("#3717: release.yml no longer runs the version-bump script or opens a pull request from its branch; the old workflow did", () => {
+  const live = WORKFLOW.split("\n").filter((line) => !line.trim().startsWith("#")).join("\n");
+  const before = readFileSync(join(REPO, "scripts/fixtures/release-before-3717.yml"), "utf8");
+  assert.match(before, /node scripts\/release-commit-version-bump\.mjs/, "the control: the old workflow ran the script");
+  assert.match(before, new RegExp(`--head ${VERSION_BRANCH}`), "the control: the old workflow opened its pull request from the branch");
+  assert.doesNotMatch(live, /release-commit-version-bump/, "nothing in release.yml runs the script");
+  assert.doesNotMatch(live, new RegExp(VERSION_BRANCH), "nothing in release.yml names the version branch");
 });
 
 test("#3131: the script is told apart from its old self by what it pushes -- never `HEAD:main`", () => {
   const source = readFileSync(join(REPO, SCRIPT), "utf8");
   assert.doesNotMatch(source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, ""), /HEAD:main/);
   assert.equal(VERSION_BRANCH, "release/version-packages");
-  assert.match(WORKFLOW, new RegExp(`--head ${VERSION_BRANCH}`), "release.yml opens the pull request from the branch the script pushes");
 });
 
 // --- #3346: the commit goes through the REAL pre-commit hook, which refuses a 17-file version bump ---

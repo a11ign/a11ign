@@ -712,3 +712,27 @@ test("#2159/#3347: the versions claim is true of the set changesets versions, sp
       + "own exceptions is the same defect one step quieter");
   }
 });
+
+/**
+ * #3717: THE HEADER MUST NOT STILL DESCRIBE THE VERSION PULL REQUEST AS THE LIVE PATH. `release.yml` was rewritten as a caller of the
+ * per-merge workflow, and a header is the half a reader meets first: the old one said, in the present tense, that the file releases on
+ * the merge of a version pull request and opens one with the bot token. The phrasings below are the ones that header used, each matched
+ * by a real line of `scripts/fixtures/release-before-3717.yml`, so the tripwire is shown to notice what it looks for before it is trusted
+ * to find nothing in the live file (a marker that cannot recognise its own remedy, and its opposite, are both half a test).
+ */
+const STALE_VERSION_PR_CLAIMS: readonly RegExp[] = [
+  /RELEASES ON THE MERGE OF A VERSION PULL REQUEST/,
+  /opens or updates the ONE version pull/,
+  /`version-pr` opens/,
+  /VERSION PULL REQUEST'S MERGE made/,
+];
+
+test("#3717: the live header names no version pull request as the path, and every tripwire phrase is matched by the file it replaced", () => {
+  const before = read("scripts/fixtures/release-before-3717.yml");
+  const live = read(".github/workflows/release.yml");
+  for (const claim of STALE_VERSION_PR_CLAIMS) {
+    assert.match(before, claim, `POSITIVE CONTROL: today's workflow before the row says '${claim}', so the tripwire can notice it`);
+    assert.doesNotMatch(live, claim, `the live release.yml still says '${claim}', which was true only of the version pull request`);
+  }
+  assert.match(live, /release-per-merge\.yml/, "the header must name the workflow it calls, so a reader knows where the release itself is");
+});

@@ -116,9 +116,14 @@ test("#3161: the exemption does not disturb the dependency pull request's own se
   assert.equal(stepRuns({ headRef: "dependabot/npm_and_yarn/x", settled: "true" }), false);
 });
 
-test("#3161: the branch the queue half exempts is the one release.yml opens the version pull request from", () => {
+test("#3717: release.yml no longer opens the version pull request, so the exemption outlives its only opener", () => {
+  // The exemption in `ci.yml` was written for the pull request `release.yml` opened from this branch (#3161). The release is per-merge now and
+  // opens none, so the exemption serves only a version pull request already open when #3717 merged, and is the DELETION row's to remove with the
+  // script that pushed the branch. What this pins until then is the other direction: nothing re-opens one.
+  const before = readFileSync(join(REPO, "scripts/fixtures/release-before-3717.yml"), "utf8");
+  assert.match(before, new RegExp(`--head ${VERSION_BRANCH}\\b`), "POSITIVE CONTROL: the workflow before #3717 opened the version pull request from the exempted branch");
   const release = readFileSync(join(REPO, ".github/workflows/release.yml"), "utf8");
-  assert.match(release, new RegExp(`--head ${VERSION_BRANCH}\\b`), "release.yml opens the version pull request from a different branch");
+  assert.doesNotMatch(release, new RegExp(`--head ${VERSION_BRANCH}\\b|${VERSION_BRANCH}`), "release.yml names the version branch again");
 });
 
 test("#3161: the version commit carries no empty changeset -- the script no longer calls `changeset add --empty` or writes one", () => {
