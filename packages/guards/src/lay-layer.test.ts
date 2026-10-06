@@ -7,6 +7,7 @@
  *   2. WHAT IS LAID is `src/` without the layer's own tests and without anything that names it a package (a manifest or a tsconfig would make every
  *      walker over `packages/` treat the laid directory as one).
  *   3. IT IS IDEMPOTENT AND IT REPLACES: a directory laid at the same tag is left alone (no network on a second run), one laid at another tag is replaced.
+ *   4. IT REPLACES A GIT CLONE ONLY WHEN IT IS DISPOSABLE (#3836): a dirty tree or an unpushed commit is REFUSED, naming the path and which, and the work is still there.
  *
  * THE POSITIVE CONTROLS are the fixtures: a lockfile with a link, one with no entry, a manifest with no remote, and a second tag.
  */
@@ -16,6 +17,8 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, mkdtem
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { execFileSync } from "node:child_process";
+import { sandboxGitEnv } from "../../../scripts/test-support/git-sandbox.ts";
 import { withGitSandbox } from "../../../scripts/test-support/git-sandbox.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -146,6 +149,61 @@ test("#3505: lay puts down every part the declaration names, without tests, and 
       // A part the tag lacks: refused (a declaration that gained a part is not "already at" the tag), and the copy already there is still there.
       assert.throws(() => lay(root, { ...plan, lays: ["src", "baselines"] }), /holds no packages\/lab\/baselines/);
       assert.ok(existsSync(join(root, "packages/lab/scripts/run.mjs")), "the refusal came before the old copy was removed");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+/** What a host that ran `bootstrap-control-plane.sh` holds at the layer's path: a clone of the layer's repository, not a laid copy. */
+function cloneInto(sandbox: { dir: string }, root: string, path: string): { run(args: string[]): string } {
+  const target = join(root, path);
+  mkdirSync(dirname(target), { recursive: true });
+  execFileSync("git", ["clone", "--quiet", pathToFileURL(sandbox.dir).href, target], { env: sandboxGitEnv() });
+  const run = (args: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.invalid", ...args], { cwd: target, encoding: "utf8", env: sandboxGitEnv() });
+  return { run };
+}
+
+test("#3836: a git clone is replaced when it is disposable, and REFUSED naming the path and why when it holds work", () => {
+  withGitSandbox((sandbox) => {
+    layerRepository(sandbox, "0.3.0");
+    const root = mkdtempSync(join(tmpdir(), "lay-layer-root-"));
+    try {
+      const plan = { remote: pathToFileURL(sandbox.dir).href, tag: `${NAME}@0.3.0`, path: "packages/worker-fleet", lays: ["src"] };
+      const target = join(root, plan.path);
+      // The clone of the layer's repository holds the package at packages/worker-fleet inside itself, so its tracked file is one level down.
+      const clone = cloneInto(sandbox, root, plan.path);
+      const refused = (pattern: RegExp) => {
+        assert.throws(() => lay(root, plan), (error: Error) => error.message.includes(target) && pattern.test(error.message), String(pattern));
+        assert.ok(existsSync(join(target, ".git")), "the refusal came before the clone was removed");
+      };
+      // DIRTY: an edit to a tracked file, then an untracked one.
+      writeFileSync(join(target, "packages/worker-fleet/src/cli-flags.mjs"), "// mine\n");
+      refused(/uncommitted/);
+      clone.run(["checkout", "--", "."]);
+      writeFileSync(join(target, "notes.txt"), "mine\n");
+      refused(/uncommitted/);
+      rmSync(join(target, "notes.txt"));
+      // UNPUSHED: a commit on the checked-out branch that no remote ref holds, with the tree clean.
+      writeFileSync(join(target, "notes.txt"), "mine\n");
+      clone.run(["add", "notes.txt"]);
+      clone.run(["commit", "--quiet", "-m", "local only"]);
+      assert.equal(clone.run(["status", "--porcelain"]), "");
+      refused(/unpushed/);
+      // ... and on another local branch, which a replaced directory would lose as well.
+      clone.run(["reset", "--quiet", "--hard", "origin/HEAD"]);
+      clone.run(["branch", "wip", "HEAD"]);
+      clone.run(["checkout", "--quiet", "wip"]);
+      writeFileSync(join(target, "wip.txt"), "mine\n");
+      clone.run(["add", "wip.txt"]);
+      clone.run(["commit", "--quiet", "-m", "wip"]);
+      clone.run(["checkout", "--quiet", "-"]);
+      refused(/unpushed/);
+      // DISPOSABLE: nothing local that a remote ref does not hold. The laid copy replaces the clone, `.git` and all.
+      clone.run(["branch", "-D", "wip"]);
+      assert.equal(lay(root, plan), `laid ${plan.tag} at ${plan.path}`);
+      assert.ok(!existsSync(join(target, ".git")), "the clone is gone");
+      assert.deepEqual(walk(target), [REF_FILE, "src/cli-flags.mjs", "src/provisioning/stamp.ps1"]);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
