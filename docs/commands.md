@@ -15,6 +15,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node packages/guards/src/piped-exit-status-guard.mjs` — detect a piped command whose exit status was read from the wrong side of the pipe
 - `node packages/guards/src/test-memory-cap.mjs` — run a test runner under a per-process memory cap (systemd-run MemoryMax) and say what the cap did
 - `node packages/guards/src/tree-wide-guards.mjs` — every tracked *.test.ts file that DECLARES ITSELF a TREE-WIDE GUARD by importing and calling
+- `node scripts/agent-org-newest-tag.mjs` — resolve the newest stable release tag of agent-org and put that checkout where the CI steps below can run it
 - `node scripts/auth-artifact-scan.mjs` — prove no credential is in what a REAL run produced -- scans every text file under a path (markdown, comment, log, JSON, whatever the extension) for the values of two environment variables. Exit 0 clean, 1 a leak, 2 could not examine.
 - `node scripts/auth-leak-check.mjs` — prove a login's credential never reaches what a run writes (ADR 0038) -- drives a real capture on THIS machine's worker with a fake credential, then searches for it. Exit 0 clean, 1 a leak, 2 could not examine.
 - `node scripts/build-packages.mjs` — run tsc --build across every package under packages/ in dependency order
@@ -34,13 +35,13 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/history-secret-scan.mjs` — scan every blob reachable from every ref for internal addresses and secret-shaped strings
 - `node scripts/install-git-hooks.mjs` — point git at this repo's tracked hooks; run automatically by npm install via prepare
 - `node scripts/known-gaps-index.mjs` — regenerate docs/known-gaps.md's own index of open sections from its headings
+- `node scripts/lay-layer.mjs` — lay a layer's code at the path this repository's readers expect, from the release the lockfile pins (#3504)
 - `node scripts/manifest-repository-check.mjs` — refuse a publish whose manifests name a different repository than the run publishing them
 - `node scripts/npm-token-liveness.mjs` — say whether the first-publish npm token is still present after it should have been revoked
 - `node scripts/pnpm.mjs` — run pnpm with the arguments given, for a package script's chain on a box with no `pnpm` on PATH
 - `node scripts/prune-stale-workspace-scope.mjs` — remove a stale workspace-scope's node_modules symlinks a rename left behind
 - `node scripts/refuse-other-installers.mjs` — the root `preinstall`: refuses any installer that is not pnpm (#2897, row 10 of 10 of "Finish the move to pnpm")
 - `node scripts/registry-consumer-gate.mjs` — install what is PUBLISHED (a11ign from the registry) into an empty directory and refuse what a consumer could not run
-- `node scripts/release-commit-version-bump.mjs` — commit changeset version's manifest bump and consumed changesets onto the version branch, never main
 - `node scripts/release-gate-scope.mjs` — warn which release:gate stages release:gate:ci does not run, and how many
 - `node scripts/release-print-versions.mjs` — print the version each published package's manifest now holds
 - `node scripts/release-publish-rehearsal.mjs` — rehearse the release's pnpm-to-npm publish hand-off for every published package, publishing nothing

@@ -29,3 +29,19 @@ updates:
       - dependency-name: "@a11ign/judge"
       - dependency-name: "@a11ign/scorer"
       - dependency-name: "a11ign"
+  - package-ecosystem: github-actions
+    # #3775: `release.yml` calls `a11ign/toolchain`'s reusable `release-per-merge.yml` at a full commit sha, and nothing
+    # else moves that sha, so a fix to the shared workflow would never reach this repository. This ecosystem reads every
+    # `uses:` in `.github/workflows/`, so the same entry also keeps the `actions/*` pins current. `directory: /` is the
+    # one Dependabot documents for it: it reads `.github/workflows/` from there.
+    # WHAT IT REWRITES THE CALL TO: a sha, never a tag. `release-safety.test.ts` requires the call to stay pinned by sha, and
+    # dependabot-core's `update_checker.rb#updated_ref` returns the new COMMIT sha whenever the current ref looks like one
+    # (`pinned_ref_looks_like_commit_sha?`); only the ref after `@` is replaced. An untagged sha moves to the head of the
+    # default branch, but only once the repository holds at least one version-like tag (`@a11ign/toolchain@0.1.2` ends in
+    # `0.1.2`, which `VERSION_REGEX` reads); a sha that IS a tag's commit moves to the newest version tag's commit.
+    directory: /
+    schedule:
+      interval: daily
+    # No `groups:`, for the reason the `npm` entry gives.
+    commit-message:
+      prefix: deps
