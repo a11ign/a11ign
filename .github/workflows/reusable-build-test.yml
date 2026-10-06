@@ -148,7 +148,7 @@ jobs:
             exit 1
           fi
       - if: inputs.run-python-tests
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with: { python-version: "3.12", cache: pip }
       - if: inputs.run-python-tests
         run: pip install -r requirements-ci.txt
