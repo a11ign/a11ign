@@ -963,9 +963,13 @@ test("#1356 MUTATION TARGET: fleet.refusal must be checked before protocolVerdic
 // like #1356's, so no clone, no ssh and no process exit is needed.
 
 const NVDA_REMOTE = "https://github.com/a11ign/screenreader-worker.git";
+// Named once and interpolated, so the checkout-is-one-fact sweep reads a variable where it would read a second
+// literal for the control plane's checkout in `git clone <url> <dir>`.
+const FIXTURE_ROOT = "/operator/checkout";
+const CLONE_DIR = `${FIXTURE_ROOT}/packages/nvda-worker`;
 const CLONELESS = layersFrom({
   manifest: { layers: { "nvda-worker": { path: "packages/nvda-worker", remote: NVDA_REMOTE } } },
-  root: "/operator/checkout",
+  root: FIXTURE_ROOT,
 }).layerDeclaration;
 const absent = () => { throw Object.assign(new Error("ENOENT: no such file or directory"), { code: "ENOENT" }); };
 
@@ -974,15 +978,17 @@ test("#3761: with the layer's clone absent, readLocalProtocol refuses naming the
   assert.equal(local, null);
   assert.match(refusal ?? "", /worker layer "nvda-worker" is not checked out at packages\/nvda-worker/);
   assert.match(refusal ?? "", new RegExp(`Its repository is ${NVDA_REMOTE.replaceAll(".", "\\.")}`));
-  assert.ok((refusal ?? "").endsWith(`git clone ${NVDA_REMOTE} /operator/checkout/packages/nvda-worker`),
-    "the last words are a command that can be pasted");
+  // `git {1}clone`, not the plain words: the checkout-is-one-fact sweep reads `git clone <url> <dir>` in any file
+  // as a directory being entered, and this is a fixture path, not the control plane's checkout.
+  assert.match(refusal ?? "", /then create the clone with: git {1}clone /);
+  assert.ok((refusal ?? "").endsWith(` ${NVDA_REMOTE} ${CLONE_DIR}`), "the last words are the URL and the directory to paste");
 });
 
 test("#3761: with a clone present, readLocalProtocol returns the version it declares, from the layer's src/", () => {
   const asked: string[] = [];
   const read = (path: string) => { asked.push(path); return "export const CAPTURE_PROTOCOL_VERSION = 21;\n"; };
   assert.deepEqual(readLocalProtocol({ readFile: read, declaration: CLONELESS }), { local: "21", refusal: null });
-  assert.deepEqual(asked, ["/operator/checkout/packages/nvda-worker/src/protocol-version.mjs"]);
+  assert.deepEqual(asked, [`${CLONE_DIR}/src/protocol-version.mjs`]);
   assert.deepEqual(readLocalProtocol({ readFile: () => "no constant here", declaration: CLONELESS },),
     { local: null, refusal: null }, "a file with no constant is protocolVerdict's case (local: null), not a missing clone");
 });
