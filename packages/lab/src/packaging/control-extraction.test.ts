@@ -135,6 +135,7 @@ const CORE_READS: Record<string, string[]> = {
   "packages/control/src/fleet-layer/provision-stamp-inputs.test.ts": ["packages/guards/src/walk-scope.mjs", "scripts/test-support/stamp-files.ts"],
   "packages/control/src/fleet-layer/provision-stamp.test.ts": ["scripts/test-support/stamp-files.ts"],
   "packages/control/src/fleet-layer/worker-fleet-does-not-read-control.test.ts": ["packages/guards/src/layer-file.mjs"],
+  "packages/control/src/fleet-auto-off.test.ts": ["scripts/lay-layer.mjs"],
   "packages/control/src/lab-pipeline.test.ts": ["packages/lab/src/training/real-page-corpus.mjs"],
   "packages/control/src/lab-reset-removal.test.ts": ["scripts/test-support/git-sandbox.ts"],
   "packages/control/src/layer-checkouts.test.ts": ["scripts/test-support/git-sandbox.ts"],
