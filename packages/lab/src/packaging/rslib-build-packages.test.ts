@@ -171,6 +171,20 @@ test("every published package's rslib.config.ts builds exactly the entries its e
   assert.deepEqual(offenders, []);
 });
 
+/** The packages whose config leaves rspack's persistent build cache on. */
+const cachingConfigs = (configs: Record<string, { performance?: { buildCache?: boolean } }>): string[] =>
+  Object.entries(configs).filter(([, config]) => config.performance?.buildCache !== false).map(([dir]) => dir);
+
+test("control: a config that leaves the build cache on is RED", () => {
+  assert.deepEqual(cachingConfigs({ judge: {}, cli: { performance: { buildCache: true } }, scorer: { performance: { buildCache: false } } }), ["judge", "cli"]);
+});
+
+test("no package's build uses rspack's persistent cache: two `npm pack`s of one package at once PANIC on its lock", () => {
+  // Measured 2026-10-06: a second concurrent `rslib build` in `packages/judge` aborted with "State lock mismatch ... This indicates a race condition"
+  // (~1 pair in 4), and `no-worker-refusal.test.ts` packs the packages from a parallel worker. Off, 18 concurrent pairs across judge, scorer and cli passed.
+  assert.deepEqual(cachingConfigs(CONFIGS as Record<string, { performance?: { buildCache?: boolean } }>), []);
+});
+
 // 4. ONE BUILD AT INSTALL, #168 -------------------------------------------------------------------------------------------------
 
 /** The simple commands of a script line, split on `&&`, `||`, `;`, `|` and `&`. */

@@ -14,6 +14,12 @@ const [library] = libraryPreset(pkg, { dir: fileURLToPath(new URL(".", import.me
 // file that exists, so a bundle that moved the file the URL is relative to, or a rename of that rule, turns it red.
 const NEW_URL_RULE = "rslib:new-url";
 
+// NO PERSISTENT BUILD CACHE: two `rslib build`s in one package (`npm pack` runs `prepack`, and tests pack the same package from parallel workers) PANIC on rspack's
+// cache lock ("State lock mismatch ... This indicates a race condition", measured 2026-10-06: a second concurrent `npm pack` of `packages/judge` aborted in ~1 of 4
+// pairs). A `prepack` build runs once from a clean checkout, so the cache bought nothing here.
+const NO_BUILD_CACHE = { buildCache: false };
+
 export default defineConfig({
+  performance: NO_BUILD_CACHE,
   lib: [{ ...library, tools: { bundlerChain: (chain) => { chain.module.rule(NEW_URL_RULE).parser({ url: false }); } } }],
 });

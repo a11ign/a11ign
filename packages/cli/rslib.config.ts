@@ -15,4 +15,9 @@ const [library] = libraryPreset(pkg, { dir: fileURLToPath(new URL(".", import.me
 // THE DECLARATIONS ARE ROLLED UP (`dts.bundle`, which needs `@microsoft/api-extractor`, a root devDependency). `report.ts` types its `pdf` field with
 // `@a11ign/documents`'s `PdfFinding`, so per-module `.d.ts` files carried `import type ... from "@a11ign/documents"` into the tarball, and a consumer's
 // `tsc` with `skipLibCheck` off failed with TS2307 because that package is no longer installed (measured, #3580). The rollup inlines the type instead.
-export default defineConfig({ lib: [{ ...library, dts: { bundle: true }, source: { entry: { ...library.source.entry, cli: "./src/cli.ts" } } }] });
+// NO PERSISTENT BUILD CACHE: two `rslib build`s in one package (`npm pack` runs `prepack`, and tests pack the same package from parallel workers) PANIC on rspack's
+// cache lock ("State lock mismatch ... This indicates a race condition", measured 2026-10-06: a second concurrent `npm pack` of `packages/judge` aborted in ~1 of 4
+// pairs). A `prepack` build runs once from a clean checkout, so the cache bought nothing here.
+const NO_BUILD_CACHE = { buildCache: false };
+
+export default defineConfig({ performance: NO_BUILD_CACHE, lib: [{ ...library, dts: { bundle: true }, source: { entry: { ...library.source.entry, cli: "./src/cli.ts" } } }] });
