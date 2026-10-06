@@ -710,6 +710,166 @@ test("#2784: the timer polls under the shortest capture and fires the service th
 });
 
 // ---------------------------------------------------------------------------------------------------------
+// #3852: the unit brings the checkout to `origin/main` before the tick, so a merge to the closure does not strand the fleet.
+// The shipped line is RUN, with the control plane's checkout rewritten to a sandbox and `systemctl`/`node` replaced by
+// recorders: a regex over the unit text would pass a step that never moves anything.
+// ---------------------------------------------------------------------------------------------------------
+
+/** The unit's ExecStartPre lines as systemd reads them: continuations joined, the quoted script taken out, `$$` made `$`. */
+function followStep(): { lines: string[]; script: string } {
+  const unit = shippedUnit("a11y-fleet-auto-off.service").replace(/\\\n\s*/g, " ");
+  const lines = activeLines(unit).filter((l) => l.startsWith("ExecStartPre="));
+  const quoted = /^ExecStartPre=-\/bin\/sh -c '([^']*)'$/.exec(lines[0] ?? "");
+  return { lines, script: (quoted?.[1] ?? "").replaceAll("$$", "$") };
+}
+
+const gitIn = (cwd: string, ...args: string[]) =>
+  spawnSync("git", args, { cwd, encoding: "utf8", env: sandboxGitEnv() });
+
+/** An `origin` holding `main`, a checkout of it standing where the control plane stands, and the two recorders. */
+function followSandbox({ playing = "", systemctlFails = false }: { playing?: string, systemctlFails?: boolean } = {}) {
+  const root = mkdtempSync(join(tmpdir(), "follow-main-"));
+  const origin = join(root, "origin"), checkout = join(root, "checkout"), bin = join(root, "bin"), calls = join(root, "calls");
+  for (const dir of [origin, bin]) mkdirSync(dir);
+  const commit = (cwd: string, name: string) => {
+    writeFileSync(join(cwd, name), name);
+    gitIn(cwd, "add", name);
+    gitIn(cwd, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "--quiet", "-m", name);
+  };
+  gitIn(origin, "init", "--quiet", "-b", "main");
+  commit(origin, "first");
+  gitIn(root, "clone", "--quiet", origin, checkout);
+  // `node` records its argv and what the tree held WHEN it ran, which is how "after the merge" is a reading and not a hope.
+  writeFileSync(join(bin, "node"), `#!/bin/sh\necho "node $*: $(git rev-parse --short HEAD)" >> ${calls}\n`, { mode: 0o755 });
+  writeFileSync(join(bin, "systemctl"), systemctlFails ? "#!/bin/sh\nexit 1\n" : `#!/bin/sh\necho "systemctl $*" >> ${calls}\nprintf '%s' '${playing}'\n`,
+    { mode: 0o755 });
+  const run = () => spawnSync("sh", ["-c", followStep().script],
+    { cwd: checkout, encoding: "utf8", env: { ...sandboxGitEnv(), PATH: `${bin}:${process.env.PATH}` } });
+  return {
+    origin, checkout, commit, run,
+    head: () => gitIn(checkout, "rev-parse", "HEAD").stdout.trim(),
+    originHead: () => gitIn(origin, "rev-parse", "HEAD").stdout.trim(),
+    calls: () => (existsSync(calls) ? readFileSync(calls, "utf8").split("\n").filter(Boolean) : []),
+    dispose: () => rmSync(root, { recursive: true, force: true }),
+  };
+}
+
+test("#3852: the unit has ONE ExecStartPre, `-` prefixed, naming the checkout the unit runs from", () => {
+  // The positive control: on the unit as it stood (no ExecStartPre) `lines` is empty and every test below has no script to run.
+  const { lines, script } = followStep();
+  assert.equal(lines.length, 1, "exactly one follow step before the tick that holds the staleness verdict");
+  assert.match(lines[0], /^ExecStartPre=-\/bin\/sh -c '/, "the `-` keeps a failed follow from stopping the tick that reads the fetch");
+  assert.ok(!/\bcd /.test(script), "it runs in WorkingDirectory=, the checkout's one literal in this unit");
+  assert.ok(!/pnpm|npm /.test(script), "the control plane has no pnpm (ADR 0012)");
+  assert.ok(!/%/.test(script), "systemd would expand a `%` specifier inside the script");
+  assert.ok(!/\$(?!\()|\$\$/.test(shippedUnit("a11y-fleet-auto-off.service").split("ExecStartPre=")[1].replaceAll("$$", "")),
+    "a single `$` in a unit is systemd's own substitution, not the shell's");
+});
+
+test("#3852: the follow step's play list is the tick's own (`LAUNCHABLE_PLAYBOOK_NAMES`)", () => {
+  const named = [...followStep().script.matchAll(/a11y-fleet-([a-z-]+)\.service/g)].map((m) => m[1]);
+  assert.deepEqual([...named].sort(), [...LAUNCHABLE_PLAYBOOK_NAMES].sort(),
+    "a play this list misses is a tree moved under a running play; one it adds is a follow that never happens");
+});
+
+test("#3852: behind `main`, the checkout fast-forwards and THEN lays the layer at the pin the merge brought", () => {
+  const sandbox = followSandbox();
+  try {
+    const before = sandbox.head();
+    sandbox.commit(sandbox.origin, "second");
+    const result = sandbox.run();
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(sandbox.head(), sandbox.originHead(), "the tree stands on origin/main");
+    assert.notEqual(sandbox.head(), before);
+    const laid = sandbox.calls().filter((c) => c.startsWith("node "));
+    assert.deepEqual(laid, [`node scripts/lay-layer.mjs screenreader-fleet: ${sandbox.head().slice(0, 7)}`],
+      "laid once, and the tree already held the merged commit when it was (the lockfile it reads is the new one)");
+  } finally {
+    sandbox.dispose();
+  }
+});
+
+test("#3852: the follow asks systemd about the plays, with a state filter that leaves `active (exited)` out", () => {
+  const sandbox = followSandbox();
+  try {
+    sandbox.run();
+    const asked = sandbox.calls().find((c) => c.startsWith("systemctl "))!;
+    assert.match(asked, /--state=running,activating,deactivating,reloading/);
+    assert.ok(!/exited|--all/.test(asked), "a finished play leaves `active (exited)` behind (`--remain-after-exit`); it is not in flight");
+  } finally {
+    sandbox.dispose();
+  }
+});
+
+test("#3852: a play in flight, or a play signal that cannot be read, leaves the checkout where it is", () => {
+  for (const options of [{ playing: "a11y-fleet-deploy.service loaded active running" }, { systemctlFails: true }]) {
+    const sandbox = followSandbox(options);
+    try {
+      const before = sandbox.head();
+      sandbox.commit(sandbox.origin, "second");
+      sandbox.run();
+      assert.equal(sandbox.head(), before, `unmoved under ${JSON.stringify(options)}`);
+      assert.deepEqual(sandbox.calls().filter((c) => c.startsWith("node ")), [], "and no layer is laid under it either");
+    } finally {
+      sandbox.dispose();
+    }
+  }
+});
+
+test("#3852: a fetch that fails leaves the old checkout standing, FAILS the step, and the verdict still says fetch-failed", () => {
+  const sandbox = followSandbox();
+  try {
+    const before = sandbox.head();
+    gitIn(sandbox.checkout, "remote", "set-url", "origin", join(sandbox.origin, "does-not-exist"));
+    const result = sandbox.run();
+    assert.notEqual(result.status, 0, "the step does not report a follow it did not do");
+    assert.equal(sandbox.head(), before);
+    assert.deepEqual(sandbox.calls().filter((c) => c.startsWith("node ")), []);
+    // The follow step is not what the verdict reads: it fetches for itself, so a tree this step could not move is refused by name.
+    const git = (args: string[]) => {
+      const done = gitIn(sandbox.checkout, ...args);
+      return { status: done.status, stdout: done.stdout, stderr: done.stderr };
+    };
+    const { verdict } = checkAgainstMain({ now: 0, fetchedAt: null, git, readSource: () => "" });
+    assert.equal((verdict as { reason: string }).reason, "fetch-failed", "the same refusal the unit had before this step existed");
+  } finally {
+    sandbox.dispose();
+  }
+});
+
+test("#3852: a checkout that cannot fast-forward is refused, never forced, and nothing is laid", () => {
+  const sandbox = followSandbox();
+  try {
+    sandbox.commit(sandbox.checkout, "local-only");
+    sandbox.commit(sandbox.origin, "second");
+    const before = sandbox.head();
+    const result = sandbox.run();
+    assert.notEqual(result.status, 0);
+    assert.equal(sandbox.head(), before, "a deploy's own commit is not discarded to follow main");
+    assert.deepEqual(sandbox.calls().filter((c) => c.startsWith("node ")), []);
+  } finally {
+    sandbox.dispose();
+  }
+});
+
+test("#3852: a fetch inside the last minute is not repeated (the tick's own fetch is throttled the same way)", () => {
+  const sandbox = followSandbox();
+  try {
+    const before = sandbox.head();
+    sandbox.commit(sandbox.origin, "second");
+    writeFileSync(join(sandbox.checkout, ".git", "FETCH_HEAD"), "");
+    sandbox.run();
+    assert.equal(sandbox.head(), before, "origin/main had not been fetched and the stamp said it just was");
+    const old = new Date(Date.now() - 2 * 60_000);
+    utimesSync(join(sandbox.checkout, ".git", "FETCH_HEAD"), old, old);
+    sandbox.run();
+    assert.equal(sandbox.head(), sandbox.originHead(), "a stamp older than a minute fetches");
+  } finally {
+    sandbox.dispose();
+  }
+});
+
+// ---------------------------------------------------------------------------------------------------------
 // #3269: the ledger is the control plane's, read through its transport from wherever the timer or an operator runs.
 // ---------------------------------------------------------------------------------------------------------
 
