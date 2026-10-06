@@ -96,7 +96,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Fetch the comment as data
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: mutation-comment
           path: ${{ runner.temp }}/mutation
