@@ -21,15 +21,17 @@
  */
 import { fileURLToPath } from "node:url";
 import { defineToolchainConfig } from "@a11ign/toolchain/rstest-config";
+import { withPrivateTmp } from "../private-tmp.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const walkScope = fileURLToPath(new URL("../../packages/guards/src/walk-scope.mjs", import.meta.url));
 
 /**
  * #3572: what the config loads, and what every worker preloads: neither is imported by any test. The lockfile is a trigger because the
- * config is a call into the installed toolchain and a new version of it changes what every run does, and `walk-scope` because it is preloaded.
+ * config is a call into the installed toolchain and a new version of it changes what every run does, and `walk-scope` and `private-tmp` because
+ * each is loaded by the config and by every worker (#3855).
  */
-const A11IGN_LOADED_TRIGGERS = ["scripts/rstest/**", "pnpm-lock.yaml", "packages/guards/src/walk-scope*.mjs"];
+const A11IGN_LOADED_TRIGGERS = ["scripts/rstest/**", "pnpm-lock.yaml", "packages/guards/src/walk-scope*.mjs", "scripts/private-tmp.mjs"];
 
 /**
  * #3572: data directories a non-tree-wide test reads by path, whole, because a file added to one is read too. NONE IS UNDER `packages/lab/` (#3505): that
@@ -157,10 +159,17 @@ const READ_FILE_TRIGGERS = [
   "scripts/test-support/launcher-reach.stand-in.cmd",
 ];
 
-export default defineToolchainConfig({
+const toolchain = defineToolchainConfig({
   root,
   // The glob `npm run test:ts` hands to node:test, so "the same number of test files run" is checkable.
   include: ["packages/*/src/**/*.test.ts"],
   preloads: [walkScope],
   forceRerunTriggers: [...A11IGN_LOADED_TRIGGERS, ...READ_DIRECTORY_TRIGGERS, ...READ_FILE_TRIGGERS],
 });
+
+/**
+ * #3855 (incident #3846): EVERY RUN HAS A PRIVATE `TMPDIR`, `~/.cache/a11ign/tmp/run-<id>`, removed when the run ends, and a test file that leaves an entry in
+ * it is named in the run's output. The config only calls the helper: making and removing the directory happens once per run in `globalSetup`, never at the
+ * config's load, which workers and other tests' imports repeat. `scripts/private-tmp.mjs` says why each piece is where it is.
+ */
+export default withPrivateTmp(toolchain);

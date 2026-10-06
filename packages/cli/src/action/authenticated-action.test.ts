@@ -121,7 +121,7 @@ test("NO new input is interpolated into a step's shell text: they arrive through
 test("the masks are added BEFORE the worker starts, so the worker's own log is covered; and the flows path is made absolute against the workspace", () => {
   const script = step("Capture and judge").run as string;
   const masksAt = script.indexOf("packages/cli/src/action/auth-masks.ts");
-  const workerAt = script.indexOf("node node_modules/@a11ign/screenreader-worker/src/server.mjs");
+  const workerAt = script.indexOf('node "$worker_js"');
   assert.ok(masksAt > 0 && workerAt > masksAt, "auth-masks must run before the worker");
   assert.match(script, /flows_path="\$GITHUB_WORKSPACE\/\$FLOWS"/);
   assert.match(script, /args\+=\(--flows "\$flows_path" --login-flow "\$LOGIN_FLOW"\)/);

@@ -21,11 +21,13 @@ import { captureTimes, readCapturesState, writeCapturesState, withFileLock, read
 import { sandboxGitEnv } from "../../worker-fleet/src/git-safe-env.mjs";
 import { DEFAULT_PROOF_PATH, PROOF_WINDOW_MS } from "./fleet-wake.mjs";
 import { CONTROL_PLANE_CHECKOUT_PATH } from "./control-plane-checkout.mjs";
+import { layerDeclaration, layerOwning, layerPinTag } from "./layer-checkouts.mjs";
+import { layingPlan } from "../../../scripts/lay-layer.mjs";
 import {
   IDLE_THRESHOLD_MS, PROBE_TIMEOUT_MS, POLL_INTERVAL_MS,
   hasWakeableMac, probeIdle, advance, advanceShutdownRequested, autoOffDecision,
   readState, writeState, dispatchShutdown, reportLine, tick, ledgerLine, DEFAULT_STATE_PATH,
-  importClosure, staleCheckoutVerdict, checkAgainstMain, FETCH_THROTTLE_MS,
+  importClosure, staleCheckoutVerdict, checkAgainstMain, judgeLaidLayer, FETCH_THROTTLE_MS,
   LAPSE_WARNING_MS, proofStanding, renewalFooter, renderReport, readPlaysInFlight, LAUNCHABLE_PLAYBOOK_NAMES,
 } from "./fleet-auto-off.mjs";
 
@@ -455,6 +457,10 @@ test("tick: revoking ONE worker's proof changes no other worker's decision (#322
 });
 
 test("tick: a worker with no MAC is never decided off, even idle past the threshold, and the report names it", async () => {
+  // The ledger is read through the transport even here, so without a stub it would reach the real ssh: a sandbox
+  // with no route to the control plane then prints "the wake-proof ledger could not be read" in every suite run (#3889).
+  // `asked` is the positive control: it fails if the stub is dropped, on a host with a route as much as on one without.
+  let asked = 0;
   const result = await tick({
     workers: [{ name: "a11y-worker-12", host: "192.0.2.20", mac: null }],
     probe: async () => ({ outcome: "idle" }),
@@ -462,7 +468,9 @@ test("tick: a worker with no MAC is never decided off, even idle past the thresh
     statePath: "x.json",
     read: () => { throw Object.assign(new Error("ENOENT"), { code: "ENOENT" }); },
     write: () => {},
+    proofTransport: (() => { asked += 1; return ""; }) as never,
   });
+  assert.equal(asked, 1, "the ledger was read through the stub and never through the real ssh");
   assert.deepEqual(result.decisions[0].decision, { action: "keep", reason: "no-mac" });
 });
 
@@ -525,6 +533,7 @@ async function tickAt(
     capturesPath: LEDGER,
     read: files.read,
     write: files.write as never,
+    proofTransport: provenAt0,
   });
 }
 
@@ -708,6 +717,166 @@ test("#2784: the timer polls under the shortest capture and fires the service th
 });
 
 // ---------------------------------------------------------------------------------------------------------
+// #3852: the unit brings the checkout to `origin/main` before the tick, so a merge to the closure does not strand the fleet.
+// The shipped line is RUN, with the control plane's checkout rewritten to a sandbox and `systemctl`/`node` replaced by
+// recorders: a regex over the unit text would pass a step that never moves anything.
+// ---------------------------------------------------------------------------------------------------------
+
+/** The unit's ExecStartPre lines as systemd reads them: continuations joined, the quoted script taken out, `$$` made `$`. */
+function followStep(): { lines: string[]; script: string } {
+  const unit = shippedUnit("a11y-fleet-auto-off.service").replace(/\\\n\s*/g, " ");
+  const lines = activeLines(unit).filter((l) => l.startsWith("ExecStartPre="));
+  const quoted = /^ExecStartPre=-\/bin\/sh -c '([^']*)'$/.exec(lines[0] ?? "");
+  return { lines, script: (quoted?.[1] ?? "").replaceAll("$$", "$") };
+}
+
+const gitIn = (cwd: string, ...args: string[]) =>
+  spawnSync("git", args, { cwd, encoding: "utf8", env: sandboxGitEnv() });
+
+/** An `origin` holding `main`, a checkout of it standing where the control plane stands, and the two recorders. */
+function followSandbox({ playing = "", systemctlFails = false }: { playing?: string, systemctlFails?: boolean } = {}) {
+  const root = mkdtempSync(join(tmpdir(), "follow-main-"));
+  const origin = join(root, "origin"), checkout = join(root, "checkout"), bin = join(root, "bin"), calls = join(root, "calls");
+  for (const dir of [origin, bin]) mkdirSync(dir);
+  const commit = (cwd: string, name: string) => {
+    writeFileSync(join(cwd, name), name);
+    gitIn(cwd, "add", name);
+    gitIn(cwd, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "--quiet", "-m", name);
+  };
+  gitIn(origin, "init", "--quiet", "-b", "main");
+  commit(origin, "first");
+  gitIn(root, "clone", "--quiet", origin, checkout);
+  // `node` records its argv and what the tree held WHEN it ran, which is how "after the merge" is a reading and not a hope.
+  writeFileSync(join(bin, "node"), `#!/bin/sh\necho "node $*: $(git rev-parse --short HEAD)" >> ${calls}\n`, { mode: 0o755 });
+  writeFileSync(join(bin, "systemctl"), systemctlFails ? "#!/bin/sh\nexit 1\n" : `#!/bin/sh\necho "systemctl $*" >> ${calls}\nprintf '%s' '${playing}'\n`,
+    { mode: 0o755 });
+  const run = () => spawnSync("sh", ["-c", followStep().script],
+    { cwd: checkout, encoding: "utf8", env: { ...sandboxGitEnv(), PATH: `${bin}:${process.env.PATH}` } });
+  return {
+    origin, checkout, commit, run,
+    head: () => gitIn(checkout, "rev-parse", "HEAD").stdout.trim(),
+    originHead: () => gitIn(origin, "rev-parse", "HEAD").stdout.trim(),
+    calls: () => (existsSync(calls) ? readFileSync(calls, "utf8").split("\n").filter(Boolean) : []),
+    dispose: () => rmSync(root, { recursive: true, force: true }),
+  };
+}
+
+test("#3852: the unit has ONE ExecStartPre, `-` prefixed, naming the checkout the unit runs from", () => {
+  // The positive control: on the unit as it stood (no ExecStartPre) `lines` is empty and every test below has no script to run.
+  const { lines, script } = followStep();
+  assert.equal(lines.length, 1, "exactly one follow step before the tick that holds the staleness verdict");
+  assert.match(lines[0], /^ExecStartPre=-\/bin\/sh -c '/, "the `-` keeps a failed follow from stopping the tick that reads the fetch");
+  assert.ok(!/\bcd /.test(script), "it runs in WorkingDirectory=, the checkout's one literal in this unit");
+  assert.ok(!/pnpm|npm /.test(script), "the control plane has no pnpm (ADR 0012)");
+  assert.ok(!/%/.test(script), "systemd would expand a `%` specifier inside the script");
+  assert.ok(!/\$(?!\()|\$\$/.test(shippedUnit("a11y-fleet-auto-off.service").split("ExecStartPre=")[1].replaceAll("$$", "")),
+    "a single `$` in a unit is systemd's own substitution, not the shell's");
+});
+
+test("#3852: the follow step's play list is the tick's own (`LAUNCHABLE_PLAYBOOK_NAMES`)", () => {
+  const named = [...followStep().script.matchAll(/a11y-fleet-([a-z-]+)\.service/g)].map((m) => m[1]);
+  assert.deepEqual([...named].sort(), [...LAUNCHABLE_PLAYBOOK_NAMES].sort(),
+    "a play this list misses is a tree moved under a running play; one it adds is a follow that never happens");
+});
+
+test("#3852: behind `main`, the checkout fast-forwards and THEN lays the layer at the pin the merge brought", () => {
+  const sandbox = followSandbox();
+  try {
+    const before = sandbox.head();
+    sandbox.commit(sandbox.origin, "second");
+    const result = sandbox.run();
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(sandbox.head(), sandbox.originHead(), "the tree stands on origin/main");
+    assert.notEqual(sandbox.head(), before);
+    const laid = sandbox.calls().filter((c) => c.startsWith("node "));
+    assert.deepEqual(laid, [`node scripts/lay-layer.mjs screenreader-fleet: ${sandbox.head().slice(0, 7)}`],
+      "laid once, and the tree already held the merged commit when it was (the lockfile it reads is the new one)");
+  } finally {
+    sandbox.dispose();
+  }
+});
+
+test("#3852: the follow asks systemd about the plays, with a state filter that leaves `active (exited)` out", () => {
+  const sandbox = followSandbox();
+  try {
+    sandbox.run();
+    const asked = sandbox.calls().find((c) => c.startsWith("systemctl "))!;
+    assert.match(asked, /--state=running,activating,deactivating,reloading/);
+    assert.ok(!/exited|--all/.test(asked), "a finished play leaves `active (exited)` behind (`--remain-after-exit`); it is not in flight");
+  } finally {
+    sandbox.dispose();
+  }
+});
+
+test("#3852: a play in flight, or a play signal that cannot be read, leaves the checkout where it is", () => {
+  for (const options of [{ playing: "a11y-fleet-deploy.service loaded active running" }, { systemctlFails: true }]) {
+    const sandbox = followSandbox(options);
+    try {
+      const before = sandbox.head();
+      sandbox.commit(sandbox.origin, "second");
+      sandbox.run();
+      assert.equal(sandbox.head(), before, `unmoved under ${JSON.stringify(options)}`);
+      assert.deepEqual(sandbox.calls().filter((c) => c.startsWith("node ")), [], "and no layer is laid under it either");
+    } finally {
+      sandbox.dispose();
+    }
+  }
+});
+
+test("#3852: a fetch that fails leaves the old checkout standing, FAILS the step, and the verdict still says fetch-failed", () => {
+  const sandbox = followSandbox();
+  try {
+    const before = sandbox.head();
+    gitIn(sandbox.checkout, "remote", "set-url", "origin", join(sandbox.origin, "does-not-exist"));
+    const result = sandbox.run();
+    assert.notEqual(result.status, 0, "the step does not report a follow it did not do");
+    assert.equal(sandbox.head(), before);
+    assert.deepEqual(sandbox.calls().filter((c) => c.startsWith("node ")), []);
+    // The follow step is not what the verdict reads: it fetches for itself, so a tree this step could not move is refused by name.
+    const git = (args: string[]) => {
+      const done = gitIn(sandbox.checkout, ...args);
+      return { status: done.status, stdout: done.stdout, stderr: done.stderr };
+    };
+    const { verdict } = checkAgainstMain({ now: 0, fetchedAt: null, git, readSource: () => "" });
+    assert.equal((verdict as { reason: string }).reason, "fetch-failed", "the same refusal the unit had before this step existed");
+  } finally {
+    sandbox.dispose();
+  }
+});
+
+test("#3852: a checkout that cannot fast-forward is refused, never forced, and nothing is laid", () => {
+  const sandbox = followSandbox();
+  try {
+    sandbox.commit(sandbox.checkout, "local-only");
+    sandbox.commit(sandbox.origin, "second");
+    const before = sandbox.head();
+    const result = sandbox.run();
+    assert.notEqual(result.status, 0);
+    assert.equal(sandbox.head(), before, "a deploy's own commit is not discarded to follow main");
+    assert.deepEqual(sandbox.calls().filter((c) => c.startsWith("node ")), []);
+  } finally {
+    sandbox.dispose();
+  }
+});
+
+test("#3852: a fetch inside the last minute is not repeated (the tick's own fetch is throttled the same way)", () => {
+  const sandbox = followSandbox();
+  try {
+    const before = sandbox.head();
+    sandbox.commit(sandbox.origin, "second");
+    writeFileSync(join(sandbox.checkout, ".git", "FETCH_HEAD"), "");
+    sandbox.run();
+    assert.equal(sandbox.head(), before, "origin/main had not been fetched and the stamp said it just was");
+    const old = new Date(Date.now() - 2 * 60_000);
+    utimesSync(join(sandbox.checkout, ".git", "FETCH_HEAD"), old, old);
+    sandbox.run();
+    assert.equal(sandbox.head(), sandbox.originHead(), "a stamp older than a minute fetches");
+  } finally {
+    sandbox.dispose();
+  }
+});
+
+// ---------------------------------------------------------------------------------------------------------
 // #3269: the ledger is the control plane's, read through its transport from wherever the timer or an operator runs.
 // ---------------------------------------------------------------------------------------------------------
 
@@ -798,11 +967,13 @@ test("#3275 importClosure on the real program: every file it names exists, and t
 
 type GitCall = string[];
 /** A scripted `git`: records every call, answers `fetch` with `fetchStatus`, `diff` with `diffOut`, `ls-files` with all paths. */
-function scriptedGit(opts: { fetchStatus?: number; diffStatus?: number; diffOut?: string; tracked?: (paths: string[]) => string[] }) {
+function scriptedGit(opts: { fetchStatus?: number; diffStatus?: number; diffOut?: string; tracked?: (paths: string[]) => string[]; lockfile?: string }) {
   const calls: GitCall[] = [];
   const git = (args: string[]) => {
     calls.push(args);
     if (args[0] === "fetch") return { status: opts.fetchStatus ?? 0, stdout: "", stderr: "" };
+    // `git show origin/main:pnpm-lock.yaml`, which pins the layers: absent unless the test gives one.
+    if (args[0] === "show") return opts.lockfile === undefined ? { status: 128, stdout: "", stderr: "" } : { status: 0, stdout: opts.lockfile, stderr: "" };
     const paths = args.slice(args.indexOf("--") + 1);
     if (args[0] === "diff") return { status: opts.diffStatus ?? 0, stdout: opts.diffOut ?? "", stderr: "" };
     return { status: 0, stdout: (opts.tracked ? opts.tracked(paths) : paths).join("\n"), stderr: "" };
@@ -829,6 +1000,120 @@ test("#3275 checkAgainstMain: a file the checkout does not track counts as diffe
   const { verdict } = checkAgainstMain({ now: 1, fetchedAt: null, git: git.git, readSource: fakeSource });
   assert.equal(verdict.action, "refuse");
   assert.match((verdict as { detail: string }).detail, /sleep\.yml/);
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// #3845: the closure reaches into `packages/worker-fleet`, which this repository does not track. Its files are held to
+// the layer's PIN (the tag main's lockfile names), not to `git ls-files`, which listed none of them and refused on main.
+// ---------------------------------------------------------------------------------------------------------
+
+const LAYER = "screenreader-fleet";
+const LAYER_PATH = "packages/worker-fleet";
+const FLEET_FILE = `${LAYER_PATH}/src/worker-http.mjs`;
+const TAG = `@a11ign/${LAYER}@0.5.1`;
+const lockfileAt = (version: string) => `importers:\n\n  .:\n    dependencies:\n      '@a11ign/${LAYER}':\n        specifier: ^0.5.1\n        version: ${version}(@a11ign/scorer@packages+scorer)\n`;
+/** The program as it really is: it imports a file of the layer, which is what makes the layer part of the comparison. */
+const sourceWithLayer = (path: string) => (path === THIS ? `import "./other.mjs";\nimport "../../worker-fleet/src/worker-http.mjs";\n` : "");
+const laidAt = (tag: string) => ({ differing: tag === TAG ? [] : [`${LAYER_PATH} (layer ${LAYER} is laid at ${tag}, main pins ${TAG})`] });
+
+test("#3845 layerPinTag reads the lockfile as scripts/lay-layer.mjs does, on the REAL lockfile, CRLF and the refusals", () => {
+  const real = readFileSync(join(REPO, "pnpm-lock.yaml"), "utf8");
+  const manifest = JSON.parse(readFileSync(join(REPO, "packages/control/layers.json"), "utf8"));
+  for (const [text, label] of [[real, "the real lockfile"], [real.replace(/\n/g, "\r\n"), "the same with CRLF"]]) {
+    const ours = layerPinTag(text, LAYER) as { tag: string };
+    const theirs = layingPlan(manifest, text, LAYER) as { tag: string };
+    assert.match(ours.tag, /^@a11ign\/screenreader-fleet@\d+\.\d+\.\d+$/, `${label}: positive control, a tag was found`);
+    assert.equal(ours.tag, theirs.tag, `${label}: control and the script that lays the layer name one build`);
+  }
+  assert.deepEqual(layerPinTag(lockfileAt("0.5.1"), LAYER), { tag: TAG }, "a peer-suffixed version is cut at the parenthesis");
+  assert.match((layerPinTag(lockfileAt("link:packages/x").replace("(@a11ign/scorer@packages+scorer)", ""), LAYER) as { refusal: string }).refusal, /not a registry release/);
+  assert.match((layerPinTag("importers: {}\n", LAYER) as { refusal: string }).refusal, /no importer entry/);
+  assert.match((layerPinTag(lockfileAt("0.5.1"), "nvda-worker") as { refusal: string }).refusal, /no importer entry/, "a layer the lockfile does not pin is refused, not defaulted");
+});
+
+test("#3845 layerOwning: a file under a separate layer's path is the layer's, the core's own files are not", () => {
+  assert.equal(layerOwning(FLEET_FILE), LAYER);
+  assert.equal(layerOwning(LAYER_PATH), LAYER);
+  assert.equal(layerOwning("packages/worker-fleet-extra/src/a.mjs"), null, "a sibling that shares a prefix is not inside the layer");
+  assert.equal(layerOwning(THIS), null);
+  assert.equal(layerDeclaration(LAYER).path, LAYER_PATH);
+});
+
+test("#3845 checkAgainstMain: the layer's files go to its pin and NEVER to git's diff or ls-files", () => {
+  const git = scriptedGit({ lockfile: lockfileAt("0.5.1") });
+  const judged: unknown[] = [];
+  const judgeLayer = (layer: { name: string; tag: string }) => { judged.push(layer); return laidAt(TAG); };
+  const { verdict } = checkAgainstMain({ now: 1, fetchedAt: null, git: git.git, readSource: sourceWithLayer, judgeLayer });
+  assert.deepEqual(verdict, { action: "proceed" }, "a layer laid at its pin proceeds: the defect, fixed");
+  assert.equal(judged.length, 1, "positive control: the layer WAS judged");
+  assert.equal((judged[0] as { tag: string }).tag, TAG, "at the tag main's lockfile names");
+  for (const call of git.calls.filter((c) => c[0] === "diff" || c[0] === "ls-files")) {
+    assert.ok(!call.includes(FLEET_FILE), `git ${call[0]} was asked about a file it cannot track`);
+    assert.ok(call.includes("packages/control/src/other.mjs"), "and the core's files still are compared");
+  }
+  assert.ok(git.calls.some((c) => c[0] === "show" && c[1] === "origin/main:pnpm-lock.yaml"), "the pin is main's, not the working tree's");
+});
+
+test("#3845 checkAgainstMain: a layer laid at another tag refuses, NAMING the layer; a core difference is still reported beside it", () => {
+  const git = scriptedGit({ lockfile: lockfileAt("0.5.1"), diffOut: "packages/control/src/other.mjs\n" });
+  const judgeLayer = () => laidAt("@a11ign/screenreader-fleet@0.4.0");
+  const { verdict } = checkAgainstMain({ now: 1, fetchedAt: null, git: git.git, readSource: sourceWithLayer, judgeLayer });
+  assert.deepEqual(verdict, { action: "refuse", reason: "stale-checkout",
+    detail: `2 files differ: packages/control/src/other.mjs, ${LAYER_PATH} (layer ${LAYER} is laid at @a11ign/screenreader-fleet@0.4.0, main pins ${TAG})` });
+});
+
+test("#3845 checkAgainstMain: a layer that cannot be read, or has no pin on main, is CANNOT_TELL and says which", () => {
+  const readSource = sourceWithLayer;
+  const proceeds = () => laidAt(TAG);
+  const noLockfile = checkAgainstMain({ now: 1, fetchedAt: null, git: scriptedGit({}).git, readSource, judgeLayer: proceeds }).verdict;
+  assert.deepEqual([(noLockfile as { reason: string }).reason, (noLockfile as { detail: string }).detail],
+    ["cannot-tell", "origin/main's pnpm-lock.yaml, which pins the layers, could not be read"]);
+
+  const unpinned = checkAgainstMain({ now: 1, fetchedAt: null, git: scriptedGit({ lockfile: "importers: {}\n" }).git, readSource, judgeLayer: proceeds }).verdict;
+  assert.equal((unpinned as { reason: string }).reason, "cannot-tell");
+  assert.match((unpinned as { detail: string }).detail, new RegExp(`layer ${LAYER} has no pin on main`));
+
+  const unreadable = checkAgainstMain({ now: 1, fetchedAt: null, git: scriptedGit({ lockfile: lockfileAt("0.5.1") }).git, readSource,
+    judgeLayer: () => ({ cannotTell: `layer ${LAYER} at ${LAYER_PATH} is not a laid tree` }) }).verdict;
+  assert.deepEqual(unreadable, { action: "refuse", reason: "cannot-tell", detail: `layer ${LAYER} at ${LAYER_PATH} is not a laid tree` });
+});
+
+test("#3845 judgeLaidLayer on real directories: laid at the pin passes; another tag, no marker, a marker without src/, and a clone do not", () => {
+  const root = mkdtempSync(join(tmpdir(), "auto-off-3845-"));
+  const layerAt = (name: string, make: (dir: string) => void) => {
+    const dir = join(root, name);
+    mkdirSync(dir, { recursive: true });
+    make(dir);
+    return judgeLaidLayer({ name: LAYER, dir, path: LAYER_PATH, tag: TAG });
+  };
+  const laid = (tag: string) => (dir: string) => { mkdirSync(join(dir, "src")); writeFileSync(join(dir, ".layer-ref"), `${tag}\n`); };
+  try {
+    assert.deepEqual(layerAt("at-pin", laid(TAG)), { differing: [] });
+    const behind = layerAt("behind", laid("@a11ign/screenreader-fleet@0.4.0")) as { differing: string[] };
+    assert.equal(behind.differing.length, 1);
+    assert.match(behind.differing[0], new RegExp(`${LAYER_PATH}.*${LAYER}.*0\\.4\\.0.*${TAG}`), "names the layer, what is laid and what main pins");
+    for (const [name, make] of [
+      ["empty", () => {}],
+      ["marker-only", (dir: string) => writeFileSync(join(dir, ".layer-ref"), `${TAG}\n`)],
+      ["src-only", (dir: string) => mkdirSync(join(dir, "src"))],
+      ["clone", (dir: string) => { laid(TAG)(dir); mkdirSync(join(dir, ".git")); }],
+    ] as [string, (dir: string) => void][]) {
+      const judged = layerAt(name, make);
+      assert.ok("cannotTell" in judged, `${name}: could not be read, so it must not read as the pin`);
+      assert.match((judged as { cannotTell: string }).cannotTell, /node scripts\/lay-layer\.mjs screenreader-fleet/, `${name}: names the remedy`);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("#3845 the REAL checkout: the laid layer is at the tag main's lockfile pins, so the guard no longer refuses a current tree", () => {
+  const pin = layerPinTag(readFileSync(join(REPO, "pnpm-lock.yaml"), "utf8"), LAYER) as { tag: string };
+  const { path, dir } = layerDeclaration(LAYER);
+  const judged = judgeLaidLayer({ name: LAYER, dir, path, tag: pin.tag });
+  assert.deepEqual(judged, { differing: [] }, "the layer this tree holds is the one its own lockfile pins (the install lays it: `prepare`)");
+  const closure = importClosure(THIS, (file) => readFileSync(join(REPO, file), "utf8"));
+  assert.ok(closure.some((file) => layerOwning(file) === LAYER), "positive control: the real program still imports the layer, so the judgment above is the one that matters");
 });
 
 test("#3275 checkAgainstMain: a failed fetch, an unresolvable origin/main and an empty closure each REFUSE", () => {
@@ -881,10 +1166,65 @@ test("#3275 tick --apply: a refusal dispatches NOTHING, says why in the report, 
   });
   assert.deepEqual(dispatched, []);
   assert.deepEqual(result.decisions[0].decision, { action: "keep", reason: "stale-checkout" });
-  assert.deepEqual(result.refusal, { reason: "stale-checkout", detail: "1 file differs: a.mjs", at: IDLE_THRESHOLD_MS });
+  assert.deepEqual(result.refusal, { reason: "stale-checkout", detail: "1 file differs: a.mjs", at: IDLE_THRESHOLD_MS, since: IDLE_THRESHOLD_MS },
+    "the first refusal of a run began now");
   assert.deepEqual(saved!.refusal, result.refusal);
   assert.equal(saved!.fetchedAt, 42);
   assert.deepEqual(saved!.shutdownRequestedAt, {}, "nothing was requested, so nothing is stamped");
+});
+
+// #3859: `at` is the LAST tick's time and so is seconds old for as long as a refusal stands; `since` is the FIRST's.
+const REFUSE = () => ({ verdict: { action: "refuse" as const, reason: "stale-checkout" as const, detail: "1 file differs: a.mjs" }, fetchedAt: 42 });
+
+const IDLE_SINCE_0 = JSON.stringify({ idleSince: { "a11y-worker-2": 0 }, shutdownRequestedAt: {} });
+
+/** An `--apply` fleet whose state file persists between ticks, as the timer's does: each tick reads what the last one wrote. */
+function tickingFleet(checkout: () => ReturnType<typeof checkAgainstMain>, firstState = IDLE_SINCE_0) {
+  let disk = firstState;
+  const tickAt = (now: number) => tick({
+    workers: WORKERS, probe: async () => ({ outcome: "idle" as const }), now: () => now, statePath: "x.json",
+    read: filesWith(disk) as never, proofTransport: provenAt0, write: (_p, data) => { disk = String(data); },
+    apply: true, checkout, dispatch: () => ({ status: 0, log: "" }),
+  });
+  return { tickAt, onDisk: () => JSON.parse(String(disk)) };
+}
+
+const IDLE_FOR_A_LONG_WHILE = IDLE_THRESHOLD_MS * 4;
+
+test("#3859 tick: two refusing ticks in a row carry the FIRST tick's time as `since` and the second's as `at`", async () => {
+  const fleet = tickingFleet(REFUSE);
+  const first = await fleet.tickAt(IDLE_THRESHOLD_MS);
+  const second = await fleet.tickAt(IDLE_FOR_A_LONG_WHILE);
+  assert.equal(first.refusal!.since, IDLE_THRESHOLD_MS);
+  assert.equal(second.refusal!.at, IDLE_FOR_A_LONG_WHILE);
+  assert.equal(second.refusal!.since, IDLE_THRESHOLD_MS, "the standing refusal is dated from its first tick, not its latest");
+  assert.deepEqual(fleet.onDisk().refusal, second.refusal, "and that is what fleet-watch reads from disk");
+});
+
+test("#3859 tick: a PROCEEDING tick between two refusals ends the run, so the next refusal begins anew", async () => {
+  const verdicts = [REFUSE, PROCEED, REFUSE];
+  const fleet = tickingFleet(() => verdicts.shift()!());
+  await fleet.tickAt(IDLE_THRESHOLD_MS);
+  const proceeding = await fleet.tickAt(IDLE_THRESHOLD_MS + 1);
+  assert.equal(proceeding.refusal, null, "positive control: the middle tick really did proceed and clear the record");
+  const again = await fleet.tickAt(IDLE_FOR_A_LONG_WHILE);
+  assert.equal(again.refusal!.since, IDLE_FOR_A_LONG_WHILE);
+});
+
+test("#3859 tick: a previous refusal written BEFORE `since` existed carries its `at` forward", async () => {
+  const oldShape = JSON.stringify({ idleSince: { "a11y-worker-2": 0 }, shutdownRequestedAt: {}, fetchedAt: 1,
+    refusal: { reason: "stale-checkout", detail: "1 file differs: a.mjs", at: 123 } });
+  const result = await tickingFleet(REFUSE, oldShape).tickAt(IDLE_FOR_A_LONG_WHILE);
+  assert.equal(result.refusal!.since, 123);
+  assert.equal(result.refusal!.at, IDLE_FOR_A_LONG_WHILE);
+});
+
+test("readState: a refusal's `since` survives the round trip, and a non-numeric one reads as absent rather than as a date", () => {
+  const refusal = { reason: "stale-checkout", detail: "d", at: 8 };
+  const read = (since: unknown) => readState("x.json", () => JSON.stringify({ refusal: { ...refusal, since } }) as never).refusal;
+  assert.deepEqual(read(5), { ...refusal, since: 5 });
+  assert.deepEqual(read("yesterday"), refusal, "a string is not a time, and must not become one");
+  assert.deepEqual(read(undefined), refusal);
 });
 
 test("#3275 tick: the checkout is asked only when --apply has something to power off", async () => {

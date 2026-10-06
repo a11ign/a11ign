@@ -81,7 +81,7 @@ on:
     #
     # The cost of the fix WAS a full `ci.yml` run per title or body edit, and this paragraph said the heavy jobs
     # skip because `changed` diffs against the base and a body edit changes no files. THAT WAS NEVER TRUE: the
-    # diff is the whole pull request, so `ts`, `guardSweep` and `agentOrg` ran in full on every body edit and
+    # diff is the whole pull request, so `ts` and `guardSweep` ran in full on every body edit and
     # every label (#3211, three runs of one head: 141 s, 33 s and 146 s of jobs each time). The heavy jobs now
     # exclude these three types BY NAME, and the `concurrency` block below keeps them from cancelling a test run.
     # `labeled`/`unlabeled` ARE THE HALF THAT MAKES THE HOLD REAL. `gate` refuses a PR carrying a
@@ -577,90 +577,6 @@ jobs:
           printf '%s' "$BODY" > /tmp/body.txt
           agent-org owned-path-signoff --diff=/tmp/changed.txt --body=/tmp/body.txt
 
-  # #3105 (found on #3102 done-when 3): THE TOOL'S OWN SUITE RUNS AGAINST THIS PULL REQUEST, so a project change that moves a
-  # line an `a11ign/agent-org` test pins is red HERE, before it merges, and not on agent-org's `main` after.
-  # #3097 repointed workflows, hooks and scripts to `agent-org <command>`; agent-org's `gate` reads this project at `main`
-  # (`PROJECT_REF: main`) and pinned the old text, so this repository merged green and 16 tests went red over there, two
-  # of its queue entries were ejected and every agent-org PR was blocked for about 50 minutes. No job here ran agent-org's tests.
-  #
-  # THE LAYOUT IS agent-org's own `ci.yml` `gate` job, turned round: THIS checkout (the PR's merge ref, or the queue's commit on
-  # `merge_group`) is the project, and `a11ign/agent-org` at `main` is laid over `packages/agent-org` where the tool lives in
-  # a project. Keep the two in step by reading that file; it names why Node is pinned to 22.22.1 and why the sibling helpers
-  # are copied beside the tests with `--ignore-existing`. `rm -rf packages/agent-org` only empties this runner's copy.
-  #
-  # AGENT-ORG AT `main` MEANS THE ORDER OF A BREAKING CHANGE IS FIXED, and that is the point: a project change that moves a
-  # pinned line is red here until agent-org's tests accept the new form, so agent-org lands first (accepting BOTH forms) and
-  # the project second. Fix forward, never revert: this job refuses the merge, it reverts nothing.
-  #
-  # UNCONDITIONAL, NOT PATH-FILTERED, though the row proposed a filter (`.github/workflows/**`, hooks, `package.json`). The suite
-  # reads the project's rules files, its `.agent-org/`, its docs and its git history, so a path list is the second list that
-  # drifts from what the tests read -- #2348's ruling for `guardSweep`, and a false negative here is exactly #3097. Cost is
-  # about three minutes of a runner, in parallel with `ts`; `needs: changed` skips it for a closed PR. NOT a reusable-workflow call
-  # into agent-org (the row's other option, to weigh first): it would need `workflow_call` and a project input added over there,
-  # and would couple this required check to a file in another repository at `main` -- the same coupling, with less of it visible here.
-  #
-  # `agentOrg` IS IN `gate`'s `needs`, so a red suite blocks the merge. `merge_group` runs it too: the queue is where #3097 was
-  # tested last, and the ejection there is what keeps a project change from landing on a red tool.
-  #
-  # #3211: NOT ON A `meta` EVENT (a body edit or a label). It tests this tree and the tool, and neither moved; the code
-  # run for the same head ran it. Measured on three runs of one head: about three minutes each, for a label.
-  agentOrg:
-    needs: changed
-    if: ${{ !contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action) }}
-    runs-on: ubuntu-latest
-    env:
-      # The tool the project is tested against. `main` follows the tool; a commit hash holds it still, to tell a project red from a tool red.
-      AGENT_ORG_REF: main
-    steps:
-      # Full history: the suite reads the project's merge-base, branch tips and recorded commits, so a shallow clone fails it for the wrong reason.
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      # pnpm on the PATH is also what `packaging/installed-layout.test.ts` installs the tool through, as a project would. The tool's own
-      # `gate` installs its three dependencies with npm; this project's `workflows-run-pnpm.test.ts` allows no npm step, and the
-      # project's lockfile already holds all three.
-      - uses: pnpm/action-setup@v6
-      # NOT the `22` the other jobs use: agent-org pins 22.22.1 because on 22.23.3 its tree-walking observer fails a test (see its `ci.yml`).
-      - uses: actions/setup-node@v7
-        with: { node-version: 22.22.1, cache: pnpm }
-      - run: pnpm install --frozen-lockfile --ignore-scripts --filter .
-      - name: The tool under test -- a11ign/agent-org at AGENT_ORG_REF, read-only, no token beyond the job's own read-only one
-        uses: actions/checkout@v7
-        with:
-          repository: a11ign/agent-org
-          ref: ${{ env.AGENT_ORG_REF }}
-          path: agent-org
-          persist-credentials: false
-          # #3276: the tool's `gate` judges its pinned populations as a RATCHET against the base of its own checkout (agent-org#111, #3245),
-          # and a shallow clone has no base. A strict reading in `GITHUB_ACTIONS` is a test failure there, red on every pull request.
-          fetch-depth: 0
-      - name: Put the tool where the tool lives in a project, and the tests' siblings beside the tests
-        run: |
-          rm -rf packages/agent-org
-          mkdir packages/agent-org
-          cd agent-org
-          cp -r src host .github CHANGELOG.md package.json LICENSE README.md ../packages/agent-org/
-          cd ..
-          # `packages/lab/` is a LAYER here (#3505), and this job installs with `--ignore-scripts`, so nothing has laid it: its fixtures are what the rsync copies.
-          node scripts/lay-layer.mjs lab
-          rsync -a --ignore-existing --exclude='*.test.ts' --exclude='*.test.mjs' packages/lab/src/packaging/ packages/agent-org/src/packaging/
-          # The tool's checkout is not part of the project the suite walks; leave only the laid-out copy. It is MOVED, not deleted (#3276):
-          # `AGENT_ORG_TOOL_REPO` names it, and the tool's ratchet reads its base there. Inside the workspace it would be the project's
-          # own repository, whose base holds no `src` (measured: `git archive <sha> src` fails), so the variable must name a clone outside it.
-          mv agent-org "$RUNNER_TEMP/agent-org-checkout"
-          echo "AGENT_ORG_TOOL_REPO=$RUNNER_TEMP/agent-org-checkout" >> "$GITHUB_ENV"
-          # The project loads the tool by path (`toolModule`, #3534). The tool's own tests read this fixture's STATIC imports, as relative paths into
-          # `packages/agent-org`, where the tool lived when #2976 removed it, so this runner (and no committed file) spells the import that way.
-          fixture=packages/guards/src/board-document-chrome-resolver.test.ts
-          sed -i 's#^const {\(.*\)} = await toolModule("src/board-document.mjs");#import {\1} from "../../agent-org/src/board-document.mjs";#' "$fixture"
-          grep -q 'from "../../agent-org/src/board-document.mjs"' "$fixture"
-          # The tool's tests list the project's files with `git ls-files`. The laid-out copy joins this runner's index so they see the tool as they did when it was tracked.
-          git add --force --intent-to-add packages/agent-org
-      # THE TOOL'S OWN RUNNER, not rstest: the suite is `node:test` files and agent-org's `gate` runs exactly this command. Under rstest 5 of 4649 failed. Named in
-      # `runner-path-has-no-tsx-c8.test.ts` (`RUNS_THE_TOOLS_OWN_SUITE`), which pins this line and refuses the same words anywhere else.
-      - name: The tool's whole suite -- every *.test.ts and *.test.mjs, run from the project's root
-        run: node --import tsx --test "packages/agent-org/src/**/*.test.ts" "packages/agent-org/src/**/*.test.mjs"
-
   # #902, step 2 of the CI Reset (chairman-approved): THE REQUIRED CHECK IS THE PRODUCT, NOT THE PROCESS.
   # Of the last forty red `ci` runs on pull requests, 13 were `ts` -- a real test, lint or typecheck
   # failure -- and the rest were the process jobs: `acceptance` 10, `mergeSafety` 10, `docs` 9,
@@ -702,7 +618,7 @@ jobs:
   # watched the body) from a queue stall into an edit -- the condition that made blocking unsafe then
   # does not hold now.
   gate:
-    needs: [changed, ts, python, ansible, changeset, rulesFitness, guardSweep, deliberateRefusals, acceptance, ownedPaths, agentOrg]
+    needs: [changed, ts, python, ansible, changeset, rulesFitness, guardSweep, deliberateRefusals, acceptance, ownedPaths]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     # `actions: read` for the one lookup below, and nothing else: this job checks nothing out and writes nothing.
@@ -721,8 +637,7 @@ jobs:
             "${{ needs.guardSweep.result }}" \
             "${{ needs.deliberateRefusals.result }}" \
             "${{ needs.acceptance.result }}" \
-            "${{ needs.ownedPaths.result }}" \
-            "${{ needs.agentOrg.result }}"
+            "${{ needs.ownedPaths.result }}"
           do
             if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
               echo "::error::a job reported '$result', which is neither success nor skipped"

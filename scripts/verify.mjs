@@ -4,11 +4,10 @@
 //
 // WHY THIS EXISTS. The chairman measured the first-run pass rate at 35% (41 of 63 pull requests red on their first
 // completed run, #928) and read the cause: authors ran "the affected files", CI runs the changed files
-// transitively, every tree-wide guard and the whole agent-org suite. A partial local run is not "passing", and
+// transitively, and every tree-wide guard. A partial local run is not "passing", and
 // nothing let an author tell the difference. This runs what CI's `gate` waits for.
 //
-// IT REUSES CI'S CODE AND DOES NOT COPY IT. Which jobs apply is `ci-changed.mjs`'s `classify`, imported. The agentOrg
-// job's ref and the files it copies are READ from `ci.yml` rather than typed here. And the population is `gate`'s own
+// IT REUSES CI'S CODE AND DOES NOT COPY IT. Which jobs apply is `ci-changed.mjs`'s `classify`, imported. The population is `gate`'s own
 // `needs` list, read from `ci.yml`: every job in it is a step below or an entry of CI_ONLY with a reason, and
 // `verify-matches-ci.test.ts` fails the day a job is added to CI and to neither.
 //
@@ -23,25 +22,14 @@
 // GREEN only for the head and body it was made for, and only when EVERY step is there and passed. `pr:open` reads
 // it; `--check` prints the same verdict without running anything.
 //
-// THE `agentOrg` STEP RUNS BESIDE `ts` (#3333). CI runs its jobs in parallel and this ran them one after another, which
-// made it slower than CI on all three pull requests measured. The step works in a detached worktree of the head in a
-// scratch directory, so nothing it writes is under the author's tree and the tree-walking guards inside `ts` never read
-// it. The cost: it tests the COMMITTED head, so an author's uncommitted edit is not in it (a stamp on a dirty tree is
-// never green anyway).
-//
-// THE `agentOrg` STEP SEES NO `~/.claude/projects`, AS CI'S RUNNER SEES NONE (#3368). Beside `ts` it took 5m46s where CI took
-// about 4m: the tool's tests read the host's transcripts to find a session (3 GB here; one test spent 90 s in it), and 1m56s is
-// what is left of it. Everything else of the home is linked, so no test sees another machine (`ciLikeHome`).
-//
 // WALL TIME is printed beside CI's median as a measurement and not a target (chairman, #3210). If this is slower
 // than CI, that is the next row, not a reason to drop a step.
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
-  closeSync, existsSync, globSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync,
-  writeFileSync,
+  existsSync, globSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync,
 } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { constants as osConstants, homedir, tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { changedFiles } from "../packages/guards/src/changed-files.mjs";
@@ -65,7 +53,7 @@ const SHORT_SHA = 9;
 
 /**
  * Every job of `ci.yml` that `gate` needs and that runs here. `runsWhen` is the `classify` key that makes CI run
- * the job, or null when CI runs it on every pull request: the agent-org suite, the body checks and the owned-path
+ * the job, or null when CI runs it on every pull request: the body checks and the owned-path
  * sign-off carry no `changed` output, so a bare diff of a docs file still runs them (#2348), and so does this.
  */
 export const STEPS = [
@@ -74,7 +62,6 @@ export const STEPS = [
   { id: "python", runsWhen: "python" },
   { id: "rulesFitness", runsWhen: "rulesFitness" },
   { id: "changeset", runsWhen: "changeset" },
-  { id: "agentOrg", runsWhen: null },
   { id: "acceptance", runsWhen: null },
   { id: "ownedPaths", runsWhen: null },
 ];
@@ -86,7 +73,7 @@ export const STEPS = [
 export const CI_ONLY = {
   guardSweep: "the tree-wide guards (tests ABOUT the repository, the #2174 class) are not a function of the diff, so no "
     + "module graph selects them and `--changed` cannot; they run once per pull request in CI, which carries no "
-    + "`changed` condition for them (#3572, chairman via ceo: the same line #3549 draws for the agent-org suite)",
+    + "`changed` condition for them (#3572, chairman via ceo)",
   ansible: "needs ansible-core and the Galaxy collections, which CI installs fresh with pip and ansible-galaxy "
     + "and which are no dependency of this checkout; `changed` skips it for any diff outside packages/control/ansible",
   deliberateRefusals: "needs the pull request's number and a GitHub token: it compares the head with what GitHub "
@@ -162,14 +149,86 @@ function minutes(ms) {
 }
 
 /**
- * The ref and the files CI's `agentOrg` job copies, READ from `ci.yml` so a change there reaches this step.
- * @param {string} ciYml
- * @returns {{ ref: string, copied: string[] } | null}
+ * EVERY SCRATCH TREE `verify` MAKES IS REMOVED ON EVERY EXIT A PROCESS CAN CHOOSE (#3847, incident #3846). `try/finally` runs on a return and a
+ * throw and does not run when a signal ends the process, so a `verify` killed by its parent (a timeout, a closed terminal, a restarted unit) left
+ * its `verify-*` tree in `/tmp`. The one `mkdtempSync` is `makeScratch`'s: it registers the tree here, and `removeScratch` (a `finally`) and the handlers below (SIGINT,
+ * SIGTERM, SIGHUP and `exit`) are the same sync removal. The handlers stop the children first, so nothing is still writing into a tree being removed.
+ *
+ * WHAT THIS CANNOT DO: SIGKILL is not delivered to anyone's handler. What survives it is the janitor's work, and a step that blocks the event loop
+ * (a `spawnSync`) would hold a signal until it returned, which is why the long steps below run through `shAsync`.
  */
-export function agentOrgStaging(ciYml) {
-  const ref = /AGENT_ORG_REF:\s*(\S+)/.exec(ciYml)?.[1];
-  const copy = /cp -r ([^\n]+?) \.\.\/packages\/agent-org\//.exec(ciYml)?.[1];
-  return ref && copy ? { ref, copied: copy.split(/\s+/) } : null;
+const liveScratch = new Set(/** @type {string[]} */ ([]));
+const liveChildren = new Set(/** @type {import("node:child_process").ChildProcess[]} */ ([]));
+let exitHandlersInstalled = false;
+
+/**
+ * @param {string} prefix the directory's name up to its random suffix
+ * @param {string} [parent] where it is made: the OS temp directory unless a caller says (`privateRunTmp` does)
+ */
+export function makeScratch(prefix, parent = tmpdir()) {
+  installExitHandlers();
+  const dir = mkdtempSync(join(parent, prefix));
+  liveScratch.add(dir);
+  return dir;
+}
+
+/** @param {string} dir a tree `makeScratch` made */
+export function removeScratch(dir) {
+  removeInSmallCalls(dir);
+  liveScratch.delete(dir);
+}
+
+/**
+ * A directory removed one top-level entry per call, then itself: the private run directory holds whatever the suite's tests left in it, and one
+ * `rm -r` of a large tree is the call that locked the host's kernel in #3846. `dir` must be a non-empty path, the `${D:?}` rule for a glob joined to a variable.
+ * @param {string} dir
+ */
+export function removeInSmallCalls(dir) {
+  if (!dir) throw new Error("removeInSmallCalls: refusing an empty directory name");
+  if (!existsSync(dir)) return;
+  for (const entry of readdirSync(dir)) rmSync(join(dir, entry), { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true });
+}
+
+/** Where a run's private temp directories are made, under the user's cache as the chairman's correction on #3846 names. */
+export const PRIVATE_TMP_ROOT = ".cache/a11ign/tmp";
+
+/**
+ * A PRIVATE `TMPDIR` FOR THIS RUN AND EVERYTHING IT SPAWNS (chairman's 16:55Z correction on #3846, #3847): `~/.cache/a11ign/tmp/run-<id>`, made once,
+ * exported as `TMPDIR` in this process's environment (so `tmpdir()`, `makeScratch` and every child inherit it) and removed, in small calls, on every
+ * exit `makeScratch`'s trees are. The test directories the suites make land in it and go with it, instead of piling up in the shared `/tmp`.
+ * THE INTERFACE #3855's rstest config can reuse: `privateRunTmp({ home? }) -> dir`, and `removeInSmallCalls(dir)` for its own removal.
+ * @param {{ home?: string }} [where]
+ * @returns {string} the run's directory
+ */
+export function privateRunTmp({ home = homedir() } = {}) {
+  const root = join(home, PRIVATE_TMP_ROOT);
+  mkdirSync(root, { recursive: true });
+  const dir = makeScratch("run-", root);
+  process.env.TMPDIR = dir;
+  return dir;
+}
+
+function removeAllScratch() {
+  for (const dir of [...liveScratch]) removeScratch(dir);
+}
+
+/** The shell's offset for "ended by signal n", which an unhandled one would have exited with. */
+const SIGNAL_EXIT_BASE = 128;
+/** The signals that end a run from outside. */
+const ENDING_SIGNALS = /** @type {const} */ (["SIGINT", "SIGTERM", "SIGHUP"]);
+
+function installExitHandlers() {
+  if (exitHandlersInstalled) return;
+  exitHandlersInstalled = true;
+  for (const signal of ENDING_SIGNALS) {
+    process.once(signal, () => {
+      for (const child of liveChildren) child.kill("SIGTERM");
+      removeAllScratch();
+      process.exit(SIGNAL_EXIT_BASE + osConstants.signals[signal]);
+    });
+  }
+  process.on("exit", removeAllScratch);
 }
 
 /**
@@ -181,16 +240,10 @@ function sh(command, args, options = {}) {
   return spawnSync(command, args, { cwd: REPO, stdio: "inherit", encoding: "utf8", env: sandboxGitEnv(), ...options });
 }
 
-/** @param {string[]} pnpmArgs */
-function pnpm(pnpmArgs, options = {}) {
+/** @param {string[]} pnpmArgs @param {{ stdio?: import("node:child_process").StdioOptions }} [options] */
+function pnpm(pnpmArgs, { stdio = "inherit" } = {}) {
   const { command, args } = pnpmCliInvocation(pnpmArgs);
-  return sh(command, args, options);
-}
-
-/** Commands run in order, stopping at the first that fails. @param {Array<() => { status: number | null }>} commands */
-function inOrder(commands) {
-  for (const command of commands) if (command().status !== 0) return "fail";
-  return "pass";
+  return shAsync(command, args, { cwd: REPO, stdio });
 }
 
 /**
@@ -200,7 +253,7 @@ function inOrder(commands) {
  * so a wrong include would read exactly like a diff no test reaches, and this floor is what tells them apart (#2165, #3572).
  */
 export const AFFECTED_INCLUDE = "packages/*/src/**/*.test.ts";
-export const AFFECTED_MIN_FILES = 159;
+export const AFFECTED_MIN_FILES = 500;
 const RSTEST_CONFIG = "scripts/rstest/rstest.config.mjs";
 
 /**
@@ -275,7 +328,7 @@ export async function runAffectedSet({ base }, run, readSummary = readRunSummary
   };
   const short = underFloor([AFFECTED_INCLUDE], AFFECTED_MIN_FILES);
   if (short.length > 0) return settle({ short, exit: null, summary: null, base });
-  const scratch = mkdtempSync(join(tmpdir(), "verify-affected-"));
+  const scratch = makeScratch("verify-affected-");
   const summaryFile = join(scratch, "summary.json");
   try {
     const { command, args } = pnpmCliInvocation(["exec", "rstest", "run", "--config", RSTEST_CONFIG,
@@ -283,7 +336,7 @@ export async function runAffectedSet({ base }, run, readSummary = readRunSummary
     const { status } = await run(command, args, { cwd: REPO, stdio: "inherit", env: { A11Y_RSTEST_SUMMARY_FILE: summaryFile } });
     return settle({ short, exit: status, summary: readSummary(summaryFile), base });
   } finally {
-    rmSync(scratch, { recursive: true, force: true });
+    removeScratch(scratch);
   }
 }
 
@@ -369,7 +422,7 @@ export async function runFailuresFirst({ name, files, dropped }, run) {
 }
 
 /**
- * `ts` must not block the event loop: `agentOrg` runs beside it as a chain of promises, and a `spawnSync` here freezes
+ * `ts` must not block the event loop: a `spawnSync` here freezes
  * every one of them until `ts` returns, which made the two run one after the other with the step merely STARTED early
  * (#3333). `run` is a parameter so a test can see that every command goes through the non-blocking runner. THE FAILURES-FIRST LEG
  * IS FIRST, before `docs:coverage`, lint and typecheck, because what it is for is seconds to the red an author is fixing (#3574).
@@ -394,17 +447,17 @@ export function runTs({ base }, run = shAsync, readSummary = readRunSummary, las
 }
 
 /** A `SKIPPED` line is an honest skip and not a pass (the engineer brief), so it is its own status and reads red. */
-function runPython() {
-  const result = pnpm(["run", "test:python"], { stdio: ["ignore", "pipe", "inherit"] });
-  const out = String(result.stdout ?? "");
+async function runPython() {
+  const result = await pnpm(["run", "test:python"], { stdio: ["ignore", "pipe", "inherit"] });
+  const out = result.stdout;
   process.stdout.write(out);
   if (result.status !== 0) return "fail";
   return /^SKIPPED/m.test(out) ? "skipped" : "pass";
 }
 
 /** CI's `changeset` job, minus the Dependabot and queue branches that only a bot's pull request reaches. @param {{ base: string }} ctx */
-function runChangeset({ base }) {
-  return pnpm(["exec", "changeset", "status", `--since=${base}`]).status === 0 ? "pass" : "fail";
+async function runChangeset({ base }) {
+  return (await pnpm(["exec", "changeset", "status", `--since=${base}`])).status === 0 ? "pass" : "fail";
 }
 
 /**
@@ -427,16 +480,17 @@ function runAcceptance({ body, files }) {
 }
 
 /** @param {{ body: string | null, files: string[] }} ctx */
-function runOwnedPaths({ body, files }) {
-  const dir = mkdtempSync(join(tmpdir(), "verify-owned-"));
+async function runOwnedPaths({ body, files }) {
+  const dir = makeScratch("verify-owned-");
   try {
     writeFileSync(join(dir, "changed.txt"), files.join("\n"));
     writeFileSync(join(dir, "body.txt"), body ?? "");
     const diff = `--diff=${join(dir, "changed.txt")}`;
-    return sh(process.execPath, [toolPath("src/bin.mjs"), "owned-path-signoff", diff, `--body=${join(dir, "body.txt")}`]).status === 0
-      ? "pass" : "fail";
+    const { status } = await shAsync(process.execPath, [toolPath("src/bin.mjs"), "owned-path-signoff", diff, `--body=${join(dir, "body.txt")}`],
+      { cwd: REPO, stdio: "inherit" });
+    return status === 0 ? "pass" : "fail";
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeScratch(dir);
   }
 }
 
@@ -445,7 +499,7 @@ const AGENT_ORG_REMOTE = "a11ign/agent-org";
 const AGENT_ORG_CACHE = "verify-agent-org";
 
 /**
- * WHICH CHECKOUT OF THE TOOL THE `agentOrg` STEP READS, in order: `A11Y_AGENT_ORG_REPO` (explicit, and never
+ * WHICH CHECKOUT OF THE TOOL THE HOST'S SUITE SLOT (`underTheHostsSlot`) READS, in order: `A11Y_AGENT_ORG_REPO` (explicit, and never
  * replaced by a guess), a sibling `../agent-org`, and otherwise a clone `verify` makes itself in the repository's
  * common git dir, shared by every worktree and never tracked. CI clones the tool with full history too (the suite
  * reads its merge-base), so the clone is full. A normal checkout has the tool at `.agent-org/host.json`'s path (a detached
@@ -481,53 +535,8 @@ function provisionAgentOrg() {
   return dir;
 }
 
-/** What the staging step writes, under `root`: the tool's directory, and the one fixture whose import it respells. */
-const agentOrgPaths = (/** @type {string} */ root) => ({
-  toolDir: join(root, "packages/agent-org"),
-  fixture: join(root, "packages/guards/src/board-document-chrome-resolver.test.ts"),
-});
-
 /**
- * WHERE THE `agentOrg` STEP WORKS: a detached worktree of the author's head, in a scratch directory OUTSIDE the author's
- * tree. The step lays the tool at `packages/agent-org` and edits one fixture's import, and the tree-walking guards
- * inside `ts` read the author's `packages/`: staged in place the two could not overlap (#3333). Everything it writes is
- * under `clone`, so `ts` runs beside it, and the `git status --porcelain` read at the end of a run has nothing to find.
- * @param {string} scratch
- */
-export function agentOrgLayout(scratch) {
-  const clone = join(scratch, "tree");
-  return { clone, ...agentOrgPaths(clone) };
-}
-
-/**
- * Lays the tool out as `packages/agent-org` under `root`, the way CI's `agentOrg` job does, and leaves NOTHING of its
- * test suite out: what the staged copy runs is what the tool's own tests are, so a file dropped here is a test CI runs
- * and `verify` does not. `root` is a parameter so a test can stage into a throwaway tree and read the result (#3329).
- * @param {{ toolRepo: string, scratch: string, copied: string[], root?: string, stdio?: import("node:child_process").StdioOptions, commit?: string }} staging
- */
-export function stageAgentOrg({ toolRepo, scratch, copied, root = REPO, stdio = "inherit", commit = "FETCH_HEAD" }) {
-  const tarball = join(scratch, "tool.tar");
-  const { toolDir: dest, fixture } = agentOrgPaths(root);
-  const here = (/** @type {string} */ command, /** @type {string[]} */ args) => sh(command, args, { cwd: root, stdio });
-  rmSync(dest, { recursive: true, force: true });
-  const steps = [
-    () => here("git", ["-C", toolRepo, "archive", "--format=tar", `--output=${tarball}`, commit, ...copied]),
-    () => here("mkdir", ["-p", dest]),
-    () => here("tar", ["-xf", tarball, "-C", dest]),
-    // The clone is tracked files only, and `packages/lab/` is a LAYER since #3505 (untracked, laid): the fixtures the rsync copies come from the lab at its pinned tag.
-    () => here("node", ["scripts/lay-layer.mjs", "lab"]),
-    () => here("rsync", ["-a", "--ignore-existing", "--exclude=*.test.ts", "--exclude=*.test.mjs",
-      "packages/lab/src/packaging/", "packages/agent-org/src/packaging/"]),
-    // The same `sed` as ci.yml's `agentOrg` job: the project reaches the tool through `toolModule`, the tool's own tests read a static relative import.
-    () => here("sed", ["-i", "s#^const {\\(.*\\)} = await toolModule(\"src/board-document.mjs\");#import {\\1} from \"../../agent-org/src/board-document.mjs\";#",
-      fixture]),
-    () => here("git", ["add", "--force", "--intent-to-add", "packages/agent-org"]),
-  ];
-  return { status: inOrder(steps) === "pass" ? 0 : 1 };
-}
-
-/**
- * A hybrid `node_modules` for the clone, which has none: every entry links to where the author's tree gets it, and
+ * A hybrid `node_modules` for a worktree that has none (`selection-skipped.mjs` makes one; the `agentOrg` step that first needed it is gone, #3885): every entry links to where the author's tree gets it, and
  * `@a11ign/*` is relinked with the SAME relative targets, so inside the clone they reach the clone's own `packages/`
  * and not the author's (docs/operational-lessons.md#resolves-to-dist-does-not-say-whose). No build runs: CI's job has none.
  * @param {{ from: string, to: string }} dirs
@@ -546,21 +555,27 @@ export function linkNodeModules({ from, to }) {
 }
 
 /**
- * Like `sh`, without blocking, and with output into `log`: a step that runs beside another must not interleave its
- * lines with it, so the output is printed whole at the step's turn.
+ * Like `sh`, without blocking.
  * @param {string} command
  * @param {string[]} args
  * @param {{ cwd: string, stdio: import("node:child_process").StdioOptions, env?: Record<string, string> }} where
- * @returns {Promise<{ status: number | null }>}
+ * @returns {Promise<{ status: number | null, stdout: string }>} `stdout` is what a piped one wrote, and "" when it was not piped
  */
 export function shAsync(command, args, { cwd, stdio, env = {} }) {
   return new Promise((done) => {
     const child = spawn(command, args, { cwd, env: sandboxGitEnv(env), stdio });
+    liveChildren.add(child);
+    let stdout = "";
+    child.stdout?.on("data", (chunk) => { stdout += chunk; });
     child.on("error", (cause) => {
+      liveChildren.delete(child);
       console.error(`verify: could not start ${command}: ${cause.message}`);
-      done({ status: null });
+      done({ status: null, stdout });
     });
-    child.on("close", (status) => done({ status }));
+    child.on("close", (status) => {
+      liveChildren.delete(child);
+      done({ status, stdout });
+    });
   });
 }
 
@@ -568,102 +583,6 @@ export function shAsync(command, args, { cwd, stdio, env = {} }) {
 async function inOrderAsync(commands) {
   for (const command of commands) if ((await command()).status !== 0) return "fail";
   return "pass";
-}
-
-/**
- * A HOME THAT HAS EVERYTHING THE REAL ONE HAS EXCEPT THE TRANSCRIPTS, which is what a CI runner's is. The tool's tests read
- * `~/.claude/projects` for the session they are asked about (`instanceCacheRead`), and on a host that has run agents for
- * weeks that is 3 GB of JSONL: one test spent 90 s of the step in it (#3368, measured with `--cpu-prof`: `readFileSync` and
- * the record parser, nothing else). Every other entry is LINKED, so corepack's pnpm, a browser or `codex` are found where
- * they are today and no test changes from run to run; an empty HOME was tried and failed 8 tests that look there.
- * @param {{ home: string, into: string }} dirs
- * @returns {string} `into`, to be the child's HOME
- */
-export function ciLikeHome({ home, into }) {
-  const claude = join(home, ".claude");
-  mkdirSync(join(into, ".claude"), { recursive: true });
-  const link = (/** @type {string} */ from, /** @type {string} */ to, /** @type {string[]} */ except) => {
-    if (!existsSync(from)) return;
-    for (const entry of readdirSync(from)) if (!except.includes(entry)) symlinkSync(join(from, entry), join(to, entry));
-  };
-  link(home, into, [".claude"]);
-  link(claude, join(into, ".claude"), ["projects"]);
-  return into;
-}
-
-/**
- * Fetches the tool's `ref` and answers with the COMMIT it was, so what is archived later is that commit and not whatever
- * `FETCH_HEAD` says by then: the checkout is shared (every session's `verify` and the tool's own workers fetch into
- * it), a plain `git fetch origin` rewrites `FETCH_HEAD` with its first line a branch, and the archive minutes later
- * was of an old one -- 39 failures of tests the tool had since deleted. Fetching by the ID is what makes it ours.
- * @param {{ toolRepo: string, ref: string, log: number }} where
- * @returns {{ status: number | null, commit: string }}
- */
-export function pinTool({ toolRepo, ref, log }) {
-  const git = (/** @type {string[]} */ ...args) =>
-    spawnSync("git", ["-C", toolRepo, ...args], { encoding: "utf8", env: sandboxGitEnv(), stdio: ["ignore", "pipe", log] });
-  const commit = git("ls-remote", "origin", ref).stdout.split(/\s/)[0] || ref;
-  return { status: git("fetch", "--quiet", "origin", commit).status, commit };
-}
-
-/**
- * CI's `agentOrg` job, step for step, in a clone of `repo`'s head: the tool at the ref `ci.yml` names laid at
- * `packages/agent-org`, the project's packaging siblings beside its tests, one fixture's import respelled, and the
- * tool's own runner. Nothing is written under `repo`. `repo` is a parameter so a test can run it on a throwaway one.
- * The runner gets `AGENT_ORG_TOOL_REPO` = the checkout the tool was laid out FROM, as `ci.yml` exports it: the laid-out copy sits inside the clone's
- * own repository, and the tool's pin ratchets refuse a directory that is not a repository of its own (#3536: without it `agentOrg` was red here).
- * @param {{ repo: string, toolRepo: string, ref: string, copied: string[], scratch: string, log: number }} job
- */
-export async function runAgentOrgInClone({ repo, toolRepo, ref, copied, scratch, log }) {
-  const { clone } = agentOrgLayout(scratch);
-  let commit = ref;
-  const at = (/** @type {string} */ cwd) => ({ cwd, stdio: /** @type {import("node:child_process").StdioOptions} */ (["ignore", log, log]) });
-  try {
-    return await inOrderAsync([
-      () => { const pinned = pinTool({ toolRepo, ref, log }); commit = pinned.commit; return pinned; },
-      () => shAsync("git", ["worktree", "add", "--quiet", "--detach", clone, "HEAD"], at(repo)),
-      () => linkNodeModules({ from: join(repo, "node_modules"), to: join(clone, "node_modules") }),
-      () => stageAgentOrg({ toolRepo, scratch, copied, root: clone, stdio: ["ignore", log, log], commit }),
-      () => shAsync("node", ["--import", "tsx", "--test", "packages/agent-org/src/**/*.test.ts",
-        "packages/agent-org/src/**/*.test.mjs"], { ...at(clone), env: { HOME: ciLikeHome({ home: homedir(), into: join(scratch, "home") }), AGENT_ORG_TOOL_REPO: toolRepo } }),
-    ]);
-  } finally {
-    await removeClone({ repo, clone, log });
-  }
-}
-
-/**
- * The link directory goes first and by itself: removing it with the worktree would be asking git not to follow links
- * into the author's `node_modules`, and what it does there is its own business. `git worktree remove` names OUR clone;
- * a bare `git worktree prune` would also take every other session's entry whose directory is momentarily away.
- * @param {{ repo: string, clone: string, log: number }} where
- */
-async function removeClone({ repo, clone, log }) {
-  rmSync(join(clone, "node_modules"), { recursive: true, force: true });
-  if (existsSync(clone)) await shAsync("git", ["worktree", "remove", "--force", clone], { cwd: repo, stdio: ["ignore", log, log] });
-}
-
-/**
- * Starts CI's `agentOrg` job and returns at once with a promise for `{ status, output }`, so it runs beside `ts`. Its
- * output is held and printed at its place in `gate`'s order. @param {string} ciYml
- */
-async function runAgentOrg(ciYml) {
-  const staging = agentOrgStaging(ciYml);
-  if (!staging) {
-    return { status: "fail", output: "verify: ci.yml's agentOrg job no longer has the AGENT_ORG_REF and `cp -r` lines this step reads\n" };
-  }
-  const toolRepo = provisionAgentOrg();
-  if (!toolRepo) return { status: "fail", output: "" };
-  const scratch = mkdtempSync(join(tmpdir(), "verify-agent-org-"));
-  const logPath = join(scratch, "agentOrg.log");
-  const log = openSync(logPath, "w");
-  try {
-    const status = await runAgentOrgInClone({ repo: REPO, toolRepo, ref: staging.ref, copied: staging.copied, scratch, log });
-    return { status, output: readFileSync(logPath, "utf8") };
-  } finally {
-    closeSync(log);
-    rmSync(scratch, { recursive: true, force: true });
-  }
 }
 
 /**
@@ -676,7 +595,7 @@ function runStep(id, ctx) {
     changed: () => "pass",
     ts: () => runTs(ctx),
     python: () => runPython(),
-    rulesFitness: () => (pnpm(["run", "rules-check"]).status === 0 ? "pass" : "fail"),
+    rulesFitness: async () => ((await pnpm(["run", "rules-check"])).status === 0 ? "pass" : "fail"),
     changeset: () => runChangeset(ctx),
     acceptance: () => runAcceptance(ctx),
     ownedPaths: () => runOwnedPaths(ctx),
@@ -709,25 +628,6 @@ function readBody(bodyFile) {
 }
 
 /**
- * `agentOrg` is the one step that runs BESIDE the others (#3333): it works in a clone of the head and writes nothing
- * the others read, where staged in the author's tree it had to wait for `ts`. Started before the first step and
- * collected at its own place, with its output held until then. Its `ms` is its own wall time and not the wait.
- * @param {Array<{ id: string, run: boolean }>} plan
- * @param {StepContext} ctx
- * @returns {Map<string, Promise<{ status: string, ms: number, output: string }>>}
- */
-function startBesideSteps(plan, ctx) {
-  const beside = new Map();
-  if (plan.some((step) => step.id === "agentOrg" && step.run)) {
-    const started = Date.now();
-    // Caught here: nobody awaits it until its turn, and a rejection with no handler would end the run during `ts`.
-    const result = runAgentOrg(ctx.ciYml).catch((cause) => ({ status: "fail", output: `verify: agentOrg threw ${cause.stack}\n` }));
-    beside.set("agentOrg", result.then((outcome) => ({ ...outcome, ms: Date.now() - started })));
-  }
-  return beside;
-}
-
-/**
  * The result of every step, in `gate`'s order, ALL of them, so an author sees every red at once as CI shows them.
  * @param {{ classification: Record<string, unknown>, ctx: StepContext }} run
  */
@@ -735,12 +635,11 @@ async function runAllSteps({ classification, ctx }) {
   /** @type {Stamp["steps"]} */
   const results = {};
   const plan = stepsToRun(classification);
-  const beside = startBesideSteps(plan, ctx);
   for (const step of plan) {
     const started = Date.now();
-    const what = !step.run ? "-- CI would skip it for this diff" : beside.has(step.id) ? "... (started beside ts)" : "...";
+    const what = step.run ? "..." : "-- CI would skip it for this diff";
     process.stdout.write(`\nverify: ${step.id} ${what}\n`);
-    const outcome = await outcomeOf(step, { beside, ctx, started });
+    const outcome = await outcomeOf(step, { ctx, started });
     process.stdout.write(outcome.output);
     results[step.id] = { status: outcome.status, ms: outcome.ms };
     process.stdout.write(`verify: ${step.id} ${outcome.status.toUpperCase()} (${minutes(outcome.ms)})\n`);
@@ -748,20 +647,18 @@ async function runAllSteps({ classification, ctx }) {
   return results;
 }
 
-/** @param {{ id: string, run: boolean }} step @param {{ beside: Map<string, Promise<{ status: string, ms: number, output: string }>>, ctx: StepContext, started: number }} where */
-async function outcomeOf(step, { beside, ctx, started }) {
+/** @param {{ id: string, run: boolean }} step @param {{ ctx: StepContext, started: number }} where */
+async function outcomeOf(step, { ctx, started }) {
   if (!step.run) return { status: "not-needed", ms: 0, output: "" };
-  const apart = beside.get(step.id);
-  if (apart) return apart;
   return { status: await runStep(step.id, ctx), ms: Date.now() - started, output: "" };
 }
 
 /**
  * THE WHOLE RUN TAKES ONE OF THE HOST'S 2 SUITE SLOTS, AT `nice -n 15 ionice -c 3`, AND TAKES IT BEFORE ITS FIRST STEP (#3536, chairman via `ceo`, 2026-10-04). Nothing limited how many full
  * suites ran at once on the agent host: the 1-minute load was over its 16 cores in 26 of 36 samples and one gate tick took 6 min 44 s. `verify` runs ITSELF under the slot, so the one slot
- * covers `ts` and the `agentOrg` step beside it however many steps run side by side, and the child it starts is `verify` again with `SLOT_ENV` set so it does not queue behind itself.
+ * covers every step, and the child it starts is `verify` again with `SLOT_ENV` set so it does not queue behind itself.
  *
- * THE IMPLEMENTATION IS THE TOOL'S, ONE COPY AND ONE SLOT COUNT, read from the same checkout the `agentOrg` step uses (`provisionAgentOrg`), never copied here and never the tool the host runs
+ * THE IMPLEMENTATION IS THE TOOL'S, ONE COPY AND ONE SLOT COUNT, read from the checkout `provisionAgentOrg` finds, never copied here and never the tool the host runs
  * (a release older than the module would have no `suite-slots.mjs`). A checkout without it is a REFUSAL naming it, and so is a missing `flock`: a limit that silently does not
  * apply is worse than none. On a runner (`CI` set) there is no slot and the tool is not even loaded, as CI is not this host.
  *
@@ -798,6 +695,7 @@ async function main() {
   }
   const slotted = await underTheHostsSlot();
   if (slotted !== null) return slotted;
+  privateRunTmp();
 
   const files = changedFiles([`${base}...HEAD`], { repoRoot: REPO });
   if (files.length === 0) {

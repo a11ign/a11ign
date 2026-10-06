@@ -601,7 +601,12 @@ runs:
         if [ -n "$AUTH_STATE" ]; then
           case "$AUTH_STATE" in /*|[A-Za-z]:*) state_path="$AUTH_STATE" ;; *) state_path="$GITHUB_WORKSPACE/$AUTH_STATE" ;; esac
         fi
-        node node_modules/@a11ign/screenreader-worker/src/server.mjs \
+        # LAUNCHED BY ITS REAL PATH (#3829). The layer's server.mjs decides it is the entry point by comparing
+        # `import.meta.url` (node resolves a link BEFORE it sets that) with `process.argv[1]` (the path AS TYPED). Under pnpm
+        # `node_modules/@a11ign/*` is a link, so the bare path made `IS_MAIN` false and the process exited without a word,
+        # never listening: empty stdout, empty stderr, empty /health. `realpathSync` is the function node's own loader uses.
+        worker_js=$(node -p "require('node:fs').realpathSync('node_modules/@a11ign/screenreader-worker/src/server.mjs')")
+        node "$worker_js" \
           > "$RUNNER_TEMP/worker.log" 2> "$RUNNER_TEMP/worker.err" &
         worker=$!
         trap 'kill $worker 2>/dev/null || true' EXIT
@@ -609,16 +614,26 @@ runs:
         # Poll for READY, never sleep a guess. `ok` only means the HTTP server is answering — a worker
         # answered it once while NVDA could not start, which is how the pool's dominant failure hid for a
         # day. `ready` is the environment check, and it is false-then-true on a cold start by design.
+        #
+        # The poll also ends when the worker's PROCESS has: a dead pid never answers, and waiting out the budget against
+        # one cost ~15 minutes a run (#3829). Readiness is read first, so a worker that answered is never called dead.
         ready=""
+        exited=""
         for _ in $(seq 1 360); do
-          health=$(curl -fsS --max-time 5 http://127.0.0.1:8765/health 2>/dev/null || true)
+          health=$(curl -fsS --max-time 5 "$A11Y_WORKER/health" 2>/dev/null || true)
           case "$health" in *'"ready":true'*) ready=1; break ;; esac
+          kill -0 "$worker" 2>/dev/null || { exited=1; break; }
           sleep 0.5
         done
         if [ -z "$ready" ]; then
           echo "--- worker stdout ---"; cat "$RUNNER_TEMP/worker.log" 2>/dev/null || true
           echo "--- worker stderr ---"; cat "$RUNNER_TEMP/worker.err" 2>/dev/null || true
-          echo "::error::The capture worker never became ready. Last /health: $health" >&2
+          if [ -n "$exited" ]; then
+            status=0; wait "$worker" || status=$?
+            echo "::error::The capture worker exited with status $status before it became ready. Last /health: $health" >&2
+          else
+            echo "::error::The capture worker never became ready. Last /health: $health" >&2
+          fi
           exit 1
         fi
         echo "worker ready"

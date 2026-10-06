@@ -422,6 +422,22 @@ function buildCheckPinJob(pinnedSha) {
     `            echo "::error::scripts/generate-consumer-gate.mjs) against a commit in this history"`,
     "            exit 1",
     "          fi",
+    // #3864: A PIN THAT IS AN ANCESTOR CAN STILL PREDATE A CHANGE TO WHAT IT PINS. The ancestry test above answers "is this
+    // sha in the history", and a pin 11 commits behind a fix to `action.yml` is in it. The `a11y` job RUNS the Action at
+    // the pin, so it then ran the pre-#3829 definition and failed with the message the fix removed, while `action-smoke`
+    // (`uses: ./`) was green at the same sha. #3788 was right that a path is a poor proxy for README's CONTENT; for the
+    // Action the path IS the content, because the file at the pin is what executes. So this reads `action.yml` between the
+    // pin and the commit running, and only that: an edit elsewhere never re-stales the pin, and one that changes the Action
+    // costs one pin-only follow-up, which is exactly the run that should not go ahead on the old definition.
+    "      - name: Refuse a pin that predates a change to the Action's own definition",
+    "        run: |",
+    `          if ! git diff --quiet ${pinnedSha} "\${{ github.sha }}" -- ${ACTION_DEFINITION.join(" ")}; then`,
+    `            echo "::error::${ACTION_DEFINITION.join(", ")} changed between the pin, ${pinnedSha}, and the commit"`,
+    `            echo "::error::this run is executing at, \${{ github.sha }}: the a11y job would run the OLD Action --"`,
+    `            echo "::error::regenerate (node scripts/generate-consumer-gate.mjs) at a commit containing the change"`,
+    `            git diff --stat ${pinnedSha} "\${{ github.sha }}" -- ${ACTION_DEFINITION.join(" ")}`,
+    "            exit 1",
+    "          fi",
     // #3788: THE QUESTION IS "WOULD REGENERATING CHANGE THIS FILE", NOT "DID A FILE THAT FEEDS THE GENERATOR
     // CHANGE". This step used to refuse any edit to README.md or the generator since the pin, and it re-staled
     // the pin three times (#3140, #3774, #3788) on edits that moved nothing the file is built from: #3504's was
@@ -434,17 +450,23 @@ function buildCheckPinJob(pinnedSha) {
     "      - uses: actions/setup-node@v7",
     "        with: { node-version: 22, cache: pnpm }",
     "      - run: pnpm install --frozen-lockfile",
+    // #3828: `--check` imports `repo-identity.mjs`, which reads the project declaration through the tool and so needs
+    // `$AGENT_ORG_TOOL`. On a runner nothing sets it but this step (the other workflows run it for the same reason), so
+    // without it the import died with ERR_MODULE_NOT_FOUND on a host path, in the last two release runs.
+    "      - name: The tool at the newest release tag, cloned for this run, so `--check` can read the project declaration",
+    '        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"',
+    // #3828: NO `if ! ... ; then echo "does not match"` AROUND `--check`. That wrapper turned every non-zero exit, a
+    // crash at import included, into a claim about the file that nothing had measured, and sent the reader to
+    // regenerate, which cannot help. `--check` prints its own `STALE` line when it HAS measured a mismatch.
     "      - name: Refuse a file that no longer matches what README.md's documented workflow produces",
-    "        run: |",
-    "          if ! node scripts/generate-consumer-gate.mjs --check; then",
-    `            echo "::error::consumer-gate.yml (pinned to ${pinnedSha}) does not match what README.md's Quickstart fence produces"`,
-    '            echo "::error::regenerate (node scripts/generate-consumer-gate.mjs) and dispatch again"',
-    "            exit 1",
-    "          fi",
+    "        run: node scripts/generate-consumer-gate.mjs --check",
     "",
     "",
   ].join("\n");
 }
+
+/** The files the Action RUNS as defined at the pin, so a change to one after the pin makes the pin stale (#3864). */
+export const ACTION_DEFINITION = ["action.yml"];
 
 /**
  * The job the generated workflow adds beyond what README shows -- refuses rather than passing on

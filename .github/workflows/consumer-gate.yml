@@ -22,24 +22,30 @@ jobs:
           fetch-depth: 0
       - name: Refuse a pin that is not an ancestor of the commit this run is executing at
         run: |
-          if ! git merge-base --is-ancestor b9a0957b0141271cf23986eb5197260ce9f89328 "${{ github.sha }}"; then
-            echo "::error::consumer-gate.yml's uses: step is pinned to b9a0957b0141271cf23986eb5197260ce9f89328, which is not an"
+          if ! git merge-base --is-ancestor 049ee6e7a0b2e441b2370b31ab0c1dbb6e535338 "${{ github.sha }}"; then
+            echo "::error::consumer-gate.yml's uses: step is pinned to 049ee6e7a0b2e441b2370b31ab0c1dbb6e535338, which is not an"
             echo "::error::ancestor of the commit this run is executing at, ${{ github.sha }} (ref"
             echo "::error::${{ github.ref_name }}, ${{ github.event_name }}) -- regenerate (node"
             echo "::error::scripts/generate-consumer-gate.mjs) against a commit in this history"
+            exit 1
+          fi
+      - name: Refuse a pin that predates a change to the Action's own definition
+        run: |
+          if ! git diff --quiet 049ee6e7a0b2e441b2370b31ab0c1dbb6e535338 "${{ github.sha }}" -- action.yml; then
+            echo "::error::action.yml changed between the pin, 049ee6e7a0b2e441b2370b31ab0c1dbb6e535338, and the commit"
+            echo "::error::this run is executing at, ${{ github.sha }}: the a11y job would run the OLD Action --"
+            echo "::error::regenerate (node scripts/generate-consumer-gate.mjs) at a commit containing the change"
+            git diff --stat 049ee6e7a0b2e441b2370b31ab0c1dbb6e535338 "${{ github.sha }}" -- action.yml
             exit 1
           fi
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
+      - name: The tool at the newest release tag, cloned for this run, so `--check` can read the project declaration
+        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
       - name: Refuse a file that no longer matches what README.md's documented workflow produces
-        run: |
-          if ! node scripts/generate-consumer-gate.mjs --check; then
-            echo "::error::consumer-gate.yml (pinned to b9a0957b0141271cf23986eb5197260ce9f89328) does not match what README.md's Quickstart fence produces"
-            echo "::error::regenerate (node scripts/generate-consumer-gate.mjs) and dispatch again"
-            exit 1
-          fi
+        run: node scripts/generate-consumer-gate.mjs --check
 
   a11y:
     needs: [check-pin]
@@ -50,7 +56,7 @@ jobs:
       pull-requests: write         # for the PR comment below; omit it and the report still runs, only quieter
     steps:
       - uses: actions/checkout@v7
-      - uses: a11ign/a11ign@b9a0957b0141271cf23986eb5197260ce9f89328
+      - uses: a11ign/a11ign@049ee6e7a0b2e441b2370b31ab0c1dbb6e535338
         # Pinned to v0.1.0, the first tagged release. Use the full commit SHA instead if your CI must
         # not move even across a release.
         id: a11ign
