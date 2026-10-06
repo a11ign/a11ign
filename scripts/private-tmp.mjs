@@ -52,6 +52,13 @@ const OWNER_RWX = 0o700;
 const NAME_PART_LIMIT = 80;
 const PATH_HASH_LENGTH = 8;
 const ENTRIES_NAMED_PER_FILE = 5;
+/**
+ * Caches the RUNTIME writes into `TMPDIR` for any process, which no test made and none can remove: `tsx-<uid>` (tsx's transform cache), `v8-compile-cache-<uid>`, `jiti`
+ * (measured in this repository's first full run: 12, 6 and 3 test files "left" them). They go with the run like everything else, but naming the test that merely
+ * spawned a child would bury the fixtures that really leak. The same list as `a11ign/agent-org`'s `private-tmp.ts` (its #312) plus `jiti`; exact names only,
+ * so `tsx-1000-x` is still a leak.
+ */
+const RUNTIME_CACHE = /^(?:(?:tsx|v8-compile-cache)-\d+|node-compile-cache|jiti)$/;
 const SIGNALS = /** @type {const} */ (["SIGINT", "SIGTERM", "SIGHUP"]);
 const SELF = fileURLToPath(import.meta.url);
 
@@ -178,10 +185,10 @@ function currentTestPath() {
 
 /**
  * @param {{ dir: string, testPath: string, root?: string, write?: (text: string) => unknown }} file
- * @returns {string[]} what the file left, for the test to read
+ * @returns {string[]} what the file left that a test could have removed, for the test to read
  */
 export function reportLeftovers({ dir, testPath, root = process.cwd(), write = (text) => process.stderr.write(text) }) {
-  const entries = listNames(dir);
+  const entries = listNames(dir).filter((name) => !RUNTIME_CACHE.test(name));
   if (entries.length > 0) write(formatLeftovers({ label: relative(root, testPath), entries }));
   return entries;
 }

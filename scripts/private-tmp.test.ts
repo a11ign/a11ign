@@ -146,6 +146,10 @@ test("reportLeftovers names the file that left an entry, and says nothing for th
   assert.deepEqual(reportLeftovers({ dir: leakyDir, testPath: leaky, root, write: (text) => written.push(text) }), ["left-behind"]);
   assert.equal(written.length, 1);
   assert.match(written[0] ?? "", /^private-tmp: a\/leaky\.test\.ts left 1 entry in its TMPDIR \(left-behind\)/);
+  for (const cache of ["tsx-1000", "v8-compile-cache-1000", "node-compile-cache", "jiti"]) mkdirSync(join(cleanDir, cache));
+  assert.deepEqual(reportLeftovers({ dir: cleanDir, testPath: clean, root, write: (text) => written.push(text) }), [], "the runtime's own caches are not a leak");
+  mkdirSync(join(cleanDir, "tsx-1000-x"));
+  assert.deepEqual(reportLeftovers({ dir: cleanDir, testPath: clean, root, write: () => {} }), ["tsx-1000-x"], "and a look-alike name still is");
   assert.match(formatLeftovers({ label: "f", entries: ["a", "b", "c", "d", "e", "f", "g"] }), /left 7 entries .*\(a, b, c, d, e, and 2 more\)/);
 });
 
