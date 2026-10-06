@@ -32,7 +32,7 @@ body:
       description: >
         The path(s) this row owns, repo-relative, comma-separated. This is not documentation — it is what
         the claim check keys on, so it must be the file a fix would actually touch.
-      placeholder: packages/nvda-worker/src/capture-probes.mjs
+      placeholder: packages/cli/src/cli.ts
     validations:
       required: true
 

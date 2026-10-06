@@ -368,11 +368,12 @@ packages/
   judge/          the deterministic WCAG rules, criterion coverage, and experience-layer ordering
   scorer/         the trained heads, the feature contract, and the Python scoring program
   evidence/       wire types, verification predicates, the WCAG 2.2 AA list. Zero deps, no I/O
-  nvda-worker/    the Windows capture worker. Plain `.mjs`, no build step — it runs on the guest
-  nvda-speech/    PRIVATE. NVDA's announcement composition, ported to run without Windows -- a pure
-                  function, no I/O (GPL, derived from NVDA; see its own README before importing)
   worker-fleet/   host-side lease, health and capacity; provisioning; the Ansible fleet definition
   lab/            PRIVATE. The corpus, the training pipeline, the gates. Ships nothing
+
+The Windows capture worker (`nvda-worker`) and NVDA's announcement composition (`nvda-speech`, PRIVATE, GPL)
+live in [`a11ign/screenreader-worker`](https://github.com/a11ign/screenreader-worker), and this repository
+installs `@a11ign/screenreader-worker` from the registry.
 
 docs/             guides, runbooks, and the ADRs.  Start at docs/README.md
 scripts/          repo-level tooling — the isolation gate, git hooks

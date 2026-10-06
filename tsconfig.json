@@ -11,6 +11,11 @@
       "node"
     ],
     "allowJs": true,
+    // The screen-reader worker is consumed from the registry (#3447), so its `.mjs` sits under `node_modules/` and ships no `.d.ts`.
+    // TypeScript reads JS there only to this depth (default 0), which turns every `@a11ign/screenreader-worker/<file>` import into
+    // TS7016. Measured on the tree: 1 leaves errors INSIDE the package (it cannot type its own relative imports), 4 leaves 2, 5 none.
+    // It reads inferred types only: errors in `node_modules` JS are still not reported as the project's own.
+    "maxNodeModuleJsDepth": 5,
     // Tests importing `scripts/test-support/git-sandbox.ts` by relative path need the literal `.ts`
     // extension (there is no `dist` to resolve to -- it is a repo-root helper, never built, per the
     // comment on that include entry below). Safe only because this program is `noEmit: true` and never

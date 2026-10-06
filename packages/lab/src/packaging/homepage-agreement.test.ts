@@ -167,7 +167,7 @@ test("#1078: the population is DERIVED, and it is six rather than the five both 
   const published = publishedPackages().map((p) => p.file.split("/")[1]).sort();
   assert.ok(published.includes("worker-fleet"),
     `the derived set is ${published.join(", ")} -- worker-fleet is published and was missing from both rows`);
-  for (const named of ["cli", "evidence", "judge", "nvda-worker", "scorer"]) {
+  for (const named of ["cli", "evidence", "judge", "scorer"]) {
     assert.ok(published.includes(named), `${named} is published and must be in the compared set`);
   }
   assert.ok(!published.includes("lab") && !published.includes("control"),

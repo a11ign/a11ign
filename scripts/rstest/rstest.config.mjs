@@ -43,7 +43,6 @@ const READ_DIRECTORY_TRIGGERS = [
   "packages/control/ansible/**",
   "packages/lab/baselines/**",
   "packages/lab/src/eval/fixtures/**",
-  "packages/nvda-speech/**",
   "packages/scorer/models/screenreader-scorer/**",
   "packages/scorer/python/**",
   "packages/scorer/tests/**",
@@ -162,14 +161,13 @@ const READ_FILE_TRIGGERS = [
   "packages/lab/src/packaging/fixtures/broken-continuation.ps1",
   "packages/lab/src/training/README.md",
   "packages/lab/src/training/accepted-acceptance-cases.json",
-  "packages/nvda-worker/CLAUDE.md",
-  "packages/nvda-worker/src/run-server.cmd",
   "packages/scorer/CHANGELOG.md",
   "packages/scorer/requirements.txt",
   "packages/worker-fleet/src/display-mode-harness.ps1",
   "requirements-ci.txt",
   "scripts/fixtures/calibration-verdicts.json",
   "scripts/history-purge-replacements.txt",
+  "scripts/test-support/launcher-reach.stand-in.cmd",
 ];
 
 export default defineToolchainConfig({

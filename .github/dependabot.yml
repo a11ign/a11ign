@@ -27,8 +27,6 @@ updates:
       - dependency-name: "@a11ign/control"
       - dependency-name: "@a11ign/evidence"
       - dependency-name: "@a11ign/judge"
-      - dependency-name: "@a11ign/nvda-speech"
       - dependency-name: "@a11ign/scorer"
       - dependency-name: "@a11ign/screenreader-fleet"
-      - dependency-name: "@a11ign/screenreader-worker"
       - dependency-name: "a11ign"

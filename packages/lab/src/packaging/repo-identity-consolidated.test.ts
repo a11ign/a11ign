@@ -142,7 +142,9 @@ const SITES: Site[] = [
   { file: ".agent-org/roles/README.md", expect: `\`${PRODUCT_REPO}\`` },
   { file: ".agent-org/roles/memory/org-shape-second-orchestrator.md", expect: `a Project on ${PRODUCT_REPO}` },
   { file: "examples/workflow.yml", expect: `uses: ${REPO}@main` },
-  { layer: "@a11ign/screenreader-worker", file: "package.json", expect: PRODUCT_GIT_URL },
+  // NOT the layer's `package.json` any more (#3447): the registry's 0.1.0 names `a11ign/screenreader-worker`, its OWN repository, which is
+  // what `manifest-repository-check.test.ts` requires of a package that publishes from there. Agreeing with THIS repository's name would
+  // be the defect, so that identity is pinned by the layer's repository and not asked of its copy here.
   // COPY-PASTE-EXECUTE, same shape as docs/getting-started.md above -- see that entry's comment for why
   // the `cd a11y-witness` line right after this is not separately pinned.
   { layer: "@a11ign/screenreader-worker", file: "src/README.md", expect: `git clone ${REPO_URL}.git` },
@@ -189,7 +191,7 @@ test("every literal site still names this repository, agreeing with repo-identit
 });
 
 test("the vacuity guard: this list is not empty and each file it names exists", () => {
-  assert.ok(SITES.length >= 30, `only ${SITES.length} sites declared -- the 2026-09-06 audit found ~30; `
+  assert.ok(SITES.length >= 29, `only ${SITES.length} sites declared -- the 2026-09-06 audit found ~30, and #3447 retired one that belonged to the layer's own repository; `
     + "a shrunk list examining less than the audit found would pass by looking at fewer things, not by "
     + "the repository needing fewer references fixed");
   const sites = [...new Map(SITES.map((s) => [siteName(s), s])).values()];

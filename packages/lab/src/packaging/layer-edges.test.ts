@@ -304,17 +304,20 @@ test("the real baseline is NON-EMPTY and records the deploy path, so a guard tha
   assert.ok(existsSync(join(ROOT, BASELINE_PATH)));
   assert.ok(baseline.length > 0, "the baseline is empty: the scan or the baseline has broken");
   const froms: string[] = baseline.map((e: { from: string }) => e.from);
-  assert.ok(froms.includes("packages/nvda-worker/src/launcher-reach.cmd"), "the declaration of what the worker's launchers reach is recorded");
+  // The layer's own `launcher-reach.cmd` left with it (#3447); the stand-in beside the stamp's walk is what records that reach until the layer carries one.
+  assert.ok(froms.includes("scripts/test-support/launcher-reach.stand-in.cmd"), "the declaration of what the worker's launchers reach is recorded");
   assert.ok(froms.some((f) => f.startsWith("packages/control/ansible/")), "the Ansible files that place it are recorded");
   assert.ok(froms.some((f) => f.startsWith("packages/worker-fleet/src/")), "the fleet's own reaches are recorded");
 });
 
-test("done-when 1: no file inside a layer that left first reaches out by path unless a named row owns the edge", () => {
-  const out = readBaseline(ROOT).filter((e: { direction: string; from: string }) => e.direction === "out" && FIRST_LAYERS.includes(packageOf(e.from) ?? ""));
-  assert.ok(out.length > 0, "POSITIVE CONTROL: the launchers are recorded as leaving edges, so this loop has entries to refuse");
-  for (const entry of out) {
-    assert.match(entry.disposition, /^owned-by:#\d+$/, `${entry.from} -> ${entry.to} leaves a layer and is owned by no row`);
-  }
+/** The baseline entries whose `from` is a file INSIDE one of the layers that left first. */
+const insideALayerThatLeft = (entries: { from: string }[]) => entries.filter((e) => FIRST_LAYERS.includes(packageOf(e.from) ?? ""));
+
+test("done-when 1, after #3447: no file inside a layer that left first is in the baseline, because none is in the tree", () => {
+  // THE CONTROL, over the same function: before the delete this loop refused every launcher the worker reached out by, so it is shown to SEE one.
+  const planted = [{ from: "packages/nvda-worker/src/launcher-reach.cmd" }, { from: "packages/nvda-speech/nvda_speech/x.py" }, { from: "packages/lab/src/a.ts" }];
+  assert.deepEqual(insideALayerThatLeft(planted).map((e) => e.from), ["packages/nvda-worker/src/launcher-reach.cmd", "packages/nvda-speech/nvda_speech/x.py"]);
+  assert.deepEqual(insideALayerThatLeft(readBaseline(ROOT)), []);
 });
 
 // ------------------------------------------------------------------ the fence for moves 2-4 (#3501): the real baseline

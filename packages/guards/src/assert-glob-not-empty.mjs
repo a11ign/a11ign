@@ -34,7 +34,8 @@
 // FIRST, unmutated copy) and then silently zero-test-passed the actual suite, reproducing #355 through the
 // fix meant to close it. "A fact stated twice" (this file's own CLAUDE.md section) applies to a shell
 // command's own argv, not only to prose. `--run` makes the two uses of the pattern the same JS array.
-import { globSync, realpathSync } from "node:fs";
+import { existsSync, globSync, readdirSync, readFileSync, realpathSync } from "node:fs";
+import { join, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { refuseUnknownFlags, flagValue } from "@a11ign/screenreader-fleet/cli-flags";
 import { pnpmCliInvocation } from "../../../scripts/npm-cli-executable.mjs";
@@ -131,6 +132,49 @@ export function runnerInvocation({ runner, patterns, concurrency }) {
     + `(${RUNNERS.join(", ")}) -- refusing to guess which one to run.`);
 }
 
+/** The scope every workspace package is published under, and so the one a manifest `name` is stripped of. */
+const SCOPE_PREFIX = "@a11ign/";
+
+/**
+ * #3447: THE `@a11ign/*` ENTRIES A TREE'S START GUARD SHOULD ASK ABOUT. A package that LEFT for its own repository (`screenreader-worker`)
+ * is consumed from the registry, so its copy under this tree's own `node_modules/` is the intended source and not a frozen copy of anything
+ * under `packages/`; asked about it, the guard would refuse every suite start in the tree that just did what the split asked.
+ *
+ * ONLY THAT ENTRY IS LEFT OUT: one that is not a workspace member (by directory, or by manifest `name`: `worker-fleet` is
+ * `@a11ign/screenreader-fleet`) AND resolves to a real copy inside this tree's own `node_modules/`. A member's stale copy, and any entry
+ * that reads ANOTHER checkout whatever it is called, are still asked about, and so is every entry when the tree has no `packages/`
+ * (silence never grants the exemption).
+ *
+ * LIVES HERE, NOT IN `worktree-resolution.mjs`, which `agent-org` carries a declared copy of: the guard stays byte-identical and which
+ * entries to ask it about is this caller's to say.
+ *
+ * @param {string} worktree
+ * @param {{ exists?: typeof existsSync, list?: typeof readdirSync, read?: typeof readFileSync, realpath?: typeof realpathSync }} [deps]
+ * @returns {typeof readdirSync} a `readdirSync` for `suiteStartVerdict`'s `list`, narrowed as above
+ */
+export function memberScopeLister(worktree, { exists = existsSync, list = readdirSync, read = readFileSync, realpath = realpathSync } = {}) {
+  const packagesDir = join(worktree, "packages");
+  const ownModules = `${realpath(worktree)}${sep}node_modules${sep}`;
+  /** @param {string} manifest */
+  const declaredName = (manifest) => {
+    if (!exists(manifest)) return null;
+    const { name } = JSON.parse(String(read(manifest, "utf8")));
+    return typeof name === "string" ? name.replace(SCOPE_PREFIX, "") : null;
+  };
+  /** A copy of its own: resolving into this tree's `node_modules/`. A dangling entry resolves nowhere, so the guard is left to classify it. @param {string} path */
+  const isCopyInOwnModules = (path) => {
+    try { return realpath(path).startsWith(ownModules); } catch { return false; }
+  };
+  /** @type {(dir: string) => string[]} */
+  const askedAbout = (dir) => {
+    const entries = /** @type {string[]} */ (list(dir));
+    if (!exists(packagesDir)) return entries;
+    const members = new Set(/** @type {string[]} */ (list(packagesDir)).flatMap((name) => [name, declaredName(join(packagesDir, name, "package.json"))]));
+    return entries.filter((name) => members.has(name) || !isCopyInOwnModules(join(dir, name)));
+  };
+  return /** @type {typeof readdirSync} */ (/** @type {unknown} */ (askedAbout));
+}
+
 /**
  * #2218: THE POINT A SUITE STARTS, and so the point a tree that reads another checkout is refused -- before a
  * runner spends minutes measuring the wrong branch and reports it green. The tree asked about is the one THIS
@@ -138,7 +182,8 @@ export function runnerInvocation({ runner, patterns, concurrency }) {
  * @returns {boolean} false after refusing
  */
 function checkResolutionBeforeRun() {
-  const verdict = suiteStartVerdict(fileURLToPath(new URL("../../../", import.meta.url)));
+  const worktree = fileURLToPath(new URL("../../../", import.meta.url));
+  const verdict = suiteStartVerdict(worktree, { list: memberScopeLister(worktree) });
   if (verdict.action === "proceed") return true;
   process.stderr.write(`${verdict.action === "refuse" ? "REFUSING: this tree does not measure itself. " : "WARNING: "}${verdict.line}\n`);
   if (verdict.action === "refuse") process.exitCode = 1;

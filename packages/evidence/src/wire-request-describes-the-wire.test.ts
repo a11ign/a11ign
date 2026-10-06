@@ -22,13 +22,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
 
+import { layerFile } from "../../guards/src/layer-file.mjs";
 import { stripComments } from "./source-text.js";
 import type { CaptureRequest, CaptureFormState } from "./index.js";
 
-const SERVER_PATH = resolve(process.cwd(), "packages/nvda-worker/src/server.mjs");
-const CAPTURE_PURE_PATH = resolve(process.cwd(), "packages/nvda-worker/src/capture-pure.mjs");
+// BY PACKAGE NAME (#3447): the worker lives in its own repository and is installed from the registry.
+const SERVER_PATH = layerFile("@a11ign/screenreader-worker", "src/server.mjs", { from: import.meta.dirname });
+const CAPTURE_PURE_PATH = layerFile("@a11ign/screenreader-worker", "src/capture-pure.mjs", { from: import.meta.dirname });
 
 /** `PROBE_FLAGS`, straight out of `capture-pure.mjs`'s own `Object.freeze([...])` array literal —
  *  the worker's own copy of the ten opt-in probe names. */

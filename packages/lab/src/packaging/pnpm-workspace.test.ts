@@ -41,9 +41,16 @@ function internalEdges(): { edge: string; version: string }[] {
       .map(([name, { version }]) => ({ edge: `${importer} -> ${name}`, version }))));
 }
 
-/** Packages that publish from ANOTHER repository, so the registry is where `cli` reads them (#3125); `cli-documents-dependency.test.ts`
- * pins that edge. Named, so a package that should be a `link:` and is not still fails here. */
-const CONSUMED_FROM_THE_REGISTRY = ["packages/cli -> @a11ign/documents"];
+/** Packages that publish from ANOTHER repository, so the registry is where their consumers read them: `cli` takes `documents` (#3125;
+ * `cli-documents-dependency.test.ts` pins that edge), and the root, `lab` and `worker-fleet` take `screenreader-worker` (#3447, which deleted
+ * `packages/nvda-worker/`; `screenreader-worker-extraction.test.ts` pins the version and its integrity). Named, so a package that should be a
+ * `link:` and is not still fails here. */
+const CONSUMED_FROM_THE_REGISTRY = [
+  "packages/cli -> @a11ign/documents",
+  ". -> @a11ign/screenreader-worker",
+  "packages/lab -> @a11ign/screenreader-worker",
+  "packages/worker-fleet -> @a11ign/screenreader-worker",
+];
 
 test("EVERY INTERNAL DEPENDENCY IN pnpm-lock.yaml IS A LINK, never a registry copy, but the named packages that left", () => {
   const edges = internalEdges();

@@ -601,7 +601,7 @@ runs:
         if [ -n "$AUTH_STATE" ]; then
           case "$AUTH_STATE" in /*|[A-Za-z]:*) state_path="$AUTH_STATE" ;; *) state_path="$GITHUB_WORKSPACE/$AUTH_STATE" ;; esac
         fi
-        node packages/nvda-worker/src/server.mjs \
+        node node_modules/@a11ign/screenreader-worker/src/server.mjs \
           > "$RUNNER_TEMP/worker.log" 2> "$RUNNER_TEMP/worker.err" &
         worker=$!
         trap 'kill $worker 2>/dev/null || true' EXIT

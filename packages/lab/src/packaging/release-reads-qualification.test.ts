@@ -201,7 +201,7 @@ test("only `proceed` publishes: no other outcome is spelled proceed", () => {
 test("every package directory is classified exactly once, so adding one fails HERE and not at a release", () => {
   const directories = readdirSync("packages", { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name)
     .filter((name) => !["node_modules"].includes(name));
-  assert.ok(directories.length >= 10, "the discovery found the packages (positive control for the emptiness)");
+  assert.ok(directories.length >= 9, "the discovery found the packages (positive control for the emptiness; ten until #3447 took nvda-speech out, with nvda-worker the eleventh)");
   const classified = [...FLEET_GATED_PACKAGES, ...RUNNER_ONLY_PACKAGES, ...PRIVATE_PACKAGES];
   assert.deepEqual([...classified].sort(), [...directories].sort());
   assert.equal(new Set(classified).size, classified.length, "no package is in two tables");

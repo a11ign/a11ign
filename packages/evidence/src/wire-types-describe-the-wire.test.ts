@@ -26,6 +26,7 @@ import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+import { layerFile } from "../../guards/src/layer-file.mjs";
 import type { CaptureStructure, CaptureInteraction, CaptureResult } from "./index.js";
 
 /** The sweep names `capture-core` writes into `structure`, and the probes it writes into `interaction`. */
@@ -147,7 +148,7 @@ test("THE EMITTED LISTS MATCH A REAL CAPTURE, not just each other", () => {
  *     (`meta` is in `EMITTED_RESULT` and not in `Capture` for the same reason — nothing populates it, this
  *     package's own audit found no writer for it, and a subset check does not require it to appear.)
  */
-const CAPTURE_CORE_PATH = resolve(process.cwd(), "packages/nvda-worker/src/capture-core.mjs");
+const CAPTURE_CORE_PATH = layerFile("@a11ign/screenreader-worker", "src/capture-core.mjs", { from: import.meta.dirname });
 
 /** One `@typedef {{ ... }} Name` LINE's field names, by regex — every one of these three typedefs is
  *  written on a single line (confirmed by reading the file), so this works line-by-line rather than over
@@ -211,7 +212,7 @@ test("Capture is a SUBSET of the published CaptureResult — server.mjs adds tas
  * Whether the TYPE admits `null` is `tsc`'s: the typed error entry below fails to compile without `| null`, which
  * `npx tsx --test` cannot see. That is stated in the PR as a typecheck observation, not an Acceptance red.
  */
-const PROBES_PATH = resolve(process.cwd(), "packages/nvda-worker/src/capture-probes.mjs");
+const PROBES_PATH = layerFile("@a11ign/screenreader-worker", "src/capture-probes.mjs", { from: import.meta.dirname });
 type StateChange = CaptureInteraction["stateChanges"][number];
 type FormChange = CaptureInteraction["formChanges"][number];
 
