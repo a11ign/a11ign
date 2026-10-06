@@ -103,7 +103,7 @@ test("#1319, #3573: the test step runs `pnpm run test:all`, and it asks the floo
   // The whole-package glob and its floor live on `test:all` now; `test:ts` carries the product brace list.
   assert.match(SCRIPTS["test:all"],
     /assert-glob-not-empty\.mjs "packages\/\*\/src\/\*\*\/\*\.test\.ts" --min=500 --run --runner=rstest /);
-  assert.match(SCRIPTS["test:ts"], /assert-glob-not-empty\.mjs "packages\/\{[a-z,-]+\}\/src\/\*\*\/\*\.test\.ts" --min=140 --run --runner=rstest /);
+  assert.match(SCRIPTS["test:ts"], /assert-glob-not-empty\.mjs "packages\/\{[a-z,-]+\}\/src\/\*\*\/\*\.test\.ts" --min=95 --run --runner=rstest /);
 });
 
 test("#1319: `test:nightly` stays on tsx -- it is nightly-only and out of #1320's scope", () => {

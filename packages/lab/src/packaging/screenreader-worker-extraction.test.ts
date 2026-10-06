@@ -174,7 +174,7 @@ test("pnpm-lock.yaml holds @a11ign/screenreader-worker at version 0.1.0 with an 
   assert.deepEqual(registryEntryRefusals(lockfile), []);
   // Derived a second way: the manifests that declare it are the importers the lockfile must resolve, so a lockfile that lost one is not "enough".
   const importers = Object.entries((parse(lockfile) as Lockfile).importers ?? {}).filter(([, sections]) => DEPENDENCY_SECTIONS.some((s) => sections[s]?.[CONSUMED] !== undefined)).map(([name]) => name).sort();
-  assert.deepEqual(importers, [".", "packages/lab", "packages/worker-fleet"]);
+  assert.deepEqual(importers, [".", "packages/lab"]);
 });
 
 test("POSITIVE CONTROL: a lockfile with a link:../nvda-worker entry is REFUSED, naming it", () => {

@@ -53,7 +53,7 @@ type ReadManifest = (directory: string) => Manifest | null;
 const readText = (path: string) => readFileSync(`${REPO_ROOT}${path}`, "utf8");
 
 /**
- * A package that has MOVED (#3125: `documents`, #3447: `screenreader-worker`) is no longer under `packages/` here, but its own repository keeps the layout
+ * A package that has MOVED (#3125: `documents`, #3447: `screenreader-worker`, #3504: `screenreader-fleet`) is no longer under `packages/` here, but its own repository keeps the layout
  * `releasablePaths` names. Its manifest is read from the copy `cli` INSTALLED from the registry, which is the published one, so the
  * name is still read from a real manifest and not assumed. The key is the declared prefix, the value where that manifest now is.
  */
@@ -61,6 +61,7 @@ const MOVED_TO_THE_REGISTRY: Record<string, string> = {
   "packages/pdf/": "packages/cli/node_modules/@a11ign/documents/package.json",
   // `nvda-speech/` has no entry: it is private and not in the published package, and the check reads only public manifests.
   "packages/nvda-worker/": "packages/lab/node_modules/@a11ign/screenreader-worker/package.json",
+  "packages/worker-fleet/": "packages/lab/node_modules/@a11ign/screenreader-fleet/package.json",
 };
 
 const workspaceManifest: ReadManifest = (directory) => {

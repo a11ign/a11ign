@@ -174,7 +174,7 @@ const AS_FILED_1939 =
   "npx rstest run --config packages/lab/rstest.config.ts packages/lab/src/packaging/lab-job-params.test.ts";
 /** And as `product-manager` corrected it by hand while promoting. Both paths are real. */
 const CORRECTED_1939 = "npx rstest run --config scripts/rstest/rstest.config.mjs --include "
-  + "packages/worker-fleet/src/lab-job-params-reach-the-command.test.ts";
+  + "packages/control/src/fleet-layer/lab-job-params-reach-the-command.test.ts";
 
 test("THE POSITIVE CONTROL: #1939's Acceptance as filed is REFUSED, and its correction is FILED", () => {
   // THE CONTROL EXISTS BECAUSE THE CALIBRATION BELOW ASSERTS AN EMPTINESS. `assert.deepEqual(offenders,

@@ -28,7 +28,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 // `pnpm publish` shells out to `npm publish`, so the rehearsal must read the npm the publish would use.
 import { npmCliInvocation, pnpmCliInvocation } from "./npm-cli-executable.mjs";
 import { publishedManifests } from "./manifest-repository-check.mjs";
-import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
+import { refuseUnknownFlags } from "./cli-flags.mjs";
 
 const REPO = fileURLToPath(new URL("../", import.meta.url));
 

@@ -552,7 +552,7 @@ runs:
       shell: pwsh
       working-directory: ${{ github.action_path }}
       run: |
-        ./packages/worker-fleet/src/provisioning/apply-foreground-lock-timeout.ps1
+        ./node_modules/@a11ign/screenreader-fleet/src/provisioning/apply-foreground-lock-timeout.ps1
         $v = (Get-ItemProperty 'HKCU:\Control Panel\Desktop' -Name ForegroundLockTimeout -ErrorAction SilentlyContinue).ForegroundLockTimeout
         if ($v -ne 0) { throw "ForegroundLockTimeout is '$v', not 0 - the capture would return 0 phrases with no error." }
         Write-Host "ForegroundLockTimeout = 0"

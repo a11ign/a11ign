@@ -71,11 +71,11 @@ const SEVEN_GATES = Array.from({ length: GATE_COUNT }, (_unused, index) => index
 const FEWEST_PLAUSIBLE_MACHINERY_FILES = 10;
 
 /**
- * The same kind of floor for `packages/`, which the changelog walk below must be SEEN to reach. Nine
- * package directories carry a manifest today (eleven before #3447 took `nvda-worker` and `nvda-speech` out of the workspace); a run that enumerates fewer than this has lost the
+ * The same kind of floor for `packages/`, which the changelog walk below must be SEEN to reach. Eight
+ * package directories carry a manifest today (eleven before #3447 took `nvda-worker` and `nvda-speech` out of the workspace, nine before #3504 took `worker-fleet`); a run that enumerates fewer than this has lost the
  * directory, and the emptiness assertion it feeds would then be reporting a walk that never looked.
  */
-const FEWEST_PLAUSIBLE_PACKAGES = 9;
+const FEWEST_PLAUSIBLE_PACKAGES = 8;
 
 /**
  * The three files #2052 measured as carrying a stale claim, and therefore the three that must still be
@@ -622,12 +622,12 @@ function workspaceManifests(): { path: string; name: string; version: string; is
 const unwrapped = (text: string): string => text.replace(/\s+/g, " ");
 
 /**
- * The four packages the registry holds at `0.1.0` (`npm view <name> version`, 2026-10-03, #3347), and the two
- * public ones that were never published and so still read `0.0.0` (#3126 owns whether and when the first two move;
- * `@a11ign/toolchain` joined under #3578 and its first publish is that row's).
+ * The four packages the registry holds at `0.1.0` (`npm view <name> version`, 2026-10-03, #3347), and the one
+ * public one that was never published and so still reads `0.0.0` (`@a11ign/toolchain`, #3578: its first publish is that row's; the other
+ * never-published package, the fleet, left the workspace with #3504).
  */
 const PUBLISHED_AT_0_1_0 = ["@a11ign/evidence", "@a11ign/judge", "@a11ign/scorer", "a11ign"];
-const NEVER_PUBLISHED = ["@a11ign/screenreader-fleet", "@a11ign/toolchain"];
+const NEVER_PUBLISHED = ["@a11ign/toolchain"];
 
 /** `version` is at least `floor`, both plain `major.minor.patch`: the only shapes a manifest here holds. */
 function versionAtLeast(version: string, floor: string): boolean {
@@ -639,7 +639,7 @@ function versionAtLeast(version: string, floor: string): boolean {
 
 /**
  * The near side of the release (#3131): `main` before `changeset version` has run reads `0.1.0` for the four
- * published packages and `0.0.0` for the other two. The far side moves all six, so these are not claims
+ * published packages and `0.0.0` for the other one. The far side moves all five, so these are not claims
  * about the registry split (that is asserted on both sides, by name) but about the literals the document quotes.
  */
 function assertVersionsAsTheNearSideHoldsThem(publicManifests: { name: string; version: string }[]): void {
@@ -679,7 +679,7 @@ test("#2159/#3347: the versions claim is true of the set changesets versions, sp
   assert.deepEqual(namesOf(published), PUBLISHED_AT_0_1_0,
     "the four packages the registry holds must all be workspace members, on either side of the release");
   assert.deepEqual(namesOf(publicManifests.filter((manifest) => !PUBLISHED_AT_0_1_0.includes(manifest.name))), NEVER_PUBLISHED,
-    "THE POSITIVE CONTROL for the split: the other public manifests are exactly the two never published, and "
+    "THE POSITIVE CONTROL for the split: the other public manifest is exactly the one never published, and "
     + "a new public package or a rename changes the registry split this file describes");
   assert.ok(published.every((manifest) => versionAtLeast(manifest.version, "0.1.0")),
     "a published package must read at least the version the registry holds, or `changeset publish` would send "
@@ -690,18 +690,18 @@ test("#2159/#3347: the versions claim is true of the set changesets versions, sp
     "THE POSITIVE CONTROL for the emptiness claims: these two private manifests are hand-set to 0.1.0 and "
     + "changesets never touches them, so this list is non-empty in any run where the manifests were "
     + "actually read");
-  assert.equal(publicManifests.length, 6,
-    `the document says SIX versioned manifests and this tree has ${publicManifests.length} — a package added, `
+  assert.equal(publicManifests.length, 5,
+    `the document says FIVE versioned manifests and this tree has ${publicManifests.length} — a package added, `
     + "published or made private changes the sentence, and it is corrected here rather than left to rot");
 
   const list = unwrapped(decisionList());
   if (!firstReleaseCut()) {
-    assert.ok(list.includes("**Four of the six versioned manifests read `0.1.0`**, the version the registry holds"),
+    assert.ok(list.includes("**Four of the five versioned manifests read `0.1.0`**, the version the registry holds"),
       "the document must state the claim over the set it is true of — the reviewer refused the unqualified "
       + "form, and a narrowing that is not in the document narrows nothing");
   }
   for (const name of NEVER_PUBLISHED) {
-    assert.ok(list.includes(name), `the document must name ${name} as one of the two that still read 0.0.0`);
+    assert.ok(list.includes(name), `the document must name ${name} as the one that still reads 0.0.0`);
   }
   assert.ok(!/every `package\.json`[^.]{0,40}reads `0\.0\.0`/.test(list),
     "the unqualified sentence must not come back. It was false in this tree from the day @a11ign/control "

@@ -134,7 +134,7 @@ const NOT_A_CORPUS_READ: Record<string, string> = {
     + "its own header says so, and it excludes itself from its own walk for the identical reason. Note it "
     + "is the guard that polices corpus readers for age-reporting, so wiring it would have been a reader "
     + "exempting itself from a guard it does not need; the classification is what keeps that visible.",
-  "packages/worker-fleet/src/lab-job.test.ts":
+  "packages/control/src/fleet-layer/lab-job.test.ts":
     "Reads the lab-job.yml catalogue and asserts on the argv it declares; the runs/ paths it matches are "
     + "job arguments in that YAML, not a corpus this test opens.",
   "packages/lab/src/gates/exit-code-contract.test.ts":

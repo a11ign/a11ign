@@ -69,9 +69,9 @@ async function fixtureRepo(body: string): Promise<string> {
   return root;
 }
 
-test("layers.json declares nvda-worker and NOTHING else, listed by hand", () => {
+test("layers.json declares nvda-worker and screenreader-fleet and NOTHING else, listed by hand", () => {
   const manifest = JSON.parse(read("packages/control/layers.json"));
-  assert.deepEqual(Object.keys(manifest.layers), ["nvda-worker"]);
+  assert.deepEqual(Object.keys(manifest.layers), ["nvda-worker", "screenreader-fleet"]);
   assert.equal(typeof manifest.layers["nvda-worker"].path, "string");
 });
 

@@ -42,14 +42,18 @@ function internalEdges(): { edge: string; version: string }[] {
 }
 
 /** Packages that publish from ANOTHER repository, so the registry is where their consumers read them: `cli` takes `documents` (#3125;
- * `cli-documents-dependency.test.ts` pins that edge), and the root, `lab` and `worker-fleet` take `screenreader-worker` (#3447, which deleted
- * `packages/nvda-worker/`; `screenreader-worker-extraction.test.ts` pins the version and its integrity). Named, so a package that should be a
- * `link:` and is not still fails here. */
+ * `cli-documents-dependency.test.ts` pins that edge), the root and `lab` take `screenreader-worker` (#3447, which deleted `packages/nvda-worker/`;
+ * `screenreader-worker-extraction.test.ts` pins the version and its integrity), and the root, `cli`, `guards` and `lab` take `screenreader-fleet`
+ * (#3504, which deleted `packages/worker-fleet/`; `worker-fleet-delete.test.ts` pins it). Named, so a package that should be a `link:` and is
+ * not still fails here. */
 const CONSUMED_FROM_THE_REGISTRY = [
   "packages/cli -> @a11ign/documents",
   ". -> @a11ign/screenreader-worker",
   "packages/lab -> @a11ign/screenreader-worker",
-  "packages/worker-fleet -> @a11ign/screenreader-worker",
+  ". -> @a11ign/screenreader-fleet",
+  "packages/cli -> @a11ign/screenreader-fleet",
+  "packages/guards -> @a11ign/screenreader-fleet",
+  "packages/lab -> @a11ign/screenreader-fleet",
 ];
 
 test("EVERY INTERNAL DEPENDENCY IN pnpm-lock.yaml IS A LINK, never a registry copy, but the named packages that left", () => {

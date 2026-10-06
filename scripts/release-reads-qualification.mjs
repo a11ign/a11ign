@@ -27,7 +27,7 @@ import { realpathSync, appendFileSync, readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
-import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
+import { refuseUnknownFlags, flagValue } from "./cli-flags.mjs";
 import { REPO } from "./repo-identity.mjs";
 const { gh } = await toolModule("src/merge-guard/lookups.mjs");
 import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
@@ -47,7 +47,8 @@ export const QUALIFICATION_CONTEXT = "qualification";
 // `toolchain` is runner-only by `orchestrator`'s reading (#3578, comment of 2026-10-05T02:30Z): every reader of it is test or
 // build tooling and none is in `gate:stability`'s closure. The limit: template-string dynamic imports are not followed, and if a
 // fleet-side job ever runs its tests through `@a11ign/toolchain`'s rstest config the answer changes.
-export const FLEET_GATED_PACKAGES = ["lab", "worker-fleet", "evidence", "control"];
+// `worker-fleet` left with #3504: its code is read through the release the lockfile pins, and `pnpm-lock.yaml` is on the read side below.
+export const FLEET_GATED_PACKAGES = ["lab", "evidence", "control"];
 // Gated by runner-only or corpus-only stages that need no worker. No private package is left in the workspace: `nvda-speech`, the last, left with the worker layer (#3447).
 export const RUNNER_ONLY_PACKAGES = ["scorer", "judge", "guards", "cli", "toolchain"];
 /** @type {string[]} */

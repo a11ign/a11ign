@@ -38,7 +38,7 @@ import { pathToFileURL } from "node:url";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { stripComments } from "./local-import-closure.mjs";
 // RELATIVE, for the reason `changed-files.mjs` records above its own identical import.
-import { flagValue, refuseUnknownFlags } from "../../worker-fleet/src/cli-flags.mjs";
+import { flagValue, refuseUnknownFlags } from "@a11ign/screenreader-fleet/cli-flags";
 
 /**
  * The packages that are to leave, by directory name under `packages/`. `agent-org` is declared AFTER it left (#2976): the real tree must show

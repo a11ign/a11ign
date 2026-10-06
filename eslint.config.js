@@ -110,6 +110,7 @@ export default tseslint.config(
   {
     ignores: [
       "packages/*/dist/**",
+      "packages/worker-fleet/**", // a LAYER CHECKOUT where laid (`scripts/lay-layer.mjs`, #3504): another repository's code, linted there
       "node_modules/**",
       ".venv/**",
       "dist/**",

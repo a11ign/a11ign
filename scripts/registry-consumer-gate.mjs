@@ -46,7 +46,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpath
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
+import { refuseUnknownFlags, flagValue } from "./cli-flags.mjs";
 import { satisfies } from "../packages/guards/src/isolation-gate.mjs";
 // STAYS npm (`no-npm-spawn.test.ts` pins this file by name): `npm install a11ign` IS the consumer's experience and `npm view` reads the
 // registry, so a pnpm here would test a different install than the one users run.

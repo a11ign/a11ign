@@ -182,15 +182,6 @@ const CLASSIFICATION: Record<string, { guard: string | null; note: string }> = {
       + "`--replace-message`. Its `git ls-files` population (the first commit's tree) asserts more than 700 files before scanning. "
       + "Both log reads skip by name on a shallow clone, and its fixtures prove each predicate refuses a planted address and token.",
   },
-  "packages/lab/src/packaging/screenreader-fleet-extraction.test.ts": {
-    guard: 'diffs.includes("diff --git")',
-    note: "guarded -- #2702's history scan spawns `git log -p` over the moving package and expects NO credential shape and "
-      + "nothing the purge rules redact. A clean result is the EXPECTED answer, so 'the history is clean' and 'the log read "
-      + "nothing' would be the same observation; the assertion that the output contains a `diff --git` header tells them "
-      + "apart. Its message scan asserts more than 300 lines came back before scanning, and carries a positive control that "
-      + "the raw messages still need `--replace-message`. Both skip by name on a shallow clone, and its fixtures prove each "
-      + "predicate refuses a planted address and token.",
-  },
   "packages/lab/src/packaging/reported-counts.test.ts": {
     guard: 'assert.deepEqual(found, ["reported.test.ts: walked.length"]',
     note: "guarded, and NOT by a floor -- which would be this guard committing the defect it exists to "
@@ -318,11 +309,17 @@ const CLASSIFICATION: Record<string, { guard: string | null; note: string }> = {
       + "the question 'does anything on the lab read inventory.yml?' was answered correctly about three "
       + "directories and wrongly about the repository.",
   },
-  "packages/worker-fleet/src/protocol-guard.test.ts": {
+  "packages/guards/src/worker-fleet-delete.test.ts": {
+    guard: "length > 100",
+    note: "guarded -- #3504's by-name scan walks `git ls-files -- packages scripts` and the floor asserts it saw more than a hundred "
+      + "by-name sources. The tracked-fleet-directory check is the EMPTINESS claim, and its positive control is the fixture "
+      + "lockfile and fixture tree in the same file that must be refused.",
+  },
+  "packages/control/src/fleet-layer/protocol-guard.test.ts": {
     guard: "clients.length >= 2",
     note: "guarded — the two known deploy call sites (check-worker-code.mjs, deploy-worker.mjs)",
   },
-  "packages/worker-fleet/src/lab-job.test.ts": {
+  "packages/control/src/fleet-layer/lab-job.test.ts": {
     guard: "referenced.length >= 5",
     note: "guarded — `git grep` for job= references across the tree; comment explicitly names the vacuity risk",
   },
@@ -408,7 +405,7 @@ const CLASSIFICATION: Record<string, { guard: string | null; note: string }> = {
       + "controls drive the detector against sources built in the test, so the shape is pinned even if "
       + "the repository population were to empty entirely.",
   },
-  "packages/worker-fleet/src/entry-points.test.ts": {
+  "packages/control/src/fleet-layer/entry-points.test.ts": {
     guard: "declared.length >= 85",
     note: "guarded — #211's FORM population, walked via `git ls-files`: every tracked source declaring "
       + "`import.meta.url ===`. Floored at 85 against 93 today, and deliberately a DIFFERENT population "

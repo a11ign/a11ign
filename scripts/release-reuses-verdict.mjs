@@ -20,7 +20,7 @@
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { realpathSync, appendFileSync } from "node:fs";
-import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
+import { refuseUnknownFlags, flagValue } from "./cli-flags.mjs";
 import { REPO } from "./repo-identity.mjs";
 const { gh } = await toolModule("src/merge-guard/lookups.mjs");
 import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";

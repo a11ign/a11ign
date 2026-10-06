@@ -70,6 +70,9 @@ tsconfig.tsbuildinfo
 # the POLICY is what is specific, not the mechanism.
 packages/worker-fleet/tailscale-acl.hujson
 
+# A LAYER CHECKOUT, laid by `scripts/lay-layer.mjs` (#3504): `a11ign/screenreader-fleet`'s code at the path `control` imports it from. Never a commit here.
+/packages/worker-fleet
+
 # Hosts that are ours and are not capture infrastructure. `tailscale.yml` merges this with the inventory
 # when it exists, so a personal machine can be reachable over the tailnet without being published in a
 # public repo as though it were part of the fleet.

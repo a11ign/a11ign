@@ -26,7 +26,7 @@ import { pnpmCliInvocation } from "./npm-cli-executable.mjs";
 // symlinks `node_modules` to a sibling's silently inherited a STALE dist and never saw it fail locally.
 // Measured: `npm ci --ignore-scripts` (CI's own install) then `node scripts/build-packages.mjs` throws
 // `ERR_MODULE_NOT_FOUND` for `dist/cli-flags.mjs`, reproduced independently in two fresh worktrees.
-import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
+import { refuseUnknownFlags } from "./cli-flags.mjs";
 
 function main() {
   // Guarded per #164: takes no flags; `--build` in this file is passed to tsc.

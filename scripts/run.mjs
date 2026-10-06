@@ -27,7 +27,7 @@ import { spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
-import { didYouMean } from "../packages/worker-fleet/src/cli-flags.mjs";
+import { didYouMean } from "./cli-flags.mjs";
 import { COMMANDS } from "./commands.mjs";
 
 const EXIT = { REFUSED: 2 };

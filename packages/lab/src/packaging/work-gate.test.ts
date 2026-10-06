@@ -4675,8 +4675,9 @@ test("#2174: the history-requirement population is unchanged by this row", () =>
   // The pin's move to ^0.2.0 (#2905) is the "this file returns then" above: agent-org's walk follows the `agent-org/src/...` specifier, and THIS file
   // imports `shippedUnits` from `agent-org/src/host-units.mjs`, the same edge `host-units.test.ts` had. Checked rather than edited past: no import was
   // added, the walk got able to see one that was already here. No Acceptance names this file, so no pull request owes a `History: full` for it.
-  assert.deepEqual(charged, ["control-extraction.test.ts", "lab-extraction.test.ts", "pre-push-resolve-toward-main.test.ts",
-    "screenreader-fleet-extraction.test.ts"],
+  // #3504 DELETED `screenreader-fleet-extraction.test.ts` with the directory it read history over (the fleet's own repository holds the leak scan): it left the set
+  // by ceasing to exist, not by a blind spot of the walk, and nothing joined.
+  assert.deepEqual(charged, ["control-extraction.test.ts", "lab-extraction.test.ts", "pre-push-resolve-toward-main.test.ts"],
   "adding a `history` reader to the gate's import closure taxes every test file that reaches it -- if "
   + "this list grew, check what was imported rather than editing the list");
 });

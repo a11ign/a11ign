@@ -9,6 +9,9 @@ packages:
   # ERR_PNPM_OUTDATED_LOCKFILE (the lockfile records the core's projects only). pnpm reads this file as static YAML, so the entry is
   # written here and `pnpm-workspace.test.ts` derives the list from layers.json: a layer added there without its line turns it red.
   - "!packages/nvda-worker"
+  # `packages/worker-fleet` is the same kind of clone (`scripts/lay-layer.mjs`, #3504): the root takes `@a11ign/screenreader-fleet` from the registry,
+  # and a laid copy joining the workspace would turn that into a `link:`.
+  - "!packages/worker-fleet"
 
 # WHY THIS IS ON: internal dependencies are pinned "0.0.0", not `workspace:*`, because npm cannot read the
 # `workspace:` protocol and `npm ci` had to keep working while both lockfiles existed. It still is the spelling: `changeset version` writes

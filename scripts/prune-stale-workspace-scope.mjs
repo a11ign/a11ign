@@ -22,7 +22,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 // plain `npm install` before any package's `dist/` exists -- the same reason `install-git-hooks.mjs`
 // imports the same file the same way. `pre-install-import-graph.test.ts` derives this file from
 // `package.json`'s `prepare` and enforces it.
-import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
+import { refuseUnknownFlags } from "./cli-flags.mjs";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 

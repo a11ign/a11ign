@@ -47,7 +47,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { changedFiles } from "../packages/guards/src/changed-files.mjs";
 import { underFloor } from "../packages/guards/src/assert-glob-not-empty.mjs";
 import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
-import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
+import { refuseUnknownFlags, flagValue } from "./cli-flags.mjs";
 const { checkBody } = await toolModule("src/pr-open.mjs");
 import { classify, knownPackages, packedFiles } from "./ci-changed.mjs";
 // NEVER a bare `pnpm` spawn -- unsafe on Windows (CVE-2024-27980), and this repo's own guard refuses one.
