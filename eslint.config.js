@@ -110,6 +110,7 @@ export default tseslint.config(
   {
     ignores: [
       "packages/*/dist/**",
+      "packages/*/.rstack/**", // Rslib's scratch for the declaration rollup (a11ign: cli): rewritten by every build, so a walk races it
       "packages/worker-fleet/**", // a LAYER CHECKOUT where laid (`scripts/lay-layer.mjs`, #3504): another repository's code, linted there
       "node_modules/**",
       ".venv/**",

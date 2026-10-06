@@ -138,14 +138,9 @@ test("tscProjectUpToDate reads stdout off a thrown error too -- --dry can exit n
   assert.equal(tscProjectUpToDate(tsconfigPath, { run }), false);
 });
 
-test("LIVE: tscProjectUpToDate against this repo's own freshly built judge package reads TRUE", () => {
-  // Not a fixture -- the real package, the real tsconfig, right after this suite's own `pretest` build.
-  // If this ever reads anything but true on a clean build, the parsing itself has drifted from tsc's
-  // real output shape, which no fixture can catch on its own.
-  const repoRoot = new URL("../../../../", import.meta.url).pathname;
-  const tsconfigPath = join(repoRoot, "packages/judge/tsconfig.json");
-  assert.equal(tscProjectUpToDate(tsconfigPath), true);
-});
+// THE LIVE TEST THAT STOOD HERE IS REMOVED (row 4c-a11ign, #3580): it ran `tsc --build --dry` over `packages/judge/tsconfig.json` and expected "up to date", and
+// judge is built by Rslib now, so its `tsconfig.json` is `noEmit` with no `composite` and the reading is no longer "up to date" by construction. The function and the
+// check that calls it live in the fleet package's `doctor.mjs` (its own repository); asking tsc about a11ign's dist is its premise, and the follow-up row is #3810.
 
 // --- END TO END: whose dist a resolution reaches is a SEPARATE fact from whether that dist is current ---
 
