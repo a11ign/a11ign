@@ -1,5 +1,12 @@
 # a11ign
 
+## 0.2.7
+
+### Patch Changes
+
+- Updated dependencies [1730386]
+  - @a11ign/screenreader-fleet@0.1.4
+
 ## 0.2.6
 
 ### Patch Changes
