@@ -36,12 +36,14 @@ const TESTS = /\.test\.(?:ts|mts|mjs)$/;
 /**
  * The version the root's registry entry for `name` holds in `pnpm-lock.yaml`, or the reason there is none.
  * Read from the text so this file imports no YAML reader: the root importer's block is the one line after the name.
+ * Line breaks are `\r?\n`: a Windows runner checks the lockfile out with CRLF (git's `core.autocrlf` default there, and the repository carries no
+ * `.gitattributes`), and a reader spelling `\n` alone refused it at install (#3787).
  * @param {string} lockfile
  * @param {string} name
  * @returns {{ version: string } | { refusal: string }}
  */
 export function pinnedVersion(lockfile, name) {
-  const block = lockfile.match(new RegExp(`^ {6}'${name.replace(/[/.]/g, "\\$&")}':\\n {8}specifier: [^\\n]+\\n {8}version: ([^\\n]+)$`, "m"));
+  const block = lockfile.match(new RegExp(`^ {6}'${name.replace(/[/.]/g, "\\$&")}':\\r?\\n {8}specifier: [^\\r\\n]+\\r?\\n {8}version: ([^\\r\\n]+)$`, "m"));
   if (!block) return { refusal: `pnpm-lock.yaml has no importer entry for ${name}` };
   const version = block[1].replace(/\(.*$/, "");
   if (!/^\d+\.\d+\.\d+/.test(version)) {
