@@ -41,7 +41,7 @@ import {
   closeSync, existsSync, globSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { constants as osConstants, homedir, tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { changedFiles } from "../packages/guards/src/changed-files.mjs";
@@ -173,6 +173,83 @@ export function agentOrgStaging(ciYml) {
 }
 
 /**
+ * EVERY SCRATCH TREE `verify` MAKES IS REMOVED ON EVERY EXIT A PROCESS CAN CHOOSE (#3847, incident #3846). `try/finally` runs on a return and a
+ * throw and does not run when a signal ends the process, so a `verify` killed by its parent (a timeout, a closed terminal, a restarted unit) left
+ * its `verify-*` tree in `/tmp`, and for the `agentOrg` step also a worktree REGISTRATION in the author's repository that the prune then has to
+ * classify. The one `mkdtempSync` is `makeScratch`'s: it registers the tree here, and `removeScratch` (a `finally`) and the handlers below (SIGINT,
+ * SIGTERM, SIGHUP and `exit`) are the same sync removal. The handlers stop the children first, so nothing is still writing into a tree being removed.
+ *
+ * WHAT THIS CANNOT DO: SIGKILL is not delivered to anyone's handler. What survives it is the janitor's work, and a step that blocks the event loop
+ * (a `spawnSync`) would hold a signal until it returned, which is why the long steps below run through `shAsync`.
+ */
+const liveScratch = new Set(/** @type {string[]} */ ([]));
+/** The clone's path to the repository it is registered in. @type {Map<string, string>} */
+const liveWorktrees = new Map();
+const liveChildren = new Set(/** @type {import("node:child_process").ChildProcess[]} */ ([]));
+let exitHandlersInstalled = false;
+
+/** @param {string} prefix the directory's name up to its random suffix, under the OS temp directory */
+export function makeScratch(prefix) {
+  installExitHandlers();
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  liveScratch.add(dir);
+  return dir;
+}
+
+/**
+ * Registers a worktree to be removed with the scratch tree it lives in, BEFORE `git worktree add` runs: a kill between the two then still finds it.
+ * @param {{ repo: string, clone: string }} worktree
+ */
+export function trackWorktree({ repo, clone }) {
+  installExitHandlers();
+  liveWorktrees.set(clone, repo);
+}
+
+/**
+ * Removes the registration and the directory, and the link directory first and by itself: removing it with the worktree would be asking git not
+ * to follow links into the author's `node_modules`, and what it does there is its own business. `git worktree remove` names OUR clone; a bare
+ * `git worktree prune` would also take every other session's entry whose directory is momentarily away.
+ * @param {{ repo: string, clone: string }} worktree
+ */
+export function removeWorktree({ repo, clone }) {
+  liveWorktrees.delete(clone);
+  rmSync(join(clone, "node_modules"), { recursive: true, force: true });
+  if (!existsSync(clone)) return;
+  const removed = spawnSync("git", ["worktree", "remove", "--force", clone], { cwd: repo, stdio: "ignore", env: sandboxGitEnv() });
+  if (removed.status !== 0) console.error(`verify: could not remove the worktree ${clone} from ${repo}'s registry (git exit ${removed.status}); \`git worktree list\` there still names it`);
+}
+
+/** @param {string} dir a tree `makeScratch` made */
+export function removeScratch(dir) {
+  for (const [clone, repo] of liveWorktrees) if (clone.startsWith(`${dir}/`)) removeWorktree({ repo, clone });
+  rmSync(dir, { recursive: true, force: true });
+  liveScratch.delete(dir);
+}
+
+function removeAllScratch() {
+  for (const dir of [...liveScratch]) removeScratch(dir);
+  for (const [clone, repo] of [...liveWorktrees]) removeWorktree({ repo, clone });
+}
+
+/** The shell's offset for "ended by signal n", which an unhandled one would have exited with. */
+const SIGNAL_EXIT_BASE = 128;
+/** The signals that end a run from outside. */
+const ENDING_SIGNALS = /** @type {const} */ (["SIGINT", "SIGTERM", "SIGHUP"]);
+
+function installExitHandlers() {
+  if (exitHandlersInstalled) return;
+  exitHandlersInstalled = true;
+  for (const signal of ENDING_SIGNALS) {
+    process.once(signal, () => {
+      for (const child of liveChildren) child.kill("SIGTERM");
+      removeAllScratch();
+      process.exit(SIGNAL_EXIT_BASE + osConstants.signals[signal]);
+    });
+  }
+  process.on("exit", removeAllScratch);
+}
+
+/**
  * @param {string} command
  * @param {string[]} args
  * @param {import("node:child_process").SpawnSyncOptions} [options]
@@ -181,10 +258,10 @@ function sh(command, args, options = {}) {
   return spawnSync(command, args, { cwd: REPO, stdio: "inherit", encoding: "utf8", env: sandboxGitEnv(), ...options });
 }
 
-/** @param {string[]} pnpmArgs */
-function pnpm(pnpmArgs, options = {}) {
+/** @param {string[]} pnpmArgs @param {{ stdio?: import("node:child_process").StdioOptions }} [options] */
+function pnpm(pnpmArgs, { stdio = "inherit" } = {}) {
   const { command, args } = pnpmCliInvocation(pnpmArgs);
-  return sh(command, args, options);
+  return shAsync(command, args, { cwd: REPO, stdio });
 }
 
 /** Commands run in order, stopping at the first that fails. @param {Array<() => { status: number | null }>} commands */
@@ -275,7 +352,7 @@ export async function runAffectedSet({ base }, run, readSummary = readRunSummary
   };
   const short = underFloor([AFFECTED_INCLUDE], AFFECTED_MIN_FILES);
   if (short.length > 0) return settle({ short, exit: null, summary: null, base });
-  const scratch = mkdtempSync(join(tmpdir(), "verify-affected-"));
+  const scratch = makeScratch("verify-affected-");
   const summaryFile = join(scratch, "summary.json");
   try {
     const { command, args } = pnpmCliInvocation(["exec", "rstest", "run", "--config", RSTEST_CONFIG,
@@ -283,7 +360,7 @@ export async function runAffectedSet({ base }, run, readSummary = readRunSummary
     const { status } = await run(command, args, { cwd: REPO, stdio: "inherit", env: { A11Y_RSTEST_SUMMARY_FILE: summaryFile } });
     return settle({ short, exit: status, summary: readSummary(summaryFile), base });
   } finally {
-    rmSync(scratch, { recursive: true, force: true });
+    removeScratch(scratch);
   }
 }
 
@@ -394,17 +471,17 @@ export function runTs({ base }, run = shAsync, readSummary = readRunSummary, las
 }
 
 /** A `SKIPPED` line is an honest skip and not a pass (the engineer brief), so it is its own status and reads red. */
-function runPython() {
-  const result = pnpm(["run", "test:python"], { stdio: ["ignore", "pipe", "inherit"] });
-  const out = String(result.stdout ?? "");
+async function runPython() {
+  const result = await pnpm(["run", "test:python"], { stdio: ["ignore", "pipe", "inherit"] });
+  const out = result.stdout;
   process.stdout.write(out);
   if (result.status !== 0) return "fail";
   return /^SKIPPED/m.test(out) ? "skipped" : "pass";
 }
 
 /** CI's `changeset` job, minus the Dependabot and queue branches that only a bot's pull request reaches. @param {{ base: string }} ctx */
-function runChangeset({ base }) {
-  return pnpm(["exec", "changeset", "status", `--since=${base}`]).status === 0 ? "pass" : "fail";
+async function runChangeset({ base }) {
+  return (await pnpm(["exec", "changeset", "status", `--since=${base}`])).status === 0 ? "pass" : "fail";
 }
 
 /**
@@ -427,16 +504,17 @@ function runAcceptance({ body, files }) {
 }
 
 /** @param {{ body: string | null, files: string[] }} ctx */
-function runOwnedPaths({ body, files }) {
-  const dir = mkdtempSync(join(tmpdir(), "verify-owned-"));
+async function runOwnedPaths({ body, files }) {
+  const dir = makeScratch("verify-owned-");
   try {
     writeFileSync(join(dir, "changed.txt"), files.join("\n"));
     writeFileSync(join(dir, "body.txt"), body ?? "");
     const diff = `--diff=${join(dir, "changed.txt")}`;
-    return sh(process.execPath, [toolPath("src/bin.mjs"), "owned-path-signoff", diff, `--body=${join(dir, "body.txt")}`]).status === 0
-      ? "pass" : "fail";
+    const { status } = await shAsync(process.execPath, [toolPath("src/bin.mjs"), "owned-path-signoff", diff, `--body=${join(dir, "body.txt")}`],
+      { cwd: REPO, stdio: "inherit" });
+    return status === 0 ? "pass" : "fail";
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeScratch(dir);
   }
 }
 
@@ -549,16 +627,23 @@ export function linkNodeModules({ from, to }) {
  * @param {string} command
  * @param {string[]} args
  * @param {{ cwd: string, stdio: import("node:child_process").StdioOptions, env?: Record<string, string> }} where
- * @returns {Promise<{ status: number | null }>}
+ * @returns {Promise<{ status: number | null, stdout: string }>} `stdout` is what a piped one wrote, and "" when it was not piped
  */
 export function shAsync(command, args, { cwd, stdio, env = {} }) {
   return new Promise((done) => {
     const child = spawn(command, args, { cwd, env: sandboxGitEnv(env), stdio });
+    liveChildren.add(child);
+    let stdout = "";
+    child.stdout?.on("data", (chunk) => { stdout += chunk; });
     child.on("error", (cause) => {
+      liveChildren.delete(child);
       console.error(`verify: could not start ${command}: ${cause.message}`);
-      done({ status: null });
+      done({ status: null, stdout });
     });
-    child.on("close", (status) => done({ status }));
+    child.on("close", (status) => {
+      liveChildren.delete(child);
+      done({ status, stdout });
+    });
   });
 }
 
@@ -619,26 +704,15 @@ export async function runAgentOrgInClone({ repo, toolRepo, ref, copied, scratch,
   try {
     return await inOrderAsync([
       () => { const pinned = pinTool({ toolRepo, ref, log }); commit = pinned.commit; return pinned; },
-      () => shAsync("git", ["worktree", "add", "--quiet", "--detach", clone, "HEAD"], at(repo)),
+      () => { trackWorktree({ repo, clone }); return shAsync("git", ["worktree", "add", "--quiet", "--detach", clone, "HEAD"], at(repo)); },
       () => linkNodeModules({ from: join(repo, "node_modules"), to: join(clone, "node_modules") }),
       () => stageAgentOrg({ toolRepo, scratch, copied, root: clone, stdio: ["ignore", log, log], commit }),
       () => shAsync("node", ["--import", "tsx", "--test", "packages/agent-org/src/**/*.test.ts",
         "packages/agent-org/src/**/*.test.mjs"], { ...at(clone), env: { HOME: ciLikeHome({ home: homedir(), into: join(scratch, "home") }), AGENT_ORG_TOOL_REPO: toolRepo } }),
     ]);
   } finally {
-    await removeClone({ repo, clone, log });
+    removeWorktree({ repo, clone });
   }
-}
-
-/**
- * The link directory goes first and by itself: removing it with the worktree would be asking git not to follow links
- * into the author's `node_modules`, and what it does there is its own business. `git worktree remove` names OUR clone;
- * a bare `git worktree prune` would also take every other session's entry whose directory is momentarily away.
- * @param {{ repo: string, clone: string, log: number }} where
- */
-async function removeClone({ repo, clone, log }) {
-  rmSync(join(clone, "node_modules"), { recursive: true, force: true });
-  if (existsSync(clone)) await shAsync("git", ["worktree", "remove", "--force", clone], { cwd: repo, stdio: ["ignore", log, log] });
 }
 
 /**
@@ -660,7 +734,7 @@ async function runAgentOrg(ciYml) {
  * @param {{ repo: string, toolRepo: string, ref: string, copied: string[] }} job
  */
 export async function runAgentOrgStep({ repo, toolRepo, ref, copied }) {
-  const scratch = mkdtempSync(join(tmpdir(), "verify-agent-org-"));
+  const scratch = makeScratch("verify-agent-org-");
   const logPath = join(scratch, "agentOrg.log");
   const log = openSync(logPath, "w");
   try {
@@ -668,7 +742,7 @@ export async function runAgentOrgStep({ repo, toolRepo, ref, copied }) {
     return { status, output: readFileSync(logPath, "utf8") };
   } finally {
     closeSync(log);
-    rmSync(scratch, { recursive: true, force: true });
+    removeScratch(scratch);
   }
 }
 
@@ -682,7 +756,7 @@ function runStep(id, ctx) {
     changed: () => "pass",
     ts: () => runTs(ctx),
     python: () => runPython(),
-    rulesFitness: () => (pnpm(["run", "rules-check"]).status === 0 ? "pass" : "fail"),
+    rulesFitness: async () => ((await pnpm(["run", "rules-check"])).status === 0 ? "pass" : "fail"),
     changeset: () => runChangeset(ctx),
     acceptance: () => runAcceptance(ctx),
     ownedPaths: () => runOwnedPaths(ctx),

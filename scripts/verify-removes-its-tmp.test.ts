@@ -27,7 +27,7 @@ import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 const VERIFY = join(REPO, "scripts/verify.mjs");
 const FIXTURE = "packages/lab/src/packaging/board-document-chrome-resolver.test.ts";
-const READY_WAIT_MS = 60_000;
+const READY_WAIT_MS = 15_000;
 const POLL_MS = 50;
 
 type Mode = "affected" | "agentOrg";
@@ -71,7 +71,7 @@ function childProgram(mode: Mode, tree: Tree): string {
   if (mode === "affected") {
     return `const verify = await import(${verify});
 const hangs = async () => { (await import("node:fs")).writeFileSync(${JSON.stringify(tree.ready)}, "1"); await new Promise(() => setInterval(() => {}, 1000)); };
-const run = process.argv[1] === "complete" ? async () => ({ status: 0 }) : hangs;
+const run = process.env.TEST_RUNS_TO_COMPLETION === "1" ? async () => ({ status: 0 }) : hangs;
 await verify.runAffectedSet({ base: "origin/main" }, run, () => ({ files: [] }));
 `;
   }
@@ -82,26 +82,27 @@ await verify.runAgentOrgStep({ repo: ${JSON.stringify(tree.author)}, toolRepo: $
 
 const settle = (ms: number) => new Promise((done) => setTimeout(done, ms));
 
-async function until(what: string, holds: () => boolean) {
+async function until(what: string, holds: () => boolean, evidence: () => string) {
   for (let waited = 0; waited < READY_WAIT_MS; waited += POLL_MS) {
     if (holds()) return;
     await settle(POLL_MS);
   }
-  assert.fail(`${what} never happened in ${READY_WAIT_MS} ms`);
+  assert.fail(`${what} never happened in ${READY_WAIT_MS} ms\n${evidence()}`);
 }
 
 /** Runs the child in `tree`; resolves with how it ended once it has. `kill` is sent when the step is mid-way, and `null` lets it finish. */
 async function runChild(mode: Mode, tree: Tree, kill: NodeJS.Signals | null) {
-  const env = { ...process.env, TMPDIR: tree.tmp };
+  // The mode travels in the environment: changed-files.mjs reads `process.argv[1]` as a path to its own entry, and `-e` makes an argument that.
+  const env = { ...process.env, TMPDIR: tree.tmp, TEST_RUNS_TO_COMPLETION: kill === null ? "1" : "0" };
   delete env.NODE_TEST_CONTEXT; // the suite inside the clone would inherit it and refuse to start ("run() called recursively")
   if (kill === null) writeFileSync(tree.release, "1");
-  const args = ["--input-type=module", "-e", childProgram(mode, tree), kill === null ? "complete" : "hang"];
+  const args = ["--input-type=module", "-e", childProgram(mode, tree)];
   const child = spawn(process.execPath, args, { cwd: REPO, env, stdio: ["ignore", "ignore", "pipe"] });
   let stderr = "";
   child.stderr.on("data", (chunk) => { stderr += chunk; });
   const ended = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((done) => child.on("close", (code, signal) => done({ code, signal })));
   if (kill === null) return { ...(await ended), stderr, before: [] as string[], standing: [] as string[] };
-  await until(`the ${mode} step reaching its wait`, () => existsSync(tree.ready));
+  await until(`the ${mode} step reaching its wait`, () => existsSync(tree.ready), () => stderr);
   const before = readdirSync(tree.tmp);
   const standing = worktreesOf(tree);
   child.kill(kill);
@@ -149,6 +150,7 @@ test("every mkdtempSync in verify.mjs is the one inside the scratch helper, so n
   assert.ok(helper, "verify.mjs has no `export function makeScratch`, the helper this test names");
   const start = helper.index;
   const end = start + helper[0].length;
+  assert.ok(sites.length > 0, "verify.mjs has no mkdtempSync at all, so the count below would pass on nothing");
   const outside = sites.filter((at) => at < start || at > end);
   assert.deepEqual(outside, [], `a mkdtempSync outside makeScratch, at offsets ${outside.join(", ")}`);
   assert.equal(sites.length - outside.length, 1, "the helper's own mkdtempSync is the positive control, and there must be exactly one");
