@@ -2168,8 +2168,13 @@ test("main hands the switch the UN-COALESCED read, not the `?? []` one", () => {
   const calls = [...source.matchAll(/deadMansSwitch\(\{[^}]*\}\)/g)].map(([text]) => text);
   const name = calls.map((c) => c.match(/openRows:\s*(\w+)/)?.[1]).find(Boolean) ?? "";
   assert.ok(name, `main must pass openRows into the switch; found ${JSON.stringify(calls)}`);
-  assert.match(source, new RegExp(`const ${name} = readOpenRows\\(\\);`),
+  // Since agent-org v0.54.11 (#3566 slice 5) the raw read is a PROPERTY of `readTrackerLanes`, which `main` destructures,
+  // rather than a `const` of `main`'s own: both halves are pinned, so neither a `?? []` at the read nor a rebinding in `main` passes.
+  assert.match(source, new RegExp(`\\b${name}: readOpenRows\\(read\\)`),
     `${name} must be the raw read -- a \`?? []\` here reads a gh outage as a healthy silent org (#1286)`);
+  const taken = source.match(/const \{([^}]*)\} = readTrackerLanes\(\);/)?.[1].split(",").map((member) => member.trim()) ?? [];
+  assert.ok(taken.includes(name),
+    `main must take ${name} from the lanes read by that name, not renamed and rebound through a coalescing \`?? []\`; it takes ${JSON.stringify(taken)}`);
   // AND THE READ ITSELF IS NOW ONE CALL, which is the other half of #1938's done-when.
   assert.equal(source.match(/"issue", "list", "--state", "open", "--limit", "500"/g)?.length, 1,
     "the gate asked for the same 500 open rows twice; the second was a strict subset of the first");
@@ -4005,10 +4010,13 @@ test("#2110: main pays for it only when something is actually claimed", () => {
   // The `decide` jsdoc spells the same call shape when it says where `claimedComments` comes from, so
   // prose is excluded by its backtick rather than by counting matches -- `cannotAskReport`'s own pin one
   // test down makes the identical exclusion for the identical reason.
-  assert.equal(gate.match(/(?<!`)readClaimedRowComments\(\)/g)?.length, 1,
+  // Since v0.54.11 the call takes the batch's `run`, so it is `readClaimedRowComments(run)`; the definition is excluded by its `function `.
+  assert.equal(gate.match(/(?<!`|function )readClaimedRowComments\(\w+\)/g)?.length, 1,
     "exactly one call site, and it is inside the condition below -- a second is a second price");
-  assert.match(gate, /const held = openRows\.some\(\(r\) => labelsOf\(r\)\.includes\(CLAIM_LABEL\)\);\s*\n\s*return held \? readClaimedRowComments\(\) : null;/,
+  assert.match(gate, /const held = openRows\.some\(\(r\) => labelsOf\(r\)\.includes\(CLAIM_LABEL\)\);\s*\n\s*return held \? readClaimedRowComments\(run\) : null;/,
     "the condition is answered from rows already in hand, so asking it costs no call of its own");
+  assert.match(gate, /claimedComments: claimedRowCommentsWhenHeld\(allOpen, read\)/,
+    "the follow-up batch asks the conditional helper, never `readClaimedRowComments` directly");
   assert.equal(GH_READS.unconditional.length, 11,
     "#2110 adds no UNCONDITIONAL read -- the comment page is conditional on a claim existing");
 });
@@ -5293,9 +5301,12 @@ test("#2202: readClosedAnswerRows refuses rather than reporting nobody owes anyt
 
 test("#2202: main feeds the closed-row read into `answerOwed` beside the open one, through the helper that SAYS a refusal", () => {
   const source = readFileSync(toolUrl("src/work-gate.mjs"), "utf8");
-  assert.match(source, /answerOwed: rowsOwingAnswers\(\{ openRows: allOpen, openPrs, closedRows: closedAnswerRows\(\) \}\)/,
+  // Since v0.54.11 the closed read is made in `readOpenRowFollowUps` and HANDED to `closedAnswerRows`, which still says the refusal.
+  assert.match(source, /answerOwed: rowsOwingAnswers\(\{ openRows: allOpen, openPrs, closedRows: closedAnswerRows\(closedRows\) \}\)/,
     "a closed row owing an answer must reach `decide` -- the open read alone is the defect");
-  assert.match(source, /function closedAnswerRows\(\) \{[^]*?NOTE: could not read the closed rows/,
+  assert.match(source, /closedRows: readClosedAnswerRows\(read\)/,
+    "the closed-row read is one of the follow-ups, so what `main` hands `closedAnswerRows` is that read's answer");
+  assert.match(source, /function closedAnswerRows\(rows\) \{[^]*?NOTE: could not read the closed rows/,
     "a refused read is a line on stderr, never a silent empty list");
 });
 
@@ -5371,7 +5382,8 @@ test("#2609: `endedSessionLabels` reads a teardown's record, and a label that ST
 
 test("#2609: `closedAnswerRows` runs the ended-session filter on what `readClosedAnswerRows` returned", () => {
   const source = readFileSync(toolUrl("src/work-gate.mjs"), "utf8");
-  assert.match(source, /function closedAnswerRows\(\) \{[^]*?return withoutEndedAnswerSessions\(rows\);/);
+  // Since v0.54.11 the rows are a PARAMETER (the read is one of the follow-ups asked together), not a local read inside the function.
+  assert.match(source, /function closedAnswerRows\(rows\) \{[^]*?return withoutEndedAnswerSessions\(rows\);/);
 });
 
 // --- #2492: answer:<session> on a PULL REQUEST woke nobody, because `gh issue list` does not return PRs ---
