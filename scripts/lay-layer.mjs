@@ -14,7 +14,8 @@
 // answered with `main`.
 //
 // A LAYER THAT IS NOT ON THE REGISTRY DECLARES ITS OWN TAG (#3505). `lab` is `private: true` and never published, so the lockfile has no entry
-// to read and the pin is the `tag` field of its own declaration in `layers.json`: still ONE place, and still a tag, never a branch. A declaration
+// to read and the pin is the `tag` field of its own declaration in `layers.json`: still ONE place, and still a tag, never a branch. It is declared
+// under `pinned`, not `layers`: `layers` are the ones a guest and a lab job must hold a pinned checkout of, and nothing on a worker runs the lab. A declaration
 // with a `tag` is never answered from the lockfile, and a declaration whose tag is not a `v<semver>` is REFUSED (a branch name moves under a
 // checkout that did not touch it). `lays` names what to lay when it is more than `src/`: `lab`'s root scripts, its baselines and `rule-ownership.json`
 // are read by path from the rest of the tree.
@@ -60,6 +61,7 @@ export function pinnedVersion(lockfile, name) {
 
 /** What a declared tag looks like: `v` and a semver. A branch or a bare sha is not a pin. */
 const DECLARED_TAG = /^v\d+\.\d+\.\d+$/;
+/** @typedef {{ path: string, remote?: string, tag?: string, lays?: string[] }} Declaration */
 /** What `lay` puts down when a declaration names nothing else. */
 const DEFAULT_LAYS = ["src"];
 
@@ -84,13 +86,14 @@ function tagToLay(entry, lockfile, layer) {
 /**
  * What to lay, from the manifest and the lockfile: the repository, the tag, the path inside the repository, what of it to lay, and the path here.
  * The layer's repository keeps the directory at the same path it had in the monorepo (ADR 0040), so `path` names both ends.
- * @param {{ layers: Record<string, { path: string, remote?: string, tag?: string, lays?: string[] }> }} manifest
+ * @param {{ layers: Record<string, Declaration>, pinned?: Record<string, Declaration> }} manifest
  * @param {string} lockfile
  * @param {string} layer
  * @returns {{ remote: string, tag: string, path: string, lays: string[] } | { refusal: string }}
  */
 export function layingPlan(manifest, lockfile, layer) {
-  const entry = Object.hasOwn(manifest.layers, layer) ? manifest.layers[layer] : undefined;
+  const declared = [manifest.layers, manifest.pinned ?? {}].find((section) => Object.hasOwn(section, layer));
+  const entry = declared?.[layer];
   if (!entry?.remote) return { refusal: `layer "${layer}" is not declared with a remote in packages/control/layers.json` };
   const pinned = tagToLay(entry, lockfile, layer);
   if ("refusal" in pinned) return pinned;

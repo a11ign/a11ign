@@ -261,6 +261,11 @@
   # THE LAYERS' HALF OF THE MOVE (ADR 0039 item 6, row 6c, #3396), after the core's so the pair is settled
   # together. A no-op while no layer lives in its own repository; the file's header says what it refuses.
   ansible.builtin.include_tasks: lab-layer-checkouts.yml
+  vars:
+    # Handed down, not read through `lab_pull`: the register is this file's, and `playbook-variables.test.ts` holds a
+    # task file to the variables its own text or its include site provides. A pull that changed the checkout is
+    # followed by the install that re-lays a LAID layer at the new lockfile's tag (#3819).
+    lab_core_moved: "{{ lab_pull is defined and lab_pull is changed }}"
 
 - name: "Say why the checkout was left alone"
   when: not lab_should_pull
