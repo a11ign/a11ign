@@ -9,19 +9,24 @@
  *
  * ## The three questions the row asked, answered where the code is
  *
- *   1. READ FROM: the repository Actions variable `GATE_LAST_TICK` of `a11ign/a11ign` (#3880, written by
- *      `work-tick.mjs` in a11ign/agent-org#326). Its value is epoch MILLISECONDS. Lag added: one API round trip
- *      after the tick's end, then up to one timer period (1 min) of this unit. Every read has a hard timeout.
+ *   1. READ FROM: the `updated_at` of the tick's standing comment, issue comment `6026375754` on
+ *      `a11ign/a11ign#3880`, authored by `a11ign-ai-workers` and edited by the tick (agent-org#333, #3896). It was
+ *      the Actions variable `GATE_LAST_TICK` until #3897: the control plane's #1875 token gets a 403 on
+ *      `actions/variables` (measured 2026-10-06 22:04Z, #3851), and a comment is an object a tokenless read sees.
+ *      The timestamp is GitHub's own, so the age needs no trust in the agents host's clock. Lag added: one API
+ *      round trip after the tick's end, then up to one timer period (1 min) of this unit. Every read has a hard timeout.
  *   2. ROUTE: the control plane's own Telegram route. The credential files are the chairman's to place
  *      (`needs:chairman` on #3851); their paths are named below and are PROVISIONAL until he names them.
- *   3. WHAT IS A TICK: the variable is written only after the completion record, on a tick that reached its
+ *   3. WHAT IS A TICK: the comment is edited only after the completion record, on a tick that reached its
  *      end, so a tick that started and died writes nothing and goes stale like a tick that never ran.
  *
  * ## Three verdicts, and a missing answer is never `fresh`
  *
  *   - `fresh`        the last tick is at most ten minutes old
  *   - `stale`        older than ten minutes
- *   - `cannot-tell`  the read timed out or failed, or the value is not a plausible epoch. **CANNOT_TELL is
+ *   - `cannot-tell`  the read timed out or failed (a 404 for a deleted comment and a 403 are HTTP statuses named
+ *                    in the message: a deleted object is not a dead tick), or the body is not a comment whose
+ *                    `updated_at` is a time no earlier than its own `created_at`. **CANNOT_TELL is
  *                    not "alive"**: it is a message saying so, because a heartbeat that goes quiet when it
  *                    cannot see is the freeze it exists to catch, one level up.
  *
@@ -40,12 +45,11 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 export const STALE_AFTER_MS = 10 * 60_000;
-/** The tick is stamped by the agents host's clock and judged by this one; a little skew is not the future. */
-export const SKEW_TOLERANCE_MS = 60_000;
 export const READ_TIMEOUT_MS = 20_000;
 export const SEND_TIMEOUT_MS = 20_000;
 export const HEARTBEAT_REPO = "a11ign/a11ign";
-export const HEARTBEAT_VARIABLE = "GATE_LAST_TICK";
+/** The tick's standing comment, on a11ign/a11ign#3880 (#3897). Its `updated_at` is the last completed tick. */
+export const HEARTBEAT_COMMENT_ID = "6026375754";
 
 const MS_PER_MINUTE = 60_000;
 const MS_PER_SECOND = 1_000;
@@ -67,21 +71,47 @@ export const TELEGRAM_CHAT_FILE = join(homedir(), ".config", "a11y-witness", "te
  */
 
 /**
- * What the variable's value says, or why it cannot be read as a time.
+ * What the comment says about the last tick, or why it cannot be read as one.
  *
- * @param {string} value the raw `GATE_LAST_TICK`
+ * `updated_at` is GitHub's clock, so there is no skew verdict: the tick is never stamped by a host this unit
+ * does not trust. A stamp before the comment's own `created_at` is a body that is not this comment, not a tick.
+ *
+ * @param {string} body the comment's `{created_at, updated_at}` as `readGateLastTick` asks for them
  * @param {number} nowMs
  * @returns {Verdict}
  */
-export function judgeTick(value, nowMs) {
-  const text = value.trim();
-  if (!/^\d+$/.test(text)) return { status: "cannot-tell", reason: `the value is not an epoch in milliseconds: ${JSON.stringify(text.slice(0, 40))}` };
-  const atMs = Number(text);
-  if (!Number.isSafeInteger(atMs)) return { status: "cannot-tell", reason: "the value is not a safe integer" };
-  const ageMs = nowMs - atMs;
-  if (ageMs < -SKEW_TOLERANCE_MS) return { status: "cannot-tell", reason: `the tick is ${minutes(-ageMs)} in the future, beyond clock skew` };
-  const age = { ageMs: Math.max(ageMs, 0), atMs };
+export function judgeTick(body, nowMs) {
+  const times = readTimes(body);
+  if (!times.ok) return { status: "cannot-tell", reason: times.reason };
+  const { createdMs, updatedMs } = times;
+  if (updatedMs < createdMs) return { status: "cannot-tell", reason: "the comment's updated_at is earlier than its created_at" };
+  const ageMs = nowMs - updatedMs;
+  const age = { ageMs: Math.max(ageMs, 0), atMs: updatedMs };
   return ageMs > STALE_AFTER_MS ? { status: "stale", ...age } : { status: "fresh", ...age };
+}
+
+/**
+ * @param {string} body
+ * @returns {{ ok: true, createdMs: number, updatedMs: number } | { ok: false, reason: string }}
+ */
+function readTimes(body) {
+  let parsed;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return { ok: false, reason: `the body is not JSON: ${JSON.stringify(body.trim().slice(0, 40))}` };
+  }
+  const createdMs = isoMs(parsed?.created_at);
+  const updatedMs = isoMs(parsed?.updated_at);
+  if (createdMs === null || updatedMs === null) return { ok: false, reason: "the body has no created_at and updated_at that are times" };
+  return { ok: true, createdMs, updatedMs };
+}
+
+/** @param {unknown} value @returns {number | null} epoch ms of an ISO-8601 string, else null */
+function isoMs(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/.test(value)) return null;
+  const ms = Date.parse(value);
+  return Number.isNaN(ms) ? null : ms;
 }
 
 /** @param {number} ms @returns {string} */
@@ -127,7 +157,7 @@ export async function run({ now, read, send, loadStanding, saveStanding }) {
 }
 
 /**
- * `gh api` for the variable, under a hard timeout that KILLS: a hung `gh` must not hold the unit.
+ * `gh api` for the standing comment, under a hard timeout that KILLS: a hung `gh` must not hold the unit.
  *
  * @param {{ spawn?: typeof spawnSync, env?: NodeJS.ProcessEnv, readToken?: () => string }} [options]
  * @returns {Read}
@@ -135,7 +165,7 @@ export async function run({ now, read, send, loadStanding, saveStanding }) {
 export function readGateLastTick({ spawn = spawnSync, env = process.env, readToken = readGhToken } = {}) {
   const token = env.GH_TOKEN || readToken().trim();
   if (!token) return { ok: false, reason: "this host has no GitHub credential" };
-  const result = spawn("gh", ["api", `repos/${HEARTBEAT_REPO}/actions/variables/${HEARTBEAT_VARIABLE}`, "--jq", ".value"], {
+  const result = spawn("gh", ["api", `repos/${HEARTBEAT_REPO}/issues/comments/${HEARTBEAT_COMMENT_ID}`, "--jq", "{created_at, updated_at}"], {
     env: { ...env, GH_TOKEN: token }, encoding: "utf8", timeout: READ_TIMEOUT_MS, killSignal: "SIGKILL",
   });
   if (result.error) return { ok: false, reason: `gh did not answer inside ${READ_TIMEOUT_MS / MS_PER_SECOND} s (${/** @type {NodeJS.ErrnoException} */ (result.error).code ?? "error"})` };
