@@ -22,19 +22,21 @@ jobs:
           fetch-depth: 0
       - name: Refuse a pin that is not an ancestor of the commit this run is executing at
         run: |
-          if ! git merge-base --is-ancestor 8a49363920cee54d4d9ebdf7ceb716961189ea3f "${{ github.sha }}"; then
-            echo "::error::consumer-gate.yml's uses: step is pinned to 8a49363920cee54d4d9ebdf7ceb716961189ea3f, which is not an"
+          if ! git merge-base --is-ancestor b9a0957b0141271cf23986eb5197260ce9f89328 "${{ github.sha }}"; then
+            echo "::error::consumer-gate.yml's uses: step is pinned to b9a0957b0141271cf23986eb5197260ce9f89328, which is not an"
             echo "::error::ancestor of the commit this run is executing at, ${{ github.sha }} (ref"
             echo "::error::${{ github.ref_name }}, ${{ github.event_name }}) -- regenerate (node"
             echo "::error::scripts/generate-consumer-gate.mjs) against a commit in this history"
             exit 1
           fi
-      - name: Refuse a pin that predates a change to what it pins
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v7
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Refuse a file that no longer matches what README.md's documented workflow produces
         run: |
-          changed=$(git diff --name-only --no-renames 8a49363920cee54d4d9ebdf7ceb716961189ea3f "${{ github.sha }}" -- README.md scripts/generate-consumer-gate.mjs)
-          if [ -n "$changed" ]; then
-            echo "::error::consumer-gate.yml is pinned to 8a49363920cee54d4d9ebdf7ceb716961189ea3f, but this changed since:"
-            echo "::error::$changed"
+          if ! node scripts/generate-consumer-gate.mjs --check; then
+            echo "::error::consumer-gate.yml (pinned to b9a0957b0141271cf23986eb5197260ce9f89328) does not match what README.md's Quickstart fence produces"
             echo "::error::regenerate (node scripts/generate-consumer-gate.mjs) and dispatch again"
             exit 1
           fi
@@ -48,7 +50,7 @@ jobs:
       pull-requests: write         # for the PR comment below; omit it and the report still runs, only quieter
     steps:
       - uses: actions/checkout@v7
-      - uses: a11ign/a11ign@8a49363920cee54d4d9ebdf7ceb716961189ea3f
+      - uses: a11ign/a11ign@b9a0957b0141271cf23986eb5197260ce9f89328
         # Pinned to v0.1.0, the first tagged release. Use the full commit SHA instead if your CI must
         # not move even across a release.
         id: a11ign
