@@ -1,0 +1,5 @@
+---
+"a11ign": patch
+---
+
+Consumes `@a11ign/screenreader-fleet` `^0.5.1` where it held `^0.3.0` across four releases, in the root, `cli`, `guards` and `lab` manifests, with the lockfile at `0.5.1` (#3803). What each release changes for the core: 0.4.0 removes `a11ign-worker-deploy`, so the root's `worker:deploy` script, whose target `deploy-worker.mjs` is no longer laid, is removed with it (`fleet:deploy` is the deploy); 0.4.1 and 0.4.2 stop `a11ign-doctor`, `a11ign-worker-compare` and `fleet-env` resolving monorepo paths from inside an installed package, and the core runs them from the laid copy at the monorepo path, so nothing changes for it; 0.5.0 replaces `expectedWorkerCode()` with the async `resolveExpectedWorkerCode({ checkoutRoot })`, which hashes the layer clone when there is one, and `worker-code-check.test.ts`, the one consumer, asks the new function (#3781); 0.5.1 makes `doctor`'s `dist-freshness` read `missingExportTargets` instead of asking `tsc --build --dry` (#3810's fleet half).
