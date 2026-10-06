@@ -20,7 +20,7 @@ import { filesUnder } from "./files-under.mjs";
  * Build a throwaway tree, hand it to `body`, and remove it however `body` ends.
  *
  * `try/finally` rather than the runner's own `after` hook: this file runs under rstest through
- * `packages/toolchain/src/node-test-shim.mjs`, which REFUSES by name every `node:test` API it does not map, and
+ * `@a11ign/toolchain/node-test-shim`, which REFUSES by name every `node:test` API it does not map, and
  * the test context's `after` is one of them.
  */
 function withTempTree(body: (root: string) => void): void {

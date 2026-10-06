@@ -27,7 +27,7 @@ import { createServer } from "node:http";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "typescript";
-import { entryProblems, type PackageExports } from "../../../toolchain/src/entries.ts";
+import { entryProblems, type PackageExports } from "@a11ign/toolchain/entries";
 // STATIC, because a dynamic `import()` of a `.ts` path is not transformed by the runner. The test below asserts the list is every config found.
 import cliConfig from "../../../cli/rslib.config.ts";
 import evidenceConfig from "../../../evidence/rslib.config.ts";
@@ -157,8 +157,8 @@ const CONFIGS: Record<string, LibraryConfig> = {
 };
 
 test("every published package's rslib.config.ts builds exactly the entries its exports and bin name, from sources that exist", () => {
-  // The toolchain's own config is checked by `toolchain-package.test.ts`; a config found here and not imported above is a package this list forgot.
-  const found = published().filter(({ dir }) => dir !== "toolchain" && existsSync(join(PACKAGES, dir, "rslib.config.ts")));
+  // The toolchain's own config is checked by `a11ign/toolchain`'s own tests; a config found here and not imported above is a package this list forgot.
+  const found = published().filter(({ dir }) => existsSync(join(PACKAGES, dir, "rslib.config.ts")));
   assert.deepEqual(found.map(({ dir }) => dir).sort(), Object.keys(CONFIGS).sort(), "CONFIGS above is not every published package's config");
   const offenders: string[] = [];
   for (const { dir, manifest } of found) {

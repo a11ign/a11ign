@@ -44,13 +44,13 @@ export const QUALIFICATION_CONTEXT = "qualification";
 // `orchestrator`). Directories under `packages/`. A package named in NEITHER list is treated as GATED: a new package
 // is held to the fleet part until someone says otherwise, never released past it by omission. The test pins that
 // every `packages/*` directory is classified, so adding one fails there rather than at a release.
-// `toolchain` is runner-only by `orchestrator`'s reading (#3578, comment of 2026-10-05T02:30Z): every reader of it is test or
-// build tooling and none is in `gate:stability`'s closure. The limit: template-string dynamic imports are not followed, and if a
-// fleet-side job ever runs its tests through `@a11ign/toolchain`'s rstest config the answer changes.
+// `toolchain` left with #3625 and is no longer a directory here: its readers are test and build tooling, none in `gate:stability`'s closure
+// (`orchestrator`'s reading, #3578), and a version of it now reaches a release as a bump of the pin in `pnpm-lock.yaml`, which is on the read side below.
+// The limit: if a fleet-side job ever runs its tests through `@a11ign/toolchain`'s rstest config the answer changes.
 // `worker-fleet` left with #3504: its code is read through the release the lockfile pins, and `pnpm-lock.yaml` is on the read side below.
 export const FLEET_GATED_PACKAGES = ["lab", "evidence", "control"];
 // Gated by runner-only or corpus-only stages that need no worker. No private package is left in the workspace: `nvda-speech`, the last, left with the worker layer (#3447).
-export const RUNNER_ONLY_PACKAGES = ["scorer", "judge", "guards", "cli", "toolchain"];
+export const RUNNER_ONLY_PACKAGES = ["scorer", "judge", "guards", "cli"];
 /** @type {string[]} */
 export const PRIVATE_PACKAGES = [];
 

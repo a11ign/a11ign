@@ -37,7 +37,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { CoverageProvider } from "@rstest/coverage-v8";
 import { refuseUnknownFlags } from "./cli-flags.mjs";
 // The toolchain's SOURCE by relative path, for the reason `scripts/rstest/rstest.config.mjs` gives: a tree with no `dist` must run this.
-import { coverageOptionsFromC8rc, coverageTotals, runChildCoverage } from "../packages/toolchain/src/merge-child-coverage.mjs";
+import { coverageOptionsFromC8rc, coverageTotals, runChildCoverage } from "@a11ign/toolchain/merge-child-coverage";
 // #492: a bare "pnpm" spawn is ENOENT on windows-2022; `npm-cli-windows-spawn.test.ts` refuses one.
 import { pnpmCliInvocation } from "./npm-cli-executable.mjs";
 

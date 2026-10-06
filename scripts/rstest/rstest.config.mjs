@@ -1,18 +1,18 @@
 // @ts-check
 
 /**
- * a11ign's own test config: a THIN CALL into `@a11ign/toolchain`'s source (#3578, ADR 0043 row 4-0). Its path is named by `--config` in the
- * Acceptance of dozens of rows and by tracked files, so it stays here; what it carries is only what is a11ign's.
+ * a11ign's own test config: a THIN CALL into the installed `@a11ign/toolchain` (#3578, ADR 0043; a registry dependency since #3625, which
+ * deleted the in-tree copy). Its path is named by `--config` in the Acceptance of dozens of rows and by tracked files, so it stays
+ * here; what it carries is only what is a11ign's.
  *
- * THE PACKAGE'S SOURCE IS IMPORTED BY RELATIVE PATH, never `@a11ign/toolchain`: a review tree, where Acceptances run, has the root
- * `node_modules` and no `packages/*\/dist`, so a specifier that resolved to the package's `dist` would turn every rstest run in a fresh
- * tree red until somebody built it by hand. `@rstest/core` is a peer of the package and resolves from the root. The files it reaches are `.mjs`
- * because plain `node` loads them (the worker's `--import` hook, this file from a test) and the agent host's `/usr/bin/node` has no
- * type stripping (`process.versions.amaro` is undefined, measured on 22.22.1); ADR 0043, Decision 1 lets a file stay `.mjs`.
+ * THE PACKAGE IS IMPORTED BY ITS NAME, and that resolves in a review tree: the package is installed under the root `node_modules` as a
+ * published tarball with its own built files, so no `packages/*\/dist` is needed (#3558). `@rstest/core` is a peer of the package and resolves
+ * from the root. The entries are `.mjs` because plain `node` loads them (the worker's `--import` hook, this file from a test) and the agent
+ * host's `/usr/bin/node` has no type stripping (`process.versions.amaro` is undefined, measured on 22.22.1).
  *
  * WHAT IS a11ign'S: the repository root, the test glob, the `walk-scope` preload (#1349), and the data files its own tests read by path,
- * which a `--changed` run cannot see (#3572). The eight recorded decisions the config makes travel with the code, in
- * `packages/toolchain/src/rstest-config.mjs`.
+ * which a `--changed` run cannot see (#3572). The eight recorded decisions the config makes travel with the package, in
+ * `a11ign/toolchain`'s `src/rstest-config.mjs`.
  *
  * THE BY-PATH HALF IS DERIVED, NOT TRUSTED: `packages/lab/src/packaging/verify-affected-set.test.ts` finds every non-source file
  * and every data directory a non-tree-wide test names in a string literal, outside its own import closure, and fails on one that no
@@ -20,16 +20,16 @@
  * A tree-wide guard (a test about the repository) is not in that population: it does not ride on `--changed` and runs in CI.
  */
 import { fileURLToPath } from "node:url";
-import { defineToolchainConfig } from "../../packages/toolchain/src/rstest-config.mjs";
+import { defineToolchainConfig } from "@a11ign/toolchain/rstest-config";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const walkScope = fileURLToPath(new URL("../../packages/guards/src/walk-scope.mjs", import.meta.url));
 
 /**
- * #3572: what the config loads, and what every worker preloads: neither is imported by any test. The toolchain's source is a
- * trigger because the config is a call into it, and `walk-scope` because it is preloaded.
+ * #3572: what the config loads, and what every worker preloads: neither is imported by any test. The lockfile is a trigger because the
+ * config is a call into the installed toolchain and a new version of it changes what every run does, and `walk-scope` because it is preloaded.
  */
-const A11IGN_LOADED_TRIGGERS = ["scripts/rstest/**", "packages/toolchain/src/**", "packages/guards/src/walk-scope*.mjs"];
+const A11IGN_LOADED_TRIGGERS = ["scripts/rstest/**", "pnpm-lock.yaml", "packages/guards/src/walk-scope*.mjs"];
 
 /** #3572: data directories a non-tree-wide test reads by path, whole, because a file added to one is read too. */
 const READ_DIRECTORY_TRIGGERS = [
