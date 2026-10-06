@@ -4,6 +4,15 @@ The release machinery from [ADR 0007](../docs/adr/0007-versioning-and-release.md
 the alternatives on 2026-08-22. **`a11ign@0.1.0` and five `@a11ign/*` packages shipped on 2026-09-19**,
 and this machinery is why that was a config change rather than a scramble.
 
+## The first release after 0.1.0 is cut from the push that carried this note (#3130)
+
+`release.yml` runs on a push to `main` that touches `.changeset/**` and on nothing else, so this paragraph is the
+carrier: no changeset, version or workflow edit rides with it. The called workflow subtracts what the release tags
+have consumed, so the three changesets here that name a release (`rslib-build-a11ign-packages`,
+`a11ign-consumes-the-fleet-3504`, `the-core-consumes-fleet-0-5-0`) are what this push releases. Only `v0.1.0` exists as a
+tag, so each package is versioned from its manifest, not from the registry's `0.1.0`: `a11ign`, `@a11ign/evidence`,
+`@a11ign/judge` and `@a11ign/scorer` all publish at `0.3.0`, and no `0.2.x` ever reaches the registry.
+
 ## Adding one
 
 ```bash
