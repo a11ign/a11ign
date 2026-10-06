@@ -62,9 +62,11 @@ export const WAIT_BOUND_MINUTES = 92;
 
 // Paths a change to which cannot change what the fleet part reads. EVERYTHING ELSE counts as read: the list is of
 // exemptions, so a path nobody thought of invalidates the verdict rather than inheriting it. The first four are
-// not code; the rest are what the version pull request changes (`release-commit-version-bump.mjs`), which is ALWAYS
-// the release sha's own diff against the commit that was qualified. `package.json` is exempt because an install
-// affecting edit to one must carry a `pnpm-lock.yaml` change under `--frozen-lockfile`, and the lockfile is NOT exempt.
+// not code; the rest are what a release-carrying merge brings. `.changeset/` is the changeset that merge ADDS, so
+// the release sha's own diff against the commit that was qualified always holds one. No version pull request exists
+// (#3717) and the version commit is detached, so nothing writes a package's `CHANGELOG.md` or `package.json` to `main` any
+// more; they stay exempt on their own grounds: a changelog is prose, and `package.json` because an install affecting edit
+// to one must carry a `pnpm-lock.yaml` change under `--frozen-lockfile`, and the lockfile is NOT exempt.
 const NOT_READ_BY_THE_FLEET_PART = [
   /^docs\//, /^\.github\//, /^\.agent-org\//, /^\.claude\//,
   /^\.changeset\//,

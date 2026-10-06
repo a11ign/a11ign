@@ -402,9 +402,8 @@ function runPython() {
   return /^SKIPPED/m.test(out) ? "skipped" : "pass";
 }
 
-/** CI's `changeset` job, minus the Dependabot and queue branches that only a bot's pull request reaches. @param {{ base: string, branch: string }} ctx */
-function runChangeset({ base, branch }) {
-  if (branch === "release/version-packages") return "not-needed";
+/** CI's `changeset` job, minus the Dependabot and queue branches that only a bot's pull request reaches. @param {{ base: string }} ctx */
+function runChangeset({ base }) {
   return pnpm(["exec", "changeset", "status", `--since=${base}`]).status === 0 ? "pass" : "fail";
 }
 
@@ -666,7 +665,7 @@ async function runAgentOrg(ciYml) {
 }
 
 /**
- * @typedef {{ ciYml: string, base: string, branch: string, body: string | null, files: string[] }} StepContext
+ * @typedef {{ ciYml: string, base: string, body: string | null, files: string[] }} StepContext
  * @param {string} id
  * @param {StepContext} ctx
  */
@@ -807,8 +806,7 @@ async function main() {
   const dirty = git(["status", "--porcelain"]) !== "";
   const packages = knownPackages(REPO);
   const classification = classify(files, packages, { repoRoot: REPO, getPackedFiles: packedFiles });
-  const ctx = { ciYml: readFileSync(join(REPO, ".github/workflows/ci.yml"), "utf8"), base, body, files,
-    branch: git(["rev-parse", "--abbrev-ref", "HEAD"]) };
+  const ctx = { ciYml: readFileSync(join(REPO, ".github/workflows/ci.yml"), "utf8"), base, body, files };
   const steps = await runAllSteps({ classification, ctx });
   const wallMs = Date.now() - started;
   const endedDirty = dirty || git(["status", "--porcelain"]) !== "";
