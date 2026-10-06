@@ -22,6 +22,10 @@
     "declarationMap": true,
     "sourceMap": true,
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "src",
+    // The screen-reader worker is consumed from the registry (#3447) and ships `.mjs` with no `.d.ts`: TypeScript reads JS under
+    // `node_modules/` only to this depth (default 0), so `worker-fleet`'s build failed with TS7016 on every `@a11ign/screenreader-worker/<file>`
+    // import. The root `tsconfig.json` carries the same setting, with the measurement (1 leaves errors, 4 leaves 2, 5 none), because it does not extend this file.
+    "maxNodeModuleJsDepth": 5
   }
 }
