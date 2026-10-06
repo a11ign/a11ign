@@ -124,7 +124,38 @@ export function layersFrom({ manifest, root }) {
   /** @param {Record<string, string>} pins a value that has passed `layerPins` */
   const layerCheckoutMove = (pins) => checkoutMoveFor(manifest, pins);
 
-  return { layerDeclaration, layerRoot, layerSourceDir, layerCodeVersion, separateLayers, layerPins, layerCheckoutMove };
+  /**
+   * The separate layer whose directory holds `path` (repo-relative), or null when it is the core's. A file of a layer's
+   * is not tracked by this repository, so "does `git ls-files` list it" cannot be the question asked of it (#3845).
+   * @param {string} path
+   * @returns {string | null}
+   */
+  function layerOwning(path) {
+    const owns = (/** @type {string} */ name) => path === manifest.layers[name].path || path.startsWith(`${manifest.layers[name].path}/`);
+    return separateLayers().find(owns) ?? null;
+  }
+
+  return { layerDeclaration, layerRoot, layerSourceDir, layerCodeVersion, separateLayers, layerPins, layerCheckoutMove, layerOwning };
+}
+
+/**
+ * The tag a layer is laid at, read from the text of the core's `pnpm-lock.yaml`: `scripts/lay-layer.mjs`'s `pinnedVersion` and
+ * `layingPlan` over again, because `control` imports nothing outside its own directory (ADR 0012) and that script imports the guards.
+ * `fleet-auto-off.test.ts` holds the two readings equal on the real lockfile, so they cannot name two builds (#3845).
+ * A lockfile with no registry entry for the layer is a refusal, never a default.
+ *
+ * @param {string} lockfile
+ * @param {string} layer a key of `layers.json`
+ * @returns {{ tag: string } | { refusal: string }}
+ */
+export function layerPinTag(lockfile, layer) {
+  const name = `@a11ign/${layer}`;
+  const entry = new RegExp(`^ {6}'${name.replace(/[/.]/g, "\\$&")}':\\r?\\n {8}specifier: [^\\r\\n]+\\r?\\n {8}version: ([^\\r\\n]+)$`, "m");
+  const block = lockfile.match(entry);
+  if (!block) return { refusal: `pnpm-lock.yaml has no importer entry for ${name}` };
+  const version = block[1].replace(/\(.*$/, "");
+  if (!/^\d+\.\d+\.\d+/.test(version)) return { refusal: `${name} is "${version}" in pnpm-lock.yaml, not a registry release: there is no tag to lay` };
+  return { tag: `${name}@${version}` };
 }
 
 /**
@@ -176,6 +207,7 @@ export const layerCodeVersion = declared.layerCodeVersion;
 export const separateLayers = declared.separateLayers;
 export const layerPins = declared.layerPins;
 export const layerCheckoutMove = declared.layerCheckoutMove;
+export const layerOwning = declared.layerOwning;
 
 /**
  * Every `--layer-ref=<name>=<sha>`, in order. REPEATABLE, which `flagValue` (first match only) is not: one
