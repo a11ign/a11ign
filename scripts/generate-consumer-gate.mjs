@@ -430,7 +430,7 @@ function buildCheckPinJob(pinnedSha) {
     // the content question directly (sha aside, #558 part 1), so a pull request that changes the fence passes by
     // regenerating in the same commit, and one that does not touch it never needs a pin-only follow-up.
     // It needs the workspace installed (the generator imports `@a11ign/screenreader-fleet`), hence the setup.
-    "      - uses: pnpm/action-setup@v4",
+    "      - uses: pnpm/action-setup@v6",
     "      - uses: actions/setup-node@v7",
     "        with: { node-version: 22, cache: pnpm }",
     "      - run: pnpm install --frozen-lockfile",
