@@ -53,8 +53,12 @@ const GUARD = "packages/lab/src/packaging/branch-protection.test.ts";
 /** The one repository whose literal the guard used to carry. */
 const FORMER_LITERAL = "a11ign/a11ign";
 
-/** `tokenProbe`: the workflow file that carries the `token-reach` job (#3710); absent reads the `token` cell CANNOT_TELL. */
-type Entry = { repo: string; defaultBranch: string; requiredCheck: string; publishes: boolean; tokenProbe?: string };
+/**
+ * `tokenProbe`: the workflow file that carries the `token-reach` job (#3710); absent reads the `token` cell CANNOT_TELL.
+ * `tokenUnused`: INSTEAD of a probe, why the repository uses `A11IGN_BOT_TOKEN` nowhere. The live read checks it against the
+ * repository's workflows, so the claim is read at each run and cannot go stale: a workflow that starts reading the token is DRIFT.
+ */
+type Entry = { repo: string; defaultBranch: string; requiredCheck: string; publishes: boolean; tokenProbe?: string; tokenUnused?: string };
 type ProtectionFile = { repositories: Entry[] };
 type ProjectFile = { code: { key: string; repo: string }[]; tracker: { repo: string }[] };
 
@@ -81,8 +85,17 @@ function entryProblems(entries: Entry[]): string[] {
       if (typeof value !== "string" || value.trim() === "") problems.push(`${entry.repo} has no \`${field}\``);
     }
     if (typeof entry.publishes !== "boolean") problems.push(`${entry.repo} says nowhere whether it publishes: \`publishes\` must be true or false`);
-    if (entry.tokenProbe !== undefined && !WORKFLOW_FILE.test(entry.tokenProbe)) problems.push(`${entry.repo}'s \`tokenProbe\` is not a workflow file name: ${JSON.stringify(entry.tokenProbe)}`);
+    problems.push(...tokenFieldProblems(entry));
   }
+  return problems;
+}
+
+/** What is wrong with an entry's two token fields: a probe file that is no file name, an unused claim with no reason, or both at once. */
+function tokenFieldProblems(entry: Entry): string[] {
+  const problems: string[] = [];
+  if (entry.tokenProbe !== undefined && !WORKFLOW_FILE.test(entry.tokenProbe)) problems.push(`${entry.repo}'s \`tokenProbe\` is not a workflow file name: ${JSON.stringify(entry.tokenProbe)}`);
+  if (entry.tokenUnused !== undefined && (typeof entry.tokenUnused !== "string" || entry.tokenUnused.trim() === "")) problems.push(`${entry.repo}'s \`tokenUnused\` must say why the token is unused here`);
+  if (entry.tokenUnused !== undefined && entry.tokenProbe !== undefined) problems.push(`${entry.repo} declares both \`tokenProbe\` and \`tokenUnused\`: a repository either uses the token (and probes it) or does not`);
   return problems;
 }
 
@@ -520,11 +533,27 @@ function failedProbeCell(repo: string, run: ProbeRun): Cell {
   return cause.startsWith("CANNOT_TELL") ? cannotTell(`${at}: ${cause}`) : drift(`${at}: ${cause}`);
 }
 
+/** The names of the workflow files whose live lines (not comments) read `secrets.A11IGN_BOT_TOKEN`; `secrets: inherit` is NOT counted, which the page says. */
+type TokenUse = Read<string[]>;
+const TOKEN_READ = /secrets\s*(\.|\[\s*['"])A11IGN_BOT_TOKEN\b/;
+
+function workflowsReadingToken(files: { name: string; text: string }[]): string[] {
+  return files.filter((f) => f.text.split("\n").some((line) => !line.trimStart().startsWith("#") && TOKEN_READ.test(line))).map((f) => f.name);
+}
+
+/** A repository that declares the token unused: OK only while no workflow in it reads the secret. Not a probe, so it names no run. */
+function unusedTokenCell(entry: Entry, use: TokenUse | null): Cell {
+  if (use === null || use.kind !== "ok") return cannotTell(`the workflows of ${entry.repo}: ${use === null ? "not asked" : unreadWhy(use)}`);
+  if (use.value.length > 0) return drift(`${PROTECTION_FILE} says ${entry.repo} uses the token nowhere, but ${use.value.join(", ")} reads secrets.A11IGN_BOT_TOKEN: give it a \`tokenProbe\` instead`);
+  return ok(`not applicable: ${entry.tokenUnused ?? ""} (no workflow of ${entry.repo} reads secrets.A11IGN_BOT_TOKEN, read now)`);
+}
+
 /**
  * Step 8: does the token reach THIS repository on the write side, as of the latest probe run. A reading at a
  * moment, per run, never a standing certificate: the cell says which run and when.
  */
-function tokenCell(entry: Entry, probe: ProbeRead): Cell {
+function tokenCell(entry: Entry, probe: ProbeRead, use: TokenUse | null = null): Cell {
+  if (entry.tokenUnused !== undefined) return unusedTokenCell(entry, use);
   const { tokenProbe } = entry;
   if (tokenProbe === undefined) return cannotTell(`no \`tokenProbe\` for ${entry.repo} in ${PROTECTION_FILE}: nothing probes the token's reach here`);
   if (probe.kind !== "ok") return cannotTell(`${tokenProbe}: ${unreadWhy(probe)}`);
@@ -668,7 +697,7 @@ const TABLE_COLUMNS = [...SETTING_COLUMNS.map((s) => s.column), "issues", "prote
 
 type RepoReads = {
   settings: Read<RepoSettings>; protection: RepoRead; envs: Read<EnvironmentList>;
-  policies: Read<PolicyList> | null; probe: ProbeRead;
+  policies: Read<PolicyList> | null; probe: ProbeRead; tokenUse: TokenUse | null;
   workflow: Read<ContentsAnswer>;
 };
 type OrgReads = { bots: Read<TeamRepo[]>; trackers: string[] };
@@ -681,7 +710,7 @@ function tableRow(entry: Entry, reads: RepoReads, org: OrgReads): Row {
       protection: protectionCell(reads.protection, entry),
       [PUBLISH_ENV]: publishCell(entry, reads.envs, reads.policies),
       bots: botsCell(entry.repo, org.bots),
-      token: tokenCell(entry, reads.probe),
+      token: tokenCell(entry, reads.probe, reads.tokenUse),
       [RELEASE_COLUMN]: releaseShapeCell(reads.workflow),
     },
   };
@@ -728,7 +757,7 @@ jobs:
     secrets: inherit
 `);
 const GOOD_READS: RepoReads = { settings: { kind: "ok", value: GOOD_SETTINGS }, protection: withClassic({ kind: "ok", value: FULL_CLASSIC }),
-  envs: RESTRICTED_ENV, policies: MAIN_ONLY, probe: PASSED, workflow: PER_MERGE_CALLER };
+  envs: RESTRICTED_ENV, policies: MAIN_ONLY, probe: PASSED, tokenUse: null, workflow: PER_MERGE_CALLER };
 const columnsNotOk = (row: Row, state: CellState): string[] => Object.entries(row.cells).filter(([, c]) => c.state === state).map(([k]) => k);
 
 test("#3705: a repository that satisfies the page reads OK in every cell -- the table can be green", () => {
@@ -830,6 +859,37 @@ test("#3710 POSITIVE CONTROL: a failed probe run with a cause prints DRIFT for e
   assert.deepEqual(columnsNotOk(unprobed, "CANNOT_TELL"), ["token"]);
   assert.match(unprobed.cells.token?.detail ?? "", /not probed yet, or the workflow lacks the probe/);
   assert.deepEqual(tableProblems([drifting], [PUBLISHER.repo]).map((p) => p.split(":")[0]), [`${PUBLISHER.repo} token`], "either state fails the table");
+});
+
+const UNUSED: Entry = { repo: "a11ign/fixture-publisher", defaultBranch: "main", requiredCheck: "gate", publishes: true, tokenUnused: "no workflow of it uses the token" };
+const workflowFile = (name: string, text: string) => ({ name, text });
+/** What `documents`'s own `release.yml` says today: the token named only in a comment that says it has none. */
+const COMMENT_ONLY = "# This repository has no secrets.A11IGN_BOT_TOKEN: the release hands none over.\njobs:\n  release:\n    uses: a11ign/toolchain/.github/workflows/release-per-merge.yml@v1\n    secrets: inherit\n";
+const READS_IT = "jobs:\n  arm:\n    steps:\n      - run: gh pr merge --auto\n        env:\n          GH_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}\n";
+
+test("#3710: a repository declaring the token unused reads not-applicable, and DRIFT the day a workflow starts reading it", () => {
+  const unusedRow = (files: { name: string; text: string }[]) =>
+    tableRow(UNUSED, { ...GOOD_READS, tokenUse: { kind: "ok", value: workflowsReadingToken(files) } }, NO_ORG);
+  const none = unusedRow([workflowFile("release.yml", COMMENT_ONLY), workflowFile("ci.yml", "jobs: {}\n")]);
+  assert.equal(none.cells.token?.state, "OK", "a comment naming the token, and `secrets: inherit`, are not a read of it");
+  assert.match(none.cells.token?.detail ?? "", /^not applicable: no workflow of it uses the token/);
+  assert.deepEqual(columnsNotOk(none, "DRIFT"), []);
+  // POSITIVE CONTROL for the emptiness above: the same scan DOES find a live read, in exactly the token cell.
+  const used = unusedRow([workflowFile("release.yml", COMMENT_ONLY), workflowFile("auto-arm.yml", READS_IT)]);
+  assert.deepEqual(columnsNotOk(used, "DRIFT"), ["token"]);
+  assert.deepEqual(columnsNotOk(used, "CANNOT_TELL"), []);
+  assert.match(used.cells.token?.detail ?? "", /auto-arm\.yml reads secrets\.A11IGN_BOT_TOKEN: give it a `tokenProbe`/);
+  assert.deepEqual(workflowsReadingToken([workflowFile("a.yml", "x: ${{ secrets['A11IGN_BOT_TOKEN'] }}\n")]), ["a.yml"], "the bracket spelling reads it too");
+  assert.deepEqual(workflowsReadingToken([workflowFile("a.yml", "x: ${{ secrets.A11IGN_BOT_TOKEN_OLD }}\n")]), [], "a longer name is another secret");
+});
+
+test("#3710: a token-unused claim that could not be checked is CANNOT_TELL, and an entry cannot be both unused and probed", () => {
+  for (const [why, use] of [["not asked", null], ["refused", { kind: "refused" }], ["unreadable", { kind: "unreadable", why: "ENOBUFS" }]] as [string, TokenUse | null][]) {
+    assert.equal(tokenCell(UNUSED, PASSED, use).state, "CANNOT_TELL", why);
+  }
+  assert.deepEqual(entryProblems([UNUSED]), []);
+  assert.match(entryProblems([{ ...UNUSED, tokenProbe: "auto-arm.yml" }]).join("\n"), /declares both `tokenProbe` and `tokenUnused`/);
+  assert.match(entryProblems([{ ...UNUSED, tokenUnused: " " }]).join("\n"), /must say why the token is unused/);
 });
 
 test("#3710: everything that is not a TOKEN-REACH reading is CANNOT_TELL, never a pass and never a drift", () => {
@@ -1074,6 +1134,23 @@ function readProbe(entry: Entry): ProbeRead {
   return { kind: "ok", value: null };
 }
 
+type DirEntry = { name?: string; type?: string }[];
+
+/** Every workflow file of the repository that reads the secret, or why that could not be told. Asked only of a repository declaring the token unused. */
+function readTokenUse(entry: Entry): TokenUse | null {
+  if (entry.tokenUnused === undefined) return null;
+  const dir = ghRead<DirEntry>(`repos/${entry.repo}/contents/.github/workflows?ref=${entry.defaultBranch}`);
+  if (dir.kind !== "ok") return dir;
+  const files: { name: string; text: string }[] = [];
+  for (const f of dir.value.filter((d) => d.type === "file" && WORKFLOW_FILE.test(d.name ?? ""))) {
+    const body = ghRead<ContentsAnswer>(`repos/${entry.repo}/contents/.github/workflows/${f.name}?ref=${entry.defaultBranch}`);
+    if (body.kind !== "ok") return body;
+    if (typeof body.value.content !== "string" || body.value.encoding !== "base64") return { kind: "unreadable", why: `${f.name} came back without base64 content` };
+    files.push({ name: f.name ?? "", text: Buffer.from(body.value.content, "base64").toString("utf8") });
+  }
+  return { kind: "ok", value: workflowsReadingToken(files) };
+}
+
 function readRepo(entry: Entry): RepoReads {
   const envs = ghRead<EnvironmentList>(`repos/${entry.repo}/environments`);
   const hasEnv = envs.kind === "ok" && (envs.value.environments ?? []).some((e) => e.name === PUBLISH_ENV);
@@ -1083,6 +1160,7 @@ function readRepo(entry: Entry): RepoReads {
     envs,
     policies: hasEnv ? ghRead(`repos/${entry.repo}/environments/${PUBLISH_ENV}/deployment-branch-policies`) : null,
     probe: readProbe(entry),
+    tokenUse: readTokenUse(entry),
     workflow: ghRead(`repos/${entry.repo}/contents/${RELEASE_WORKFLOW}?ref=${entry.defaultBranch}`),
   };
 }
