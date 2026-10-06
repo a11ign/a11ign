@@ -12,7 +12,7 @@ import { captureReachedThePage, captureDoubt, pageCensus } from "@a11ign/evidenc
 import { WCAG_22_AA } from "@a11ign/evidence/wcag";
 
 // The `.` subpath is types only, so at runtime it is an empty module. Importing it still proves the subpath
-// resolves and that `dist/index.js` was actually shipped — `files` allow-lists drop assets silently.
+// resolves and that `dist/index.mjs` was actually shipped — `files` allow-lists drop assets silently.
 await import("@a11ign/evidence");
 
 // The README's first example, verbatim in shape: the browser's census is the oracle, and the screen reader's

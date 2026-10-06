@@ -18,7 +18,6 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/agent-org-newest-tag.mjs` — resolve the newest stable release tag of agent-org and put that checkout where the CI steps below can run it
 - `node scripts/auth-artifact-scan.mjs` — prove no credential is in what a REAL run produced -- scans every text file under a path (markdown, comment, log, JSON, whatever the extension) for the values of two environment variables. Exit 0 clean, 1 a leak, 2 could not examine.
 - `node scripts/auth-leak-check.mjs` — prove a login's credential never reaches what a run writes (ADR 0038) -- drives a real capture on THIS machine's worker with a fake credential, then searches for it. Exit 0 clean, 1 a leak, 2 could not examine.
-- `node scripts/build-packages.mjs` — run tsc --build across every package under packages/ in dependency order
 - `node scripts/changeset-untracked-check.mjs` — refuse with the RIGHT message when the tree carries an untracked changeset
 - `node scripts/check-retired-heads.mjs` — refuse a candidate whose scorer head set shrank without declaring what it retired
 - `node scripts/check-schema-migration.mjs` — refuse a release while a declared schema migration is still open

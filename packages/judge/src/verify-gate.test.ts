@@ -2,7 +2,7 @@
  * `@huggingface/transformers` IS OPTIONAL, AND ITS ABSENCE MUST NOT BE A BARE MODULE-NOT-FOUND.
  *
  * `ENABLED` is read once at module load from `JUDGE_GATE`/`GATE_MODEL_PATH`, so the enabled path can only
- * be exercised in a fresh process -- these tests spawn one against the BUILT `dist/internal.js` (a plain
+ * be exercised in a fresh process -- these tests spawn one against the BUILT `dist/internal.mjs` (a plain
  * subprocess needs no `tsx`, and this package's own `prepack`/`prepare` already keep `dist` current).
  *
  * Reproduced from a real tarball install (architecture-audit.md §4.5, §3.5): `@huggingface/transformers`
@@ -18,7 +18,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, resolve } from "node:path";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const INTERNAL_JS = pathToFileURL(resolve(HERE, "../dist/internal.js")).href;
+const INTERNAL_JS = pathToFileURL(resolve(HERE, "../dist/internal.mjs")).href;
 
 function runProbe(env: Record<string, string>): string {
   const script = `

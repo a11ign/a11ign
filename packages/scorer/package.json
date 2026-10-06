@@ -7,11 +7,11 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "default": "./dist/index.mjs"
     },
     "./evidence-units": {
       "types": "./dist/evidence-units.d.ts",
-      "default": "./dist/evidence-units.js"
+      "default": "./dist/evidence-units.mjs"
     }
   },
   "bin": {
@@ -34,7 +34,8 @@
     "access": "public"
   },
   "scripts": {
-    "prepack": "tsc --build"
+    "build": "rslib build",
+    "prepack": "rslib build"
   },
   "repository": {
     "type": "git",
@@ -52,5 +53,8 @@
   ],
   "dependencies": {
     "@a11ign/evidence": "0.2.0"
+  },
+  "devDependencies": {
+    "@a11ign/toolchain": "0.1.0"
   }
 }

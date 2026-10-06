@@ -7,31 +7,31 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "default": "./dist/index.mjs"
     },
     "./verify": {
       "types": "./dist/verify.d.ts",
-      "default": "./dist/verify.js"
+      "default": "./dist/verify.mjs"
     },
     "./wcag": {
       "types": "./dist/wcag.d.ts",
-      "default": "./dist/wcag.js"
+      "default": "./dist/wcag.mjs"
     },
     "./document-identity": {
       "types": "./dist/document-identity.d.ts",
-      "default": "./dist/document-identity.js"
+      "default": "./dist/document-identity.mjs"
     },
     "./conformance": {
       "types": "./dist/conformance.d.ts",
-      "default": "./dist/conformance.js"
+      "default": "./dist/conformance.mjs"
     },
     "./earl": {
       "types": "./dist/earl.d.ts",
-      "default": "./dist/earl.js"
+      "default": "./dist/earl.mjs"
     },
     "./source-text": {
       "types": "./dist/source-text.d.ts",
-      "default": "./dist/source-text.js"
+      "default": "./dist/source-text.mjs"
     }
   },
   "files": [
@@ -60,6 +60,7 @@
     "nvda"
   ],
   "scripts": {
-    "prepack": "tsc --build"
+    "build": "rslib build",
+    "prepack": "rslib build"
   }
 }

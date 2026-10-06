@@ -1,8 +1,8 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "outDir": "dist", "rootDir": "src" },
+  // `tsc` only CHECKS this package: Rslib builds it (ADR 0043, Decision 4), and `rootDir` is explicit because TypeScript 6 refuses to guess it.
+  "compilerOptions": { "rootDir": "src", "noEmit": true },
   "include": ["src"],
-  // Tests are run from source by the root `npm test`, and must not reach a consumer's `node_modules`.
-  // `files: ["dist"]` in package.json would ship them compiled if they were built.
+  // Tests are run from source by rstest, and must not reach a consumer's `node_modules`.
   "exclude": ["src/**/*.test.ts"]
 }

@@ -7,7 +7,7 @@
 // no venv). The Python program resolves its own output directory from its file location, so this cannot write
 // the encoder into the wrong place no matter where it is run from.
 import { spawnSync } from "node:child_process";
-import { scorerPaths } from "../dist/index.js";
+import { scorerPaths } from "../dist/index.mjs";
 
 const python = process.env.A11Y_PYTHON ?? "python3";
 const { fetchEncoderScript, requirements } = scorerPaths();
