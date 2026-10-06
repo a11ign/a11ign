@@ -134,6 +134,32 @@ test("adoptFileDirectory is inert without a run, and idempotent for one test pat
   assert.notEqual(env.TMPDIR, adopted);
 });
 
+/**
+ * THE FIRST CI RUN OF THIS ROW FAILED HERE (#3873, 4 test files): a file's directory is the TMPDIR of the `ansible-playbook` its tests spawn, and ansible-core's local RPC
+ * server binds a unix socket at `<TMPDIR>/pymp-XXXXXXXX/listener-XXXXXXXX`. A unix socket path is capped at 107 bytes (read with Python's `socket.bind`: 107 binds, 108 is
+ * "AF_UNIX path too long"). The runner's `/home/runner/.cache/a11ign/tmp/run-XXXXXX/file-<hash>-<80 characters of name>` put four files at 112-117. The positive control is
+ * the OLD name length, which this same arithmetic puts over the limit, so the assertion can fail.
+ */
+const SOCKET_PATH_LIMIT = 107;
+const RPC_SOCKET_SUFFIX = join("pymp-XXXXXXXX", "listener-XXXXXXXX");
+const RUNNER_HOME = "/home/runner";
+const LONGEST_HOME_WE_FIT = 19;
+const FIRST_VERSION_NAME_LENGTH = 80;
+const LONGER_THAN_ANY_TEST_FILE_NAME = 200;
+
+function longestSocketPath(home: string, nameLength: number): number {
+  const testPath = `/repo/packages/control/src/${"n".repeat(nameLength)}.test.ts`;
+  return join(home, PRIVATE_TMP_ROOT, "run-XXXXXX", fileDirectoryName(testPath), RPC_SOCKET_SUFFIX).length;
+}
+
+test("a file's directory is short enough that a socket an ansible child binds under it fits the 107-byte path limit, on the runner and on a longer home", () => {
+  assert.ok(longestSocketPath(RUNNER_HOME, LONGER_THAN_ANY_TEST_FILE_NAME) <= SOCKET_PATH_LIMIT, "the longest test file name, on the runner");
+  assert.ok(longestSocketPath("/home/".padEnd(LONGEST_HOME_WE_FIT, "h"), LONGER_THAN_ANY_TEST_FILE_NAME) <= SOCKET_PATH_LIMIT, `a home of ${LONGEST_HOME_WE_FIT} characters`);
+  const first = join(RUNNER_HOME, PRIVATE_TMP_ROOT, "run-XXXXXX", `file-xxxxxxxx-${"n".repeat(FIRST_VERSION_NAME_LENGTH)}`, RPC_SOCKET_SUFFIX).length;
+  assert.ok(first > SOCKET_PATH_LIMIT, `the control: the first version's name was ${first} bytes, over the limit`);
+  assert.match(fileDirectoryName("/repo/a/layer-control-lab.test.ts"), /^file-[0-9a-f]{8}-layer-contro$/, "still carries a hint of the file, after the hash that makes it unique");
+});
+
 test("reportLeftovers names the file that left an entry, and says nothing for the one that cleaned up", () => {
   const run = tempDir("private-tmp-leftovers-");
   const root = "/repo";
@@ -192,7 +218,8 @@ test("a run points TMPDIR into ~/.cache/a11ign/tmp/run-<id> for its first test f
   const { run } = throwawayProject({ "leaky.test.mjs": LEAKY, "clean.test.mjs": CLEAN });
   const { status, report, privateRoot, recorded } = run();
   assert.equal(status, 0, report);
-  assert.match(readFileSync(recorded, "utf8"), new RegExp(`^${privateRoot}/run-[^/]+/file-[0-9a-f]{8}-leaky\\.test\\.mjs$`.replaceAll("/", "\\/")));
+  // the name part is cut at 12 characters (the socket path budget above), so `leaky.test.mjs` is `leaky.test.m` in the directory and whole in the report
+  assert.match(readFileSync(recorded, "utf8"), new RegExp(`^${privateRoot}/run-[^/]+/file-[0-9a-f]{8}-leaky\\.test\\.m$`.replaceAll("/", "\\/")));
   assert.match(report, /private-tmp: leaky\.test\.mjs left 1 entry in its TMPDIR \(leaked-by-fixture\)/);
   assert.doesNotMatch(report, /private-tmp: clean\.test\.mjs/, "the control: the file that removed what it made is not named");
   assert.deepEqual(runDirectories(privateRoot), [], "the run's directory is gone, the leaked entry with it");

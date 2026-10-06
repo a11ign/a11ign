@@ -49,7 +49,14 @@ const FILE_ENV = "A11Y_PRIVATE_TMP_FILE";
 /** The directories a caller means by "no private choice": setting `TMPDIR` to one of these is the same as leaving it unset. */
 const SHARED_TMP = ["/tmp", "/var/tmp"];
 const OWNER_RWX = 0o700;
-const NAME_PART_LIMIT = 80;
+/**
+ * A file's directory is the `TMPDIR` of everything its tests spawn, and a unix socket path is capped at 107 bytes (measured: `bind` succeeds at 107 and fails with
+ * "AF_UNIX path too long" at 108). ansible-core's local RPC server binds `<TMPDIR>/pymp-XXXXXXXX/listener-XXXXXXXX`, 32 more, so `TMPDIR` has 75 and the first
+ * version's name (up to 80 characters of the file's basename) put four ansible-driving test files at 112-117 on the CI runner, `/home/runner/.cache/a11ign/tmp/run-XXXXXX/`
+ * being 41 of them: "Local RPC server did not start". The name is a hint for whoever finds a directory left after a SIGKILL, the hash is what makes it unique, so the
+ * hint is short: `file-` + 8 + `-` + 12 is 26, which fits a home of up to 19 characters (the runner's is 12).
+ */
+const NAME_PART_LIMIT = 12;
 const PATH_HASH_LENGTH = 8;
 const ENTRIES_NAMED_PER_FILE = 5;
 /**
