@@ -14,17 +14,17 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import {
-  closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync,
+  closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { constants as osConstants, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   CI_ONLY, agentOrgLayout, ciLikeHome, agentOrgSource, stageAgentOrg, STEPS, agentOrgStaging, bodyHash, jobsGateNeeds, linkNodeModules,
-  pinTool, runAgentOrgInClone, runTs, shAsync, stampVerdict, stepsToRun, unaccountedJobs,
+  makeScratch, pinTool, runAgentOrgInClone, removeScratch, runTs, shAsync, stampVerdict, stepsToRun, unaccountedJobs,
 } from "../../../../scripts/verify.mjs";
 import { sandboxGitEnv } from "../../../guards/src/git-env.mjs";
 import { classify, knownPackages } from "../../../../scripts/ci-changed.mjs";
@@ -68,7 +68,7 @@ test("CI_ONLY names only jobs gate needs, and none of them is also a step", () =
 // THE STAGED COPY IS READ, NOT THE SOURCE OF verify.mjs (#3329, review of #3350): a grep for two old names passes when
 // the test goes missing under any other, so this stages a throwaway tool and a throwaway tree and lists what arrived.
 function stageThrowawayTool(toolFiles: Record<string, string>) {
-  const dir = mkdtempSync(join(tmpdir(), "verify-stage-"));
+  const dir = makeScratch("verify-stage-");
   const run = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, stdio: "pipe", env: sandboxGitEnv() });
   const tool = join(dir, "tool");
   const root = join(dir, "root");
@@ -100,7 +100,7 @@ test("the staged agent-org copy holds every test file the tool has, live-tree-in
       ["acceptance-commands.test.ts", "live-tree-independence.test.ts"]);
     assert.ok(existsSync(join(staged, "helper.mjs")), "the lab's packaging helpers were not laid beside the tool's");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeScratch(dir);
   }
 });
 
@@ -185,7 +185,7 @@ test("`ts` runs every command through the non-blocking runner, in order, and sto
 });
 
 test("the tool is archived at the commit the fetch pinned, though another fetch has since rewritten FETCH_HEAD (#3333)", () => {
-  const dir = mkdtempSync(join(tmpdir(), "verify-pin-"));
+  const dir = makeScratch("verify-pin-");
   const git = (cwd: string, ...args: string[]) =>
     execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd, stdio: "pipe", env: sandboxGitEnv() });
   try {
@@ -215,12 +215,12 @@ test("the tool is archived at the commit the fetch pinned, though another fetch 
     assert.deepEqual(staged(undefined), ["deleted-since.test.ts"], "the control: FETCH_HEAD alone WAS the other fetch's, so the clobber is real here");
     assert.deepEqual(staged(pinned.commit), ["current.test.ts"]);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeScratch(dir);
   }
 });
 
 test("linkNodeModules links each entry to where the source gets it, and @a11ign/* with the same relative targets", () => {
-  const dir = mkdtempSync(join(tmpdir(), "verify-link-"));
+  const dir = makeScratch("verify-link-");
   try {
     writeAll(dir, { "from/plain/index.js": "", "elsewhere/pkg/index.js": "" });
     symlinkSync(join(dir, "elsewhere/pkg"), join(dir, "from/linked"));
@@ -232,12 +232,12 @@ test("linkNodeModules links each entry to where the source gets it, and @a11ign/
     assert.equal(readlinkSync(join(dir, "clone/node_modules/@a11ign/lab")), "../../packages/lab",
       "a workspace link must stay relative, so the clone's resolves to the clone's own packages/");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeScratch(dir);
   }
 });
 
 test("the agentOrg suite runs in a clone of the head: the author's tree is clean DURING the run and after it", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "verify-clone-test-"));
+  const dir = makeScratch("verify-clone-test-");
   const [author, origin, tool, scratch] = ["author", "origin", "tool", "scratch"].map((name) => join(dir, name));
   const fixture = "packages/lab/src/packaging/board-document-chrome-resolver.test.ts";
   try {
@@ -252,7 +252,7 @@ test("the agentOrg suite runs in a clone of the head: the author's tree is clean
     const report = join(dir, "report.json");
     writeAll(origin, {
       "src/probe.test.mjs": `import { writeFileSync } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { test } from "node:test";
 test("probe", () => writeFileSync(${JSON.stringify(report)}, JSON.stringify({ cwd: process.cwd(),
   authorStatus: execFileSync("git", ["status", "--porcelain"], { cwd: ${JSON.stringify(author)}, encoding: "utf8" }) })));\n`,
@@ -281,7 +281,7 @@ test("probe", () => writeFileSync(${JSON.stringify(report)}, JSON.stringify({ cw
     assert.ok(!existsSync(agentOrgLayout(scratch).clone), "the clone was left behind");
     assert.equal(git(author, "worktree", "list").split("\n").length, 1, "the clone's worktree entry was left behind");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeScratch(dir);
   }
 });
 
@@ -398,7 +398,7 @@ test("the engineer brief quotes no second copy of the stamp's fields", () => {
 
 // #3368: THE TOOL'S SUITE READS `~/.claude/projects`, WHICH A CI RUNNER DOES NOT HAVE AND THIS HOST HAS 3 GB OF.
 test("ciLikeHome links everything of the real home except the transcripts, so no test finds a different machine", () => {
-  const dir = mkdtempSync(join(tmpdir(), "ci-like-home-"));
+  const dir = makeScratch("ci-like-home-");
   try {
     const home = join(dir, "home");
     mkdirSync(join(home, ".claude/projects"), { recursive: true });
@@ -413,12 +413,12 @@ test("ciLikeHome links everything of the real home except the transcripts, so no
     assert.ok(existsSync(join(into, ".cache/node")), "a directory entry resolves through its link");
     assert.ok(existsSync(join(home, ".claude/projects/session.jsonl")), "the real transcripts are untouched");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeScratch(dir);
   }
 });
 
 test("ciLikeHome of a home with no ~/.claude is a home with no ~/.claude/projects, not an error", () => {
-  const dir = mkdtempSync(join(tmpdir(), "ci-like-home-"));
+  const dir = makeScratch("ci-like-home-");
   try {
     mkdirSync(join(dir, "home"));
     writeFileSync(join(dir, "home/.bashrc"), "");
@@ -426,14 +426,14 @@ test("ciLikeHome of a home with no ~/.claude is a home with no ~/.claude/project
     assert.deepEqual(readdirSync(into).sort(), [".bashrc", ".claude"]);
     assert.deepEqual(readdirSync(join(into, ".claude")), []);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeScratch(dir);
   }
 });
 
 test("the agentOrg suite is run with the transcript-free home, and a command's env reaches the child", async () => {
   const source = read("scripts/verify.mjs");
   assert.match(source, /shAsync\("node", \["--import", "tsx", "--test"[^\n]*\n[^\n]*\{ \.\.\.at\(clone\), env: \{ HOME: ciLikeHome\(/, "the suite's command no longer gets the home");
-  const dir = mkdtempSync(join(tmpdir(), "sh-env-"));
+  const dir = makeScratch("sh-env-");
   try {
     const out = join(dir, "out");
     const log = openSync(out, "w");
@@ -442,7 +442,7 @@ test("the agentOrg suite is run with the transcript-free home, and a command's e
     assert.equal(status, 0);
     assert.equal(readFileSync(out, "utf8").trim(), "/x/y");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    removeScratch(dir);
   }
 });
 
@@ -493,4 +493,74 @@ test("#2348: `gate` waits for the sweep and reads its result", () => {
   const gate = jobBlockOf(CI, "gate");
   assert.match(gate, /needs: \[[^\]]*\bguardSweep\b/, "gate does not need guardSweep, so a red sweep would not block a merge");
   assert.ok(gate.includes("needs.guardSweep.result"), "gate names guardSweep in `needs` but never reads its result");
+});
+
+// #3856: EVERY TREE THIS FILE MAKES IS REMOVED ON A SIGNAL TOO (incident #3846, 1a). `try/finally` does not run when SIGTERM or SIGINT ends the process, so each site
+// goes through verify.mjs's `makeScratch`, whose handlers (and `exit`) remove it. The child makes one tree for EACH `makeScratch` call this file has, with that
+// call's prefix, and is killed once the test has READ them all standing. SIGKILL is nobody's to handle: what survives it is the janitor's.
+// POSITIVE CONTROLS: the same child run to completion leaves nothing (the reading is of a directory a finished run empties), the kill is only sent after the
+// trees stood, and the sites are read off this file, so a site added later is covered by the child without anyone listing it.
+const SELF_PATH = fileURLToPath(import.meta.url);
+/** The shell's offset for "ended by signal n", which is the status `makeScratch`'s handler exits with. */
+const SIGNAL_EXIT_BASE = 128;
+const READY_WAIT_MS = 15_000;
+const POLL_MS = 50;
+const HARNESS_PREFIX = "verify-signal-test-"; // a variable, so the read below does not count the harness's own tree as a site
+const SITE_PREFIXES = [...readFileSync(SELF_PATH, "utf8").matchAll(/\bmakeScratch\("([^"]+)"\)/g)].map((match) => match[1]);
+
+function siteChild(): { dir: string; tmp: string; ready: string; program: string } {
+  const dir = makeScratch(HARNESS_PREFIX);
+  const [tmp, ready] = [join(dir, "tmp"), join(dir, "ready")];
+  mkdirSync(tmp);
+  const program = `const { makeScratch } = await import(${JSON.stringify(pathToFileURL(fileURLToPath(new URL("scripts/verify.mjs", ROOT))).href)});
+for (const prefix of ${JSON.stringify(SITE_PREFIXES)}) makeScratch(prefix);
+(await import("node:fs")).writeFileSync(${JSON.stringify(ready)}, "1");
+if (process.env.TEST_RUNS_TO_COMPLETION !== "1") await new Promise(() => setInterval(() => {}, 1000));
+`;
+  return { dir, tmp, ready, program };
+}
+
+async function runSiteChild(kill: NodeJS.Signals | null) {
+  const { dir, tmp, ready, program } = siteChild();
+  const env = { ...process.env, TMPDIR: tmp, TEST_RUNS_TO_COMPLETION: kill === null ? "1" : "0" };
+  const child = spawn(process.execPath, ["--input-type=module", "-e", program], { cwd: fileURLToPath(ROOT), env, stdio: ["ignore", "ignore", "pipe"] });
+  let stderr = "";
+  child.stderr.on("data", (chunk) => { stderr += chunk; });
+  const ended = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((done) => child.on("close", (code, signal) => done({ code, signal })));
+  let before: string[] = [];
+  if (kill !== null) {
+    for (let waited = 0; !existsSync(ready); waited += POLL_MS) {
+      assert.ok(waited < READY_WAIT_MS, `the child never made its trees in ${READY_WAIT_MS} ms\n${stderr}`);
+      await new Promise((done) => setTimeout(done, POLL_MS));
+    }
+    before = readdirSync(tmp);
+    child.kill(kill);
+    // A handler that swallows the signal would leave the child waiting for ever: bound it, so that is a failed assertion and not a hang.
+    setTimeout(() => child.kill("SIGKILL"), READY_WAIT_MS).unref();
+  }
+  return { ...(await ended), stderr, before, left: readdirSync(tmp), dir };
+}
+
+for (const signal of [null, "SIGTERM", "SIGINT"] as const) {
+  test(`${signal ? `a ${signal} in the middle of a test` : "a run to completion (the positive control)"} leaves none of this file's ${SITE_PREFIXES.length} scratch trees`, async () => {
+    assert.ok(SITE_PREFIXES.length >= 7 && new Set(SITE_PREFIXES).size >= 6, `the sites read off this file were ${SITE_PREFIXES.join(", ")}: the child would kill nothing`);
+    const run = await runSiteChild(signal);
+    try {
+      if (signal) {
+        assert.equal(run.before.length, SITE_PREFIXES.length, `not every tree stood before the kill: ${run.before.join(", ")}\n${run.stderr}`);
+        assert.equal(run.code, SIGNAL_EXIT_BASE + osConstants.signals[signal], `the child did not end with the status of ${signal}: ${run.code} ${run.signal}\n${run.stderr}`);
+      } else {
+        assert.equal(run.code, 0, run.stderr);
+      }
+      assert.deepEqual(run.left, [], `${signal ?? "a clean exit"} left a tree behind\n${run.stderr}`);
+    } finally {
+      removeScratch(run.dir);
+    }
+  });
+}
+
+test("this file makes no directory outside makeScratch, so no tree escapes the cleanup", () => {
+  const source = readFileSync(SELF_PATH, "utf8");
+  assert.deepEqual([...source.matchAll(/\bmkdtempSync\(/g)].map((match) => match.index), [], "a bare directory-maker is back in this file");
+  assert.ok(SITE_PREFIXES.includes("verify-clone-test-"), "the positive control: the site that also registers a worktree is among those read");
 });
