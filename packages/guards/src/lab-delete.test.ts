@@ -253,12 +253,16 @@ test("POSITIVE CONTROL: an entry or a configuration naming the package is REFUSE
 // ---- 5. the pin -----------------------------------------------------------------------------------------------------
 
 type LayerEntry = { path?: string; remote?: string; tag?: string; lays?: string[] };
+type LayersManifest = { layers: Record<string, LayerEntry>; pinned?: Record<string, LayerEntry> };
 
 /** What is wrong with `lab`'s declaration, the scripts that lay it and the ignore line that keeps the laid copy out of a commit. */
-function pinRefusals({ manifest, scripts, gitignore }: { manifest: { layers: Record<string, LayerEntry> }; scripts: Record<string, string>; gitignore: string }): string[] {
-  const entry = manifest.layers[DEPARTED_DIRECTORY];
-  if (entry === undefined) return ["packages/control/layers.json declares no `lab` layer"];
+function pinRefusals({ manifest, scripts, gitignore }: { manifest: LayersManifest; scripts: Record<string, string>; gitignore: string }): string[] {
+  const entry = manifest.pinned?.[DEPARTED_DIRECTORY];
+  if (entry === undefined) return ["packages/control/layers.json declares no `lab` layer under `pinned`"];
+  // Under `layers` a guest and a lab job must hold a pinned checkout of it (`separateLayers`), and nothing on a worker runs the lab.
+  const held = Object.hasOwn(manifest.layers, DEPARTED_DIRECTORY) ? ["`lab` is declared under `layers`, which makes fleet:deploy and every lab job demand a pin for it"] : [];
   const declaration = [
+    ...held,
     ...(entry.path === DEPARTED_PATH ? [] : [`the layer's path is ${entry.path}, not ${DEPARTED_PATH}`]),
     ...(/^https:\/\/github\.com\/a11ign\/lab\.git$/.test(entry.remote ?? "") ? [] : [`the layer's remote is ${entry.remote}, not a11ign/lab`]),
     ...(SEMVER_TAG.test(entry.tag ?? "") ? [] : [`the layer's tag is ${entry.tag}: a pin is a v<semver> tag, never a branch or a sha`]),
@@ -270,7 +274,7 @@ function pinRefusals({ manifest, scripts, gitignore }: { manifest: { layers: Rec
 }
 
 const pinInputs = (root: string) => ({
-  manifest: JSON.parse(read(root, "packages/control/layers.json")) as { layers: Record<string, LayerEntry> },
+  manifest: JSON.parse(read(root, "packages/control/layers.json")) as LayersManifest,
   scripts: (JSON.parse(read(root, "package.json")) as { scripts: Record<string, string> }).scripts,
   gitignore: read(root, ".gitignore"),
 });
@@ -279,16 +283,18 @@ test("lab is taken as a pinned tag of a11ign/lab, laid by build and prepare, and
   const { manifest, scripts, gitignore } = pinInputs(REPO_ROOT);
   assert.deepEqual(pinRefusals({ manifest, scripts, gitignore }), []);
   // The parts to lay are what the rest of the tree reads by path, so a part dropped from the declaration is a read that stops resolving.
-  assert.deepEqual([...(manifest.layers.lab.lays ?? [])].sort(), ["baselines", "rule-ownership.json", "scripts", "src"]);
+  assert.deepEqual([...(manifest.pinned?.lab.lays ?? [])].sort(), ["baselines", "rule-ownership.json", "scripts", "src"]);
 });
 
-test("POSITIVE CONTROL: a branch for a tag, a missing layer, a build that does not lay it and an unignored laid copy are each REFUSED", () => {
-  const good = { manifest: { layers: { lab: { path: DEPARTED_PATH, remote: "https://github.com/a11ign/lab.git", tag: "v0.1.2", lays: ["src"] } } },
+test("POSITIVE CONTROL: a branch for a tag, a missing layer, a layer a deploy would demand a pin for, a build that does not lay it and an unignored laid copy are each REFUSED", () => {
+  const lab = { path: DEPARTED_PATH, remote: "https://github.com/a11ign/lab.git", tag: "v0.1.2", lays: ["src"] };
+  const good = { manifest: { layers: {}, pinned: { lab } },
     scripts: { build: "node scripts/lay-layer.mjs lab", prepare: "node scripts/lay-layer.mjs lab && x" }, gitignore: `/${DEPARTED_PATH}\n` };
   assert.deepEqual(pinRefusals(good), []);
-  assert.match(pinRefusals({ ...good, manifest: { layers: { lab: { ...good.manifest.layers.lab, tag: "main" } } } })[0], /a pin is a v<semver> tag, never a branch or a sha/);
-  assert.match(pinRefusals({ ...good, manifest: { layers: { lab: { ...good.manifest.layers.lab, tag: undefined } } } })[0], /a pin is a v<semver> tag/);
-  assert.deepEqual(pinRefusals({ ...good, manifest: { layers: {} } }), ["packages/control/layers.json declares no `lab` layer"]);
+  assert.match(pinRefusals({ ...good, manifest: { layers: {}, pinned: { lab: { ...lab, tag: "main" } } } })[0], /a pin is a v<semver> tag, never a branch or a sha/);
+  assert.match(pinRefusals({ ...good, manifest: { layers: {}, pinned: { lab: { ...lab, tag: undefined } } } })[0], /a pin is a v<semver> tag/);
+  assert.deepEqual(pinRefusals({ ...good, manifest: { layers: {}, pinned: {} } }), ["packages/control/layers.json declares no `lab` layer under `pinned`"]);
+  assert.deepEqual(pinRefusals({ ...good, manifest: { layers: { lab }, pinned: { lab } } }), ["`lab` is declared under `layers`, which makes fleet:deploy and every lab job demand a pin for it"]);
   assert.deepEqual(pinRefusals({ ...good, scripts: { build: "node scripts/lay-layer.mjs lab", prepare: "x" } }), ["`prepare` does not lay lab"]);
   assert.deepEqual(pinRefusals({ ...good, gitignore: "node_modules\n" }), [`.gitignore does not ignore /${DEPARTED_PATH}`]);
 });

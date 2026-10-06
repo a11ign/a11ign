@@ -514,6 +514,8 @@ export function stageAgentOrg({ toolRepo, scratch, copied, root = REPO, stdio = 
     () => here("git", ["-C", toolRepo, "archive", "--format=tar", `--output=${tarball}`, commit, ...copied]),
     () => here("mkdir", ["-p", dest]),
     () => here("tar", ["-xf", tarball, "-C", dest]),
+    // The clone is tracked files only, and `packages/lab/` is a LAYER since #3505 (untracked, laid): the fixtures the rsync copies come from the lab at its pinned tag.
+    () => here("node", ["scripts/lay-layer.mjs", "lab"]),
     () => here("rsync", ["-a", "--ignore-existing", "--exclude=*.test.ts", "--exclude=*.test.mjs",
       "packages/lab/src/packaging/", "packages/agent-org/src/packaging/"]),
     // The same `sed` as ci.yml's `agentOrg` job: the project reaches the tool through `toolModule`, the tool's own tests read a static relative import.

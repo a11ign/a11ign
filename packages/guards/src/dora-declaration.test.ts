@@ -55,13 +55,14 @@ const readText = (path: string) => readFileSync(`${REPO_ROOT}${path}`, "utf8");
 /**
  * A package that has MOVED (#3125: `documents`, #3447: `screenreader-worker`, #3504: `screenreader-fleet`, #3625: `toolchain`) is no longer under `packages/` here, but its own repository keeps the layout
  * `releasablePaths` names. Its manifest is read from the copy this workspace INSTALLED from the registry, which is the published one, so the
- * name is still read from a real manifest and not assumed. The key is the declared prefix, the value where that manifest now is.
+ * name is still read from a real manifest and not assumed. The key is the declared prefix, the value where that manifest now is. The root imports
+ * the worker and the fleet since the lab left the workspace (#3505), so those two are read from the root's `node_modules`, not from the lab's.
  */
 const MOVED_TO_THE_REGISTRY: Record<string, string> = {
   "packages/pdf/": "packages/cli/node_modules/@a11ign/documents/package.json",
   // `nvda-speech/` has no entry: it is private and not in the published package, and the check reads only public manifests.
-  "packages/nvda-worker/": "packages/lab/node_modules/@a11ign/screenreader-worker/package.json",
-  "packages/worker-fleet/": "packages/lab/node_modules/@a11ign/screenreader-fleet/package.json",
+  "packages/nvda-worker/": "node_modules/@a11ign/screenreader-worker/package.json",
+  "packages/worker-fleet/": "node_modules/@a11ign/screenreader-fleet/package.json",
   "packages/toolchain/": "node_modules/@a11ign/toolchain/package.json",
 };
 

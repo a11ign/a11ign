@@ -28,8 +28,9 @@ const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 
 interface Importer { [section: string]: Record<string, { specifier: string; version: string }> | undefined }
 const DEPENDENCY_SECTIONS = ["dependencies", "devDependencies", "optionalDependencies"];
-/** Below this, the parse has broken rather than the repo having shrunk: it has dozens of internal edges. */
-const MIN_INTERNAL_EDGES = 20;
+/** Below this, the parse has broken rather than the repo having shrunk. It was 20 over a lockfile that held `lab` (three registry edges and the links
+ * to its siblings); with the lab gone (#3505) the same parse reads 18, counted as the edges this test's own `internalEdges()` returns. */
+const MIN_INTERNAL_EDGES = 15;
 const isInternal = (name: string) => name === "a11ign" || name.startsWith("@a11ign/");
 
 /** Every internal dependency edge the lockfile records, as `importer -> name = version`. */
@@ -42,23 +43,20 @@ function internalEdges(): { edge: string; version: string }[] {
 }
 
 /** Packages that publish from ANOTHER repository, so the registry is where their consumers read them: `cli` takes `documents` (#3125;
- * `cli-documents-dependency.test.ts` pins that edge), the root and `lab` take `screenreader-worker` (#3447, which deleted `packages/nvda-worker/`;
- * `screenreader-worker-extraction.test.ts` pins the version and its integrity), and the root, `cli`, `guards` and `lab` take `screenreader-fleet`
- * (#3504, which deleted `packages/worker-fleet/`; `worker-fleet-delete.test.ts` pins it), and the root, `cli`, `judge`, `lab` and `scorer` take `toolchain`
+ * `cli-documents-dependency.test.ts` pins that edge), the root takes `screenreader-worker` (#3447, which deleted `packages/nvda-worker/`;
+ * `screenreader-worker-extraction.test.ts` pins the version and its integrity), and the root, `cli` and `guards` take `screenreader-fleet`
+ * (#3504, which deleted `packages/worker-fleet/`; `worker-fleet-delete.test.ts` pins it), and the root, `cli`, `judge` and `scorer` take `toolchain`
  * (#3625, which deleted `packages/toolchain/`; `toolchain-package.test.ts` pins the version). Named, so a package that should be a `link:` and is
  * not still fails here. */
 const CONSUMED_FROM_THE_REGISTRY = [
   "packages/cli -> @a11ign/documents",
   ". -> @a11ign/screenreader-worker",
-  "packages/lab -> @a11ign/screenreader-worker",
   ". -> @a11ign/screenreader-fleet",
   "packages/cli -> @a11ign/screenreader-fleet",
   "packages/guards -> @a11ign/screenreader-fleet",
-  "packages/lab -> @a11ign/screenreader-fleet",
   ". -> @a11ign/toolchain",
   "packages/cli -> @a11ign/toolchain",
   "packages/judge -> @a11ign/toolchain",
-  "packages/lab -> @a11ign/toolchain",
   "packages/scorer -> @a11ign/toolchain",
 ];
 
@@ -115,10 +113,10 @@ test("yaml AND axe-core are hoisted to the root, because no manifest declares th
   assert.match(lock, /^ {2}axe-core@\d+\.\d+\.\d+:/m);
 });
 
-/** The layers `packages/control/layers.json` declares, as `[name, path]`. Read as the file, as `lab` imports nothing from `control`. */
+/** The layers `packages/control/layers.json` declares, held (`layers`) or only laid (`pinned`, #3505), as `[name, path]`. Read as the file, not through `control`. */
 function declaredLayers(): [string, string][] {
-  const manifest = JSON.parse(readFileSync(join(ROOT, "packages/control/layers.json"), "utf8")) as { layers: Record<string, { path: string }> };
-  return Object.entries(manifest.layers).map(([name, { path }]) => [name, path]);
+  const manifest = JSON.parse(readFileSync(join(ROOT, "packages/control/layers.json"), "utf8")) as { layers: Record<string, { path: string }>; pinned?: Record<string, { path: string }> };
+  return Object.entries({ ...manifest.layers, ...manifest.pinned }).map(([name, { path }]) => [name, path]);
 }
 
 test("EVERY LAYER layers.json DECLARES IS EXCLUDED FROM THE WORKSPACE, because its clone is not a member of the core", () => {

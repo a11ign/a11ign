@@ -127,6 +127,10 @@ importers:
       '@a11ign/screenreader-fleet':
         specifier: ^0.3.0
         version: 0.3.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)
+    devDependencies:
+      '@a11ign/control':
+        specifier: 0.1.0
+        version: link:../control
 
   packages/judge:
     dependencies:

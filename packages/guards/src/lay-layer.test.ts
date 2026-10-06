@@ -108,13 +108,17 @@ test("lay: src/ only, without the layer's tests or its manifest, at the pinned t
 });
 
 test("#3505: a layer that is not on the registry lays the tag IT declares, whatever the lockfile says, and a tag that is not a v<semver> is REFUSED", () => {
-  const manifest = { layers: { lab: UNPUBLISHED } };
+  const manifest = { layers: {}, pinned: { lab: UNPUBLISHED } };
   // The lockfile holds no `@a11ign/lab` entry at all, and the plan does not need one: the declaration is the pin.
   assert.deepEqual(layingPlan(manifest, lockfileWith("0.3.0"), "lab"), { remote: UNPUBLISHED.remote, tag: "v0.1.2", path: "packages/lab", lays: UNPUBLISHED.lays });
   // POSITIVE CONTROL for the refusal: a branch, a sha, a moving range and a missing `v` each stand where a pin should.
   for (const tag of ["main", "e61c6faf9209d7b9c55d6b90a4363807b5dd9b08", "v0.1", "0.1.2", "v0.1.2-rc.1"]) {
-    assert.match(layingPlan({ layers: { lab: { ...UNPUBLISHED, tag } } }, lockfileWith("0.3.0"), "lab").refusal, /not a v<semver> tag/, tag);
+    assert.match(layingPlan({ layers: {}, pinned: { lab: { ...UNPUBLISHED, tag } } }, lockfileWith("0.3.0"), "lab").refusal, /not a v<semver> tag/, tag);
   }
+  // Declared under `layers` it is laid the same way, which is what a layer that gains a registry release and keeps a tag would be.
+  assert.equal(layingPlan({ layers: { lab: UNPUBLISHED } }, lockfileWith("0.3.0"), "lab").tag, "v0.1.2");
+  // A layer in neither section is refused, naming the manifest.
+  assert.match(layingPlan(manifest, lockfileWith("0.3.0"), "ghost").refusal, /not declared with a remote/);
   // And the registry path is untouched: no `tag` means the lockfile's, laid as `src/` alone.
   assert.deepEqual(layingPlan(MANIFEST, lockfileWith("0.3.0"), "screenreader-fleet").lays, ["src"]);
 });
