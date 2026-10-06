@@ -320,7 +320,7 @@ const pwshAvailable = spawnSync("pwsh", ["-NoProfile", "-Command", "1"], { encod
 /** The guest's "is the layer on the box" script, template variables filled in for a fixture, git clone replaced by a stub that says so. */
 function guestPresentScript({ repoPath, remote }: { repoPath: string, remote: string }) {
   const task = read("packages/control/ansible/tasks/layer-checkouts.yml").split("\n- name:").find((chunk) => chunk.includes("Each such layer is on the box"))!;
-  const body = task.split("win_shell: |\n")[1].split(/\n  loop:/)[0];
+  const body = task.split("win_shell: |\n")[1].split(/\n {2}loop:/)[0];
   const indent = /^ */.exec(body)![0].length;
   return body.split("\n").map((line) => line.slice(indent)).join("\n")
     .replaceAll("{{ a11y_repo_path }}", repoPath).replaceAll("{{ item.value.path }}", LAYER_PATH)
