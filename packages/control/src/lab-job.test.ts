@@ -11,6 +11,7 @@
  * for the identical reason: a function built to be asserted on cannot let the test runner die with it.
  * `checkFleet` and `dispatch` are swapped for fakes throughout.
  */
+// no-token: gh -- the #3289 tests hand the poster a RECORDING `gh` and the rest drive pure argv/text; run with `gh` off PATH and no token env, the 15 `#3289` tests pass and the `(rendered)` ones skip with no `ansible-playbook`
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
