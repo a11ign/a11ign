@@ -208,6 +208,17 @@ about 68 box-hours, **4.5 h on 15 serving boxes or 6.8 h on 10**, before a retry
 and this reading does not explain. The 15-box figure is arithmetic: no run has used 15. A reading at a
 moment: re-count before quoting.
 
+**The recapture, MEASURED 2026-10-06 (#3524), beside the estimate above.** The cached dataset recapture
+(`lab-job.mjs -e job=capture`, `training:capture:fresh`, `--no-cache`) ran on 15 serving boxes at
+`provisionRevision` `39f66503fb35f022`, protocol 22, code `912bd620a9960d40` on every box, from
+**04:56:35Z to 08:36:43Z: 3 h 40 min wall**, against the 3.6 h the 2026-09-23 rate predicted for those 3,590
+captures. The run's own progress file read `1,794 captured, 1 failed, 0 skipped, of 1,795 cases`; the one
+failure (`image-missing-alt`, HTTP 500 `screen-reader-mute` twice from worker 6) was recaptured alone with
+`capture-only -e only=image-missing-alt` (1 captured, 0 failed, exit 0), so **1,795 of 1,795 cases (3,590
+captures) were captured fresh in this window**. NOT recaptured, on purpose: the 916 acceptance captures,
+which never read or write the cache (`DATASET_KIND=acceptance`), so no stamp move invalidated them. The
+count is the run's own record, not a second count of the cache on disk. A reading at a moment.
+
 **What is NOT decided, and is recorded as open work instead of quietly dropped:** the `provisionRevision`
 blind spot to five of six modules and all ten task files is a real gap in the shared measurement, separate
 from the parity question, and worth its own backlog row rather than folding it into "parity is decided" —
