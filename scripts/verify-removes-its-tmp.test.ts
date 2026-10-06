@@ -23,6 +23,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
+import { removeInSmallCalls } from "./verify.mjs";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 const VERIFY = join(REPO, "scripts/verify.mjs");
@@ -30,8 +31,8 @@ const FIXTURE = "packages/lab/src/packaging/board-document-chrome-resolver.test.
 const READY_WAIT_MS = 15_000;
 const POLL_MS = 50;
 
-type Mode = "affected" | "agentOrg";
-type Tree = { dir: string; author: string; tool: string; tmp: string; ready: string; release: string };
+type Mode = "affected" | "agentOrg" | "private";
+type Tree = { dir: string; author: string; tool: string; tmp: string; home: string; ready: string; release: string };
 
 const git = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, encoding: "utf8", stdio: "pipe", env: sandboxGitEnv() }).trim();
 
@@ -45,10 +46,10 @@ const writeAll = (root: string, files: Record<string, string>) => {
 /** The tool's one test announces itself through `ready`, then waits for `release` (or gives up), so the suite is mid-step for as long as the test wants. */
 function throwawayTree(): Tree {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), "removes-its-tmp-test-")));
-  const [author, origin, tool, tmp] = ["author", "origin", "tool", "tmp"].map((name) => join(dir, name));
+  const [author, origin, tool, tmp, home] = ["author", "origin", "tool", "tmp", "home"].map((name) => join(dir, name));
   const ready = join(dir, "ready");
   const release = join(dir, "release");
-  for (const path of [author, origin, tmp]) mkdirSync(path);
+  for (const path of [author, origin, tmp, home]) mkdirSync(path);
   writeAll(author, { [FIXTURE]: 'import "agent-org/src/board-document.mjs";\n', "packages/lab/src/packaging/sibling.mjs": "", ".gitignore": "node_modules\n" });
   git(author, "init", "-q", "-b", "main"); git(author, "add", "."); git(author, "commit", "-q", "-m", "author");
   symlinkSync(realpathSync(join(REPO, "node_modules")), join(author, "node_modules"));
@@ -62,12 +63,24 @@ test("wait", async () => {
   });
   git(origin, "init", "-q", "-b", "main"); git(origin, "add", "."); git(origin, "commit", "-q", "-m", "tool");
   git(dir, "clone", "-q", origin, tool);
-  return { dir, author, tool, tmp, ready, release };
+  return { dir, author, tool, tmp, home, ready, release };
 }
 
 /** The child's whole program: a real step of verify.mjs, run where the test says. @param {Mode} mode */
 function childProgram(mode: Mode, tree: Tree): string {
   const verify = JSON.stringify(pathToFileURL(VERIFY).href);
+  if (mode === "private") {
+    // What a suite's test leaves behind goes in the private directory with a child that REPORTS the TMPDIR it was given, so the control sees it inherited.
+    return `const verify = await import(${verify});
+const { writeFileSync, mkdirSync } = await import("node:fs");
+const { spawnSync } = await import("node:child_process");
+const dir = verify.privateRunTmp({ home: ${JSON.stringify(tree.home)} });
+mkdirSync(dir + "/a-test-left-this/deep", { recursive: true });
+writeFileSync(dir + "/a-test-left-this/deep/file", "x");
+spawnSync(process.execPath, ["-e", "require('node:fs').writeFileSync(" + JSON.stringify(${JSON.stringify(tree.ready)}) + ", process.env.TMPDIR)"]);
+if (process.env.TEST_RUNS_TO_COMPLETION !== "1") await new Promise(() => setInterval(() => {}, 1000));
+`;
+  }
   if (mode === "affected") {
     return `const verify = await import(${verify});
 const hangs = async () => { (await import("node:fs")).writeFileSync(${JSON.stringify(tree.ready)}, "1"); await new Promise(() => setInterval(() => {}, 1000)); };
@@ -103,13 +116,14 @@ async function runChild(mode: Mode, tree: Tree, kill: NodeJS.Signals | null) {
   const ended = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((done) => child.on("close", (code, signal) => done({ code, signal })));
   if (kill === null) return { ...(await ended), stderr, before: [] as string[], standing: [] as string[] };
   await until(`the ${mode} step reaching its wait`, () => existsSync(tree.ready), () => stderr);
-  const before = readdirSync(tree.tmp);
+  const before = readdirSync(mode === "private" ? privateRoot(tree) : tree.tmp);
   const standing = worktreesOf(tree);
   child.kill(kill);
   const result = await ended;
   return { ...result, stderr, before, standing };
 }
 
+const privateRoot = (tree: Tree) => join(tree.home, ".cache/a11ign/tmp");
 const leftIn = (tree: Tree) => readdirSync(tree.tmp);
 const worktreesOf = (tree: Tree) => git(tree.author, "worktree", "list").split("\n");
 
@@ -154,4 +168,45 @@ test("every mkdtempSync in verify.mjs is the one inside the scratch helper, so n
   const outside = sites.filter((at) => at < start || at > end);
   assert.deepEqual(outside, [], `a mkdtempSync outside makeScratch, at offsets ${outside.join(", ")}`);
   assert.equal(sites.length - outside.length, 1, "the helper's own mkdtempSync is the positive control, and there must be exactly one");
+});
+
+// THE PRIVATE RUN DIRECTORY (chairman's correction on #3846): verify's TMPDIR for itself and what it spawns, removed on every exit, in small calls.
+for (const signal of [null, "SIGTERM", "SIGINT"] as const) {
+  test(`private TMPDIR: ${signal ?? "a run to completion"} leaves nothing under ~/.cache/a11ign/tmp, and a spawned child was given it${signal ? "" : " (the positive control)"}`, async () => {
+    const tree = throwawayTree();
+    try {
+      const { before, stderr } = await runChild("private", tree, signal);
+      if (signal) assert.ok(before.some((name) => name.startsWith("run-")), `no run-* directory stood before the kill: ${before.join(", ")}\n${stderr}`);
+      const given = readFileSync(tree.ready, "utf8");
+      assert.ok(given.startsWith(`${privateRoot(tree)}/run-`), `the spawned child's TMPDIR was ${given}`);
+      assert.deepEqual(readdirSync(privateRoot(tree)), [], `${signal} left a run directory\n${stderr}`);
+      assert.deepEqual(leftIn(tree), [], "something was made in the shared temp directory instead of the private one");
+    } finally {
+      rmSync(tree.dir, { recursive: true, force: true });
+    }
+  });
+}
+
+test("removeInSmallCalls refuses an empty name, and removes a tree one entry at a time, itself last", () => {
+  assert.throws(() => removeInSmallCalls(""), /refusing an empty directory name/);
+  const dir = mkdtempSync(join(tmpdir(), "removes-its-tmp-small-"));
+  try {
+    for (const name of ["a", "b", "c"]) writeAll(dir, { [`${name}/inner/file`]: "x" });
+    removeInSmallCalls(dir);
+    assert.ok(!existsSync(dir), "the directory was left standing");
+    removeInSmallCalls(dir); // already gone: not an error, since the signal handler and the `exit` handler both run it
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("main takes the private TMPDIR after the slot and before any step, and verify.mjs has one place that sets TMPDIR", () => {
+  const source = readFileSync(VERIFY, "utf8");
+  const main = /^async function main\(\) \{[\s\S]*?^}/m.exec(source)?.[0] ?? "";
+  assert.ok(main.length > 0, "verify.mjs has no `async function main`");
+  const slot = main.indexOf("underTheHostsSlot()");
+  const taken = main.indexOf("privateRunTmp()");
+  assert.ok(slot >= 0 && taken > slot, "main must call privateRunTmp() after underTheHostsSlot(), so only the process that does the work makes one");
+  assert.ok(taken < main.indexOf("runAllSteps("), "main must call privateRunTmp() before its steps");
+  assert.equal(source.match(/process\.env\.TMPDIR\s*=/g)?.length, 1);
 });

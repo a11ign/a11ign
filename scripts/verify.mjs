@@ -188,10 +188,13 @@ const liveWorktrees = new Map();
 const liveChildren = new Set(/** @type {import("node:child_process").ChildProcess[]} */ ([]));
 let exitHandlersInstalled = false;
 
-/** @param {string} prefix the directory's name up to its random suffix, under the OS temp directory */
-export function makeScratch(prefix) {
+/**
+ * @param {string} prefix the directory's name up to its random suffix
+ * @param {string} [parent] where it is made: the OS temp directory unless a caller says (`privateRunTmp` does)
+ */
+export function makeScratch(prefix, parent = tmpdir()) {
   installExitHandlers();
-  const dir = mkdtempSync(join(tmpdir(), prefix));
+  const dir = mkdtempSync(join(parent, prefix));
   liveScratch.add(dir);
   return dir;
 }
@@ -222,8 +225,39 @@ export function removeWorktree({ repo, clone }) {
 /** @param {string} dir a tree `makeScratch` made */
 export function removeScratch(dir) {
   for (const [clone, repo] of liveWorktrees) if (clone.startsWith(`${dir}/`)) removeWorktree({ repo, clone });
-  rmSync(dir, { recursive: true, force: true });
+  removeInSmallCalls(dir);
   liveScratch.delete(dir);
+}
+
+/**
+ * A directory removed one top-level entry per call, then itself: the private run directory holds whatever the suite's tests left in it, and one
+ * `rm -r` of a large tree is the call that locked the host's kernel in #3846. `dir` must be a non-empty path, the `${D:?}` rule for a glob joined to a variable.
+ * @param {string} dir
+ */
+export function removeInSmallCalls(dir) {
+  if (!dir) throw new Error("removeInSmallCalls: refusing an empty directory name");
+  if (!existsSync(dir)) return;
+  for (const entry of readdirSync(dir)) rmSync(join(dir, entry), { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true });
+}
+
+/** Where a run's private temp directories are made, under the user's cache as the chairman's correction on #3846 names. */
+export const PRIVATE_TMP_ROOT = ".cache/a11ign/tmp";
+
+/**
+ * A PRIVATE `TMPDIR` FOR THIS RUN AND EVERYTHING IT SPAWNS (chairman's 16:55Z correction on #3846, #3847): `~/.cache/a11ign/tmp/run-<id>`, made once,
+ * exported as `TMPDIR` in this process's environment (so `tmpdir()`, `makeScratch` and every child inherit it) and removed, in small calls, on every
+ * exit `makeScratch`'s trees are. The test directories the suites make land in it and go with it, instead of piling up in the shared `/tmp`.
+ * THE INTERFACE #3855's rstest config can reuse: `privateRunTmp({ home? }) -> dir`, and `removeInSmallCalls(dir)` for its own removal.
+ * @param {{ home?: string }} [where]
+ * @returns {string} the run's directory
+ */
+export function privateRunTmp({ home = homedir() } = {}) {
+  const root = join(home, PRIVATE_TMP_ROOT);
+  mkdirSync(root, { recursive: true });
+  const dir = makeScratch("run-", root);
+  process.env.TMPDIR = dir;
+  return dir;
 }
 
 function removeAllScratch() {
@@ -878,6 +912,7 @@ async function main() {
   }
   const slotted = await underTheHostsSlot();
   if (slotted !== null) return slotted;
+  privateRunTmp();
 
   const files = changedFiles([`${base}...HEAD`], { repoRoot: REPO });
   if (files.length === 0) {
