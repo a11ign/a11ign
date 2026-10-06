@@ -307,9 +307,9 @@ test("when the core's pull just changed the checkout the install re-lays the lay
   if (!ansibleAvailable) return t.skip("ansible-playbook is not on PATH here. Not run, and not counted as a pass.");
   const { second, lay, play } = laidFixture();
   lay({ ".layer-ref": `${TAG_ANNOTATED}\n`, "src/index.mjs": "export {};\n" });
-  const pulled = play([...layerRefs(second), "-e", JSON.stringify({ lab_pull: { changed: true } })]);
+  const pulled = play([...layerRefs(second), "-e", JSON.stringify({ lab_core_moved: true })]);
   assert.equal(pulled.status, 0, pulled.output);
-  const notPulled = play([...layerRefs(second), "-e", JSON.stringify({ lab_pull: { changed: false } })]);
+  const notPulled = play([...layerRefs(second), "-e", JSON.stringify({ lab_core_moved: false })]);
   assert.notEqual(notPulled.status, 0, "a pull that changed nothing re-lays nothing, so the laid tag is judged");
 });
 
@@ -354,6 +354,13 @@ test("the guest's git moves loop over the clones only, and the clones are the la
   const moves = code.split("\n- name:").find((chunk) => chunk.includes("Fetch, check out and fast-forward"))!;
   assert.match(moves, /loop: "\{\{ a11y_layer_clones \}\}"/, "a laid tree has no history: git on it fails, in the CORE's repository if it walks up");
   assert.match(code, /a11y_layer_clones: .*rejectattr\('key', 'in', layer_present\.results \| selectattr\('stdout', 'search', 'laid'\)/);
+});
+
+test("run-job.yml hands the lab's layer check whether its pull moved the core, from the very register the install is gated on", () => {
+  const runJob = codeText(read("packages/control/ansible/tasks/run-job.yml"));
+  const include = runJob.split("\n- name:").find((chunk) => chunk.includes("include_tasks: lab-layer-checkouts.yml"))!;
+  assert.match(include, /lab_core_moved: "\{\{ lab_pull is defined and lab_pull is changed \}\}"/);
+  assert.match(runJob, /Install dependencies[\s\S]*?when: lab_pull is defined and lab_pull is changed/, "the install is gated on the same register");
 });
 
 test("with no layer in its own repository the lab's tasks run nothing, not even without a checkout there", (t) => {
