@@ -73,9 +73,8 @@ test("MUTATION TARGET: prepack itself is still present on every one of those pac
   const missing = packagesWithPrepack().filter((name) => {
     const pkg = JSON.parse(readFileSync(join(PACKAGES_DIR, name, "package.json"), "utf8")) as
       { scripts: Record<string, string> };
-    // A package with an `rslib.config.ts` builds with Rslib (#3578, ADR 0043 Decision 3); every other one with `tsc --build`.
-    const builder = existsSync(join(PACKAGES_DIR, name, "rslib.config.ts")) ? "rslib build" : "tsc --build";
-    return pkg.scripts.prepack !== builder;
+    // Every package builds with Rslib (ADR 0043, Decision 4; row 4c-a11ign, #3580): `tsc --build` is gone from this repository.
+    return pkg.scripts.prepack !== "rslib build";
   });
   assert.deepEqual(missing, [], `these packages lost their prepack build step entirely: ${missing.join(", ")}`);
 });

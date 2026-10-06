@@ -13,7 +13,7 @@
  *
  * That boundary HELD when this was written — measured across all 6 published packages, zero violations —
  * which is exactly when it is worth pinning. A boundary that holds by luck is one nobody notices breaking:
- * `licence-boundary.test.ts` covers copyleft direction and `project-references.test.ts` covers that a
+ * `licence-boundary.test.ts` covers copyleft direction and `rslib-build-packages.test.ts` covers that a
  * cross-package import is declared, but NOTHING covered this direction, and adding one import to `cli`
  * would have gone unremarked.
  *

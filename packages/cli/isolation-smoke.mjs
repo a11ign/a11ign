@@ -23,7 +23,7 @@ assert.ok(statSync(bin).size > 0, "the bin is empty");
 
 /**
  * ACTUALLY RUN IT, THROUGH THE SAME SYMLINK A REAL CALLER USES — architecture-audit.md §7.2: "the
- * published dist/cli.js bin is executed by nothing". Existence and a non-zero size are exactly what this
+ * published dist/cli.mjs bin is executed by nothing". Existence and a non-zero size are exactly what this
  * file asserted before, and neither would have caught the bug that shipped: `isProgram` compared
  * `import.meta.url` (which Node's ESM loader resolves through symlinks) against a NON-resolved
  * `process.argv[1]`. `os.tmpdir()` — where this gate itself runs, and where `npx` stages a package before

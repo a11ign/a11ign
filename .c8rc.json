@@ -26,7 +26,6 @@
     "  packages/scorer/bin/fetch-encoder.mjs — downloads 87 MB through Python",
     "  packages/cli/src/scan/axe.ts — launches Chromium through Playwright",
     "  packages/cli/src/scan/run-axe.ts — CLI wrapper around the Playwright scan",
-    "  scripts/build-packages.mjs — spawns tsc",
     "  scripts/coverage.mjs — spawns the test runner; measuring the measurer is circular",
     "",
     "THE SPLIT OUTRAN THE EXCLUSION, and it is why main went red on 2026-09-06. capture-core.mjs was excluded because it drives NVDA. On 2026-09-05 it was split into three, and the exclusion followed only the PARENT - so 4,823 statements of guidepup-driving code entered the measured population at 0%, and packages/ fell from 87.18% to 77.64%. Nothing in the split was wrong and no test was deleted.",
@@ -60,7 +59,6 @@
     "**/dist/**",
     "**/isolation-smoke.mjs",
     "scripts/isolation-fixtures/**",
-    "scripts/tsconfig-fixtures/**",
     "packages/lab/src/harnesses/capture-check.mjs",
     "packages/lab/src/harnesses/capture-fixtures.mjs",
     "packages/lab/src/harnesses/run-spike.ts",
@@ -77,7 +75,6 @@
     "packages/scorer/bin/fetch-encoder.mjs",
     "packages/cli/src/scan/axe.ts",
     "packages/cli/src/scan/run-axe.ts",
-    "scripts/build-packages.mjs",
     "scripts/coverage.mjs"
   ],
   "reporter": [

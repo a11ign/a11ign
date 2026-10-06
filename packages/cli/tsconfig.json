@@ -1,16 +1,8 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "outDir": "dist", "rootDir": "src" },
+  // `tsc` only CHECKS this package: Rslib builds it (ADR 0043, Decision 4), and `rootDir` is explicit because TypeScript 6 refuses to guess it.
+  "compilerOptions": { "rootDir": "src", "noEmit": true },
   "include": ["src"],
-  "exclude": ["src/**/*.test.ts"],
-  // `tsc --build` builds these first, so a fresh `npm ci` cannot compile the CLI against a sibling's missing
-  // `dist` — the failure M4 hit. `nvda-worker` is deliberately absent: the CLI speaks HTTP to a worker.
-  // `../scorer` was missing while `cli.ts` imported `scorerPaths` from it — found by the discovery guard
-  // in `project-references.test.ts`, not by anything that had run before. Same latent race as scorer's own
-  // missing reference to evidence: invisible on a warm machine, a coin-flip on a first `npm install`.
-  "references": [
-    { "path": "../evidence" },
-    { "path": "../judge" },
-    { "path": "../scorer" }
-  ]
+  // Tests are run from source by rstest, and must not reach a consumer's `node_modules`.
+  "exclude": ["src/**/*.test.ts"]
 }

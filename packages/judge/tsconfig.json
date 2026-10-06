@@ -1,16 +1,8 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "outDir": "dist", "rootDir": "src" },
+  // `tsc` only CHECKS this package: Rslib builds it (ADR 0043, Decision 4), and `rootDir` is explicit because TypeScript 6 refuses to guess it.
+  "compilerOptions": { "rootDir": "src", "noEmit": true },
   "include": ["src"],
-  // Tests run from source via the root `npm test`; they must not reach a consumer's node_modules.
-  "exclude": ["src/**/*.test.ts"],
-  // NOT decoration. `prepare` runs during `npm ci` in whatever order npm chooses, and this package's build
-  // failed there with `Cannot find module '@a11ign/evidence/wcag'` — the sibling's `dist` did not exist
-  // yet. `tsc --build` follows `references` and builds them first, which is the ordering guarantee ADR 0005
-  // says `composite: true` buys. It also makes the dependency graph compiler-enforced: a cycle here is a
-  // build error (TS6202), asserted in `src/packaging/project-references.test.ts`.
-  "references": [
-    { "path": "../evidence" },
-    { "path": "../scorer" }
-  ]
+  // Tests are run from source by rstest, and must not reach a consumer's `node_modules`.
+  "exclude": ["src/**/*.test.ts"]
 }

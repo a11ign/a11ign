@@ -90,8 +90,6 @@ jobs:
           ls -la packages/evidence/dist/ || echo "(no dist directory at all)"
           echo "--- wcag.d.ts, first 20 lines ---"
           head -20 packages/evidence/dist/wcag.d.ts || echo "(no wcag.d.ts)"
-          echo "--- does tsc consider the graph up to date? ---"
-          pnpm exec tsc --build --dry $(node -e "const fs=require('fs');console.log(fs.readdirSync('packages').filter(d=>fs.existsSync('packages/'+d+'/tsconfig.json')).map(d=>'packages/'+d).join(' '))") || true
       # docs/coverage.md is GENERATED and DELIBERATELY UNTRACKED (#158) -- a fresh checkout has no copy, so
       # doc-references.test.ts (reached by the suite) would otherwise report a real
       # citation as broken. Only the

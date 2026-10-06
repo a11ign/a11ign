@@ -7,31 +7,31 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "default": "./dist/index.mjs"
     },
     "./layers": {
       "types": "./dist/layers.d.ts",
-      "default": "./dist/layers.js"
+      "default": "./dist/layers.mjs"
     },
     "./rules": {
       "types": "./dist/rules.d.ts",
-      "default": "./dist/rules.js"
+      "default": "./dist/rules.mjs"
     },
     "./internal": {
       "types": "./dist/internal.d.ts",
-      "default": "./dist/internal.js"
+      "default": "./dist/internal.mjs"
     },
     "./coverage": {
       "types": "./dist/coverage.d.ts",
-      "default": "./dist/coverage.js"
+      "default": "./dist/coverage.mjs"
     },
     "./outcomes": {
       "types": "./dist/outcomes.d.ts",
-      "default": "./dist/outcomes.js"
+      "default": "./dist/outcomes.mjs"
     },
     "./act-rules": {
       "types": "./dist/act-rules.d.ts",
-      "default": "./dist/act-rules.js"
+      "default": "./dist/act-rules.mjs"
     }
   },
   "files": [
@@ -62,7 +62,8 @@
     "access": "public"
   },
   "scripts": {
-    "prepack": "tsc --build"
+    "build": "rslib build",
+    "prepack": "rslib build"
   },
   "repository": {
     "type": "git",
@@ -77,5 +78,8 @@
     "screen-reader",
     "nvda",
     "judge"
-  ]
+  ],
+  "devDependencies": {
+    "@a11ign/toolchain": "0.1.0"
+  }
 }

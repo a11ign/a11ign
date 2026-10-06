@@ -56,11 +56,12 @@ rather than asking a human to judge.
 
 ## The contract every package follows
 
-**`"prepack": "tsc --build"` is mandatory, not tidiness.** `npm pack` does not build, so without it the
+**`"prepack": "rslib build"` is mandatory, not tidiness.** `npm pack` does not build, so without it the
 tarball ships an empty `dist` on any machine that has not built first — every clean clone, every CI job.
 Demonstrated rather than assumed: with `dist` deleted, the isolation gate failed with `ERR_MODULE_NOT_FOUND`,
-and passed once `prepack` existed. `"prepare"` runs the same build after `npm install`, so the root
-`typecheck` resolves the package's `.d.ts` without a separate step.
+and passed once `prepack` existed. **No package carries a `prepare`.** The root `prepare` runs ONE build after
+`pnpm install`, `pnpm -r run build`, which pnpm orders by the packages' declared dependencies, so the root
+`typecheck` resolves each package's `.d.ts` without a separate step (#168: five unordered builds raced).
 
 Each package under `packages/` owns an `isolation-smoke.mjs` that imports itself **by package name** and
 exercises the first example in its README. The gate copies it into a throwaway consumer directory next to

@@ -533,13 +533,13 @@ test("every declared entry guard uses the exact comparison — no sources consul
  * source directly. Discovered rather than named, for the reason every discovery test in this file exists:
  * a bin nobody remembered to list here is exactly the one that ships broken.
  */
-/** `dist/cli.js` is built from `src/cli.ts` or `src/cli.mjs`; anything not under `dist/` is its own source. */
+/** `dist/cli.mjs` (`.js` before row 4c-a11ign, #3580) is built from `src/cli.ts` or `src/cli.mjs`; anything not under `dist/` is its own source. */
 function sourceFor(targetPath: string): string {
   const dir = dirname(targetPath);
   if (basename(dir) !== "dist") return targetPath;
   const base = basename(targetPath);
-  const srcTs = join(dir, "..", "src", base.replace(/\.js$/, ".ts"));
-  const srcMjs = join(dir, "..", "src", base.replace(/\.js$/, ".mjs"));
+  const srcTs = join(dir, "..", "src", base.replace(/\.m?js$/, ".ts"));
+  const srcMjs = join(dir, "..", "src", base.replace(/\.m?js$/, ".mjs"));
   if (existsSync(srcTs)) return srcTs;
   if (existsSync(srcMjs)) return srcMjs;
   return targetPath;

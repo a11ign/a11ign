@@ -10,7 +10,7 @@
  * 2. THE ENTRIES HELPER. One entry per built `exports` key, in both directions. Control: a fixture package with a subpath that has
  *    no entry is RED, and so is one with an entry that has no subpath.
  * 3. THE BASE. The package's `tsconfig.base.json` turns `declarationMap` and `sourceMap` off and carries no `composite`, `outDir`
- *    or `rootDir`; a11ign's root base still carries those three. Control: a base that carries `composite` is RED.
+ *    or `rootDir`, and neither does a11ign's root base (row 4c-a11ign, #3580, deleted the references that needed them). Control: a base that carries `composite` is RED.
  * 4. THE PEERS. `@rstest/core` and `@rslib/core` are peers of the package and devDependencies of the root, with ranges that include
  *    the versions `pnpm-lock.yaml` resolved. Control: a range that excludes the locked version is RED.
  * 5. THE THIN CONFIG. `scripts/rstest/rstest.config.mjs` holds no run-record, reporter or alias logic, and the four files that moved
@@ -159,10 +159,10 @@ function baseProblems(options: Record<string, unknown>): string[] {
   return [...on, ...references];
 }
 
-test("the package's base turns declarationMap and sourceMap off and carries no composite, outDir or rootDir; the root base still carries the three", () => {
+test("the package's base turns declarationMap and sourceMap off and carries no composite, outDir or rootDir, and the root base carries none either", () => {
   assert.deepEqual(baseProblems(ownCompilerOptions(join(PACKAGE, "tsconfig.base.json"))), []);
   const root = ownCompilerOptions(join(REPO, "tsconfig.base.json"));
-  for (const key of REFERENCES_ONLY) assert.ok(key in root, `the root base lost ${key}, which a11ign's project references still need until row 4c-a11ign`);
+  assert.deepEqual(baseProblems({ ...root, declarationMap: false, sourceMap: false }), [], "the root base carries an emit setting: nothing here builds with `tsc` any more (row 4c-a11ign)");
   const rootConfig = ts.readConfigFile(join(REPO, "tsconfig.base.json"), (file) => readFileSync(file, "utf8")).config as { extends?: string };
   assert.equal(rootConfig.extends, "./packages/toolchain/tsconfig.base.json", "the root base does not extend the package's");
 });
