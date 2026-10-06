@@ -258,7 +258,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
@@ -279,7 +279,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
@@ -371,7 +371,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
@@ -459,7 +459,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
@@ -619,7 +619,7 @@ jobs:
       # pnpm on the PATH is also what `packaging/installed-layout.test.ts` installs the tool through, as a project would. The tool's own
       # `gate` installs its three dependencies with npm; this project's `workflows-run-pnpm.test.ts` allows no npm step, and the
       # project's lockfile already holds all three.
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       # NOT the `22` the other jobs use: agent-org pins 22.22.1 because on 22.23.3 its tree-walking observer fails a test (see its `ci.yml`).
       - uses: actions/setup-node@v7
         with: { node-version: 22.22.1, cache: pnpm }
