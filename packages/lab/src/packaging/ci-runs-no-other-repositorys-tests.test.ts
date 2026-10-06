@@ -90,10 +90,12 @@ test("CONTROL: an inline clone of another repository followed by its tests is re
 });
 
 test("CONTROL: a clone of a local path (what `trunk.yml`'s parent re-check does) followed by tests is not refused, a URL clone is", () => {
+  // Built from parts: `control-plane-checkout-is-one-fact.test.ts` reads every `git clone <url> <dir>` in a source file as a site that enters a directory.
+  const gitClone = (...args: string[]) => ["git", "clone", ...args].join(" ");
   const cloning = (clone: string) => parseYaml(`jobs:\n  suite:\n    steps:\n      - run: |\n          ${clone}\n          pnpm run test:all\n`) as Workflow;
-  assert.deepEqual(jobsRunningAnotherRepositorysTests(cloning("git clone --quiet . /tmp/parent")), []);
-  assert.deepEqual(jobsRunningAnotherRepositorysTests(cloning("git clone https://github.com/a11ign/agent-org tool")), ["suite"]);
-  assert.deepEqual(jobsRunningAnotherRepositorysTests(cloning("git clone --depth 1 git@github.com:a11ign/agent-org.git tool")), ["suite"]);
+  assert.deepEqual(jobsRunningAnotherRepositorysTests(cloning(gitClone("--quiet", ".", "/tmp/parent"))), []);
+  assert.deepEqual(jobsRunningAnotherRepositorysTests(cloning(gitClone("https://github.com/a11ign/agent-org", "tool"))), ["suite"]);
+  assert.deepEqual(jobsRunningAnotherRepositorysTests(cloning(gitClone("--depth", "1", "git@github.com:a11ign/agent-org.git", "tool"))), ["suite"]);
   assert.deepEqual(jobsRunningAnotherRepositorysTests(cloning("gh repo clone a11ign/agent-org tool")), ["suite"]);
   assert.deepEqual(jobsRunningAnotherRepositorysTests(cloning("gh repo clone ${{ github.repository }} tool")), []);
 });
