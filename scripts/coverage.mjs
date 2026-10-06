@@ -65,36 +65,71 @@ function step(args) {
   return spawnSync(process.execPath, args, { cwd: ROOT, stdio: "inherit" });
 }
 
+/**
+ * What `@rstest/coverage-v8`'s `CoverageProvider` leaves in `process.exitCode`, taken out of it. The provider runs IN THIS
+ * PROCESS (`runChildCoverage` folds child coverage in-process), and every time it logs "Failed to process coverage for ..."
+ * (`dist/index.js` 1343, 1426, 1430: a child entry it cannot parse, such as a `node -e` script's `[eval1]`) it ALSO sets
+ * `process.exitCode = 1` -- so this script used to exit 1 after printing a passing reading and none of its own messages
+ * (#3865, release run 37504186973: 206 such lines, 596 files passed, exit 1). That is the provider's diagnostic about files
+ * it could not read, not this gate's verdict, and an unread child file only lowers the totals, so the threshold stays the gate.
+ * @returns {number}
+ */
+export function takeProviderExitCode() {
+  const code = Number(process.exitCode ?? 0);
+  process.exitCode = undefined;
+  return code;
+}
+
+/**
+ * Everything this script prints and exits with, derived from what it measured -- pure, so that "never exits non-zero
+ * without saying why" (#3865) is a property a test can enumerate rather than a habit of `main()`.
+ * @param {{ mergedReport: boolean, mergeStatus: number | null, providerExitCode: number,
+ *   totals: ReturnType<typeof coverageTotals> | null, c8rc: { lines: number, statements: number } }} reading
+ * @returns {{ code: number, stdout: string[], stderr: string[] }}
+ */
+export function coverageVerdict({ mergedReport, mergeStatus, providerExitCode, totals, c8rc }) {
+  if (!mergedReport || !totals) {
+    return { code: mergeStatus || 1, stdout: [], stderr: [
+      `coverage: no merged report at ${MERGED_REPORT} (merge exited ${mergeStatus}) -- nothing to check.` ] };
+  }
+  const stdout = [`coverage: lines ${totals.lines.pct}%  statements ${totals.statements.pct}%  `
+    + `(threshold ${c8rc.lines}%/${c8rc.statements}%)`];
+  const stderr = providerExitCode === 0 ? [] : [
+    `coverage: @rstest/coverage-v8 could not process coverage for some files (its "Failed to process coverage" lines `
+    + `above) and set exit code ${providerExitCode}; those files read as uncovered, so the totals can only be low, and `
+    + "the threshold is this gate's verdict, not that exit code." ];
+  if (mergeStatus !== 0) {
+    stderr.push("coverage: the suite did not pass -- coverage was measured but this is a test failure, not a coverage miss.");
+    return { code: mergeStatus || 1, stdout, stderr };
+  }
+  const misses = thresholdMissLines(totals, c8rc);
+  return { code: misses.length ? 1 : 0, stdout, stderr: [...stderr, ...misses] };
+}
+
 async function main() {
   refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/coverage.mjs" });
   const floor = step([join(ROOT, "packages/guards/src/assert-glob-not-empty.mjs"), TEST_GLOB, `--min=${MIN_TEST_FILES}`]);
-  if (floor.status !== 0) process.exit(floor.status ?? 1);
+  if (floor.status !== 0) {
+    process.stderr.write(`coverage: the vacuity floor failed (${TEST_GLOB} matched fewer than ${MIN_TEST_FILES} files) -- not measuring.\n`);
+    process.exit(floor.status ?? 1);
+  }
 
   const c8rc = JSON.parse(readFileSync(join(ROOT, ".c8rc.json"), "utf8"));
   const rstest = pnpmCliInvocation(["exec", "rstest", "run", "--config", "scripts/rstest/rstest.config.mjs"]);
   const mergeStatus = await runChildCoverage({ root: ROOT, population: c8rc, rstest: { command: rstest.command, args: rstest.args } });
-  if (!existsSync(MERGED_REPORT)) {
-    process.stderr.write(`coverage: no merged report at ${MERGED_REPORT} (merge exited ${mergeStatus}) -- nothing to check.\n`);
-    process.exit(mergeStatus ?? 1);
+  const mergedReport = existsSync(MERGED_REPORT);
+  let totals = null;
+  if (mergedReport) {
+    const options = coverageOptionsFromC8rc(c8rc, REPORTS_DIRECTORY);
+    const map = new CoverageProvider(/** @type {any} */ (options), ROOT).createCoverageMap();
+    map.merge(JSON.parse(readFileSync(MERGED_REPORT, "utf8")));
+    totals = coverageTotals(map);
   }
 
-  const options = coverageOptionsFromC8rc(c8rc, REPORTS_DIRECTORY);
-  const map = new CoverageProvider(/** @type {any} */ (options), ROOT).createCoverageMap();
-  map.merge(JSON.parse(readFileSync(MERGED_REPORT, "utf8")));
-  const totals = coverageTotals(map);
-  process.stdout.write(`coverage: lines ${totals.lines.pct}%  statements ${totals.statements.pct}%  `
-    + `(threshold ${c8rc.lines}%/${c8rc.statements}%)\n`);
-
-  if (mergeStatus !== 0) {
-    process.stderr.write("coverage: the suite did not pass -- coverage was measured but this is a test "
-      + "failure, not a coverage miss.\n");
-    process.exit(mergeStatus ?? 1);
-  }
-  const misses = thresholdMissLines(totals, c8rc);
-  if (misses.length) {
-    for (const line of misses) process.stderr.write(`${line}\n`);
-    process.exit(1);
-  }
+  const { code, stdout, stderr } = coverageVerdict({ mergedReport, mergeStatus, providerExitCode: takeProviderExitCode(), totals, c8rc });
+  for (const line of stdout) process.stdout.write(`${line}\n`);
+  for (const line of stderr) process.stderr.write(`${line}\n`);
+  if (code !== 0) process.exit(code);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) await main();
