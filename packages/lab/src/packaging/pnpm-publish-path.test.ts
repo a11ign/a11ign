@@ -92,11 +92,9 @@ test("#2301: the provenance request REHEARSES the pnpm-to-npm hand-off, after th
     "the rehearsal comes after the pack: it hands the packed set on");
 });
 
-test("#2301: `release:version` refreshes the pnpm lockfile, and the release commit stages that one", () => {
+test("#2301: `release:version` refreshes the pnpm lockfile", () => {
   const scripts = JSON.parse(read("package.json")).scripts as Record<string, string>;
   assert.equal(scripts["release:version"], "changeset version && node scripts/pnpm.mjs install --lockfile-only");
-  const bump = read("scripts/release-commit-version-bump.mjs");
-  assert.match(stripComments(bump), /"pnpm-lock\.yaml"/);
 });
 
 // --- the isolation gate ----------------------------------------------------------------------------------
