@@ -31,9 +31,7 @@ const ROOT = resolve(import.meta.dirname, "../../..");
 const NOT_CAPTURE_CALLERS: Record<string, string> = {
   "packages/judge/src/rules.ts": "defines ruleFindings",
   "packages/judge/src/judge.ts": "receives a JudgeInput its caller already built",
-  "packages/lab/src/eval/fitness.ts": "names it in a comment only",
   "packages/judge/isolation-smoke.mjs": "builds a literal input to prove the bundle loads",
-  "packages/lab/scripts/score-rules.ts": "scores EXPORTED records, which carry ruleEvidence from oracleCounts",
 };
 
 function discoverCallers(): string[] {
@@ -54,7 +52,9 @@ test("the callers are DISCOVERED rather than trusted from a list", () => {
   // iterating an empty array and passing — the exact way the signal-type scrape passed having examined
   // nothing, which this repo records as a rule: a test must not derive its expectations from source TEXT
   // without first proving the text was found.
-  assert.ok(callers.length >= 8, `discovered only ${callers.length} rule callers: ${callers.join(", ")}`);
+  // Was 8 over a tree that tracked the lab's scripts, which called it too (and two of them were exempt above); they left for a11ign/lab (#3505), so
+  // `git grep` here finds the four modules this package and `cli` hold: `cli.ts`, `judge.ts`, `rules.ts` and `isolation-smoke.mjs`.
+  assert.ok(callers.length >= 4, `discovered only ${callers.length} rule callers: ${callers.join(", ")}`);
   assert.ok(callers.includes("packages/cli/src/cli.ts"), "the product path must be among them");
 });
 

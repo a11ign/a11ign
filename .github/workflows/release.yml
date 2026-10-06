@@ -269,7 +269,7 @@ jobs:
             exit 1
           fi
           pnpm exec rstest run --config "$RSTEST_CONFIG" \
-            --include packages/lab/src/packaging/release-publishes-only-what-stays.test.ts \
+            --include packages/guards/src/release-publishes-only-what-stays.test.ts \
             --disableConsoleIntercept 2>&1 | tee "$RUNNER_TEMP/release-hold.log"
           # A green exit is not a pass: the PASS line is printed only on the far side of the assertion.
           grep -q 'RELEASE HOLD PASS' "$RUNNER_TEMP/release-hold.log" || {

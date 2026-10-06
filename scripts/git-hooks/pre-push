@@ -599,8 +599,8 @@ run_gate() { # run_gate <branch-label>
   # checkout (#2218), which is 42 of 56 linked worktrees, and a push hook that newly refused those pushes would be a
   # different change. The cap module is the shared half; it prints `memory cap: ...` so this run says which path it took.
   run "leak scan" node packages/guards/src/test-memory-cap.mjs run tsx -- pnpm exec tsx --test \
-    packages/lab/src/packaging/tracked-source-leak-guard.test.ts \
-    packages/lab/src/packaging/tracked-prose-leak-guard.test.ts
+    packages/guards/src/tracked-source-leak-guard.test.ts \
+    packages/guards/src/tracked-prose-leak-guard.test.ts
 
   snapshot_children_cpu "$cpu_end_file"; wall_end="$(now_ms)"
   local gate_cpu gate_wall

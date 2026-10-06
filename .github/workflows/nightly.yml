@@ -289,7 +289,7 @@ jobs:
             # and `bash -e` would end the loop at the first. `$?` is the runner's own status under pipefail.
             set +e
             A11Y_CHECK_MAIN_RULESET=1 A11Y_PROTECTION_REPO="$repo" pnpm exec rstest run --config "$RSTEST_CONFIG" \
-              --include packages/lab/src/packaging/branch-protection.test.ts \
+              --include packages/guards/src/branch-protection.test.ts \
               --disableConsoleIntercept 2>&1 | tee "$LOG"
             STATUS=$?
             set -e
@@ -326,7 +326,7 @@ jobs:
           TABLE_LOG="settings-table.log"
           set +e
           A11Y_CHECK_MAIN_RULESET=1 pnpm exec rstest run --config "$RSTEST_CONFIG" \
-            --include packages/lab/src/packaging/layer-repository-protection.test.ts \
+            --include packages/guards/src/layer-repository-protection.test.ts \
             --disableConsoleIntercept 2>&1 | tee "$TABLE_LOG"
           STATUS=$?
           set -e

@@ -8,7 +8,7 @@ score, plus the head arithmetic itself.
 file invalidates every weight file that does not carry the new version — the scorer refuses the mismatch
 rather than silently scoring against features it was not trained on.
 
-It was extracted from the trainer (now `packages/lab/scripts/train-screenreader-model.py`), which the
+It was extracted from the trainer (now `scripts/train-screenreader-model.py` in the lab's own repository, a11ign/lab), which the
 scoring program used to load
 dynamically by file path. That made the trainer a RUNTIME DEPENDENCY of scoring, so shipping a scorer meant
 shipping a trainer, which ADR 0004 rejects: distributing a trainer implies a consumer can reproduce

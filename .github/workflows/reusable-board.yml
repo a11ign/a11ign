@@ -53,4 +53,4 @@ jobs:
       # internally, and is already a guarded, already-discovered entry point everywhere else this row touches.
       - env:
           GH_TOKEN: ${{ github.token }}
-        run: node packages/guards/src/assert-glob-not-empty.mjs "packages/lab/src/packaging/board-*.test.ts" "packages/lab/src/packaging/public-claim.test.ts" --min=1 --run --runner=rstest
+        run: node packages/guards/src/assert-glob-not-empty.mjs "packages/guards/src/board-*.test.ts" "packages/guards/src/public-claim.test.ts" --min=1 --run --runner=rstest

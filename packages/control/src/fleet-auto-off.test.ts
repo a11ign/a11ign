@@ -457,6 +457,10 @@ test("tick: revoking ONE worker's proof changes no other worker's decision (#322
 });
 
 test("tick: a worker with no MAC is never decided off, even idle past the threshold, and the report names it", async () => {
+  // The ledger is read through the transport even here, so without a stub it would reach the real ssh: a sandbox
+  // with no route to the control plane then prints "the wake-proof ledger could not be read" in every suite run (#3889).
+  // `asked` is the positive control: it fails if the stub is dropped, on a host with a route as much as on one without.
+  let asked = 0;
   const result = await tick({
     workers: [{ name: "a11y-worker-12", host: "192.0.2.20", mac: null }],
     probe: async () => ({ outcome: "idle" }),
@@ -464,7 +468,9 @@ test("tick: a worker with no MAC is never decided off, even idle past the thresh
     statePath: "x.json",
     read: () => { throw Object.assign(new Error("ENOENT"), { code: "ENOENT" }); },
     write: () => {},
+    proofTransport: (() => { asked += 1; return ""; }) as never,
   });
+  assert.equal(asked, 1, "the ledger was read through the stub and never through the real ssh");
   assert.deepEqual(result.decisions[0].decision, { action: "keep", reason: "no-mac" });
 });
 
@@ -527,6 +533,7 @@ async function tickAt(
     capturesPath: LEDGER,
     read: files.read,
     write: files.write as never,
+    proofTransport: provenAt0,
   });
 }
 

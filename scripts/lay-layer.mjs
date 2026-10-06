@@ -13,6 +13,13 @@
 // `control` reads and what `a11ign` installs cannot name two builds. A lockfile that holds no registry entry for the package is REFUSED, never
 // answered with `main`.
 //
+// A LAYER THAT IS NOT ON THE REGISTRY DECLARES ITS OWN TAG (#3505). `lab` is `private: true` and never published, so the lockfile has no entry
+// to read and the pin is the `tag` field of its own declaration in `layers.json`: still ONE place, and still a tag, never a branch. It is declared
+// under `pinned`, not `layers`: `layers` are the ones a guest and a lab job must hold a pinned checkout of, and nothing on a worker runs the lab. A declaration
+// with a `tag` is never answered from the lockfile, and a declaration whose tag is not a `v<semver>` is REFUSED (a branch name moves under a
+// checkout that did not touch it). `lays` names what to lay when it is more than `src/`: `lab`'s root scripts, its baselines, `rule-ownership.json` and `CLAUDE.md`
+// are read by path from the rest of the tree.
+//
 // THE SOURCE IS LAID, NOT THE PACKAGE: `src/` (less its own tests) and nothing that names it a package (`package.json`, `tsconfig.json`, the build config). Every walker
 // here that finds packages (`allPackages`, the build, the start guard's member scope, `ci-changed`) asks for a manifest first, so a laid directory
 // without one is invisible to them, and what `control` imports and the tests read is all under `src/`. The registry copy in `node_modules` is the package.
@@ -52,21 +59,45 @@ export function pinnedVersion(lockfile, name) {
   return { version };
 }
 
+/** What a declared tag looks like: `v` and a semver. A branch or a bare sha is not a pin. */
+const DECLARED_TAG = /^v\d+\.\d+\.\d+$/;
+/** @typedef {{ path: string, remote?: string, tag?: string, lays?: string[] }} Declaration */
+/** What `lay` puts down when a declaration names nothing else. */
+const DEFAULT_LAYS = ["src"];
+
 /**
- * What to lay, from the manifest and the lockfile: the repository, the tag, the path inside the repository, and the path here.
- * The layer's repository keeps the directory at the same path it had in the monorepo (ADR 0040), so `path` names both ends.
- * @param {{ layers: Record<string, { path: string, remote?: string }> }} manifest
+ * The tag to lay: the declaration's own when it has one (a layer that is not on the registry), else the release the lockfile pins.
+ * @param {{ tag?: string }} entry
  * @param {string} lockfile
  * @param {string} layer
- * @returns {{ remote: string, tag: string, path: string } | { refusal: string }}
+ * @returns {{ tag: string } | { refusal: string }}
  */
-export function layingPlan(manifest, lockfile, layer) {
-  const entry = Object.hasOwn(manifest.layers, layer) ? manifest.layers[layer] : undefined;
-  if (!entry?.remote) return { refusal: `layer "${layer}" is not declared with a remote in packages/control/layers.json` };
+function tagToLay(entry, lockfile, layer) {
+  if (entry.tag !== undefined) {
+    if (!DECLARED_TAG.test(entry.tag)) return { refusal: `layer "${layer}" declares tag "${entry.tag}", which is not a v<semver> tag: a branch or a sha is not a pin` };
+    return { tag: entry.tag };
+  }
   const name = `@a11ign/${layer}`;
   const pinned = pinnedVersion(lockfile, name);
   if ("refusal" in pinned) return pinned;
-  return { remote: entry.remote, tag: `${name}@${pinned.version}`, path: entry.path };
+  return { tag: `${name}@${pinned.version}` };
+}
+
+/**
+ * What to lay, from the manifest and the lockfile: the repository, the tag, the path inside the repository, what of it to lay, and the path here.
+ * The layer's repository keeps the directory at the same path it had in the monorepo (ADR 0040), so `path` names both ends.
+ * @param {{ layers: Record<string, Declaration>, pinned?: Record<string, Declaration> }} manifest
+ * @param {string} lockfile
+ * @param {string} layer
+ * @returns {{ remote: string, tag: string, path: string, lays: string[] } | { refusal: string }}
+ */
+export function layingPlan(manifest, lockfile, layer) {
+  const declared = [manifest.layers, manifest.pinned ?? {}].find((section) => Object.hasOwn(section, layer));
+  const entry = declared?.[layer];
+  if (!entry?.remote) return { refusal: `layer "${layer}" is not declared with a remote in packages/control/layers.json` };
+  const pinned = tagToLay(entry, lockfile, layer);
+  if ("refusal" in pinned) return pinned;
+  return { remote: entry.remote, tag: pinned.tag, path: entry.path, lays: entry.lays ?? DEFAULT_LAYS };
 }
 
 /** @param {string[]} args @param {string} cwd */
@@ -76,20 +107,26 @@ const git = (args, cwd) => execFileSync("git", args, { cwd, encoding: "utf8", st
  * Put the layer's directory at `plan.path` under `root`, at `plan.tag`. Idempotent: a directory laid at the same tag is left alone; one laid at
  * another is replaced, since it is a copy and not work.
  * @param {string} root
- * @param {{ remote: string, tag: string, path: string }} plan
+ * @param {{ remote: string, tag: string, path: string, lays: string[] }} plan
  */
 export function lay(root, plan) {
   const target = join(root, plan.path);
   const refFile = join(target, REF_FILE);
   // The ref file alone is not "laid": a `git rebase` over the commit that deleted the tracked fleet removed `src/` and left `.layer-ref`, and a
   // second run that trusted the file said "already at" over an empty directory (#3504, found at that rebase).
-  if (existsSync(refFile) && existsSync(join(target, "src")) && readFileSync(refFile, "utf8").trim() === plan.tag) return `already at ${plan.tag}`;
+  // Every part the declaration names, not `src/` alone: a declaration that gained a part at the same tag must lay it, not say "already at".
+  const laidWhole = plan.lays.every((part) => existsSync(join(target, part)));
+  if (existsSync(refFile) && laidWhole && readFileSync(refFile, "utf8").trim() === plan.tag) return `already at ${plan.tag}`;
   const scratch = mkdtempSync(join(tmpdir(), "lay-layer-"));
   try {
     git(["-c", "advice.detachedHead=false", "clone", "--quiet", "--depth", "1", "--branch", plan.tag, plan.remote, scratch], root);
+    // A name the tag does not hold is a wrong declaration, never an empty layer, and it is read BEFORE the old copy goes.
+    for (const part of plan.lays) {
+      if (!existsSync(join(scratch, plan.path, part))) throw new Error(`NOT LAID: ${plan.tag} of ${plan.remote} holds no ${plan.path}/${part}`);
+    }
     rmSync(target, { recursive: true, force: true });
     mkdirSync(target, { recursive: true });
-    cpSync(join(scratch, plan.path, "src"), join(target, "src"), { recursive: true, filter: (from) => !TESTS.test(from) });
+    for (const part of plan.lays) cpSync(join(scratch, plan.path, part), join(target, part), { recursive: true, filter: (path) => !TESTS.test(path) });
     writeFileSync(refFile, `${plan.tag}\n`);
   } finally {
     rmSync(scratch, { recursive: true, force: true });

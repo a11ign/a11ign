@@ -112,6 +112,7 @@ export default tseslint.config(
       "packages/*/dist/**",
       "packages/*/.rstack/**", // Rslib's scratch for the declaration rollup (a11ign: cli): rewritten by every build, so a walk races it
       "packages/worker-fleet/**", // a LAYER CHECKOUT where laid (`scripts/lay-layer.mjs`, #3504): another repository's code, linted there
+      "packages/lab/**", // the same, for `a11ign/lab` (#3505): its own CI lints it, over a checkout of this repository
       "node_modules/**",
       ".venv/**",
       "dist/**",
@@ -166,16 +167,8 @@ export default tseslint.config(
       // 79 of 79 files spawning git already import and call a canonical helper, so this holds a line
       // rather than finding gaps, and the lint run passing IS that measurement.
       "local/git-spawn-scrubbed": ["error", { dataNotASpawn: [] }],
-      "local/uncontrolled-emptiness": ["error", { exempt: {
-        // The naive check reproduced on purpose -- "0 checked, 0 missing" -- to show that examining
-        // nothing and finding nothing produce the same sentence. A demonstration of this rule's defect,
-        // inside the guard file for this rule's defect, and it must stay vacuous.
-        "packages/lab/src/packaging/git-population-vacuity.test.ts": "demonstration",
-        // `CORPUS_GUARD` is DERIVED from `samples.length > 0` and consumed as an early return, so the
-        // assertion is unreachable with an empty population. The control was already there; pinning it
-        // again would turn an honest skip into a failure on a checkout with no corpus.
-        "packages/lab/src/capture/verify.corpus.test.ts": "guarded-by labCorpusReadable",
-      } }],
+      // EMPTY SINCE #3505: both entries it held were files of `packages/lab`, which left the workspace. Each had a reason, and `a11ign/lab` carries it.
+      "local/uncontrolled-emptiness": ["error", { exempt: {} }],
       "complexity": ["error", 15], // "do one thing": decision points (stricter than ESLint's default 20)
       "max-depth": ["error", 3], // "indent level should not be greater than one or two"
       "max-params": ["error", 4], // flag/polyadic args -> use an argument object

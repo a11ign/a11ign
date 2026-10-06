@@ -60,5 +60,8 @@
   ],
   "dependencies": {
     "@a11ign/screenreader-fleet": "^0.5.1"
+  },
+  "devDependencies": {
+    "@a11ign/control": "0.1.0"
   }
 }
