@@ -1842,6 +1842,26 @@ test("#1399 WIRING: the claim/dispatch and decline CLIs report a thrown error th
 // stamp reader and writer, and claim, and read the ORDER of what it did.
 
 /**
+ * A local branch is a PEER'S unmerged work in these fixtures. Since agent-org 0.54.7 (#3745) a claim passes over a local branch that is
+ * merged into origin/main and held by no worktree, and a stub answering "" to every git call reads as exactly that.
+ */
+function unmergedBranchAnswer(subcommand: "merge-base" | "rev-list") {
+  if (subcommand === "rev-list") return "3";
+  throw Object.assign(new Error("git merge-base: not an ancestor"), { status: 1 });
+}
+
+/** What origin answers to `ls-remote`: the FULL head listing with no `--exit-code`, else whether the one branch is there. */
+function lsRemoteAnswer(args: string[], { remoteBranch, remoteStatus, originHeads, listingThrows }:
+  { remoteBranch: boolean; remoteStatus: number; originHeads: string[]; listingThrows: boolean }) {
+  if (!args.includes("--exit-code")) {
+    if (listingThrows) throw Object.assign(new Error("git ls-remote: Could not read from remote repository"), { status: 128 });
+    return originHeads.join("\n");
+  }
+  if (remoteBranch) return "abc123\trefs/heads/agent/x-1432";
+  throw Object.assign(new Error(`git ls-remote exited ${remoteStatus}`), { status: remoteStatus });
+}
+
+/**
  * The git/gh a worktree claim meets: a local branch, an origin branch, row #1432's claim-record comments, and
  * (#2014) origin's FULL head listing -- the `ls-remote` with no `--exit-code`, which the row check reads.
  */
@@ -1854,14 +1874,8 @@ function worktreeClaimRun({ localBranch = false, remoteBranch = false, remoteSta
       if (localBranch) return "abc123";
       throw Object.assign(new Error("git rev-parse: no such ref"), { status: 1 });
     }
-    if (cmd === "git" && args[0] === "ls-remote" && !args.includes("--exit-code")) {
-      if (listingThrows) throw Object.assign(new Error("git ls-remote: Could not read from remote repository"), { status: 128 });
-      return originHeads.join("\n");
-    }
-    if (cmd === "git" && args[0] === "ls-remote") {
-      if (remoteBranch) return "abc123\trefs/heads/agent/x-1432";
-      throw Object.assign(new Error(`git ls-remote exited ${remoteStatus}`), { status: remoteStatus });
-    }
+    if (cmd === "git" && (args[0] === "merge-base" || args[0] === "rev-list")) return unmergedBranchAnswer(args[0]);
+    if (cmd === "git" && args[0] === "ls-remote") return lsRemoteAnswer(args, { remoteBranch, remoteStatus, originHeads, listingThrows });
     if (cmd === "gh" && args[0] === "issue" && args.includes("comments")) {
       return JSON.stringify({ comments: recordComments.map((body) => ({ body })) });
     }
@@ -1880,7 +1894,9 @@ function worktreeClaim(stub: ReturnType<typeof worktreeClaimRun>, { pathExists =
   const stamped: string[][] = [];
   const claimCalls: unknown[][] = [];
   const recordingRun = (cmd: string, args: string[]) => {
-    if (cmd === "git" && (args[0] === "fetch" || args[0] === "worktree" || args[0] === "branch")) order.push(`git ${args[0]} ${args[1]}`);
+    // `worktree list` is a READ (the claim asks which worktree holds a branch before it refuses), so it is not a write to order.
+    const writes = args[0] === "fetch" || (args[0] === "worktree" && args[1] !== "list") || args[0] === "branch";
+    if (cmd === "git" && writes) order.push(`git ${args[0]} ${args[1]}`);
     return stub.run(cmd, args);
   };
   const call = () => claimWithWorktree(1432, "worker-tooling", { ...TARGET, run: recordingRun as never,
