@@ -1,0 +1,408 @@
+/**
+ * #2612, child 1 of #69: `packages/guards/src/layer-edges.mjs`, the guard that makes the boundary of `nvda-worker` and
+ * `nvda-speech` a thing a machine can read, and refuses a reach across it that the baseline does not name.
+ *
+ * EVERY FIXTURE IS A REPOSITORY OF ITS OWN under `fixtures/layer-edges/<case>/`, holding a real `packages/other/src/x.mjs`.
+ * That file is the CONFOUND control: a fixture that names it in a comment or as data passes because of the comment or the
+ * data, and never because the target was missing (`a-negative-fixture-needs-the-confound-in-it`). Each such case asserts the
+ * target exists and that the mention is really there, so a fixture emptied by accident is not read as a pass.
+ *
+ * THE POSITIVE CONTROLS ARE IN THIS FILE, by name, because `assert.deepEqual(edges, [])` passes over an empty population:
+ *   - the clean fixture is asserted to hold scanned files, so "no edges" is a scan that looked and found none;
+ *   - the declared layer list is asserted to hold all six packages, and the real tree's baseline to be NON-EMPTY, to hold
+ *     the deploy path and to name every directed pair among `worker-fleet`, `lab` and `control` (#3501), so a guard that
+ *     discovers nothing is not read as a tree with no edges;
+ *   - a baseline entry for an edge that does not exist is asserted REFUSED as stale, and an edge the baseline lacks REFUSED
+ *     as new, so an allowlist the subject can join has no reading in which it passes.
+ */
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { declareTreeWideGuard } from "./tree-wide-guard.mjs";
+import {
+  BASELINE_PATH, LAYER_PACKAGES, countByDisposition, describeVerdict, findEdges, isScanned, judgeEdges, packageOf,
+  readBaseline, trackedFiles,
+} from "./layer-edges.mjs";
+
+// #3610: "the real tree agrees with the committed baseline" walks `trackedFiles()`, so this file's population is the whole
+// tracked tree and no import graph from a changed file reaches it -- the edge a new file adds is in the new file.
+// Declared so `--changed` does not pretend to select it and CI's `guardSweep` carries it once per pull request.
+declareTreeWideGuard();
+
+const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
+const GUARD = join(ROOT, "packages/guards/src/layer-edges.mjs");
+const FIXTURES = join(ROOT, "packages/guards/src/fixtures/layer-edges");
+
+const fixture = (name: string) => join(FIXTURES, name);
+const edgesOf = (name: string) => findEdges({ root: fixture(name), tracked: trackedFiles(fixture(name)) });
+const textOf = (name: string, path: string) => readFileSync(join(fixture(name), path), "utf8");
+const cli = (...args: string[]) => spawnSync(process.execPath, [GUARD, ...args], { encoding: "utf8" });
+
+const TARGET = "packages/other/src/x.mjs";
+const LAYER_FILE = "packages/nvda-worker/src/x.mjs";
+/** The layers that left, or are leaving, first (#2612, #2976): the ones whose every `out` edge a named row owns. */
+const FIRST_LAYERS = ["nvda-worker", "nvda-speech", "agent-org"];
+/** The three the fence of #3501 adds, for moves 2-4 of #69. */
+const SPLIT_LAYERS = ["worker-fleet", "lab", "control"];
+/** The layers whose directory is not in the tree at all: no tracked file is inside one, so no baseline entry may be FROM one. (`worker-fleet` and `lab` are laid there at build time, untracked, #3504, #3505.) */
+const DEPARTED_LAYERS = [...FIRST_LAYERS, "worker-fleet", "lab"];
+/** One x.mjs and one own.mjs per layer, and the other package's x.mjs. */
+const THREE_LAYERS_CLEAN_FILES = 7;
+const REASON_AT_LEAST_CHARS = 40;
+const BASELINE_AT_LEAST = 100;
+const DIRECTED_PAIRS_AMONG_THREE = 6;
+/** A path a test lives at; `moves-with` is only ever a test's disposition. */
+const TEST_PATH = /\.test\.|\/fixtures\/|\/test-support\/|\/tests?\/|(?:^|\/)test_[^/]*\.py$/;
+
+// ------------------------------------------------------------------ the declared layers
+
+test("the layer packages are DECLARED, all six, and packageOf reads the directory under packages/", () => {
+  assert.deepEqual([...LAYER_PACKAGES], [...FIRST_LAYERS, ...SPLIT_LAYERS]);
+  assert.equal(packageOf("packages/nvda-worker/src/server.mjs"), "nvda-worker");
+  assert.equal(packageOf("packages/nvda-speech"), "nvda-speech");
+  assert.equal(packageOf("scripts/x.mjs"), null, "the repository root and scripts/ are in no package");
+});
+
+// ------------------------------------------------------------------ the clean fixture PASSES
+
+test("a clean layer package PASSES: its own imports, a bare package import, and another package reaching it by NAME", () => {
+  const scanned = trackedFiles(fixture("clean")).filter((path) => isScanned(path));
+  assert.deepEqual(scanned.sort(), [
+    "packages/nvda-worker/src/own.mjs", "packages/nvda-worker/src/x.mjs", "packages/other/src/x.mjs", "packages/other/src/y.mjs",
+  ], "POSITIVE CONTROL: the clean fixture is scanned, so no edges is a scan that found none");
+  assert.deepEqual(edgesOf("clean"), []);
+});
+
+// ------------------------------------------------------------------ the refusals, one fixture each
+
+test("an import that leaves the layer is REFUSED, naming both ends", () => {
+  const edges = edgesOf("imports-across");
+  assert.deepEqual(edges, [{ from: LAYER_FILE, to: TARGET, kind: "import", direction: "out" }]);
+  const message = describeVerdict(judgeEdges(edges, [])).join("\n");
+  assert.match(message, /NEW EDGE out: packages\/nvda-worker\/src\/x\.mjs -> packages\/other\/src\/x\.mjs/);
+});
+
+test("a `new URL(..., import.meta.url)` read that leaves the layer is REFUSED", () => {
+  assert.deepEqual(edgesOf("url-read"), [{ from: LAYER_FILE, to: TARGET, kind: "path-literal", direction: "out" }]);
+});
+
+test("a `.cmd` launcher naming another package's path is REFUSED", () => {
+  assert.deepEqual(edgesOf("launcher"), [
+    { from: "packages/nvda-worker/src/run.cmd", to: TARGET, kind: "launcher", direction: "out" },
+  ]);
+});
+
+test("a path named once in a constant and read through the variable is REFUSED", () => {
+  assert.deepEqual(edgesOf("bound-literal"), [{ from: LAYER_FILE, to: TARGET, kind: "path-literal", direction: "out", via: { declaredLine: 2, readLine: 3 } }]);
+});
+
+test("a `<rev>:<path>` argument (the shape of `git show`) naming another package is REFUSED", () => {
+  assert.deepEqual(edgesOf("git-show"), [{ from: LAYER_FILE, to: TARGET, kind: "path-literal", direction: "out" }]);
+});
+
+// ------------------------------------------------------------------ a path carried through a `const` (#2643)
+//
+// THE REFUSALS AND THE PASSES GO THROUGH ONE ENTRY POINT, `edgesOf`, which is `findEdges` over the fixture's own files: a
+// guard that refuses everything would satisfy the refusals and fail the passes, and one that refuses nothing the reverse.
+
+const viaOf = (name: string) => edgesOf(name).map((e) => ({ file: e.from.split("/").pop(), via: e.via }));
+
+test("a path assigned to a `const` and read a few lines later is REFUSED, naming the declaration and the read", () => {
+  assert.match(textOf("const-read", LAYER_FILE), /^const SIBLING = "packages\/other\/src\/x\.mjs";$/m, "CONTROL: the const is really there");
+  const edges = edgesOf("const-read");
+  assert.deepEqual(edges, [{ from: LAYER_FILE, to: TARGET, kind: "path-literal", direction: "out", via: { declaredLine: 4, readLine: 7 } }]);
+  const message = describeVerdict(judgeEdges(edges, [])).join("\n");
+  assert.match(message, /through a const declared at line 4 and read at line 7/);
+  assert.equal(cli("--check", `--root=${fixture("const-read")}`).status, 1, "and the command refuses it too");
+});
+
+test("a `const` that is only handed to a function that does not read PASSES: a parser, an `includes`, a `.map` over strings", () => {
+  assert.ok(existsSync(join(fixture("const-parsed"), TARGET)), "CONTROL: the target exists, so this passes because the const is not read");
+  const source = textOf("const-parsed", LAYER_FILE);
+  assert.match(source, /^const PATH = "packages\/other\/src\/x\.mjs";$/m);
+  assert.match(source, /mentions\("see packages\/other\/src\/x\.mjs", PATH\)/, "and the const is passed to a call");
+  assert.match(source, /LIST\.map\(\(entry\) => entry\.toUpperCase\(\)\)/, "and a list of paths is walked by a callback that reads nothing");
+  const scanned = trackedFiles(fixture("const-parsed")).filter((path) => isScanned(path));
+  assert.ok(scanned.includes(LAYER_FILE) && scanned.includes("packages/nvda-worker/src/y.mjs"), "POSITIVE CONTROL: both files are scanned");
+  assert.deepEqual(edgesOf("const-parsed"), []);
+  assert.equal(cli("--check", `--root=${fixture("const-parsed")}`).status, 0);
+});
+
+test("the property a read takes is the property that is read: `expect` holds another package's path as DATA and `file` is the layer's own", () => {
+  const source = textOf("const-parsed", "packages/nvda-worker/src/y.mjs");
+  assert.match(source, /file: "packages\/nvda-worker\/src\/own\.mjs", expect: "packages\/other\/src\/x\.mjs"/);
+  assert.match(source, /readFileSync\(join\(ROOT, file\)/);
+  assert.deepEqual(edgesOf("const-parsed").filter((e) => e.from.endsWith("y.mjs")), [], "the destructured `file` is judged, not every string in the list");
+  const swapped = viaOf("const-array").filter((e) => e.file === "z.mjs");
+  assert.deepEqual(swapped, [{ file: "z.mjs", via: { declaredLine: 4, readLine: 7 } }], "CONTROL: with the paths the other way round the same loop IS refused");
+});
+
+test("a path in a list `const` that is walked into a read is REFUSED: for-of into existsSync, a spread list mapped into join, a destructured loop", () => {
+  assert.deepEqual(viaOf("const-array"), [
+    { file: "x.mjs", via: { declaredLine: 4, readLine: 8 } },
+    { file: "y.mjs", via: { declaredLine: 3, readLine: 7 } },
+    { file: "z.mjs", via: { declaredLine: 4, readLine: 7 } },
+  ]);
+  assert.match(textOf("const-array", "packages/nvda-worker/src/y.mjs"), /const ALL = \[\.\.\.A, \.\.\.B\];/, "CONTROL: the list is built by spreading two");
+  assert.ok(edgesOf("const-array").every((e) => e.to === TARGET), "the layer's own path in B is not a reach");
+});
+
+test("a `const` shadowed in an inner scope is judged on the value that reaches the read, on both sides of the block", () => {
+  for (const file of ["x.mjs", "y.mjs"]) {
+    assert.match(textOf("const-shadowed", `packages/nvda-worker/src/${file}`), /const P = "\.\/own\.mjs"|const P = "\.\.\/\.\.\/other\/src\/x\.mjs"/);
+  }
+  assert.ok(existsSync(join(fixture("const-shadowed"), "packages/nvda-worker/src/own.mjs")), "CONTROL: `./own.mjs` exists, so an unresolved read is not why one read is clean");
+  assert.deepEqual(viaOf("const-shadowed"), [
+    // the INNER const names the other package and is declared BEFORE a file-level const that names the layer's own file
+    { file: "x.mjs", via: { declaredLine: 3, readLine: 4 } },
+    // the FILE-LEVEL const names the other package, an inner block shadows it with the layer's own file, and the read AFTER the block is the outer one
+    { file: "y.mjs", via: { declaredLine: 2, readLine: 7 } },
+  ]);
+});
+
+// ------------------------------------------------------------------ worker-fleet, lab and control are layers too (#3501)
+
+test("a declared layer of moves 2-4 that reaches across by path is REFUSED, naming both ends, for each of the three", () => {
+  const edges = edgesOf("three-layers");
+  assert.deepEqual(edges, [
+    { from: "packages/other/src/y.mjs", to: "packages/control/src/own.mjs", kind: "import", direction: "in" },
+    { from: "packages/lab/src/x.mjs", to: "packages/worker-fleet/src/own.mjs", kind: "import", direction: "out" },
+    { from: "packages/worker-fleet/src/x.mjs", to: "packages/other/src/x.mjs", kind: "import", direction: "out" },
+    { from: "packages/control/src/x.mjs", to: "packages/lab/src/own.mjs", kind: "path-literal", direction: "out" },
+  ]);
+  const message = describeVerdict(judgeEdges(edges, [])).join("\n");
+  assert.match(message, /NEW EDGE out: packages\/worker-fleet\/src\/x\.mjs -> packages\/other\/src\/x\.mjs/);
+  assert.match(message, /NEW EDGE out: packages\/lab\/src\/x\.mjs -> packages\/worker-fleet\/src\/own\.mjs/, "an edge between two layers is named by both");
+  assert.match(message, /NEW EDGE out: packages\/control\/src\/x\.mjs -> packages\/lab\/src\/own\.mjs/);
+  assert.equal(cli("--check", `--root=${fixture("three-layers")}`).status, 1, "and the command refuses it too");
+});
+
+test("the same three layers importing only themselves and a package by NAME PASS, with every file scanned", () => {
+  const scanned = trackedFiles(fixture("three-layers-clean")).filter((path) => isScanned(path));
+  assert.equal(scanned.length, THREE_LAYERS_CLEAN_FILES, "POSITIVE CONTROL: the clean fixture holds one x.mjs and one own.mjs per layer and one other package");
+  assert.ok(SPLIT_LAYERS.every((layer) => scanned.includes(`packages/${layer}/src/x.mjs`)), "and each of the three is among them");
+  assert.deepEqual(edgesOf("three-layers-clean"), []);
+  assert.equal(cli("--check", `--root=${fixture("three-layers-clean")}`).status, 0);
+});
+
+test("a `packages/<name>` token in a launcher whose <name> is no package is not a reach: a URL's path PASSES, the real token beside it is REFUSED", () => {
+  assert.match(textOf("token-not-a-package", "packages/worker-fleet/src/bootstrap.sh"), /cli\.github\.com\/packages\/githubcli-archive-keyring\.gpg/, "CONTROL: the URL is really there");
+  assert.deepEqual(edgesOf("token-not-a-package"), [
+    { from: "packages/worker-fleet/src/bootstrap.sh", to: TARGET, kind: "launcher", direction: "out" },
+  ]);
+});
+
+test("the OTHER direction: a package that imports into the layer by path is REFUSED", () => {
+  assert.deepEqual(edgesOf("reach-in"), [
+    { from: "packages/other/src/y.mjs", to: "packages/nvda-worker/src/own.mjs", kind: "import", direction: "in" },
+  ]);
+});
+
+test("a workflow and a config file naming a layer path are REFUSED, as `in` edges of their own kinds", () => {
+  const kinds = edgesOf("workflow-config").map((e) => `${e.direction} ${e.kind} ${e.from}`).sort();
+  assert.deepEqual([...new Set(kinds)], [
+    "in config .c8rc.json",
+    "in workflow .github/workflows/w.yml",
+  ]);
+});
+
+// ------------------------------------------------------------------ the passes that must stay passes
+
+test("a path mentioned ONLY in a comment PASSES, with the real target and the comment both present", () => {
+  assert.ok(existsSync(join(fixture("comment-only"), TARGET)), "CONTROL: the target exists, so this passes because it is a comment");
+  assert.match(textOf("comment-only", "packages/nvda-worker/src/x.mjs"), /\/\/ import \{ X \} from "\.\.\/\.\.\/other\/src\/x\.mjs"/);
+  assert.match(textOf("comment-only", "packages/nvda-worker/src/run.cmd"), /^rem node "packages\\other\\src\\x\.mjs"/m);
+  assert.deepEqual(edgesOf("comment-only"), []);
+});
+
+test("a path handed to a parser as DATA PASSES: a region body and a fixture list are named, never read", () => {
+  assert.ok(existsSync(join(fixture("data-only"), TARGET)), "CONTROL: the target exists, so this passes because it is data");
+  assert.match(textOf("data-only", LAYER_FILE), /REGION_BODY = "packages\/other\/src\/x\.mjs/);
+  assert.match(textOf("data-only", LAYER_FILE), /parseRegion\("packages\/other\/src\/x\.mjs"\)/, "and a path literal is handed to a call");
+  assert.deepEqual(edgesOf("data-only"), []);
+});
+
+test("`${name}/package.json` is not the repository's package.json: a template that begins with an interpolation PASSES", () => {
+  assert.ok(existsSync(join(fixture("dynamic-template"), "package.json")), "CONTROL: a root package.json exists to be falsely read");
+  assert.match(textOf("dynamic-template", LAYER_FILE), /require\.resolve\(`\$\{name\}\/package\.json`\)/);
+  assert.deepEqual(edgesOf("dynamic-template"), []);
+});
+
+// ------------------------------------------------------------------ the baseline is not an allowlist the subject can join
+
+const ENTRY = {
+  from: LAYER_FILE, to: TARGET, kind: "import", direction: "out" as const, disposition: "owned-by:#2614", reason: "a stated reason",
+};
+
+test("an edge the baseline names is not new, and the same baseline over a tree without it is STALE", () => {
+  const edges = edgesOf("imports-across");
+  assert.equal(edges.length, 1, "POSITIVE CONTROL: the fixture has the edge, so the empty result below is the baseline's doing");
+  assert.deepEqual(judgeEdges(edges, [ENTRY]), { unlisted: [], stale: [], malformed: [] });
+  const stale = judgeEdges(edgesOf("clean"), [ENTRY]);
+  assert.deepEqual(stale.stale, [ENTRY]);
+  assert.match(describeVerdict(stale).join("\n"), /STALE ENTRY: packages\/nvda-worker\/src\/x\.mjs -> packages\/other\/src\/x\.mjs/);
+});
+
+test("an entry the baseline cannot honour is MALFORMED: no disposition, no reason, a bare owned-by, a retired word, or not a list", () => {
+  const malformed = (entry: object) => judgeEdges([], [entry]).malformed;
+  assert.deepEqual(malformed(ENTRY), [], "CONTROL: the well-formed entry is accepted");
+  assert.match(malformed({ ...ENTRY, reason: "" })[0], /missing reason/);
+  const withoutDisposition = Object.fromEntries(Object.entries(ENTRY).filter(([field]) => field !== "disposition"));
+  assert.match(malformed(withoutDisposition)[0], /missing disposition/, "an entry with no disposition at all is REFUSED (#3501)");
+  assert.match(malformed({ ...ENTRY, disposition: "  " })[0], /missing disposition/);
+  assert.match(malformed({ ...ENTRY, disposition: "owned-by:2614" })[0], /not cut, by-name, checkout-path, moves-with:<layer> or owned-by:#<row>/);
+  assert.match(malformed({ ...ENTRY, disposition: "travels" })[0], /not cut, by-name/, "`travels` is retired for `moves-with:<layer>`");
+  assert.match(malformed({ ...ENTRY, kind: "vibes" })[0], /kind "vibes"/);
+  assert.match(judgeEdges([], { not: "a list" }).malformed[0], /not a JSON array/);
+});
+
+test("every disposition the row names is accepted, and `moves-with` must name a declared layer", () => {
+  const malformed = (disposition: string) => judgeEdges([], [{ ...ENTRY, disposition }]).malformed;
+  for (const ok of ["cut", "by-name", "checkout-path", "moves-with:lab", "moves-with:nvda-worker", "owned-by:#3396"]) {
+    assert.deepEqual(malformed(ok), [], `${ok} is a disposition`);
+  }
+  assert.match(malformed("moves-with:other")[0], /"other", which is not a declared layer/);
+  assert.match(malformed("moves-with:")[0], /not cut, by-name/);
+  assert.match(malformed("cutting")[0], /not cut, by-name/, "the match is anchored: a word that merely starts with `cut` is no disposition");
+});
+
+test("counts by disposition are the hand count", () => {
+  const entries = [
+    { ...ENTRY }, { ...ENTRY, to: "b" }, { ...ENTRY, direction: "in" as const, disposition: "owned-by:#2613" },
+    { ...ENTRY, direction: "in" as const, disposition: "moves-with:lab" }, { ...ENTRY, direction: "in" as const, disposition: "by-name" },
+    { ...ENTRY, disposition: "checkout-path" }, { ...ENTRY, disposition: "cut" },
+  ];
+  assert.deepEqual(countByDisposition(entries), {
+    "out:owned-by": 2, "in:owned-by": 1, "in:moves-with:lab": 1, "in:by-name": 1, "out:checkout-path": 1, "out:cut": 1,
+  });
+});
+
+// ------------------------------------------------------------------ the real tree
+
+test("the real tree agrees with the committed baseline: no new edge, no stale entry, every entry well-formed", () => {
+  const baseline = readBaseline(ROOT);
+  const verdict = judgeEdges(findEdges({ root: ROOT, tracked: trackedFiles(ROOT) }), baseline);
+  assert.deepEqual(describeVerdict(verdict), []);
+});
+
+test("the widened guard finds `const`-carried edges in the real tree that a literal-only reading did not, each with its declaration and read", () => {
+  const carried = findEdges({ root: ROOT, tracked: trackedFiles(ROOT) }).filter((e) => e.via !== undefined);
+  assert.ok(carried.length >= 1, "POSITIVE CONTROL: no edge in the real tree was found through a const, so the widening matched nothing");
+  const froms = carried.map((e) => e.from);
+  // The two lab tests that read the layer's CLAUDE.md through a const left with the lab (#3505); the one that stays and reads control's `package.json` the same way is the witness.
+  for (const file of ["control-extraction.test.ts"]) {
+    assert.ok(froms.some((from) => from.endsWith(file)), `${file} reads the layer's files through a const and is not found`);
+  }
+  for (const { from, via } of carried) assert.ok(via && via.declaredLine > 0 && via.readLine >= via.declaredLine, `${from}: the declaration and the read are lines of the file`);
+});
+
+test("the real baseline is NON-EMPTY and records the deploy path, so a guard that found nothing is not read as a fenced layer", () => {
+  const baseline = readBaseline(ROOT);
+  assert.ok(existsSync(join(ROOT, BASELINE_PATH)));
+  assert.ok(baseline.length > 0, "the baseline is empty: the scan or the baseline has broken");
+  const froms: string[] = baseline.map((e: { from: string }) => e.from);
+  // The layer's own `launcher-reach.cmd` left with it (#3447); the stand-in beside the stamp's walk is what records that reach until the layer carries one.
+  assert.ok(froms.includes("scripts/test-support/launcher-reach.stand-in.cmd"), "the declaration of what the worker's launchers reach is recorded");
+  assert.ok(froms.some((f) => f.startsWith("packages/control/ansible/")), "the Ansible files that place it are recorded");
+  // The fleet's own reaches left with it (#3504); what is recorded now is the reaches INTO the directory it is laid at, by control and by the tests of both.
+  const intoTheFleet = baseline.filter((e: { to: string }) => e.to.startsWith("packages/worker-fleet"));
+  assert.ok(intoTheFleet.some((e: { from: string }) => e.from.startsWith("packages/control/src/")), "control's reaches into the laid fleet are recorded");
+  assert.ok(intoTheFleet.some((e: { from: string }) => e.from.startsWith("package.json")), "the root scripts that run it by path are recorded");
+});
+
+/** The baseline entries whose `from` is a file INSIDE one of the layers that left first. */
+const insideALayerThatLeft = (entries: { from: string }[]) => entries.filter((e) => DEPARTED_LAYERS.includes(packageOf(e.from) ?? ""));
+
+test("done-when 1, after #3447, #3504 and #3505: no file inside a layer that left is in the baseline, because none is in the tree", () => {
+  // THE CONTROL, over the same function: before the delete this loop refused every launcher the worker reached out by, so it is shown to SEE one.
+  const planted = [{ from: "packages/nvda-worker/src/launcher-reach.cmd" }, { from: "packages/nvda-speech/nvda_speech/x.py" }, { from: "packages/worker-fleet/src/doctor.mjs" }, { from: "packages/lab/src/a.ts" }];
+  assert.deepEqual(insideALayerThatLeft(planted).map((e) => e.from), ["packages/nvda-worker/src/launcher-reach.cmd", "packages/nvda-speech/nvda_speech/x.py", "packages/worker-fleet/src/doctor.mjs", "packages/lab/src/a.ts"]);
+  assert.deepEqual(insideALayerThatLeft(readBaseline(ROOT)), []);
+});
+
+// ------------------------------------------------------------------ the fence for moves 2-4 (#3501): the real baseline
+
+const pairsOf = (entries: { from: string; to: string }[]) => {
+  const counts = new Map<string, number>();
+  for (const { from, to } of entries) {
+    const [a, b] = [packageOf(from), packageOf(to)];
+    if (a !== null && b !== null && a !== b && SPLIT_LAYERS.includes(a) && SPLIT_LAYERS.includes(b)) counts.set(`${a} -> ${b}`, (counts.get(`${a} -> ${b}`) ?? 0) + 1);
+  }
+  return counts;
+};
+
+test("the real baseline names the two directed pairs that remain among worker-fleet, lab and control, and is not empty", () => {
+  const baseline = readBaseline(ROOT);
+  assert.ok(baseline.length > BASELINE_AT_LEAST, `POSITIVE CONTROL: the fence is a baseline of hundreds of edges, not ${baseline.length}`);
+  const pairs = pairsOf(baseline);
+  // Of the six, the two FROM worker-fleet went with its code (#3504) and the two FROM lab with its (#3505); control still reads INTO the directories they are laid at.
+  const expected = SPLIT_LAYERS.flatMap((a) => SPLIT_LAYERS.filter((b) => b !== a).map((b) => `${a} -> ${b}`)).filter((pair) => !pair.startsWith("worker-fleet -> ") && !pair.startsWith("lab -> "));
+  assert.equal(expected.length, DIRECTED_PAIRS_AMONG_THREE - 4);
+  assert.deepEqual([...pairs.keys()].sort(), expected.sort(), "a directed pair with no edge, or an edge outside the six, means the scan or the baseline broke");
+  assert.ok([...pairs.values()].every((n) => n > 0));
+});
+
+test("every baseline entry carries a disposition and a reason, and the word `cut` is a promise with a reason beside it", () => {
+  const baseline = readBaseline(ROOT);
+  assert.ok(baseline.some((e: { disposition: string }) => e.disposition === "cut"), "POSITIVE CONTROL: some edge is promised cut, so the loop below has one to hold to account");
+  for (const entry of baseline) {
+    assert.ok(typeof entry.reason === "string" && entry.reason.trim().length >= REASON_AT_LEAST_CHARS, `${entry.from} -> ${entry.to}: a reason is a sentence, not a tag`);
+  }
+});
+
+test("`moves-with` is a TEST's disposition: it names a path a test lives at, and a declared layer", () => {
+  const moving = readBaseline(ROOT).filter((e: { disposition: string }) => e.disposition.startsWith("moves-with:"));
+  assert.ok(moving.length > 0, "POSITIVE CONTROL: tests are recorded as moving with the code they read");
+  for (const entry of moving) {
+    assert.match(entry.from, TEST_PATH, `${entry.from} is code, and code does not move with a test: cut it, name the checkout or give it a row`);
+    assert.ok(LAYER_PACKAGES.includes(entry.disposition.slice("moves-with:".length)), `${entry.disposition} names no declared layer`);
+  }
+});
+
+/** The code edges that leave worker-fleet for control, lab or nvda-worker, or lab for control. */
+const backEdgesOf = (entries: { from: string; to: string }[]) => entries.filter((e) => !TEST_PATH.test(e.from) && (
+  (packageOf(e.from) === "worker-fleet" && ["control", "lab", "nvda-worker"].includes(packageOf(e.to) ?? "")) || (packageOf(e.from) === "lab" && packageOf(e.to) === "control")));
+
+test("done-when 4, after #3505: no code edge leaves worker-fleet or lab for another layer in the baseline, because neither has a file in the tree", () => {
+  // THE CONTROL, over the same function: it is shown to SEE one of each kind, so an empty answer over the baseline is not a filter that matches nothing.
+  const planted = [{ from: "packages/worker-fleet/src/a.mjs", to: "packages/control/src/b.mjs" }, { from: "packages/lab/src/a.ts", to: "packages/control/src/b.mjs" },
+    { from: "packages/lab/src/a.test.ts", to: "packages/control/src/b.mjs" }, { from: "packages/control/src/a.mjs", to: "packages/lab/src/b.mjs" }];
+  assert.equal(backEdgesOf(planted).length, 2, "the worker-fleet edge and the lab code edge, and neither the lab TEST's nor control's own");
+  assert.deepEqual(backEdgesOf(readBaseline(ROOT)), []);
+});
+
+test("a layer that has LEFT is still read: the host declaration naming agent-org's old directory is an edge, not a tree without one", () => {
+  const edges = findEdges({ root: ROOT, tracked: trackedFiles(ROOT) });
+  assert.ok(edges.some((e) => e.from === ".agent-org/host.json" && e.to === "packages/agent-org"), "the fix for a token naming no package must not hide a declared layer that has departed");
+  assert.ok(!edges.some((e) => e.to.includes("githubcli-archive-keyring")), "and the URL's `/packages/` is read as no package");
+});
+
+// ------------------------------------------------------------------ the command
+
+test("`--check` exits 0 over the real tree, and non-zero, naming both ends, over a tree with a new edge", () => {
+  const real = cli("--check");
+  assert.equal(real.status, 0, real.stderr);
+  assert.match(real.stdout, /baseline agrees/);
+  assert.equal(cli("--check", `--root=${fixture("clean")}`).status, 0, "CONTROL: a clean tree is not refused");
+  const crossing = cli("--check", `--root=${fixture("imports-across")}`);
+  assert.equal(crossing.status, 1);
+  assert.match(crossing.stderr, /NEW EDGE out: packages\/nvda-worker\/src\/x\.mjs -> packages\/other\/src\/x\.mjs/);
+});
+
+test("`--check` over a tree whose only baseline entry names an edge that is gone exits non-zero as STALE", () => {
+  const baseline = JSON.parse(readFileSync(join(fixture("stale-baseline"), BASELINE_PATH), "utf8"));
+  assert.equal(baseline.length, 1, "POSITIVE CONTROL: the fixture's baseline names an edge");
+  assert.deepEqual(edgesOf("stale-baseline"), [], "and the fixture's tree no longer has it");
+  const stale = cli("--check", `--root=${fixture("stale-baseline")}`);
+  assert.equal(stale.status, 1);
+  assert.match(stale.stderr, /STALE ENTRY: packages\/nvda-worker\/src\/x\.mjs -> packages\/other\/src\/x\.mjs/);
+});
+
+test("a mistyped flag is refused rather than run as the default, and no mode is a usage error", () => {
+  assert.notEqual(cli("--chek").status, 0, "an unknown flag must not run the default and report success");
+  assert.equal(cli().status, 2, "no mode is a usage error, not a pass");
+});
