@@ -29,6 +29,10 @@
  * manifest and validate a layer's ref with `LAYER_REF`, which is `lab_ref`'s own pattern. With no layer that
  * declares a `remote`, every one of them is a no-op, which is the state today.
  *
+ * A HOST THAT HAS INSTALLED HOLDS A SEPARATE LAYER LAID, NOT CLONED (#3819): `scripts/lay-layer.mjs` replaces the clone with `src/`
+ * and `.layer-ref`. The lab's and the guests' tasks accept that shape; `layerCheckoutMove` does not need to, because the control
+ * plane's checkout never installs (ADR 0012), so nothing lays there and a missing `.git` still means a missing checkout.
+ *
  * `worker-fleet` does NOT use this: it is published and `control` never is
  * (`worker-fleet-does-not-read-control.test.ts`), so its readers ask the worker package by name instead.
  */
