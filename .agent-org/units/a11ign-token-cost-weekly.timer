@@ -1,0 +1,19 @@
+[Unit]
+# THE CLOCK BEHIND `token-cost.mjs --post` -- #3690, the host half of #3217. See a11ign-token-cost-weekly.service, which
+# holds the retry and the late-start evidence this hour rests on.
+Description=Weekly (Monday) append of the calls-and-dollars reading to the CI-health comment (#3690)
+
+[Timer]
+# MONDAY 12:13 UTC, in UTC: the script reckons the week in UTC days, so a fixed UTC hour reads the same week all year and
+# does not drift at a BST boundary. The comment is due 06:43Z and has appeared up to 8h44m late (15:27Z on 2026-10-05), so
+# the first attempt is 5.5h after the slot and the service retries every 90 minutes until about 22:43Z. :13 keeps it off the
+# top of the hour (#965).
+OnCalendar=Mon *-*-* 12:13:00 UTC
+
+# A HOST ASLEEP AT THE HOUR STILL RUNS ON WAKING. Idempotent per week, so a late catch-up cannot post twice. A catch-up
+# AFTER MONDAY reads the NEXT week's window, whose comment does not exist, and fails visibly through its eight starts.
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

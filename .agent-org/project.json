@@ -45,6 +45,8 @@
       "a11ign-lab-watch.timer",
       "a11ign-regression-board.service",
       "a11ign-regression-board.timer",
+      "a11ign-token-cost-weekly.service",
+      "a11ign-token-cost-weekly.timer",
       "a11ign-weekly-review.service",
       "a11ign-weekly-review.timer"
     ]

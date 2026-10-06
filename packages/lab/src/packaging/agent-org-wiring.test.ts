@@ -85,7 +85,7 @@ const MIN_WORKFLOWS = 5;
 /** lint, typecheck, the unscoped suite, pytest. */
 const RED_JOB_COMMAND_COUNT = 4;
 const MIN_REASON_LENGTH = 20;
-const OWN_UNIT_COUNT = 12;
+const OWN_UNIT_COUNT = 14;
 /** corpus-release, lab-watch and fleet-watch: the own services that spawn `gh`. */
 const MIN_DECLARING_SERVICES = 3;
 const workflowText = (name: string) => read(`${WORKFLOWS}/${name}`);
@@ -673,9 +673,9 @@ test("[40] #2620: the project's own services still name their own host (the scan
     "a timer names no path, and the literal belongs in the project's own units, which is where it is");
 });
 
-test("[41] the 12 units in a11ign's .agent-org/units equal the `units.own` list in its declaration, and none are stray", () => {
+test("[41] the 14 units in a11ign's .agent-org/units equal the `units.own` list in its declaration, and none are stray", () => {
   const { own } = unitsDeclaration();
-  assert.equal(own.length, OWN_UNIT_COUNT, "POSITIVE CONTROL: twelve units are declared, so the equality below is not two empty lists");
+  assert.equal(own.length, OWN_UNIT_COUNT, "POSITIVE CONTROL: fourteen units are declared, so the equality below is not two empty lists");
   assert.deepEqual(unitNames(), [...own].sort());
 });
 
@@ -686,6 +686,7 @@ test("[42] #2620: NO UNIT IS RENAMED -- a11ign's own units still carry the names
     "a11ign-fleet-watch.service", "a11ign-fleet-watch.timer",
     "a11ign-lab-watch.service", "a11ign-lab-watch.timer",
     "a11ign-regression-board.service", "a11ign-regression-board.timer", // #3328: boards the outsider job's `regression` rows
+    "a11ign-token-cost-weekly.service", "a11ign-token-cost-weekly.timer", // #3690: the weekly calls-and-dollars reading's clock
     "a11ign-weekly-review.service", "a11ign-weekly-review.timer", // #3319: the weekly outsider review's clock
   ]);
 });
@@ -779,7 +780,7 @@ test("[49] #2000: which own timers run their service at `host:install`, and whic
   assert.deepEqual(requiring, ["a11ign-corpus-release-nightly.timer", "a11ign-corpus-snapshot.timer"],
     "`Requires=` in a timer's [Unit] is an ordinary start dependency, so `enable --now` starts the service too, once, at install time. Adding "
     + "another entry means that service runs during `host:install`: say so in the unit and check it is a run you want unattended");
-  assert.deepEqual(ownTimers().filter((name) => !requiring.includes(name)).sort(), ["a11ign-fleet-watch.timer", "a11ign-lab-watch.timer", "a11ign-regression-board.timer", "a11ign-weekly-review.timer"],
+  assert.deepEqual(ownTimers().filter((name) => !requiring.includes(name)).sort(), ["a11ign-fleet-watch.timer", "a11ign-lab-watch.timer", "a11ign-regression-board.timer", "a11ign-token-cost-weekly.timer", "a11ign-weekly-review.timer"],
     "the watchers `--post`, so a firing at every `host:install` would put a comment on #928 each time; they are activated by name alone ON PURPOSE. "
     + "The weekly review files a row, which is idempotent by ISO week but still not something an install should do (#3319). The regression board sweeps every quarter hour and would only anticipate its first fire (#3328)");
 });
