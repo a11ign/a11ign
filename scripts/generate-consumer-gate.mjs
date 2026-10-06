@@ -379,12 +379,12 @@ function buildWorkflowHeader() {
  * is `B`, never `A`, for the identical structural reason a committed file can never equal its own HEAD.
  * Exact equality here would refuse every dispatch, forever, which is worse than the gap it replaces.
  *
- * SO: is the pin an ANCESTOR of `github.sha`, AND has nothing that would CHANGE the generated content
- * (README.md, this generator) landed since the pin -- rather than "is it identical". That is
+ * SO: is the pin an ANCESTOR of `github.sha`, AND does the committed file still match what the generator
+ * produces now (`--check`, sha aside, #3788) -- rather than "is it identical". That is
  * satisfiable by the normal regenerate-then-commit-then-dispatch sequence (the pin is the immediate
- * parent, an ancestor by definition, and nothing else has landed yet), tolerates ordinary commits
- * landing on OTHER files between regeneration and dispatch, and still refuses the real defect class:
- * a pin left behind while README.md or the generator itself moved on. Two separate refusals, because
+ * parent, an ancestor by definition), tolerates ordinary commits landing on any files between
+ * regeneration and dispatch, and still refuses the real defect class:
+ * a file left behind while the fence or the generator's output moved on. Two separate refusals, because
  * "not in this history at all" and "in this history but stale relative to a real change" need opposite
  * fixes and must not print the same word.
  *
@@ -399,8 +399,8 @@ function buildWorkflowHeader() {
  * does not (the whole point of a consumer-shaped gate). `check-pin` is generator-added infrastructure,
  * never something a reader copies from README.md, so rule #1 (nothing added the document doesn't give)
  * does not apply to it -- the same reasoning that already justifies `needs: [check-pin]` on the
- * extracted job and `verify-report` existing at all. `fetch-depth: 0` because the ancestor/diff checks
- * below need real history, not the single-commit shallow clone `actions/checkout` defaults to.
+ * extracted job and `verify-report` existing at all. `fetch-depth: 0` because the ancestry check
+ * below needs real history, not the single-commit shallow clone `actions/checkout` defaults to.
  *
  * @param {string} pinnedSha
  * @returns {string}
@@ -422,15 +422,22 @@ function buildCheckPinJob(pinnedSha) {
     `            echo "::error::scripts/generate-consumer-gate.mjs) against a commit in this history"`,
     "            exit 1",
     "          fi",
-    "      - name: Refuse a pin that predates a change to what it pins",
+    // #3788: THE QUESTION IS "WOULD REGENERATING CHANGE THIS FILE", NOT "DID A FILE THAT FEEDS THE GENERATOR
+    // CHANGE". This step used to refuse any edit to README.md or the generator since the pin, and it re-staled
+    // the pin three times (#3140, #3774, #3788) on edits that moved nothing the file is built from: #3504's was
+    // prose outside the Quickstart fence. A path is only a proxy for the content, and an over-broad one cannot be
+    // satisfied in one pull request, since the pin names a commit that predates the PR's own edit. `--check` asks
+    // the content question directly (sha aside, #558 part 1), so a pull request that changes the fence passes by
+    // regenerating in the same commit, and one that does not touch it never needs a pin-only follow-up.
+    // It needs the workspace installed (the generator imports `@a11ign/screenreader-fleet`), hence the setup.
+    "      - uses: pnpm/action-setup@v4",
+    "      - uses: actions/setup-node@v7",
+    "        with: { node-version: 22, cache: pnpm }",
+    "      - run: pnpm install --frozen-lockfile",
+    "      - name: Refuse a file that no longer matches what README.md's documented workflow produces",
     "        run: |",
-    // #939: `--no-renames`, so a rename of either pinned file out of the pathspec is not missed. Inline
-    // rather than through `changed-files.mjs`: this step runs before `npm ci`, with no checkout of scripts
-    // guaranteed beyond the workflow itself.
-    `          changed=$(git diff --name-only --no-renames ${pinnedSha} "\${{ github.sha }}" -- README.md scripts/generate-consumer-gate.mjs)`,
-    '          if [ -n "$changed" ]; then',
-    `            echo "::error::consumer-gate.yml is pinned to ${pinnedSha}, but this changed since:"`,
-    '            echo "::error::$changed"',
+    "          if ! node scripts/generate-consumer-gate.mjs --check; then",
+    `            echo "::error::consumer-gate.yml (pinned to ${pinnedSha}) does not match what README.md's Quickstart fence produces"`,
     '            echo "::error::regenerate (node scripts/generate-consumer-gate.mjs) and dispatch again"',
     "            exit 1",
     "          fi",
