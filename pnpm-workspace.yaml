@@ -3,6 +3,12 @@
 
 packages:
   - "packages/*"
+  # A LAYER'S CLONE IS NOT A MEMBER OF THE CORE (#3760). packages/control/layers.json declares layers that live in their own
+  # repository and are cloned at their `path` on a guest, the lab host and any operator worktree that runs a layer job; `packages/*`
+  # would make that clone a workspace project, and `pnpm install --frozen-lockfile` at the core root then fails with
+  # ERR_PNPM_OUTDATED_LOCKFILE (the lockfile records the core's projects only). pnpm reads this file as static YAML, so the entry is
+  # written here and `pnpm-workspace.test.ts` derives the list from layers.json: a layer added there without its line turns it red.
+  - "!packages/nvda-worker"
 
 # WHY THIS IS ON: internal dependencies are pinned "0.0.0", not `workspace:*`, because npm cannot read the
 # `workspace:` protocol and `npm ci` had to keep working while both lockfiles existed. It still is the spelling: `changeset version` writes

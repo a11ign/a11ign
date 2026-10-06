@@ -58,15 +58,20 @@ const read = (root: string, path: string): string => readFileSync(join(root, pat
 
 // ---- 1. neither package is in the workspace -----------------------------------------------------------------
 
-/** The directories `pnpm-workspace.yaml`'s `packages:` globs match. Only the `dir/*` shape is read, which is the only one it holds. */
+/** The directories `pnpm-workspace.yaml`'s `packages:` globs match, less the ones a `!dir` entry excludes (#3760: a layer's clone is not a member).
+ * Only the `dir/*` and `!dir` shapes are read, which are the only ones it holds. */
 function workspaceDirectories(root: string): string[] {
   const { packages } = parse(read(root, "pnpm-workspace.yaml")) as { packages?: string[] };
   assert.ok(Array.isArray(packages) && packages.length > 0, "pnpm-workspace.yaml names no packages: the reader is looking at the wrong file");
-  return packages.flatMap((glob) => {
+  const excluded = packages.filter((entry) => entry.startsWith("!")).map((entry) => {
+    assert.match(entry, /^![\w./-]+$/, `${entry} is an exclusion shape this reader does not expand: widen it before trusting a pass`);
+    return entry.slice(1);
+  });
+  return packages.filter((entry) => !entry.startsWith("!")).flatMap((glob) => {
     assert.match(glob, /^[\w./-]+\/\*$/, `${glob} is a glob shape this reader does not expand: widen it before trusting a pass`);
     const parent = glob.slice(0, -2);
     return readdirSync(join(root, parent), { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => posix.join(parent, entry.name));
-  });
+  }).filter((directory) => !excluded.includes(directory));
 }
 
 function manifestName(root: string, directory: string): string | null {
@@ -113,6 +118,10 @@ test("POSITIVE CONTROL: a workspace holding either directory, or either name und
   });
   withFixture({ ...files, "packages/nvda-worker/package.json": "{}", "packages/renamed/package.json": "{}" }, (root) => {
     assert.deepEqual(workspaceRefusals(root), ["packages/nvda-worker is still a workspace directory"], "the directory alone is enough");
+  });
+  // The other direction (#3760): the layer's clone sits at that path and `!packages/nvda-worker` keeps it out, so it is not a member.
+  withFixture({ ...files, "pnpm-workspace.yaml": 'packages:\n  - "packages/*"\n  - "!packages/nvda-worker"\n' }, (root) => {
+    assert.deepEqual(workspaceRefusals(root), ["packages/renamed still carries the name @a11ign/nvda-speech"], "an excluded directory is not a member");
   });
 });
 
