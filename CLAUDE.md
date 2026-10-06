@@ -2,8 +2,7 @@
 
 ## Where else to look
 
-**THE POPULATION-SPECIFIC RULES ARE IN NESTED `CLAUDE.md` FILES (#1240)**, so a session pays only for the
-directory it works in. [What moved →](docs/operational-lessons.md#the-nested-claudemd-split)
+**THE POPULATION-SPECIFIC RULES ARE IN NESTED `CLAUDE.md` FILES (#1240).** [What moved →](docs/operational-lessons.md#the-nested-claudemd-split)
 
 | | |
 |---|---|
@@ -28,7 +27,8 @@ a11y-witness drives a **real screen reader (NVDA)** through real navigation, **a
 rule/visual layer) rather than instead of it. See `README.md`, `PLAN.md`.
 
 **A finding is either ASSERTED or REFERRED, and knowing which is decided by which layer owns the subtype.**
-The counts are readings at a moment: re-derive before quoting. README's claim block carries the current one.
+Measured 2026-09-24 on the calibration set at protocol 21: **0 criteria asserted wrongly, 395 referred** — a reading at
+a moment, so re-derive before quoting. README's claim block carries the current statement.
 [The readings and the superseded 2026-08-24 figure →](docs/operational-lessons.md#what-asserted-versus-referred-was-measured-at)
 
 | | |
@@ -41,8 +41,6 @@ outranks the screen-reader layer's `cantTell` only — **asserted BY axe-core an
 **A DOM rule may override silence, not a contrary lived reading.** Pinned row by row in `outcomes.test.ts`
 (`besideTheRuleLayer`). [The precedence table →](docs/operational-lessons.md#axe-core-beside-the-screen-reader-layer)
 ## Code conventions
-
-The applicable subset of *Clean Code* (Martin), in two halves, enforced differently.
 
 **Mechanical — enforced by ESLint (`pnpm run lint`); errors block CI:**
 - Small functions doing one thing at one level of abstraction; the top-level reads as a top-down narrative (the Stepdown Rule). Gated by `max-lines-per-function` (70), `complexity` (15), `max-depth` (3).
