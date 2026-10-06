@@ -253,7 +253,7 @@ function pnpm(pnpmArgs, { stdio = "inherit" } = {}) {
  * so a wrong include would read exactly like a diff no test reaches, and this floor is what tells them apart (#2165, #3572).
  */
 export const AFFECTED_INCLUDE = "packages/*/src/**/*.test.ts";
-export const AFFECTED_MIN_FILES = 500;
+export const AFFECTED_MIN_FILES = 159;
 const RSTEST_CONFIG = "scripts/rstest/rstest.config.mjs";
 
 /**

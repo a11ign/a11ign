@@ -23,7 +23,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
 
-const REPO = fileURLToPath(new URL("../../../../", import.meta.url));
+const REPO = fileURLToPath(new URL("../../../", import.meta.url));
 const WORKFLOWS = join(REPO, ".github/workflows");
 
 type Step = { uses?: string; run?: string; with?: Record<string, unknown> };
