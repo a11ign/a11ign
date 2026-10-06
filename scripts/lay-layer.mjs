@@ -104,8 +104,29 @@ export function layingPlan(manifest, lockfile, layer) {
 const git = (args, cwd) => execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"], env: sandboxGitEnv() }).trim();
 
 /**
+ * Why a directory that holds a `.git` is NOT disposable, or null when it is: `bootstrap-control-plane.sh` and `deploy.yml` once made the layer's path a
+ * clone, and a host that still has one must migrate to the laid copy once (#3826 item 4), which is only safe when nothing in it exists nowhere else.
+ * Two things are work: a tree that differs from its commit (untracked files included), and a commit on a local ref that no remote ref holds. A git
+ * that cannot answer is "cannot tell", never "disposable": a `.git` it does not open would make it read the repository ABOVE, which is this one.
+ * @param {string} target
+ * @returns {string | null}
+ */
+function whyNotDisposable(target) {
+  try {
+    if (realpathSync(git(["rev-parse", "--show-toplevel"], target)) !== realpathSync(target)) return "git does not open it as a repository of its own, so nothing says it is disposable";
+    const reasons = [];
+    if (git(["status", "--porcelain"], target)) reasons.push("it has uncommitted changes");
+    if (git(["rev-list", "--max-count=1", "HEAD", "--branches", "--not", "--remotes"], target)) reasons.push("it has unpushed commits (on no remote ref)");
+    return reasons.length ? reasons.join(" and ") : null;
+  } catch (cause) {
+    throw new Error(`NOT LAID: ${target} holds a .git and git could not say whether it is disposable`, { cause });
+  }
+}
+
+/**
  * Put the layer's directory at `plan.path` under `root`, at `plan.tag`. Idempotent: a directory laid at the same tag is left alone; one laid at
- * another is replaced, since it is a copy and not work.
+ * another is replaced, since it is a copy and not work. A git clone is replaced only when it is disposable (#3836), and otherwise REFUSED, naming
+ * the path and why: `pnpm install` runs this, and a clone with work in it is not a copy.
  * @param {string} root
  * @param {{ remote: string, tag: string, path: string, lays: string[] }} plan
  */
@@ -117,6 +138,8 @@ export function lay(root, plan) {
   // Every part the declaration names, not `src/` alone: a declaration that gained a part at the same tag must lay it, not say "already at".
   const laidWhole = plan.lays.every((part) => existsSync(join(target, part)));
   if (existsSync(refFile) && laidWhole && readFileSync(refFile, "utf8").trim() === plan.tag) return `already at ${plan.tag}`;
+  const unsafe = existsSync(join(target, ".git")) ? whyNotDisposable(target) : null;
+  if (unsafe) throw new Error(`NOT LAID: ${target} is a git clone and ${unsafe}; push or discard that work, or remove the directory, and run this again`);
   const scratch = mkdtempSync(join(tmpdir(), "lay-layer-"));
   try {
     git(["-c", "advice.detachedHead=false", "clone", "--quiet", "--depth", "1", "--branch", plan.tag, plan.remote, scratch], root);
