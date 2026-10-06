@@ -7,8 +7,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 
+import { layerFile } from "../../../guards/src/layer-file.mjs";
 import { LEAK_EXIT } from "./leak-detector.js";
 import {
   LeakCheckUsageError, credentialsFrom, examine, examineRaw, examineWritten, parseLeakCheckArgs, redactionCountIn,
@@ -210,10 +211,10 @@ const isComment = (line: string): boolean => /^\s*(\/\/|\/\*|\*)/.test(line);
 
 interface WriteSite { file: string; kind: "call" | "import"; line: number }
 
-/** Every write-capable call, and every import of a write-capable name, in the given files (paths relative to the repo). */
+/** Every write-capable call, and every import of a write-capable name, in the given files (paths relative to the repo, or absolute for the worker layer's). */
 function writeSitesIn(files: readonly string[], root: string): WriteSite[] {
   return files.flatMap((file) => {
-    const text = readFileSync(join(root, file), "utf8");
+    const text = readFileSync(isAbsolute(file) ? file : join(root, file), "utf8");
     const calls = text.split("\n").flatMap((line, index) => (!isComment(line) && CALL.test(line) ? [{ file, kind: "call" as const, line: index + 1 }] : []));
     return FS_IMPORT.test(text) ? [...calls, { file, kind: "import" as const, line: 0 }] : calls;
   });
@@ -222,7 +223,8 @@ function writeSitesIn(files: readonly string[], root: string): WriteSite[] {
 /** The auth directory alone holds more than this many non-test sources; fewer scanned means the walk missed the population. */
 const MIN_SCANNED_FILES = 10;
 const AUTH_DIR = "packages/cli/src/auth";
-const WORKER_AUTH_FILES = ["packages/nvda-worker/src/auth-flow.mjs", "packages/nvda-worker/src/capture-auth.mjs"];
+/** The worker layer's login code, BY PACKAGE NAME (#3447): the layer is installed from the registry, so these are the published files, absolute. */
+const WORKER_AUTH_FILES = ["src/auth-flow.mjs", "src/capture-auth.mjs"].map((rel) => layerFile("@a11ign/screenreader-worker", rel, { from: REPO }));
 const inspected = (root: string): string[] => [
   ...readdirSync(join(root, AUTH_DIR)).filter((name) => /\.(ts|mjs)$/.test(name) && !name.endsWith(".test.ts")).map((name) => `${AUTH_DIR}/${name}`),
   ...WORKER_AUTH_FILES,

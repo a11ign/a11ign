@@ -20,6 +20,7 @@ import {
   RESOLUTION, OVERRIDE_ENV, worktreeResolution, resolutionLine, classifyResolvedPath, suiteStartVerdict,
 } from "./worktree-resolution.mjs";
 import { toolPath } from "../../../scripts/agent-org-newest-tag.mjs";
+import { memberScopeLister } from "./assert-glob-not-empty.mjs";
 
 const REPO = fileURLToPath(new URL("../../../", import.meta.url));
 const PACKAGE = "agent-org";
@@ -194,6 +195,42 @@ test("#2218: a stale COPY refuses too -- inside the tree is not the tree's sourc
     const tree = checkout(base, "wt-copy");
     mkdirSync(join(tree, "node_modules", "@a11ign", PACKAGE), { recursive: true });
     assert.equal(suiteStartVerdict(tree, { env: {} }).action, "refuse");
+  });
+});
+
+test("#3447: the floor asks only about the workspace's members, so a registry copy of a package that LEFT is not a stale copy and a member's still is", () => {
+  withScratch((base) => {
+    const tree = checkout(base, "wt-registry");
+    linkScope(tree, join(tree, "packages", PACKAGE));
+    // `screenreader-worker` has no directory and no manifest name under packages/: the registry copy IS its source.
+    const left = join(tree, "node_modules", "@a11ign", "screenreader-worker");
+    mkdirSync(left, { recursive: true });
+    writeFileSync(join(left, "index.mjs"), "// installed from the registry\n");
+    const asked = (): ReturnType<typeof suiteStartVerdict> => suiteStartVerdict(tree, { env: {}, list: memberScopeLister(tree) });
+    assert.equal(suiteStartVerdict(tree, { env: {} }).action, "refuse", "CONTROL: asked about every entry, the guard refuses this tree, so the lister is what changes the answer");
+    assert.equal(asked().action, "proceed");
+    // A package that is no member but is LINKED to another checkout is the broken shape whatever it is called, and is still asked about.
+    const elsewhere = join(base, "other-checkout");
+    mkdirSync(elsewhere, { recursive: true });
+    symlinkSync(elsewhere, join(tree, "node_modules", "@a11ign", "not-a-member"));
+    assert.equal(asked().action, "refuse", "a non-member that reads another checkout is not excused by not being a member");
+    rmSync(join(tree, "node_modules", "@a11ign", "not-a-member"));
+    // THE OTHER DIRECTION: the same copy shape for a package the workspace DOES hold still refuses. A member's directory and its
+    // published name differ (`worker-fleet` is `@a11ign/screenreader-fleet`), so a name that only the manifest knows must count too.
+    // A fixture directory, not the real one: naming a layer's own path here would make this test an edge out of the guards.
+    mkdirSync(join(tree, "packages", "renamed-member"), { recursive: true });
+    writeFileSync(join(tree, "packages", "renamed-member", "package.json"), JSON.stringify({ name: "@a11ign/by-manifest-name" }));
+    mkdirSync(join(tree, "node_modules", "@a11ign", "by-manifest-name"), { recursive: true });
+    assert.equal(asked().action, "refuse");
+  });
+});
+
+test("#3447: a tree with no packages/ directory is asked about in full -- silence never grants the exemption", () => {
+  withScratch((base) => {
+    const tree = checkout(base, "wt-no-packages");
+    mkdirSync(join(tree, "node_modules", "@a11ign", "screenreader-worker"), { recursive: true });
+    rmSync(join(tree, "packages"), { recursive: true, force: true });
+    assert.equal(suiteStartVerdict(tree, { env: {}, list: memberScopeLister(tree) }).action, "refuse");
   });
 });
 

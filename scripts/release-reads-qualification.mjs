@@ -47,10 +47,11 @@ export const QUALIFICATION_CONTEXT = "qualification";
 // `toolchain` is runner-only by `orchestrator`'s reading (#3578, comment of 2026-10-05T02:30Z): every reader of it is test or
 // build tooling and none is in `gate:stability`'s closure. The limit: template-string dynamic imports are not followed, and if a
 // fleet-side job ever runs its tests through `@a11ign/toolchain`'s rstest config the answer changes.
-export const FLEET_GATED_PACKAGES = ["lab", "worker-fleet", "evidence", "nvda-worker", "control"];
-// Gated by runner-only or corpus-only stages that need no worker. `nvda-speech` is private and never published.
+export const FLEET_GATED_PACKAGES = ["lab", "worker-fleet", "evidence", "control"];
+// Gated by runner-only or corpus-only stages that need no worker. No private package is left in the workspace: `nvda-speech`, the last, left with the worker layer (#3447).
 export const RUNNER_ONLY_PACKAGES = ["scorer", "judge", "guards", "cli", "toolchain"];
-export const PRIVATE_PACKAGES = ["nvda-speech"];
+/** @type {string[]} */
+export const PRIVATE_PACKAGES = [];
 
 // The wall-clock after which a wait is a problem to raise rather than a state to sit in: #3132's worst observed time
 // to a CLEARED verdict -- 46:15 to the first verdict plus 45:02 for one re-run = 91:17, rounded up. An observed

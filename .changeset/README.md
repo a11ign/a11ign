@@ -25,7 +25,7 @@ patches, four as minors and **three as no release at all**. All fourteen are maj
 | package | major means |
 |---|---|
 | `@a11ign/scorer` | **any retrain, any threshold change, any encoder swap.** The weights ARE the API: a consumer's build goes from passing to failing with no code change. Record the training-report provenance — corpus, encoder hash, thresholds — in the entry, because "which model scored this" is what a disputed finding turns on. |
-| `@a11ign/nvda-worker` | a wire-protocol change a host cannot ignore. **Not** the same as `CAPTURE_PROTOCOL_VERSION`, which is a capture-cache key: a package major must not force a recapture, and a protocol bump must not wait for a major. |
+| `@a11ign/screenreader-worker` (released from its own repository since #3447; the row stays because the rule is the package's) | a wire-protocol change a host cannot ignore. **Not** the same as `CAPTURE_PROTOCOL_VERSION`, which is a capture-cache key: a package major must not force a recapture, and a protocol bump must not wait for a major. |
 | everything else | ordinary semver on the exported API. |
 
 A 40-line refactor of `capture-core.mjs` that `evidence:check` reports as SAME is a **patch**, however
@@ -41,7 +41,7 @@ reached the release gate; the gate refused at that run; the versions are read fr
 ## Config choices worth knowing
 
 - **`"linked": []`** — every package versions independently, which is the payoff ADR 0004's boundaries
-  were drawn for: a change touching only `nvda-worker` publishes `nvda-worker` and nothing else.
+  were drawn for: a change touching only `evidence` publishes `evidence` and nothing else.
 - **`"access": "public"`** — and it has to stay that way. Every published package here is scoped
   (`@a11ign/*`) and npm refuses a scoped publish under any other value, so this is load-bearing now
   rather than protective. `release.yml`'s publish step reads this file back and refuses on anything

@@ -56,7 +56,7 @@ import { stampEnvironmentFiles } from "../../../scripts/test-support/stamp-files
 // request. The declaration is ENFORCED rather than trusted: `declareWalkScope` observes what this
 // file actually reads and fails it here if anything lands outside the scope -- so a scope that is
 // too narrow is loud, never a guard that silently stopped running.
-export const WALK_SCOPE = ["packages/control","packages/nvda-worker","packages/worker-fleet"];
+export const WALK_SCOPE = ["packages/control","packages/worker-fleet","scripts/test-support"];
 await declareWalkScope(import.meta.url);
 
 const ROLE = fileURLToPath(new URL("../../control/ansible/roles/worker/", import.meta.url));

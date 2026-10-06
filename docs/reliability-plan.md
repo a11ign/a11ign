@@ -462,11 +462,11 @@ had been written. `release:provenance` still reports `CHANGELOG absent, so nothi
 to carry, `absent (never published)`, was a conclusion the check had no instrument for, and **the next
 sentence of this very paragraph is the counter-example**: `release.yml` ran `release:version` inside the
 job and nothing committed the result back, so the manifests kept reading `0.0.0` — until #3347 brought the four the
-registry holds to its number. **Four of the seven versioned manifests read `0.1.0`**, the version the registry holds
-(`a11ign`, `@a11ign/evidence`, `@a11ign/judge`, `@a11ign/scorer`), and the three never published
-(`@a11ign/screenreader-fleet`, `@a11ign/screenreader-worker`, `@a11ign/toolchain`) still read `0.0.0` (#3126 owns
-whether the first two move; `@a11ign/toolchain` joined under #3578 and its first publish is that row's). `@a11ign/documents` is the seventh no longer: it publishes from its own repository and `a11ign` takes it by
-range (#3125). The seven are the public ones under `packages/`, which are exactly the set `changeset version`
+registry holds to its number. **Four of the six versioned manifests read `0.1.0`**, the version the registry holds
+(`a11ign`, `@a11ign/evidence`, `@a11ign/judge`, `@a11ign/scorer`), and the two never published
+(`@a11ign/screenreader-fleet`, `@a11ign/toolchain`) still read `0.0.0` (#3126 owns
+whether the first moves; `@a11ign/toolchain` joined under #3578 and its first publish is that row's). `@a11ign/documents` (#3125) and `@a11ign/screenreader-worker` (#3447) are no longer among them: each publishes from its own repository and `a11ign` takes them by
+range or from the registry. The six are the public ones under `packages/`, which are exactly the set `changeset version`
 writes while `.changeset/config.json` sets `privatePackages.version` to `false`. Every
 changeset that publish consumed is still in `.changeset/` (#1824; `release-commit-version-bump.mjs` fixes
 it and no real dispatch has exercised it yet).

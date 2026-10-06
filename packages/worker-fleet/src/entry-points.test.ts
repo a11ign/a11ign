@@ -379,7 +379,6 @@ const KNOWN_PLAIN_ENTRY_GUARDS: readonly string[] = Object.freeze([
   "packages/lab/src/training/preflight-screenreader-dataset.mjs",
   "packages/lab/src/training/repeat-capture.mjs",
   "packages/lab/src/training/wait-for-capture.mjs",
-  "packages/nvda-worker/src/server.mjs",
   "packages/worker-fleet/src/fleet-env.mjs",
   "packages/worker-fleet/src/guest-run.mjs",
   "packages/worker-fleet/src/normalise-fleet.mjs",
@@ -557,27 +556,10 @@ test("every declared bin's entry-point guard survives being reached through a sy
   assert.ok(sources.length >= 6, `only found ${sources.length} declared bin sources; the discovery is `
     + "broken, not the codebase clean");
 
-  // `a11ign-nvda-worker` is Windows-only by ADR 0001, and npm's Windows bin shim is a `.cmd`/`.ps1` wrapper
-  // that does not depend on a shebang or a symlink the way POSIX's does. It carries the identical pattern
-  // and should still be fixed, but `server.mjs` is a capture-path file held under this repo's own
-  // sequencing rule (anything touching server.mjs/capture-core.mjs/capture-probes.mjs/capture-setup.mjs/
-  // worker-files.mjs waits for the in-flight recapture) — tracked, not silently exempted.
-  //
-  // #1102 — THE SENTENCE THAT USED TO BE HERE WAS FALSE AND IS REMOVED RATHER THAN REWORDED. It read
-  // "so this exposure is real on every platform this repo actually ships the bin FOR except this one",
-  // which assumes npm ships this bin only to Windows. **It does not: the manifest declares no `os`, so
-  // npm installs it on macOS and Linux, links a POSIX symlink, and this guard's omission of `realpathSync`
-  // makes `main()` never run — the server exits 0 with no output.** ADR 0001 is a design record; `os` is
-  // the field npm reads, and nothing in the manifest carries the claim.
-  //
-  // The obvious remedy is not available: measured 2026-09-12 in an isolated clone, a non-matching `os` or
-  // `cpu` on ANY workspace member fails `npm install` for the WHOLE workspace with EBADPLATFORM -- so
-  // declaring `"os": ["win32"]` here would break every developer Mac and CI's ubuntu-latest. The absence
-  // is now asserted, with that measurement, in `published-manifest-policy.test.ts`, which also pins that
-  // THIS exemption exists while the manifest carries no platform claim -- the two facts asserted together,
-  // which is what neither file could do alone and why the false sentence survived review.
-  const exempt = new Set(["packages/nvda-worker/src/server.mjs"]);
-  const jsSources = sources.filter((s) => !exempt.has(s) && /\.(mjs|ts)$/.test(s));
+  // `a11ign-nvda-worker`'s bin was exempt here while it lived in this workspace (#1102: Windows-only by ADR 0001, yet the
+  // manifest carried no `os`, so npm linked it on POSIX too). It left with the worker (#3447): the registry copy is that
+  // repository's to guard, and nothing under `packages/` here declares it any more.
+  const jsSources = sources.filter((s) => /\.(mjs|ts)$/.test(s));
 
   const vulnerable = jsSources.filter((path) => {
     const src = readFileSync(`${REPO}${path}`, "utf8");

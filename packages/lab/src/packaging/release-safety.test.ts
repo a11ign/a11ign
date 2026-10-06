@@ -150,8 +150,8 @@ test("the workspaces lockfile trap is handled", () => {
 
 test("every package Changesets would publish is one we mean to publish", () => {
   // A package that becomes public by accident is as bad as a publish by accident. `lab` ships nothing by
-  // design — what ships is its output — and `nvda-speech` is internal.
-  for (const name of ["lab", "nvda-speech"]) {
+  // design — what ships is its output. (`nvda-speech` left with the worker in #3447.)
+  for (const name of ["lab"]) {
     const pkg = JSON.parse(readFileSync(resolve(REPO, `packages/${name}/package.json`), "utf8"));
     assert.equal(pkg.private, true, `packages/${name} must stay private or Changesets will version it`);
   }

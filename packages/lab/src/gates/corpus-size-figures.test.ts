@@ -98,10 +98,17 @@ import { REPO_ROOT } from "../dataset-paths.mjs";
 const GUARDED_2155 = [
   "packages/lab/src/training/README.md",
   "packages/lab/src/training/capture-cache.mjs",
-  "packages/nvda-worker/CLAUDE.md",
   "packages/cli/src/cli.ts",
   "packages/control/src/fleet-status.mjs",
 ];
+
+/**
+ * #2155's Region as it stood at `d9521699e`: the four above plus `packages/nvda-worker/CLAUDE.md`, which left this
+ * repository with the worker (#3447) and so cannot be GUARDED any more. `CONTROL ON REAL HISTORY` reads the old text out of
+ * git, where that file still exists, so the control keeps its ten figures and its 9-of-10 reading rather than being quietly
+ * weakened to nine. A population the guard no longer owns is still the population the control was measured on.
+ */
+const REGION_AT_BASE_2155 = [...GUARDED_2155, "packages/nvda-worker/CLAUDE.md"];
 
 /**
  * #2244: THE DEPLOY GUARDS AND THEIR NEIGHBOURS -- what #2155's five files did not reach. Eight files, each
@@ -291,9 +298,9 @@ test("the guarded list reaches no dated record -- nothing under docs/, and nothi
     "#2155's Region deliberately excludes docs/ and the ADRs: their 2,122s are records of what a past "
     + "decision cost, and a guard that demanded an as-of date on them would be asking history to restate "
     + `itself. Found: ${strays.join(", ")}`);
-  const REGION_FILES_2155 = 5;
+  const REGION_FILES_2155 = 4;
   assert.equal(GUARDED_2155.length, REGION_FILES_2155,
-    "#2155's Region names five existing files; a sixth is a deliberate edit here, not a glob's doing");
+    "#2155's Region names four files that still exist (its fifth, nvda-worker/CLAUDE.md, left in #3447); a fifth is a deliberate edit here, not a glob's doing");
   const REGION_FILES_2244 = 8;
   assert.equal(GUARDED_2244.length, REGION_FILES_2244,
     "#2244's Region adds eight existing files (its ninth is this one, which is not self-scanned); a ninth "
@@ -327,7 +334,7 @@ test("CONTROL ON REAL HISTORY: 9 of d9521699e's 10 figures are flagged", (t) => 
     t.skip(`${BASE} is not in this checkout (a shallow clone). Not run, and not counted as a pass.`);
     return;
   }
-  const blobs = GUARDED_2155.map((rel) => ({ rel, text: git("show", `${BASE}:${rel}`) }));
+  const blobs = REGION_AT_BASE_2155.map((rel) => ({ rel, text: git("show", `${BASE}:${rel}`) }));
   const found = blobs.flatMap(({ rel, text }) => flagged(rel, text));
   const count = population(blobs);
   assert.equal(count, FIGURES_AT_BASE, "the population at that commit is 10 corpus-size figures");

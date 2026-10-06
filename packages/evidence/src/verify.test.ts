@@ -2,6 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { layerFile } from "../../guards/src/layer-file.mjs";
 import {
   captureDoubt, captureHasSubstance, captureIsSelfConsistent, captureMentionsTitle,
   captureRanRequestedProbes, probeStates, sweepCompleteness, captureReachedThePage, domCensus, pageCensus,
@@ -1183,8 +1184,7 @@ test("#30: the OBJECTION'S OWN EXAMPLE — a search form to its results page is 
   // `true` here would look checked and examine nothing, which is the shape this repo keeps paying for --
   // so this reads the real source. If someone widens `sameDocument` on the strength of this change, the
   // comparison below stops matching and this test says so.
-  const browserSession = readFileSync(
-    new URL("../../nvda-worker/src/browser-session.mjs", import.meta.url), "utf8");
+  const browserSession = readFileSync(layerFile("@a11ign/screenreader-worker", "src/browser-session.mjs", { from: import.meta.dirname }), "utf8");
   assert.match(browserSession, /return samePath\(actual\.pathname, expected\.pathname\) && actual\.search === expected\.search;/,
     "`sameDocument` must still compare `search` EXACTLY -- this fix deliberately does not touch it, because "
     + "a search results page really is a different page to measure");

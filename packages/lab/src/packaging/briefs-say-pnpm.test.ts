@@ -26,7 +26,6 @@ const REGION = [
   "CLAUDE.md",
   ".github/CLAUDE.md",
   "packages/lab/CLAUDE.md",
-  "packages/nvda-worker/CLAUDE.md",
   "packages/control/CLAUDE.md",
   ".claude/rules",
 ] as const;

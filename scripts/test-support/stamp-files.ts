@@ -2,7 +2,7 @@
  * The provision stamp's `$ENVIRONMENT_FILES`, as the stamp itself resolves it (ADR 0039 item 6d, #3397).
  *
  * Two of the five entries are READ by the stamp -- the layer's `run-server.cmd` from `layers.json`, the
- * foreground-lock script from the layer's `launcher-reach.cmd` -- so a test that parsed only the quoted
+ * foreground-lock script from the layer's `launcher-reach.cmd` (a stand-in here, #3447) -- so a test that parsed only the quoted
  * lines would see three. This returns all five, in the stamp's order, from the SAME two files the script
  * reads and not from a restated copy of its answer. The order is the contract: the hash is taken over the
  * entries in sequence.
@@ -25,8 +25,8 @@ export function declaredReach(declaration: string, name: string): string | undef
   return line?.[1].replaceAll("\\", "/");
 }
 
-/** The stamp's declaration file for a layer, as a path under `root`. */
-export const reachFile = (root = REPO) => join(root, declaredLayerPath("nvda-worker", root), "src/launcher-reach.cmd");
+/** The declaration the stamp reads, as a stand-in: the layer's own file is not in this tree (see the stand-in's header). */
+export const reachFile = (root = REPO) => join(root, "scripts/test-support/launcher-reach.stand-in.cmd");
 
 /** `$ENVIRONMENT_FILES` of `stampSource`, with its two read entries resolved from the declarations. */
 export function stampEnvironmentFiles(stampSource: string, root = REPO): string[] {

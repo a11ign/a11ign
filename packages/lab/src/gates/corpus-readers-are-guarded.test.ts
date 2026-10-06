@@ -30,7 +30,7 @@
  *
  *   - **guarded** — it calls `corpusReadable`.
  *   - **unguarded-by-cycle** — it is outside `packages/lab` and CANNOT call it. `packages/lab` depends on
- *     evidence, judge, scorer, worker-fleet, nvda-worker and control, so every one of these would be a
+ *     evidence, judge, scorer, worker-fleet and control, so every one of these would be a
  *     dependency cycle. Not a missing `exports` field — a direction problem, which no export list fixes.
  *   - **not-a-corpus-read** — the scan matched a literal or a prose path, not a read of the corpus.
  *
@@ -106,9 +106,6 @@ const UNGUARDED_BY_CYCLE: Record<string, string> = {
   "packages/judge/src/channel-tables-4.1.2.test.ts":
     "@a11ign/lab depends on @a11ign/judge, so judge cannot import corpus-settled.mjs without a "
     + "cycle -- the same direction its own dataset-paths EXEMPT entry already records.",
-  "packages/nvda-worker/src/capture-pure.corpus.test.ts":
-    "@a11ign/lab depends on @a11ign/screenreader-worker; same cycle, same direction as its existing "
-    + "dataset-paths EXEMPT entry.",
   "packages/cli/src/cli.test.ts":
     "Reads the corpus through an accessor and skips honestly when it is absent, but sits outside lab, so it "
     + "cannot consult the guard. Found by THIS scan rather than by any hand-written list, which is the "
