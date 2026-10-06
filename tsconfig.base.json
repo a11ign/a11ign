@@ -5,8 +5,9 @@
   // `sourceMap` OFF. A published package emits through Rslib and `tsc` only checks it (`noEmit` in each package's own `tsconfig.json`), so
   // this file carries none of `composite`, `outDir` or `rootDir` and no package carries `references`: the build order is pnpm's own
   // (`pnpm -r run build`, topological over the packages' declared dependencies), not a graph the compiler walks (row 4c-a11ign).
-  // The relative path, not `@a11ign/toolchain/tsconfig.base.json`, because a tree with no `dist` and no workspace links must still typecheck.
-  "extends": "./packages/toolchain/tsconfig.base.json",
+  // Read from the installed package (#3625: a registry dependency, the in-tree copy is gone). The file is shipped as-is, not built, so
+  // a tree with no `dist` still typechecks once `pnpm install` has run.
+  "extends": "@a11ign/toolchain/tsconfig.base.json",
   "compilerOptions": {
     // The screen-reader worker is consumed from the registry (#3447) and ships `.mjs` with no `.d.ts`: TypeScript reads JS under
     // `node_modules/` only to this depth (default 0), so a package importing `@a11ign/screenreader-worker/<file>` failed with TS7016. The

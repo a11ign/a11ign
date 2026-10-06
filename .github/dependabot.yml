@@ -28,7 +28,6 @@ updates:
       - dependency-name: "@a11ign/evidence"
       - dependency-name: "@a11ign/judge"
       - dependency-name: "@a11ign/scorer"
-      - dependency-name: "@a11ign/toolchain"
       - dependency-name: "a11ign"
   - package-ecosystem: github-actions
     # #3775: `release.yml` calls `a11ign/toolchain`'s reusable `release-per-merge.yml` at a full commit sha, and nothing
