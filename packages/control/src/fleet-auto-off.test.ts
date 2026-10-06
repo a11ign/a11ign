@@ -1159,10 +1159,65 @@ test("#3275 tick --apply: a refusal dispatches NOTHING, says why in the report, 
   });
   assert.deepEqual(dispatched, []);
   assert.deepEqual(result.decisions[0].decision, { action: "keep", reason: "stale-checkout" });
-  assert.deepEqual(result.refusal, { reason: "stale-checkout", detail: "1 file differs: a.mjs", at: IDLE_THRESHOLD_MS });
+  assert.deepEqual(result.refusal, { reason: "stale-checkout", detail: "1 file differs: a.mjs", at: IDLE_THRESHOLD_MS, since: IDLE_THRESHOLD_MS },
+    "the first refusal of a run began now");
   assert.deepEqual(saved!.refusal, result.refusal);
   assert.equal(saved!.fetchedAt, 42);
   assert.deepEqual(saved!.shutdownRequestedAt, {}, "nothing was requested, so nothing is stamped");
+});
+
+// #3859: `at` is the LAST tick's time and so is seconds old for as long as a refusal stands; `since` is the FIRST's.
+const REFUSE = () => ({ verdict: { action: "refuse" as const, reason: "stale-checkout" as const, detail: "1 file differs: a.mjs" }, fetchedAt: 42 });
+
+const IDLE_SINCE_0 = JSON.stringify({ idleSince: { "a11y-worker-2": 0 }, shutdownRequestedAt: {} });
+
+/** An `--apply` fleet whose state file persists between ticks, as the timer's does: each tick reads what the last one wrote. */
+function tickingFleet(checkout: () => ReturnType<typeof checkAgainstMain>, firstState = IDLE_SINCE_0) {
+  let disk = firstState;
+  const tickAt = (now: number) => tick({
+    workers: WORKERS, probe: async () => ({ outcome: "idle" as const }), now: () => now, statePath: "x.json",
+    read: filesWith(disk) as never, proofTransport: provenAt0, write: (_p, data) => { disk = String(data); },
+    apply: true, checkout, dispatch: () => ({ status: 0, log: "" }),
+  });
+  return { tickAt, onDisk: () => JSON.parse(String(disk)) };
+}
+
+const IDLE_FOR_A_LONG_WHILE = IDLE_THRESHOLD_MS * 4;
+
+test("#3859 tick: two refusing ticks in a row carry the FIRST tick's time as `since` and the second's as `at`", async () => {
+  const fleet = tickingFleet(REFUSE);
+  const first = await fleet.tickAt(IDLE_THRESHOLD_MS);
+  const second = await fleet.tickAt(IDLE_FOR_A_LONG_WHILE);
+  assert.equal(first.refusal!.since, IDLE_THRESHOLD_MS);
+  assert.equal(second.refusal!.at, IDLE_FOR_A_LONG_WHILE);
+  assert.equal(second.refusal!.since, IDLE_THRESHOLD_MS, "the standing refusal is dated from its first tick, not its latest");
+  assert.deepEqual(fleet.onDisk().refusal, second.refusal, "and that is what fleet-watch reads from disk");
+});
+
+test("#3859 tick: a PROCEEDING tick between two refusals ends the run, so the next refusal begins anew", async () => {
+  const verdicts = [REFUSE, PROCEED, REFUSE];
+  const fleet = tickingFleet(() => verdicts.shift()!());
+  await fleet.tickAt(IDLE_THRESHOLD_MS);
+  const proceeding = await fleet.tickAt(IDLE_THRESHOLD_MS + 1);
+  assert.equal(proceeding.refusal, null, "positive control: the middle tick really did proceed and clear the record");
+  const again = await fleet.tickAt(IDLE_FOR_A_LONG_WHILE);
+  assert.equal(again.refusal!.since, IDLE_FOR_A_LONG_WHILE);
+});
+
+test("#3859 tick: a previous refusal written BEFORE `since` existed carries its `at` forward", async () => {
+  const oldShape = JSON.stringify({ idleSince: { "a11y-worker-2": 0 }, shutdownRequestedAt: {}, fetchedAt: 1,
+    refusal: { reason: "stale-checkout", detail: "1 file differs: a.mjs", at: 123 } });
+  const result = await tickingFleet(REFUSE, oldShape).tickAt(IDLE_FOR_A_LONG_WHILE);
+  assert.equal(result.refusal!.since, 123);
+  assert.equal(result.refusal!.at, IDLE_FOR_A_LONG_WHILE);
+});
+
+test("readState: a refusal's `since` survives the round trip, and a non-numeric one reads as absent rather than as a date", () => {
+  const refusal = { reason: "stale-checkout", detail: "d", at: 8 };
+  const read = (since: unknown) => readState("x.json", () => JSON.stringify({ refusal: { ...refusal, since } }) as never).refusal;
+  assert.deepEqual(read(5), { ...refusal, since: 5 });
+  assert.deepEqual(read("yesterday"), refusal, "a string is not a time, and must not become one");
+  assert.deepEqual(read(undefined), refusal);
 });
 
 test("#3275 tick: the checkout is asked only when --apply has something to power off", async () => {
