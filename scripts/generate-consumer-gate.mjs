@@ -466,7 +466,7 @@ function buildCheckPinJob(pinnedSha) {
 }
 
 /** The files the Action RUNS as defined at the pin, so a change to one after the pin makes the pin stale (#3864). */
-const ACTION_DEFINITION = ["action.yml"];
+export const ACTION_DEFINITION = ["action.yml"];
 
 /**
  * The job the generated workflow adds beyond what README shows -- refuses rather than passing on

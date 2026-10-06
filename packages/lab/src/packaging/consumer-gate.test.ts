@@ -19,7 +19,7 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import {
   extractDocumentedJobsBlock, pinActionRef, substituteTarget, extractJobName, extractPinnedSha,
-  buildConsumerGateWorkflow, generate, currentHeadSha, refuseDirtyGenerationInputs, README_PATH, OUT,
+  buildConsumerGateWorkflow, generate, currentHeadSha, ACTION_DEFINITION, refuseDirtyGenerationInputs, README_PATH, OUT,
 } from "../../../../scripts/generate-consumer-gate.mjs";
 import { sandboxGitEnv } from "../../../guards/src/git-env.mjs";
 
@@ -414,6 +414,8 @@ test("#3828: `--check` is not wrapped in a message that claims a mismatch the ru
 
 // --- #3864: a pin that is an ancestor can still predate a change to the Action it pins ---
 
+// The generator's own list, not a path written here: a path literal out of the layer is an edge `layer-edges` counts.
+const [ACTION_FILE] = ACTION_DEFINITION;
 const ACTION_FRESHNESS_STEP = "Refuse a pin that predates a change to the Action's own definition";
 const GIT_IDENTITY = {
   GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@example.invalid", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@example.invalid",
@@ -436,7 +438,7 @@ function git(cwd: string, ...args: string[]): string {
 function repoWithChangesAfterPin(afterPin: string[]): { pin: string, tip: string, dir: string } {
   const dir = mkdtempSync(join(tmpdir(), "consumer-gate-freshness-"));
   git(dir, "init", "-q");
-  writeFileSync(join(dir, "action.yml"), "name: v1\n");
+  writeFileSync(join(dir, ACTION_FILE), "name: v1\n");
   writeFileSync(join(dir, "README.md"), "v1\n");
   git(dir, "add", "-A");
   git(dir, "commit", "-q", "-m", "pin");
@@ -461,11 +463,11 @@ function runFreshnessStep(repo: { pin: string, tip: string, dir: string }): { st
 }
 
 test("#3864: a pin older than a change to action.yml is REFUSED, naming the file and both commits", () => {
-  const repo = repoWithChangesAfterPin(["README.md", "action.yml"]);
+  const repo = repoWithChangesAfterPin(["README.md", ACTION_FILE]);
   try {
     const { status, output } = runFreshnessStep(repo);
     assert.equal(status, 1, output);
-    assert.match(output, /action\.yml changed between the pin/);
+    assert.ok(output.includes(`${ACTION_FILE} changed between the pin`), output);
     assert.ok(output.includes(repo.pin) && output.includes(repo.tip), "the refusal names the pin and the commit running");
   } finally { rmSync(repo.dir, { recursive: true, force: true }); }
 });
