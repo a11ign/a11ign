@@ -36,7 +36,7 @@ import { sandboxGitEnv } from "./git-env.mjs";
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const DEPARTED_DIRECTORY = "worker-fleet";
 const CONSUMED = "@a11ign/screenreader-fleet";
-const CONSUMED_VERSION = "0.3.0";
+const CONSUMED_VERSION = "0.5.1";
 /** Both names the package has carried; a changeset may name neither. BUILT, NOT WRITTEN: a rename test refuses a file that spells the old name whole. */
 const NAMES = [CONSUMED, ["@a11ign", "worker-fleet"].join("/")] as const;
 /** What a pnpm integrity looks like: an algorithm, a dash and base64. Not a hash of anything: a SHAPE, so a placeholder is refused. */
@@ -170,7 +170,7 @@ const REAL_INTEGRITY = `sha512-${"A".repeat(86)}==`;
 /** A minimal lockfile: the root declares the package at `version`, with `integrity` (or none) in `packages:`. */
 function lockfileWith({ version, integrity, extra = "" }: { version: string; integrity?: string; extra?: string }): string {
   const resolution = integrity === undefined ? "" : `    resolution: {integrity: ${integrity}}\n`;
-  return `lockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    dependencies:\n      '${CONSUMED}':\n        specifier: ^0.3.0\n        version: ${version}\n${extra}\n`
+  return `lockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    dependencies:\n      '${CONSUMED}':\n        specifier: ^0.5.1\n        version: ${version}\n${extra}\n`
     + `packages:\n\n  '${CONSUMED}@${CONSUMED_VERSION}':\n${resolution}    engines: {node: '>=20'}\n`;
 }
 
