@@ -17,7 +17,7 @@
     "witness": "A11Y_PYTHON=.venv/bin/python tsx packages/cli/src/cli.ts",
     "auth:leak-check": "tsx scripts/auth-leak-check.mjs",
     "auth:artifact-scan": "tsx scripts/auth-artifact-scan.mjs",
-    "worker": "node node_modules/@a11ign/screenreader-worker/src/server.mjs",
+    "worker": "node \"$(node -p \"require('node:fs').realpathSync('node_modules/@a11ign/screenreader-worker/src/server.mjs')\")\"",
     "eval": "A11Y_PYTHON=.venv/bin/python tsx packages/lab/src/eval/run.ts",
     "rules-check": "tsx packages/lab/src/eval/rules-check.ts",
     "test": "node scripts/pnpm.mjs run test:ts && node scripts/pnpm.mjs run test:python",
