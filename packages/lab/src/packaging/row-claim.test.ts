@@ -1844,6 +1844,9 @@ test("#1399 WIRING: the claim/dispatch and decline CLIs report a thrown error th
 /**
  * A local branch is a PEER'S unmerged work in these fixtures. Since agent-org 0.54.7 (#3745) a claim passes over a local branch that is
  * merged into origin/main and held by no worktree, and a stub answering "" to every git call reads as exactly that.
+ * The refusal asserted below is THE TOOL'S, not this repository's: `--branch=… ALREADY EXISTS locally (…)` is spelled in agent-org's
+ * `src/row-claim.mjs` (`localBranchReading`'s caller), which `toolModule` loads at its newest release tag. A failure here that carries
+ * no `reason` means that spelling or the free-branch reading moved there, so read the tool's refusal before touching this stub (#3756).
  */
 function unmergedBranchAnswer(subcommand: "merge-base" | "rev-list") {
   if (subcommand === "rev-list") return "3";
