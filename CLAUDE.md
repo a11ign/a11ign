@@ -2,13 +2,12 @@
 
 ## Where else to look
 
-**THE POPULATION-SPECIFIC RULES ARE IN NESTED `CLAUDE.md` FILES (#1240)**, so a session pays only for the
-directory it works in. [What moved →](docs/operational-lessons.md#the-nested-claudemd-split)
+**THE POPULATION-SPECIFIC RULES ARE IN NESTED `CLAUDE.md` FILES (#1240).** [What moved →](docs/operational-lessons.md#the-nested-claudemd-split)
 
 | | |
 |---|---|
 | [`packages/control/CLAUDE.md`](packages/control/CLAUDE.md) | the fleet: `fleet:deploy`, `fleet:provision`, Ansible, lab jobs |
-| [`packages/nvda-worker/CLAUDE.md`](packages/nvda-worker/CLAUDE.md) | the worker and NVDA: `doctor`, readiness, the capture cache |
+| [`screenreader-worker`'s `CLAUDE.md`](https://github.com/a11ign/screenreader-worker/blob/main/CLAUDE.md) | the worker and NVDA: `doctor`, readiness, the capture cache. **Moved to the layer repository (#3447)** |
 | [`packages/lab/CLAUDE.md`](packages/lab/CLAUDE.md) | the corpus: `gate:stability`, and who may report a gate reading `runs/` |
 | [`.github/CLAUDE.md`](.github/CLAUDE.md) | verifying changes, the hooks, sharing this checkout |
 
@@ -42,8 +41,6 @@ outranks the screen-reader layer's `cantTell` only — **asserted BY axe-core an
 **A DOM rule may override silence, not a contrary lived reading.** Pinned row by row in `outcomes.test.ts`
 (`besideTheRuleLayer`). [The precedence table →](docs/operational-lessons.md#axe-core-beside-the-screen-reader-layer)
 ## Code conventions
-
-The applicable subset of *Clean Code* (Martin), in two halves, enforced differently.
 
 **Mechanical — enforced by ESLint (`pnpm run lint`); errors block CI:**
 - Small functions doing one thing at one level of abstraction; the top-level reads as a top-down narrative (the Stepdown Rule). Gated by `max-lines-per-function` (70), `complexity` (15), `max-depth` (3).

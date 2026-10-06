@@ -2119,6 +2119,12 @@ rules and a session elsewhere does not pay for them. Root was 40,296 bytes in ev
 **Nothing was reworded in the move** — every line is byte-identical, and `content-preservation.test.ts`
 names these four paths as destinations rather than globbing the tree.
 
+<!-- #3743: moved VERBATIM out of the root CLAUDE.md, to make room for the link to the layer repository's copy. -->
+As the root `CLAUDE.md` carried the sentence, with the rule's closing clause:
+
+**THE POPULATION-SPECIFIC RULES ARE IN NESTED `CLAUDE.md` FILES (#1240)**, so a session pays only for the
+directory it works in.
+
 
 This file is for working ON the repo: rules only, each linking to the incident that produced it in
 `docs/` (#458 split this file down from 228k chars; see `docs/operational-lessons.md` and its siblings).
@@ -2236,6 +2242,9 @@ directory it works in. [What moved, and why it was byte-identical →](docs/oper
 ## Code conventions, as CLAUDE.md carried them
 
 *Moved by #2217; the conventions stay in [`CLAUDE.md`](../CLAUDE.md), more tersely worded.*
+
+<!-- #3743: moved VERBATIM out of the root CLAUDE.md, where it opened the section. -->
+The applicable subset of *Clean Code* (Martin), in two halves, enforced differently.
 
 - Small functions that do one thing at a single level of abstraction; the top-level function reads as a top-down narrative (the Stepdown Rule). Gated by `max-lines-per-function` (70), `complexity` (15), `max-depth` (3).
 
