@@ -2,7 +2,8 @@
  * #3851: the control plane's external heartbeat. Every clock, read, send and file is injected, so the decision is
  * proven offline -- the resource ban bars a live read of the fleet and nothing here reaches a network.
  *
- * `GATE_LAST_TICK` is epoch MILLISECONDS (a11ign/a11ign#3880), so every fixture below is built in milliseconds.
+ * The tick is the `updated_at` of a standing comment on a11ign/a11ign#3880 (#3897), so a fixture is the comment's
+ * `{created_at, updated_at}` as the reader asks for them.
  */
 // no-token: gh -- the CLI tests below put a FAKE `gh` first on PATH; nothing here spawns the real one.
 import { test } from "node:test";
@@ -13,7 +14,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  STALE_AFTER_MS, READ_TIMEOUT_MS, TELEGRAM_TOKEN_FILE, GH_TOKEN_FILE, judgeTick, messageFor, run, readGateLastTick, telegramSender,
+  STALE_AFTER_MS, READ_TIMEOUT_MS, HEARTBEAT_COMMENT_ID, TELEGRAM_TOKEN_FILE, GH_TOKEN_FILE, judgeTick, messageFor, run, readGateLastTick, telegramSender,
 } from "./gate-heartbeat.mjs";
 import { shippedControlUnits } from "./control-unit-drift.mjs";
 
@@ -21,6 +22,11 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ANSIBLE = join(HERE, "..", "ansible");
 const MINUTE = 60_000;
 const NOW = Date.parse("2026-10-06T20:00:00Z");
+const CREATED = Date.parse("2026-10-06T10:00:00Z");
+
+/** The comment body the reader returns for a tick at `updatedMs`; GitHub stamps whole seconds. */
+const iso = (ms: number) => new Date(Math.floor(ms / 1000) * 1000).toISOString().replace(".000", "");
+const comment = (updatedMs: number, createdMs = CREATED) => JSON.stringify({ created_at: iso(createdMs), updated_at: iso(updatedMs) });
 
 /** A run of the whole decision against a scripted clock, recording what was sent and what was remembered. */
 function harness({ stateFile = "none", sendResult = { ok: true } } = {}) {
@@ -34,7 +40,7 @@ function harness({ stateFile = "none", sendResult = { ok: true } } = {}) {
     clock = NOW + minutesLater * MINUTE;
     return run({
       now: () => clock,
-      read: () => (readFails ? { ok: false, reason: readFails } : { ok: true, value: String(tickAt) }),
+      read: () => (readFails ? { ok: false, reason: readFails } : { ok: true, value: comment(tickAt!) }),
       send: async (text: string) => { if (sendOk) sent.push(text); return sendOk ? { ok: true } : { ok: false, reason: "refused" }; },
       loadStanding: () => standing as never,
       saveStanding: (s: string) => { standing = s; },
@@ -54,26 +60,33 @@ function harness({ stateFile = "none", sendResult = { ok: true } } = {}) {
 
 test("judgeTick: nine minutes is fresh, exactly ten is fresh, eleven is stale", () => {
   for (const [minutes, status] of [[9, "fresh"], [10, "fresh"], [11, "stale"]] as const) {
-    const verdict = judgeTick(String(NOW - minutes * MINUTE), NOW);
+    const verdict = judgeTick(comment(NOW - minutes * MINUTE), NOW);
     assert.equal(verdict.status, status, `${minutes} min`);
   }
   assert.equal(STALE_AFTER_MS, 10 * MINUTE);
 });
 
-test("judgeTick: a value that is not a time is CANNOT_TELL, never fresh", () => {
-  for (const value of ["", "   ", "null", "yesterday", "1.5e12", "-5", "2026-10-06T20:00:00Z", "99999999999999999999999"]) {
-    const verdict = judgeTick(value, NOW);
-    assert.equal(verdict.status, "cannot-tell", JSON.stringify(value));
+test("judgeTick: a body that is not a comment with two times is CANNOT_TELL, never fresh", () => {
+  const good = { created_at: "2026-10-06T10:00:00Z", updated_at: "2026-10-06T19:59:00Z" };
+  assert.equal(judgeTick(JSON.stringify(good), NOW).status, "fresh", "the control: this shape reads");
+  for (const body of [
+    "", "   ", "null", "yesterday", "[]", "1791318587803", "{}", '{"message":"Not Found","status":"404"}',
+    JSON.stringify({ ...good, updated_at: null }), JSON.stringify({ ...good, updated_at: "1791318587803" }),
+    JSON.stringify({ ...good, updated_at: "2026-13-45T99:99:99Z" }), JSON.stringify({ updated_at: good.updated_at }),
+  ]) {
+    assert.equal(judgeTick(body, NOW).status, "cannot-tell", JSON.stringify(body));
   }
 });
 
-test("judgeTick: a tick a little in the future is clock skew, one far in the future is not a tick", () => {
-  assert.equal(judgeTick(String(NOW + 30_000), NOW).status, "fresh");
-  assert.equal(judgeTick(String(NOW + 5 * MINUTE), NOW).status, "cannot-tell");
+test("judgeTick: an updated_at earlier than the comment's own created_at is CANNOT_TELL, not stale", () => {
+  const verdict = judgeTick(comment(CREATED - MINUTE), NOW);
+  assert.equal(verdict.status, "cannot-tell");
+  assert.match(verdict.status === "cannot-tell" ? verdict.reason : "", /earlier than its created_at/);
 });
 
-test("judgeTick: the seeded probe value `1` reads stale, as #3880 said it would until the first tick", () => {
-  assert.equal(judgeTick("1", NOW).status, "stale");
+test("judgeTick: a stamp a little ahead of this clock is fresh at age zero (GitHub's clock is the reference)", () => {
+  const verdict = judgeTick(comment(NOW + 30_000), NOW);
+  assert.deepEqual(verdict, { status: "fresh", ageMs: 0, atMs: NOW + 30_000 });
 });
 
 // ---------------------------------------------------------------------------------------------------------
@@ -140,7 +153,7 @@ test("a read that cannot say is a message saying so, once, and never silence", a
 test("a malformed record is CANNOT_TELL through the whole run, not fresh", async () => {
   let said = "";
   const result = await run({
-    now: () => NOW, read: () => ({ ok: true, value: "not-a-number" }), send: async (text) => { said = text; return { ok: true }; },
+    now: () => NOW, read: () => ({ ok: true, value: "not-json" }), send: async (text) => { said = text; return { ok: true }; },
     loadStanding: () => "none", saveStanding: () => {},
   });
   assert.equal(result.verdict.status, "cannot-tell");
@@ -180,30 +193,35 @@ test("messageFor: nothing to say while fresh and nothing standing", () => {
 // The reader -- a hard timeout and a refusal that names itself.
 // ---------------------------------------------------------------------------------------------------------
 
-test("readGateLastTick: asks for the variable under a KILLING timeout and returns its value", () => {
+test("readGateLastTick: asks for the standing comment under a KILLING timeout and returns its body", () => {
   const seen = { args: [] as string[], options: {} as Record<string, unknown> };
   const spawn = ((_cmd: string, args: string[], options: Record<string, unknown>) => {
     seen.args = args;
     seen.options = options;
-    return { status: 0, stdout: "1791318587803\n", stderr: "" };
+    return { status: 0, stdout: `${comment(NOW)}\n`, stderr: "" };
   }) as unknown as typeof spawnSync;
   const read = readGateLastTick({ spawn, env: { GH_TOKEN: "x" }, readToken: () => "" });
-  assert.deepEqual(read, { ok: true, value: "1791318587803\n" });
-  assert.match(seen.args.join(" "), /repos\/a11ign\/a11ign\/actions\/variables\/GATE_LAST_TICK/);
+  assert.deepEqual(read, { ok: true, value: `${comment(NOW)}\n` });
+  assert.equal(seen.args[1], `repos/a11ign/a11ign/issues/comments/${HEARTBEAT_COMMENT_ID}`);
+  assert.equal(HEARTBEAT_COMMENT_ID, "6026375754", "the id #3897 names, on a11ign/a11ign#3880");
+  assert.ok(!seen.args.join(" ").includes("actions/variables"), "POSITIVE CONTROL: the old variable path is what this assertion is red on");
   assert.equal(seen.options.timeout, READ_TIMEOUT_MS);
   assert.equal(seen.options.killSignal, "SIGKILL", "a hung gh must be killed, not asked politely");
 });
 
 test("readGateLastTick: a timeout, a failure and a missing credential are each a refusal to say, with the reason", () => {
   const timedOut = (() => ({ error: Object.assign(new Error("x"), { code: "ETIMEDOUT" }), status: null })) as unknown as typeof spawnSync;
-  const failed = (() => ({ status: 1, stdout: "", stderr: "HTTP 403: Resource not accessible by personal access token\nmore" })) as unknown as typeof spawnSync;
+  const failed = (() => ({ status: 1, stdout: "", stderr: "gh: Resource not accessible by personal access token (HTTP 403)\nmore" })) as unknown as typeof spawnSync;
+  const gone = (() => ({ status: 1, stdout: "", stderr: "gh: Not Found (HTTP 404)\n" })) as unknown as typeof spawnSync;
   const never = (() => { throw new Error("must not spawn without a credential"); }) as unknown as typeof spawnSync;
   const withToken = { env: { GH_TOKEN: "x" }, readToken: () => "" };
 
   const a = readGateLastTick({ ...withToken, spawn: timedOut });
   assert.ok(!a.ok && /ETIMEDOUT/.test(a.reason));
   const b = readGateLastTick({ ...withToken, spawn: failed });
-  assert.ok(!b.ok && /exited 1: HTTP 403/.test(b.reason) && !/more/.test(b.reason), "only the first line of stderr");
+  assert.ok(!b.ok && /exited 1: .*HTTP 403/.test(b.reason) && !/more/.test(b.reason), "only the first line of stderr");
+  const d = readGateLastTick({ ...withToken, spawn: gone });
+  assert.ok(!d.ok && /HTTP 404/.test(d.reason), "a deleted comment names its status and is not a verdict about the tick");
   const c = readGateLastTick({ spawn: never, env: {}, readToken: () => "  \n" });
   assert.ok(!c.ok && /no GitHub credential/.test(c.reason));
 });
@@ -216,7 +234,7 @@ test("readGateLastTick: the token file is used when GH_TOKEN is unset, and the p
   let token = "";
   const spawn = ((_c: string, _a: string[], options: { env: NodeJS.ProcessEnv }) => {
     token = options.env.GH_TOKEN ?? "";
-    return { status: 0, stdout: "1", stderr: "" };
+    return { status: 0, stdout: comment(NOW), stderr: "" };
   }) as unknown as typeof spawnSync;
   readGateLastTick({ spawn, env: {}, readToken: () => "from-file\n" });
   assert.equal(token, "from-file");
@@ -260,10 +278,10 @@ test("telegramSender: neither an HTTP failure nor a thrown error carries the tok
 // The whole CLI, against a FAKE `gh` first on PATH and no network: the entry point, the state file and the exit.
 // ---------------------------------------------------------------------------------------------------------
 
-function cli(value: string, extraEnv: Record<string, string> = {}) {
+function cli(updatedMs: number, extraEnv: Record<string, string> = {}) {
   const dir = mkdtempSync(join(tmpdir(), "heartbeat-"));
   const gh = join(dir, "gh");
-  writeFileSync(gh, `#!/bin/sh\nprintf '%s\\n' '${value}'\n`);
+  writeFileSync(gh, `#!/bin/sh\nprintf '%s\\n' '${comment(updatedMs)}'\n`);
   chmodSync(gh, 0o755);
   const result = spawnSync(process.execPath, [join(HERE, "gate-heartbeat.mjs")], {
     encoding: "utf8", timeout: 30_000,
@@ -277,7 +295,7 @@ function cli(value: string, extraEnv: Record<string, string> = {}) {
 }
 
 test("CLI: a fresh tick exits 0 and says fresh", () => {
-  const { dir, result } = cli(String(Date.now()));
+  const { dir, result } = cli(Date.now());
   try {
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /gate heartbeat: fresh/);
@@ -285,7 +303,7 @@ test("CLI: a fresh tick exits 0 and says fresh", () => {
 });
 
 test("CLI: a stale tick with no Telegram route FAILS the unit loudly and leaves nothing recorded as told", () => {
-  const { dir, result } = cli(String(Date.now() - 11 * MINUTE));
+  const { dir, result } = cli(Date.now() - 11 * MINUTE);
   try {
     assert.equal(result.status, 1, "a heartbeat that cannot message must fail, not exit 0");
     assert.match(result.stdout, /gate heartbeat: stale \(last tick 11 min old\)/);
