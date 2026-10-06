@@ -43,6 +43,14 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const DEPARTED_DIRECTORY = "lab";
 const DEPARTED_PATH = `packages/${DEPARTED_DIRECTORY}`;
 const PACKAGE_NAME = "@a11ign/lab";
+/** Floors on what each reader SEES before an empty answer from it means anything (each is well under the reading, which is the point of a floor, not a pin). */
+const MIN_WORKSPACE_DIRECTORIES = 5;
+const MIN_LOCKFILE_IMPORTERS = 5;
+const MIN_TEST_GLOBS = 4;
+const MIN_WORKFLOWS = 10;
+const MIN_RELOCATED = 15;
+/** The tree-wide guards beyond the three that stayed: the leak scans and the fence, which declare themselves too. */
+const RELOCATED_GUARDS = 3;
 /** What a declared tag looks like: `v` and a semver. Spelled here as well as in `lay-layer.mjs`, so a loosening in one is a failure in the other. */
 const SEMVER_TAG = /^v\d+\.\d+\.\d+$/;
 
@@ -101,7 +109,7 @@ function workspaceDirectories(root: string): string[] {
   const excluded = new Set(packages.filter((glob) => glob.startsWith("!")).map((glob) => glob.slice(1)));
   return packages.filter((glob) => !glob.startsWith("!")).flatMap((glob) => {
     assert.match(glob, /^[\w./-]+\/\*$/, `${glob} is a glob shape this reader does not expand: widen it before trusting a pass`);
-    const parent = glob.slice(0, -2);
+    const parent = glob.slice(0, -"/*".length);
     return readdirSync(join(root, parent), { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => posix.join(parent, entry.name));
   }).filter((directory) => !excluded.has(directory));
 }
@@ -130,7 +138,7 @@ test("no file under packages/lab is tracked", () => {
 });
 
 test("the workspace matches no lab directory and no manifest carries the package's name", () => {
-  assert.ok(workspaceDirectories(REPO_ROOT).length >= 5, "the workspace expanded to almost nothing: the reader is not looking at the tree");
+  assert.ok(workspaceDirectories(REPO_ROOT).length >= MIN_WORKSPACE_DIRECTORIES, "the workspace expanded to almost nothing: the reader is not looking at the tree");
   assert.deepEqual(workspaceRefusals(REPO_ROOT), []);
 });
 
@@ -168,7 +176,7 @@ function lockfileRefusals(lockfile: string): string[] {
 
 test("pnpm-lock.yaml holds no importer under packages/lab, no link: to it and no @a11ign/lab entry", () => {
   const lockfile = read(REPO_ROOT, "pnpm-lock.yaml");
-  assert.ok(Object.keys((parse(lockfile) as Lockfile).importers ?? {}).length >= 5, "the lockfile has almost no importers: the reader is not looking at it");
+  assert.ok(Object.keys((parse(lockfile) as Lockfile).importers ?? {}).length >= MIN_LOCKFILE_IMPORTERS, "the lockfile has almost no importers: the reader is not looking at it");
   assert.deepEqual(lockfileRefusals(lockfile), []);
 });
 
@@ -202,7 +210,7 @@ test("no test:* script's glob names packages/lab, as a path or in a brace list",
   const manifest = JSON.parse(read(REPO_ROOT, "package.json"));
   const globs = testScriptGlobs(manifest);
   // The reader's own precondition: it SEES the globs, or "none names lab" is a statement about an empty list.
-  assert.ok(globs.length >= 4 && globs.some(({ script }) => script === "test:ts") && globs.some(({ script }) => script === "test:org"), `the reader found ${globs.length} test glob(s)`);
+  assert.ok(globs.length >= MIN_TEST_GLOBS && globs.some(({ script }) => script === "test:ts") && globs.some(({ script }) => script === "test:org"), `the reader found ${globs.length} test glob(s)`);
   assert.deepEqual(globRefusals(manifest), []);
 });
 
@@ -317,7 +325,7 @@ function runners(root: string): Record<string, string> {
 
 test("nothing that runs a test by path names a test of packages/lab/", () => {
   const files = runners(REPO_ROOT);
-  assert.ok(Object.keys(files).length >= 10, "the reader found almost no workflow: it is not looking at the tree");
+  assert.ok(Object.keys(files).length >= MIN_WORKFLOWS, "the reader found almost no workflow: it is not looking at the tree");
   // The workflow that holds the generated-file comment is exempt BY NAME and by claim: `consumer-gate.yml` and `outsider-job.yml` say which test checks them
   // in a header, and that test is a lab one by the ADR's own split (27 move with lab). The header is prose, and `departedTestRefusals` reads prose, so those
   // two files are asserted to carry exactly that and nothing that RUNS it.
@@ -339,7 +347,7 @@ test("POSITIVE CONTROL: a workflow, a hook or a script that runs a deleted lab t
 
 test("every test relocated by name is tracked at its new home and not at its old", () => {
   const now = new Set(tracked(REPO_ROOT, "packages/guards", "scripts"));
-  assert.ok(Object.keys(RELOCATED).length >= 15, "the table is nearly empty: the check below would pass on nothing");
+  assert.ok(Object.keys(RELOCATED).length >= MIN_RELOCATED, "the table is nearly empty: the check below would pass on nothing");
   const missing = Object.entries(RELOCATED).filter(([, to]) => !now.has(to)).map(([from, to]) => `${from} went to ${to}, which is not tracked`);
   const left = Object.keys(RELOCATED).filter((from) => tracked(REPO_ROOT, from).length > 0).map((from) => `${from} is still tracked`);
   assert.deepEqual([...missing, ...left], []);
@@ -366,7 +374,7 @@ test("the tree-wide guards the product keeps are still discovered, all exist, an
   const selected = treeWideGuardFiles();
   const present = new Set(tracked(REPO_ROOT));
   // The population is not empty and is not just the three: the relocated leak scans and the layer-edge fence declare themselves too.
-  assert.ok(selected.length >= STAYING_GUARDS.length + 3, `${selected.length} guard(s) found: ${selected.join(", ")}`);
+  assert.ok(selected.length >= STAYING_GUARDS.length + RELOCATED_GUARDS, `${selected.length} guard(s) found: ${selected.join(", ")}`);
   assert.deepEqual(guardRefusals({ selected, exists: (path) => present.has(path) }), []);
   for (const relocated of ["layer-edges", "tracked-source-leak-guard", "tracked-prose-leak-guard"]) {
     assert.ok(selected.includes(`packages/guards/src/${relocated}.test.ts`), `${relocated} was relocated and is still a tree-wide guard`);
