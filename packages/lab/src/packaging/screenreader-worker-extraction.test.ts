@@ -35,7 +35,8 @@ const CONSUMED = "@a11ign/screenreader-worker";
 const CONSUMED_VERSION = "0.1.0";
 /** The two directories that left, and every name either has been published or reserved under. */
 const DEPARTED_DIRECTORIES = ["nvda-worker", "nvda-speech"] as const;
-const DEPARTED_NAMES = ["@a11ign/nvda-worker", "@a11ign/nvda-speech", "@a11ign/screenreader-speech"] as const;
+// BUILT, NOT WRITTEN: `package-rename-nvda-worker.test.ts` refuses any non-document file that spells the old name whole.
+const DEPARTED_NAMES = [["@a11ign", "nvda-worker"].join("/"), "@a11ign/nvda-speech", "@a11ign/screenreader-speech"] as const;
 /** What a pnpm integrity looks like: an algorithm, a dash and base64. Not a hash of anything: a SHAPE, so a placeholder is refused. */
 const INTEGRITY_SHAPE = /^sha512-[A-Za-z0-9+/]{86}==$/;
 

@@ -197,7 +197,11 @@ function writeWrapperPlaybook(tmp: string, repoDir: string, bin: string) {
   // run-job.yml's layer include reads `playbook_dir/../layers.json` (#3396), as it does in the real tree where the playbook
   // sits in `ansible/` beside `layers.json`'s directory. So the wrapper is one level down and the real manifest is one up.
   mkdirSync(join(tmp, "ansible"));
-  writeFileSync(join(tmp, "layers.json"), readFileSync(LAYERS_PATH));
+  // The real manifest, minus each layer's `remote` (#3447): a layer in its own repository makes `lab-layer-checkouts.yml` demand a
+  // `layer_refs` entry and a second checkout, and this harness is about the lock. The layer-checkout tasks have tests of their own.
+  const manifest = JSON.parse(readFileSync(LAYERS_PATH, "utf8")) as { layers: Record<string, { path: string, remote?: string }> };
+  for (const layer of Object.values(manifest.layers)) delete layer.remote;
+  writeFileSync(join(tmp, "layers.json"), JSON.stringify(manifest));
   writeFileSync(join(tmp, WRAPPER), `---
 - name: exercise run-job.yml's lock directly
   hosts: localhost

@@ -167,6 +167,7 @@ const READ_FILE_TRIGGERS = [
   "requirements-ci.txt",
   "scripts/fixtures/calibration-verdicts.json",
   "scripts/history-purge-replacements.txt",
+  "scripts/test-support/launcher-reach.stand-in.cmd",
 ];
 
 export default defineToolchainConfig({
