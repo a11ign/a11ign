@@ -200,7 +200,7 @@ function inOrder(commands) {
  * so a wrong include would read exactly like a diff no test reaches, and this floor is what tells them apart (#2165, #3572).
  */
 export const AFFECTED_INCLUDE = "packages/*/src/**/*.test.ts";
-export const AFFECTED_MIN_FILES = 500;
+export const AFFECTED_MIN_FILES = 159;
 const RSTEST_CONFIG = "scripts/rstest/rstest.config.mjs";
 
 /**
@@ -484,7 +484,7 @@ function provisionAgentOrg() {
 /** What the staging step writes, under `root`: the tool's directory, and the one fixture whose import it respells. */
 const agentOrgPaths = (/** @type {string} */ root) => ({
   toolDir: join(root, "packages/agent-org"),
-  fixture: join(root, "packages/lab/src/packaging/board-document-chrome-resolver.test.ts"),
+  fixture: join(root, "packages/guards/src/board-document-chrome-resolver.test.ts"),
 });
 
 /**
@@ -517,7 +517,7 @@ export function stageAgentOrg({ toolRepo, scratch, copied, root = REPO, stdio = 
     () => here("rsync", ["-a", "--ignore-existing", "--exclude=*.test.ts", "--exclude=*.test.mjs",
       "packages/lab/src/packaging/", "packages/agent-org/src/packaging/"]),
     // The same `sed` as ci.yml's `agentOrg` job: the project reaches the tool through `toolModule`, the tool's own tests read a static relative import.
-    () => here("sed", ["-i", "s#^const {\\(.*\\)} = await toolModule(\"src/board-document.mjs\");#import {\\1} from \"../../../agent-org/src/board-document.mjs\";#",
+    () => here("sed", ["-i", "s#^const {\\(.*\\)} = await toolModule(\"src/board-document.mjs\");#import {\\1} from \"../../agent-org/src/board-document.mjs\";#",
       fixture]),
     () => here("git", ["add", "--force", "--intent-to-add", "packages/agent-org"]),
   ];

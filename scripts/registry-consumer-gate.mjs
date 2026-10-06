@@ -53,7 +53,7 @@ import { satisfies } from "../packages/guards/src/isolation-gate.mjs";
 import { npmCliInvocation } from "./npm-cli-executable.mjs";
 
 const REPO = fileURLToPath(new URL("../", import.meta.url));
-export const FIXTURES_DIR = resolve(REPO, "packages/lab/src/packaging/fixtures/registry-consumer-gate");
+export const FIXTURES_DIR = resolve(REPO, "scripts/fixtures/registry-consumer-gate");
 
 /** The package a consumer types. Everything else this gate reads is what installing it brought. */
 export const ENTRY_PACKAGE = "a11ign";

@@ -14,7 +14,7 @@
  * which a `--changed` run cannot see (#3572). The eight recorded decisions the config makes travel with the package, in
  * `a11ign/toolchain`'s `src/rstest-config.mjs`.
  *
- * THE BY-PATH HALF IS DERIVED, NOT TRUSTED: `packages/lab/src/packaging/verify-affected-set.test.ts` finds every non-source file
+ * THE BY-PATH HALF IS DERIVED, NOT TRUSTED: `packages/lab/src/packaging/verify-affected-set.test.ts` (in `a11ign/lab` since #3505, run there over this repository's tree) finds every non-source file
  * and every data directory a non-tree-wide test names in a string literal, outside its own import closure, and fails on one that no
  * pattern here covers. A new such read therefore fails that test until a line is added here; the test is the maintainer of this list.
  * A tree-wide guard (a test about the repository) is not in that population: it does not ride on `--changed` and runs in CI.
@@ -31,7 +31,10 @@ const walkScope = fileURLToPath(new URL("../../packages/guards/src/walk-scope.mj
  */
 const A11IGN_LOADED_TRIGGERS = ["scripts/rstest/**", "pnpm-lock.yaml", "packages/guards/src/walk-scope*.mjs"];
 
-/** #3572: data directories a non-tree-wide test reads by path, whole, because a file added to one is read too. */
+/**
+ * #3572: data directories a non-tree-wide test reads by path, whole, because a file added to one is read too. NONE IS UNDER `packages/lab/` (#3505): that
+ * directory is laid and untracked, so a change to it is never in a diff and a trigger naming it would select nothing.
+ */
 const READ_DIRECTORY_TRIGGERS = [
   ".agent-org/roles/**",
   ".agent-org/units/**",
@@ -41,8 +44,6 @@ const READ_DIRECTORY_TRIGGERS = [
   "docs/board/**",
   "packages/cli/src/fixtures/**",
   "packages/control/ansible/**",
-  "packages/lab/baselines/**",
-  "packages/lab/src/eval/fixtures/**",
   "packages/scorer/models/screenreader-scorer/**",
   "packages/scorer/python/**",
   "packages/scorer/tests/**",
@@ -146,21 +147,6 @@ const READ_FILE_TRIGGERS = [
   "packages/evidence/README.md",
   "packages/evidence/src/fixtures-exhausted-887.json",
   "packages/evidence/src/fixtures/submit-activation-cases.json",
-  "packages/lab/CLAUDE.md",
-  "packages/lab/README.md",
-  "packages/lab/rule-ownership.json",
-  "packages/lab/scripts/audit-scorer-shortcuts.py",
-  "packages/lab/scripts/check-screenreader-hardening.py",
-  "packages/lab/scripts/compose-multi-defect-probe.py",
-  "packages/lab/scripts/diagnose-false-positives.py",
-  "packages/lab/scripts/evaluate-screenreader-acceptance.py",
-  "packages/lab/scripts/explain-case.py",
-  "packages/lab/scripts/scorer-shortcuts.baseline.json",
-  "packages/lab/scripts/train-screenreader-model.py",
-  "packages/lab/src/eval/recorded-provenance.sha256",
-  "packages/lab/src/packaging/fixtures/broken-continuation.ps1",
-  "packages/lab/src/training/README.md",
-  "packages/lab/src/training/accepted-acceptance-cases.json",
   "packages/scorer/CHANGELOG.md",
   "packages/scorer/requirements.txt",
   "packages/worker-fleet/src/display-mode-harness.ps1",

@@ -641,6 +641,8 @@ jobs:
           cd agent-org
           cp -r src host .github CHANGELOG.md package.json LICENSE README.md ../packages/agent-org/
           cd ..
+          # `packages/lab/` is a LAYER here (#3505), and this job installs with `--ignore-scripts`, so nothing has laid it: its fixtures are what the rsync copies.
+          node scripts/lay-layer.mjs lab
           rsync -a --ignore-existing --exclude='*.test.ts' --exclude='*.test.mjs' packages/lab/src/packaging/ packages/agent-org/src/packaging/
           # The tool's checkout is not part of the project the suite walks; leave only the laid-out copy. It is MOVED, not deleted (#3276):
           # `AGENT_ORG_TOOL_REPO` names it, and the tool's ratchet reads its base there. Inside the workspace it would be the project's
@@ -649,9 +651,9 @@ jobs:
           echo "AGENT_ORG_TOOL_REPO=$RUNNER_TEMP/agent-org-checkout" >> "$GITHUB_ENV"
           # The project loads the tool by path (`toolModule`, #3534). The tool's own tests read this fixture's STATIC imports, as relative paths into
           # `packages/agent-org`, where the tool lived when #2976 removed it, so this runner (and no committed file) spells the import that way.
-          fixture=packages/lab/src/packaging/board-document-chrome-resolver.test.ts
-          sed -i 's#^const {\(.*\)} = await toolModule("src/board-document.mjs");#import {\1} from "../../../agent-org/src/board-document.mjs";#' "$fixture"
-          grep -q 'from "../../../agent-org/src/board-document.mjs"' "$fixture"
+          fixture=packages/guards/src/board-document-chrome-resolver.test.ts
+          sed -i 's#^const {\(.*\)} = await toolModule("src/board-document.mjs");#import {\1} from "../../agent-org/src/board-document.mjs";#' "$fixture"
+          grep -q 'from "../../agent-org/src/board-document.mjs"' "$fixture"
           # The tool's tests list the project's files with `git ls-files`. The laid-out copy joins this runner's index so they see the tool as they did when it was tracked.
           git add --force --intent-to-add packages/agent-org
       # THE TOOL'S OWN RUNNER, not rstest: the suite is `node:test` files and agent-org's `gate` runs exactly this command. Under rstest 5 of 4649 failed. Named in

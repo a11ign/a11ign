@@ -12,6 +12,9 @@ packages:
   # `packages/worker-fleet` is the same kind of clone (`scripts/lay-layer.mjs`, #3504): the root takes `@a11ign/screenreader-fleet` from the registry,
   # and a laid copy joining the workspace would turn that into a `link:`.
   - "!packages/worker-fleet"
+  # `packages/lab` is the same kind of clone (`scripts/lay-layer.mjs`, #3505): the directory left the workspace for `a11ign/lab`, and a laid copy
+  # holds no manifest, but a worktree that still has the old directory's `package.json` would otherwise be an importer the lockfile no longer records.
+  - "!packages/lab"
 
 # WHY THIS IS ON: internal dependencies are pinned "0.0.0", not `workspace:*`, because npm cannot read the
 # `workspace:` protocol and `npm ci` had to keep working while both lockfiles existed. It still is the spelling: `changeset version` writes

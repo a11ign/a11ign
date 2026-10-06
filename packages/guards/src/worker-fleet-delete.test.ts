@@ -187,7 +187,7 @@ test("pnpm-lock.yaml holds @a11ign/screenreader-fleet at the registry's version 
     .filter((directory) => { try { return CONSUMED in { ...JSON.parse(read(REPO_ROOT, join(directory, "package.json"))).dependencies, ...JSON.parse(read(REPO_ROOT, join(directory, "package.json"))).devDependencies }; } catch { return false; } })
     .sort();
   assert.deepEqual(fromLockfile, fromManifests);
-  assert.deepEqual(fromLockfile, [".", "packages/cli", "packages/guards", "packages/lab"]);
+  assert.deepEqual(fromLockfile, [".", "packages/cli", "packages/guards"]);
 });
 
 test("POSITIVE CONTROL: a lockfile with a link:../worker-fleet entry is REFUSED, naming it", () => {
