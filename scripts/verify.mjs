@@ -652,11 +652,19 @@ async function runAgentOrg(ciYml) {
   }
   const toolRepo = provisionAgentOrg();
   if (!toolRepo) return { status: "fail", output: "" };
+  return runAgentOrgStep({ repo: REPO, toolRepo, ref: staging.ref, copied: staging.copied });
+}
+
+/**
+ * The step's own scratch directory and log around `runAgentOrgInClone`; a parameter set of its own so a test can run the whole of it on a throwaway repo.
+ * @param {{ repo: string, toolRepo: string, ref: string, copied: string[] }} job
+ */
+export async function runAgentOrgStep({ repo, toolRepo, ref, copied }) {
   const scratch = mkdtempSync(join(tmpdir(), "verify-agent-org-"));
   const logPath = join(scratch, "agentOrg.log");
   const log = openSync(logPath, "w");
   try {
-    const status = await runAgentOrgInClone({ repo: REPO, toolRepo, ref: staging.ref, copied: staging.copied, scratch, log });
+    const status = await runAgentOrgInClone({ repo, toolRepo, ref, copied, scratch, log });
     return { status, output: readFileSync(logPath, "utf8") };
   } finally {
     closeSync(log);
