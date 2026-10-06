@@ -258,7 +258,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
@@ -279,7 +279,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
@@ -328,34 +328,13 @@ jobs:
         run: |
           node scripts/dependency-changeset.mjs check --base=${{ needs.changed.outputs.base }} --since=${{ github.event.merge_group.base_sha }}
           echo "settled=true" >> "$GITHUB_OUTPUT"
-      # #3161: THE VERSION PULL REQUEST IS EXEMPT, BY ITS ONE BRANCH. `changeset version` consumes the changesets and
-      # always ships `package.json` and `CHANGELOG.md`, so `changeset status --since` exits 1 on a version commit and
-      # that pull request could never merge. `release.yml` opens it from `release/version-packages` (`VERSION_BRANCH`
-      # in `release-commit-version-bump.mjs`) and nothing else pushes there; the match is EXACT, not a prefix.
-      # `github.head_ref` is EMPTY on `merge_group`, whose ref is `gh-readonly-queue/...` and names no branch. The
-      # `merge-queue-main` ruleset (23681721) has `merge_method: MERGE`, read with `gh api repos/a11ign/a11ign/rulesets/23681721`,
-      # so a queue entry's `head_commit.message` is `Merge pull request #N from <owner>/<branch>`, a blank line, then the
-      # title. The step below reads the FIRST LINE exactly, in shell (a newline cannot be written inside an expression
-      # string), so `release/version-packages-x` is still enforced. A switch to SQUASH changes that message and is the
-      # moment this step changes. Keying the queue half on a message is safe: an entry exists only for a pull request
-      # that already passed this job on `pull_request`, where only the branch name exempts it.
-      - id: version
-        name: The version pull request's queue entry is recognised by the branch on its merge commit's first line
-        if: github.event_name == 'merge_group'
-        env:
-          QUEUE_MESSAGE: ${{ github.event.merge_group.head_commit.message }}
-        run: |
-          first=$(printf '%s\n' "$QUEUE_MESSAGE" | head -n 1)
-          if [[ "$first" =~ ^Merge\ pull\ request\ \#[0-9]+\ from\ ${GITHUB_REPOSITORY_OWNER}/release/version-packages$ ]]; then
-            echo "queue=true" >> "$GITHUB_OUTPUT"
-          fi
       # #3584: A QUEUE ENTRY IS DIFFED AGAINST ITS OWN PARENT, as the `deps:` step above does. Up to 5 entries are built and
       # entry 2 contains entry 1, while `needs.changed.outputs.base` is `origin/main`, which does not yet hold the entry
       # ahead: behind the version-packages entry, its consumed bumps of `package.json` and `CHANGELOG.md` read as this
       # entry's own, and `changeset status` ejected #3579 (run 37241009696). `merge_group.base_sha` is EMPTY on a pull
       # request, so `||` falls through to the base it has always used there.
       - name: A consumer-visible change must say what it does to a consumer
-        if: steps.precise.outputs.changeset == 'true' && steps.dependency.outputs.settled != 'true' && github.head_ref != 'release/version-packages' && steps.version.outputs.queue != 'true'
+        if: steps.precise.outputs.changeset == 'true' && steps.dependency.outputs.settled != 'true'
         run: |
           if ! pnpm exec changeset status --since=${{ github.event.merge_group.base_sha || needs.changed.outputs.base }}; then
             echo "::error::This PR changes a published package and carries no changeset."
@@ -392,7 +371,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
@@ -480,7 +459,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
@@ -640,7 +619,7 @@ jobs:
       # pnpm on the PATH is also what `packaging/installed-layout.test.ts` installs the tool through, as a project would. The tool's own
       # `gate` installs its three dependencies with npm; this project's `workflows-run-pnpm.test.ts` allows no npm step, and the
       # project's lockfile already holds all three.
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       # NOT the `22` the other jobs use: agent-org pins 22.22.1 because on 22.23.3 its tree-walking observer fails a test (see its `ci.yml`).
       - uses: actions/setup-node@v7
         with: { node-version: 22.22.1, cache: pnpm }

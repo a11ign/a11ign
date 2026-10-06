@@ -71,7 +71,7 @@ jobs:
 
       - name: Set up pnpm
         if: steps.hour.outputs.mode != 'none'
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Install
         if: steps.hour.outputs.mode != 'none'
