@@ -166,6 +166,7 @@ const READ_FILE_TRIGGERS = [
   "packages/worker-fleet/src/display-mode-harness.ps1",
   "requirements-ci.txt",
   "scripts/fixtures/calibration-verdicts.json",
+  "scripts/fixtures/release-before-3717.yml",
   "scripts/history-purge-replacements.txt",
   "scripts/test-support/launcher-reach.stand-in.cmd",
 ];

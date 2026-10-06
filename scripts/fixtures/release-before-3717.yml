@@ -1,0 +1,829 @@
+# The publish path. IT RELEASES ON THE MERGE OF A VERSION PULL REQUEST, WITH NOBODY TYPING AND NOBODY PUSHING (#3131).
+#
+# The name is settled (`a11ign`, PLAN.md B5, #1530) and the first release has shipped: `a11ign@0.1.0` and
+# five `@a11ign/*` packages went to the public registry on 2026-09-19T09:39:12Z, from `b373d1d7`. This
+# workflow exists so that releasing is a reviewed config change rather than someone improvising
+# `npm publish` across six interdependent packages at the moment they are least able to check the result.
+# npm versions cannot be unpublished after 72 hours, only deprecated, so a wrong release is permanent.
+#
+# #2052 — WHY THE TWO SENTENCES ABOVE NOW NAME A DATE. Until 2026-09-23 this header stated in the present
+# tense that nothing had ever been published, and quoted an access setting the file had not had since
+# 2026-09-14. Both claims were true when written, and nothing about a comment notices when they stop. On
+# 2026-09-23 a session working #1567 read this header first, concluded the publish had not happened, and
+# left five milestone rows standing behind a fleet provision that was already unblocked; a direct registry
+# read is what reversed it. A comment asserting the current state of something OUTSIDE this file — a
+# registry, a sibling config — reads as authoritative precisely because somebody troubled to write it, and
+# has nothing keeping it true. `release-header-currency.test.ts` now reads `.changeset/config.json` itself
+# and checks every place here that quotes it, so gate 4 below cannot drift from the file it quotes again.
+#
+# #3131 — TWO EVENTS, ONE FILE (chairman's direction 2026-10-03, #928, ADR 0041: releases are continuous). It
+# used to start ONLY on `workflow_dispatch`, default to a dry run, and publish only when a person typed
+# `publish-for-real`; its last step then pushed the version bump straight to `main`, which `main`'s required
+# review (#2022) refuses. Now the `plan` job reads two facts off the pushed tree and picks ONE of four modes:
+#
+#   version-pr  a changeset naming a release is pending  -> `version-pr` opens or updates the ONE version pull
+#               request, which arms and merges through the queue like every other pull request
+#   publish     none is pending AND a package's version is NEWER than the registry's latest for it -> the push
+#               the VERSION PULL REQUEST'S MERGE made; the guards run and `release` publishes
+#   nothing     neither -> nothing runs after `plan`
+#   rehearsal   `workflow_dispatch` -> every guard and a dry run, publishing nothing
+#
+# THE REGISTRY IS THE STATE, NOT A FLAG: a publish that failed is simply re-run (the platform's "re-run failed
+# jobs") and `plan` reads the same answer again, and a package already on the registry is never in `publish`.
+# This workflow WRITES NOTHING TO `main`: the version pull request is its only write, and it is a branch.
+#
+# SEVEN INDEPENDENT THINGS must all be true before a single byte is published. They are independent on
+# purpose: any one of them alone would be a single point of failure, and this repo's own rule is that a
+# verification must not share a failure mode with the action it guards.
+#
+#   1. Only a push to `main` can publish, and only the push on which NO changeset is pending and a version
+#      is ahead of the registry. A merge that carries a changeset opens a version pull request instead.
+#   2. A `workflow_dispatch` cannot publish. `dry-run` defaults to true, and `plan` REFUSES a dispatch that
+#      sets it false rather than quietly doing a rehearsal the person did not ask for.
+#   3. Nothing here writes `main`. The version bump travels on a pull request that needs `main`'s own
+#      approving review and the merge queue: THAT is what stands where the typed confirmation stood. The
+#      confirmation's job was to stop an accident; the review and the gates do it now, and they are checked
+#      by the platform rather than by whoever is typing.
+#   4. `.changeset/config.json` must say `"access": "public"`, and the publish step reads the file back
+#      rather than assuming it — so a run fails at that step rather than publishing under a setting nobody
+#      checked. It reads `public` today; it was flipped there on 2026-09-14 (#1530), and a scoped
+#      `@a11ign/*` package cannot publish under anything else at all.
+#   5. `action-smoke` must SUCCEED, run HERE, against the exact sha this workflow ran at. It drives the
+#      published Action the way a consumer does — `uses: ./`, inputs only, no repo knowledge — so it is the
+#      only check here that exercises the weights through the path a user takes.
+#   6. `capture-regression` must SUCCEED, run HERE, against the same sha. It drives real NVDA over the
+#      bundled tutorial pages, so a change to the capture path is proven against the exact commit about to
+#      publish rather than trusted from whenever it last happened to run.
+#   7. `consumer-gate` must SUCCEED, run HERE. #494: `action-smoke` runs `uses: ./` with full repository
+#      knowledge — it needs no `actions/checkout` and never reads the public documents, so it could not
+#      have caught (and did not catch) three publish-blockers the V1 rehearsal (#324) found on a real
+#      windows-2022 runner: no checkout in any public doc, the Action's own build dying on Windows, and a
+#      failure message lying about where the report was. `consumer-gate.yml` is generated from README.md's
+#      own Quickstart fence, not hand-retyped, and its workspace starts empty — the ONE check here that
+#      exercises the path a first reader actually takes, rather than the path this repo's own CI takes.
+#
+#   5, 6 and 7 used to run on every push touching their own paths, on `main`, with this workflow merely
+#   QUERYING whether that separately-triggered run had passed — reasonable while `main` itself was gated
+#   by nothing else, wrong now that `ci.yml` gates every merge on the PR (chairman's direction,
+#   2026-09-06): a check that only ever ran on a push nobody blocks on is not a release guard, it is a
+#   a habit. All three workflows left `main`/PR entirely and now declare `workflow_call`, so this file runs
+#   them as JOBS against the sha actually being released, and `release`'s own `needs:` on all three makes
+#   "job did not succeed" the same failure as any other step here — no query, no race between "never ran"
+#   and "running right now", the exact ambiguity the old query step had to fail closed on three ways.
+#
+# Removing any of the seven is a deliberate act. Do not remove them in the same change that changes what starts this.
+#
+# THE GUARDS ABOUT WHAT IS PUBLISHED ALL STAY AND RUN ON THE PUBLISHING EVENT, which is what the guards above
+# do not cover: the manifest-repository check, the packed-install check (`gate:isolation`), the provenance
+# request, and the hold (#3126). `release-triggers-itself.test.ts` pins each of them in the publishing job.
+#
+# `dist-tag` (issue #326) IS GONE (#3131). It let a typed, real dispatch publish under `next` instead of "latest"; no
+# dispatch publishes now, so the input would reach nothing, and an input that does nothing reads as a control.
+# A push publishes to "latest", which is changesets' own default with no flag.
+name: release
+
+on:
+  # `paths` is what keeps `plan` off every merge that carries none of the files below: a changeset is a file under
+  # `.changeset/`, and the version pull request's merge changes a manifest, so every push this workflow
+  # PUBLISHES on touches one of those two. The registry, not the push, is the state, so a merge outside the filter
+  # loses no release.
+  #
+  # #3359: THE FILTER ALSO HAS TO NAME EVERY FILE THE VERSION COMMIT REWRITES, which is a second job. `version-pr`
+  # force-pushes `release/version-packages` as the product of `changeset version`, rebuilt on the head it ran at, and
+  # only a run this filter lets through rewrites it. The version commit changes the root `package.json` and
+  # `pnpm-lock.yaml` as well as each package's manifest (`versionBumpPaths`), so a later merge that moves either (a
+  # Dependabot bump of a root dependency lands daily) left the branch on its old base and the pull request
+  # CONFLICTING: #3353 sat on `931b660ab` through three merges, none of which ran this workflow. `plan` installs
+  # nothing, so the extra runs cost a checkout and two reads. `push-trigger-allowlist.test.ts` pins that every path
+  # `versionBumpPaths` names is matched here and that no catch-all is.
+  push:
+    branches: [main]
+    paths: [".changeset/**", "package.json", "pnpm-lock.yaml", "packages/*/package.json"]
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Rehearse the release (every guard, a version, a pack, the publish hand-off) and publish nothing. A dispatch never publishes, so false is refused.
+        type: boolean
+        default: true
+
+# ONE RELEASE AT A TIME, AND NEVER CANCELLED IN FLIGHT (#3131). A publish that is cancelled half way leaves some
+# packages on the registry and some not, and a registry cannot be rolled back. GitHub holds ONE run pending
+# behind the running one and drops older pending runs, which loses nothing: every run re-reads the registry.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  # WHICH OF THE FOUR MODES THIS RUN IS (see the header), decided from the pushed tree and the registry and from
+  # nothing else. No install, no build: this runs on every push the `paths` filter lets through.
+  plan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      mode: ${{ steps.mode.outputs.mode }}
+      # Every non-private package's reading, as JSON: the SAME comparison that chose the mode, handed on so the
+      # publishing job's "never older than the registry" step reads it rather than writing a second one (#3167).
+      readings: ${{ steps.mode.outputs.readings }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: mode
+        env:
+          EVENT: ${{ github.event_name }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            if [ "$DRY_RUN" != "true" ]; then
+              echo "::error::A dispatch rehearses and never publishes. Releases happen on the merge of the version pull request; set dry-run true."
+              exit 1
+            fi
+            echo "mode=rehearsal" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # PENDING means a changeset that NAMES A RELEASE of a package `changeset version` will version
+          # (`"pkg": minor` in its frontmatter, `pkg` not `private`). The version pull request carries one EMPTY
+          # changeset (`release-commit-version-bump.mjs` says why), and counting it would ask for a version pull
+          # request after every version pull request, for ever. A PRIVATE-ONLY changeset is the same trap from the
+          # other side: `privatePackages: { version: false }` makes `changeset version` consume none of them, so
+          # counting them kept `pending > 0` for ever and `mode=publish` was unreachable (#3369: 67 files, run
+          # 37165118081). A name no manifest answers to counts: it is not provably private, and `changeset version`
+          # in the version pull request is where an unknown name fails loudly.
+          pending=$(node -e '
+            const fs = require("fs");
+            const isPrivate = new Map();
+            for (const dir of fs.readdirSync("packages")) {
+              const path = `packages/${dir}/package.json`;
+              if (!fs.existsSync(path)) continue;
+              const manifest = JSON.parse(fs.readFileSync(path, "utf8"));
+              isPrivate.set(manifest.name, manifest.private === true);
+            }
+            const release = /^["\x27]?(.+?)["\x27]?\s*:\s*(major|minor|patch)\s*$/;
+            const namesPublicRelease = (file) => {
+              const [, frontmatter = ""] = fs.readFileSync(`.changeset/${file}`, "utf8").split(/^---[ \t]*$/m);
+              return frontmatter.split("\n").some((line) => {
+                const named = release.exec(line.trim());
+                return named !== null && isPrivate.get(named[1]) !== true;
+              });
+            };
+            const files = fs.readdirSync(".changeset").filter((file) => file.endsWith(".md") && file !== "README.md");
+            console.log(files.filter(namesPublicRelease).length);
+          ')
+          echo "changesets naming a release: $pending"
+
+          # AHEAD means STRICTLY NEWER than the registry's latest for that package, never merely "not on the registry":
+          # `main`'s manifests read 0.0.0 while the registry holds 0.1.0 (#1824), and the publish command would send
+          # 0.0.0, because it sends any version the registry lacks. A package the registry has never heard of (E404)
+          # counts as latest 0.0.0, so the 0.0.0 placeholder is never publishable. Any OTHER failure (a network error, a
+          # 5xx) is CANNOT_TELL and fails this job: "could not ask" must never read as "not published", because the
+          # reading that follows from it is a publish. The reasoning goes to stderr (the log); stdout is the readings.
+          # BEHIND is the other half of the same comparison, and it is why `readings` exists: the publish command sends
+          # EVERY package whose manifest version the registry lacks, so a manifest older than latest is published as an
+          # older version and, with no `--tag`, can move `latest` backwards, which cannot be undone (#3167). `plan` does not
+          # refuse on it (a behind manifest on `main` is expected until the move to 0.1.0, and would block the version pull
+          # request too); the publishing job's own step does, from this output.
+          readings=$(node -e '
+            const fs = require("fs");
+            const { execFileSync } = require("child_process");
+            const fail = (message) => { console.error(`::error::CANNOT_TELL: ${message}`); process.exit(1); };
+            const triple = (version) => {
+              const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
+              if (!match) fail(`${version} is not a plain x.y.z version`);
+              return match.slice(1).map(Number);
+            };
+            const newer = (a, b) => { for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i]; return false; };
+            const latestOnRegistry = (name) => {
+              try {
+                const latest = execFileSync("npm", ["view", name, "version"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+                // ADR 0040 reserves the name of each extracted package with `0.0.0-reserved.0`, and until that package releases it
+                // is the latest on the registry. It is a name held, not a release: the same footing as E404, so 0.0.0 stays
+                // unpublishable over it. Only that spelling is understood; any other prerelease is CANNOT_TELL (#3131).
+                return /^0\.0\.0-reserved\.\d+$/.test(latest) ? "0.0.0" : latest;
+              } catch (error) {
+                if (/E404/.test(String(error.stderr))) return "0.0.0";
+                return fail(`the registry did not answer for ${name}: ${error.stderr}`);
+              }
+            };
+            const readings = [];
+            for (const dir of fs.readdirSync("packages")) {
+              const path = `packages/${dir}/package.json`;
+              if (!fs.existsSync(path)) continue;
+              const manifest = JSON.parse(fs.readFileSync(path, "utf8"));
+              if (manifest.private) continue;
+              const latest = latestOnRegistry(manifest.name);
+              const isAhead = newer(triple(manifest.version), triple(latest));
+              const isBehind = newer(triple(latest), triple(manifest.version));
+              console.error(`${isAhead ? "AHEAD of" : "not ahead of"} the registry: ${manifest.name}@${manifest.version} (latest there: ${latest})`);
+              readings.push({ name: manifest.name, manifest: manifest.version, latest, state: isAhead ? "ahead" : isBehind ? "behind" : "level" });
+            }
+            console.log(JSON.stringify(readings));
+          ')
+          ahead=$(jq '[.[] | select(.state == "ahead")] | length' <<< "$readings")
+          echo "readings=$readings" >> "$GITHUB_OUTPUT"
+
+          if [ "$pending" -gt 0 ]; then mode=version-pr
+          elif [ "$ahead" -gt 0 ]; then mode=publish
+          else mode=nothing
+          fi
+          echo "mode=$mode"
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+
+  # THE VERSION PULL REQUEST: the ONLY write this workflow makes, and it is a branch. Pushed and opened with
+  # `A11IGN_BOT_TOKEN`, never `GITHUB_TOKEN`: a pull request opened or pushed to by `GITHUB_TOKEN` starts NO workflow
+  # (GitHub's own rule, against loops), so `ci` would never report on it and `gate` would never go green. The token is
+  # also what `auto-arm.yml` arms with, so this pull request arms like any other. It then waits for the approving
+  # review `main` requires (#2022): that wait is the confirmation the typed string used to be.
+  version-pr:
+    needs: plan
+    if: needs.plan.outputs.mode == 'version-pr'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Refuse without the bot token, which a pull request needs to be built on
+        env:
+          A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
+        run: |
+          if [ -z "$A11IGN_BOT_TOKEN" ]; then
+            echo "::error::A11IGN_BOT_TOKEN is not set. A version pull request opened with GITHUB_TOKEN gets no ci run and can never merge, so this does not fall back to it."
+            exit 1
+          fi
+      # `fetch-depth: 0` brings every tag: `compile` below reads each package's manifest at its `<name>@<version>` release tag,
+      # and a shallow checkout holds none, so it would report "nothing moved" whatever had.
+      - uses: actions/checkout@v7
+        with: { token: "${{ secrets.A11IGN_BOT_TOKEN }}", fetch-depth: 0 }
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v7
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
+        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+      # #3170 (#3159 follow-up): a dependency pull request is ACCEPTED from its diff by ci's `changeset` job, and the entry it
+      # owes is WRITTEN here, so `changeset version` below consumes it with every other pending entry. It must come BEFORE
+      # `release:version`: after it the changesets are already spent. Not folded into `release:version` itself, whose exact
+      # text `pnpm-publish-path.test.ts` and `release-safety.test.ts` pin.
+      - name: Write the entry each dependency pull request owes, from the manifests at the last release tags
+        run: node scripts/dependency-changeset.mjs compile
+      # `changeset version` does NOT update the lockfile; `release:version` is that plus the lockfile-only install
+      # (see .changeset/README.md), so the version pull request does not break the next frozen install.
+      - run: pnpm run release:version
+      - name: Commit the version bump to the version branch, never to main
+        run: node scripts/release-commit-version-bump.mjs
+      - name: Open the version pull request, or bring the open one up to date
+        env:
+          GH_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
+        run: |
+          set -euo pipefail
+          # An absent branch means the script found nothing to commit; nothing to open then.
+          if ! git ls-remote --exit-code --heads origin release/version-packages > /dev/null; then
+            echo "no version branch was pushed: nothing to open"
+            exit 0
+          fi
+          cat > "$RUNNER_TEMP/body.md" <<'BODY'
+          ## What it is
+
+          The version pull request: `changeset version` applied to every changeset pending on `main`, plus the lockfile
+          refresh. Opened and kept current by `release.yml` on each push that leaves a changeset pending.
+          **Merging it IS the release**: on the push it makes, no changeset names a release and a package's version is
+          ahead of the registry, so `release.yml` runs every guard and publishes.
+
+          It touches the NVDA worker package's version and changelog, which `owned-path-signoff` guards. A version bump
+          writes a version and a changelog and nothing else, so each owned-path fact is stated as it stands:
+
+          CAPTURE_PROTOCOL_VERSION: unchanged
+          provisionRevision: unchanged
+          environmentKey: unchanged
+          weights: unchanged
+
+          Acceptance:
+          node scripts/release-print-versions.mjs
+
+          Closes: none — a version pull request finishes no row
+          BODY
+          number=$(gh pr list --repo "$GITHUB_REPOSITORY" --head release/version-packages --base main --state open --json number --jq '.[0].number // empty')
+          if [ -n "$number" ]; then
+            gh pr edit "$number" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/body.md"
+          else
+            gh pr create --repo "$GITHUB_REPOSITORY" --base main --head release/version-packages \
+              --title "Version packages" --body-file "$RUNNER_TEMP/body.md"
+          fi
+
+  # GUARDS 5, 6 AND 7, RUN AS JOBS AGAINST THE EXACT SHA THIS WORKFLOW RAN AT -- see the file
+  # header. `uses:` a local workflow path calls it as a reusable workflow (`workflow_call`); no `with:`
+  # needed, since neither takes an input. GitHub runs a called workflow at THIS workflow's own ref by
+  # default, which is exactly the property the old query step existed to approximate by asking whether a
+  # separately-triggered run happened to match.
+  action-smoke:
+    needs: plan
+    if: needs.plan.outputs.mode == 'publish' || needs.plan.outputs.mode == 'rehearsal'
+    uses: ./.github/workflows/action-smoke.yml
+
+  capture-regression:
+    needs: plan
+    if: needs.plan.outputs.mode == 'publish' || needs.plan.outputs.mode == 'rehearsal'
+    uses: ./.github/workflows/capture-regression.yml
+
+  # #494. `consumer-gate.yml`'s own `uses: a11ign/a11ign@<sha>` step is pinned to a LITERAL sha
+  # baked in at generation time (see scripts/generate-consumer-gate.mjs's own header for why `${{ }}` does
+  # not work in a `uses:` field) -- so unlike action-smoke/capture-regression, this job does NOT
+  # automatically track "the exact sha this workflow ran at" by virtue of being a local
+  # `workflow_call`. #558 closes that gap FROM INSIDE consumer-gate.yml itself: it now carries its own
+  # `check-pin` job comparing the pin against `${{ github.sha }}`, which under `workflow_call` resolves to
+  # THIS release's own sha -- so a stale pin fails here, on ubuntu-latest, before the Windows
+  # job ever starts, with no separate step needed. The "consumer-gate.yml is current" step in the
+  # `release` job below still checks something DIFFERENT: real drift between README.md's documented
+  # workflow and the committed file (a reworded doc, a generator change) -- regenerate (`node
+  # scripts/generate-consumer-gate.mjs`) and commit if that one fires.
+  consumer-gate:
+    needs: plan
+    if: needs.plan.outputs.mode == 'publish' || needs.plan.outputs.mode == 'rehearsal'
+    uses: ./.github/workflows/consumer-gate.yml
+    # #1251. A called workflow may not request more than its caller grants, and this repository's default
+    # GITHUB_TOKEN is read-only. consumer-gate.yml is generated from README.md's Quickstart fence, which on
+    # 2026-09-09 gained `pull-requests: write` for the Action's optional PR-comment step -- so from that day
+    # every dispatch of THIS file failed at validation ("The nested job 'a11y' is requesting
+    # 'pull-requests: write', but is only allowed 'pull-requests: none'"), before a single job existed, and
+    # nothing on the PR path could see it because nothing on the PR path calls release.yml. The grant
+    # lives HERE, not in the generator: the generated file must stay exactly what a reader copies.
+    # `release-safety.test.ts` pins that every permission a called job requests is granted on its caller.
+    permissions:
+      contents: read
+      pull-requests: write
+
+  # #3291: THE ROW THE VERDICT STEP'S CONTRACT PROMISES. A wait past the measured bound ("raise a row, do not skip") and a
+  # confirmed `regression` each stop the release, and nothing else would tell anyone: an overdue wait is otherwise a red
+  # run somebody must happen to see. This job files ONE row per release sha, idempotent by title, so a re-run of the failed
+  # `release` job finds the row and files none. It is NOT the publishing job: that one holds `contents: write` and
+  # `id-token: write`, and this one holds `issues: write` and `contents: read` and nothing else. No checkout, no install:
+  # it runs `gh` and nothing from the tree, so the one token that may write an issue never meets code from the repository.
+  # A rehearsal files nothing, because it publishes nothing and a dispatch on a branch has no release sha worth a row.
+  qualification-row:
+    needs: [plan, release]
+    if: failure() && needs.plan.outputs.mode == 'publish' && needs.release.outputs.row-title != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: File the row for this sha, unless it is already filed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ROW_TITLE: ${{ needs.release.outputs.row-title }}
+          ROW_LABELS: ${{ needs.release.outputs.row-labels }}
+          ROW_BODY: ${{ needs.release.outputs.row-body }}
+        run: |
+          set -euo pipefail
+          # The title is the row's identity. The search narrows, the exact comparison decides, and `--state all` means a
+          # row already closed still counts: ONE row per sha, never a second after the first was dealt with.
+          filed=$(gh issue list --state all --limit 100 --search "\"$ROW_TITLE\" in:title" --json title \
+            --jq '[.[] | select(.title == env.ROW_TITLE)] | length')
+          if [ "$filed" != "0" ]; then
+            echo "already filed: $ROW_TITLE"
+            exit 0
+          fi
+          label_args=()
+          IFS=',' read -ra labels <<< "$ROW_LABELS"
+          for label in "${labels[@]}"; do
+            # Create only what is missing: `gh label create --force` would repaint a label that exists.
+            present=$(LABEL="$label" gh label list --limit 1000 --json name --jq '[.[] | select(.name == env.LABEL)] | length')
+            if [ "$present" = "0" ]; then gh label create "$label"; fi
+            label_args+=(--label "$label")
+          done
+          gh issue create --title "$ROW_TITLE" --body "$ROW_BODY" "${label_args[@]}"
+
+  release:
+    needs: [plan, action-smoke, capture-regression, consumer-gate]
+    if: needs.plan.outputs.mode == 'publish' || needs.plan.outputs.mode == 'rehearsal'
+    runs-on: ubuntu-latest
+    # The one job that publishes, and so the only one under the environment (ADR 0043: every repository's publish job runs
+    # under `npm-publish`). The name is part of the OIDC claim npm checks against the package's trusted publisher, so it
+    # is set there too; `release-triggers-itself.test.ts` pins both this and that no other job takes it.
+    environment: npm-publish
+    # What the verdict step below decided, handed to `qualification-row` (#3291): the publishing job holds `contents: write`
+    # and `id-token: write` and must not also hold `issues: write`, so the row is filed by a job that holds nothing else.
+    # Empty `row-*` outputs mean no row.
+    outputs:
+      row-title: ${{ steps.qualification.outputs.row-title }}
+      row-labels: ${{ steps.qualification.outputs.row-labels }}
+      row-body: ${{ steps.qualification.outputs.row-body }}
+    permissions:
+      # `write` SINCE 2026-09-19, AND THE FIRST PUBLISH IS WHY. This read `read`, scoped deliberately so
+      # the job could not push -- and `changeset publish` creates a git tag per published package, which
+      # it therefore could not do. The result was measured rather than predicted: `a11ign@0.1.0` and five
+      # scoped packages went live at `b373d1d7`, and origin carried NO tag naming that commit.
+      #
+      # THAT GAP IS NOT COSMETIC. A GitHub Actions consumer pins with `uses: a11ign/a11ign@v0.1.0`, which
+      # resolves a GIT REF -- npm has no part in it. So the published Action could not be pinned to the
+      # version that was published.
+      #
+      # WHAT IT WIDENS, STATED PLAINLY: a push to `main` can now start this job, so a merge, not a person,
+      # decides when it may write to the repository. The write is the tag the publish already implies -- a ref
+      # naming a commit that is, by then, already public on npm and unchangeable. NOTHING IN THIS JOB WRITES
+      # A BRANCH (`release-triggers-itself.test.ts` refuses any `git push` here), and branch protection still
+      # refuses a force-push of `main`: `contents: write` grants no bypass of it.
+      contents: write
+      # REQUIRED BY PROVENANCE, and only by it. npm signs the attestation with a short-lived OIDC token
+      # from this job; without the claim it fails the publish rather than shipping unsigned.
+      id-token: write
+      # READ ONLY, for the fleet part's verdict below (#3136): the lab posts a commit status and this job reads it.
+      statuses: read
+    steps:
+      - uses: actions/checkout@v7
+        with: { fetch-depth: 0 }
+
+      # #1452: `changeset status`'s divergence check (`@changesets/git`'s `getDivergedCommit`) runs
+      # `git merge-base main HEAD` -- a literal LOCAL branch named `main`, never `origin/main`. Dispatched on
+      # any other branch, `actions/checkout` above creates a local ref only for the branch actually checked
+      # out; `main` exists solely as `origin/main`, so that lookup fails with "Failed to find where HEAD
+      # diverged from main" before a single version prints (measured on run 34783509737, dispatched off
+      # `agent/first-publish-0-1-0-1396`). Dispatched on `main` itself the local branch already exists --
+      # forcing it here would be `git branch -f` on the branch currently checked out, which git refuses.
+      - name: Make a local `main` ref available for changesets' divergence check
+        run: |
+          if [ "$(git symbolic-ref --short HEAD)" != "main" ]; then
+            git fetch origin main:main
+          fi
+
+      # #2301: THE PUBLISH PATH IS pnpm'S NOW, and so is the install. `changeset publish` chooses its tool from the
+      # workspace (`pnpm-workspace.yaml`, `packageManager`), so with pnpm here the publish runs `pnpm publish`,
+      # which packs with pnpm and then hands the tarball to the runner's NPM -- the only thing that talks to the
+      # registry, which is why provenance and OIDC below are still npm's business. `pnpm/action-setup` reads the
+      # version out of `packageManager`, and comes before setup-node because `cache: pnpm` shells out to it.
+      # `registry-url` stays: it is what writes the `.npmrc` that npm publishes with.
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v7
+        with: { node-version: 22, cache: pnpm, registry-url: https://registry.npmjs.org }
+
+      - run: pnpm install --frozen-lockfile
+      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
+        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+      - run: pnpm run build
+
+      # #3136 (ADR 0041, decision 3): THE RELEASE READS THE FLEET PART'S VERDICT, by commit sha, instead of ignoring it.
+      # This runner proves what a runner can prove; the stability gate and the NVDA layer need a Windows worker
+      # (`release-gate-scope.mjs` names the nine stages). The lab posts a commit status, context `qualification`, on the
+      # sha, and `release-reads-qualification.mjs` decides one of FOUR outcomes: `proceed` (success, or no fleet stage
+      # gates the packages released), `wait` (absent or pending: NOT a pass), `rerun` (one failure: a candidate regression,
+      # the lab re-runs once) and `regression` (two). ONLY `proceed` lets the steps after this one run, so `Publish` never
+      # starts on anything else, and nothing is skipped to get a pass: no threshold moves, and no revert (fix forward).
+      # THE LOG NAMES THE OUTCOME AND THE SHA ON EVERY RUN. The writer of the status is #3289, so until it lands every real
+      # release stops here at `wait` -- the safe state, and the one a user can see. A wait is RE-RUN (the platform's "re-run
+      # failed jobs") once the lab has posted: the registry is the state, so `plan` reads the same answer again. It is
+      # not polled here: a runner held for the ~92 minutes the worst measured cleared verdict takes would hold the
+      # `release` concurrency group with it.
+      #
+      # A STOP THAT NEEDS A PERSON RAISES A ROW (#3291): `regression`, and a `wait` past the 92-minute bound. The step writes
+      # the row's title, labels and body as outputs and the `qualification-row` job files it; this job files nothing.
+      #
+      # A REHEARSAL REPORTS AND CONTINUES, because it publishes nothing and a dispatch on any branch would otherwise
+      # always stop here. It is the one place this step is allowed to fail without stopping the job.
+      - name: Read the fleet part's verdict for this sha
+        id: qualification
+        continue-on-error: ${{ needs.plan.outputs.mode == 'rehearsal' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          READINGS: ${{ needs.plan.outputs.readings }}
+        run: node scripts/release-reads-qualification.mjs --sha=${{ github.sha }} --readings="$READINGS"
+
+      # THE WHOLE-REPO COVERAGE THRESHOLD, HERE AND ON A NIGHTLY SCHEDULE (`nightly.yml`'s `coverage`
+      # job -- moved there from the now-deleted `coverage.yml`, #901) -- chairman's direction, 2026-09-06,
+      # follow-up to #133/#140. It left `ci.yml`'s per-PR job entirely (154s of a measured 269s,
+      # re-testing packages a given PR could not have touched), and a release is the other place it must
+      # still be checked: nothing else on the release path re-runs the full suite, so a threshold
+      # regression that a package-scoped PR run could not see would otherwise ship unnoticed.
+      #
+      # #1308: BUT NOT TWICE FOR THE SAME SHA. `pnpm run coverage` is rstest (`@rstest/coverage-v8`, #1320)
+      # over the whole suite, and nightly already pays that cost once a day against whatever `main`'s tip was at
+      # 06:17 London -- a release cut soon after a nightly run re-runs coverage for a sha nightly already
+      # verified. This step reads nightly's own `coverage` JOB conclusion (never the run's -- a sibling
+      # job like `gateSweep` failing must not make this refuse a genuinely reusable verdict) for the EXACT
+      # sha being released, never "the latest nightly run" (which is usually the PARENT sha, not this
+      # one). No verdict for this sha, or a failed one, and it runs coverage exactly as before.
+      - id: coverage-verdict
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release-reuses-verdict.mjs --sha=${{ github.sha }}
+
+      - name: Coverage — the whole-repo threshold
+        if: steps.coverage-verdict.outputs.reuse != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: pnpm run coverage
+
+      # The full gate, not a subset. `release:gate` is ordered cheapest-first so a cheap failure does not
+      # wait behind an expensive one, and it starts with `scorer:shortcuts` — the one check that can see a
+      # head penalising a feature it was never shown.
+      #
+      # NOT `continue-on-error`. A release that ships past its own gate is the thing this file exists to
+      # prevent; if the gate cannot run in CI, fix the gate rather than skipping it here.
+      #
+      # SO IT WAS FIXED, BY SPLITTING IT -- 2026-08-30, on this workflow's first ever dry run, which died
+      # `sh: 1: .venv/bin/python: not found` at stage 4 of 12. Eight of the chain's thirteen stages need
+      # the Python venv or the CORPUS, and the corpus is gitignored and hours of fleet time: `scorer:shortcuts`,
+      # `corpus:distribution`, `check-signals`, `rules:gate`, `rules:coverage`, `rules:real-pages`,
+      # `evaluate-acceptance:shipped` and `eval:gate`. No amount of runner setup makes them possible, so
+      # `pnpm run release:gate` here could only ever fail -- and a gate that cannot pass is one people stop
+      # running it, which is how this file's own locks would come to be bypassed.
+      #
+      # `release:gate:ci` is the part a runner CAN prove: the artefact is safetensors, the weights have a
+      # changelog entry accounting for them, no schema migration is open, and every package is usable when
+      # installed from a tarball. The rest must have passed ON THE LAB. A human typing `publish-for-real` used to
+      # assert that; NOBODY DOES NOW (#3131), so the fleet part of the gate is NOT wired into the publish and is
+      # not claimed to be: the step after the consumer-gate check names, on EVERY run including the publishing
+      # one, which stages this runner did not run (`release-gate-scope.mjs`). Wiring it is its own row.
+      #
+      # This is the same argument the consumer-path check below already makes for `action-smoke`: "a
+      # verification sharing a failure mode with the action it guards" verifies nothing, and re-running a
+      # check on the machine that wants to publish is not evidence. The difference is only that a lab job
+      # leaves no artefact this workflow can query, so it says so instead of implying otherwise.
+      - name: The release gate — the part a runner can prove
+        run: pnpm run release:gate:ci
+
+      # #558: THIS STEP NO LONGER VERIFIES THE PIN'S FRESHNESS -- IT CANNOT, AND NEITHER CAN ANYTHING ELSE
+      # RUN AT THIS POINT. `generate-consumer-gate.mjs`'s own header explains why: a regenerated file pins
+      # HEAD, but COMMITTING that file makes HEAD become a new commit the pin cannot name, so "does the pin
+      # equal HEAD" has no reachable YES in any committed tree -- measured on a clean `main`, where this
+      # step failed unconditionally, including on a commit that had JUST regenerated correctly. What
+      # remains is real drift: does the committed file still match what README.md's documented workflow
+      # produces, sha aside (a reworded doc, a generator change) -- the same comparison
+      # commands-documented.test.ts already runs for docs/commands.md (A6b, #478), and the one this check
+      # CAN actually pass or fail on.
+      #
+      # The pin's FRESHNESS is guard 7's own concern now, not this step's: `consumer-gate.yml` carries a
+      # `check-pin` job (also #558) comparing the pin against `${{ github.sha }}`, which under this file's
+      # `workflow_call` resolves to THIS release's own sha -- so a stale pin fails guard 7
+      # itself, on ubuntu-latest, before that job's Windows step even starts. This step and guard 7 check
+      # two different things and neither one alone would close the "checked something, not this" gap.
+      - name: consumer-gate.yml matches README.md's documented workflow (sha aside -- guard 7 checks that)
+        run: node scripts/generate-consumer-gate.mjs --check
+
+      # #1397: THIS COUNT USED TO BE TYPED INTO THE MESSAGE ("4 of release:gate's 12 stages") rather than
+      # read from the two chains it describes, and drifted the day release:gate grew a stage: the true
+      # count was 5 of 13. `release-gate-scope.mjs` reads `package.json`'s own `release:gate` and
+      # `release:gate:ci` scripts every run, so the warning can only ever describe the chain that exists.
+      - name: Name what this runner did NOT check
+        run: node scripts/release-gate-scope.mjs
+
+      # BEFORE `version`, and the order is the whole point. `changeset status` reports what is PENDING, so
+      # after `version` has consumed them it says "Some packages have been changed but no changesets were
+      # found" and exits 1 — which is correct behaviour for a question asked at the wrong moment. Measured
+      # 2026-08-30 on this workflow's second ever dry run, where it failed the step it was meant to
+      # illustrate.
+      #
+      # #1466: `--verbose` is the whole fix for this step. Plain `changeset status` prints only a BUMP
+      # LEVEL per package ("minor"), never a version -- every reading of "0.1.0 for all six" up to run
+      # 34785498618 was arithmetic done by whoever read the log, not something the log said. `--verbose`
+      # prints `<name> -> <newVersion>` for every package the release plan touches.
+      #
+      # REHEARSAL ONLY (#3131). On the publishing push nothing is pending by definition -- `plan` only says
+      # `publish` once the version pull request has consumed every changeset -- so asking would print nothing
+      # and, with `main` already at HEAD, apply nothing; the manifests are already at the version to publish.
+      - name: What is pending, before anything is applied
+        if: needs.plan.outputs.mode == 'rehearsal'
+        run: pnpm exec changeset status --verbose
+
+      # `changeset version` does NOT update the lockfile, under pnpm or npm. Without the lockfile-only install
+      # that follows, the lockfile ships describing the PREVIOUS versions — and under pnpm the failure is
+      # louder but no better: the next `pnpm install --frozen-lockfile` refuses a workspace whose manifests
+      # moved, so the release commit would break every CI job after it. `pnpm run release:version` does both;
+      # see .changeset/README.md.
+      - name: Apply the pending changesets
+        if: needs.plan.outputs.mode == 'rehearsal'
+        run: pnpm run release:version
+
+      # #1466: AFTER `release:version`, the manifests hold the version this run would actually publish --
+      # the applied half of "pending and applied" (`git diff --stat` below names which FILES changed, never
+      # what they now say). `release-print-versions.mjs` reads the same six manifests
+      # `manifest-repository-check.mjs` already treats as "published", so this names exactly the packages
+      # the pending step above named.
+      - name: What each package's version now is
+        run: node scripts/release-print-versions.mjs
+
+      # AFTER, and it asks a different question: what did `version` actually write? The two together are
+      # "what was asked for" and "what happened", which is the shape every verification here takes.
+      - name: What the version bump actually changed
+        run: git --no-pager diff --stat
+
+      # PACK, not publish. This is the last step on the default path and it is the one that would have
+      # caught the failures M0 found: a pack includes untracked files, so "it worked locally" was never
+      # evidence, and a package with no `prepack` ships an empty `dist` on any machine that has not built.
+      #
+      # #2301: PACKED BY pnpm, INSTALLED BY npm -- the pack is the tool that will publish, the install is the
+      # tool a stranger runs -- and the packed `package.json` of every package is read back for a
+      # `workspace:` protocol or an internal range its sibling does not satisfy. The gate prints which tool
+      # did which half, so this log says it rather than a comment.
+      - name: Pack every package, which is what a consumer receives
+        run: pnpm run gate:isolation
+
+      # #1536: EVERY PUBLISHED MANIFEST MUST NAME THE REPOSITORY THIS RUN PUBLISHES FROM, and this asks before the
+      # registry does. Run 34816466408 passed every guard job and every step above, then npm's provenance check
+      # refused the PUT: each manifest's "repository.url" named a11ign/a11ign, not the repository the run came from
+      # (#915 5660524401). NO `if:`, deliberately: a dry run never reaches the registry, so this step is the only
+      # place a dry run can see the mismatch. Until the transfer (#63) a run from the pre-transfer repository goes
+      # red HERE by design -- the manifests already name a11ign/a11ign -- and that is not a regression.
+      - name: Every published manifest names the repository this run publishes from
+        run: node scripts/manifest-repository-check.mjs
+
+      # NOT AN EIGHTH GUARD (#3126): a TEMPORARY HOLD that each move row's last step lifts, one package at a time, until
+      # `@a11ign/screenreader-worker`, `-fleet` and `@a11ign/documents` have released from their own repositories (ADR 0040).
+      # Publishing path only, and before the `access` read-back and `changeset publish`, so it goes red before any byte leaves.
+      - name: Hold -- refuse to publish packages whose own repositories have not released them
+        if: needs.plan.outputs.mode == 'publish'
+        env:
+          A11Y_CHECK_RELEASE_HOLD: "1"
+        run: |
+          set -o pipefail
+          # The runner's config path is read from its one owner, never spelled here: `entry-points.test.ts` treats any
+          # script path a workflow names as an entry point that must be inert on import, and the config is not one.
+          RSTEST_CONFIG="$(node -e 'import("./packages/guards/src/assert-glob-not-empty.mjs").then((m) => { if (m.RSTEST_CONFIG) console.log(m.RSTEST_CONFIG); else process.exit(1); })')" || RSTEST_CONFIG=""
+          if [ -z "$RSTEST_CONFIG" ]; then
+            echo '::error::CANNOT_TELL: could not read RSTEST_CONFIG, so the hold never ran. Nothing published.'
+            exit 1
+          fi
+          pnpm exec rstest run --config "$RSTEST_CONFIG" \
+            --include packages/lab/src/packaging/release-publishes-only-what-stays.test.ts \
+            --disableConsoleIntercept 2>&1 | tee "$RUNNER_TEMP/release-hold.log"
+          # A green exit is not a pass: the PASS line is printed only on the far side of the assertion.
+          grep -q 'RELEASE HOLD PASS' "$RUNNER_TEMP/release-hold.log" || {
+            echo '::error::CANNOT_TELL: the hold exited green but never printed RELEASE HOLD PASS. Nothing published.'
+            exit 1
+          }
+
+      - name: Refuse to publish unless .changeset/config.json says public
+        if: needs.plan.outputs.mode == 'publish'
+        run: |
+          access=$(node -p "require('./.changeset/config.json').access")
+          if [ "$access" != "public" ]; then
+            echo "::error::.changeset/config.json has access=$access. It must read 'public': every"
+            echo "published package here is scoped (@a11ign/*) and npm refuses a scoped publish under"
+            echo "anything else, so this run would fail at the registry instead of here. If that value"
+            echo "changed on purpose, change it back in a reviewed commit, not here."
+            exit 1
+          fi
+
+      # NEVER PUBLISH A VERSION OLDER THAN THE REGISTRY'S LATEST (#3167). `plan` picks `publish` when ONE package is
+      # ahead, but `changeset publish` then sends EVERY package whose manifest version the registry lacks, and with no
+      # `--tag` an older version can move `latest` backwards, which cannot be undone. The readings are `plan`'s own
+      # (same comparison, same registry read, taken in this run under the `release` concurrency group), not a second
+      # one. It runs BEFORE `Publish`, and `release-never-publishes-older.test.ts` pins that order.
+      - name: Refuse to publish a package whose manifest is behind the registry's latest
+        if: needs.plan.outputs.mode == 'publish'
+        env:
+          READINGS: ${{ needs.plan.outputs.readings }}
+        run: |
+          node -e '
+            const readings = JSON.parse(process.env.READINGS || "null");
+            if (!Array.isArray(readings) || readings.length === 0) {
+              console.error("::error::CANNOT_TELL: the plan handed on no registry readings. Nothing published.");
+              process.exit(1);
+            }
+            for (const r of readings) console.log(`${r.state.toUpperCase()}: ${r.name}@${r.manifest} (latest on the registry: ${r.latest}, https://www.npmjs.com/package/${r.name})`);
+            const behind = readings.filter((r) => r.state === "behind");
+            if (behind.length > 0) {
+              const names = behind.map((r) => `${r.name}@${r.manifest} < ${r.latest}`).join(", ");
+              console.error(`::error::Behind the registry: ${names}. The publish step would send an older version and could move latest backwards. Nothing published.`);
+              process.exit(1);
+            }
+          '
+
+      # #3180: TRUSTED PUBLISHING NEEDS npm 11.5.1 OR NEWER, and `actions/setup-node` with Node 22 ships npm 10.x. Without this
+      # step the first merge-triggered publish (#3131) has no credential: there is no `NODE_AUTH_TOKEN` below, npm's
+      # documented floor for the OIDC exchange is 11.5.1 (not re-measured here), and it would fail at the registry at
+      # the moment this file's header says nobody can check the result. No publish on record has used OIDC (every `_npmUser` is a person), so nothing had ever
+      # shown the gap. The floor is read back from the npm that is first on PATH, not assumed from the install, because
+      # that is the npm pnpm shells out to; `release-triggers-itself.test.ts` pins this step before `Publish` and runs
+      # the check against a fake npm below the floor.
+      # STAYS npm (#3180, pinned in `workflows-run-pnpm.test.ts`): `npm install -g` is the only way to upgrade npm itself; pnpm cannot.
+      - name: Upgrade npm to the trusted-publishing floor, and refuse below it
+        run: |
+          npm install -g "npm@^11.5.1"
+          have="$(npm --version)"
+          printf '%s\n%s\n' 11.5.1 "$have" | sort -V -C || {
+            echo "::error::npm $have is below 11.5.1, which trusted publishing needs. Nothing published."
+            exit 1
+          }
+
+      # NPM PROVENANCE, which ADR 0006 requires and nothing implemented.
+      #
+      # That ADR lists it as one of "two operational requirements that are easy to forget and expensive to
+      # retrofit", and gives the reason this project specifically cannot skip it: *"Provenance is worth more
+      # here than usual: the whole product claim is trustworthy evidence, and a supply-chain story that
+      # stops at 'trust us' undercuts it."* A tool that asks people to believe its findings about their
+      # site, shipping tarballs nobody can trace to this repo, is arguing against itself.
+      #
+      # `NPM_CONFIG_PROVENANCE` rather than a `--provenance` flag, because changesets runs `npm publish`
+      # itself across six interdependent packages and there is no argv to pass through. It needs
+      # `id-token: write` on the job, added above -- without it npm fails the publish rather than quietly
+      # omitting the attestation, which is the right way round.
+      #
+      # RETROFITTING IS THE EXPENSIVE PART, exactly as the ADR says: provenance attaches at publish time,
+      # so a version shipped without it can never gain it. The first publish is the only chance.
+      # #2301: `pnpm exec changeset publish`, which runs `pnpm publish` per package (the tool is read from the
+      # workspace). pnpm packs, then shells out to `npm publish <tarball>` with THE STEP'S environment, so
+      # `NPM_CONFIG_PROVENANCE` below reaches the npm that signs -- proved by the rehearsal step after this one,
+      # not assumed from the setting.
+      # THE DELIBERATE npm HAND-OFF IN THIS FILE (#2891, pinned in `workflows-run-pnpm.test.ts`): no step here spells `npm publish`,
+      # the hand-off to it happens inside pnpm, and it stays npm's because trusted publishing is bound to npm's OIDC and the
+      # provenance is npm's to sign.
+      - name: Publish
+        if: needs.plan.outputs.mode == 'publish'
+        run: pnpm exec changeset publish
+        env:
+          # NO `NODE_AUTH_TOKEN`, AND ITS ABSENCE IS THE POINT (#63 step 11, 2026-09-19). All six packages
+          # now name this repository and this workflow as a TRUSTED PUBLISHER on npm, so each publish
+          # authenticates with a short-lived OIDC token minted for this workflow run rather than with a
+          # long-lived registry credential stored as a secret. Setting `NODE_AUTH_TOKEN` here would make
+          # npm use the token and never exercise OIDC, so leaving it would mean the trusted-publisher
+          # configuration was never actually tested -- green, and proving nothing.
+          #
+          # `id-token: write` on the job (above) is what makes this work, and it was already there for
+          # provenance. THE SECRET ITSELF IS NOT REVOKED BY THIS CHANGE: if the first OIDC publish fails,
+          # restoring this one line is the whole rollback. Revoke `NPM_TOKEN` only after a real publish
+          # has succeeded without it -- the failure mode here is at publish time, which this file's own
+          # header calls "the moment they are least able to check the result".
+          NPM_CONFIG_PROVENANCE: "true"
+
+      # #2301: THE DRY RUN PROVES THE PART OF THE PUBLISH THAT A DRY RUN CAN REACH, and it is the step that
+      # answers "does provenance still get requested now that pnpm is the one calling npm". Setting
+      # `NPM_CONFIG_PROVENANCE` and reading the setting proves nothing about whether it arrives; this runs the
+      # SAME hand-off the real publish uses (`pnpm publish` -> `npm publish`, `--dry-run`) for every published
+      # package, with the same variable, and REFUSES unless the npm at the far end reports provenance on. It
+      # reaches the registry-facing code path and stops before the upload, so it publishes nothing: the
+      # signing itself happens only on a real publish, and that is the one thing this cannot show.
+      - name: Dry run only -- the pnpm-to-npm publish hand-off, with provenance requested
+        if: inputs.dry-run == true
+        env:
+          NPM_CONFIG_PROVENANCE: "true"
+        run: node scripts/release-publish-rehearsal.mjs
+
+      # #1824 / #3131: THERE IS NO "COMMIT THE VERSION BUMP BACK" STEP, AND ITS ABSENCE IS THE POINT. It pushed straight to
+      # `main`, which `main`'s required review refuses. The bump is committed by the `version-pr` job, onto a branch,
+      # and arrives here already merged: that is why this job only ever publishes a version that is ALREADY on `main`.
+
+      - name: Say plainly what happened
+        env:
+          MODE: ${{ needs.plan.outputs.mode }}
+        run: |
+          if [ "$MODE" = "publish" ]; then
+            echo "Published. npm versions cannot be unpublished after 72 hours, only deprecated."
+          else
+            echo "REHEARSAL — versioned and packed, published nothing. A dispatch never publishes: a release is the"
+            echo "merge of the version pull request, and this workflow's own push trigger does the rest."
+          fi
+
+  token-reach:
+    # ## DOES `A11IGN_BOT_TOKEN` REACH THIS REPOSITORY ON THE WRITE SIDE? -- #3710, measured 2026-10-05
+    #
+    # The token's reach used to be learned by the first release that died on it (`toolchain`'s `release`
+    # 37356801652, `Resource not accessible by personal access token`, #3578), and its scope is readable only by its owner
+    # (403 for every agent). This job asks the token itself, and `layer-repository-protection.test.ts`'s
+    # `token` cell reads the LATEST run of a job NAMED `token-reach` in the workflow `docs/code-repository-protection.json`
+    # names (`tokenProbe`), so the job's name is a contract and is the same in every code repository.
+    #
+    # WHAT RUNS IT: a push to `main` that touches one of this workflow's `paths` (`.changeset/**`, `package.json`,
+    # `pnpm-lock.yaml`, `packages/*/package.json`), or a `workflow_dispatch`. NOT every merge: the PR that adds or changes
+    # this job touches none of those paths, so its own merge does not run it. A dispatch of `main` (it runs `plan` as a
+    # rehearsal and publishes nothing) is the way to get a reading on demand, and the cell reads it.
+    #
+    # A READ OF A REF IS NOT THE INSTRUMENT: every code repository is public and a ref read answers 200 with no credential
+    # at all. Two probes that WRITE NOTHING, each measured against four credentials on all eight repositories (runs
+    # 37383283351 and 37383468910, the row #3710 comment): the push service's advertisement (`git-receive-pack`: 200 for
+    # the token, 401 for none, 403 for a read-only or wrong-repository `GITHUB_TOKEN`), and `POST /pulls` with an empty
+    # body (422 `Invalid request` when authorised, so nothing is created; 401/403 otherwise). Together they are the two
+    # things a version PR and an arm need, contents write and pull-requests write. Refuted: `PATCH /pulls/0` (404 for
+    # a read-only credential too) and `.permissions.push` (absent for an installation token). NOT VERIFIED: a PAT
+    # scoped read-only; the verdict keys on the status, never on the 403's wording.
+    #
+    # IT GATES NOTHING: no job `needs` it, `version-pr` is unchanged, and `arm` (`auto-arm.yml`) keeps its documented
+    # `GITHUB_TOKEN` fallback, because stopping every arm for a token problem is worse than the degradation this reports.
+    # It is a SEPARATE job rather than `version-pr`'s first step because `version-pr` runs only when a version pull request
+    # is due, which would leave the reading rare and stale. WHY HERE AND NOT IN `auto-arm.yml`, the token's lasting user:
+    # `agent-org`'s `auto-arm-token.test.ts` pins that file at exactly two reads of the secret, and a third belongs on a
+    # row of its own. #3717 removes `version-pr`; whoever does it moves this job and `tokenProbe` to `auto-arm.yml`.
+    # A reading at a moment, per run, never a standing certificate.
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Probe the token's reach on the write side, failing with a TOKEN-REACH line that names the cause
+        env:
+          A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
+        run: |
+          repo="$GITHUB_REPOSITORY"
+          say() { echo "::error::TOKEN-REACH $repo: $1"; exit 1; }
+          [ -n "$A11IGN_BOT_TOKEN" ] || say "A11IGN_BOT_TOKEN is not set, so nothing here can push, open or arm a pull request with it"
+          status() { curl -sS --max-time 30 -o /dev/null -w '%{http_code}' "$@" || true; }
+          basic=$(printf 'x-access-token:%s' "$A11IGN_BOT_TOKEN" | base64 -w0)
+          push=$(status -H "Authorization: Basic $basic" "https://github.com/$repo.git/info/refs?service=git-receive-pack")
+          pulls=$(status -X POST -H "Authorization: Bearer $A11IGN_BOT_TOKEN" -d '{}' "https://api.github.com/repos/$repo/pulls")
+          if [ "$push/$pulls" = "200/422" ]; then
+            echo "TOKEN-REACH $repo: ok (push service 200; POST /pulls 422, authorised, nothing created)"
+            exit 0
+          fi
+          for s in "$push" "$pulls"; do
+            case "$s" in 000|5??) say "CANNOT_TELL the probe could not ask (push $push, pulls $pulls); this is not a reading of the token" ;; esac
+          done
+          [ "$push" = 200 ] || say "the token cannot push here: the push service answered HTTP $push (401: rejected, expired or revoked; 403 or 404: it does not reach this repository, or only reads it)"
+          say "the token pushes but cannot open or arm pull requests here: POST /pulls answered HTTP $pulls where 422 was wanted (403: it lacks pull-requests: write)"

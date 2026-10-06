@@ -79,15 +79,18 @@ test("#1536 THE INCIDENT, on the real manifests: from run 34816466408's reposito
     "publishing from the repository the manifests name is not refused");
 });
 
-test("#1536 THE WORKFLOW CALLS IT: release.yml runs the check with no `if:`, so on the dry run too, before the guard and before `changeset publish`", () => {
+test("#1536 THE WORKFLOW CALLS IT: release.yml runs the check with no `if:`, so on a rehearsal too, in a job the publishing call NEEDS", () => {
   const step = WORKFLOW.indexOf("run: node scripts/manifest-repository-check.mjs");
   assert.notEqual(step, -1, "release.yml does not run scripts/manifest-repository-check.mjs");
   const stepStart = WORKFLOW.lastIndexOf("- name:", step);
   assert.doesNotMatch(WORKFLOW.slice(stepStart, step), /\n\s+if:/,
-    "the check carries an `if:`, so some path -- the dry run -- can skip it");
+    "the check carries an `if:`, so some path -- a rehearsal -- can skip it");
   const refuse = WORKFLOW.indexOf("- name: Refuse to publish unless");
-  const publish = WORKFLOW.indexOf("run: pnpm exec changeset publish");
-  assert.ok(refuse !== -1 && publish !== -1, "release.yml's guard or publish step moved; re-read this test");
-  assert.ok(step < refuse && step < publish,
-    "the manifest check must run before the guard step and before `changeset publish`, or the registry answers first");
+  const call = WORKFLOW.indexOf("uses: a11ign/toolchain/.github/workflows/release-per-merge.yml@");
+  assert.ok(refuse !== -1 && call !== -1, "release.yml's guard step or the call to the called workflow moved; re-read this test");
+  assert.ok(step < refuse && step < call,
+    "the manifest check must run before the guard step and before the call that publishes, or the registry answers first");
+  // #3717: the publish left this file, so "before `changeset publish`" is a fact about the job graph: the guards job is one the call needs.
+  const releaseJob = WORKFLOW.slice(WORKFLOW.indexOf("\n  release:\n"));
+  assert.match(releaseJob, /\n {4}needs:\s*\[[^\]]*\bguards\b[^\]]*\]/, "the call must need the guards job, or a red manifest check stops nothing");
 });
