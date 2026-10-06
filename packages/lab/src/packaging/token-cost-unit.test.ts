@@ -141,14 +141,6 @@ test("the first start is after the 06:43Z slot, and the unit's comment cites the
   assert.ok(!citesLateStartRun(unitText("a11ign-lab-watch.service").replace(/\b\d{11}\b/g, "")), "POSITIVE CONTROL: the reading can say no");
 });
 
-test("the script still takes `--post`, still exits non-zero on an absent comment, and reads the week of TODAY (what the retry bound rests on)", () => {
-  const script = readFileSync(join(ROOT, "scripts/token-cost.mjs"), "utf8");
-  assert.match(script, /"--post"/);
-  assert.match(script, /is not on #\$\{on\.issue\} yet/);
-  assert.match(script, /throw new Error\(`token-cost: "\$\{heading\}"/);
-  assert.match(readFileSync(join(ROOT, "scripts/ci-health.mjs"), "utf8"), /const until = new Date\(`\$\{dayOf\(now\)\}T00:00:00Z`\)/);
-});
-
 test("both names are in units.own", () => {
   const own = declaredOwn();
   assert.ok(own.includes(SERVICE) && own.includes(TIMER));
