@@ -8,7 +8,7 @@ directory it works in. [What moved →](docs/operational-lessons.md#the-nested-c
 | | |
 |---|---|
 | [`packages/control/CLAUDE.md`](packages/control/CLAUDE.md) | the fleet: `fleet:deploy`, `fleet:provision`, Ansible, lab jobs |
-| [`packages/nvda-worker/CLAUDE.md`](packages/nvda-worker/CLAUDE.md) | the worker and NVDA: `doctor`, readiness, the capture cache |
+| [`screenreader-worker`'s `CLAUDE.md`](https://github.com/a11ign/screenreader-worker/blob/main/CLAUDE.md) | the worker and NVDA: `doctor`, readiness, the capture cache. **Moved to the layer repository (#3447)** |
 | [`packages/lab/CLAUDE.md`](packages/lab/CLAUDE.md) | the corpus: `gate:stability`, and who may report a gate reading `runs/` |
 | [`.github/CLAUDE.md`](.github/CLAUDE.md) | verifying changes, the hooks, sharing this checkout |
 
@@ -28,8 +28,7 @@ a11y-witness drives a **real screen reader (NVDA)** through real navigation, **a
 rule/visual layer) rather than instead of it. See `README.md`, `PLAN.md`.
 
 **A finding is either ASSERTED or REFERRED, and knowing which is decided by which layer owns the subtype.**
-Measured 2026-09-24 on the calibration set at protocol 21: **0 criteria asserted wrongly, 395 referred** — a reading at
-a moment, so re-derive before quoting. README's claim block carries the current statement.
+The counts are readings at a moment: re-derive before quoting. README's claim block carries the current one.
 [The readings and the superseded 2026-08-24 figure →](docs/operational-lessons.md#what-asserted-versus-referred-was-measured-at)
 
 | | |
