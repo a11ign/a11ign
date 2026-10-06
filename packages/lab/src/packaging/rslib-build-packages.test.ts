@@ -185,6 +185,20 @@ test("no package's build uses rspack's persistent cache: two `npm pack`s of one 
   assert.deepEqual(cachingConfigs(CONFIGS as Record<string, { performance?: { buildCache?: boolean } }>), []);
 });
 
+/** The packages whose config lets Rslib empty `dist` before a build. */
+const cleaningConfigs = (configs: Record<string, { lib: { output?: { cleanDistPath?: boolean } }[] }>): string[] =>
+  Object.entries(configs).filter(([, config]) => config.lib.some((lib) => lib.output?.cleanDistPath !== false)).map(([dir]) => dir);
+
+test("control: a config that lets Rslib empty `dist` is RED", () => {
+  assert.deepEqual(cleaningConfigs({ judge: { lib: [{}] }, cli: { lib: [{ output: { cleanDistPath: true } }] }, scorer: { lib: [{ output: { cleanDistPath: false } }] } }), ["judge", "cli"]);
+});
+
+test("no package's build empties `dist`: a pack in one test file left another's reader a missing built file", () => {
+  // Measured 2026-10-06: `corpus-restore-drill.test.ts` failed with ERR_MODULE_NOT_FOUND on `packages/scorer/dist/evidence-units.mjs` in a full `verify` run
+  // (it passes alone); a poller over one `rslib build` of scorer found the file absent on 2.4% of reads, and on none with `cleanDistPath: false`.
+  assert.deepEqual(cleaningConfigs(CONFIGS as Parameters<typeof cleaningConfigs>[0]), []);
+});
+
 // 4. ONE BUILD AT INSTALL, #168 -------------------------------------------------------------------------------------------------
 
 /** The simple commands of a script line, split on `&&`, `||`, `;`, `|` and `&`. */

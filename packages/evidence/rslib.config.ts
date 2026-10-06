@@ -9,6 +9,8 @@ import { defineConfig } from "@rslib/core";
 // cache lock ("State lock mismatch ... This indicates a race condition", measured 2026-10-06: a second concurrent `npm pack` of `packages/judge` aborted in ~1 of 4
 // pairs). A `prepack` build runs once from a clean checkout, so the cache bought nothing here.
 const NO_BUILD_CACHE = { buildCache: false };
+// `cleanDistPath: false`: Rslib empties `dist` before every build, and a reader of `dist` in another test file found a built file missing for the length of
+// the build (measured 2026-10-06 on `packages/scorer`: 2.4% of reads during one build; 0 with this off). The reason is written out in the toolchain preset.
 
 export default defineConfig({
   performance: NO_BUILD_CACHE,
@@ -27,6 +29,6 @@ export default defineConfig({
         "source-text": "./src/source-text.ts",
       },
     },
-    output: { target: "node", autoExternal: true, filename: { js: "[name].mjs" } },
+    output: { target: "node", autoExternal: true, cleanDistPath: false, filename: { js: "[name].mjs" } },
   }],
 });
