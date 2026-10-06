@@ -9,7 +9,7 @@
 // two chains every run means the count can only ever describe the chain that is actually there.
 import { readFileSync, realpathSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
+import { refuseUnknownFlags } from "./cli-flags.mjs";
 
 const REPO = fileURLToPath(new URL("../", import.meta.url));
 

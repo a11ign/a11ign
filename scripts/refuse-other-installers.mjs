@@ -54,7 +54,7 @@
 
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
+import { refuseUnknownFlags } from "./cli-flags.mjs";
 
 const PNPM_USER_AGENT = /^pnpm\//;
 

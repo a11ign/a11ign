@@ -23,7 +23,7 @@
 import { readdirSync, readFileSync, existsSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
+import { refuseUnknownFlags } from "./cli-flags.mjs";
 
 const REPO = fileURLToPath(new URL("../", import.meta.url));
 

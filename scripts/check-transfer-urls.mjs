@@ -46,7 +46,7 @@ import { fileURLToPath } from "node:url";
 import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
 
-import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
+import { refuseUnknownFlags } from "./cli-flags.mjs";
 import { PRODUCT_REPO } from "./repo-identity.mjs";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));

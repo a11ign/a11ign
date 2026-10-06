@@ -286,13 +286,13 @@ This is not a footnote to the interesting work — it *is* some of the work. Scr
 **This project's own worker fleet is bare metal, not a UTM VM.** The local UTM path below was the
 original testing setup and is deprecated for anything beyond a quick single-worker trial — "The UTM is
 deprecated, that was a testing thing" (repository owner, 2026-09-05). See `pnpm run fleet:status`,
-`pnpm run fleet:deploy` and [`packages/worker-fleet/README.md`](./packages/worker-fleet/README.md) for how
+`pnpm run fleet:deploy` and the [`a11ign/screenreader-fleet` README](https://github.com/a11ign/screenreader-fleet#readme) for how
 the real fleet works; the table below is about getting ONE worker of your own running, which is still a
 reasonable way to try the tool on a machine that is not part of any fleet.
 
 | you have | do this | what you get |
 |---|---|---|
-| a Windows box | [`packages/worker-fleet/src/provisioning/bootstrap-windows-worker.ps1`](./packages/worker-fleet/src/provisioning/bootstrap-windows-worker.ps1) | One idempotent script, then `A11Y_WORKER=http://host:8765` — the same script the bare-metal fleet's own boxes provision from |
+| a Windows box | [`src/provisioning/bootstrap-windows-worker.ps1`](https://github.com/a11ign/screenreader-fleet/blob/main/packages/worker-fleet/src/provisioning/bootstrap-windows-worker.ps1) in `a11ign/screenreader-fleet` | One idempotent script, then `A11Y_WORKER=http://host:8765` — the same script the bare-metal fleet's own boxes provision from |
 | neither a Windows box nor a Mac to spare | [`capture-regression.yml`](./.github/workflows/capture-regression.yml) | Real NVDA on a GitHub-hosted runner, so a contributor needs no infrastructure at all |
 | a Mac, and nothing else, for a quick trial only | [`docs/local-worker-vm.md`](./docs/local-worker-vm.md) — **deprecated** | A scripted Windows VM: ISO build, unattended install, auto-logon, NVDA provisioning, capture verified — no GUI clicking. Fine for trying the CLI once; not how this project runs its own captures |
 
@@ -335,7 +335,7 @@ Throughput scales by running more workers, not more threads ([ADR 0001](./docs/a
 It also means a second shell or agent driving the same worker will see your restarts as
 breakage; `worker-ctl.sh status` is the arbiter.
 
-When a worker breaks, the error messages lie — `"NVDA not installed"` usually means a version mismatch, not a missing install. [`docs/nvda-worker-runbook.md`](./docs/nvda-worker-runbook.md) maps error string to actual cause, and [`packages/worker-fleet/src/provisioning/diagnose-nvda-worker.ps1`](./packages/worker-fleet/src/provisioning/diagnose-nvda-worker.ps1) applies that table automatically across six layers.
+When a worker breaks, the error messages lie — `"NVDA not installed"` usually means a version mismatch, not a missing install. [`docs/nvda-worker-runbook.md`](./docs/nvda-worker-runbook.md) maps error string to actual cause, and [`src/provisioning/diagnose-nvda-worker.ps1`](https://github.com/a11ign/screenreader-fleet/blob/main/packages/worker-fleet/src/provisioning/diagnose-nvda-worker.ps1) in `a11ign/screenreader-fleet` applies that table automatically across six layers.
 
 ## How we know it works
 
@@ -368,12 +368,16 @@ packages/
   judge/          the deterministic WCAG rules, criterion coverage, and experience-layer ordering
   scorer/         the trained heads, the feature contract, and the Python scoring program
   evidence/       wire types, verification predicates, the WCAG 2.2 AA list. Zero deps, no I/O
-  worker-fleet/   host-side lease, health and capacity; provisioning; the Ansible fleet definition
   lab/            PRIVATE. The corpus, the training pipeline, the gates. Ships nothing
 
 The Windows capture worker (`nvda-worker`) and NVDA's announcement composition (`nvda-speech`, PRIVATE, GPL)
 live in [`a11ign/screenreader-worker`](https://github.com/a11ign/screenreader-worker), and this repository
 installs `@a11ign/screenreader-worker` from the registry.
+
+The host-side fleet (lease, health and capacity; provisioning; the `a11ign-doctor` and `a11y-worker-*` bins) lives in
+[`a11ign/screenreader-fleet`](https://github.com/a11ign/screenreader-fleet), installed as `@a11ign/screenreader-fleet`.
+`pnpm run build` lays its `src/` at `packages/worker-fleet/` (untracked), at the release the lockfile pins, for the
+scripts below and `control` that run it by path.
 
 docs/             guides, runbooks, and the ADRs.  Start at docs/README.md
 scripts/          repo-level tooling — the isolation gate, git hooks

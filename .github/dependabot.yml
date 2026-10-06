@@ -28,5 +28,4 @@ updates:
       - dependency-name: "@a11ign/evidence"
       - dependency-name: "@a11ign/judge"
       - dependency-name: "@a11ign/scorer"
-      - dependency-name: "@a11ign/screenreader-fleet"
       - dependency-name: "a11ign"

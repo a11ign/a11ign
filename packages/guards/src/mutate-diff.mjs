@@ -38,7 +38,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { changedFiles } from "./changed-files.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { changedLines } from "./mutant-survivors.mjs";
-import { flagValue, refuseUnknownFlags } from "../../worker-fleet/src/cli-flags.mjs";
+import { flagValue, refuseUnknownFlags } from "@a11ign/screenreader-fleet/cli-flags";
 
 export const DEFAULT_MAX_MUTANTS = 100;
 export const DEFAULT_BUDGET_SECONDS = 420;

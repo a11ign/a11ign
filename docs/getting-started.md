@@ -123,7 +123,7 @@ On that machine, in an **elevated** PowerShell:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass -Force
-irm https://raw.githubusercontent.com/a11ign/a11ign/main/packages/worker-fleet/src/provisioning/bootstrap-windows-worker.ps1 | iex
+irm https://raw.githubusercontent.com/a11ign/screenreader-fleet/main/packages/worker-fleet/src/provisioning/bootstrap-windows-worker.ps1 | iex
 ```
 
 It installs Node, Git and NVDA, configures the interactive session, and starts the worker

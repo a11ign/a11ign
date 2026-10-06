@@ -57,5 +57,8 @@
   },
   "files": [
     "src"
-  ]
+  ],
+  "dependencies": {
+    "@a11ign/screenreader-fleet": "^0.3.0"
+  }
 }

@@ -37,7 +37,7 @@ import { pathToFileURL } from "node:url";
 
 import { changedFiles } from "../packages/guards/src/changed-files.mjs";
 import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
-import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
+import { refuseUnknownFlags, flagValue } from "./cli-flags.mjs";
 
 /** The sections a consumer's install is built from. `devDependencies` is the one that is not. */
 export const RUNTIME_SECTIONS = ["dependencies", "peerDependencies", "optionalDependencies"];

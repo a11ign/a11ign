@@ -165,20 +165,20 @@ test("classify: a private package never demands a changeset, whatever it packs",
 /**
  * ISSUE #132, reproduced directly: a TEST FILE under a published package's `src/` must NOT fire
  * `changeset`, because `npm pack` never ships it -- measured on the real PR this blocked,
- * `packages/worker-fleet/src/lab-job.test.ts`. Injected `getPackedFiles`, so this proves `classify`'s OWN
+ * `packages/worker-fleet/src/lab-job.test.ts` (a package that has since moved to its own repository, so the fakes below name `cli`). Injected `getPackedFiles`, so this proves `classify`'s OWN
  * logic (asks the packed manifest, not the path) without needing a real `npm pack` per test.
  */
 test("classify: a file NOT in the packed manifest does not fire changeset, even under src/", () => {
-  const getPackedFiles = fakePacked({ "worker-fleet": ["dist/index.js", "src/local-worker/build-vm.sh"] });
-  const result = classify(["packages/worker-fleet/src/lab-job.test.ts"], ["worker-fleet"], { getPackedFiles });
+  const getPackedFiles = fakePacked({ cli: ["dist/index.js", "src/local-worker/build-vm.sh"] });
+  const result = classify(["packages/cli/src/lab-job.test.ts"], ["cli"], { getPackedFiles });
   assert.equal(result.changeset, false,
     "src/lab-job.test.ts is not in the packed manifest (raw) and its built form (dist/lab-job.test.js) "
     + "is not either -- npm never ships it, so it cannot reach a consumer");
 });
 
 test("classify: a RAW-shipped file under a published package's own files entry fires changeset", () => {
-  const getPackedFiles = fakePacked({ "worker-fleet": ["dist/index.js", "src/provisioning/deploy.ps1"] });
-  const result = classify(["packages/worker-fleet/src/provisioning/deploy.ps1"], ["worker-fleet"], { getPackedFiles });
+  const getPackedFiles = fakePacked({ cli: ["dist/index.js", "src/provisioning/deploy.ps1"] });
+  const result = classify(["packages/cli/src/provisioning/deploy.ps1"], ["cli"], { getPackedFiles });
   assert.equal(result.changeset, true, "this exact path is in the packed manifest -- it reaches a consumer");
 });
 
@@ -223,9 +223,9 @@ test("reachesPacked: prefix candidates match ANY packed file under that prefix, 
   assert.equal(reachesPacked(new Set(["src/provisioning/deploy.ps1"]), ["src/provisioning/deploy.ps1"]), true);
 });
 
-test("classify: a .mjs source file worker-fleet actually PACKS fires changeset — #720, was false before the fix", () => {
-  const getPackedFiles = fakePacked({ "worker-fleet": ["dist/deploy-worker.mjs"] });
-  const result = classify(["packages/worker-fleet/src/deploy-worker.mjs"], ["worker-fleet"], { getPackedFiles });
+test("classify: a .mjs source file a package actually PACKS fires changeset — #720, was false before the fix", () => {
+  const getPackedFiles = fakePacked({ cli: ["dist/deploy-worker.mjs"] });
+  const result = classify(["packages/cli/src/deploy-worker.mjs"], ["cli"], { getPackedFiles });
   assert.equal(result.changeset, true);
 });
 
@@ -242,19 +242,9 @@ test("packedFiles + candidatePackedPaths against the REAL packages/cli: src/cli.
   assert.ok(hit, `none of src/cli.ts's candidate paths were packed; packed set was: ${[...packed].slice(0, 10).join(", ")}...`);
 });
 
-/**
- * #720: the REAL bug, against the REAL package -- worker-fleet actually ships `dist/deploy-worker.mjs`
- * via `tsc --build`'s `allowJs`, and the old `.tsx?`-only regex could never see it. This is what a naive
- * `git checkout lead/changeset-gate-asks-npm -- <file>` would have missed: that stranded branch predates
- * this file's `--precise`/`npm pack`-based architecture entirely (#132/#151), so re-deriving the fix here
- * -- against today's `classify()` -- is the right move, not reviving `consumer-visible.mjs`.
- */
-test("packedFiles + candidatePackedPaths against the REAL packages/worker-fleet: src/deploy-worker.mjs reaches a consumer", () => {
-  const packed = packedFiles(REPO.replace(/\/$/, ""), "worker-fleet");
-  assert.ok(packed.size > 0, "npm pack --dry-run reported an empty manifest for packages/worker-fleet -- broken build?");
-  const hit = reachesPacked(packed, candidatePackedPaths("src/deploy-worker.mjs"));
-  assert.ok(hit, `none of src/deploy-worker.mjs's candidate paths were packed; packed set was: ${[...packed].slice(0, 10).join(", ")}...`);
-});
+// #720's REAL-package control (`packedFiles` against `packages/worker-fleet`, which shipped `dist/deploy-worker.mjs` through `tsc --build`'s `allowJs`)
+// left with the package (#3504): no package published from this repository compiles an `.mjs` any more, so there is no real manifest to read it
+// from. What stays is the injected one above and `candidatePackedPaths`'s extension-agnostic mapping, which is the logic #720 fixed.
 
 test("classify: a root config file touches EVERY known package, never just the ones that happened to change", () => {
   const result = classify(["package.json"], ["lab", "judge", "cli", "scorer"]);

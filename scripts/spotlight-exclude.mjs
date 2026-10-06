@@ -30,7 +30,7 @@ import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
-import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
+import { refuseUnknownFlags } from "./cli-flags.mjs";
 import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 
 const MARKER = ".metadata_never_index";

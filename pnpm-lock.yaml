@@ -18,8 +18,8 @@ importers:
         specifier: 0.2.1
         version: link:packages/scorer
       '@a11ign/screenreader-fleet':
-        specifier: 0.1.4
-        version: link:packages/worker-fleet
+        specifier: ^0.3.0
+        version: 0.3.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)
       '@a11ign/screenreader-worker':
         specifier: ^0.1.0
         version: 0.1.0
@@ -92,8 +92,8 @@ importers:
         specifier: 0.2.1
         version: link:../scorer
       '@a11ign/screenreader-fleet':
-        specifier: 0.1.4
-        version: link:../worker-fleet
+        specifier: ^0.3.0
+        version: 0.3.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)
       yaml:
         specifier: ^2.9.1
         version: 2.9.1
@@ -113,7 +113,11 @@ importers:
 
   packages/evidence: {}
 
-  packages/guards: {}
+  packages/guards:
+    dependencies:
+      '@a11ign/screenreader-fleet':
+        specifier: ^0.3.0
+        version: 0.3.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)
 
   packages/judge:
     dependencies:
@@ -133,8 +137,8 @@ importers:
         specifier: 0.2.1
         version: link:../scorer
       '@a11ign/screenreader-fleet':
-        specifier: 0.1.4
-        version: link:../worker-fleet
+        specifier: ^0.3.0
+        version: 0.3.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)
       '@a11ign/screenreader-worker':
         specifier: ^0.1.0
         version: 0.1.0
@@ -166,30 +170,33 @@ importers:
 
   packages/toolchain: {}
 
-  packages/worker-fleet:
-    dependencies:
-      '@a11ign/judge':
-        specifier: 0.2.3
-        version: link:../judge
-      '@a11ign/screenreader-worker':
-        specifier: ^0.1.0
-        version: 0.1.0
-    devDependencies:
-      '@a11ign/evidence':
-        specifier: 0.2.0
-        version: link:../evidence
-      typescript:
-        specifier: ^6.0.3
-        version: 6.0.3
-      yaml:
-        specifier: ^2.9.1
-        version: 2.9.1
-
 packages:
 
   '@a11ign/documents@0.1.0':
     resolution: {integrity: sha512-LeL53lM09iXFMKBPtEgevHGM0VMTv+c9HtWwMnCNtJ14f2sSswGFXMO/1i5Q5tKkk0EgVj+Tq5tqeAJN25izSw==}
     engines: {node: '>=20'}
+
+  '@a11ign/evidence@0.1.0':
+    resolution: {integrity: sha512-Pn9xdgqLfxsTOSPoOqee4cqiwiRKia4hvv1On7pRoh70qvB2qAQ0K2n/5pFcseEmOCOUF30lNC6YQu2L4bfL3w==}
+    engines: {node: '>=20'}
+
+  '@a11ign/judge@0.1.0':
+    resolution: {integrity: sha512-XCAPGxM+i5dHtiUQMvjsp0/DG/zNsn8oAWJJVvy5QhJIE8ro+sjMk78QjmAGnSpmR4U7v8D3TA/dbGhKXZ0FpA==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      '@a11ign/scorer': 0.1.0
+      '@anthropic-ai/sdk': ^0.106.0
+      '@huggingface/transformers': '>=3.0.0'
+    peerDependenciesMeta:
+      '@anthropic-ai/sdk':
+        optional: true
+      '@huggingface/transformers':
+        optional: true
+
+  '@a11ign/screenreader-fleet@0.3.0':
+    resolution: {integrity: sha512-E1WMmxUinL4vHeijYFSQ/gwHY8d5NRbCnFlsQ8jx2+e7g94+FjbqYrwU+QyK1zwJQowtAdievnQphNQXsF8oeQ==}
+    engines: {node: '>=20'}
+    hasBin: true
 
   '@a11ign/screenreader-worker@0.1.0':
     resolution: {integrity: sha512-QNo5s/ltMfnQH8jnfDjV760JK8XDpAjB7kIdxVv9yZYD/nZLfNtUN0abYm8wD0RG/Z97LrqZbxVoTROGT/PNeA==}
@@ -1782,6 +1789,24 @@ snapshots:
   '@a11ign/documents@0.1.0':
     dependencies:
       pdf-lib: 1.17.1
+
+  '@a11ign/evidence@0.1.0': {}
+
+  '@a11ign/judge@0.1.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)':
+    dependencies:
+      '@a11ign/evidence': 0.1.0
+      '@a11ign/scorer': link:packages/scorer
+    optionalDependencies:
+      '@anthropic-ai/sdk': 0.131.0
+
+  '@a11ign/screenreader-fleet@0.3.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)':
+    dependencies:
+      '@a11ign/judge': 0.1.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)
+      '@a11ign/screenreader-worker': 0.1.0
+    transitivePeerDependencies:
+      - '@a11ign/scorer'
+      - '@anthropic-ai/sdk'
+      - '@huggingface/transformers'
 
   '@a11ign/screenreader-worker@0.1.0':
     dependencies:

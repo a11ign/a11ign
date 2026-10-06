@@ -11,7 +11,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -137,7 +137,7 @@ test("success on an EARLIER commit carries when only the version bump changed si
 });
 
 test("success on an earlier commit does NOT carry once a path the fleet part reads changed since", () => {
-  for (const path of ["packages/lab/src/stability.mjs", "packages/worker-fleet/src/cli-flags.mjs",
+  for (const path of ["packages/lab/src/stability.mjs", "packages/evidence/src/index.ts",
     "pnpm-lock.yaml", "scripts/anything.mjs", "a-path-nobody-thought-of"]) {
     const decision = decide([on(RELEASE, []), on(QUALIFIED, [...VERSION_BUMP, path], "success")]);
     assert.equal(decision.outcome, "wait", `${path} is read by the fleet part`);
@@ -199,9 +199,10 @@ test("only `proceed` publishes: no other outcome is spelled proceed", () => {
 });
 
 test("every package directory is classified exactly once, so adding one fails HERE and not at a release", () => {
+  // A PACKAGE is a directory with a manifest: `packages/worker-fleet/` is a layer checkout where `pnpm run build` laid it (#3504), with no manifest, untracked.
   const directories = readdirSync("packages", { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name)
-    .filter((name) => !["node_modules"].includes(name));
-  assert.ok(directories.length >= 9, "the discovery found the packages (positive control for the emptiness; ten until #3447 took nvda-speech out, with nvda-worker the eleventh)");
+    .filter((name) => !["node_modules"].includes(name) && existsSync(`packages/${name}/package.json`));
+  assert.ok(directories.length >= 8, "the discovery found the packages (positive control for the emptiness; ten until #3447 took nvda-speech out, with nvda-worker the eleventh, and nine until #3504 took worker-fleet)");
   const classified = [...FLEET_GATED_PACKAGES, ...RUNNER_ONLY_PACKAGES, ...PRIVATE_PACKAGES];
   assert.deepEqual([...classified].sort(), [...directories].sort());
   assert.equal(new Set(classified).size, classified.length, "no package is in two tables");
@@ -213,7 +214,7 @@ test("PRIVATE_PACKAGES are private manifests, and every PUBLISHED package is in 
   // lab, control and guards are private here too (#3126: their own repositories release them), so a private manifest
   // may sit in a fleet table; what may NOT happen is a published one being only in PRIVATE_PACKAGES.
   const published = readdirSync("packages", { withFileTypes: true }).filter((d) => d.isDirectory())
-    .map((d) => d.name).filter((dir) => manifest(dir).private !== true);
+    .map((d) => d.name).filter((dir) => existsSync(`packages/${dir}/package.json`)).filter((dir) => manifest(dir).private !== true);
   assert.ok(published.length >= 4, "the discovery found published packages (positive control for the emptiness)");
   for (const dir of published) {
     assert.ok([...FLEET_GATED_PACKAGES, ...RUNNER_ONLY_PACKAGES].includes(dir), `${dir} is published and in no fleet table`);

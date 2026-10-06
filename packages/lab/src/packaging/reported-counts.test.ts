@@ -130,7 +130,6 @@ const KNOWN_REPORTED_FLOORS: readonly string[] = Object.freeze([
   "ready-label-audit.test.ts: statuses.size",
   "region-paths.test.ts: roots.length",
   "releasability.test.ts: VERDICTS.cases.length",
-  "repo-identity-consolidated.test.ts: SITES.length",
   "schema-migration-citations.test.ts: SOURCE_FILES.length",
   "schema-migration-citations.test.ts: headings.length",
   "spawned-paths.test.ts: files.length",

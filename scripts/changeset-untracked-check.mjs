@@ -34,7 +34,7 @@ import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 // RELATIVE, NOT `@a11ign/screenreader-fleet/cli-flags` -- this script is a root script, matching
 // `ci-changed.mjs`'s own rule: the package specifier resolves to `dist/`, which a fresh checkout
 // does not have built yet.
-import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
+import { refuseUnknownFlags } from "./cli-flags.mjs";
 
 /**
  * Untracked `.changeset/*.md` paths from `git status --porcelain -- .changeset`'s own text.

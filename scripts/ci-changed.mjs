@@ -34,7 +34,7 @@ import { changedFiles } from "../packages/guards/src/changed-files.mjs";
 // specifier, and every other root script runs after `npm run build`. This one gates whether ANYTHING
 // else in the workflow builds at all, so it cannot depend on a build having already happened; the file
 // itself is plain JS with no TypeScript syntax, so importing straight from `src` costs nothing.
-import { refuseUnknownFlags, flagValue } from "../packages/worker-fleet/src/cli-flags.mjs";
+import { refuseUnknownFlags, flagValue } from "./cli-flags.mjs";
 import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 // REUSED, NOT RE-DERIVED. `changedPackages` already exists, already extracts `packages/<name>` from a
 // diff, and already has its own test (`changed-packages.test.ts`) proving it against real shapes (a

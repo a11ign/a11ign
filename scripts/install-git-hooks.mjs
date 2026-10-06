@@ -39,7 +39,7 @@ import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 // `pre-install-import-graph.test.ts` DERIVES it from `package.json`'s `prepare`. See the second
 // file's header for why the derived form matters: the declared list does not contain
 // `workflow-run-liveness.mjs`, which had been crashing on this same import on every run.
-import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
+import { refuseUnknownFlags } from "./cli-flags.mjs";
 
 /** Relative, so it keeps working inside a `git worktree` — where `.git` is a file, not a directory. */
 export const HOOKS_PATH = "scripts/git-hooks";

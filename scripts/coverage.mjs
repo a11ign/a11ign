@@ -35,7 +35,7 @@ import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { CoverageProvider } from "@rstest/coverage-v8";
-import { refuseUnknownFlags } from "../packages/worker-fleet/src/cli-flags.mjs";
+import { refuseUnknownFlags } from "./cli-flags.mjs";
 // The toolchain's SOURCE by relative path, for the reason `scripts/rstest/rstest.config.mjs` gives: a tree with no `dist` must run this.
 import { coverageOptionsFromC8rc, coverageTotals, runChildCoverage } from "../packages/toolchain/src/merge-child-coverage.mjs";
 // #492: a bare "pnpm" spawn is ENOENT on windows-2022; `npm-cli-windows-spawn.test.ts` refuses one.

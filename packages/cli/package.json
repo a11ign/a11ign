@@ -24,7 +24,7 @@
     "@a11ign/judge": "0.2.3",
     "@a11ign/documents": "^0.1.0",
     "@a11ign/scorer": "0.2.1",
-    "@a11ign/screenreader-fleet": "0.1.4",
+    "@a11ign/screenreader-fleet": "^0.3.0",
     "yaml": "^2.9.1"
   },
   "optionalDependencies": {

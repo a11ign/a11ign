@@ -102,7 +102,7 @@ test("every importer that declares the new name resolves it in pnpm-lock.yaml, t
   const lock = parse(readFileSync(join(REPO, "pnpm-lock.yaml"), "utf8")) as { importers: Record<string, LockImporter> };
   const declarers = workspaceManifests().filter((file) => declaresNewName(readManifest(file)));
   // Derived a second way: the three manifests `git grep` finds naming it, so a walk that lost one is not "enough".
-  assert.deepEqual(declarers, ["package.json", "packages/lab/package.json", "packages/worker-fleet/package.json"]);
+  assert.deepEqual(declarers, ["package.json", "packages/lab/package.json"]);
   for (const file of declarers) {
     const importer = dirname(file);
     const section = DEPENDENCY_SECTIONS.find((name) => lock.importers[importer]?.[name]?.[NEW_NAME]);
