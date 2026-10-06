@@ -314,8 +314,8 @@ jobs:
 
       # #3180: TRUSTED PUBLISHING NEEDS npm 11.5.1 OR NEWER, and `actions/setup-node` with Node 22 ships npm 10.x. The called workflow
       # installs it for its own publish; THIS is the npm the provenance request below runs with, and the floor is read back from the
-      # npm first on PATH, because that is the one pnpm shells out to. STAYS npm (pinned in `workflows-run-pnpm.test.ts`):
-      # `npm install -g` is the only way to upgrade npm itself; pnpm cannot.
+      # npm first on PATH, because that is the one pnpm shells out to.
+      # STAYS npm (#3180, pinned in `workflows-run-pnpm.test.ts`): `npm install -g` is the only way to upgrade npm itself; pnpm cannot.
       - name: Upgrade npm to the trusted-publishing floor, and refuse below it
         run: |
           npm install -g "npm@^11.5.1"
