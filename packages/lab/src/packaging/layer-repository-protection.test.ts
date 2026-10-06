@@ -573,7 +573,8 @@ function tokenCell(entry: Entry, probe: ProbeRead, use: TokenUse | null = null):
  * phrase reads it as the thing it replaced. The rule, in the order it is applied:
  *
  *   DRIFT        any job uses `changesets/action`, is NAMED `version-pr`, requests `pull-requests: write`
- *                (job or workflow level), runs `gh pr create`, or pushes a BRANCH (`git push` that is not a tag push);
+ *                (job or workflow level; a job that calls the local consumer-gate workflow is excused the grant, below),
+ *                runs `gh pr create`, or pushes a BRANCH (`git push` that is not a tag push);
  *   OK           otherwise, a job calls the reusable per-merge workflow, or a step pushes the merge's TAG;
  *   CANNOT_TELL  the file could not be read or parsed, or it is neither (nothing releases, or only a local
  *                composite action does, and that is not followed).
@@ -597,6 +598,16 @@ type WorkflowStep = { uses?: unknown; run?: unknown };
 type WorkflowJob = { uses?: unknown; permissions?: unknown; steps?: WorkflowStep[] };
 type Workflow = { permissions?: unknown; jobs?: Record<string, WorkflowJob> };
 type ContentsAnswer = { content?: string; encoding?: string };
+
+/**
+ * #3777: the local consumer-gate workflow is generated from the README's Quickstart fence, which asks for
+ * `pull-requests: write` for the Action's optional PR-comment step, and a called workflow may not request more than
+ * its caller grants, so the caller carries it. That grant comments on a pull request and opens none, so on THIS call
+ * it is not the version pull request's signal. Only this call: any other job with the grant still reads DRIFT, and
+ * so does the same job by its name or by anything its steps do (a `uses:` job has none).
+ */
+const CONSUMER_GATE_CALL = /^\.\/\.github\/workflows\/consumer-gate\.ya?ml$/;
+const callsConsumerGate = (job: WorkflowJob): boolean => typeof job.uses === "string" && CONSUMER_GATE_CALL.test(job.uses);
 
 const grantsPullRequestWrite = (permissions: unknown): boolean =>
   permissions === "write-all"
@@ -624,7 +635,7 @@ function stepSignals(step: WorkflowStep): string[] {
 
 function jobSignals(id: string, job: WorkflowJob): string[] {
   const found = (id === VERSION_PR_JOB ? [`has the version pull request job's name, \`${VERSION_PR_JOB}\``] : [])
-    .concat(grantsPullRequestWrite(job.permissions) ? ["requests `pull-requests: write`"] : [])
+    .concat(grantsPullRequestWrite(job.permissions) && !callsConsumerGate(job) ? ["requests `pull-requests: write`"] : [])
     .concat((job.steps ?? []).flatMap(stepSignals));
   return found.map((what) => `job \`${id}\` ${what}`);
 }
@@ -1055,6 +1066,51 @@ test("#3718: each DRIFT signal fires on its own, and a tag push is not a branch 
   assert.match(shapeOf(job("    steps:\n      - run: gh pr create --title x\n")).detail, /runs `gh pr create`/);
   assert.equal(shapeOf(job("    steps:\n      - run: git push origin --tags\n")).state, "OK");
   assert.equal(shapeOf(job("    steps:\n      - run: |\n          git push origin \\\n            \"HEAD:refs/tags/$TAG\"\n")).state, "OK", "a continued line is one command");
+});
+
+/** `a11ign`'s `release.yml` as #3772 left it: the consumer gate called with the grant its Quickstart fence asks for, beside the per-merge call. */
+const CONSUMER_GATE_WITH_GRANT = `name: release
+on: { push: { branches: [main] } }
+jobs:
+  consumer-gate:
+    uses: ./.github/workflows/consumer-gate.yml
+    permissions:
+      contents: read
+      pull-requests: write
+  release:
+    uses: a11ign/toolchain/.github/workflows/release-per-merge.yml@5ea3fc027eb0891d6329e6a02c2d4ed1c679178a
+`;
+
+test("#3777 POSITIVE CONTROL: the consumer gate called with its PR-comment grant reads OK, because the grant opens nothing", () => {
+  const cell = shapeOf(CONSUMER_GATE_WITH_GRANT);
+  assert.equal(cell.state, "OK", cell.detail);
+  assert.match(cell.detail, /calls a11ign\/toolchain\/\.github\/workflows\/release-per-merge\.yml@/);
+});
+
+test("#3777: only the call to the local consumer gate is excused the grant; every other signal still reads DRIFT beside it", () => {
+  const gate = "  consumer-gate:\n    uses: ./.github/workflows/consumer-gate.yml\n    permissions: { pull-requests: write }\n";
+  const perMerge = "  release:\n    uses: a11ign/toolchain/.github/workflows/release-per-merge.yml@v1\n";
+  const wrap = (jobs: string, head = ""): string => `${head}jobs:\n${jobs}`;
+  const withAction = shapeOf(wrap(`${gate}${perMerge}  version:\n    steps:\n      - uses: changesets/action@v1\n`));
+  assert.equal(withAction.state, "DRIFT", "the action in another job is still the version pull request");
+  assert.match(withAction.detail, /job `version` uses `changesets\/action`/);
+  assert.doesNotMatch(withAction.detail, /consumer-gate/, "the excused grant is not what it names");
+  assert.match(shapeOf(wrap(`${gate}${perMerge}`, "permissions: { pull-requests: write }\n")).detail, /the workflow requests/, "a workflow-level grant is not excused by calling the gate");
+  const other = shapeOf(wrap(`${perMerge}  lint:\n    uses: ./.github/workflows/lint.yml\n    permissions: { pull-requests: write }\n`));
+  assert.equal(other.state, "DRIFT", "a different local workflow with the grant is not the consumer gate");
+  assert.match(other.detail, /job `lint` requests `pull-requests: write`/);
+  const named = shapeOf(wrap(`${perMerge}  version-pr:\n    uses: ./.github/workflows/consumer-gate.yml\n    permissions: { pull-requests: write }\n`));
+  assert.equal(named.state, "DRIFT", "a job NAMED for the version pull request is read by its name, whatever it calls");
+  assert.match(named.detail, /has the version pull request job's name/);
+  assert.doesNotMatch(named.detail, /requests `pull-requests: write`/, "the grant on a consumer-gate call is not what makes it DRIFT");
+});
+
+test("#3777: the cell for `a11ign` reads OK on the committed release.yml, which still carries the consumer gate's grant", () => {
+  const text = readFileSync(join(REPO_ROOT, RELEASE_WORKFLOW), "utf8");
+  const live = text.split("\n").filter((line) => !line.trim().startsWith("#")).join("\n");
+  assert.match(live, /pull-requests: write/, "positive control: the grant this test excuses is still on a live line, so OK is the rule's doing");
+  const cell = releaseShapeOfText(text);
+  assert.equal(cell.state, "OK", cell.detail);
 });
 
 test("#3718: a workflow that is neither shape, or cannot be read, is CANNOT_TELL and never OK", () => {
