@@ -4,9 +4,9 @@
  * kept only what is still a fact ABOUT THIS REPOSITORY. Each is pinned with a positive control, because an assertion that something is absent passes on an
  * empty population (`.claude/rules/guards-and-assertions.md`):
  *
- * 1. THE DEPENDENCY. The root and the three packages that build with the presets pin one exact version, and `pnpm-lock.yaml` resolves it from the registry
+ * 1. THE DEPENDENCY. The root, `lab` (its tests import the package) and the three packages that build with the presets pin one exact version, and `pnpm-lock.yaml` resolves it from the registry
  *    (`pnpm-workspace.test.ts` pins the same edges as not `link:`). Control: a manifest range, a second version, or a `link:` is RED.
- * 2. THE OLD HOME IS GONE. `packages/toolchain/` holds no manifest and no source (the row's own Acceptance reads git for the tracked listing). Control: the same read finds `packages/cli`.
+ * 2. THE OLD HOME IS GONE. `packages/toolchain/` holds no manifest and no source (the row's own Acceptance reads git for the tracked listing). Control: the same read finds the thin config.
  * 3. THE BASE. The root base extends the INSTALLED package's, and carries none of `composite`, `outDir`, `rootDir` (row 4c-a11ign, #3580, deleted the
  *    references that needed them). Control: a base that carries `composite` is RED.
  * 4. THE PEERS. `@rstest/core` and `@rslib/core` are peers of the installed package and devDependencies of the root, with ranges that include the versions
@@ -46,8 +46,8 @@ function ownCompilerOptions(path: string): Record<string, unknown> {
 
 // 1. THE DEPENDENCY -------------------------------------------------------------------------------------------------------------
 
-/** Every importer that declares the package, as the lockfile records it. The packages build with its presets; the root runs its test config. */
-const CONSUMERS = [".", "packages/cli", "packages/judge", "packages/scorer"];
+/** Every importer that declares the package, as the lockfile records it. The packages build with its presets, `lab`'s tests import it, and the root runs its test config. */
+const CONSUMERS = [".", "packages/cli", "packages/judge", "packages/lab", "packages/scorer"];
 
 /** What is wrong with the way a set of importers takes the package: one exact registry version, the same everywhere, and never a link. */
 function dependencyProblems(consumers: Record<string, { specifier: string; version: string } | undefined>): string[] {
@@ -63,8 +63,8 @@ function dependencyProblems(consumers: Record<string, { specifier: string; versi
 
 const lockedConsumers = () => Object.fromEntries(CONSUMERS.map((importer) => [importer, lock.importers[importer].devDependencies?.[NAME]]));
 
-test("the root and the three building packages pin one exact registry version of the toolchain, and the lockfile resolves it without a link", () => {
-  assert.equal(CONSUMERS.length, 4, "the positive control for the loop below: four importers are read");
+test("the root, lab and the three building packages pin one exact registry version of the toolchain, and the lockfile resolves it without a link", () => {
+  assert.equal(CONSUMERS.length, 5, "the positive control for the loop below: five importers are read");
   assert.deepEqual(dependencyProblems(lockedConsumers()), []);
   for (const importer of CONSUMERS) {
     const manifest = readJson<Manifest>(join(REPO, importer === "." ? "package.json" : `${importer}/package.json`));
@@ -85,7 +85,7 @@ test("control: a range, a second version, a link and a missing declaration are e
 // 2. THE OLD HOME IS GONE -------------------------------------------------------------------------------------------------------
 
 test("the package has no manifest under packages/toolchain/, and the same read finds one where a package lives", () => {
-  assert.ok(existsSync(join(REPO, "packages/cli/package.json")), "the positive control: the same read finds a package that is in the tree");
+  assert.ok(existsSync(join(REPO, "scripts/rstest/rstest.config.mjs")), "the positive control: the same read finds a file that is in the tree");
   assert.equal(existsSync(join(REPO, "packages/toolchain/package.json")), false);
   assert.equal(existsSync(join(REPO, "packages/toolchain/src")), false);
 });

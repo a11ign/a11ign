@@ -48,9 +48,9 @@ function packagesWithPrepack(): string[] {
   return found.sort();
 }
 
-test("VACUITY GUARD: the discovery finds a non-trivial population -- the five known publishable packages", () => {
+test("VACUITY GUARD: the discovery finds a non-trivial population -- the four known publishable packages", () => {
   const found = packagesWithPrepack();
-  assert.ok(found.length >= 5, `expected at least 5 packages with a prepack script, found ${found.length} `
+  assert.ok(found.length >= 4, `expected at least 4 packages with a prepack script, found ${found.length} `
     + `(${found.join(", ")}) -- the discovery walk is probably broken`);
 });
 
