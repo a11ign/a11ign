@@ -25,8 +25,9 @@ import { validRef, PLAYBOOKS, LIMIT_PATTERN, SERIAL_PATTERN, DISPLAY_MODE_PATTER
   inventorySources, inventoryReadScript, parseInventoryReads, protocolGuardVerdict,
   fleetHoldUntil, fleetHoldWorkers, fleetHoldReachesTarget, activeFleetHolds, allowHoldNumbers, sequenceHoldGate,
   GH_TOKEN_FILE, ghEnvironment, fleetHoldReadRefusal, readFleetGatedIssues, tokenSetOf,
-  writeIdentityFor, overrideUnitParts, limitTouches, identityStepFailure }
+  writeIdentityFor, overrideUnitParts, limitTouches, identityStepFailure, readLocalProtocol, guardProtocolChange }
   from "./fleet-playbook.mjs";
+import { layersFrom } from "./layer-checkouts.mjs";
 import { CONTROL_PLANE_CHECKOUT_PATH } from "./control-plane-checkout.mjs";
 import { protocolVerdict } from "../../worker-fleet/src/protocol-guard.mjs";
 
@@ -953,6 +954,81 @@ test("#1356 MUTATION TARGET: fleet.refusal must be checked before protocolVerdic
     fleet: { workers: [], refusal: "no inventory exists at /etc/a11ign/inventory.yml on the control plane" },
   });
   assert.doesNotMatch(guarded.message, /no worker answered/, "#1356's own refusal must win instead");
+});
+
+// --- #3761: guardProtocolChange reads the operator's CLONE of the worker layer, or refuses naming it ---
+//
+// Since #3447 a primary checkout holds at most a `node_modules` at packages/nvda-worker, so the old read died
+// with an ENOENT stack. The readers below are injected (`readFile`, `declaration`, `readLocal`, `readFleet`)
+// like #1356's, so no clone, no ssh and no process exit is needed.
+
+const NVDA_REMOTE = "https://github.com/a11ign/screenreader-worker.git";
+const CLONELESS = layersFrom({
+  manifest: { layers: { "nvda-worker": { path: "packages/nvda-worker", remote: NVDA_REMOTE } } },
+  root: "/operator/checkout",
+}).layerDeclaration;
+const absent = () => { throw Object.assign(new Error("ENOENT: no such file or directory"), { code: "ENOENT" }); };
+
+test("#3761: with the layer's clone absent, readLocalProtocol refuses naming the layer, its remote and the clone command", () => {
+  const { local, refusal } = readLocalProtocol({ readFile: absent, declaration: CLONELESS });
+  assert.equal(local, null);
+  assert.match(refusal ?? "", /worker layer "nvda-worker" is not checked out at packages\/nvda-worker/);
+  assert.match(refusal ?? "", new RegExp(`Its repository is ${NVDA_REMOTE.replaceAll(".", "\\.")}`));
+  assert.ok((refusal ?? "").endsWith(`git clone ${NVDA_REMOTE} /operator/checkout/packages/nvda-worker`),
+    "the last words are a command that can be pasted");
+});
+
+test("#3761: with a clone present, readLocalProtocol returns the version it declares, from the layer's src/", () => {
+  const asked: string[] = [];
+  const read = (path: string) => { asked.push(path); return "export const CAPTURE_PROTOCOL_VERSION = 21;\n"; };
+  assert.deepEqual(readLocalProtocol({ readFile: read, declaration: CLONELESS }), { local: "21", refusal: null });
+  assert.deepEqual(asked, ["/operator/checkout/packages/nvda-worker/src/protocol-version.mjs"]);
+  assert.deepEqual(readLocalProtocol({ readFile: () => "no constant here", declaration: CLONELESS },),
+    { local: null, refusal: null }, "a file with no constant is protocolVerdict's case (local: null), not a missing clone");
+});
+
+test("#3761: only a MISSING clone is refused -- any other read failure is rethrown, not read as 'no clone'", () => {
+  const denied = () => { throw Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" }); };
+  assert.throws(() => readLocalProtocol({ readFile: denied, declaration: CLONELESS }), /EACCES/);
+});
+
+test("#3761: guardProtocolChange exits 3 on a missing clone, before it asks the control plane anything", async () => {
+  const exits: number[] = [];
+  const spoke: string[] = [];
+  const write = process.stdout.write.bind(process.stdout);
+  process.stdout.write = ((chunk: string) => { spoke.push(String(chunk)); return true; }) as typeof process.stdout.write;
+  try {
+    await guardProtocolChange("deploy.yml", {
+      readLocal: () => readLocalProtocol({ readFile: absent, declaration: CLONELESS }),
+      readFleet: () => { throw new Error("must not ssh to the control plane with nothing to compare"); },
+      exit: (code) => { exits.push(code); },
+    });
+  } finally { process.stdout.write = write; }
+  assert.deepEqual(exits, [3]);
+  assert.match(spoke.join(""), /^REFUSING deploy\.yml: the worker layer "nvda-worker" is not checked out/);
+});
+
+test("#3761: with a clone present, guardProtocolChange goes on to ask the control plane, in the FLEET's words and not the clone's", async () => {
+  const spoke: string[] = [];
+  const write = process.stdout.write.bind(process.stdout);
+  process.stdout.write = ((chunk: string) => { spoke.push(String(chunk)); return true; }) as typeof process.stdout.write;
+  let asked = 0;
+  try {
+    await guardProtocolChange("deploy.yml", {
+      readLocal: () => ({ local: "21", refusal: null }),
+      readFleet: () => { asked += 1; return { workers: [], refusal: "no inventory on the control plane" }; },
+      exit: () => {},
+    });
+  } finally { process.stdout.write = write; }
+  assert.equal(asked, 1, "the missing-clone refusal must not fire when the clone is there");
+  assert.match(spoke.join(""), /^REFUSING deploy\.yml: could not learn which boxes/);
+  assert.doesNotMatch(spoke.join(""), /not checked out/);
+});
+
+test("#3761: no other playbook reads the layer at all -- sleep.yml and provision-role.yml cannot move the protocol", async () => {
+  const never = () => { throw new Error("must not be read"); };
+  await guardProtocolChange("sleep.yml", { readLocal: never, readFleet: never, exit: never });
+  await guardProtocolChange("provision-role.yml", { readLocal: never, readFleet: never, exit: never });
 });
 
 // --- #1839: a fleet-hold sequence refuses fleet:deploy/fleet:provision unless each holding row is named ---

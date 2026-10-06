@@ -106,6 +106,17 @@ test("a declared layer whose path is ABSENT is refused, naming the layer and the
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
+test("#3761: layerDeclaration names a declared layer WITHOUT its directory existing -- what a missing-clone refusal needs", () => {
+  const root = mkdtempSync(join(tmpdir(), "layer-checkouts-"));
+  try {
+    const remote = "https://example.invalid/thing.git";
+    const { layerDeclaration, layerRoot: rootOf } = layersFrom({ manifest: { layers: { thing: { path: "not/here", remote } } }, root });
+    assert.deepEqual(layerDeclaration("thing"), { name: "thing", path: "not/here", remote, dir: join(root, "not/here") });
+    assert.throws(() => rootOf("thing"), /does not exist/, "layerRoot still refuses: only the declaration is lenient");
+    assert.throws(() => layerDeclaration("ghost"), /layer "ghost" is not declared/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test("POSITIVE CONTROL: a layer at a second path gives a different codeVersion from the real one", async () => {
   const root = await fixtureRepo("a fixture, not the worker\n");
   const { codeVersion } = await fromLayer("code-version.mjs");
