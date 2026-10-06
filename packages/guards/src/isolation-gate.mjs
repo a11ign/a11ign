@@ -554,6 +554,56 @@ export function checkIsolation(packageDir) {
   }
 }
 
+const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
+
+/** Where the one declaration of the layers lives, relative to a repository root. */
+const LAYERS_JSON = "packages/control/layers.json";
+
+/**
+ * The directories `layers.json` declares as the checkout of a layer that lives in a repository of its own (#3830).
+ *
+ * A layer is published from ITS repository (ADR 0040, #3126), so packing the checkout this host holds of it checks
+ * something this release does not publish, and its `prepack` needs tooling the core's hosts need not have: on the lab
+ * (no `pnpm` on PATH, #3141) that stopped `release:gate` at stage 5 with nine stages unread. `pnpm-workspace.yaml`
+ * already says "a layer's clone is not a member of the core" (#3760); this is the same disagreement, in the gate's
+ * own discovery.
+ *
+ * Read from the file directly, the way `scripts/lay-layer.mjs` does, and NOT through `control`'s `layer-checkouts.mjs`:
+ * that module holds a computed `import()` (`layerCodeVersion`), and every guard that declares a walk scope has this
+ * file in its import closure, where a computed import is refused (`declared-walk-scope.test.ts`). It is still the one
+ * declaration, read here and never restated. #3506 deletes `packages/control`, and then this is the line it repoints.
+ *
+ * A layer with no `remote` is inside this repository's checkout, which publishes it, so it is not a layer checkout.
+ * An absent or unreadable `layers.json` throws: answering "no layers" would pack them again, silently.
+ *
+ * @returns {string[]}
+ */
+function layerCheckoutDirs() {
+  const file = join(REPO_ROOT, LAYERS_JSON);
+  /** @type {{ layers: Record<string, { path: string, remote?: string }> }} */
+  let manifest;
+  try {
+    manifest = JSON.parse(readFileSync(file, "utf8"));
+  } catch (cause) {
+    throw new Error(`gate:isolation cannot read ${file}, so it cannot tell which packages are a layer's checkout`, { cause });
+  }
+  return Object.values(manifest.layers).filter((layer) => layer.remote).map((layer) => resolve(REPO_ROOT, layer.path));
+}
+
+/** Is this directory a separate layer's checkout, which this repository's release does not publish? @param {string} dir */
+function isLayerCheckout(dir) {
+  return layerCheckoutDirs().includes(resolve(dir));
+}
+
+/**
+ * The layer checkouts present here (holding a `package.json`) that discovery leaves out, by directory name: reported
+ * beside the private count, because a gate that quietly covers less than you think is the failure this file exists to prevent.
+ * @returns {string[]}
+ */
+export function leftOutLayerCheckouts() {
+  return layerCheckoutDirs().filter((dir) => existsSync(join(dir, "package.json"))).map((dir) => basename(dir));
+}
+
 /** Every real package, so neither the gate nor the build can run against a stale hand-written list. */
 export function allPackages() {
   const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -561,6 +611,7 @@ export function allPackages() {
   return readdirSync(root, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && existsSync(join(root, entry.name, "package.json")))
     .map((entry) => join(root, entry.name))
+    .filter((dir) => !isLayerCheckout(dir))
     // A `private` package is never published, so "can a consumer install this?" has no meaning for it and a
     // missing smoke test is not a defect. `@a11ign/lab` is private on purpose (ADR 0008): the corpus is
     // not distributable and the trainer would imply a reproducibility promise this project cannot make.
@@ -575,6 +626,7 @@ function countPrivatePackages() {
   if (!existsSync(root)) return 0;
   return readdirSync(root, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && existsSync(join(root, entry.name, "package.json")))
+    .filter((entry) => !isLayerCheckout(join(root, entry.name)))
     .filter((entry) => JSON.parse(readFileSync(join(root, entry.name, "package.json"), "utf8")).private)
     .length;
 }
@@ -598,6 +650,11 @@ if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.arg
   const privateCount = args.length === 0 || args[0] === "--all" ? countPrivatePackages() : 0;
   if (privateCount) {
     process.stdout.write(`skipping ${privateCount} private package(s): never published, so nothing installs them\n`);
+  }
+  const leftOut = args.length === 0 || args[0] === "--all" ? leftOutLayerCheckouts() : [];
+  if (leftOut.length) {
+    process.stdout.write(`leaving out ${leftOut.length} layer checkout(s) (${leftOut.join(", ")}): `
+      + "each is published from its own repository, so this release does not pack it\n");
   }
   if (targets.length === 0) {
     // Says so rather than reporting success over nothing. The gate's own correctness is asserted separately
