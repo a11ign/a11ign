@@ -1167,16 +1167,16 @@ test("#3275 tick --apply: a refusal dispatches NOTHING, says why in the report, 
 });
 
 // #3859: `at` is the LAST tick's time and so is seconds old for as long as a refusal stands; `since` is the FIRST's.
-const REFUSE = () => ({ verdict: { action: "refuse" as const, reason: "stale-checkout", detail: "1 file differs: a.mjs" }, fetchedAt: 42 });
+const REFUSE = () => ({ verdict: { action: "refuse" as const, reason: "stale-checkout" as const, detail: "1 file differs: a.mjs" }, fetchedAt: 42 });
 
 const IDLE_SINCE_0 = JSON.stringify({ idleSince: { "a11y-worker-2": 0 }, shutdownRequestedAt: {} });
 
 /** An `--apply` fleet whose state file persists between ticks, as the timer's does: each tick reads what the last one wrote. */
-function tickingFleet(checkout: () => ReturnType<typeof REFUSE> | ReturnType<typeof PROCEED>, firstState = IDLE_SINCE_0) {
+function tickingFleet(checkout: () => ReturnType<typeof checkAgainstMain>, firstState = IDLE_SINCE_0) {
   let disk = firstState;
   const tickAt = (now: number) => tick({
     workers: WORKERS, probe: async () => ({ outcome: "idle" as const }), now: () => now, statePath: "x.json",
-    read: filesWith(disk) as never, proofTransport: provenAt0, write: (_p: string, data: string) => { disk = String(data); },
+    read: filesWith(disk) as never, proofTransport: provenAt0, write: (_p, data) => { disk = String(data); },
     apply: true, checkout, dispatch: () => ({ status: 0, log: "" }),
   });
   return { tickAt, onDisk: () => JSON.parse(String(disk)) };
