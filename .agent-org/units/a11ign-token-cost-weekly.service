@@ -1,0 +1,64 @@
+[Unit]
+# THE WEEKLY CALLS-AND-DOLLARS READING'S POSTING -- #3690, the host half of #3217 (`scripts/token-cost.mjs --post`,
+# `docs/token-cost.md`). It appends one section to the week's CI-health comment on #928, and the transcripts it reads are
+# on THIS host, so no workflow can run it.
+#
+# IT MUST RUN AFTER THAT COMMENT EXISTS, AND THE COMMENT IS LATE: `ci-health.yml` is due Mondays 06:43Z, and
+# GitHub starts a scheduled run hours late (#965: the board edition's runs started ~5h late three days running). Measured
+# 2026-10-05 (#3678): the 06:43 slot had no run at 12:00Z, and the first scheduled runs started 15:16:37Z (run 37331502384,
+# the comment created 15:27:42Z, 8h44m after the slot) and 22:53:52Z (run 37385323128, the 16:43 slot, 6h10m late). `--post`
+# exits non-zero and changes nothing while the comment is absent, and does nothing when it already carries the reading,
+# so a retry is safe.
+#
+# THE RETRY, AND WHY IT IS THIS ONE: the timer starts it Monday 12:13Z, and `Restart=on-failure` starts it again 90 minutes
+# after each failure, at most EIGHT starts in all (`StartLimitBurst`), so the last is about 22:43Z. The window must END
+# INSIDE MONDAY UTC: the script reads the seven UTC days before TODAY (`weeklyWindow`) and looks for that week's heading,
+# so an attempt after 00:00Z asks for a DIFFERENT week's comment. Each failed attempt reads transcripts and the merged pull
+# requests BEFORE it looks for the comment (a few pages and one REST call per merged pull request), which is why this is
+# eight attempts and not forty-eight. When the eighth fails the unit is FAILED (start limit hit), never green with nothing
+# posted, and a week with no reading is a finding for `product-manager` (docs/token-cost.md). A comment that lands after
+# ~22:43Z is therefore missed, and the ceiling is the day boundary, not a choice (the 10-05 16:43 slot started 22:53Z).
+#
+# A WALL-CLOCK EVENT, NOT A CHECK FOR WORK (`org-routing-and-timers.md`): one reading a week. A second run in the same
+# week appends nothing and says so, so `Persistent=true` on the timer is safe.
+Description=a11ign: append the weekly calls-and-dollars reading to the CI-health comment (#3690, #3217)
+
+# THE START LIMIT IS THE RETRY BOUND. 8 starts inside 12h (the eight take ~10.5h at 90-minute spacing plus run time), so
+# a ninth is refused and the unit is marked failed.
+StartLimitIntervalSec=12h
+StartLimitBurst=8
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/agent/repos/a11y-witness
+
+# A systemd unit gets no login shell's PATH, and the script spawns `gh` and `git`. The wrapper at ~/.local/bin/gh
+# is first so the unit and an interactive session run the same `gh`.
+Environment=PATH=/home/agent/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=HOME=/home/agent
+
+# V8'S COMPILE CACHE GOES UNDER THE HOME, NOT /tmp -- #2458. See a11ign-lab-watch.service.
+Environment=NODE_COMPILE_CACHE=%h/.cache/node-compile-cache
+
+# WHICH ACCOUNT THIS EDITS AS, DECLARED (#1974): the workers account. A unit that does not say gets `~/.config/gh`, a
+# person's. `--post` PATCHes a comment `github-actions[bot]` wrote; read 2026-10-06 (#3690): this account holds `write` on
+# the repository (`collaborators/a11ign-ai-workers/permission`) and its PATCH of a scratch comment of its own returned 200.
+# The bot-authored comment itself was NOT edited by it, by instruction, so that last step is untested until the first run.
+Environment=GH_CONFIG_DIR=/home/agent/workers/gh
+
+# UPDATED FIRST, and non-fatal, as every unit that runs this checkout's code does: a stale checkout runs last week's script.
+ExecStartPre=-%h/.local/bin/agent-org primary:update
+
+# The program is the repository-relative script, as a11ign-corpus-release-nightly.service's is, so `unitEntryPoints`
+# resolves it from any checkout.
+ExecStart=/usr/bin/node scripts/token-cost.mjs --post
+
+TimeoutStartSec=600
+
+# `Restart=on-failure` ON A ONESHOT restarts it after a non-zero exit only (systemd >= 244; this host has 259), which is
+# exactly "the comment is not there yet". A timeout counts as a failure too.
+Restart=on-failure
+RestartSec=90min
+
+# NO [Install] SECTION, as a11ign-lab-watch.service: `WantedBy=default.target` would run this at every boot, and the
+# timer is the only thing that may start it.
