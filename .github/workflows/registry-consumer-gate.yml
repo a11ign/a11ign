@@ -101,7 +101,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       # `row-file` is this repository's own filing path and needs its dependencies; the reading itself needs only Node.
       - name: Install
         run: pnpm install --frozen-lockfile

@@ -57,7 +57,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with: { ref: main }
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - id: ci
@@ -119,7 +119,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with: { ref: main, fetch-depth: 0 }
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
@@ -237,7 +237,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with: { ref: main }
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
@@ -359,7 +359,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with: { ref: main, fetch-depth: 0 }
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
@@ -396,7 +396,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with: { ref: main }
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
@@ -471,7 +471,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with: { ref: main }
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts

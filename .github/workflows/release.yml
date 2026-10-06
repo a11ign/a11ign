@@ -122,7 +122,7 @@ jobs:
           fi
 
       # #2301: THE PUBLISH PATH IS pnpm'S, and so is the install. `registry-url` stays: it writes the `.npmrc` npm publishes with.
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm, registry-url: https://registry.npmjs.org }
 
