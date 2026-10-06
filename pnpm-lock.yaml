@@ -18,7 +18,7 @@ importers:
         specifier: 0.2.1
         version: link:packages/scorer
       '@a11ign/screenreader-fleet':
-        specifier: 0.1.3
+        specifier: 0.1.4
         version: link:packages/worker-fleet
       '@a11ign/screenreader-worker':
         specifier: ^0.1.0
@@ -30,7 +30,7 @@ importers:
         specifier: ^0.31.0
         version: 0.31.0
       a11ign:
-        specifier: 0.2.6
+        specifier: 0.2.7
         version: link:packages/cli
     devDependencies:
       '@changesets/cli':
@@ -92,7 +92,7 @@ importers:
         specifier: 0.2.1
         version: link:../scorer
       '@a11ign/screenreader-fleet':
-        specifier: 0.1.3
+        specifier: 0.1.4
         version: link:../worker-fleet
       yaml:
         specifier: ^2.9.1
@@ -133,7 +133,7 @@ importers:
         specifier: 0.2.1
         version: link:../scorer
       '@a11ign/screenreader-fleet':
-        specifier: 0.1.3
+        specifier: 0.1.4
         version: link:../worker-fleet
       '@a11ign/screenreader-worker':
         specifier: ^0.1.0
@@ -146,7 +146,7 @@ importers:
         specifier: 0.31.0
         version: 0.31.0
       a11ign:
-        specifier: 0.2.6
+        specifier: 0.2.7
         version: link:../cli
       serve:
         specifier: 14.2.6
