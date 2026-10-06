@@ -639,7 +639,7 @@ jobs:
           rm -rf packages/agent-org
           mkdir packages/agent-org
           cd agent-org
-          cp -r src host .github CHANGELOG.md package.json LICENSE README.md ../packages/agent-org/
+          cp -r src host scripts .github CHANGELOG.md package.json LICENSE README.md ../packages/agent-org/
           cd ..
           rsync -a --ignore-existing --exclude='*.test.ts' --exclude='*.test.mjs' packages/lab/src/packaging/ packages/agent-org/src/packaging/
           # The tool's checkout is not part of the project the suite walks; leave only the laid-out copy. It is MOVED, not deleted (#3276):
