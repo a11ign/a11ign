@@ -2518,7 +2518,6 @@ the same outage with a log line attached: the guard did its job and the org did 
   - *Do not let the pile form* (closed): #3854 (agent-org) and #3855 (the rstest config here) give every test run a
     private `TMPDIR` removed when the run ends and name a test file that leaves anything in it; #3847 makes `verify`
     remove its own trees on every exit; #3848 fixes the leaking tests and adds a guard that fails the suite for one.
-  - *Do not remove in one call* (closed): #3850 caps worktrees and prunes in small niced batches.
   - *Clear the existing pile gently* (**open**): #3849, a timer running `prune-tmp` in small niced batches, never
     removing a large tree in one call. It carries a `Not-before` of 2026-10-14.
   - *The control plane follows `main`* (closed): #3852, so `stale-checkout` is not a standing refusal.
@@ -2526,5 +2525,8 @@ the same outage with a log line attached: the guard did its job and the org did 
   - *A watcher elsewhere* (**open**): #3851, an external heartbeat. The control plane reads the gate's last tick and
     messages the chairman on Telegram when it is older than 10 minutes. This is the half of the rule that is not yet
     true: until it lands, the host is still watched only from itself.
+- **Not a class fix of this incident:** #3850 (a worktree cap, prompt removal of finished worktrees, a prune in small niced
+  batches; closed). It was filed as one, and #3846's 16:55Z correction withdrew it, because the pile that locked the
+  host was shared test temp dirs under `/tmp`, not worktrees. It stays as ordinary backlog and is not listed above.
 - **Not done here:** the kernel panic sysctl lines and the kernel update are a `needs:chairman` brief that needs sudo, held
   on #3846 (its Done-when 3), and this section does not record them as applied.
