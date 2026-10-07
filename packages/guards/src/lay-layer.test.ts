@@ -271,3 +271,88 @@ test("#3836: a git clone is replaced when it is disposable, and REFUSED naming t
     }
   });
 });
+
+/**
+ * #3973: what a lab host holds at the pinned release: the layer's repository cloned, then detached AT a release tag whose commit is on NO branch of origin
+ * (a release is tagged, not merged), with `tsc --build`'s output beside the source. The tag is fetched from origin the way the host's clone got it.
+ */
+function cloneAtReleaseTag(sandbox: { dir: string; run(args: string[]): string; commit(message: string): string }, root: string, path: string) {
+  layerRepository(sandbox, "0.3.0");
+  const branch = sandbox.run(["rev-parse", "--abbrev-ref", "HEAD"]).trim();
+  sandbox.run(["checkout", "--quiet", "--detach"]);
+  writeFileSync(join(sandbox.dir, "packages/worker-fleet/src/cli-flags.mjs"), `export const VERSION = "0.4.0";\n`);
+  sandbox.run(["add", "-A"]);
+  sandbox.commit("release 0.4.0");
+  sandbox.run(["tag", `${NAME}@0.4.0`]);
+  sandbox.run(["checkout", "--quiet", branch]);
+  assert.equal(sandbox.run(["branch", "--contains", `${NAME}@0.4.0`]).trim(), "", "the release commit is on no branch of origin");
+  const clone = cloneInto(sandbox, root, path);
+  clone.run(["fetch", "--quiet", "origin", "tag", `${NAME}@0.4.0`]);
+  clone.run(["checkout", "--quiet", "--detach", `${NAME}@0.4.0`]);
+  return clone;
+}
+
+test("#3973: a clone detached at a release tag that origin holds, with only build output untracked, is replaced; work beside it is still REFUSED", () => {
+  withGitSandbox((sandbox) => {
+    const root = mkdtempSync(join(tmpdir(), "lay-layer-root-"));
+    try {
+      const plan = { remote: pathToFileURL(sandbox.dir).href, tag: `${NAME}@0.4.0`, path: "packages/worker-fleet", lays: ["src"] };
+      const target = join(root, plan.path);
+      const clone = cloneAtReleaseTag(sandbox, root, plan.path);
+      const refused = (pattern: RegExp) => {
+        assert.throws(() => lay(root, plan), (error: Error) => error.message.includes(target) && pattern.test(error.message), String(pattern));
+        assert.ok(existsSync(join(target, ".git")), "the refusal came before the clone was removed");
+      };
+      // CONTROLS, so a check that ignores everything is refused. An untracked file that is not build output is work, beside the build file too.
+      writeFileSync(join(target, "tsconfig.tsbuildinfo"), "{}\n");
+      writeFileSync(join(target, "notes.txt"), "mine\n");
+      refused(/uncommitted/);
+      rmSync(join(target, "notes.txt"));
+      // A modified TRACKED file is work whatever it is named, and so is a staged one.
+      writeFileSync(join(target, "packages/worker-fleet/src/cli-flags.mjs"), "// mine\n");
+      refused(/uncommitted/);
+      clone.run(["checkout", "--", "."]);
+      // A commit on no remote ref and under no tag origin holds.
+      writeFileSync(join(target, "work.txt"), "mine\n");
+      clone.run(["add", "work.txt"]);
+      clone.run(["commit", "--quiet", "-m", "local only"]);
+      refused(/unpushed/);
+      // A tag made only in the clone, over a commit origin lacks, is not evidence; nor is a local tag moved onto a name origin holds.
+      clone.run(["tag", `${NAME}@9.9.9`]);
+      refused(/unpushed/);
+      clone.run(["tag", "--force", `${NAME}@0.4.0`]);
+      refused(/unpushed/);
+      // ... and a build file nested in a directory is the same build output, while the same directory holding anything else is not.
+      clone.run(["reset", "--quiet", "--hard", `${NAME}@0.3.0`]);
+      clone.run(["fetch", "--quiet", "--force", "origin", "tag", `${NAME}@0.4.0`]);
+      clone.run(["checkout", "--quiet", "--detach", `${NAME}@0.4.0`]);
+      clone.run(["tag", "-d", `${NAME}@9.9.9`]);
+      mkdirSync(join(target, "build"), { recursive: true });
+      writeFileSync(join(target, "build/tsconfig.tsbuildinfo"), "{}\n");
+      writeFileSync(join(target, "build/out.js"), "\n");
+      refused(/uncommitted/);
+      rmSync(join(target, "build/out.js"));
+      // DISPOSABLE: at origin's tag, with build output only.
+      assert.equal(lay(root, plan), `laid ${plan.tag} at ${plan.path}`);
+      assert.ok(!existsSync(join(target, ".git")), "the clone is gone");
+      assert.deepEqual(walk(target), [REF_FILE, "src/cli-flags.mjs", "src/provisioning/stamp.ps1"]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+test("#3973: when origin cannot be asked for its tags, a commit no branch holds is 'cannot tell', never disposable", () => {
+  withGitSandbox((sandbox) => {
+    const root = mkdtempSync(join(tmpdir(), "lay-layer-root-"));
+    try {
+      const plan = { remote: pathToFileURL(sandbox.dir).href, tag: `${NAME}@0.4.0`, path: "packages/worker-fleet", lays: ["src"] };
+      const clone = cloneAtReleaseTag(sandbox, root, plan.path);
+      clone.run(["remote", "set-url", "origin", pathToFileURL(join(root, "nowhere")).href]);
+      assert.throws(() => lay(root, plan), (error: Error) => /git could not say whether it is disposable/.test(error.message));
+      assert.ok(existsSync(join(root, plan.path, ".git")), "nothing was removed");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
