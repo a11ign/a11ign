@@ -25,7 +25,7 @@ The last three are the same rule pointed at three different sources, and the thi
 indistinguishable, from inside, from somebody else's job.
 
 ```bash
-npm run lab:status -- -e job=<name>     # ONE run: systemd's view, the journal bounded by
+pnpm run lab:status -e job=<name>       # ONE run: systemd's view, the journal bounded by
                                         # InvocationID, and the run's own progress file
 ```
 

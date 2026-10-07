@@ -316,7 +316,7 @@ is the next mechanical step and it is small.
 
 ```bash
 npm run lab:job -- -e job=gate-stability     # dispatch, then close the laptop
-npm run lab:status -- -e job=gate-stability  # it is still running
+pnpm run lab:status -e job=gate-stability    # it is still running
 ```
 
 And one number, from L1's two-way measurement: **`polls survived` from the lab against the same figure from

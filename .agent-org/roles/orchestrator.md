@@ -151,7 +151,7 @@ Nothing, currently, and that is a real risk rather than a boast. If this session
   stale, what was measured versus inferred today. That is why this file exists, and why findings go to
   `product-manager`'s tracker rather than staying in a transcript.
 - **The successor's first three commands** are `pnpm run doctor`, `pnpm run fleet:status`, and
-  `pnpm run lab:status -- -e job=capture`. Each names its own next step. Do not deploy or dispatch before
+  `pnpm run lab:status -e job=capture`. Each names its own next step. Do not deploy or dispatch before
   all three are read — this repo's guards turn a collision into a silent wrong answer, not an error.
 
 ## What this role reports upward
