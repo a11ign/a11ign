@@ -369,9 +369,15 @@ const SCRIPT = join(REPO_ROOT, "scripts/ci-changed.mjs");
 const EXIT_REFUSED = 2;
 const BASE_REF = "base-ref";
 
-/** Runs the real CLI as a child process against a checkout; GITHUB_OUTPUT is only set when the test asks for it. */
+/**
+ * Runs the real CLI as a child process against a checkout; GITHUB_OUTPUT is only set when the test asks for it.
+ * `sandboxGitEnv()` inherits `process.env`, and on a CI runner that carries the real `GITHUB_OUTPUT`: the CLI then appended to the job's own
+ * output file and printed nothing (run 37658662088), so the variable is removed before the test's own are added.
+ */
 function runCli(args: string[], env: Record<string, string> = {}) {
-  const run = spawnSync(process.execPath, [SCRIPT, ...args], { encoding: "utf8", env: { ...sandboxGitEnv(), PATH: process.env.PATH ?? "", ...env } });
+  const inherited: Record<string, string | undefined> = { ...sandboxGitEnv(), PATH: process.env.PATH ?? "" };
+  delete inherited.GITHUB_OUTPUT;
+  const run = spawnSync(process.execPath, [SCRIPT, ...args], { encoding: "utf8", env: { ...inherited, ...env } });
   return { status: run.status, stdout: run.stdout, stderr: run.stderr };
 }
 
