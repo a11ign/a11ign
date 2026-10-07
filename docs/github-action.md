@@ -27,12 +27,14 @@ jobs:
           url: https://example.com/contact
           task: Send an enquiry
       # Keep the evidence: the full result, transcript included. Guarded on the output existing, so a run
-      # that failed does not also fail the upload. `summary-md` is a second output you can upload (see the Outputs table).
+      # that failed does not also fail the upload. `summary-md` is the rendered report; upload it beside the result (see the Outputs table).
       - uses: actions/upload-artifact@v7
         if: always() && steps.a11ign.outputs.result-json != ''
         with:
           name: a11ign-result
-          path: ${{ steps.a11ign.outputs.result-json }}
+          path: |
+            ${{ steps.a11ign.outputs.result-json }}
+            ${{ steps.a11ign.outputs.summary-md }}
           if-no-files-found: warn
 ```
 
@@ -108,7 +110,7 @@ new ignore rule with a negation under it.
 so a busy PR gets one comment that changes rather than one per push. The comment step runs `always()`, so
 the report still arrives when the check is failing — which is precisely when someone wants to read it.
 
-**Not on a pull request, no comment.** A run started by hand or by a push has nothing to comment on: the log's last line is the count (`a11ign: N finding(s)`), with a line before it for anything that bounds that count (an examination that ended early, a capture spanning more than one document, criteria resting on an examination known to be partial), and another for the criteria axe-core FAILED (`a11ign: N criteria FAILED by the rule layer (axe-core)`), which sit beside the count rather than in it, and the full result, transcript included, is in the `a11ign-result` artifact the upload step saves above (`result-json`). The rendered report is in the pull-request comment and the run's job summary; the `v0.1.0` tag cannot put it in the artifact, because it has no `summary-md` output (see the Outputs table).
+**Not on a pull request, no comment.** A run started by hand or by a push has nothing to comment on: the log's last line is the count (`a11ign: N finding(s)`), with a line before it for anything that bounds that count (an examination that ended early, a capture spanning more than one document, criteria resting on an examination known to be partial), and another for the criteria axe-core FAILED (`a11ign: N criteria FAILED by the rule layer (axe-core)`), which sit beside the count rather than in it, and the full result, transcript included, is in the `a11ign-result` artifact the upload step saves above (`result-json`). The rendered report is in the pull-request comment and the run's job summary; release `0.3.0` puts it in the artifact too, through its `summary-md` output (see the Outputs table), which the `v0.1.0` tag lacks.
 
 **The same rendered report is also written to the run's job summary, but a CI-only consumer — no browser,
 nothing rendered — cannot reach that.** GitHub exposes Actions job summaries (`$GITHUB_STEP_SUMMARY`,
@@ -136,8 +138,8 @@ gh api "repos/<owner>/<repo>/actions/artifacts/$artifact_id/zip" > result.zip
 ```
 
 Either way what comes back is a directory holding the file
-`result-json` names (and, from the first tag that has the `summary-md` output, `a11ign-summary.md`, the exact rendered
-report the job summary carries, once the upload step adds it), the schema below (`verdict.findings`, `verdict.taskCompletable`,
+`result-json` names (and, from release `0.3.0`, which has the `summary-md` output, `a11ign-summary.md`, the exact rendered
+report the job summary carries, once the upload step lists it), the schema below (`verdict.findings`, `verdict.taskCompletable`,
 `captureVerified`, ...) — the transcript behind every finding. Neither needs a browser or
 `pull-requests: write` permission.
 

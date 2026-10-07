@@ -63,18 +63,20 @@ jobs:
           url: https://your-site.example/the-page
           task: Send an enquiry
       # Keep the evidence: the full result, transcript included. Guarded on the output existing, so a run
-      # that failed does not also fail the upload. `summary-md`, the rendered report, is a second output you can upload the same way.
+      # that failed does not also fail the upload. `summary-md` is the rendered report; upload it beside the result.
       - uses: actions/upload-artifact@v7
         if: always() && steps.a11ign.outputs.result-json != ''
         with:
           name: a11ign-result
-          path: ${{ steps.a11ign.outputs.result-json }}
+          path: |
+            ${{ steps.a11ign.outputs.result-json }}
+            ${{ steps.a11ign.outputs.summary-md }}
           if-no-files-found: warn
 ```
 
 Save it as `.github/workflows/a11ign.yml`. It runs on every pull request, and `workflow_dispatch` also lets you start it by hand from the repository's Actions tab (or `gh workflow run a11ign.yml`) — `workflow_dispatch` resolves the workflow from the default branch as GitHub sees it at dispatch time, so trigger it only after the push that changed the workflow has landed, not in the same breath as the push.
 
-**Not on a pull request, no comment.** A run started by hand or by a push has nothing to comment on: the log's last line is the count (`a11ign: N finding(s)`), with a line before it for anything that bounds that count (an examination that ended early, a capture spanning more than one document, criteria resting on an examination known to be partial), and another for the criteria axe-core FAILED (`a11ign: N criteria FAILED by the rule layer (axe-core)`), which sit beside the count rather than in it, and the full result, transcript included, is in the `a11ign-result` artifact the upload step saves above. The rendered report is in the pull-request comment and the run's job summary, and a CLI-only reader has no route to the job summary; the `v0.1.0` tag has no `summary-md` output to put the report in the artifact (the next tag will), so the artifact carries the result alone until then, and it is the one that works headlessly ([`docs/github-action.md`](./github-action.md#why-it-looks-like-this) has the reason and the `gh` commands).
+**Not on a pull request, no comment.** A run started by hand or by a push has nothing to comment on: the log's last line is the count (`a11ign: N finding(s)`), with a line before it for anything that bounds that count (an examination that ended early, a capture spanning more than one document, criteria resting on an examination known to be partial), and another for the criteria axe-core FAILED (`a11ign: N criteria FAILED by the rule layer (axe-core)`), which sit beside the count rather than in it, and the full result, transcript included, is in the `a11ign-result` artifact the upload step saves above. The rendered report is in the pull-request comment and the run's job summary, and a CLI-only reader has no route to the job summary; release `0.3.0` has the `summary-md` output, so the upload step above puts the same report in the artifact beside the result, and the artifact is the one that works headlessly ([`docs/github-action.md`](./github-action.md#why-it-looks-like-this) has the reason and the `gh` commands).
 
 **`task` is load-bearing, but the word match it enables is not the guard on what gets operated.** It is
 what a user is trying to *do*, in plain words. On this shipped default (`probe-forms` on), a run always
