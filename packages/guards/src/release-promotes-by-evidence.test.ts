@@ -421,11 +421,18 @@ function decideJobName(workflow: Workflow): string | undefined {
 function runsOn(job: Job, event: string): boolean {
   const expression = (job.if ?? "").replace(/^\$\{\{\s*|\s*\}\}$/g, "").trim();
   if (expression === "") return true;
-  const equals = /^github\.event_name == '([a-z_]+)'$/.exec(expression);
-  if (equals) return equals[1] === event;
-  const differs = /^github\.event_name != '([a-z_]+)'$/.exec(expression);
-  if (differs) return differs[1] !== event;
-  return true;
+  return expression.split(" || ").some((term) => termAdmits(term, event));
+}
+
+/** One `||` term (#4000): its `&&` atoms must all admit the event; an atom about anything but the event name (a ref) admits it. */
+function termAdmits(term: string, event: string): boolean {
+  return term.replace(/^\(|\)$/g, "").trim().split(" && ").every((atom) => {
+    const equals = /^github\.event_name == '([a-z_]+)'$/.exec(atom.trim());
+    if (equals) return equals[1] === event;
+    const differs = /^github\.event_name != '([a-z_]+)'$/.exec(atom.trim());
+    if (differs) return differs[1] !== event;
+    return true;
+  });
 }
 
 const NO_MOVE = "no job moves a dist-tag by OIDC in `npm-publish`";

@@ -37,6 +37,22 @@ repeat that decision.
 > yours is decided in the [top-level README](../../README.md), not here. Check the current version with
 > `npm view a11ign dist-tags.latest`.
 
+## Which version you get
+
+- **`npx a11ign` runs the `latest` tag**: the newest version that has passed the fleet's qualification.
+- **`npx a11ign@next` runs the newest published version**, which is qualified later.
+- **Read both with `npm view a11ign dist-tags`.** When `latest` is behind `next`, that version is waiting for its
+  qualification, or failed it; a failure is a public row, so it is not silent. If you need the newest change and can
+  take it unqualified, use `a11ign@next`.
+
+**How long a merged fix takes to reach each**, as measured on one release and never as a promise:
+
+- Measured 2026-10-07: a merge to `main` reached `next` in 40 minutes. That release's run was re-run once after a failed first attempt, so it is the slow case
+  of a single reading, not an average. The commands and times are in
+  [the reading on #3778](https://github.com/a11ign/a11ign/issues/3778#issuecomment-6043356294).
+- `next` to `latest`: not yet measured. `latest` was still `0.1.0` when this was written. The reading is
+  [#3778](https://github.com/a11ign/a11ign/issues/3778)'s second Done-when, and this line changes when it is posted.
+
 ## What "a rule scanner cannot see" means, concretely
 
 Measured against the University of Washington "Accessible University" demo — a third-party, expert-built
