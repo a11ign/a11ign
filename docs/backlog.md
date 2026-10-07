@@ -1370,6 +1370,16 @@ specific, narrower slice.
 
 **The close path should NOT carry the rest; a periodic read in the gate should (filed as #3883).** `labelsToStrip`/`stripClaimLabels` already strip in the same act as a MERGE-driven close, and `close-rows-sweep.mjs` backstops it by walking merged PRs, so a row closed any other way (by hand, as not planned, or by a `Closes` GitHub resolved with `a11ign-ci` as actor) is in neither list; and the live-holder test cannot be made at a hand close. The platform for a recurring question is `work-gate.mjs` (`.claude/rules/org-routing-and-timers.md`), not a new cron or sweep. *Not established:* how many of the 178 PR-closed rows were closed by the strip-carrying path, since the timelines of only a handful were read.
 
+## The product shelf was empty, 2026-10-07 (#3911)
+
+**What was filed.** `product-manager`, on the chairman's pick of outcome 3 (then 2, then 1; #3911 comment of 2026-10-07), filed six rows, each `ready` with a Region, an Acceptance that exits non-zero today and a pasted Open-check: #3945 (the toolchain's `release-per-merge.yml` takes a `dist-tag` input; labelled `backlog` and `answer:product-manager` when re-read), #3946 (publish every changeset merge to `next`, the fleet verdict off the publish path), #3947 (promote to `latest` on a green qualification), #3948 (the Action's major tag moves only after a promotion), #3949 (DORA reads `next`-to-`latest`) and #3950 (the `a11ign` README says which version `npx a11ign` runs). #3778 is re-scoped to read the first real release, and #3130 and #3131 are closed as superseded.
+
+**How many are product by the #3820 definition: ONE, #3950** (Region `packages/cli/README.md`). The other five change `.github/workflows/release.yml`, a workflow in `a11ign/toolchain`, or `agent-org`, which that definition makes org rows. `ceo` ruled 2026-10-07 NOT to widen `releasablePaths` (`.agent-org/project.json`, `_dora`) to count them: it is the DORA declaration, and a path list the org controls is, like a label it controls, not a measurement of where engineers spent starts. #3950 waits on #3778 by a native edge, so no product row is OFFERABLE until #3778 closes, and `NO PRODUCT ROW OFFERABLE` keeps printing until then. **Who can change that: `ceo`**, because the definition and the 60% order are the chairman's and `ceo` relays them.
+
+**What the empty shelf cost.** The row counted 88 consecutive ticks (about 3 h) from 2026-10-06T21:18:21Z, last ten starts all `org` (share 0/10, read from `~/.cache/a11ign/engineer-starts.json`). Re-read by the claimant at 2026-10-07T07:06Z: `journalctl --user -u a11ign-work-tick --since "2026-10-06 21:18:00 UTC" -o cat | grep -c 'NO PRODUCT ROW OFFERABLE'` printed **255 lines** (the first at 21:18Z read share 1/10, the last at 06:47Z read 0/10). 255 is a count of journal lines, not of ticks, and the two were not reconciled here. In the last 30 minutes the same command printed 1, so the line is still firing; it did not stop when the rows were filed, and the ruling above says it will not until #3778 closes.
+
+**What follows.** Outcome 2 is #2568 (`ready`, waiting on #3778). Outcome 1 has no row: no open work finds the outsiders, and filing one would invent the need.
+
 ## How an item leaves this page
 
 **CORRECTED 2026-09-06 — the rule below said "delete" while 51 closed rows sat here, struck through and
