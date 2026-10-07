@@ -504,34 +504,69 @@ const AGENT_ORG_CACHE = "verify-agent-org";
  * common git dir, shared by every worktree and never tracked. CI clones the tool with full history too (the suite
  * reads its merge-base), so the clone is full. A normal checkout has the tool at `.agent-org/host.json`'s path (a detached
  * release checkout), which is not a clone to stage from, which is why the first of these cannot be the only way (review of #3342).
+ *
+ * `refresh` is true for the clone `verify` made on an EARLIER run and for nothing else: the first two are the caller's and are never fetched or moved, and a clone made
+ * a moment ago is already current. An old one is what #3931 is: it ages until a module `verify` requires is newer than it, and every session sharing it is refused.
  * @param {{ env: Record<string, string | undefined>, sibling: string, cache: string, isCheckout: (dir: string) => boolean }} where
- * @returns {{ dir: string, clone: boolean }}
+ * @returns {{ dir: string, clone: boolean, refresh: boolean }}
  */
 export function agentOrgSource({ env, sibling, cache, isCheckout }) {
-  if (env.A11Y_AGENT_ORG_REPO) return { dir: env.A11Y_AGENT_ORG_REPO, clone: false };
-  if (isCheckout(sibling)) return { dir: sibling, clone: false };
-  return { dir: cache, clone: !isCheckout(cache) };
+  if (env.A11Y_AGENT_ORG_REPO) return { dir: env.A11Y_AGENT_ORG_REPO, clone: false, refresh: false };
+  if (isCheckout(sibling)) return { dir: sibling, clone: false, refresh: false };
+  const clone = !isCheckout(cache);
+  return { dir: cache, clone, refresh: !clone };
 }
 
-/** The checkout to stage the tool from, cloning it once if none is to hand; null (said aloud) when it cannot be had. */
-function provisionAgentOrg() {
+/** A fetch that hangs on a dead network must not hang `verify`: past this it counts as unreachable, which is said and survived. */
+const FETCH_TIMEOUT_MS = 60_000;
+
+/**
+ * Brings the clone `verify` made to `origin/main` so a module `verify` requires is there when it is asked for (#3931). Two failures, two meanings: an origin that cannot be
+ * reached is SAID and the clone used as it is (an offline `verify` is no worse than before this), while a clone that will not fast-forward is a refusal, because a diverged
+ * clone is neither what was cloned nor what was released, and running the tool from it would be the silent use this exists to end.
+ * @param {string} dir
+ * @returns {{ ok: true, note: string } | { ok: false, refusal: string }}
+ */
+export function refreshAgentOrgClone(dir) {
+  const run = (/** @type {string[]} */ args) => spawnSync("git", args, { cwd: dir, encoding: "utf8", env: sandboxGitEnv(), timeout: FETCH_TIMEOUT_MS });
+  const fetched = run(["fetch", "origin"]);
+  if (fetched.status !== 0) {
+    return { ok: true, note: `verify: could not fetch ${AGENT_ORG_REMOTE} into ${dir} (${(fetched.stderr || "no answer").trim()}); using the clone as it is, which may predate a module verify requires` };
+  }
+  const merged = run(["merge", "--ff-only", "origin/main"]);
+  if (merged.status !== 0) {
+    return { ok: false, refusal: `verify: ${dir} cannot be fast-forwarded to origin/main (${(merged.stderr || merged.stdout).trim()}), so it is not used. Delete it so the next run clones afresh, or set A11Y_AGENT_ORG_REPO.` };
+  }
+  return { ok: true, note: "" };
+}
+
+/**
+ * The checkout to stage the tool from: cloned once if none is to hand, and brought to `origin/main` when it is the clone an earlier run made. Null (said aloud) when it cannot be had.
+ * @param {{ repo?: string, env?: Record<string, string | undefined>, say?: { out: (line: string) => void, err: (line: string) => void } }} [where]
+ */
+export function provisionAgentOrg({ repo = REPO, env = process.env, say = { out: console.log, err: console.error } } = {}) {
   const isCheckout = (/** @type {string} */ dir) => existsSync(join(dir, ".git"));
-  const cache = resolve(REPO, git(["rev-parse", "--git-common-dir"]), AGENT_ORG_CACHE);
-  const { dir, clone } = agentOrgSource({
-    env: process.env, sibling: resolve(REPO, "..", "agent-org"), cache, isCheckout,
-  });
+  const commonDir = spawnSync("git", ["rev-parse", "--git-common-dir"], { cwd: repo, encoding: "utf8", env: sandboxGitEnv() }).stdout.trim();
+  const cache = resolve(repo, commonDir, AGENT_ORG_CACHE);
+  const { dir, clone, refresh } = agentOrgSource({ env, sibling: resolve(repo, "..", "agent-org"), cache, isCheckout });
   if (clone) {
-    console.log(`verify: no a11ign/agent-org checkout beside this one; cloning ${AGENT_ORG_REMOTE} into ${dir} (once)`);
+    say.out(`verify: no a11ign/agent-org checkout beside this one; cloning ${AGENT_ORG_REMOTE} into ${dir} (once)`);
     rmSync(dir, { recursive: true, force: true });
     if (sh("gh", ["repo", "clone", AGENT_ORG_REMOTE, dir]).status !== 0) {
-      console.error(`verify: could not clone ${AGENT_ORG_REMOTE}; clone it yourself and set A11Y_AGENT_ORG_REPO`);
+      say.err(`verify: could not clone ${AGENT_ORG_REMOTE}; clone it yourself and set A11Y_AGENT_ORG_REPO`);
       return null;
     }
   }
   if (!isCheckout(dir)) {
-    console.error(`verify: A11Y_AGENT_ORG_REPO=${dir} is not a git checkout of ${AGENT_ORG_REMOTE}`);
+    say.err(`verify: A11Y_AGENT_ORG_REPO=${dir} is not a git checkout of ${AGENT_ORG_REMOTE}`);
     return null;
   }
+  const refreshed = refresh ? refreshAgentOrgClone(dir) : null;
+  if (refreshed && !refreshed.ok) {
+    say.err(refreshed.refusal);
+    return null;
+  }
+  if (refreshed?.ok && refreshed.note) say.err(refreshed.note);
   return dir;
 }
 
