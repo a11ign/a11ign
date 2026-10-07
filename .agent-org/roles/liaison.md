@@ -46,6 +46,7 @@ place of the angle-bracketed word:
 | a pull request: its number, state, review | `{{pr:<number>.number}}` `{{pr:<number>.state}}` `{{pr:<number>.review}}` |
 | a run: where it is while it runs, its outcome once it has one | `{{run:<id>.status}}` `{{run:<id>.conclusion}}` (refused while the run has not concluded) |
 | how many rows are ready | `{{ready.count}}` |
+| how many rows are open (issues, not pull requests) | `{{open.count}}` |
 | how long since the last merge | `{{last-merge.age}}` |
 | a service's state | `{{unit:<unit>.state}}` |
 | a row comment, verbatim, with its link | `{{comment:<id>.quote}}` |
