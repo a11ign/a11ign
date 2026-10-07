@@ -462,7 +462,7 @@ jobs:
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v7
-      - uses: a11ign/a11ign@c77c1ba0f65e94e0cef4fcdb8d3f3c7ac1be87fa   # a full commit SHA: no tag yet contains the login flow
+      - uses: a11ign/a11ign@5768e1d44b7ea5d3e6182ca45d5aeb89bcaadc76   # a full commit SHA: no tag newer than v0.1.0 exists, and v0.1.0 predates the login flow
         env:                                   # the credential enters HERE, from GitHub Secrets, and nowhere else
           APP_TEST_USER: ${{ secrets.APP_TEST_USER }}
           APP_TEST_PASSWORD: ${{ secrets.APP_TEST_PASSWORD }}

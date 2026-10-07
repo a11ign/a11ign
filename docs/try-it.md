@@ -279,12 +279,13 @@ Each fault is a sentence in the log's last lines with `(fault: <code>)` after it
 | `auth-login-failed`, reason `unbindable-field` | the flow names a control the page does not expose by that accessible name | copy the name from the accessibility inspector, glyphs included; if the control truly has no name, that is a finding about your login form |
 | `auth-login-failed`, reason `expect-not-met` | the login ran and the page after it was not the one your `expect:` names | wrong password, an account that needs MFA or a password change, or an `expect:` that is not what the signed-in page shows |
 | `auth-login-failed`, reason `left-origin` | the login went to another site | an identity provider: SSO, which this path does not cover |
+| `auth-login-failed`, reason `expect-not-met`, at `login step 1 (goto)`, with `could not be loaded (CDP: no Page.loadEventFired within 30000 ms)` | the browser on the runner never finished loading your login page. The log names the reason `expect-not-met` although no `expect:` has run yet (the wording is the tool's, not yours) | **not your flows file or your secrets.** Add a step that fetches the page from the runner (`curl -sS -o /dev/null -w '%{http_code}' https://your-site/login`): if that answers 200 and the run still fails, the page is waiting on something the runner cannot reach, usually a third-party analytics or A/B-testing script. Re-running does not help then (measured 2026-10-07: the same failure four times in 30 minutes on `the-internet.herokuapp.com`, a page that had been green on 2026-09-26 and 2026-09-30); use a staging page without it |
 | `auth-session-lost` | the login worked and the page then asked for showed the login form again | run again; then check the account may hold a session and the URL is reachable when signed in |
 | `auth-challenge-detected` | a step failed on a page with a CAPTCHA widget | an account or environment your site exempts from the challenge |
 | `auth-refused-judge-backend` | `judge-backend` names a vendor that would receive a transcript of a page behind a login | leave it at its default, `local` |
 | `auth-credential-in-artifact` | a value from your login survived redaction in what the run was about to write | **do not use the output**; report it with the variable names and no values |
 
-A run that fails outside these (for example a runner that never becomes ready) is not a fault of the login: re-run the same commit.
+A run that fails outside these (for example a runner that never becomes ready) is not a fault of the login: re-run the same commit **once**. A second identical failure is not flakiness: read the last lines of the Action step's log for the line that names it, and compare it with the table above.
 
 ## The other route: run it from the repository
 
