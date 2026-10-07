@@ -1,6 +1,6 @@
 /**
  * #3505 (move 3 of #69, the delete step): THE DELETE'S OWN TEST. `packages/lab` left the workspace for `a11ign/lab` (ADR 0040, M3), and this repository
- * takes it as a PINNED TAG: `packages/control/layers.json` declares the tag, and `scripts/lay-layer.mjs` lays the lab's scripts, source, baselines and
+ * takes it as a PINNED TAG: `layers.json` declares the tag, and `scripts/lay-layer.mjs` lays the lab's scripts, source, baselines and
  * rule table at `packages/lab` (untracked, never a workspace member) for the scripts, tests and workflows that read them by path. It lives in
  * `packages/guards`, not in the directory it proves gone: that directory cannot hold the test that says it is not there.
  *
@@ -64,7 +64,6 @@ const RELOCATED: Record<string, string> = {
   "packages/lab/src/packaging/screenreader-worker-extraction.test.ts": "packages/guards/src/screenreader-worker-extraction.test.ts", // #3447
   "packages/lab/src/packaging/pnpm-workspace.test.ts": "packages/guards/src/pnpm-workspace.test.ts", // #3447
   "packages/lab/src/packaging/dora-declaration.test.ts": "packages/guards/src/dora-declaration.test.ts", // #3138
-  "packages/lab/src/packaging/control-extraction.test.ts": "packages/guards/src/control-extraction.test.ts", // #2704
   "packages/lab/src/packaging/lay-layer.test.ts": "packages/guards/src/lay-layer.test.ts", // #3504, the test of the script this row changes
   "packages/lab/src/packaging/nightly-only-path.test.ts": "packages/guards/src/nightly-only-path.test.ts", // #1135, #1149
   "packages/lab/nightly/tenants.mjs": "packages/guards/nightly/tenants.mjs", // the manifest nightly-only-path.test.ts pins both ways
@@ -266,7 +265,7 @@ type LayersManifest = { layers: Record<string, LayerEntry>; pinned?: Record<stri
 /** What is wrong with `lab`'s declaration, the scripts that lay it and the ignore line that keeps the laid copy out of a commit. */
 function pinRefusals({ manifest, scripts, gitignore }: { manifest: LayersManifest; scripts: Record<string, string>; gitignore: string }): string[] {
   const entry = manifest.pinned?.[DEPARTED_DIRECTORY];
-  if (entry === undefined) return ["packages/control/layers.json declares no `lab` layer under `pinned`"];
+  if (entry === undefined) return ["layers.json declares no `lab` layer under `pinned`"];
   // Under `layers` a guest and a lab job must hold a pinned checkout of it (`separateLayers`), and nothing on a worker runs the lab.
   const held = Object.hasOwn(manifest.layers, DEPARTED_DIRECTORY) ? ["`lab` is declared under `layers`, which makes fleet:deploy and every lab job demand a pin for it"] : [];
   const declaration = [
@@ -282,7 +281,7 @@ function pinRefusals({ manifest, scripts, gitignore }: { manifest: LayersManifes
 }
 
 const pinInputs = (root: string) => ({
-  manifest: JSON.parse(read(root, "packages/control/layers.json")) as LayersManifest,
+  manifest: JSON.parse(read(root, "layers.json")) as LayersManifest,
   scripts: (JSON.parse(read(root, "package.json")) as { scripts: Record<string, string> }).scripts,
   gitignore: read(root, ".gitignore"),
 });
@@ -301,7 +300,7 @@ test("POSITIVE CONTROL: a branch for a tag, a missing layer, a layer a deploy wo
   assert.deepEqual(pinRefusals(good), []);
   assert.match(pinRefusals({ ...good, manifest: { layers: {}, pinned: { lab: { ...lab, tag: "main" } } } })[0], /a pin is a v<semver> tag, never a branch or a sha/);
   assert.match(pinRefusals({ ...good, manifest: { layers: {}, pinned: { lab: { ...lab, tag: undefined } } } })[0], /a pin is a v<semver> tag/);
-  assert.deepEqual(pinRefusals({ ...good, manifest: { layers: {}, pinned: {} } }), ["packages/control/layers.json declares no `lab` layer under `pinned`"]);
+  assert.deepEqual(pinRefusals({ ...good, manifest: { layers: {}, pinned: {} } }), ["layers.json declares no `lab` layer under `pinned`"]);
   assert.deepEqual(pinRefusals({ ...good, manifest: { layers: { lab }, pinned: { lab } } }), ["`lab` is declared under `layers`, which makes fleet:deploy and every lab job demand a pin for it"]);
   assert.deepEqual(pinRefusals({ ...good, scripts: { build: "node scripts/lay-layer.mjs lab", prepare: "x" } }), ["`prepare` does not lay lab"]);
   assert.deepEqual(pinRefusals({ ...good, gitignore: "node_modules\n" }), [`.gitignore does not ignore /${DEPARTED_PATH}`]);
@@ -355,10 +354,8 @@ test("every test relocated by name is tracked at its new home and not at its old
 
 // ---- 7. the tree-wide guards the product keeps still run, and select nothing that left ------------------------------
 
-/** Names the tree-wide guards outside the departed directory that must still be found: the three #2703 counted as staying. */
+/** Names the tree-wide guards outside the departed directory that must still be found: the three #2703 counted as staying, of which TWO (`fleet-layer/entry-points` and `fleet-layer/protocol-guard`) left with `packages/control` (#3506) and run in `a11ign/control`'s CI now (`docs/known-gaps.md`). */
 const STAYING_GUARDS = [
-  "packages/control/src/fleet-layer/entry-points.test.ts",
-  "packages/control/src/fleet-layer/protocol-guard.test.ts",
   "packages/judge/src/criteria-counts-are-not-spelled-out.test.ts",
 ];
 
@@ -383,7 +380,7 @@ test("the tree-wide guards the product keeps are still discovered, all exist, an
 
 test("POSITIVE CONTROL: a guard selected from the departed directory, a missing one and a lost staying guard are each REFUSED", () => {
   const exists = (path: string) => !path.endsWith("/vanished.test.ts");
-  assert.deepEqual(guardRefusals({ selected: [...STAYING_GUARDS], exists }), [], "the three that stayed pass");
+  assert.deepEqual(guardRefusals({ selected: [...STAYING_GUARDS], exists }), [], "the guard that stayed passes");
   assert.deepEqual(guardRefusals({ selected: [...STAYING_GUARDS, "packages/lab/src/packaging/ci-changed.test.ts"], exists }),
     ["packages/lab/src/packaging/ci-changed.test.ts is selected and lives in the directory that left"]);
   assert.deepEqual(guardRefusals({ selected: [...STAYING_GUARDS, "packages/guards/src/vanished.test.ts"], exists }),

@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@v7
 
       # `packages/lab/` left this repository for a11ign/lab (#3505), and the two assertions below are its script. It is LAID at the tag
-      # `packages/control/layers.json` declares, which needs git and nothing installed: this job installs nothing before the action runs.
+      # `layers.json` declares, which needs git and nothing installed: this job installs nothing before the action runs.
       - name: Lay a11ign/lab's scripts where the assertions read them
         shell: bash
         run: node scripts/lay-layer.mjs lab

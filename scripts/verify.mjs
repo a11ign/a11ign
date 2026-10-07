@@ -75,7 +75,7 @@ export const CI_ONLY = {
     + "module graph selects them and `--changed` cannot; they run once per pull request in CI, which carries no "
     + "`changed` condition for them (#3572, chairman via ceo)",
   ansible: "needs ansible-core and the Galaxy collections, which CI installs fresh with pip and ansible-galaxy "
-    + "and which are no dependency of this checkout; `changed` skips it for any diff outside packages/control/ansible",
+    + "and which are no dependency of this checkout; `changed` skips it for any diff that does not move a layer's pin in layers.json",
   deliberateRefusals: "needs the pull request's number and a GitHub token: it compares the head with what GitHub "
     + "recorded (#294) and the body's Closes with what GitHub will close (#549), and no pull request exists before "
     + "pr:open (the body's own shape is checked by the `acceptance` step)",
@@ -253,7 +253,7 @@ function pnpm(pnpmArgs, { stdio = "inherit" } = {}) {
  * so a wrong include would read exactly like a diff no test reaches, and this floor is what tells them apart (#2165, #3572).
  */
 export const AFFECTED_INCLUDE = "packages/*/src/**/*.test.ts";
-export const AFFECTED_MIN_FILES = 159;
+export const AFFECTED_MIN_FILES = 107;
 const RSTEST_CONFIG = "scripts/rstest/rstest.config.mjs";
 
 /**

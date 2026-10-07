@@ -3,7 +3,7 @@
 
 packages:
   - "packages/*"
-  # A LAYER'S CLONE IS NOT A MEMBER OF THE CORE (#3760). packages/control/layers.json declares layers that live in their own
+  # A LAYER'S CLONE IS NOT A MEMBER OF THE CORE (#3760). layers.json (the root's, since #3506) declares layers that live in their own
   # repository and are cloned at their `path` on a guest, the lab host and any operator worktree that runs a layer job; `packages/*`
   # would make that clone a workspace project, and `pnpm install --frozen-lockfile` at the core root then fails with
   # ERR_PNPM_OUTDATED_LOCKFILE (the lockfile records the core's projects only). pnpm reads this file as static YAML, so the entry is
@@ -15,6 +15,9 @@ packages:
   # `packages/lab` is the same kind of clone (`scripts/lay-layer.mjs`, #3505): the directory left the workspace for `a11ign/lab`, and a laid copy
   # holds no manifest, but a worktree that still has the old directory's `package.json` would otherwise be an importer the lockfile no longer records.
   - "!packages/lab"
+  # `packages/control` is the same kind of clone (`scripts/lay-layer.mjs`, #3506): the directory left the workspace for `a11ign/control`, and a laid copy holds no manifest,
+  # but a worktree that still has the old directory's `package.json` would otherwise be an importer the lockfile no longer records.
+  - "!packages/control"
 
 # WHY THIS IS ON: internal dependencies are pinned "0.0.0", not `workspace:*`, because npm cannot read the
 # `workspace:` protocol and `npm ci` had to keep working while both lockfiles existed. It still is the spelling: `changeset version` writes
@@ -47,7 +50,7 @@ linkWorkspacePackages: true
 autoInstallPeers: false
 
 # TWO PACKAGES ARE IMPORTED BUT DECLARED BY NO MANIFEST, and npm's hoisting has hidden it: packages/control's
-# tests import `yaml`, and packages/lab/scripts/axe-calibration.mjs imports `axe-core`. pnpm gives a package only
+# tests imported `yaml` (they left with #3506; the guards' tests import it now), and packages/lab/scripts/axe-calibration.mjs imports `axe-core`. pnpm gives a package only
 # what it declares, so under pnpm both failed to resolve (found by running the whole suite under both).
 # Declaring them is the right fix. It was refused to #2297 because it would have changed package-lock.json, which
 # that row promised to leave alone; the file is gone (#2301), so nothing but a row's scope stands between

@@ -16,8 +16,8 @@
  *   5. Who reaches it, and how. Code in `lab`, `guards`, `cli` and `scripts/` never imports it by a relative path into `packages/worker-fleet`:
  *      it names it BY PACKAGE NAME, or (the root's scripts and the guards that run before `node_modules` exists, which cannot import a package
  *      at all) reads `scripts/cli-flags.mjs`, the one file of the fleet those need, kept as a copy in this repository. `control` CANNOT (ADR 0012, `control-has-no-dependencies.test.ts`: it runs from a raw checkout with no `node_modules`),
- *      so it reaches the fleet by relative path through the layer `packages/control/layers.json` declares at that very path, which is the only
- *      place a relative path into the directory is allowed to land.
+ *      so it reaches the fleet by relative path through the layer `layers.json` declares at that very path, which is the only
+ *      place a relative path into the directory is allowed to land. The scan of control's modules for that left with them (#3506); the declaration stays pinned here.
  *
  * THE POSITIVE CONTROL is each function over a fixture: a lockfile with a `link:../worker-fleet` entry is REFUSED naming it, and so is a
  * workspace that still matches the directory, a registry entry with no integrity, a changeset that names the package, and a relative import.
@@ -276,31 +276,10 @@ test("POSITIVE CONTROL: a relative import of the fleet is REFUSED naming the fil
   ]);
 });
 
-/** Where a relative import into the fleet may land: the path the layer manifest declares for it. Control's modules sit one level below `packages/control`, so `../../worker-fleet/` IS `packages/worker-fleet/`. */
-function controlRefusals({ manifest, files }: { manifest: { layers: Record<string, { path: string; remote?: string }> }; files: Record<string, string> }): string[] {
-  const layer = manifest.layers["screenreader-fleet"];
-  if (layer?.remote === undefined) return ["packages/control/layers.json declares no screenreader-fleet layer with a remote"];
-  if (layer.path === `packages/${DEPARTED_DIRECTORY}`) return [];
-  return Object.entries(files).filter(([path]) => path.startsWith("packages/control/") && /\.mjs$/.test(path)).filter(([, text]) => /["'](?:\.\.\/)+worker-fleet\//.test(text))
-    .map(([path]) => `${path} reaches the fleet from a place the declared layer path ${layer.path} does not resolve`);
-}
-
-test("control reaches the fleet only through the layer layers.json declares at packages/worker-fleet", () => {
-  const manifest = JSON.parse(read(REPO_ROOT, "packages/control/layers.json"));
+// `control` reaches the fleet by a relative path through this declaration, and its own repository holds the scan of that (`a11ign/control`, #3506): the
+// directory is laid and untracked here, so a scan of tracked files would read nothing. What stays pinned HERE is the declaration it resolves through.
+test("the fleet is declared as a separate layer at packages/worker-fleet, with its own repository, which is where control's relative imports land", () => {
+  const manifest = JSON.parse(read(REPO_ROOT, "layers.json"));
   assert.equal(manifest.layers["screenreader-fleet"]?.path, "packages/worker-fleet");
   assert.match(manifest.layers["screenreader-fleet"]?.remote ?? "", /^https:\/\/github\.com\/a11ign\/screenreader-fleet\.git$/);
-  const files = Object.fromEntries(Object.entries(trackedText(REPO_ROOT)).filter(([path]) => path.startsWith("packages/control/src/") && !path.includes("/fleet-layer/")));
-  const reaching = Object.values(files).filter((text) => /["'](?:\.\.\/)+worker-fleet\//.test(text)).length;
-  assert.ok(reaching >= 10, `only ${reaching} control module(s) reach the fleet by path: the scan is looking at nothing`);
-  assert.deepEqual(controlRefusals({ manifest, files }), []);
-});
-
-test("POSITIVE CONTROL: control with no declared layer, or one with no remote, is REFUSED", () => {
-  const files = { "packages/control/src/a.mjs": 'import { x } from "../../worker-fleet/src/cli-flags.mjs";\n' };
-  assert.deepEqual(controlRefusals({ manifest: { layers: {} }, files }), ["packages/control/layers.json declares no screenreader-fleet layer with a remote"]);
-  assert.deepEqual(controlRefusals({ manifest: { layers: { "screenreader-fleet": { path: "packages/worker-fleet" } } }, files }),
-    ["packages/control/layers.json declares no screenreader-fleet layer with a remote"]);
-  assert.deepEqual(controlRefusals({ manifest: { layers: { "screenreader-fleet": { path: "packages/worker-fleet", remote: "https://x/y.git" } } }, files }), []);
-  assert.deepEqual(controlRefusals({ manifest: { layers: { "screenreader-fleet": { path: "packages/elsewhere", remote: "https://x/y.git" } } }, files }),
-    ["packages/control/src/a.mjs reaches the fleet from a place the declared layer path packages/elsewhere does not resolve"]);
 });

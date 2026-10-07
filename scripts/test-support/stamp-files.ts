@@ -15,7 +15,7 @@ const REPO = fileURLToPath(new URL("../../", import.meta.url));
 
 /** The layer's directory as `layers.json` declares it, forward-slashed. */
 export function declaredLayerPath(layer: string, root = REPO): string {
-  const manifest = JSON.parse(readFileSync(join(root, "packages/control/layers.json"), "utf8"));
+  const manifest = JSON.parse(readFileSync(join(root, "layers.json"), "utf8"));
   return manifest.layers[layer].path;
 }
 

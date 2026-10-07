@@ -49,11 +49,11 @@ const FIRST_LAYERS = ["nvda-worker", "nvda-speech", "agent-org"];
 /** The three the fence of #3501 adds, for moves 2-4 of #69. */
 const SPLIT_LAYERS = ["worker-fleet", "lab", "control"];
 /** The layers whose directory is not in the tree at all: no tracked file is inside one, so no baseline entry may be FROM one. (`worker-fleet` and `lab` are laid there at build time, untracked, #3504, #3505.) */
-const DEPARTED_LAYERS = [...FIRST_LAYERS, "worker-fleet", "lab"];
+const DEPARTED_LAYERS = [...FIRST_LAYERS, "worker-fleet", "lab", "control"];
 /** One x.mjs and one own.mjs per layer, and the other package's x.mjs. */
 const THREE_LAYERS_CLEAN_FILES = 7;
 const REASON_AT_LEAST_CHARS = 40;
-const BASELINE_AT_LEAST = 100;
+const BASELINE_AT_LEAST = 20;
 const DIRECTED_PAIRS_AMONG_THREE = 6;
 /** A path a test lives at; `moves-with` is only ever a test's disposition. */
 const TEST_PATH = /\.test\.|\/fixtures\/|\/test-support\/|\/tests?\/|(?:^|\/)test_[^/]*\.py$/;
@@ -289,16 +289,8 @@ test("the real tree agrees with the committed baseline: no new edge, no stale en
   assert.deepEqual(describeVerdict(verdict), []);
 });
 
-test("the widened guard finds `const`-carried edges in the real tree that a literal-only reading did not, each with its declaration and read", () => {
-  const carried = findEdges({ root: ROOT, tracked: trackedFiles(ROOT) }).filter((e) => e.via !== undefined);
-  assert.ok(carried.length >= 1, "POSITIVE CONTROL: no edge in the real tree was found through a const, so the widening matched nothing");
-  const froms = carried.map((e) => e.from);
-  // The two lab tests that read the layer's CLAUDE.md through a const left with the lab (#3505); the one that stays and reads control's `package.json` the same way is the witness.
-  for (const file of ["control-extraction.test.ts"]) {
-    assert.ok(froms.some((from) => from.endsWith(file)), `${file} reads the layer's files through a const and is not found`);
-  }
-  for (const { from, via } of carried) assert.ok(via && via.declaredLine > 0 && via.readLine >= via.declaredLine, `${from}: the declaration and the read are lines of the file`);
-});
+// The real-tree witness of the `const`-carried reading was `control-extraction.test.ts`, which read the layer's `package.json` through a const; it left with the directory (#3506), and no
+// edge of the real tree is carried that way now. The widening is held by the `const-*` fixtures above, which each carry their own positive control.
 
 test("the real baseline is NON-EMPTY and records the deploy path, so a guard that found nothing is not read as a fenced layer", () => {
   const baseline = readBaseline(ROOT);
@@ -307,11 +299,12 @@ test("the real baseline is NON-EMPTY and records the deploy path, so a guard tha
   const froms: string[] = baseline.map((e: { from: string }) => e.from);
   // The layer's own `launcher-reach.cmd` left with it (#3447); the stand-in beside the stamp's walk is what records that reach until the layer carries one.
   assert.ok(froms.includes("scripts/test-support/launcher-reach.stand-in.cmd"), "the declaration of what the worker's launchers reach is recorded");
-  assert.ok(froms.some((f) => f.startsWith("packages/control/ansible/")), "the Ansible files that place it are recorded");
-  // The fleet's own reaches left with it (#3504); what is recorded now is the reaches INTO the directory it is laid at, by control and by the tests of both.
+  // The fleet's own reaches left with it (#3504), control's with it (#3506); what is recorded now is the reaches INTO the directories they are laid at, by the root and by the tests.
   const intoTheFleet = baseline.filter((e: { to: string }) => e.to.startsWith("packages/worker-fleet"));
-  assert.ok(intoTheFleet.some((e: { from: string }) => e.from.startsWith("packages/control/src/")), "control's reaches into the laid fleet are recorded");
   assert.ok(intoTheFleet.some((e: { from: string }) => e.from.startsWith("package.json")), "the root scripts that run it by path are recorded");
+  const intoControl = baseline.filter((e: { to: string }) => e.to.startsWith("packages/control"));
+  assert.ok(intoControl.some((e: { from: string }) => e.from === "package.json"), "the root scripts that run control by path are recorded");
+  assert.ok(intoControl.some((e: { from: string }) => e.from === ".github/workflows/ci.yml"), "and the workflow that lays its playbooks to check them");
 });
 
 /** The baseline entries whose `from` is a file INSIDE one of the layers that left first. */
@@ -335,20 +328,19 @@ const pairsOf = (entries: { from: string; to: string }[]) => {
   return counts;
 };
 
-test("the real baseline names the two directed pairs that remain among worker-fleet, lab and control, and is not empty", () => {
+test("the real baseline holds NO directed pair among worker-fleet, lab and control, because none has a file in the tree, and is not empty", () => {
   const baseline = readBaseline(ROOT);
-  assert.ok(baseline.length > BASELINE_AT_LEAST, `POSITIVE CONTROL: the fence is a baseline of hundreds of edges, not ${baseline.length}`);
-  const pairs = pairsOf(baseline);
-  // Of the six, the two FROM worker-fleet went with its code (#3504) and the two FROM lab with its (#3505); control still reads INTO the directories they are laid at.
-  const expected = SPLIT_LAYERS.flatMap((a) => SPLIT_LAYERS.filter((b) => b !== a).map((b) => `${a} -> ${b}`)).filter((pair) => !pair.startsWith("worker-fleet -> ") && !pair.startsWith("lab -> "));
-  assert.equal(expected.length, DIRECTED_PAIRS_AMONG_THREE - 4);
-  assert.deepEqual([...pairs.keys()].sort(), expected.sort(), "a directed pair with no edge, or an edge outside the six, means the scan or the baseline broke");
-  assert.ok([...pairs.values()].every((n) => n > 0));
+  assert.ok(baseline.length > BASELINE_AT_LEAST, `POSITIVE CONTROL: the fence is a baseline of dozens of edges, not ${baseline.length}`);
+  // THE CONTROL, over the same function: it is shown to SEE every one of the six pairs, so an empty answer over the baseline is not a filter that matches nothing.
+  const planted = SPLIT_LAYERS.flatMap((a) => SPLIT_LAYERS.filter((b) => b !== a).map((b) => ({ from: `packages/${a}/src/x.mjs`, to: `packages/${b}/src/y.mjs` })));
+  assert.equal(pairsOf(planted).size, DIRECTED_PAIRS_AMONG_THREE);
+  assert.deepEqual([...pairsOf(baseline).keys()], [], "an edge from one of the three to another means a file of a departed layer is in the tree again, or the baseline was edited by hand");
 });
 
 test("every baseline entry carries a disposition and a reason, and the word `cut` is a promise with a reason beside it", () => {
   const baseline = readBaseline(ROOT);
-  assert.ok(baseline.some((e: { disposition: string }) => e.disposition === "cut"), "POSITIVE CONTROL: some edge is promised cut, so the loop below has one to hold to account");
+  // The one `cut` the baseline held was an edge out of control (#3506): none is promised now, and the reason is still owed by every entry that remains.
+  assert.ok(baseline.length > BASELINE_AT_LEAST, "POSITIVE CONTROL: the baseline is not empty, so the loop below has entries to hold to account");
   for (const entry of baseline) {
     assert.ok(typeof entry.reason === "string" && entry.reason.trim().length >= REASON_AT_LEAST_CHARS, `${entry.from} -> ${entry.to}: a reason is a sentence, not a tag`);
   }

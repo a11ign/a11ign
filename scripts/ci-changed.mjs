@@ -382,7 +382,9 @@ export function classify(files, allPackages,
     /^packages\/[^/]+\/(python|tests)\/.*\.py$/.test(f)
     || f === "requirements-ci.txt" || f === "packages/scorer/requirements.txt");
 
-  const ansible = files.some((f) => f.startsWith("packages/control/ansible/"));
+  // The playbooks are `a11ign/control`'s and LAID here (#3506), so no diff of this repository can touch them; what can change them is the tag `layers.json` pins,
+  // and the job lays that tag before it checks it. A move of the pin is therefore the one reason to re-read the playbooks.
+  const ansible = files.includes("layers.json");
 
   const docsFiles = files.filter((f) => f.startsWith("docs/") || DOC_ROOT_FILES.has(f));
   // `board` is true, and `docs` FALSE, only when EVERY doc-touching file in the diff is a board file --
