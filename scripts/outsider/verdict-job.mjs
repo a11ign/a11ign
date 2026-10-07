@@ -137,11 +137,11 @@ const gh = (args) => (assertNoLeakInArgv("gh", args), execFileSync("gh", args, {
 /** The release tag's COMMIT: the peeled ref of an annotated tag, else the tag itself. @param {string} version */
 function tagShaOf(version) {
   const remote = `https://github.com/${PRODUCT_REPO}`;
-  for (const ref of [`refs/tags/v${version}^{}`, `refs/tags/v${version}`]) {
+  for (const ref of [`refs/tags/a11ign@${version}^{}`, `refs/tags/a11ign@${version}`]) {
     const sha = execFileSync("git", ["ls-remote", remote, ref], { encoding: "utf8", env: sandboxGitEnv() }).split("\t")[0].trim();
     if (sha) return sha;
   }
-  throw new Error(`no release tag v${version} on ${remote}`);
+  throw new Error(`no release tag a11ign@${version} on ${remote}`);
 }
 
 /**

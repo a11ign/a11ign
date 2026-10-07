@@ -33,9 +33,9 @@ jobs:
         run: |
           set -euo pipefail
           version=$(npm view a11ign dist-tags.latest)
-          tag_sha=$(git ls-remote https://github.com/a11ign/a11ign "refs/tags/v${version}^{}" | cut -f1)
-          [ -n "$tag_sha" ] || tag_sha=$(git ls-remote https://github.com/a11ign/a11ign "refs/tags/v${version}" | cut -f1)
-          [ -n "$tag_sha" ] || { echo "::error::no release tag v${version} on https://github.com/a11ign/a11ign"; exit 1; }
+          tag_sha=$(git ls-remote https://github.com/a11ign/a11ign "refs/tags/a11ign@${version}^{}" | cut -f1)
+          [ -n "$tag_sha" ] || tag_sha=$(git ls-remote https://github.com/a11ign/a11ign "refs/tags/a11ign@${version}" | cut -f1)
+          [ -n "$tag_sha" ] || { echo "::error::no release tag a11ign@${version} on https://github.com/a11ign/a11ign"; exit 1; }
           title="outsider v${version} ${tag_sha}"
           # A run counts as answered once it is unfinished or ended success/failure: a cancelled one never answered,
           # and a version already red must not be re-run every hour on a windows runner.
@@ -60,9 +60,9 @@ jobs:
         run: |
           set -euo pipefail
           version="$VERSION"
-          tag_sha=$(git ls-remote https://github.com/a11ign/a11ign "refs/tags/v${version}^{}" | cut -f1)
-          [ -n "$tag_sha" ] || tag_sha=$(git ls-remote https://github.com/a11ign/a11ign "refs/tags/v${version}" | cut -f1)
-          [ -n "$tag_sha" ] || { echo "::error::no release tag v${version} on https://github.com/a11ign/a11ign"; exit 1; }
+          tag_sha=$(git ls-remote https://github.com/a11ign/a11ign "refs/tags/a11ign@${version}^{}" | cut -f1)
+          [ -n "$tag_sha" ] || tag_sha=$(git ls-remote https://github.com/a11ign/a11ign "refs/tags/a11ign@${version}" | cut -f1)
+          [ -n "$tag_sha" ] || { echo "::error::no release tag a11ign@${version} on https://github.com/a11ign/a11ign"; exit 1; }
           workflow_file="${GITHUB_WORKFLOW_REF#"${GITHUB_REPOSITORY}/"}"
           workflow_file="${workflow_file%%@*}"
           pinned=$(sed -nE 's#^[[:space:]]*(- )?uses:[[:space:]]*a11ign/a11ign@([0-9a-f]{40})([[:space:]].*)?$#\2#p' "$workflow_file")
