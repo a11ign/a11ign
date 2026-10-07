@@ -202,17 +202,29 @@ jobs:
                 return fail(`the registry did not answer for ${name}: ${error.stderr}`);
               }
             };
+            // #4023: THE VERSION READ IS THE ONE THE RELEASE COMMIT STARTS FROM, not `main`'"'"'s manifest. The called workflow resets each
+            // package to its newest tag `<name>@x.y.z` before versioning, and `main` never receives that commit, so its manifests lag
+            // the registry for good once a release has shipped (0.2.7 on `main` against a11ign@0.3.0): reading them refused every
+            // release after the first. A package with no tag keeps `main`'"'"'s version, as the called workflow does.
+            const newestTagVersion = (name) => {
+              const versions = execFileSync("git", ["tag", "--list", `${name}@*`], { encoding: "utf8" }).split("\n")
+                .filter((tag) => tag.lastIndexOf("@") > 0 && tag.slice(0, tag.lastIndexOf("@")) === name)
+                .map((tag) => tag.slice(tag.lastIndexOf("@") + 1))
+                .filter((version) => /^\d+\.\d+\.\d+$/.test(version));
+              return versions.reduce((best, version) => (best === null || newer(triple(version), triple(best)) ? version : best), null);
+            };
             const readings = [];
             for (const dir of fs.readdirSync("packages")) {
               const path = `packages/${dir}/package.json`;
               if (!fs.existsSync(path)) continue;
               const manifest = JSON.parse(fs.readFileSync(path, "utf8"));
               if (manifest.private) continue;
+              const base = newestTagVersion(manifest.name) ?? manifest.version;
               const latest = latestOnRegistry(manifest.name);
-              const isAhead = newer(triple(manifest.version), triple(latest));
-              const isBehind = newer(triple(latest), triple(manifest.version));
-              console.error(`${isAhead ? "AHEAD of" : "not ahead of"} the registry: ${manifest.name}@${manifest.version} (latest there: ${latest})`);
-              readings.push({ name: manifest.name, manifest: manifest.version, latest, state: isAhead ? "ahead" : isBehind ? "behind" : "level" });
+              const isAhead = newer(triple(base), triple(latest));
+              const isBehind = newer(triple(latest), triple(base));
+              console.error(`${isAhead ? "AHEAD of" : "not ahead of"} the registry: ${manifest.name}@${base} (release base; main reads ${manifest.version}; latest there: ${latest})`);
+              readings.push({ name: manifest.name, manifest: base, latest, state: isAhead ? "ahead" : isBehind ? "behind" : "level" });
             }
             console.log(JSON.stringify(readings));
           ')
@@ -293,9 +305,9 @@ jobs:
 
       # NEVER PUBLISH A VERSION OLDER THAN THE REGISTRY'S LATEST (#3167). The called workflow's `changeset publish` sends EVERY package
       # whose version the registry lacks, and an older version sent there is a regression nobody can take back. It stays when the tag is `next` (#3946): the registry's `latest` is still the floor a version must clear to be worth a tag at all.
-      # THE READING IS OF `main`'S MANIFESTS, and the release commit's bases are the last tags' versions where a package has a tag:
-      # a tag is cut only by a publish, so it follows the registry and this reading is the one that can disagree with it. A package
-      # with no tag keeps `main`'s version, which is exactly what is read here.
+      # THE READING IS OF THE RELEASE COMMIT'S BASES, the last tags' versions where a package has a tag (#4023: it read `main`'s
+      # manifests, which lag every tag for good, and refused each release after the first). A tag is cut only by a publish, so it
+      # follows the registry. A package with no tag keeps `main`'s version, which is what the called workflow starts from too.
       - name: Refuse to publish a package whose manifest is behind the registry's latest
         env:
           READINGS: ${{ steps.readings.outputs.readings }}
