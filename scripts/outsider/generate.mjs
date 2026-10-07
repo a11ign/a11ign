@@ -166,9 +166,9 @@ const inSingleQuotes = (text) => text.replaceAll("'", "'\\''");
 /** The `git ls-remote` that reads a release tag's COMMIT: the peeled ref of an annotated tag, else the tag itself. */
 function tagShaCommand() {
   return [
-    `tag_sha=$(git ls-remote ${ACTION_REMOTE} "refs/tags/v\${version}^{}" | cut -f1)`,
-    `[ -n "$tag_sha" ] || tag_sha=$(git ls-remote ${ACTION_REMOTE} "refs/tags/v\${version}" | cut -f1)`,
-    `[ -n "$tag_sha" ] || { echo "::error::no release tag v\${version} on ${ACTION_REMOTE}"; exit 1; }`,
+    `tag_sha=$(git ls-remote ${ACTION_REMOTE} "refs/tags/a11ign@\${version}^{}" | cut -f1)`,
+    `[ -n "$tag_sha" ] || tag_sha=$(git ls-remote ${ACTION_REMOTE} "refs/tags/a11ign@\${version}" | cut -f1)`,
+    `[ -n "$tag_sha" ] || { echo "::error::no release tag a11ign@\${version} on ${ACTION_REMOTE}"; exit 1; }`,
   ];
 }
 
