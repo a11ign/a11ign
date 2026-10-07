@@ -19,7 +19,7 @@
  * pin and no install behind it leaves the old tree, which runs and answers for the wrong code). Imports only `node:` modules
  * (`control-has-no-dependencies.test.ts`).
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -50,7 +50,7 @@ export function labLaidCopyRefusal({ manifest, root }) {
   return null;
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
   const refusal = labLaidCopyRefusal({ manifest: JSON.parse(readFileSync(MANIFEST_PATH, "utf8")), root: REPO_ROOT });
   if (refusal === null) process.exit(0);
   process.stderr.write(`lab-laid-copy: REFUSING: ${refusal}\n`);
