@@ -38,15 +38,24 @@ export const DRY_RUN_MARKER = "(dry-run)";
 const RELEASE_WORKFLOW = join(REPO, ".github/workflows/release.yml");
 
 /**
- * The dist-tag the release publishes with, read from the one place that spells it: the `release` call's `dist-tag:` input (#4009).
+ * The dist-tag the release publishes with, read from the one place that spells it: the `release` JOB's `dist-tag:` input (#4009).
  * Without `--tag` npm applies `latest`, and npm 11 refuses that for a version below one already published (`main` is never written
  * by a release, so it is always below `next`): the rehearsal went red on a publish the release does not make.
+ *
+ * Scoped to the lines of `release:` (up to the next key at the jobs' indent), so another job's `dist-tag` input, now or later, is
+ * neither mistaken for the release's nor makes the rehearsal refuse a valid file. No YAML parser: `yaml` is hoisted to the root
+ * `node_modules` by `pnpm-workspace.yaml` and declared by no manifest this script could lean on.
  * @param {string} workflowText the text of `release.yml`; comment lines do not match, because the key must start the line
  * @returns {string}
  */
 export function releaseDistTag(workflowText) {
-  const tags = [...workflowText.matchAll(/^\s+dist-tag:\s*([\w.-]+)\s*$/gm)].map((match) => match[1]);
-  if (tags.length !== 1) throw new Error(`release.yml must pass exactly one \`dist-tag:\`, found ${tags.length}: the rehearsal cannot tell which one the release publishes with`);
+  const lines = workflowText.split("\n");
+  const start = lines.findIndex((line) => /^ {2}release:\s*$/.test(line));
+  if (start < 0) throw new Error("release.yml has no `release` job: the rehearsal cannot tell which dist-tag the release publishes with");
+  const end = lines.findIndex((line, index) => index > start && /^ {2}[^\s#]/.test(line));
+  const job = lines.slice(start + 1, end < 0 ? undefined : end);
+  const tags = job.flatMap((line) => line.match(/^\s+dist-tag:\s*([\w.-]+)\s*$/)?.[1] ?? []);
+  if (tags.length !== 1) throw new Error(`the \`release\` job must pass exactly one \`dist-tag:\`, found ${tags.length}: the rehearsal cannot tell which one the release publishes with`);
   return tags[0];
 }
 

@@ -239,6 +239,7 @@ for (const name of JOBS_THAT_STAY) {
 test("the rehearsal's main() hands `pnpm publish` the tag it READ from release.yml, not a spelled one (#4009)", () => {
   const source = readFileSync(REHEARSAL, "utf8");
   assert.match(source, /releaseDistTag\(readFileSync\(RELEASE_WORKFLOW, "utf8"\)\)/, "the tag is read from release.yml");
+  assert.match(source, /RELEASE_WORKFLOW = join\(REPO, "\.github\/workflows\/release\.yml"\)/, "and from the workflow that is actually the release's");
   assert.match(source, /pnpmCliInvocation\(publishArgs\(tag\)\)/, "and that tag is what the publish is rehearsed with");
   assert.equal(releaseDistTag(readFileSync(WORKFLOW, "utf8")), "next");
 });
@@ -249,7 +250,7 @@ test("the rehearsal's arguments name the `--tag` the real `release` call passes,
   assert.equal(publishArgs(releaseDistTag(real)).at(-1), "next", "positive control: the arguments are not empty of a tag");
   const retagged = brokenAs((workflow) => { workflow.jobs!.release.with!["dist-tag"] = "beta"; });
   assert.deepEqual(rehearsalRefusals(parse(retagged) as Workflow, retagged), []);
-  assert.deepEqual(publishArgs("next").slice(-2), ["--tag", "next"]);
+  assert.deepEqual(publishArgs("next"), ["publish", "--dry-run", "--no-git-checks", "--access", "public", "--tag", "next"]);
 });
 
 test("a rehearsal that names no `--tag`, or another one, is REFUSED, whatever the workflow says (#4009)", () => {
@@ -259,9 +260,17 @@ test("a rehearsal that names no `--tag`, or another one, is REFUSED, whatever th
   assert.equal(rehearsalRefusals(workflow, "x").length, 1, "text the reader cannot read");
 });
 
-test("a release.yml with no `dist-tag:` or two of them is one the rehearsal REFUSES to read (#4009)", () => {
+test("a release job with no `dist-tag:` or two of them, or no release job, is one the rehearsal REFUSES to read (#4009)", () => {
   assert.throws(() => releaseDistTag("jobs:\n  release:\n    with:\n      kind: npm\n"), /found 0/);
-  assert.throws(() => releaseDistTag("      dist-tag: next\n      dist-tag: latest\n"), /found 2/);
+  assert.throws(() => releaseDistTag("jobs:\n  release:\n    with:\n      dist-tag: next\n      dist-tag: latest\n"), /found 2/);
+  assert.throws(() => releaseDistTag("jobs:\n  other:\n    with:\n      dist-tag: next\n"), /no `release` job/);
+});
+
+test("another job's `dist-tag` input is IGNORED, before or after the release job's (#4009, review of 97ca8eb7)", () => {
+  const unrelated = (tag: string) => `  other-${tag}:\n    uses: x/y/.github/workflows/z.yml@main\n    with:\n      dist-tag: ${tag}\n`;
+  const text = `jobs:\n${unrelated("beta")}  release:\n    with:\n      kind: npm\n  # a comment at the jobs' indent does not end the job\n      dist-tag: next\n\n${unrelated("canary")}`;
+  assert.equal(releaseDistTag(text), "next");
+  assert.throws(() => releaseDistTag(`jobs:\n  release:\n    with:\n      kind: npm\n${unrelated("beta")}`), /found 0/, "and a dist-tag past the end of the release job is not the release's");
 });
 
 test("a comment, or a step that echoes `dist-tag: latest`, is not read as the release's tag (#4009)", () => {
