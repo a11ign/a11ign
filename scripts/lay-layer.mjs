@@ -113,11 +113,39 @@ export function layingPlan(manifest, lockfile, layer) {
 /** @param {string[]} args @param {string} cwd */
 const git = (args, cwd) => execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"], env: sandboxGitEnv() }).trim();
 
+/** Untracked files that `tsc --build` writes and a build rewrites from source: not work. Everything else untracked IS (an operator's `notes.txt`, #3836). */
+const BUILD_OUTPUT = /(^|\/)[^/]+\.tsbuildinfo$/;
+
+/** Whether `git status --porcelain -z` says the tree differs from its commit, an untracked build file (`BUILD_OUTPUT`) aside. @param {string} target */
+function hasUncommittedWork(target) {
+  const untracked = "?? ";
+  const entries = git(["status", "--porcelain", "-z", "--untracked-files=all"], target).split("\0").filter(Boolean);
+  return entries.some((entry) => !(entry.startsWith(untracked) && BUILD_OUTPUT.test(entry.slice(untracked.length))));
+}
+
+/**
+ * Whether a commit on a local ref is held by no remote ref AND by no tag that ORIGIN holds. A release is tagged, not always merged, so the commit a host's
+ * clone sits at can be on no branch of origin and still be pushed. The tags are read from ORIGIN (`ls-remote`), never from the clone's own list: a tag made
+ * here over a local-only commit is not evidence, and a local tag moved onto a name origin holds is read at origin's commit. Origin is asked only when the
+ * remote refs leave a commit over, and a failed ask throws, which the caller reports as "cannot tell". `--ignore-missing` drops a tag whose commit this
+ * clone never fetched: it cannot be an ancestor of anything here.
+ * @param {string} target
+ */
+function hasUnpushedCommits(target) {
+  const onNoRemoteRef = ["rev-list", "--max-count=1", "HEAD", "--branches", "--not", "--remotes"];
+  if (!git(onNoRemoteRef, target)) return false;
+  const heldByOrigin = git(["ls-remote", "--tags", "origin"], target).split("\n").filter(Boolean).map((line) => line.split("\t")[0]);
+  return Boolean(git([...onNoRemoteRef, "--ignore-missing", ...heldByOrigin], target));
+}
+
 /**
  * Why a directory that holds a `.git` is NOT disposable, or null when it is: `bootstrap-control-plane.sh` and `deploy.yml` once made the layer's path a
  * clone, and a host that still has one must migrate to the laid copy once (#3826 item 4), which is only safe when nothing in it exists nowhere else.
- * Two things are work: a tree that differs from its commit (untracked files included), and a commit on a local ref that no remote ref holds. A git
- * that cannot answer is "cannot tell", never "disposable": a `.git` it does not open would make it read the repository ABOVE, which is this one.
+ * Two things are work, and each has one thing that is not (#3973):
+ *   1. a tree that differs from its commit (untracked files included) is work, except an untracked BUILD file, which rebuilds from source (`BUILD_OUTPUT`);
+ *   2. a commit on a local ref that no remote ref holds is work, unless a tag that ORIGIN holds reaches it (`hasUnpushedCommits`).
+ * A git that cannot answer is "cannot tell", never "disposable": a `.git` it does not open would make it read the repository ABOVE, which is this one, and
+ * an origin that cannot be asked for its tags leaves a commit no branch holds unproven.
  * @param {string} target
  * @returns {string | null}
  */
@@ -125,8 +153,8 @@ function whyNotDisposable(target) {
   try {
     if (realpathSync(git(["rev-parse", "--show-toplevel"], target)) !== realpathSync(target)) return "git does not open it as a repository of its own, so nothing says it is disposable";
     const reasons = [];
-    if (git(["status", "--porcelain"], target)) reasons.push("it has uncommitted changes");
-    if (git(["rev-list", "--max-count=1", "HEAD", "--branches", "--not", "--remotes"], target)) reasons.push("it has unpushed commits (on no remote ref)");
+    if (hasUncommittedWork(target)) reasons.push("it has uncommitted changes");
+    if (hasUnpushedCommits(target)) reasons.push("it has unpushed commits (on no remote ref and under no tag origin holds)");
     return reasons.length ? reasons.join(" and ") : null;
   } catch (cause) {
     throw new Error(`NOT LAID: ${target} holds a .git and git could not say whether it is disposable`, { cause });
