@@ -44,15 +44,18 @@
 # Removing any of the seven is a deliberate act. Do not remove them in the same change that changes what starts this.
 #
 # THE GUARDS ABOUT WHAT IS PUBLISHED ALL STAY, and are steps of the `guards` job that `release` NEEDS (the called workflow takes
-# no steps of the caller's, so a guard is a job it waits for): the fleet part's qualification verdict (#3136), the coverage
-# threshold, the part of `release:gate` a runner can prove, `consumer-gate.yml`'s currency, the packed-install check
-# (`gate:isolation`), the manifest-repository check, the hold on packages that have left (#3126), the access read-back, the
-# refusal to publish older than the registry (#3167), the npm floor and the provenance request. `release-triggers-itself.test.ts`
-# pins each of them, and `release-safety.test.ts` says which moved where. THEY RUN ON THE `main` TREE, NOT ON THE RELEASE COMMIT
-# (that commit exists only inside the called workflow, after them), which is why a version bump they would have seen on `main`
-# under the version pull request is not what they read now.
+# no steps of the caller's, so a guard is a job it waits for): the coverage threshold, the part of `release:gate` a runner can
+# prove, `consumer-gate.yml`'s currency, the packed-install check (`gate:isolation`), the manifest-repository check, the hold on
+# packages that have left (#3126), the access read-back, the refusal to publish older than the registry (#3167), the npm floor and
+# the provenance request. `release-publishes-to-next.test.ts` pins that each of them is still here, and
+# `release-publishes-only-what-stays.test.ts` pins the hold. THEY RUN ON THE `main` TREE, NOT ON THE RELEASE COMMIT (that commit
+# exists only inside the called workflow, after them), which is why a version bump they would have seen on `main` under the
+# version pull request is not what they read now.
 #
-# `dist-tag` (issue #326) is gone (#3131): a push publishes to "latest", which is changesets' own default with no flag.
+# A PUSH PUBLISHES TO THE DIST-TAG `next`, AND THE FLEET'S VERDICT NO LONGER GATES IT (#3946, outcome 3 of #3911: release channels and
+# promotion by evidence). Pre-merge CI and the guards above are the gate for `next`; the fleet part's qualification (#3136) is read
+# AFTER the publish, and `latest` moves only on a green one (the promotion row). `scripts/release-reads-qualification.mjs` stays in
+# the tree for that reading and nothing here runs it. `npm stage publish` is not used: it needs a person's 2FA approval per version.
 name: release
 
 on:
@@ -96,19 +99,11 @@ jobs:
       pull-requests: write
 
   # EVERY GUARD ABOUT WHAT IS PUBLISHED THAT IS A STEP, in one job the `release` job needs (see the header). It holds `contents: read`
-  # and `statuses: read` and nothing else: no `id-token`, no write. The old `release` job held both writes beside all of these.
+  # and nothing else: no `id-token`, no write. The old `release` job held both writes beside all of these.
   guards:
     runs-on: ubuntu-latest
-    # What the verdict step below decided, handed to `qualification-row`: this job must not also hold `issues: write`, so the row
-    # is filed by a job that holds nothing else. Empty `row-*` outputs mean no row.
-    outputs:
-      row-title: ${{ steps.qualification.outputs.row-title }}
-      row-labels: ${{ steps.qualification.outputs.row-labels }}
-      row-body: ${{ steps.qualification.outputs.row-body }}
     permissions:
       contents: read
-      # READ ONLY, for the fleet part's verdict below (#3136): the lab posts a commit status and this job reads it.
-      statuses: read
     steps:
       - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
@@ -131,8 +126,8 @@ jobs:
         run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
       - run: pnpm run build
 
-      # EACH PUBLIC PACKAGE'S MANIFEST AGAINST THE REGISTRY'S LATEST, taken once and handed to the two steps that read it: the
-      # qualification verdict (which packages gate it) and the refusal to publish older. AHEAD means STRICTLY NEWER than the
+      # EACH PUBLIC PACKAGE'S MANIFEST AGAINST THE REGISTRY'S LATEST, taken once and handed to the step that reads it: the
+      # refusal to publish older. AHEAD means STRICTLY NEWER than the
       # registry's latest, never merely "not on the registry": `main`'s manifests have read 0.0.0 while the registry held 0.1.0
       # (#1824), and a package the registry has never heard of (E404) counts as latest 0.0.0. Any OTHER failure (a network error,
       # a 5xx) is CANNOT_TELL and fails this step: "could not ask" must never read as "not published", because the reading that
@@ -178,27 +173,6 @@ jobs:
             console.log(JSON.stringify(readings));
           ')
           echo "readings=$readings" >> "$GITHUB_OUTPUT"
-
-      # #3136 (ADR 0041, decision 3): THE RELEASE READS THE FLEET PART'S VERDICT, by commit sha, instead of ignoring it. This runner
-      # proves what a runner can prove; the stability gate and the NVDA layer need a Windows worker (`release-gate-scope.mjs`
-      # names the nine stages). The lab posts a commit status, context `qualification`, on the sha, and
-      # `release-reads-qualification.mjs` decides one of FOUR outcomes: `proceed` (success, or no fleet stage gates the packages
-      # released), `wait` (absent or pending: NOT a pass), `rerun` (one failure) and `regression` (two). ONLY `proceed` lets
-      # this job finish, so the called workflow never starts on anything else. THE LOG NAMES THE OUTCOME AND THE SHA ON EVERY RUN.
-      # The writer of the status is #3289, so until it lands a release that includes a fleet-gated package stops here at `wait`:
-      # the safe state, and the one a user can see. A wait is RE-RUN once the lab has posted, never polled.
-      #
-      # A STOP THAT NEEDS A PERSON RAISES A ROW (#3291): `regression`, and a `wait` past the 92-minute bound. This step writes the
-      # row's title, labels and body as outputs and the `qualification-row` job files it.
-      #
-      # A REHEARSAL REPORTS AND CONTINUES, because it publishes nothing and a dispatch on any branch would otherwise always stop here.
-      - name: Read the fleet part's verdict for this sha
-        id: qualification
-        continue-on-error: ${{ github.event_name == 'workflow_dispatch' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          READINGS: ${{ steps.readings.outputs.readings }}
-        run: node scripts/release-reads-qualification.mjs --sha=${{ github.sha }} --readings="$READINGS"
 
       # THE WHOLE-REPO COVERAGE THRESHOLD, HERE AND ON A NIGHTLY SCHEDULE (`nightly.yml`'s `coverage` job). Nothing else on the
       # release path re-runs the full suite, so a threshold regression a package-scoped PR run could not see would otherwise ship.
@@ -289,7 +263,7 @@ jobs:
           fi
 
       # NEVER PUBLISH A VERSION OLDER THAN THE REGISTRY'S LATEST (#3167). The called workflow's `changeset publish` sends EVERY package
-      # whose version the registry lacks, and with no `--tag` an older version can move `latest` backwards, which cannot be undone.
+      # whose version the registry lacks, and an older version sent there is a regression nobody can take back. It stays when the tag is `next` (#3946): the registry's `latest` is still the floor a version must clear to be worth a tag at all.
       # THE READING IS OF `main`'S MANIFESTS, and the release commit's bases are the last tags' versions where a package has a tag:
       # a tag is cut only by a publish, so it follows the registry and this reading is the one that can disagree with it. A package
       # with no tag keeps `main`'s version, which is exactly what is read here.
@@ -336,47 +310,6 @@ jobs:
           NPM_CONFIG_PROVENANCE: "true"
         run: node scripts/release-publish-rehearsal.mjs
 
-  # #3291: THE ROW THE VERDICT STEP'S CONTRACT PROMISES. A wait past the measured bound ("raise a row, do not skip") and a confirmed
-  # `regression` each stop the release, and nothing else would tell anyone: an overdue wait is otherwise a red run somebody must
-  # happen to see. This job files ONE row per release sha, idempotent by title, so a re-run of the failed `guards` job finds the row
-  # and files none. It holds `issues: write` and `contents: read` and nothing else. No checkout, no install: it runs `gh` and nothing
-  # from the tree, so the one token that may write an issue never meets code from the repository. A rehearsal files nothing, because
-  # it publishes nothing and a dispatch on a branch has no release sha worth a row.
-  qualification-row:
-    needs: [guards]
-    if: failure() && github.event_name == 'push' && needs.guards.outputs.row-title != ''
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      issues: write
-    steps:
-      - name: File the row for this sha, unless it is already filed
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          ROW_TITLE: ${{ needs.guards.outputs.row-title }}
-          ROW_LABELS: ${{ needs.guards.outputs.row-labels }}
-          ROW_BODY: ${{ needs.guards.outputs.row-body }}
-        run: |
-          set -euo pipefail
-          # The title is the row's identity. The search narrows, the exact comparison decides, and `--state all` means a
-          # row already closed still counts: ONE row per sha, never a second after the first was dealt with.
-          filed=$(gh issue list --state all --limit 100 --search "\"$ROW_TITLE\" in:title" --json title \
-            --jq '[.[] | select(.title == env.ROW_TITLE)] | length')
-          if [ "$filed" != "0" ]; then
-            echo "already filed: $ROW_TITLE"
-            exit 0
-          fi
-          label_args=()
-          IFS=',' read -ra labels <<< "$ROW_LABELS"
-          for label in "${labels[@]}"; do
-            # Create only what is missing: `gh label create --force` would repaint a label that exists.
-            present=$(LABEL="$label" gh label list --limit 1000 --json name --jq '[.[] | select(.name == env.LABEL)] | length')
-            if [ "$present" = "0" ]; then gh label create "$label"; fi
-            label_args+=(--label "$label")
-          done
-          gh issue create --title "$ROW_TITLE" --body "$ROW_BODY" "${label_args[@]}"
-
   # THE RELEASE: one call, and the only job here that can publish. Every job above is a guard it WAITS FOR, so a red one stops the call
   # and nothing is skipped to get a pass. The permissions are what the called workflow's jobs may use (a called workflow can keep or
   # reduce a permission and never gain one): `contents: write` for its tags, `checks: read` for its gate, `id-token: write` for the
@@ -392,7 +325,9 @@ jobs:
       id-token: write
     # No job-level `concurrency`: the workflow-level group above holds the whole run, and a job-level group of the same name would
     # wait on its own run. The called workflow carries its own, per repository.
-    uses: a11ign/toolchain/.github/workflows/release-per-merge.yml@5ea3fc027eb0891d6329e6a02c2d4ed1c679178a
+    uses: a11ign/toolchain/.github/workflows/release-per-merge.yml@5ec501f5b8d05366deeb422493a0a1c54c7c37c8
     with:
       kind: npm
       gate-check: gate
+      # #3946: every merge that carries a changeset goes to `next`; `latest` moves on a qualified reading, in the promotion row.
+      dist-tag: next
