@@ -446,28 +446,32 @@ record of why the publish waited; each item now carries what decided it and when
    after this list was written — collapse to one entry, and fold the lineage INTO it as a table naming
    every promotion, its record count, its feature schema, and that none was published, because deleting
    the four outright would have destroyed the only record ADR 0007 leaves of the weights' provenance.
-   `.changeset/` holds **one** promotion changeset today (`promote-candidate-0d498ef6.md`, 2,834 records,
-   feature schema `screenreader-structured-v19`), and `release:provenance` reads *"PASS — all 1 of 1 from
-   the shipped weights"*. `promote:model` replaces the standing promotion changeset each time it promotes,
-   so "one entry, the shipped weights'" is the shape the tool now keeps rather than a call still to make.
+   `.changeset/` held **one** promotion changeset (`promote-candidate-0d498ef6.md`, 2,834 records,
+   feature schema `screenreader-structured-v19`) until the version commit of 2026-10-03 (`e1fa9cb78`)
+   consumed it into `packages/cli/CHANGELOG.md`; `main` now holds **no** promotion changeset (re-read
+   2026-10-07 off `ls .changeset`). `promote:model` replaces the standing promotion changeset each time it
+   promotes, so "one entry, the shipped weights'" is the shape the tool keeps rather than a call still to make.
 
 **ITEM 3 HAS A LIVE SUCCESSOR, and it is the same question one release on: what does the first CHANGELOG
 say?** Measured 2026-09-23. The first release shipped on 2026-09-19 and **the first CHANGELOG was never
-written** — a walk of this tree finds no `CHANGELOG.md` at all outside the installs, caches and run
+written** until the version commit of 2026-10-03 (`e1fa9cb78`) wrote four: `main` holds a `CHANGELOG.md` for each of `cli`, `evidence`, `judge` and `scorer` and for no other package (`ls packages/*/CHANGELOG.md`, 2026-10-07). Before it, a walk of this tree found none at all outside the installs, caches and run
 records that are not this repository's own files (`node_modules`, `.git`, `runs`, `__pycache__`, `.venv`
 and `coverage`). `dist` is walked, unlike in the sweeps that share this prune list: it is this
 repository's own build output and `npm pack` ships a package's changelog, so a copy there would mean one
-had been written. `release:provenance` still reports `CHANGELOG absent, so nothing to examine` — and
+had been written. `release:provenance` then reported `CHANGELOG absent, so nothing to examine` — and
 **since #2162 it says nothing beyond that**, because `existsSync` cannot see a registry. The gloss it used
 to carry, `absent (never published)`, was a conclusion the check had no instrument for, and **the next
 sentence of this very paragraph is the counter-example**: `release.yml` ran `release:version` inside the
 job and nothing committed the result back, so the manifests kept reading `0.0.0` — until #3347 brought the four the
-registry holds to its number. **All four versioned manifests read `0.1.0`**, the version the registry holds
-(`a11ign`, `@a11ign/evidence`, `@a11ign/judge`, `@a11ign/scorer`). `@a11ign/documents` (#3125), `@a11ign/screenreader-worker` (#3447), `@a11ign/screenreader-fleet` (#3504) and `@a11ign/toolchain` (#3625, which joined under #3578) are no longer among them: each publishes from its own repository and this repository takes them by
+registry holds to its number. **The four versioned manifests no longer read `0.1.0`:** the 2026-10-03 version commit moved them to
+`0.2.7` (`a11ign`), `0.2.0` (`@a11ign/evidence`), `0.2.3` (`@a11ign/judge`) and `0.2.1` (`@a11ign/scorer`), and the registry's `a11ign`
+has since passed them (`0.1.0`, `0.3.0`). **That is not a defect:** the release is a version commit on NO branch (`release.yml`'s header: `main` is
+never written, "its versions and changelogs lag the last tag"), so `main`'s manifests are the last version commit `main` took and
+never the registry's latest. `@a11ign/documents` (#3125), `@a11ign/screenreader-worker` (#3447), `@a11ign/screenreader-fleet` (#3504) and `@a11ign/toolchain` (#3625, which joined under #3578) are no longer among them: each publishes from its own repository and this repository takes them by
 range or from the registry. The four are the public ones under `packages/`, which are exactly the set `changeset version`
-writes while `.changeset/config.json` sets `privatePackages.version` to `false`. Every
-changeset that publish consumed is still in `.changeset/` (#1824; `release-commit-version-bump.mjs` fixes
-it and no real dispatch has exercised it yet).
+writes while `.changeset/config.json` sets `privatePackages.version` to `false`. The
+changesets the 2026-10-03 version commit consumed are gone from `.changeset/` (it holds eight pending today, none of them
+`first-publish-*` or a promotion), which is the far side of the problem #1824 named.
 
 **TWO MANIFESTS DO READ `0.1.0`, AND THEY ARE NOT PART OF THIS.** `@a11ign/control` and `@a11ign/lab` are
 both `private`, so `changeset version` has never touched either: their `0.1.0` is a hand-set number from
@@ -478,25 +482,21 @@ reviewer's refusal of #2159 at `ff88e9ea`, and in that form it was false: it swe
 release does not version and has never versioned.
 
 ```
-$ ls .changeset/*.md | grep -v README | wc -l   ->  90 pending      (a ROLLING count)
-$ ls .changeset/first-publish-*.md | wc -l      ->   6
-$ npx changeset version (scratch copy, 2026-10-03) ->  a11ign, evidence, judge, scorer 0.1.0 -> 0.2.0; the three never published 0.0.0 -> 0.1.0
-$ npm view a11ign versions                       ->  0.1.0, live since 2026-09-19
+$ ls .changeset/*.md | grep -v README | wc -l   ->   8 pending      (a ROLLING count, read 2026-10-07 at 811a3472b)
+$ ls .changeset/first-publish-*.md | wc -l      ->   0   (ls: no match)
+$ grep -h '"version"' packages/{cli,evidence,judge,scorer}/package.json -> 0.2.7, 0.2.0, 0.2.3, 0.2.1
+$ npm view a11ign versions --json                ->  ["0.1.0","0.3.0"]
 ```
 
 **The pending total is a reading at a named moment and moves with every merge — re-derive it before
 quoting it.** The other three do not move on their own, which is why the argument rests on them.
 
-**Six of the pending entries are `first-publish-*.md`**, each headed *"The first published version of …"*
-and describing a publish that has already happened. On the next real dispatch `changeset version` writes
-each package's first `CHANGELOG.md` under a single `## 0.1.0` heading carrying every one of them — six
-announcing a first release, the rest describing work that landed after 0.1.0 reached the registry — and
-`changeset publish` then skips
-the six packages already at 0.1.0, so that changelog would describe a version no consumer ever received.
-Correcting the base first, so the manifests read the versions actually published and the pending set lands
-at 0.2.0, is the other option — and #3347 took it for the four published packages. **Which of those a first changelog does is a call about what it says, not a
-tidy-up** — the same reason the original item 3 was a decision — and only `@a11ign/pdf`, never published,
-is unaffected either way.
+**None of the pending entries is a `first-publish-*.md` any more.** There were six, each headed *"The first published version of …"*
+and describing a publish that had already happened, and the plan above feared a first changelog under a single `## 0.1.0` heading
+that would describe a version no consumer ever received. #3347 took the other option, correcting the base so the pending set landed
+at 0.2.0, and the 2026-10-03 version commit then wrote the changelogs: each of the four carries one *"The first published
+version of …"* line (`grep -c`), under its `0.2.x` heading, and none has a `## 0.1.0` section. **What a first changelog says was a call about
+what it says, not a tidy-up** — the same reason the original item 3 was a decision — and the changelogs now say what #3347 chose.
 
 **Before a real publish, run the full gate on the lab** — `pnpm run lab:job -e job=release-gate`. The
 workflow can only prove 5 of its 13 stages, and since #3131 nobody asserts the other eight on a publish
