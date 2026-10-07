@@ -25,11 +25,15 @@
 # purpose: any one of them alone would be a single point of failure, and this repo's own rule is that a
 # verification must not share a failure mode with the action it guards.
 #
-#   1. Only a push to `main` can publish, and the called workflow refuses any other ref in its first job. This file's `release`
-#      job runs on `push` only, so no other event reaches the call.
-#   2. A `workflow_dispatch` cannot publish. It runs every guard below and stops: the `release` job is `if: push`, and the
-#      `npm-publish` environment the called `publish` job runs under is restricted to `main` (a dispatch from a branch, whose
-#      file is the branch author's, is never minted the OIDC token).
+#   1. Only a push to `main`, or a `workflow_dispatch` ON `main` (#4000), can publish, and the called workflow refuses any other ref
+#      in its first job. This file's `release` job runs on those two only, so no other event reaches the call.
+#   2. A `workflow_dispatch` from any OTHER ref cannot publish. It runs every guard below and stops: the `release` job's `if` names
+#      `refs/heads/main` for a dispatch, and the `npm-publish` environment the called `publish` job runs under is restricted to
+#      `main` (a dispatch from a branch, whose file is the branch author's, is never minted the OIDC token; no `if:` here can keep a
+#      branch from publishing, and that restriction is what does). A dispatch ON `main` exists so a release that failed AFTER its
+#      cause was fixed is not left waiting for the next changeset: the platform's "re-run failed jobs" re-runs the SAME sha, whose
+#      tree still holds the defect. It publishes what a push would: the called workflow's `plan` reads what no tag has consumed, so a
+#      dispatch after a push that already released publishes NOTHING.
 #   3. Nothing here writes `main`, opens a pull request or holds `A11IGN_BOT_TOKEN`. The called workflow writes tags and
 #      nothing else; the approving review `main` requires (#2022) stands where the typed confirmation once stood.
 #   4. `.changeset/config.json` must say `"access": "public"`, and the `guards` job reads the file back rather than assuming it
@@ -88,12 +92,14 @@ name: release
 on:
   # `paths` keeps this off the ordinary merge: a release is due when a changeset arrives, and a changeset is a file under
   # `.changeset/`. What a tag has not yet consumed is subtracted by the called workflow, so a changeset whose release failed is
-  # released by the next run that reaches the call, never twice. `push-trigger-allowlist.test.ts` pins that no catch-all is here.
+  # released by the next run that reaches the call, never twice. `push-trigger-allowlist.test.ts` was in `packages/lab`, which left this tree with #3505 (0a5f6ca61), and no tracked file here
+  # pins that no catch-all is: `paths` above is the whole of it.
   push:
     branches: [main]
     paths: [".changeset/**"]
   # THE REHEARSAL, KEPT (#3717): a person may run every guard below on any branch and publish nothing. The called workflow has no dry
-  # run, so the rehearsal is the guards alone and the `release` job is skipped by its own `if`.
+  # run, so the rehearsal is the guards alone and the `release` job is skipped by its own `if`. THE ONE EXCEPTION IS A DISPATCH ON `main`
+  # (#4000), which is the release: the retry of a failed one whose cause is fixed, without waiting for the next changeset.
   workflow_dispatch:
   # THE PROMOTION'S TRIGGER (#3947), narrowed to the `qualification` context by the `decide` job's own `if`: `on:` cannot filter a status
   # by context. See the header.
@@ -253,7 +259,7 @@ jobs:
       # is still here would be published from this repository. On a push only, so a rehearsal and ordinary CI stay green while the
       # packages are still here, and before the called workflow starts, so it goes red before any byte leaves.
       - name: Hold -- refuse to publish packages whose own repositories have not released them
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
         env:
           A11Y_CHECK_RELEASE_HOLD: "1"
         run: |
@@ -340,7 +346,7 @@ jobs:
   # there is no pull request to open. The file name is the one npm's trusted-publisher entries name (workflow `release.yml`,
   # environment `npm-publish`): the OIDC token names the CALLING file, so renaming this file breaks the publish.
   release:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     needs: [action-smoke, capture-regression, consumer-gate, guards]
     permissions:
       contents: write
@@ -374,7 +380,7 @@ jobs:
   decide:
     name: decide which versions on next may become latest
     needs: [release]
-    if: ${{ !cancelled() && (github.event_name == 'push' || (github.event_name == 'status' && github.event.context == 'qualification')) }}
+    if: ${{ !cancelled() && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || (github.event_name == 'status' && github.event.context == 'qualification')) }}
     runs-on: ubuntu-latest
     concurrency:
       group: promote-latest-decision

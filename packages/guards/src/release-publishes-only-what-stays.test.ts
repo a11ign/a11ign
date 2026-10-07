@@ -21,8 +21,8 @@
  *
  * The three are publishable today, so asserting they are not would be red on `main` for as long as the moves take. The
  * held-set assertion therefore runs only under `A11Y_CHECK_RELEASE_HOLD=1` (the precedent is
- * `A11Y_CHECK_MAIN_RULESET=1`), which `release.yml` sets on a step of its `guards` job that runs on a push only (#3717; it was the plan's `publish` mode, #3131, and before that `inputs.dry-run == false`), and which the called release `needs`. Ordinary CI and
- * the dry run stay green; a real publish goes red before any byte leaves, naming the package. What keeps that from
+ * `A11Y_CHECK_MAIN_RULESET=1`), which `release.yml` sets on a step of its `guards` job that runs on a publishing run only, a push or a dispatch on `main` (#3717, #4000; it was the plan's `publish` mode, #3131, and before that `inputs.dry-run == false`), and which the called release `needs`. Ordinary CI and
+ * the rehearsal (a dispatch from another ref) stay green; a real publish goes red before any byte leaves, naming the package. What keeps that from
  * being a switch nobody throws is the last test here, which reads the PARSED workflow.
  *
  * ## Lifting a name
@@ -161,20 +161,25 @@ test("THE HOLD: the real workspace publishes none of the held packages (real pat
 });
 
 interface Step { name?: string; if?: string; run?: string; env?: Record<string, string> }
-interface WorkflowJob { needs?: string | string[]; steps?: Step[] }
+interface WorkflowJob { if?: string; needs?: string | string[]; steps?: Step[] }
+
+/** What publishes (#4000): a push, or a dispatch whose ref is `main`. A dispatch from any other ref is the rehearsal and publishes nothing. */
+const PUBLISHING_RUN = "github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')";
 
 function releaseJobs(): Record<string, WorkflowJob> {
   return (parse(readFileSync(WORKFLOW, "utf8")) as { jobs?: Record<string, WorkflowJob> }).jobs ?? {};
 }
 
-test("release.yml runs this hold on a push only, in the job the publishing call needs", () => {
+test("release.yml runs this hold on a publishing run only (a push, or a dispatch on main), in the job the publishing call needs", () => {
   const { guards, release } = releaseJobs();
   const steps = guards?.steps ?? [];
   const holdAt = steps.findIndex((step) => step.env?.[HOLD_FLAG] === "1");
   assert.notEqual(holdAt, -1, `no step of release.yml's guards job sets ${HOLD_FLAG}=1, so the hold would never bite`);
   const hold = steps[holdAt];
-  assert.equal(hold.if?.replace(/\s+/g, " ").trim(), "github.event_name == 'push'",
-    "the hold runs on the publishing push only: the rehearsal (a dispatch) and ordinary CI stay green while the packages are still here");
+  assert.equal(hold.if?.replace(/\s+/g, " ").trim(), PUBLISHING_RUN,
+    "the hold runs on a publishing run only (a push, or a dispatch ON main, #4000): the rehearsal (a dispatch from any other ref) and ordinary CI stay green while the packages are still here");
+  assert.equal(release?.if?.replace(/\s+/g, " ").trim(), PUBLISHING_RUN,
+    "the hold and the call must start on the SAME runs: a publishing run the hold skips would send the held packages");
   assert.ok(hold.run?.includes(SELF), `the hold step must run ${SELF}`);
   assert.ok(hold.run?.includes("RELEASE HOLD PASS"),
     "a green exit is not a pass: the step must require the PASS line, or a run that asserted nothing would publish");
