@@ -50,6 +50,23 @@ test("POSITIVE CONTROL: the version is read past the peers pnpm appends, and a l
   assert.equal(layingPlan(MANIFEST, ok, "screenreader-fleet").tag, `${NAME}@0.3.0`);
 });
 
+test("#3939: a layer's DECLARED package names the tag, not its key; no declaration still means @a11ign/<key>; a declared package the lockfile lacks is REFUSED naming it", () => {
+  const worker = { path: "packages/nvda-worker", package: "screenreader-worker", remote: "https://example.invalid/screenreader-worker.git" };
+  const lockfile = `importers:\n\n  .:\n    dependencies:\n      '@a11ign/screenreader-worker':\n        specifier: 0.2.0\n        version: 0.2.0\n`;
+  const manifest = { layers: { "nvda-worker": worker } };
+  assert.equal(layingPlan(manifest, lockfile, "nvda-worker").tag, "@a11ign/screenreader-worker@0.2.0");
+  // The key alone is NOT the package: the same layer without the declaration looks for @a11ign/nvda-worker and refuses (the defect this row closes).
+  assert.match(layingPlan({ layers: { "nvda-worker": { ...worker, package: undefined } } }, lockfile, "nvda-worker").refusal, /no importer entry for @a11ign\/nvda-worker/);
+  // A declared package the lockfile does not hold is a refusal that names the PACKAGE, not the key.
+  assert.match(layingPlan({ layers: { "nvda-worker": { ...worker, package: "ghost" } } }, lockfile, "nvda-worker").refusal, /no importer entry for @a11ign\/ghost/);
+  // A layer with no `package` is unchanged.
+  assert.equal(layingPlan(MANIFEST, lockfileWith("0.3.0"), "screenreader-fleet").tag, `${NAME}@0.3.0`);
+  // The real declaration and the real lockfile agree.
+  const real = JSON.parse(readFileSync(join(REPO_ROOT, "layers.json"), "utf8"));
+  const plan = layingPlan(real, readFileSync(join(REPO_ROOT, "pnpm-lock.yaml"), "utf8"), "nvda-worker");
+  assert.match(plan.tag, /^@a11ign\/screenreader-worker@\d+\.\d+\.\d+$/);
+});
+
 /** A repository that holds the layer the way its own repository does: the package at `packages/worker-fleet`, plus tests and a manifest. */
 function layerRepository(sandbox: { dir: string; run(args: string[]): string; commit(message: string): string }, version: string): void {
   const write = (path: string, text: string) => {

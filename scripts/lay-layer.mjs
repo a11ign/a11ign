@@ -67,14 +67,16 @@ export function pinnedVersion(lockfile, name) {
 
 /** What a declared tag looks like: `v` and a semver. A branch or a bare sha is not a pin. */
 const DECLARED_TAG = /^v\d+\.\d+\.\d+$/;
-/** @typedef {{ path: string, remote?: string, tag?: string, lays?: string[], declares?: string, keeps?: string[] }} Declaration */
+/** @typedef {{ path: string, package?: string, remote?: string, tag?: string, lays?: string[], declares?: string, keeps?: string[] }} Declaration */
 /** @typedef {{ remote: string, tag: string, path: string, lays: string[], declares?: string, keeps?: string[] }} LayingPlan */
 /** What `lay` puts down when a declaration names nothing else. */
 const DEFAULT_LAYS = ["src"];
 
 /**
  * The tag to lay: the declaration's own when it has one (a layer that is not on the registry), else the release the lockfile pins.
- * @param {{ tag?: string }} entry
+ * The registry package is the declaration's `package` (#3939), because a layer's key is not always its package (`nvda-worker` is `@a11ign/screenreader-worker`);
+ * a declaration without one means `@a11ign/<key>`. It is declared, never inferred from the repository name: `layers.json` is the one place that says.
+ * @param {{ tag?: string, package?: string }} entry
  * @param {string} lockfile
  * @param {string} layer
  * @returns {{ tag: string } | { refusal: string }}
@@ -84,7 +86,7 @@ function tagToLay(entry, lockfile, layer) {
     if (!DECLARED_TAG.test(entry.tag)) return { refusal: `layer "${layer}" declares tag "${entry.tag}", which is not a v<semver> tag: a branch or a sha is not a pin` };
     return { tag: entry.tag };
   }
-  const name = `@a11ign/${layer}`;
+  const name = `@a11ign/${entry.package ?? layer}`;
   const pinned = pinnedVersion(lockfile, name);
   if ("refusal" in pinned) return pinned;
   return { tag: `${name}@${pinned.version}` };
