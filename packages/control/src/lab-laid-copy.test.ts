@@ -14,7 +14,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -93,18 +93,26 @@ test("a laid tree missing something `lays` names is refused naming it (the scrip
   assert.match(refusal(root) ?? "", /holds no scripts/);
 });
 
+test("a laid tree missing several `lays` names every one of them, separated", () => {
+  const root = newRoot();
+  layLab(root, { leaving: ["scripts", "baselines"] });
+  assert.match(refusal(root) ?? "", /holds no scripts, baselines:/);
+});
+
 test("a manifest that declares no pinned lab is refused, never read as 'nothing to check'", () => {
   assert.match(labLaidCopyRefusal({ manifest: { pinned: {} }, root: newRoot() }) ?? "", /declares no `pinned\.lab`/);
 });
 
-/** The real command, in a fixture checkout of its own: the module and the manifest where the module looks for them. */
-function commandIn(root: string) {
+/** The real command's file, in a fixture checkout of its own: the module and the manifest where the module looks for them. */
+function commandFileIn(root: string) {
   const control = join(root, "packages/control");
   mkdirSync(join(control, "src"), { recursive: true });
   copyFileSync(MODULE, join(control, "src/lab-laid-copy.mjs"));
   writeFileSync(join(control, "layers.json"), JSON.stringify(REAL_MANIFEST));
-  return spawnSync(process.execPath, [join(control, "src/lab-laid-copy.mjs")], { encoding: "utf8" });
+  return join(control, "src/lab-laid-copy.mjs");
 }
+const play = (entry: string) => spawnSync(process.execPath, [entry], { encoding: "utf8" });
+const commandIn = (root: string) => play(commandFileIn(root));
 
 test("the command the play runs exits with the refusal status and names the missing packages/lab on a pulled-not-installed fixture, and 0 on a laid one", () => {
   const bare = commandIn(newRoot());
@@ -113,6 +121,18 @@ test("the command the play runs exits with the refusal status and names the miss
   const laid = newRoot();
   layLab(laid);
   const ok = commandIn(laid);
+  assert.equal(ok.status, 0, ok.stderr);
+});
+
+test("the command run THROUGH A SYMLINK still refuses a bare host: node resolves the module's real path, so a guard comparing argv[1] unresolved never fires and the check passes in silence (#1086)", () => {
+  const root = newRoot();
+  const link = join(root, "lab-laid-copy-link.mjs");
+  symlinkSync(commandFileIn(root), link);
+  const bare = play(link);
+  assert.equal(bare.status, REFUSED, `through a symlink the command ran nothing: status ${bare.status}, stderr ${bare.stderr}`);
+  assert.match(bare.stderr, /lab-laid-copy: REFUSING: .*packages\/lab does not exist/);
+  layLab(root);
+  const ok = play(link);
   assert.equal(ok.status, 0, ok.stderr);
 });
 
