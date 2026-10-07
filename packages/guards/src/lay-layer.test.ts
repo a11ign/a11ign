@@ -35,7 +35,7 @@ test("the real lockfile pins a registry release, and the plan names its tag", ()
   const lockfile = readFileSync(join(REPO_ROOT, "pnpm-lock.yaml"), "utf8");
   const pinned = pinnedVersion(lockfile, NAME);
   assert.ok("version" in pinned, JSON.stringify(pinned));
-  const plan = layingPlan(JSON.parse(readFileSync(join(REPO_ROOT, "packages/control/layers.json"), "utf8")), lockfile, "screenreader-fleet");
+  const plan = layingPlan(JSON.parse(readFileSync(join(REPO_ROOT, "layers.json"), "utf8")), lockfile, "screenreader-fleet");
   assert.deepEqual(plan, { remote: "https://github.com/a11ign/screenreader-fleet.git", tag: `${NAME}@${pinned.version}`, path: "packages/worker-fleet", lays: ["src"] });
 });
 
@@ -149,6 +149,51 @@ test("#3505: lay puts down every part the declaration names, without tests, and 
       // A part the tag lacks: refused (a declaration that gained a part is not "already at" the tag), and the copy already there is still there.
       assert.throws(() => lay(root, { ...plan, lays: ["src", "baselines"] }), /holds no packages\/lab\/baselines/);
       assert.ok(existsSync(join(root, "packages/lab/scripts/run.mjs")), "the refusal came before the old copy was removed");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+test("#3506: a layer that DECLARES a copy gets this repository's file written over the tag's, a re-lay keeps what `keeps` names, and a changed declaration at the same tag is not 'already at'", () => {
+  withGitSandbox((sandbox) => {
+    const write = (root: string, path: string, text: string) => {
+      mkdirSync(dirname(join(root, path)), { recursive: true });
+      writeFileSync(join(root, path), text);
+    };
+    write(sandbox.dir, "packages/control/src/a.mjs", "export const a = 1;\n");
+    write(sandbox.dir, "packages/control/ansible/play.yml", "- hosts: all\n");
+    write(sandbox.dir, "packages/control/layers.json", '{"fromTheTag":true}\n');
+    sandbox.run(["add", "-A"]);
+    sandbox.commit("release 0.1.2");
+    sandbox.run(["tag", "v0.1.2"]);
+    const root = mkdtempSync(join(tmpdir(), "lay-layer-root-"));
+    try {
+      write(root, "layers.json", '{"fromTheRoot":1}\n');
+      const plan = { remote: pathToFileURL(sandbox.dir).href, tag: "v0.1.2", path: "packages/control", lays: ["src", "ansible"], declares: "layers.json",
+        keeps: ["ansible/inventory.yml", "ansible/*.local.yml"] };
+      // An operator's untracked files sit in the directory BEFORE the first lay (a checkout that held the tracked tree): they must survive it.
+      write(root, "packages/control/ansible/inventory.yml", "real addresses\n");
+      write(root, "packages/control/ansible/me.local.yml", "my laptop\n");
+      write(root, "packages/control/ansible/notes.txt", "not kept\n");
+      write(root, "packages/control/src/stale.mjs", "gone after the lay\n");
+      assert.equal(lay(root, plan), "laid v0.1.2 at packages/control");
+      assert.equal(readFileSync(join(root, "packages/control/layers.json"), "utf8"), '{"fromTheRoot":1}\n', "the root's declaration, never the tag's");
+      assert.deepEqual(walk(join(root, "packages/control")), [REF_FILE, "ansible/inventory.yml", "ansible/me.local.yml", "ansible/play.yml", "layers.json", "src/a.mjs"],
+        "what keeps names is carried across, the rest of the old directory is not, and the tag's own layers.json is not laid");
+      assert.equal(readFileSync(join(root, "packages/control/ansible/inventory.yml"), "utf8"), "real addresses\n");
+      assert.equal(lay(root, plan), "already at v0.1.2");
+      // POSITIVE CONTROL for the idempotence check: the declaration moved, the TAG did not, and the laid copy must follow.
+      write(root, "layers.json", '{"fromTheRoot":2}\n');
+      assert.equal(lay(root, plan), "laid v0.1.2 at packages/control", "an unchanged tag with a changed declaration is laid again");
+      assert.equal(readFileSync(join(root, "packages/control/layers.json"), "utf8"), '{"fromTheRoot":2}\n');
+      assert.ok(existsSync(join(root, "packages/control/ansible/inventory.yml")), "and the kept file survived the second lay too");
+      // A layer that declares neither is wiped whole, as before: `keeps` is opt-in.
+      const plain = { remote: plan.remote, tag: plan.tag, path: plan.path, lays: plan.lays };
+      write(root, "packages/control/ansible/inventory.yml", "still there\n");
+      rmSync(join(root, "packages/control", REF_FILE));
+      assert.equal(lay(root, plain), "laid v0.1.2 at packages/control");
+      assert.ok(!existsSync(join(root, "packages/control/ansible/inventory.yml")), "with no `keeps` the directory is replaced whole");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

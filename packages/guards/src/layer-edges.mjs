@@ -83,7 +83,7 @@ const PLACEHOLDER = "\uE000";
 export const EDGE_KINDS = Object.freeze(["import", "path-literal", "launcher", "workflow", "config"]);
 /**
  * What an edge in the baseline is to become, and the only words the baseline may use (#3501): `cut` the reach goes; `by-name` it becomes a
- * published-package import; `checkout-path` it is resolved through `packages/control/layers.json` (ADR 0039 item 6a); `moves-with:<layer>` a test that
+ * published-package import; `checkout-path` it is resolved through `layers.json` (ADR 0039 item 6a); `moves-with:<layer>` a test that
  * goes with the code it reads; `owned-by:#<row>` a row that exists decides it. `cut` is a promise and not an exemption: when the reach is cut the
  * edge vanishes and the entry becomes STALE, which is how the cut is noticed.
  */

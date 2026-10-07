@@ -69,13 +69,17 @@ packages/worker-fleet/tailscale-acl.hujson
 # A LAYER CHECKOUT, laid by `scripts/lay-layer.mjs` (#3504): `a11ign/screenreader-fleet`'s code at the path `control` imports it from. Never a commit here.
 /packages/worker-fleet
 
-# A LAYER CHECKOUT, laid by `scripts/lay-layer.mjs` (#3505): `a11ign/lab`'s scripts, source, baselines and rule table at the path the product's scripts and tests read them from, at the tag `packages/control/layers.json` declares. Never a commit here.
+# A LAYER CHECKOUT, laid by `scripts/lay-layer.mjs` (#3505): `a11ign/lab`'s scripts, source, baselines and rule table at the path the product's scripts and tests read them from, at the tag `layers.json` declares. Never a commit here.
 /packages/lab
 
 # Hosts that are ours and are not capture infrastructure. `tailscale.yml` merges this with the inventory
 # when it exists, so a personal machine can be reachable over the tailnet without being published in a
 # public repo as though it were part of the fleet.
 packages/control/ansible/*.local.yml
+
+# `a11ign/control`'s source and playbooks, LAID the same way (#3506), at the tag `layers.json` declares. It holds the operator's untracked `ansible/inventory.yml` and `ansible/*.local.yml`
+# too (`lay-layer.mjs` carries them across a re-lay). The two lines that ignored those files by name stay beside it: leaking the real fleet's addresses (#54) must take two mistakes, not one.
+/packages/control
 
 # Whatever agent tooling the person at the keyboard happens to use.
 #

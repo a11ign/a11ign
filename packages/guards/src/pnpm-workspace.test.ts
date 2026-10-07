@@ -113,9 +113,9 @@ test("yaml AND axe-core are hoisted to the root, because no manifest declares th
   assert.match(lock, /^ {2}axe-core@\d+\.\d+\.\d+:/m);
 });
 
-/** The layers `packages/control/layers.json` declares, held (`layers`) or only laid (`pinned`, #3505), as `[name, path]`. Read as the file, not through `control`. */
+/** The layers `layers.json` declares, held (`layers`) or only laid (`pinned`, #3505), as `[name, path]`. Read as the file, not through `control`. */
 function declaredLayers(): [string, string][] {
-  const manifest = JSON.parse(readFileSync(join(ROOT, "packages/control/layers.json"), "utf8")) as { layers: Record<string, { path: string }>; pinned?: Record<string, { path: string }> };
+  const manifest = JSON.parse(readFileSync(join(ROOT, "layers.json"), "utf8")) as { layers: Record<string, { path: string }>; pinned?: Record<string, { path: string }> };
   return Object.entries({ ...manifest.layers, ...manifest.pinned }).map(([name, { path }]) => [name, path]);
 }
 

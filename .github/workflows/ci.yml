@@ -217,6 +217,9 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with: { python-version: "3.12" }
+      # The playbooks left this repository for `a11ign/control` (#3506): they are LAID at the tag `layers.json` pins, which needs git and node and nothing installed.
+      - name: Lay a11ign/control's playbooks where the checks read them
+        run: node scripts/lay-layer.mjs control
       # `ansible-core`, not the full `ansible` metapackage -- the metapackage bundles hundreds of
       # collections this fleet does not use.
       - run: pip install ansible-core pyyaml

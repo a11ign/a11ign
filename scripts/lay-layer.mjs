@@ -4,7 +4,7 @@
 //
 // WHY THIS EXISTS. `packages/worker-fleet/` left the workspace for `a11ign/screenreader-fleet` (#3504), and `control` imports its source by
 // relative path and CANNOT import it by name: it runs from a raw checkout with no `node_modules` (ADR 0012, `control-has-no-dependencies.test.ts`).
-// ADR 0039 item 6 answers that with a declared second checkout at the path the monorepo used, `packages/control/layers.json`. A host gets it
+// ADR 0039 item 6 answers that with a declared second checkout at the path the monorepo used, `layers.json` at the root. A host gets it
 // from `fleet:deploy`; a CI runner and an agent's worktree get it from THIS, so `control`'s imports, and the tests that read the fleet's files,
 // resolve in the tree they run in. It is untracked (`.gitignore`) and outside the workspace (`pnpm-workspace.yaml`), so it never reaches a commit
 // or the lockfile.
@@ -20,6 +20,12 @@
 // checkout that did not touch it). `lays` names what to lay when it is more than `src/`: `lab`'s root scripts, its baselines, `rule-ownership.json` and `CLAUDE.md`
 // are read by path from the rest of the tree.
 //
+// `control` IS LAID THE SAME WAY, AND READS THE DECLARATION THAT LAYS IT (#3506). `layers.json` moved from `packages/control/` to the root, because
+// a file inside a directory that is laid and untracked cannot say which tag to lay it at. `control`'s own readers still open `../layers.json` from
+// their `src/`, so `declares` names that file and `lay` WRITES this repository's copy there, over whatever the tag holds: one declaration, never two.
+// `keeps` names the files an operator holds INSIDE the laid directory (the untracked `inventory.yml`, `*.local.yml`): a re-lay wipes the directory,
+// so it carries those across, and a layer that declares none is wiped whole as before.
+//
 // THE SOURCE IS LAID, NOT THE PACKAGE: `src/` (less its own tests) and nothing that names it a package (`package.json`, `tsconfig.json`, the build config). Every walker
 // here that finds packages (`allPackages`, the build, the start guard's member scope, `ci-changed`) asks for a manifest first, so a laid directory
 // without one is invisible to them, and what `control` imports and the tests read is all under `src/`. The registry copy in `node_modules` is the package.
@@ -27,9 +33,9 @@
 // NOT A SUBMODULE (ADR 0039 item 6 rejected it) and NOT A COPY OF THE TARBALL: the registry package ships `dist/`, not the `src/*.mjs` that
 // `control` imports.
 import { execFileSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 import { refuseUnknownFlags } from "./cli-flags.mjs";
@@ -61,7 +67,8 @@ export function pinnedVersion(lockfile, name) {
 
 /** What a declared tag looks like: `v` and a semver. A branch or a bare sha is not a pin. */
 const DECLARED_TAG = /^v\d+\.\d+\.\d+$/;
-/** @typedef {{ path: string, remote?: string, tag?: string, lays?: string[] }} Declaration */
+/** @typedef {{ path: string, remote?: string, tag?: string, lays?: string[], declares?: string, keeps?: string[] }} Declaration */
+/** @typedef {{ remote: string, tag: string, path: string, lays: string[], declares?: string, keeps?: string[] }} LayingPlan */
 /** What `lay` puts down when a declaration names nothing else. */
 const DEFAULT_LAYS = ["src"];
 
@@ -89,15 +96,16 @@ function tagToLay(entry, lockfile, layer) {
  * @param {{ layers: Record<string, Declaration>, pinned?: Record<string, Declaration> }} manifest
  * @param {string} lockfile
  * @param {string} layer
- * @returns {{ remote: string, tag: string, path: string, lays: string[] } | { refusal: string }}
+ * @returns {LayingPlan | { refusal: string }}
  */
 export function layingPlan(manifest, lockfile, layer) {
   const declared = [manifest.layers, manifest.pinned ?? {}].find((section) => Object.hasOwn(section, layer));
   const entry = declared?.[layer];
-  if (!entry?.remote) return { refusal: `layer "${layer}" is not declared with a remote in packages/control/layers.json` };
+  if (!entry?.remote) return { refusal: `layer "${layer}" is not declared with a remote in layers.json` };
   const pinned = tagToLay(entry, lockfile, layer);
   if ("refusal" in pinned) return pinned;
-  return { remote: entry.remote, tag: pinned.tag, path: entry.path, lays: entry.lays ?? DEFAULT_LAYS };
+  return { remote: entry.remote, tag: pinned.tag, path: entry.path, lays: entry.lays ?? DEFAULT_LAYS,
+    ...(entry.declares === undefined ? {} : { declares: entry.declares }), ...(entry.keeps === undefined ? {} : { keeps: entry.keeps }) };
 }
 
 /** @param {string[]} args @param {string} cwd */
@@ -124,20 +132,49 @@ function whyNotDisposable(target) {
 }
 
 /**
- * Put the layer's directory at `plan.path` under `root`, at `plan.tag`. Idempotent: a directory laid at the same tag is left alone; one laid at
- * another is replaced, since it is a copy and not work. A git clone is replaced only when it is disposable (#3836), and otherwise REFUSED, naming
- * the path and why: `pnpm install` runs this, and a clone with work in it is not a copy.
+ * The files of `target` that `keeps` names, as `[path under target, bytes]`. A `*` stands for part of ONE file name and never for a directory, so a
+ * pattern cannot reach further than the line that wrote it.
+ * @param {string} target
+ * @param {string[]} keeps
+ * @returns {[string, Buffer][]}
+ */
+function keptFiles(target, keeps) {
+  return keeps.flatMap((pattern) => {
+    const directory = dirname(pattern);
+    if (!existsSync(join(target, directory))) return [];
+    const wanted = new RegExp(`^${pattern.slice(directory.length + 1).split("*").map((piece) => piece.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join("[^/]*")}$`);
+    return readdirSync(join(target, directory)).filter((name) => wanted.test(name))
+      .map((name) => /** @type {[string, Buffer]} */ ([join(directory, name), readFileSync(join(target, directory, name))]));
+  });
+}
+
+/**
+ * Whether `target` already holds exactly what `plan` would put there. The ref file alone is not "laid": a `git rebase` over the commit that deleted
+ * the tracked fleet removed `src/` and left `.layer-ref`, and a second run that trusted the file said "already at" over an empty directory (#3504,
+ * found at that rebase). Every part the declaration names, not `src/` alone: a declaration that gained a part at the same tag must lay it, not say
+ * "already at". And the declaration's own copy (#3506): a root `layers.json` that changed at the SAME tag must reach the copy `control` reads.
  * @param {string} root
- * @param {{ remote: string, tag: string, path: string, lays: string[] }} plan
+ * @param {string} target
+ * @param {LayingPlan} plan
+ */
+function alreadyLaid(root, target, plan) {
+  const refFile = join(target, REF_FILE);
+  if (!existsSync(refFile) || readFileSync(refFile, "utf8").trim() !== plan.tag) return false;
+  if (!plan.lays.every((part) => existsSync(join(target, part)))) return false;
+  return plan.declares === undefined || (existsSync(join(target, plan.declares)) && readFileSync(join(target, plan.declares), "utf8") === readFileSync(join(root, "layers.json"), "utf8"));
+}
+
+/**
+ * Put the layer's directory at `plan.path` under `root`, at `plan.tag`. Idempotent: a directory laid at the same tag is left alone; one laid at
+ * another is replaced, since it is a copy and not work (what `plan.keeps` names is carried across, the one thing in it that is). A git clone is
+ * replaced only when it is disposable (#3836), and otherwise REFUSED, naming the path and why: `pnpm install` runs this, and a clone with work in it
+ * is not a copy.
+ * @param {string} root
+ * @param {LayingPlan} plan
  */
 export function lay(root, plan) {
   const target = join(root, plan.path);
-  const refFile = join(target, REF_FILE);
-  // The ref file alone is not "laid": a `git rebase` over the commit that deleted the tracked fleet removed `src/` and left `.layer-ref`, and a
-  // second run that trusted the file said "already at" over an empty directory (#3504, found at that rebase).
-  // Every part the declaration names, not `src/` alone: a declaration that gained a part at the same tag must lay it, not say "already at".
-  const laidWhole = plan.lays.every((part) => existsSync(join(target, part)));
-  if (existsSync(refFile) && laidWhole && readFileSync(refFile, "utf8").trim() === plan.tag) return `already at ${plan.tag}`;
+  if (alreadyLaid(root, target, plan)) return `already at ${plan.tag}`;
   const unsafe = existsSync(join(target, ".git")) ? whyNotDisposable(target) : null;
   if (unsafe) throw new Error(`NOT LAID: ${target} is a git clone and ${unsafe}; push or discard that work, or remove the directory, and run this again`);
   const scratch = mkdtempSync(join(tmpdir(), "lay-layer-"));
@@ -147,10 +184,13 @@ export function lay(root, plan) {
     for (const part of plan.lays) {
       if (!existsSync(join(scratch, plan.path, part))) throw new Error(`NOT LAID: ${plan.tag} of ${plan.remote} holds no ${plan.path}/${part}`);
     }
+    const kept = keptFiles(target, plan.keeps ?? []);
     rmSync(target, { recursive: true, force: true });
     mkdirSync(target, { recursive: true });
     for (const part of plan.lays) cpSync(join(scratch, plan.path, part), join(target, part), { recursive: true, filter: (path) => !TESTS.test(path) });
-    writeFileSync(refFile, `${plan.tag}\n`);
+    for (const [path, bytes] of kept) writeFileSync(join(target, path), bytes);
+    if (plan.declares) cpSync(join(root, "layers.json"), join(target, plan.declares));
+    writeFileSync(join(target, REF_FILE), `${plan.tag}\n`);
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
@@ -160,8 +200,8 @@ export function lay(root, plan) {
 function main() {
   refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/lay-layer.mjs <layer>" });
   const layer = process.argv[2];
-  if (!layer) throw new Error("usage: node scripts/lay-layer.mjs <layer>   (a key of packages/control/layers.json)");
-  const manifest = JSON.parse(readFileSync(join(REPO_ROOT, "packages/control/layers.json"), "utf8"));
+  if (!layer) throw new Error("usage: node scripts/lay-layer.mjs <layer>   (a key of layers.json)");
+  const manifest = JSON.parse(readFileSync(join(REPO_ROOT, "layers.json"), "utf8"));
   const plan = layingPlan(manifest, readFileSync(join(REPO_ROOT, "pnpm-lock.yaml"), "utf8"), layer);
   if ("refusal" in plan) throw new Error(`NOT LAID: ${plan.refusal}`);
   console.log(lay(REPO_ROOT, plan));
