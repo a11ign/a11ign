@@ -15,7 +15,11 @@
  *   2. the fleet's verdict is not on the publish path: no step runs `release-reads-qualification`, none is `id: qualification`,
  *      `guards` exposes no `row-*` output, and no `qualification-row` job exists or is waited for;
  *   3. no `stage` call (`npm stage publish` needs a person's 2FA approval per version, which the design rules out);
- *   4. every guard that stays is still there, and `release` still waits for the jobs that carry them.
+ *   4. every guard that stays is still there, and `release` still waits for the jobs that carry them;
+ *   5. the publish REHEARSAL names the dist-tag the `release` call passes (#4009): without `--tag` npm applies `latest`, and npm 11
+ *      refuses that below a published higher version, so once `0.3.0` was on `next` every run of the guards went red on a publish
+ *      the release does not make. The rehearsal reads the tag out of `release.yml`; this file fails if what it reads, or what it
+ *      hands to `pnpm publish`, is not the parsed `dist-tag`.
  *
  * ## Positive control for the emptiness
  *
@@ -29,9 +33,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse, stringify } from "yaml";
+import { publishArgs, releaseDistTag } from "../../../scripts/release-publish-rehearsal.mjs";
 
 const REPO = fileURLToPath(new URL("../../..", import.meta.url));
 const WORKFLOW = join(REPO, ".github/workflows/release.yml");
+const REHEARSAL = join(REPO, "scripts/release-publish-rehearsal.mjs");
 const FULL_SHA_PIN = /^a11ign\/toolchain\/\.github\/workflows\/release-per-merge\.yml@[0-9a-f]{40}$/;
 
 interface Step { id?: string; name?: string; run?: string; env?: Record<string, string> }
@@ -79,6 +85,23 @@ function refusals(text: string): string[] {
     ...guardRefusals(workflow),
     ...coverageRefusals(workflow),
   ];
+}
+
+/**
+ * #4009, kept OUT of `refusals()` so that breaking the rehearsal fails these tests and not every row above: what the rehearsal would hand `pnpm publish`, judged against the `dist-tag` of the PARSED `release` call. Three ways to be
+ * wrong: the reader returns something else (or throws) for this text, the arguments carry no `--tag`, or they carry another one.
+ */
+function rehearsalRefusals(workflow: Workflow, text: string): string[] {
+  const released = workflow.jobs?.release?.with?.["dist-tag"];
+  if (typeof released !== "string") return []; // `callRefusals` already names a call with no `dist-tag`
+  let read: string;
+  try { read = releaseDistTag(text); } catch (cause) { return [`the rehearsal cannot read the release's dist-tag: ${(cause as Error).message}`]; }
+  if (read !== released) return [`the rehearsal reads dist-tag ${read}, the \`release\` call passes ${released}`];
+  const args = publishArgs(read);
+  const named = args[args.indexOf("--tag") + 1];
+  if (!args.includes("--tag")) return ["the rehearsal's `pnpm publish` names no `--tag`, so npm applies `latest`"];
+  if (named !== released) return [`the rehearsal publishes with --tag ${named}, the \`release\` call passes ${released}`];
+  return [];
 }
 
 function callRefusals(workflow: Workflow): string[] {
@@ -212,3 +235,36 @@ for (const name of JOBS_THAT_STAY) {
     assert.deepEqual(refusals(text), [`\`release\` no longer needs the guard job ${name}`]);
   });
 }
+
+test("the rehearsal's main() hands `pnpm publish` the tag it READ from release.yml, not a spelled one (#4009)", () => {
+  const source = readFileSync(REHEARSAL, "utf8");
+  assert.match(source, /releaseDistTag\(readFileSync\(RELEASE_WORKFLOW, "utf8"\)\)/, "the tag is read from release.yml");
+  assert.match(source, /pnpmCliInvocation\(publishArgs\(tag\)\)/, "and that tag is what the publish is rehearsed with");
+  assert.equal(releaseDistTag(readFileSync(WORKFLOW, "utf8")), "next");
+});
+
+test("the rehearsal's arguments name the `--tag` the real `release` call passes, and follow it when it moves (#4009)", () => {
+  const real = readFileSync(WORKFLOW, "utf8");
+  assert.deepEqual(rehearsalRefusals(parse(real) as Workflow, real), []);
+  assert.equal(publishArgs(releaseDistTag(real)).at(-1), "next", "positive control: the arguments are not empty of a tag");
+  const retagged = brokenAs((workflow) => { workflow.jobs!.release.with!["dist-tag"] = "beta"; });
+  assert.deepEqual(rehearsalRefusals(parse(retagged) as Workflow, retagged), []);
+  assert.deepEqual(publishArgs("next").slice(-2), ["--tag", "next"]);
+});
+
+test("a rehearsal that names no `--tag`, or another one, is REFUSED, whatever the workflow says (#4009)", () => {
+  const workflow = parse(readFileSync(WORKFLOW, "utf8")) as Workflow;
+  const text = readFileSync(WORKFLOW, "utf8");
+  assert.equal(rehearsalRefusals(workflow, text.replace(/dist-tag: next/, "dist-tag: beta")).length, 1, "a reader that disagrees with the parsed call");
+  assert.equal(rehearsalRefusals(workflow, "x").length, 1, "text the reader cannot read");
+});
+
+test("a release.yml with no `dist-tag:` or two of them is one the rehearsal REFUSES to read (#4009)", () => {
+  assert.throws(() => releaseDistTag("jobs:\n  release:\n    with:\n      kind: npm\n"), /found 0/);
+  assert.throws(() => releaseDistTag("      dist-tag: next\n      dist-tag: latest\n"), /found 2/);
+});
+
+test("a comment, or a step that echoes `dist-tag: latest`, is not read as the release's tag (#4009)", () => {
+  const text = `${readFileSync(WORKFLOW, "utf8")}\n# dist-tag: latest\n`;
+  assert.equal(releaseDistTag(text), "next");
+});
