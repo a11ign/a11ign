@@ -354,7 +354,7 @@ jobs:
       id-token: write
     # No job-level `concurrency`: the workflow-level group above holds the whole run, and a job-level group of the same name would
     # wait on its own run. The called workflow carries its own, per repository.
-    uses: a11ign/toolchain/.github/workflows/release-per-merge.yml@e1adf2412e905c164cd1fdca526e0417c1b09e6e
+    uses: a11ign/toolchain/.github/workflows/release-per-merge.yml@4aa20dfc9ca96b6f8bfb4d10d76070dcd1415741
     with:
       kind: npm
       gate-check: gate
