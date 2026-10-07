@@ -588,14 +588,14 @@ const RELEASE_COLUMN = "release-shape";
 const RELEASE_WORKFLOW = ".github/workflows/release.yml";
 const VERSION_PR_JOB = "version-pr";
 /**
- * The reusable per-merge workflow lives in `a11ign/toolchain` (#3712). NOT VERIFIED: that row has not named the
- * file, no repository calls it yet (read 2026-10-05), so this matches any `release*` workflow there. When #3712
- * names it, tighten this to the name.
+ * The reusable per-merge workflow lives in `a11ign/toolchain` (#3712). This matches any `release*` workflow there ON
+ * PURPOSE: `release-shape` reads the shape and nothing else. That a call is THE shared workflow, by its name and a
+ * full sha, is `release-standard`'s (#3962), so tightening this one would make two columns say the same thing.
  */
 const PER_MERGE_CALL = /^a11ign\/toolchain\/\.github\/workflows\/[^@]*release[^@]*\.ya?ml@/;
 
 type WorkflowStep = { uses?: unknown; run?: unknown };
-type WorkflowJob = { uses?: unknown; permissions?: unknown; steps?: WorkflowStep[] };
+type WorkflowJob = { name?: unknown; needs?: unknown; uses?: unknown; permissions?: unknown; steps?: WorkflowStep[] };
 type Workflow = { permissions?: unknown; jobs?: Record<string, WorkflowJob> };
 type ContentsAnswer = { content?: string; encoding?: string };
 
@@ -672,44 +672,278 @@ function structuralProblem(jobs: Record<string, unknown>): string | null {
   return null;
 }
 
-function releaseShapeOfText(text: string): Cell {
+/** A workflow file parsed and checked usable, or the cell that says why it is not: a file that parses can still hide a signal. */
+function readWorkflow(text: string, file: string): { workflow: Workflow } | { cell: Cell } {
   let workflow: Workflow | null;
   try {
     workflow = parseYaml(text) as Workflow | null;
   } catch (cause) {
-    return cannotTell(`${RELEASE_WORKFLOW} does not parse: ${cause instanceof Error ? cause.message.split("\n")[0] : String(cause)}`);
+    return { cell: cannotTell(`${file} does not parse: ${whyParseFailed(cause)}`) };
   }
   if (typeof workflow !== "object" || workflow === null || typeof workflow.jobs !== "object" || workflow.jobs === null) {
-    return cannotTell(`${RELEASE_WORKFLOW} parses and has no \`jobs\`, so there is no release to read`);
+    return { cell: cannotTell(`${file} parses and has no \`jobs\`, so there is nothing to read`) };
   }
-  if (Array.isArray(workflow.jobs)) return cannotTell(`${RELEASE_WORKFLOW} has \`jobs\` as a list, not a mapping of job ids`);
+  if (Array.isArray(workflow.jobs)) return { cell: cannotTell(`${file} has \`jobs\` as a list, not a mapping of job ids`) };
   const problem = structuralProblem(workflow.jobs);
-  if (problem !== null) return cannotTell(`${RELEASE_WORKFLOW} parses but cannot be read: ${problem}`);
-  const signals = versionPrSignals(workflow);
+  return problem === null ? { workflow } : { cell: cannotTell(`${file} parses but cannot be read: ${problem}`) };
+}
+
+function releaseShapeOfText(text: string): Cell {
+  const read = readWorkflow(text, RELEASE_WORKFLOW);
+  if ("cell" in read) return read.cell;
+  const signals = versionPrSignals(read.workflow);
   if (signals.length > 0) return drift(`opens a version pull request: ${signals.join("; ")}`);
-  const evidence = perMergeEvidence(workflow);
+  const evidence = perMergeEvidence(read.workflow);
   return evidence === null
     ? cannotTell(`${RELEASE_WORKFLOW} reads as neither shape: no version-pull-request signal, no call to the reusable per-merge workflow and no tag push`)
     : ok(`releases per merge: ${evidence}`);
 }
 
 /** The contents endpoint answers base64 wrapped at 60 columns; a directory answers an array and a big file no content. */
-function releaseShapeCell(read: Read<ContentsAnswer>): Cell {
-  if (read.kind !== "ok") return cannotTell(`${RELEASE_WORKFLOW}: ${unreadWhy(read)}`);
+function contentsText(read: Read<ContentsAnswer>, file: string): { text: string } | { cell: Cell } {
+  if (read.kind !== "ok") return { cell: cannotTell(`${file}: ${unreadWhy(read)}`) };
   const { content, encoding } = read.value;
   if (typeof content !== "string" || encoding !== "base64") {
-    return cannotTell(`${RELEASE_WORKFLOW} came back without base64 content (a directory, or over the API's 1 MB): not a pass`);
+    return { cell: cannotTell(`${file} came back without base64 content (a directory, or over the API's 1 MB): not a pass`) };
   }
-  return releaseShapeOfText(Buffer.from(content, "base64").toString("utf8"));
+  return { text: Buffer.from(content, "base64").toString("utf8") };
+}
+
+function releaseShapeCell(read: Read<ContentsAnswer>): Cell {
+  const file = contentsText(read, RELEASE_WORKFLOW);
+  return "cell" in file ? file.cell : releaseShapeOfText(file.text);
+}
+
+// --- #3962: the toolchain standard (ADR 0043), four columns read from each repository's default branch --------------
+
+/**
+ * #3962: A REPOSITORY OFF THE TOOLCHAIN STANDARD READS DRIFT. The columns above say how a repository is SET UP and how
+ * it RELEASES; `release-shape` passes agent-org, lab and control, which release per merge, and said nothing about
+ * whether any of them was ON the standard (`@a11ign/toolchain`, rstest, the one shared release workflow, a required
+ * `tsc --noEmit`, Rslib for what is published). Nothing flagged it, because nothing read it. Nothing here is typed in per
+ * repository: the one fact an entry adds is `publishes`, which `npm-publish` already reads.
+ *
+ * EVERY FILE IS READ OFF THE DEFAULT BRANCH AND PARSED, never grepped, for the reason `release-shape` gives: a comment
+ * describing `tsx --test` is not a script running it. An unreadable file is CANNOT_TELL, and so is a DRIFT reached while a
+ * workspace manifest was unreadable, because the script or dependency it was looking for may be in the one not read.
+ *
+ * WHAT IS NOT READ: a path filter or an `if:` on the job that runs `tsc` (a job a path filter skips reads as skipped, which
+ * the gate passes), and the version of anything. A pinned sha is read for its SHAPE (40 hex), not for being the newest.
+ */
+const TEST_RUNNER_COLUMN = "test-runner";
+const RELEASE_STANDARD_COLUMN = "release-standard";
+const TYPECHECK_COLUMN = "typecheck";
+const BUILD_COLUMN = "build";
+
+const TOOLCHAIN_PACKAGE = "@a11ign/toolchain";
+/** The toolchain is the one repository that cannot depend on itself: its root manifest is a private workspace, and the package is under `packages/`. */
+const TOOLCHAIN_REPO = "a11ign/toolchain";
+const RSTEST_PACKAGE = "@rstest/core";
+const RSLIB_PACKAGE = "@rslib/core";
+const PACKAGE_JSON = "package.json";
+const CI_WORKFLOW = ".github/workflows/ci.yml";
+const WORKSPACE_MANIFEST = /^packages\/[^/]+\/package\.json$/;
+const LOCAL_WORKFLOW_CALL = /^\.\/(\.github\/workflows\/[A-Za-z0-9_.-]+\.ya?ml)$/;
+const RSLIB_CONFIG = /^(?:.*\/)?rslib\.config\.[cm]?[jt]s$/;
+/** The shared workflow `a11ign/toolchain` publishes (#3712), pinned by a FULL sha: a tag or a branch moves under the repository. */
+const STANDARD_RELEASE_CALL = /^a11ign\/toolchain\/\.github\/workflows\/release-per-merge\.ya?ml@(.+)$/;
+const FULL_SHA = /^[0-9a-f]{40}$/;
+/** `tsx --test` and `node --test`, and not `--test-concurrency`, which a wrapper around rstest passes through. */
+const NODE_TEST_RUNNER = /\b(?:tsx|node)\b[^;&|\n]*\s--test(?![\w-])/;
+const RUNS_RSTEST = /(?<![\w./-])rstest(?![\w./-])/;
+const TSC_NO_EMIT = /\btsc\b[^;&|\n]*\s--noEmit\b/;
+/** `pnpm run x`, `pnpm x`, `npm run x`, `node scripts/pnpm.mjs run x`; the flags before `run` (`--filter`, `-r`) send it to the workspace's packages. */
+const RUN_SCRIPT = /\b(?:pnpm(?:\.mjs)?|npm|yarn)\b((?:\s+(?:--filter[= ]\S+|-F\s+\S+|-r|--recursive|-w|--silent|--if-present))*)(?:\s+run)?\s+([A-Za-z][\w:.-]*)/g;
+
+type Manifest = { dependencies?: Record<string, string>; devDependencies?: Record<string, string>; scripts?: Record<string, string> };
+type TreeAnswer = { tree?: { path?: string; type?: string }[]; truncated?: boolean };
+type PathRead = { path: string; read: Read<ContentsAnswer> };
+/** What one repository's reads of the standard hold. `workspace` is each `packages/*\/package.json` the tree lists, and `called` each local workflow `ci.yml` calls. */
+type StandardReads = { manifest: Read<ContentsAnswer>; tree: Read<TreeAnswer>; workspace: PathRead[]; ci: Read<ContentsAnswer>; called: PathRead[] };
+type Packages = { root: Manifest; workspace: Manifest[]; unread: string[] };
+
+const whyParseFailed = (cause: unknown): string => cause instanceof Error ? (cause.message.split("\n")[0] ?? "") : String(cause);
+
+function parseManifest(read: Read<ContentsAnswer>, file: string): { manifest: Manifest } | { cell: Cell } {
+  const text = contentsText(read, file);
+  if ("cell" in text) return text;
+  try {
+    const parsed: unknown = JSON.parse(text.text);
+    return isMapping(parsed) ? { manifest: parsed as Manifest } : { cell: cannotTell(`${file} is JSON and not an object`) };
+  } catch (cause) {
+    return { cell: cannotTell(`${file} does not parse: ${whyParseFailed(cause)}`) };
+  }
+}
+
+/** The root manifest and every workspace manifest that could be read, naming each that could not be: a script may be delegated to it. */
+function packagesOf(reads: StandardReads): { packages: Packages } | { cell: Cell } {
+  const root = parseManifest(reads.manifest, PACKAGE_JSON);
+  if ("cell" in root) return root;
+  const parsed = reads.workspace.map(({ path, read }) => ({ path, found: parseManifest(read, path) }));
+  const treeUnread = reads.tree.kind === "ok" ? [] : ["the repository tree"];
+  return { packages: {
+    root: root.manifest,
+    workspace: parsed.flatMap((p) => "manifest" in p.found ? [p.found.manifest] : []),
+    unread: [...treeUnread, ...parsed.filter((p) => "cell" in p.found).map((p) => p.path)],
+  } };
+}
+
+const dependenciesOf = (manifest: Manifest): Record<string, string> => ({ ...manifest.dependencies, ...manifest.devDependencies });
+
+/** A DRIFT reached while a manifest could not be read is not a finding: what it looked for may be in the one it did not. */
+const drifted = (why: string, packages: Packages): Cell => packages.unread.length === 0 ? drift(why)
+  : cannotTell(`${why} -- but ${packages.unread.join(", ")} could not be read, so it may be there`);
+
+type Expansion = { packages: Packages; seen: Set<string> };
+
+/** Every command a script runs: its `pre` and `post` hooks, itself, and what those reach through `pnpm run <script>` (once each, so a cycle ends). */
+function scriptCommands(name: string, delegated: boolean, ctx: Expansion): string[] {
+  const key = `${delegated ? "workspace" : "root"} ${name}`;
+  if (ctx.seen.has(key)) return [];
+  ctx.seen.add(key);
+  const manifests = delegated ? ctx.packages.workspace : [ctx.packages.root];
+  const own = manifests.flatMap((m) => [`pre${name}`, name, `post${name}`].flatMap((script) => m.scripts?.[script] ?? []));
+  return own.flatMap((command) => [command, ...reachedCommands(command, ctx)]);
+}
+
+function reachedCommands(command: string, ctx: Expansion): string[] {
+  return [...command.matchAll(RUN_SCRIPT)].flatMap((m) => scriptCommands(m[2] ?? "", (m[1] ?? "").trim() !== "", ctx));
+}
+
+/** `test-runner`: the toolchain and rstest are dependencies, and what `test` runs (through the scripts it calls) is rstest and not node's runner. */
+function testRunnerCell(entry: Entry, packages: Packages): Cell {
+  const deps = dependenciesOf(packages.root);
+  const commands = scriptCommands("test", false, { packages, seen: new Set() });
+  const problems = [
+    ...(entry.repo === TOOLCHAIN_REPO || deps[TOOLCHAIN_PACKAGE] !== undefined ? [] : [`${PACKAGE_JSON} does not carry ${TOOLCHAIN_PACKAGE}`]),
+    ...(deps[RSTEST_PACKAGE] === undefined ? [`${PACKAGE_JSON} does not carry ${RSTEST_PACKAGE}`] : []),
+    ...(packages.root.scripts?.test === undefined ? ["there is no `test` script"] : []),
+    ...(commands.some((c) => NODE_TEST_RUNNER.test(c)) ? ["`test` runs node's test runner (`tsx --test` or `node --test`)"] : []),
+    ...(commands.length > 0 && !commands.some((c) => RUNS_RSTEST.test(c)) ? ["`test` does not run rstest"] : []),
+  ];
+  return problems.length > 0 ? drifted(problems.join("; "), packages)
+    : ok(`${RSTEST_PACKAGE} ${deps[RSTEST_PACKAGE]}, ${entry.repo === TOOLCHAIN_REPO ? "the toolchain itself" : `${TOOLCHAIN_PACKAGE} ${deps[TOOLCHAIN_PACKAGE]}`}; \`test\` runs rstest`);
+}
+
+/** `release-standard`: some job calls the shared per-merge workflow, pinned by a full sha. `release-shape` reads only the shape and stays as it was. */
+function releaseStandardCell(read: Read<ContentsAnswer>): Cell {
+  const file = contentsText(read, RELEASE_WORKFLOW);
+  if ("cell" in file) return file.cell;
+  const parsed = readWorkflow(file.text, RELEASE_WORKFLOW);
+  if ("cell" in parsed) return parsed.cell;
+  const calls = Object.entries(parsed.workflow.jobs ?? {}).flatMap(([id, job]) => typeof job.uses === "string" ? [{ id, uses: job.uses }] : []);
+  const standard = calls.flatMap((c) => { const ref = STANDARD_RELEASE_CALL.exec(c.uses)?.[1]; return ref === undefined ? [] : [{ ...c, ref }]; });
+  const pinned = standard.find((c) => FULL_SHA.test(c.ref));
+  if (pinned !== undefined) return ok(`job \`${pinned.id}\` calls the shared per-merge workflow pinned at ${pinned.ref}`);
+  if (standard[0] !== undefined) return drift(`job \`${standard[0].id}\` calls the shared per-merge workflow at \`@${standard[0].ref}\`, which is not a full 40-hex sha, so it moves under the repository`);
+  return drift(`no job calls a11ign/toolchain/.github/workflows/release-per-merge.yml@<40 hex>; ${calls.length === 0 ? "no job calls a reusable workflow at all" : `the calls are ${calls.map((c) => c.uses).join(", ")}`}`);
+}
+
+const needsOf = (job: WorkflowJob): string[] => typeof job.needs === "string" ? [job.needs]
+  : Array.isArray(job.needs) ? job.needs.filter((n): n is string => typeof n === "string") : [];
+
+const jobLabels = (id: string, job: WorkflowJob): string[] => [id, ...(typeof job.name === "string" ? [job.name] : [])];
+
+/** The jobs a merge cannot happen without: the required check's own job, everything it `needs`, and any job a required-check list names. */
+function requiredJobIds(jobs: Record<string, WorkflowJob>, requiredCheck: string, namedByRules: string[]): Set<string> {
+  const labelled = (names: string[]): string[] => Object.entries(jobs).filter(([id, job]) => jobLabels(id, job).some((l) => names.includes(l))).map(([id]) => id);
+  const found = new Set(labelled([requiredCheck, ...namedByRules]));
+  for (const id of found) for (const need of needsOf(jobs[id] ?? {})) found.add(need);
+  return found;
+}
+
+type CalledWorkflows = Record<string, { workflow: Workflow } | { cell: Cell }>;
+type JobTypecheck = { how: string | null; unread: string[] };
+
+/** The command of this job that runs `tsc --noEmit`, directly or through the scripts it calls; a local reusable workflow it calls is followed one level. */
+function jobTypecheck(job: WorkflowJob, env: { packages: Packages; called: CalledWorkflows }, followCalls = true): JobTypecheck {
+  const ctx = { packages: env.packages, seen: new Set<string>() };
+  const commands = (job.steps ?? []).flatMap((s) => shellCommands(s.run)).map((c) => c.replace(/\s#.*$/, "")).flatMap((c) => [c, ...reachedCommands(c, ctx)]);
+  const direct = commands.find((c) => TSC_NO_EMIT.test(c));
+  const local = typeof job.uses === "string" ? LOCAL_WORKFLOW_CALL.exec(job.uses)?.[1] : undefined;
+  if (direct !== undefined || local === undefined || !followCalls) return { how: direct ?? null, unread: [] };
+  const callee = env.called[local];
+  if (callee === undefined || "cell" in callee) return { how: null, unread: [local] };
+  const inside = Object.values(callee.workflow.jobs ?? {}).map((j) => jobTypecheck(j, env, false));
+  return { how: inside.find((i) => i.how !== null)?.how ?? null, unread: [] };
+}
+
+type RequiredChecks = { names: string[]; complete: boolean };
+
+/** The required-check names both surfaces list, and whether BOTH could be read: classic protection is admin-only, so a name it holds may be unseen. */
+function requiredChecks(read: RepoRead): RequiredChecks {
+  const { rulesetChecks, classicChecks } = checkNames(read);
+  return { names: [...(rulesetChecks ?? []), ...(classicChecks ?? [])], complete: read.rules.kind === "ok" && read.classic.kind === "ok" };
+}
+
+/** `typecheck`: `tsc --noEmit` runs inside the required check's job, in a job it waits for, or in a job a required-check list names. */
+function typecheckCell(entry: Entry, reads: StandardReads, packages: Packages, required: RequiredChecks): Cell {
+  const file = contentsText(reads.ci, CI_WORKFLOW);
+  if ("cell" in file) return file.cell;
+  const ci = readWorkflow(file.text, CI_WORKFLOW);
+  if ("cell" in ci) return ci.cell;
+  const jobs = ci.workflow.jobs ?? {};
+  const called: CalledWorkflows = Object.fromEntries(reads.called.map(({ path, read }) => {
+    const text = contentsText(read, path);
+    return [path, "cell" in text ? text : readWorkflow(text.text, path)];
+  }));
+  const gate = Object.entries(jobs).find(([id, job]) => jobLabels(id, job).includes(entry.requiredCheck));
+  if (gate === undefined) return drift(`${CI_WORKFLOW} has no job \`${entry.requiredCheck}\`, so the required check has nothing to run`);
+  const mustPass = requiredJobIds(jobs, entry.requiredCheck, required.names);
+  const found = Object.entries(jobs).map(([id, job]) => ({ id, ...jobTypecheck(job, { packages, called }) }));
+  const inside = found.find((f) => f.how !== null && mustPass.has(f.id));
+  if (inside !== undefined) return ok(`job \`${inside.id}\` runs \`${inside.how}\`, and ${inside.id === gate[0] ? "is the required check" : "the required check waits for it"}`);
+  const outside = found.find((f) => f.how !== null);
+  if (outside !== undefined) {
+    const why = `job \`${outside.id}\` runs \`${outside.how}\`, but \`${entry.requiredCheck}\` does not wait for it and no required check names it`;
+    return required.complete ? drift(why) : cannotTell(`${why} -- classic protection was not readable, so a required check of that name cannot be ruled out`);
+  }
+  const unread = found.flatMap((f) => f.unread);
+  return unread.length > 0 ? cannotTell(`no job runs \`tsc --noEmit\` in what was read, and ${unread.join(", ")} could not be`)
+    : drifted(`no job of ${CI_WORKFLOW} runs \`tsc --noEmit\`, directly or through the scripts it calls`, packages);
+}
+
+/** The local workflow files `ci.yml` calls with `uses: ./.github/workflows/<file>`: a job that calls one has its steps in that file. */
+function localWorkflowCalls(ci: Read<ContentsAnswer>): string[] {
+  const file = contentsText(ci, CI_WORKFLOW);
+  const parsed = "cell" in file ? file : readWorkflow(file.text, CI_WORKFLOW);
+  if ("cell" in parsed) return [];
+  const calls = Object.values(parsed.workflow.jobs ?? {}).flatMap((job) => typeof job.uses === "string" ? [LOCAL_WORKFLOW_CALL.exec(job.uses)?.[1] ?? ""] : []);
+  return [...new Set(calls.filter((c) => c !== ""))];
+}
+
+/** `build`: where the repository publishes, Rslib builds it (`@rslib/core` somewhere in its manifests, and an `rslib.config.*` in its tree). */
+function buildCell(entry: Entry, found: { packages: Packages } | { cell: Cell }, tree: Read<TreeAnswer>): Cell {
+  if (!entry.publishes) return ok("not a publisher: `publishes` is false, so nothing it builds is published and the standard's Rslib build does not apply");
+  if ("cell" in found) return found.cell;
+  const { packages } = found;
+  if (tree.kind !== "ok") return cannotTell(`the repository tree: ${unreadWhy(tree)}`);
+  const configs = (tree.value.tree ?? []).flatMap((e) => e.type === "blob" && typeof e.path === "string" && !e.path.includes("node_modules/") && RSLIB_CONFIG.test(e.path) ? [e.path] : []);
+  const hasPackage = [packages.root, ...packages.workspace].some((m) => dependenciesOf(m)[RSLIB_PACKAGE] !== undefined);
+  const problems = [...(hasPackage ? [] : [`no manifest carries ${RSLIB_PACKAGE}`]), ...(configs.length > 0 ? [] : ["the tree has no `rslib.config.*`"])];
+  return problems.length > 0 ? drifted(`a publisher that does not build with Rslib: ${problems.join("; ")}`, packages) : ok(`builds with Rslib: ${RSLIB_PACKAGE}, ${configs[0]}`);
+}
+
+/** The four standard cells. A manifest that could not be read is the reason for each cell that needs it, which is not `release-standard`, nor `build` of a repository that publishes nothing. */
+function standardCells(entry: Entry, reads: RepoReads): Record<string, Cell> {
+  const found = packagesOf(reads.standard);
+  const through = (cellOf: (packages: Packages) => Cell): Cell => "cell" in found ? found.cell : cellOf(found.packages);
+  return {
+    [TEST_RUNNER_COLUMN]: through((p) => testRunnerCell(entry, p)),
+    [RELEASE_STANDARD_COLUMN]: releaseStandardCell(reads.workflow),
+    [TYPECHECK_COLUMN]: through((p) => typecheckCell(entry, reads.standard, p, requiredChecks(reads.protection))),
+    [BUILD_COLUMN]: buildCell(entry, found, reads.standard.tree),
+  };
 }
 
 /** Every column of a row. `tableProblems` fails a row that lacks one, so a new cell cannot be dropped silently. */
-const TABLE_COLUMNS = [...SETTING_COLUMNS.map((s) => s.column), "issues", "protection", PUBLISH_ENV, "bots", "token", RELEASE_COLUMN];
+const TABLE_COLUMNS = [...SETTING_COLUMNS.map((s) => s.column), "issues", "protection", PUBLISH_ENV, "bots", "token", RELEASE_COLUMN,
+  TEST_RUNNER_COLUMN, RELEASE_STANDARD_COLUMN, TYPECHECK_COLUMN, BUILD_COLUMN];
 
 type RepoReads = {
   settings: Read<RepoSettings>; protection: RepoRead; envs: Read<EnvironmentList>;
   policies: Read<PolicyList> | null; probe: ProbeRead; tokenUse: TokenUse | null;
-  workflow: Read<ContentsAnswer>;
+  workflow: Read<ContentsAnswer>; standard: StandardReads;
 };
 type OrgReads = { bots: Read<TeamRepo[]>; trackers: string[] };
 
@@ -723,6 +957,7 @@ function tableRow(entry: Entry, reads: RepoReads, org: OrgReads): Row {
       bots: botsCell(entry.repo, org.bots),
       token: tokenCell(entry, reads.probe, reads.tokenUse),
       [RELEASE_COLUMN]: releaseShapeCell(reads.workflow),
+      ...standardCells(entry, reads),
     },
   };
 }
@@ -767,8 +1002,36 @@ jobs:
     uses: a11ign/toolchain/.github/workflows/release.yml@v1
     secrets: inherit
 `);
+// --- #3962: a repository on the standard, and the real ones as they stood before their rows ------------------------
+
+const STANDARD_SHA = "5ea3fc027eb0891d6329e6a02c2d4ed1c679178a";
+/** `screenreader-worker`'s, `documents`' and `toolchain`'s call, 2026-10-07: the shared workflow pinned by a full sha. */
+const STANDARD_CALLER = releaseFile(`name: release
+on: { push: { branches: [main] } }
+jobs:
+  release:
+    uses: a11ign/toolchain/.github/workflows/release-per-merge.yml@${STANDARD_SHA}
+    secrets: inherit
+`);
+const manifestFile = (manifest: object): Read<ContentsAnswer> => releaseFile(JSON.stringify(manifest));
+const treeOf = (...paths: string[]): Read<TreeAnswer> => ({ kind: "ok", value: { tree: paths.map((path) => ({ path, type: "blob" })) } });
+/** `screenreader-worker`'s root manifest, reduced to what the columns read. */
+const ON_STANDARD = { devDependencies: { "@a11ign/toolchain": "0.1.2", "@rstest/core": "0.12.3", "@rslib/core": "1.0.3" },
+  scripts: { test: "rstest run", typecheck: "tsc --noEmit", build: "rslib build" } };
+const gateWith = (...steps: string[]): Read<ContentsAnswer> => releaseFile(`name: ci
+on: { pull_request: {}, merge_group: {} }
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - run: pnpm install --frozen-lockfile
+${steps.map((run) => `      - run: ${run}`).join("\n")}
+`);
+const GOOD_STANDARD: StandardReads = { manifest: manifestFile(ON_STANDARD), tree: treeOf("package.json", "rslib.config.mjs"), workspace: [],
+  ci: gateWith("pnpm run typecheck", "pnpm test"), called: [] };
+
 const GOOD_READS: RepoReads = { settings: { kind: "ok", value: GOOD_SETTINGS }, protection: withClassic({ kind: "ok", value: FULL_CLASSIC }),
-  envs: RESTRICTED_ENV, policies: MAIN_ONLY, probe: PASSED, tokenUse: null, workflow: PER_MERGE_CALLER };
+  envs: RESTRICTED_ENV, policies: MAIN_ONLY, probe: PASSED, tokenUse: null, workflow: STANDARD_CALLER, standard: GOOD_STANDARD };
 const columnsNotOk = (row: Row, state: CellState): string[] => Object.entries(row.cells).filter(([, c]) => c.state === state).map(([k]) => k);
 
 test("#3705: a repository that satisfies the page reads OK in every cell -- the table can be green", () => {
@@ -1156,11 +1419,262 @@ test("#3718: a declared repository with no release-shape cell is a failure, and 
   assert.deepEqual(tableProblems([{ ...row, cells: without }], [PUBLISHER.repo]), [`${PUBLISHER.repo} ${RELEASE_COLUMN}: NO CELL, the table did not read it`]);
   for (const [workflow, state] of [[releaseFile(ACTION_STEP), "DRIFT"], [{ kind: "refused" }, "CANNOT_TELL"]] as [Read<ContentsAnswer>, CellState][]) {
     const failing = tableRow(PUBLISHER, { ...GOOD_READS, workflow }, NO_ORG);
-    assert.deepEqual(columnsNotOk(failing, state), [RELEASE_COLUMN]);
-    assert.equal(tableProblems([failing], [PUBLISHER.repo]).length, 1);
+    // `release-standard` reads the same file, so a workflow that cannot be read or is not per-merge fails it too (#3962).
+    assert.deepEqual(columnsNotOk(failing, state), [RELEASE_COLUMN, RELEASE_STANDARD_COLUMN]);
+    assert.equal(tableProblems([failing], [PUBLISHER.repo]).length, 2);
   }
   const [header] = renderTable([row]);
-  assert.match(header ?? "", /token +release-shape$/, "the header is as wide as its longest name, so the columns stay aligned");
+  assert.match(header ?? "", /token +release-shape +test-runner/, "the header is as wide as its longest name, so the columns stay aligned");
+});
+
+// --- #3962: the four columns of the toolchain standard --------------------------------------------------------------
+
+const TOOLCHAIN: Entry = { repo: TOOLCHAIN_REPO, defaultBranch: "main", requiredCheck: "gate", publishes: true };
+const NOT_A_PUBLISHER: Entry = { repo: "a11ign/fixture-tag-only", defaultBranch: "main", requiredCheck: "gate", publishes: false };
+
+/** The four cells of a repository whose reads are GOOD_READS but for what a test replaces. */
+const standardOf = (over: Partial<StandardReads> = {}, extra: Partial<RepoReads> = {}, entry: Entry = PUBLISHER): Record<string, Cell> =>
+  standardCells(entry, { ...GOOD_READS, ...extra, standard: { ...GOOD_STANDARD, ...over } });
+const manifestWith = (over: object): Read<ContentsAnswer> => manifestFile({ ...ON_STANDARD, ...over });
+const scriptsWith = (scripts: Record<string, string>): Read<ContentsAnswer> => manifestWith({ scripts });
+const stateOf = (cell: Cell | undefined): string => cell?.state ?? "NO CELL";
+
+test("#3962: a repository on the standard reads OK in all four columns, each saying what it read", () => {
+  const cells = standardOf();
+  assert.deepEqual(Object.keys(cells), [TEST_RUNNER_COLUMN, RELEASE_STANDARD_COLUMN, TYPECHECK_COLUMN, BUILD_COLUMN]);
+  assert.deepEqual(Object.values(cells).map((c) => c.state), ["OK", "OK", "OK", "OK"]);
+  assert.match(cells[TEST_RUNNER_COLUMN]?.detail ?? "", /@rstest\/core 0\.12\.3, @a11ign\/toolchain 0\.1\.2; `test` runs rstest/);
+  assert.match(cells[RELEASE_STANDARD_COLUMN]?.detail ?? "", new RegExp(`pinned at ${STANDARD_SHA}`));
+  assert.match(cells[TYPECHECK_COLUMN]?.detail ?? "", /job `gate` runs `tsc --noEmit`, and is the required check/);
+  assert.match(cells[BUILD_COLUMN]?.detail ?? "", /builds with Rslib: @rslib\/core, rslib\.config\.mjs/);
+});
+
+// The NEGATIVE CONTROLS are the repositories themselves, as they stood before the rows that moved them (read off their
+// default branches 2026-10-07 by commit: lab 1fd5d6bd6, control 4abadd554, agent-org f245fd1b4 and 0eefc0972).
+const LAB_BEFORE = { devDependencies: { "@changesets/cli": "3.0.3", "@types/node": "^26.6.4", tsx: "4.23.15", typescript: "^7.0.2" },
+  scripts: { typecheck: "tsc --noEmit", test: "tsx --test \"scripts/*.test.ts\"", changeset: "changeset" } };
+const AGENT_ORG_BEFORE = { devDependencies: { "@types/node": "^22.20.5", tsx: "^4.22.4", typescript: "^6.0.3", yaml: "^2.9.0" },
+  scripts: { typecheck: "tsc --noEmit -p tsconfig.json", changeset: "pnpm dlx @changesets/cli@3.0.1", "messaging:listen": "node src/messaging/listen.mjs" } };
+/** agent-org's `release.yml` before #3965, reduced: it tags the merge by hand, which is per-merge and is not the shared workflow. */
+const AGENT_ORG_RELEASE_BEFORE = releaseFile(`name: release
+on: { push: { branches: [main] } }
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: |
+          TAG="v$(node -p "require('./package.json').version")"
+          git push origin "HEAD:refs/tags/$TAG"
+`);
+
+test("#3962 NEGATIVE CONTROL, RED FIRST: lab as it stood (tsx --test, no toolchain, no rstest) reads DRIFT on test-runner", () => {
+  const cell = standardOf({ manifest: manifestFile(LAB_BEFORE) }, {}, { ...PUBLISHER, repo: "a11ign/lab", publishes: false })[TEST_RUNNER_COLUMN];
+  assert.equal(stateOf(cell), "DRIFT");
+  for (const named of [/does not carry @a11ign\/toolchain/, /does not carry @rstest\/core/, /runs node's test runner \(`tsx --test` or `node --test`\)/, /`test` does not run rstest/]) {
+    assert.match(cell?.detail ?? "", named);
+  }
+});
+
+test("#3962 NEGATIVE CONTROL, RED FIRST: agent-org as it stood (no `test` script at all) reads DRIFT on test-runner", () => {
+  const cell = standardOf({ manifest: manifestFile(AGENT_ORG_BEFORE) })[TEST_RUNNER_COLUMN];
+  assert.equal(stateOf(cell), "DRIFT");
+  assert.match(cell?.detail ?? "", /there is no `test` script/);
+});
+
+test("#3962 NEGATIVE CONTROL, RED FIRST: agent-org's release as it stood reads DRIFT on release-standard and OK on release-shape, the one file read both ways", () => {
+  assert.equal(releaseShapeCell(AGENT_ORG_RELEASE_BEFORE).state, "OK", "it tags the merge itself: per-merge, which is all `release-shape` reads");
+  const cell = standardOf({}, { workflow: AGENT_ORG_RELEASE_BEFORE })[RELEASE_STANDARD_COLUMN];
+  assert.equal(stateOf(cell), "DRIFT");
+  assert.match(cell?.detail ?? "", /no job calls a11ign\/toolchain\/\.github\/workflows\/release-per-merge\.yml@<40 hex>; no job calls a reusable workflow at all/);
+  assert.equal(stateOf(standardOf({}, { workflow: STANDARD_CALLER })[RELEASE_STANDARD_COLUMN]), "OK", "and the remedy, once applied, stops the complaint");
+});
+
+test("#3962: test-runner -- each part of the standard fails on its own, and a script that only MENTIONS node's runner does not", () => {
+  const cases: [string, object, RegExp][] = [
+    ["no toolchain", { devDependencies: { "@rstest/core": "0.12.3" } }, /does not carry @a11ign\/toolchain/],
+    ["no rstest", { devDependencies: { "@a11ign/toolchain": "0.1.2" } }, /does not carry @rstest\/core/],
+    ["node --test", { scripts: { test: "node --test src/" } }, /runs node's test runner/],
+    ["another runner", { scripts: { test: "vitest run" } }, /`test` does not run rstest/],
+    ["a path that only looks like it", { scripts: { test: "node scripts/run.mjs --config scripts/rstest/rstest.config.mjs" } }, /`test` does not run rstest/],
+  ];
+  for (const [what, over, why] of cases) {
+    const cell = standardOf({ manifest: manifestWith(over) })[TEST_RUNNER_COLUMN];
+    assert.equal(stateOf(cell), "DRIFT", what);
+    assert.match(cell?.detail ?? "", why, what);
+  }
+  const mentions = scriptsWith({ test: "rstest run", "test:legacy": "tsx --test old/" });
+  assert.equal(stateOf(standardOf({ manifest: mentions })[TEST_RUNNER_COLUMN]), "OK", "`test:legacy` is not what `test` runs: parsed, not grepped");
+});
+
+test("#3962: test-runner follows `pnpm run <script>`, the hooks, and a wrapper that is not node's runner; a cycle ends", () => {
+  // `a11ign`'s own: `test` runs `test:ts` through the repository's pnpm wrapper, which hands rstest to a guard script.
+  const wrapped = scriptsWith({ test: "node scripts/pnpm.mjs run test:ts && node scripts/pnpm.mjs run test:python",
+    "test:ts": "node packages/guards/src/assert-glob-not-empty.mjs \"packages/*/src/**/*.test.ts\" --min=95 --run --runner=rstest ${A11Y_TEST_CONCURRENCY:+--test-concurrency=$A11Y_TEST_CONCURRENCY}",
+    "test:python": "python -m pytest" });
+  assert.equal(stateOf(standardOf({ manifest: wrapped })[TEST_RUNNER_COLUMN]), "OK", "`--test-concurrency` passed to a wrapper is not `node --test`");
+  const hooked = scriptsWith({ test: "echo done", pretest: "pnpm run unit", unit: "tsx --test src/" });
+  assert.equal(stateOf(standardOf({ manifest: hooked })[TEST_RUNNER_COLUMN]), "DRIFT", "a `pretest` hook that runs node's runner is part of `test`");
+  assert.equal(stateOf(standardOf({ manifest: scriptsWith({ test: "pnpm run test" }) })[TEST_RUNNER_COLUMN]), "DRIFT", "a script that calls itself ends, and runs no rstest");
+});
+
+test("#3962: test-runner -- the toolchain repository is the one that need not depend on itself; any other repository must", () => {
+  const rootOnly = manifestWith({ devDependencies: { "@rstest/core": "0.12.3" } });
+  assert.equal(stateOf(standardOf({ manifest: rootOnly }, {}, TOOLCHAIN)[TEST_RUNNER_COLUMN]), "OK");
+  assert.equal(stateOf(standardOf({ manifest: rootOnly })[TEST_RUNNER_COLUMN]), "DRIFT");
+});
+
+test("#3962: an unreadable or malformed package.json is CANNOT_TELL on every cell that needs it, never a pass", () => {
+  for (const manifest of [{ kind: "refused" }, { kind: "unreadable", why: "HTTP 502" }, releaseFile("{ not json"), releaseFile("[1, 2]")] as Read<ContentsAnswer>[]) {
+    const cells = standardOf({ manifest });
+    assert.deepEqual([TEST_RUNNER_COLUMN, TYPECHECK_COLUMN, BUILD_COLUMN].map((c) => stateOf(cells[c])), ["CANNOT_TELL", "CANNOT_TELL", "CANNOT_TELL"]);
+    assert.equal(stateOf(cells[RELEASE_STANDARD_COLUMN]), "OK", "`release-standard` reads release.yml and needs no manifest");
+  }
+  assert.equal(stateOf(standardOf({ manifest: { kind: "refused" } }, {}, NOT_A_PUBLISHER)[BUILD_COLUMN]), "OK", "a repository that publishes nothing needs no manifest to say so");
+});
+
+test("#3962: release-standard -- only the shared workflow pinned by a FULL sha is the standard", () => {
+  const call = (uses: string): Read<ContentsAnswer> => releaseFile(`jobs:\n  release:\n    uses: ${uses}\n`);
+  const cell = (uses: string): Cell | undefined => standardOf({}, { workflow: call(uses) })[RELEASE_STANDARD_COLUMN];
+  const base = "a11ign/toolchain/.github/workflows/release-per-merge.yml";
+  assert.equal(stateOf(cell(`${base}@${STANDARD_SHA}`)), "OK");
+  for (const moving of ["v1", "main", STANDARD_SHA.slice(0, 7), `${STANDARD_SHA}0`]) {
+    assert.equal(stateOf(cell(`${base}@${moving}`)), "DRIFT", moving);
+    assert.match(cell(`${base}@${moving}`)?.detail ?? "", /not a full 40-hex sha/, moving);
+  }
+  const other = cell(`a11ign/toolchain/.github/workflows/release.yml@${STANDARD_SHA}`);
+  assert.equal(stateOf(other), "DRIFT", "another workflow of the toolchain is not the one");
+  assert.match(other?.detail ?? "", /the calls are a11ign\/toolchain\/\.github\/workflows\/release\.yml@/);
+  assert.equal(stateOf(cell(`someone-else/toolchain/.github/workflows/release-per-merge.yml@${STANDARD_SHA}`)), "DRIFT");
+  assert.equal(stateOf(standardOf({}, { workflow: { kind: "refused" } })[RELEASE_STANDARD_COLUMN]), "CANNOT_TELL");
+  assert.equal(stateOf(standardOf({}, { workflow: releaseFile("jobs: [") })[RELEASE_STANDARD_COLUMN]), "CANNOT_TELL");
+  assert.equal(releaseShapeCell(call(`${base}@v1`)).state, "OK", "`release-shape` reads the shape only, so the same unpinned call still reads OK there");
+});
+
+/** Where `tsc` runs is the question, so the cases vary the ci.yml and the manifest around it. */
+const CI_TYPECHECK_JOB = `name: ci
+on: { pull_request: {}, merge_group: {} }
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - run: pnpm test
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - run: npm run typecheck
+`;
+
+test("#3962: typecheck -- `tsc --noEmit` inside the required job reads OK, directly or through the scripts it calls", () => {
+  const direct = standardOf({ ci: gateWith("pnpm exec tsc -p packages/lab/tsconfig.json --noEmit", "pnpm test") })[TYPECHECK_COLUMN];
+  assert.equal(stateOf(direct), "OK", "lab's and control's form: the flag after the project");
+  assert.match(direct?.detail ?? "", /job `gate` runs `pnpm exec tsc -p packages\/lab\/tsconfig\.json --noEmit`, and is the required check/);
+  assert.equal(stateOf(standardOf({ ci: gateWith("pnpm exec tsc --noEmit -p tsconfig.control.json") })[TYPECHECK_COLUMN]), "OK", "control's form: the flag before the project");
+  assert.equal(stateOf(standardOf({ ci: gateWith("pnpm run typecheck") })[TYPECHECK_COLUMN]), "OK", "through the `typecheck` script");
+  // `documents`' form: the gate runs only `pnpm test`; `pretest` runs the root `typecheck`, which hands it to the package.
+  const documents = { manifest: scriptsWith({ test: "rstest run", pretest: "pnpm run typecheck", typecheck: "pnpm --filter @a11ign/documents run typecheck" }),
+    workspace: [{ path: "packages/pdf/package.json", read: manifestFile({ scripts: { typecheck: "tsc --noEmit" } }) }], ci: gateWith("pnpm test", "pnpm run smoke") };
+  assert.equal(stateOf(standardOf(documents)[TYPECHECK_COLUMN]), "OK");
+  const emptied = { ...documents, workspace: [{ path: "packages/pdf/package.json", read: manifestFile({ scripts: { typecheck: "eslint ." } }) }] };
+  assert.equal(stateOf(standardOf(emptied)[TYPECHECK_COLUMN]), "DRIFT", "the package's `typecheck` is what it delegates to, and it is not tsc");
+  const unread = { ...documents, workspace: [{ path: "packages/pdf/package.json", read: { kind: "refused" } as Read<ContentsAnswer> }] };
+  assert.equal(stateOf(standardOf(unread)[TYPECHECK_COLUMN]), "CANNOT_TELL", "the package it delegates to could not be read, so the script may be there");
+});
+
+test("#3962: typecheck -- a job that does not run `tsc --noEmit`, or that only says it in a comment, reads DRIFT", () => {
+  const notTsc = scriptsWith({ test: "rstest run", typecheck: "eslint ." });
+  const drifts: [string, Read<ContentsAnswer>, Read<ContentsAnswer>][] = [
+    ["no tsc at all", gateWith("pnpm test"), manifestFile(ON_STANDARD)],
+    ["tsc without --noEmit", gateWith("pnpm exec tsc -p tsconfig.json"), manifestFile(ON_STANDARD)],
+    // In a block scalar: on a plain `run:` line YAML itself drops ` # ...`, so only a block can carry the comment to the shell.
+    ["a trailing shell comment", releaseFile("jobs:\n  gate:\n    steps:\n      - run: |\n          pnpm test  # pnpm exec tsc --noEmit\n"), manifestFile(ON_STANDARD)],
+    ["a `typecheck` script that is not tsc", gateWith("pnpm run typecheck"), notTsc],
+    ["a YAML comment", releaseFile("name: ci\njobs:\n  gate:\n    steps:\n      # - run: tsc --noEmit\n      - run: pnpm test\n"), manifestFile(ON_STANDARD)],
+  ];
+  for (const [what, ci, manifest] of drifts) assert.equal(stateOf(standardOf({ ci, manifest })[TYPECHECK_COLUMN]), "DRIFT", what);
+  const noGate = releaseFile("jobs:\n  build:\n    steps:\n      - run: tsc --noEmit\n");
+  assert.match(standardOf({ ci: noGate })[TYPECHECK_COLUMN]?.detail ?? "", /has no job `gate`/);
+});
+
+test("#3962 NEGATIVE CONTROL: agent-org's shape -- `tsc` in a job the required `gate` does not wait for -- is DRIFT when both surfaces were read, CANNOT_TELL when classic was not", () => {
+  const ci = releaseFile(CI_TYPECHECK_JOB);
+  const manifest = scriptsWith({ test: "rstest run", typecheck: "tsc --noEmit -p tsconfig.json" });
+  const read = (protection: RepoRead): Cell | undefined => standardOf({ ci, manifest }, { protection })[TYPECHECK_COLUMN];
+  const complete = read(withClassic({ kind: "ok", value: FULL_CLASSIC }));
+  assert.equal(stateOf(complete), "DRIFT");
+  assert.match(complete?.detail ?? "", /job `typecheck` runs `tsc --noEmit -p tsconfig\.json`, but `gate` does not wait for it and no required check names it/);
+  const blind = read(withClassic({ kind: "refused" }));
+  assert.equal(stateOf(blind), "CANNOT_TELL", "classic protection is admin-only: a required check of that name may be listed there");
+  assert.match(blind?.detail ?? "", /classic protection was not readable/);
+  // The two ways it becomes OK: `gate` waits for the job, or a required-check list names it.
+  const waits = releaseFile(CI_TYPECHECK_JOB.replace("  gate:\n    runs-on", "  gate:\n    needs: [typecheck]\n    runs-on"));
+  assert.equal(stateOf(standardOf({ ci: waits, manifest })[TYPECHECK_COLUMN]), "OK");
+  assert.match(standardOf({ ci: waits, manifest })[TYPECHECK_COLUMN]?.detail ?? "", /the required check waits for it/);
+  const named = withClassic({ kind: "ok", value: { ...FULL_CLASSIC, required_status_checks: { contexts: ["gate", "typecheck"] } } });
+  assert.equal(stateOf(read(named)), "OK", "classic lists `typecheck` as a required context");
+  const ruleset: RepoRead = { ...withClassic({ kind: "refused" }), rules: { kind: "ok", value: [...BOTH_RULES, { type: "required_status_checks", parameters: { required_status_checks: [{ context: "typecheck" }] } }] } };
+  assert.equal(stateOf(read(ruleset)), "OK", "so does the ruleset's own rule, which a non-admin can read");
+});
+
+test("#3962: typecheck follows a local reusable workflow one level, and an unreadable one is CANNOT_TELL", () => {
+  // `a11ign`'s shape: `gate` needs `ts`, which calls `reusable-build-test.yml`, where the step is.
+  const ci = releaseFile(`jobs:
+  ts:
+    uses: ./.github/workflows/reusable-build-test.yml
+    with: { run-lint-typecheck: true }
+  python:
+    uses: some/other-repo/.github/workflows/x.yml@main
+  gate:
+    needs: [ts, python]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo checked
+`);
+  const callee = "jobs:\n  build-test:\n    runs-on: ubuntu-latest\n    steps:\n      - if: inputs.run-lint-typecheck\n        run: pnpm run typecheck\n";
+  assert.deepEqual(localWorkflowCalls(ci), [".github/workflows/reusable-build-test.yml"], "the control: the local call is found, the remote one is not");
+  const called = [{ path: ".github/workflows/reusable-build-test.yml", read: releaseFile(callee) }];
+  assert.equal(stateOf(standardOf({ ci, called })[TYPECHECK_COLUMN]), "OK");
+  const refused = [{ path: called[0]?.path ?? "", read: { kind: "refused" } as Read<ContentsAnswer> }];
+  assert.equal(stateOf(standardOf({ ci, called: refused })[TYPECHECK_COLUMN]), "CANNOT_TELL");
+  assert.equal(stateOf(standardOf({ ci, called: [{ path: called[0]?.path ?? "", read: releaseFile(callee.replace("pnpm run typecheck", "pnpm run lint")) }] })[TYPECHECK_COLUMN]), "DRIFT");
+  assert.deepEqual(localWorkflowCalls({ kind: "refused" }), [], "an unreadable ci.yml has no calls to follow, and its own cell says CANNOT_TELL");
+  assert.equal(stateOf(standardOf({ ci: { kind: "refused" } })[TYPECHECK_COLUMN]), "CANNOT_TELL");
+});
+
+test("#3962: build -- a publisher builds with Rslib (the package and a config file), and a repository that publishes nothing is not asked", () => {
+  const cell = (over: Partial<StandardReads>, entry: Entry = PUBLISHER): Cell | undefined => standardOf(over, {}, entry)[BUILD_COLUMN];
+  assert.equal(stateOf(cell({})), "OK");
+  assert.equal(stateOf(cell({ tree: treeOf("packages/pdf/rslib.config.ts") })), "OK", "a config in a package counts, in any of the config extensions");
+  const noConfig = cell({ tree: treeOf("package.json", "tsconfig.json") });
+  assert.equal(stateOf(noConfig), "DRIFT");
+  assert.match(noConfig?.detail ?? "", /the tree has no `rslib\.config\.\*`/);
+  assert.equal(stateOf(cell({ tree: treeOf("node_modules/x/rslib.config.mjs", "src/rslib.config.json") })), "DRIFT", "a vendored copy and a file that is not a config do not count");
+  const noPackage = cell({ manifest: manifestWith({ devDependencies: { "@rstest/core": "0.12.3" } }) });
+  assert.equal(stateOf(noPackage), "DRIFT");
+  assert.match(noPackage?.detail ?? "", /no manifest carries @rslib\/core/);
+  const inPackage = cell({ manifest: manifestWith({ devDependencies: { "@rstest/core": "0.12.3" } }), workspace: [{ path: "packages/pdf/package.json", read: manifestFile({ devDependencies: { "@rslib/core": "1.0.3" } }) }] });
+  assert.equal(stateOf(inPackage), "OK", "the package that builds may carry the dependency");
+  assert.equal(stateOf(cell({ tree: { kind: "unreadable", why: "GitHub truncated the listing" } })), "CANNOT_TELL");
+  const idle = cell({ manifest: manifestWith({ devDependencies: {} }), tree: treeOf("package.json") }, NOT_A_PUBLISHER);
+  assert.equal(stateOf(idle), "OK");
+  assert.match(idle?.detail ?? "", /not a publisher/);
+});
+
+test("#3962: the table fails a row with no cell for any of the four columns, prints all four, and an unreadable manifest fails it", () => {
+  const row = tableRow(PUBLISHER, GOOD_READS, NO_ORG);
+  assert.deepEqual(tableProblems([row], [PUBLISHER.repo]), []);
+  for (const column of [TEST_RUNNER_COLUMN, RELEASE_STANDARD_COLUMN, TYPECHECK_COLUMN, BUILD_COLUMN]) {
+    const without = Object.fromEntries(Object.entries(row.cells).filter(([name]) => name !== column));
+    assert.deepEqual(tableProblems([{ ...row, cells: without }], [PUBLISHER.repo]), [`${PUBLISHER.repo} ${column}: NO CELL, the table did not read it`], column);
+  }
+  const unreadable = tableRow(PUBLISHER, { ...GOOD_READS, standard: { ...GOOD_STANDARD, manifest: { kind: "refused" } } }, NO_ORG);
+  assert.deepEqual(columnsNotOk(unreadable, "CANNOT_TELL"), [TEST_RUNNER_COLUMN, TYPECHECK_COLUMN, BUILD_COLUMN]);
+  // lab's manifest and agent-org's release as they stood, on a publisher: three cells DRIFT and `release-shape` still reads OK.
+  const bad = tableRow(PUBLISHER, { ...GOOD_READS, workflow: AGENT_ORG_RELEASE_BEFORE, standard: { ...GOOD_STANDARD, manifest: manifestFile(LAB_BEFORE) } }, NO_ORG);
+  assert.deepEqual(columnsNotOk(bad, "DRIFT"), [TEST_RUNNER_COLUMN, RELEASE_STANDARD_COLUMN, BUILD_COLUMN]);
+  assert.equal(stateOf(bad.cells[RELEASE_COLUMN]), "OK");
+  const [header] = renderTable([row]);
+  assert.match(header ?? "", /release-shape +test-runner +release-standard +typecheck +build\s*$/);
 });
 
 // --- the live table, over every declared repository -------------------------------------------------------
@@ -1211,6 +1725,24 @@ function readTokenUse(entry: Entry): TokenUse | null {
   return { kind: "ok", value: workflowsReadingToken(files) };
 }
 
+const contentsPath = (entry: Entry, path: string): string => `repos/${entry.repo}/contents/${path}?ref=${entry.defaultBranch}`;
+
+/** The tree of the default branch, one call; a listing GitHub cut short is unreadable, because a file may be missing from it. */
+function readTree(entry: Entry): Read<TreeAnswer> {
+  const tree = ghRead<TreeAnswer>(`repos/${entry.repo}/git/trees/${entry.defaultBranch}?recursive=1`);
+  return tree.kind === "ok" && tree.value.truncated === true
+    ? { kind: "unreadable", why: "GitHub truncated the listing, so a file may be missing from it" } : tree;
+}
+
+/** The four standard columns' reads: `package.json`, `ci.yml`, the local workflows it calls, and each workspace manifest the tree lists. */
+function readStandard(entry: Entry): StandardReads {
+  const tree = readTree(entry);
+  const manifests = tree.kind === "ok" ? (tree.value.tree ?? []).flatMap((e) => e.type === "blob" && WORKSPACE_MANIFEST.test(e.path ?? "") ? [e.path ?? ""] : []) : [];
+  const ci = ghRead<ContentsAnswer>(contentsPath(entry, CI_WORKFLOW));
+  const read = (path: string): PathRead => ({ path, read: ghRead<ContentsAnswer>(contentsPath(entry, path)) });
+  return { manifest: ghRead(contentsPath(entry, PACKAGE_JSON)), tree, workspace: manifests.map(read), ci, called: localWorkflowCalls(ci).map(read) };
+}
+
 function readRepo(entry: Entry): RepoReads {
   const envs = ghRead<EnvironmentList>(`repos/${entry.repo}/environments`);
   const hasEnv = envs.kind === "ok" && (envs.value.environments ?? []).some((e) => e.name === PUBLISH_ENV);
@@ -1221,7 +1753,8 @@ function readRepo(entry: Entry): RepoReads {
     policies: hasEnv ? ghRead(`repos/${entry.repo}/environments/${PUBLISH_ENV}/deployment-branch-policies`) : null,
     probe: readProbe(entry),
     tokenUse: readTokenUse(entry),
-    workflow: ghRead(`repos/${entry.repo}/contents/${RELEASE_WORKFLOW}?ref=${entry.defaultBranch}`),
+    workflow: ghRead(contentsPath(entry, RELEASE_WORKFLOW)),
+    standard: readStandard(entry),
   };
 }
 
@@ -1240,7 +1773,9 @@ test("#3705 LIVE: every code repository is read against docs/new-code-repository
   assert.ok(rows.length >= 1, "no repository to read: the declared list was empty, and an empty read certifies nothing");
   const lines = renderTable(rows);
   console.log(lines.join("\n"));
-  for (const r of rows) console.log(`  ${RELEASE_COLUMN} ${r.repo}: ${r.cells[RELEASE_COLUMN]?.state ?? "NO CELL"} ${r.cells[RELEASE_COLUMN]?.detail ?? ""}`);
+  for (const column of [RELEASE_COLUMN, TEST_RUNNER_COLUMN, RELEASE_STANDARD_COLUMN, TYPECHECK_COLUMN, BUILD_COLUMN]) {
+    for (const r of rows) console.log(`  ${column} ${r.repo}: ${r.cells[column]?.state ?? "NO CELL"} ${r.cells[column]?.detail ?? ""}`);
+  }
   const problems = tableProblems(rows, declared);
   for (const p of problems) console.log(`  ${p}`);
   assert.deepEqual(problems, [], "a repository drifts from docs/new-code-repository.md, or a setting could not be read: neither is a pass");
