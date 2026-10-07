@@ -39,6 +39,7 @@ entry names what is missing, what it would cost, and what would tell you it is f
 - [§54](#54-the-thrash-guard-needle-was-never-seen-render-open-by-design-2745) THE THRASH-GUARD NEEDLE WAS NEVER SEEN RENDER — OPEN, by design (#2745)
 - [§55](#55-githubs-closingissuesreferences-was-empty-for-prs-opened-from-0912z-on-2026-09-30-came-back-by-itself-and-the-cause-was-not-found-open-a-reading-2824) GITHUB'S closingIssuesReferences WAS EMPTY FOR PRs OPENED FROM 09:12Z ON 2026-09-30, CAME BACK BY ITSELF, AND THE CAUSE WAS NOT FOUND — OPEN, a reading (#2824)
 - [§56](#56-the-chairmans-chat-channel-is-not-cryptographic-its-classifier-is-a-heuristic-and-a-reply-waits-on-ceo-open-by-design-2899-2911) THE CHAIRMAN'S CHAT CHANNEL IS NOT CRYPTOGRAPHIC, ITS CLASSIFIER IS A HEURISTIC, AND A REPLY WAITS ON ceo — OPEN, by design (#2899, #2911)
+- [§57](#57-a-page-whose-first-visit-differs-from-every-later-one-is-not-something-gatestability-watches-open-by-design-3905-3130) A PAGE WHOSE FIRST VISIT DIFFERS FROM EVERY LATER ONE IS NOT SOMETHING gate:stability WATCHES — OPEN, by design (#3905, #3130)
 <!-- known-gaps-index:end -->
 
 ## The order these should be done in
@@ -3739,3 +3740,37 @@ the chairman's to make.
 **What would close the entry as a whole:** a live reading (row 13) of one message in, one reply out and one answered request, with each figure
 above that can be measured (latency, the ledger's update ids against the chat) written beside the claim it supports. Until then this is a documented
 boundary of the design and not a defect awaiting a fix.
+
+## 57. A PAGE WHOSE FIRST VISIT DIFFERS FROM EVERY LATER ONE IS NOT SOMETHING `gate:stability` WATCHES — OPEN, by design (#3905, #3130)
+
+**Found on `https://www.nls.uk/join/`, and the gate no longer carries it.** The page loads Civic Cookie Control through Google Tag Manager with
+`initialState: notify, notifyOnce: true`, so its cookie panel opens on a browser profile's FIRST visit and never again. `orchestrator` read the kept
+captures of the 2026-10-06 22:10Z `gate:stability` run (#3901): capture 1 was that first visit (no "English" in the transcript, `events=24`, first
+focus event "Close Cookie Control") and captures 2 to 5, and all ten captures of the two 2026-10-04 runs, were the warm shape, identical to each
+other. The gate read UNSTABLE on that canary on any worker whose profile had not met the panel, the `qualification` status on `3a8f211b3` was
+`failure`, and #3130's release was held.
+
+**`ceo` ruled (2026-10-07, #3130): replace the canary, do not teach the gate to discard a cold profile's first capture.** A warm-up that is "not one
+of the five" would change what `stable` means from "five captures of one page read the same" to "five read the same once the first is thrown away",
+and the first visit IS a reader's visit: the panel that opens on it is what a screen-reader user meets before anything else. That is a finding about
+the page, so the gate is not taught to look away from it. The canary became W3C's APG disclosure-navigation page, chosen for having no
+first-visit-only state (its HTML and six scripts hold no `localStorage`, `sessionStorage`, `document.cookie` or `indexedDB`, and no consent markup;
+read 2026-10-07, see the entry in `stability-gate.mjs`).
+
+### What the gate does and does NOT see
+
+- **Does:** whether five captures of one page, taken back to back in one adopted profile, read the same. A page with a once-per-profile panel makes
+  that profile's first capture differ from the rest and the gate reports it as UNSTABLE, which was correct about the pipeline's reading of the page and
+  a misleading verdict about the pipeline.
+- **Does NOT:** the first-visit difference as a property of the page. Five captures in one profile see only the first visit's difference, ONCE, and it
+  is the capture that distinguishes nothing from a flake. After this row no canary has such state, so the gate sees NO page whose first visit differs
+  from every later one, and a `STABLE` on all nine canaries says nothing about one.
+- **Does NOT:** whether the corpus's captures were taken on a first visit or a warm one. A cold profile and a warm one read a different page here;
+  nothing records which a capture was, so the two populations can share a corpus unlabelled.
+
+**"All gates pass" must not be read as covering it.** The replacement loses nothing the gate was asserting (the other eight canaries were STABLE at the
+same run), and it gains nothing about first visits.
+
+**What would close it:** a capture that records whether its profile had met the page before, and a check that reads the first visit as its own
+reading rather than as a sample of the warm one. That is a decision about the capture protocol and not a change to this gate, and nothing in
+this row does it.
