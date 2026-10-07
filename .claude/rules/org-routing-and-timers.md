@@ -12,21 +12,16 @@
   included.
 - A product PR opens as a DRAFT and is marked ready only on a "convinced"; docs-and-tests PRs open ready.
   **Nobody merges by hand.**
-- **`Acceptance:` and `Closes` are MERGE-BLOCKING** — a malformed body does not merge. The two defects
-  that cost four red runs: a DUPLICATED `Acceptance:` section, and a MISSING `Closes`. A PR finishing no
-  row declares `Closes: none -- <reason>`, em dash required.
+- **`Acceptance:` and `Closes` are MERGE-BLOCKING** — a malformed body does not merge (a DUPLICATED
+  `Acceptance:`, a MISSING `Closes`). A PR finishing no row declares `Closes: none -- <reason>`, em dash required.
 - **A settled draft with no verdict goes to the external reviewer; an engineer reviews only when `ceo`
   names one** (#1394). A spawned engineer never claims a second row (#2407).
 
 ## `lane:ceo` protects review, not authorship (ceo, 2026-09-18)
 
-- **A `lane:<owner>` label refuses any OTHER session unconditionally** (`laneReason`,
-  `row-claim/runner-rule.mjs`). A `Lane-exception:` line changes nothing at claim time — only the label
-  does.
-- **The test before leaving a row in a lane other than `any`: does the label protect a DECISION only the
-  owner can make (a publish order, a freeze, a ruling), or a PATH that needs the owner's REVIEW but not
-  their hands?** A path re-lanes to `lane:any`; a decision stays, and the wait is then a real cost of it.
-  Full ruling: `docs/lane-ownership.json`'s `_claimVsAuthorRuling`.
+- **A `lane:<owner>` label refuses any OTHER session unconditionally**, whatever a `Lane-exception:` line
+  says. Keep one only for a DECISION; a PATH needing review re-lanes to `any`
+  ([why](../../docs/operational-lessons.md#laneceo-protects-review-not-authorship-ceos-ruling-2026-09-18)).
 
 ## Routing — who reads what (chairman, 2026-09-14)
 
@@ -35,6 +30,9 @@
   close-outs, host-run announcements. An engineer's report goes there, never to `ceo`.
 - **Three things come up to `ceo`:** a ruling `product-manager` cannot make (a rule or ADR conflict, a
   crossing into a `ceo` lane, the publish path); ONE state reading per tick; anything for the chairman.
+- **A `needs:chairman` row carries a BRIEF, not a ticket (#3409):** it opens `BRIEF for the chairman`, in plain
+  English, and a missing required line sends NO alert. **Before labelling, confirm it is still needed and his
+  own Claude session cannot do it** ([lines, why](../../docs/operational-lessons.md#a-needschairman-brief-is-a-brief-not-a-ticket)).
 - **That reading is POSTED and DELIVERED (#2083):** post on **#928** (the RECORD), then deliver it with
   **`agent-org prompt:session ceo "…"`**. **Both halves, or it is unrecorded or undelivered.**
 - **`orchestrator` is the first reader for fleet and lab questions**; answers are posted on the row.
