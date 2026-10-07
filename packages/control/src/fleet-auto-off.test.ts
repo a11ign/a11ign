@@ -21,7 +21,7 @@ import { captureTimes, readCapturesState, writeCapturesState, withFileLock, read
 import { sandboxGitEnv } from "../../worker-fleet/src/git-safe-env.mjs";
 import { DEFAULT_PROOF_PATH, PROOF_WINDOW_MS } from "./fleet-wake.mjs";
 import { CONTROL_PLANE_CHECKOUT_PATH } from "./control-plane-checkout.mjs";
-import { layerDeclaration, layerOwning, layerPinTag } from "./layer-checkouts.mjs";
+import { layerDeclaration, layerOwning, layerPinTag, layersFrom, pinnedLayerTag } from "./layer-checkouts.mjs";
 import { layingPlan } from "../../../scripts/lay-layer.mjs";
 import {
   IDLE_THRESHOLD_MS, PROBE_TIMEOUT_MS, POLL_INTERVAL_MS,
@@ -967,12 +967,13 @@ test("#3275 importClosure on the real program: every file it names exists, and t
 
 type GitCall = string[];
 /** A scripted `git`: records every call, answers `fetch` with `fetchStatus`, `diff` with `diffOut`, `ls-files` with all paths. */
-function scriptedGit(opts: { fetchStatus?: number; diffStatus?: number; diffOut?: string; tracked?: (paths: string[]) => string[]; lockfile?: string }) {
+function scriptedGit(opts: { fetchStatus?: number; diffStatus?: number; diffOut?: string; tracked?: (paths: string[]) => string[]; lockfile?: string; manifest?: string }) {
   const calls: GitCall[] = [];
   const git = (args: string[]) => {
     calls.push(args);
     if (args[0] === "fetch") return { status: opts.fetchStatus ?? 0, stdout: "", stderr: "" };
     // `git show origin/main:pnpm-lock.yaml`, which pins the layers: absent unless the test gives one.
+    if (args[0] === "show" && args[1] === "origin/main:layers.json") return opts.manifest === undefined ? { status: 128, stdout: "", stderr: "" } : { status: 0, stdout: opts.manifest, stderr: "" };
     if (args[0] === "show") return opts.lockfile === undefined ? { status: 128, stdout: "", stderr: "" } : { status: 0, stdout: opts.lockfile, stderr: "" };
     const paths = args.slice(args.indexOf("--") + 1);
     if (args[0] === "diff") return { status: opts.diffStatus ?? 0, stdout: opts.diffOut ?? "", stderr: "" };
@@ -1114,6 +1115,94 @@ test("#3845 the REAL checkout: the laid layer is at the tag main's lockfile pins
   assert.deepEqual(judged, { differing: [] }, "the layer this tree holds is the one its own lockfile pins (the install lays it: `prepare`)");
   const closure = importClosure(THIS, (file) => readFileSync(join(REPO, file), "utf8"));
   assert.ok(closure.some((file) => layerOwning(file) === LAYER), "positive control: the real program still imports the layer, so the judgment above is the one that matters");
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// #3914: #3506 makes `packages/control` a laid, untracked copy of `a11ign/control`, so the closure's OWN files would all read as
+// differing from `origin/main`. When `layers.json` declares `pinned.control` they are held to its pin (the tag main's `layers.json`
+// names), like #3845's layer; with none declared, which is every checkout today, nothing changes.
+// ---------------------------------------------------------------------------------------------------------
+
+const CONTROL_TAG = "v0.1.3";
+const CONTROL_PATH = "packages/control";
+const REAL_MANIFEST = JSON.parse(readFileSync(join(REPO, "packages/control/layers.json"), "utf8"));
+const manifestPinning = (tag: string) => JSON.stringify({ layers: {}, pinned: { control: { path: CONTROL_PATH, tag } } });
+const withControlPinned = { ...REAL_MANIFEST, pinned: { ...REAL_MANIFEST.pinned, control: { path: CONTROL_PATH, tag: CONTROL_TAG } } };
+const sourceOfControlOnly = (path: string) => (path === THIS ? 'import "./other.mjs";\n' : "");
+
+/** A checkout at `root` whose `packages/control` is laid at `laidTag` (`null`: laid with no `.layer-ref`), judged by the REAL `judgeLaidLayer`. */
+function checkLaidControl(opts: { laidTag: string | null; manifest?: string; manifestDeclares?: Record<string, unknown> }) {
+  const root = mkdtempSync(join(tmpdir(), "auto-off-3914-"));
+  try {
+    mkdirSync(join(root, CONTROL_PATH, "src"), { recursive: true });
+    if (opts.laidTag !== null) writeFileSync(join(root, CONTROL_PATH, ".layer-ref"), `${opts.laidTag}\n`);
+    const layers = layersFrom({ manifest: opts.manifestDeclares ?? withControlPinned, root });
+    const git = scriptedGit({ manifest: opts.manifest ?? manifestPinning(CONTROL_TAG) });
+    const { verdict } = checkAgainstMain({ now: 1, fetchedAt: null, git: git.git, readSource: sourceOfControlOnly, layers });
+    return { verdict, calls: git.calls };
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+test("#3914 a laid control at the tag main's layers.json pins PROCEEDS, and git is never asked about a file it does not track", () => {
+  const { verdict, calls } = checkLaidControl({ laidTag: CONTROL_TAG });
+  assert.deepEqual(verdict, { action: "proceed" }, "the defect: every closure file read as differing once control was laid");
+  assert.ok(calls.some((c) => c[0] === "show" && c[1] === "origin/main:layers.json"), "the pin is main's, not the working tree's (positive control: it was read)");
+  assert.ok(!calls.some((c) => c[0] === "diff" || c[0] === "ls-files"), "no core file is left, so git is not asked: a diff with no pathspec would read the whole tree");
+});
+
+test("#3914 a laid control at another tag REFUSES naming both tags; one with no .layer-ref is CANNOT_TELL", () => {
+  const behind = checkLaidControl({ laidTag: "v0.1.2" }).verdict as { action: string; reason: string; detail: string };
+  assert.deepEqual([behind.action, behind.reason], ["refuse", "stale-checkout"]);
+  assert.match(behind.detail, new RegExp(`${CONTROL_PATH} \\(layer control is laid at v0\\.1\\.2, main pins ${CONTROL_TAG}\\)`));
+
+  const unmarked = checkLaidControl({ laidTag: null }).verdict as { action: string; reason: string; detail: string };
+  assert.deepEqual([unmarked.action, unmarked.reason], ["refuse", "cannot-tell"]);
+  assert.match(unmarked.detail, /node scripts\/lay-layer\.mjs control/, "names the remedy");
+});
+
+test("#3914 a pin on main that cannot be read is CANNOT_TELL and says why, never the working tree's pin", () => {
+  const noManifest = checkAgainstMain({ now: 1, fetchedAt: null, git: scriptedGit({}).git, readSource: sourceOfControlOnly,
+    layers: layersFrom({ manifest: withControlPinned, root: REPO }) }).verdict as { reason: string; detail: string };
+  assert.deepEqual([noManifest.reason, noManifest.detail], ["cannot-tell", "origin/main's layers.json, which pins control, could not be read"]);
+  for (const [manifest, why] of [
+    ["not json", /not JSON/], [JSON.stringify({ layers: {} }), /declares no pinned layer control/],
+    [manifestPinning("main"), /not a v<semver> tag/],
+  ] as [string, RegExp][]) {
+    const verdict = checkLaidControl({ laidTag: CONTROL_TAG, manifest }).verdict as { reason: string; detail: string };
+    assert.equal(verdict.reason, "cannot-tell", manifest);
+    assert.match(verdict.detail, why);
+  }
+});
+
+test("#3914 with NO pinned.control declared (every checkout today) control's files go to git as before and layers.json is never read", () => {
+  const git = scriptedGit({ diffOut: "packages/control/src/other.mjs\n" });
+  const { verdict } = checkAgainstMain({ now: 1, fetchedAt: null, git: git.git, readSource: sourceOfControlOnly });
+  assert.deepEqual(verdict, { action: "refuse", reason: "stale-checkout", detail: "1 file differs: packages/control/src/other.mjs" });
+  assert.ok(git.calls.some((c) => c[0] === "diff" && c.includes("packages/control/src/other.mjs")), "positive control: the core's comparison ran");
+  assert.ok(!git.calls.some((c) => c[0] === "show"), "no pin was read: nothing is laid");
+  assert.equal(layerOwning("packages/control/src/other.mjs"), null);
+  assert.equal(layersFrom({ manifest: REAL_MANIFEST, root: REPO }).layerOwning("packages/control/src/other.mjs"), null);
+});
+
+test("#3914 layerOwning with pinned.control declared: control's paths are the layer's, a sibling sharing the prefix is not", () => {
+  const { layerOwning: owning, laidControl } = layersFrom({ manifest: withControlPinned, root: REPO });
+  assert.equal(owning(THIS), "control");
+  assert.equal(owning(CONTROL_PATH), "control");
+  assert.equal(owning("packages/control-extra/src/a.mjs"), null);
+  assert.equal(owning(FLEET_FILE), LAYER, "the separate layers are still theirs");
+  assert.deepEqual(laidControl(), { name: "control", path: CONTROL_PATH, dir: join(REPO, CONTROL_PATH) });
+});
+
+test("#3914 pinnedLayerTag reads the tag a pinned layer declares, on the REAL manifest too, and refuses what is not a v<semver> tag", () => {
+  assert.deepEqual(pinnedLayerTag(manifestPinning(CONTROL_TAG), "control"), { tag: CONTROL_TAG });
+  assert.deepEqual(pinnedLayerTag(JSON.stringify(REAL_MANIFEST), "lab"), { tag: REAL_MANIFEST.pinned.lab.tag }, "the real manifest's own pin reads");
+  assert.ok("refusal" in pinnedLayerTag(JSON.stringify(REAL_MANIFEST), "control"), "none declared today");
+  assert.ok("refusal" in pinnedLayerTag(JSON.stringify({ pinned: { control: { path: CONTROL_PATH } } }), "control"), "a declaration with no tag");
+  assert.ok("refusal" in pinnedLayerTag(JSON.stringify({ pinned: { control: { tag: "abc1234" } } }), "control"), "a sha is not a pin");
+  assert.ok("refusal" in pinnedLayerTag(JSON.stringify({ pinned: { constructor: {} } }), "constructor"), "an inherited key is not a declaration");
+  assert.ok("refusal" in pinnedLayerTag("[", "control"));
 });
 
 test("#3275 checkAgainstMain: a failed fetch, an unresolvable origin/main and an empty closure each REFUSE", () => {

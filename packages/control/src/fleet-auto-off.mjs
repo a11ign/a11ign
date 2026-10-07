@@ -71,6 +71,11 @@
  * `origin/main`'s lockfile names, which the laid tree's `.layer-ref` must equal (`judgeLaidLayer`). Same tag or refusal, naming
  * the layer; a layer that cannot be read is `cannot-tell`.
  *
+ * THE CLOSURE'S OWN FILES ARE A LAYER TOO, once `layers.json` declares `pinned.control` (#3506, #3914): `packages/control` is then a laid,
+ * untracked copy of `a11ign/control`, and every file of the closure would read as differing from `origin/main`, which no longer holds it.
+ * Those files are judged by the same rule, against the tag `origin/main`'s `layers.json` pins for `control`. With no `pinned.control`
+ * declared, which is every checkout until #3506 lands, nothing changes.
+ *
  * It fails CLOSED, the only direction auto-off may err in: a failed fetch, an unresolvable `origin/main`, an errored
  * diff or an empty closure each refuse (`CANNOT_TELL` is never `identical`). The fetch moves only the remote-tracking
  * ref, never the working tree, so it cannot race a running play; it is throttled to once a minute by a stamp in the
@@ -123,7 +128,7 @@ import { join, posix } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { sandboxGitEnv } from "../../worker-fleet/src/git-safe-env.mjs";
 import { requestJson } from "../../worker-fleet/src/worker-http.mjs";
-import { layerDeclaration, layerOwning, layerPinTag } from "./layer-checkouts.mjs";
+import { CONTROL_LAYER, laidControl, layerDeclaration, layerOwning, layerPinTag, pinnedLayerTag } from "./layer-checkouts.mjs";
 import { refuseUnknownFlags } from "../../worker-fleet/src/cli-flags.mjs";
 import { inventoryHosts } from "./fleet-discover.mjs";
 import { inventoryPathFor } from "./control-plane-fleet.mjs";
@@ -578,6 +583,9 @@ export function staleCheckoutVerdict({ differing, fetchOk, why }) {
  * @returns {string[] | null} `null` when `git` could not say
  */
 function filesDifferingFromMain(paths, git) {
+  // No pathspec makes `git diff` read the WHOLE tree: once control is laid (#3914) the closure holds no core file at all, and an
+  // unrelated difference anywhere in the repository would refuse a timer whose own files all match their pins.
+  if (paths.length === 0) return [];
   const diff = git(["diff", "--name-only", "origin/main", "--", ...paths]);
   const tracked = git(["ls-files", "--", ...paths]);
   if (diff.status !== 0 || tracked.status !== 0) return null;
@@ -590,6 +598,8 @@ function filesDifferingFromMain(paths, git) {
  * @typedef {{ name: string, dir: string, path: string, tag: string }} LayerAtItsPin a separate layer, where this host holds it, and the
  *   tag `origin/main`'s lockfile pins it at
  * @typedef {(layer: LayerAtItsPin) => { differing: string[] } | { cannotTell: string }} JudgeLayer
+ * @typedef {{ layerOwning: typeof layerOwning, layerDeclaration: typeof layerDeclaration, laidControl: typeof laidControl }} Layers where
+ *   a layer lives: injectable, because the real `layers.json` declares no `pinned.control` until #3506
  */
 
 /**
@@ -616,27 +626,47 @@ export function judgeLaidLayer({ name, dir, path, tag }) {
 }
 
 /**
- * The comparison with `origin/main`: the core's files by content, each separate layer's files by its pin.
+ * The `layers.json` `origin/main` holds. At the repository root, where #3506 moves it: `packages/control`, which holds it today, is
+ * the layer it will no longer track.
+ */
+const MANIFEST_ON_MAIN = "layers.json";
+
+/**
+ * The tag `origin/main` pins a layer at: a separate layer by its lockfile entry, the laid control by its declaration in `layers.json`.
  *
- * @param {{ paths: string[], git: Git, judgeLayer: JudgeLayer }} input
+ * @param {{ name: string, git: Git }} input
+ * @returns {{ tag: string } | { why: string }}
+ */
+function pinOnMain({ name, git }) {
+  const control = name === CONTROL_LAYER;
+  const file = control ? MANIFEST_ON_MAIN : "pnpm-lock.yaml";
+  const shown = git(["show", `origin/main:${file}`]);
+  if (shown.status !== 0) return { why: `origin/main's ${file}, which pins ${control ? name : "the layers"}, could not be read` };
+  const pin = control ? pinnedLayerTag(shown.stdout, name) : layerPinTag(shown.stdout, name);
+  return "refusal" in pin ? { why: `layer ${name} has no pin on main: ${pin.refusal}` } : pin;
+}
+
+/**
+ * The comparison with `origin/main`: the core's files by content, each layer's files (a separate layer's, and the control plane's own
+ * once it is laid) by its pin.
+ *
+ * @param {{ paths: string[], git: Git, judgeLayer: JudgeLayer, layers: Layers }} input
  * @returns {{ differing: string[] | null, why?: string }}
  */
-function compareWithMain({ paths, git, judgeLayer }) {
+function compareWithMain({ paths, git, judgeLayer, layers }) {
   /** @type {Map<string, string[]>} */
   const ofLayer = new Map();
   const ofCore = paths.filter((path) => {
-    const layer = layerOwning(path);
+    const layer = layers.layerOwning(path);
     if (layer !== null) ofLayer.set(layer, [...(ofLayer.get(layer) ?? []), path]);
     return layer === null;
   });
   const differing = filesDifferingFromMain(ofCore, git);
-  if (differing === null || ofLayer.size === 0) return { differing };
-  const lockfile = git(["show", "origin/main:pnpm-lock.yaml"]);
-  if (lockfile.status !== 0) return { differing: null, why: "origin/main's pnpm-lock.yaml, which pins the layers, could not be read" };
+  if (differing === null) return { differing };
   for (const name of ofLayer.keys()) {
-    const pin = layerPinTag(lockfile.stdout, name);
-    if ("refusal" in pin) return { differing: null, why: `layer ${name} has no pin on main: ${pin.refusal}` };
-    const { path, dir } = layerDeclaration(name);
+    const pin = pinOnMain({ name, git });
+    if ("why" in pin) return { differing: null, why: pin.why };
+    const { path, dir } = (name === CONTROL_LAYER ? layers.laidControl() : null) ?? layers.layerDeclaration(name);
     const judged = judgeLayer({ name, dir, path, tag: pin.tag });
     if ("cannotTell" in judged) return { differing: null, why: judged.cannotTell };
     differing.push(...judged.differing);
@@ -644,13 +674,16 @@ function compareWithMain({ paths, git, judgeLayer }) {
   return { differing: differing.sort() };
 }
 
+/** @type {Layers} */
+const REAL_LAYERS = { layerOwning, layerDeclaration, laidControl };
+
 /**
  * Is the checkout this program runs from the same, where it matters, as `origin/main`?
  *
- * @param {{ now: number, fetchedAt: number | null, git: Git, readSource: (path: string) => string, judgeLayer?: JudgeLayer }} where
+ * @param {{ now: number, fetchedAt: number | null, git: Git, readSource: (path: string) => string, judgeLayer?: JudgeLayer, layers?: Layers }} where
  * @returns {{ verdict: ReturnType<typeof staleCheckoutVerdict>, fetchedAt: number | null }}
  */
-export function checkAgainstMain({ now, fetchedAt, git, readSource, judgeLayer = judgeLaidLayer }) {
+export function checkAgainstMain({ now, fetchedAt, git, readSource, judgeLayer = judgeLaidLayer, layers = REAL_LAYERS }) {
   // A stamp from the future is a clock fault, not a fresh fetch.
   const fresh = fetchedAt !== null && fetchedAt <= now && now - fetchedAt < FETCH_THROTTLE_MS;
   const fetchOk = fresh || git(["fetch", "--quiet", "origin", "+refs/heads/main:refs/remotes/origin/main"]).status === 0;
@@ -661,7 +694,7 @@ export function checkAgainstMain({ now, fetchedAt, git, readSource, judgeLayer =
     try {
       const closure = importClosure(THIS_FILE, readSource);
       // This file imports plenty; a closure of just itself means the walk found nothing, which is not "no differences".
-      if (closure.length > 1) compared = compareWithMain({ paths: [...closure, ...RUN_BESIDE_THE_CODE], git, judgeLayer });
+      if (closure.length > 1) compared = compareWithMain({ paths: [...closure, ...RUN_BESIDE_THE_CODE], git, judgeLayer, layers });
     } catch {
       compared = { differing: null };
     }
