@@ -443,6 +443,67 @@ jobs:
           echo "::error::${{ steps.plan.outputs.blocked }} group(s) could not be decided; see the lines above. Nothing for them was moved."
           exit 1
 
+  # THE ACTION'S MAJOR TAG (#3948): `uses: a11ign/a11ign@v0` follows the version the promotion has qualified, so a user of the Action gets a fix
+  # once the fleet's qualification has passed and never on a `next` publish. It `needs` the promotion's SUCCESS and reads only what that job moved
+  # (`promoted`), so a red qualification, a wait and a `next` publish leave it alone. `contents: write` and nothing else: no `id-token` (the npm
+  # token stays in `promote`), and no checkout, so no repository code runs beside the write. The Action is the `a11ign` package, whose tag is
+  # `a11ign@<version>`; the major tag is `v<major>` (`v0` while the version is 0.x) and is the ONLY ref this job writes.
+  #
+  # THE PER-VERSION TAGS STAY IMMUTABLE: nothing here deletes, pushes or writes one. The tags are read with `git ls-remote --tags` and never
+  # assumed (the first move, and the major tag's absence before it, are that reading), and the log names the old target, the new target and the
+  # version on every run. THE TAG NEVER MOVES BACKWARDS: the version it follows is the highest per-version tag on its current commit, and a
+  # promotion that is not newer leaves it and says so. A tag it cannot account for, or a listing it cannot read, is red and moves nothing.
+  # A failed run is recovered by "re-run failed jobs", which keeps `promote`'s outputs. THE FIRST REAL RUN IS #3778's READING, not this row's.
+  promote-action-tag:
+    name: move the Action's major tag to the promoted version
+    needs: [promote]
+    if: ${{ needs.promote.result == 'success' }}
+    runs-on: ubuntu-latest
+    concurrency:
+      group: action-major-tag
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - name: Move v<major> to the commit of the promoted a11ign version's tag, or leave it and say why
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PROMOTED: ${{ needs.promote.outputs.promoted }}
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::CANNOT_TELL: $1. Nothing moved."; exit 1; }
+          version=$(jq -r '[.[] | .tag | select(startswith("a11ign@")) | ltrimstr("a11ign@")] | sort_by(split(".") | map(tonumber)) | last // empty' <<<"${PROMOTED:-[]}")
+          if [ -z "$version" ]; then
+            echo "no version of the Action was promoted; the major tag stays where it is"
+            exit 0
+          fi
+          major_tag="v${version%%.*}"
+          listing=$(git ls-remote --tags "$GITHUB_SERVER_URL/$GH_REPO" 'refs/tags/a11ign@*' 'refs/tags/v*') || fail "the tags of $GH_REPO could not be listed"
+          # One `name<TAB>commit` line per tag, the PEELED commit where the tag is annotated.
+          commits=$(awk -F'\t' '{ ref = $2; sub("^refs/tags/", "", ref); peeled = (ref ~ /\^\{\}$/); sub(/\^\{\}$/, "", ref); if (peeled || !(ref in c)) c[ref] = $1 } END { for (r in c) print r "\t" c[r] }' <<<"$listing")
+          commit_of() { awk -F'\t' -v t="$1" '$1 == t { print $2 }' <<<"$commits"; }
+          new=$(commit_of "a11ign@$version")
+          [ -n "$new" ] || fail "no tag a11ign@$version to point $major_tag at (promoted, and the tag job has not cut it)"
+          old=$(commit_of "$major_tag")
+          if [ -z "$old" ]; then
+            gh api -X POST "repos/$GH_REPO/git/refs" -f ref="refs/tags/$major_tag" -f sha="$new" >/dev/null
+            echo "$major_tag: was absent, now $new for $version (a11ign@$version)"
+            exit 0
+          fi
+          if [ "$old" = "$new" ]; then
+            echo "$major_tag: already at $new for $version; nothing to move"
+            exit 0
+          fi
+          followed=$(awk -F'\t' -v c="$old" '$2 == c && ($1 ~ /^a11ign@[0-9]+\.[0-9]+\.[0-9]+$/ || $1 ~ /^v[0-9]+\.[0-9]+\.[0-9]+$/) { n = $1; sub(/^a11ign@/, "", n); sub(/^v/, "", n); print n }' <<<"$commits" | sort -V | tail -n1)
+          [ -n "$followed" ] || fail "$major_tag is at $old, which no per-version tag names, so the version it follows is unknown"
+          if [ "$version" = "$followed" ] || ! printf '%s\n%s\n' "$followed" "$version" | sort -V -C; then
+            echo "the major tag never moves backwards: a promotion of $version leaves $major_tag at $old, which follows $followed"
+            exit 0
+          fi
+          gh api -X PATCH "repos/$GH_REPO/git/refs/tags/$major_tag" -f sha="$new" -F force=true >/dev/null
+          echo "$major_tag: was $old (follows $followed), now $new for $version (a11ign@$version)"
+
   # WHEN `latest` MOVED, recorded where `dora` reads it with no token (the header). The only job here holding `contents: write` for this,
   # and it runs no repository code: no checkout, `gh` and `jq`. The line is appended once (a re-run finds it and leaves the notes alone), and
   # `a11ign`'s Release is marked the latest Release only now.
