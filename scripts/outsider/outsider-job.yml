@@ -92,20 +92,23 @@ jobs:
       pull-requests: write         # for the PR comment below; omit it and the report still runs, only quieter
     steps:
       - uses: actions/checkout@v7
-      - uses: a11ign/a11ign@11ac493646c4cbb2147bcc08f053a2255f18c823
-        # Pinned to v0.1.0, the first tagged release. Use the full commit SHA instead if your CI must
-        # not move even across a release.
+      - uses: a11ign/a11ign@890cd490276d16102b3f371007951a24942950da   # the commit of the release tagged a11ign@0.3.0
+        # Pinned to the full 40-character commit of release 0.3.0, so your CI does not move when a newer
+        # one is published. `v0.1.0` predates the `summary-md` output used below.
         id: a11ign
         with:
           url: https://www.w3.org/WAI/demos/bad/before/home.html
           task: Find the main navigation and reach the survey.
-      # Keep the evidence: the full result, including the transcript behind every finding. Guarded on the
-      # output existing, so a run that failed does not also fail the upload.
+      # Keep the evidence: the full result, including the transcript behind every finding, and the rendered
+      # report beside it (`summary-md`). Guarded on the output existing, so a run that failed does not also
+      # fail the upload.
       - uses: actions/upload-artifact@v7
         if: always() && steps.a11ign.outputs.result-json != ''
         with:
           name: a11ign-result
-          path: ${{ steps.a11ign.outputs.result-json }}
+          path: |
+            ${{ steps.a11ign.outputs.result-json }}
+            ${{ steps.a11ign.outputs.summary-md }}
           if-no-files-found: warn
   # <<< README's job ends
 
@@ -136,7 +139,7 @@ jobs:
           - docs/try-it.md: "The other route: run it from the repository", and the authenticated run behind a login
 
           ### Substitutions: every line that differs from README.md's fence
-          - README.md line 178: `- uses: a11ign/a11ign@v0.1.0` became `- uses: a11ign/a11ign@<the release's full commit sha, as pinned on that line of this file>`
+          - README.md line 178: `- uses: a11ign/a11ign@890cd490276d16102b3f371007951a24942950da   # the commit of the release tagged a11ign@0.3.0` became `- uses: a11ign/a11ign@<the release's full commit sha, as pinned on that line of this file>   # the commit of the release tagged a11ign@0.3.0`
           - README.md line 183: `url: https://example.com/contact` became `url: https://www.w3.org/WAI/demos/bad/before/home.html`
           - README.md line 184: `task: Send an enquiry` became `task: Find the main navigation and reach the survey.`
           - added: `needs: [pin]` under the job's key, so it waits for the pin check
