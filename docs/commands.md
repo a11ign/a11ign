@@ -43,9 +43,9 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node scripts/registry-consumer-gate.mjs` — install what is PUBLISHED (a11ign from the registry) into an empty directory and refuse what a consumer could not run
 - `node scripts/release-gate-scope.mjs` — warn which release:gate stages release:gate:ci does not run, and how many
 - `node scripts/release-print-versions.mjs` — print the version each published package's manifest now holds
+- `node scripts/release-promote.mjs` — decide which versions published to `next` become `latest`, and print the plan release.yml's `promote` job carries out
 - `node scripts/release-publish-rehearsal.mjs` — rehearse the release's pnpm-to-npm publish hand-off for every published package, publishing nothing
 - `node scripts/release-reads-qualification.mjs` — read the fleet part's `qualification` commit status for the release's sha, and say proceed, wait, rerun or regression
-- `node scripts/release-reuses-verdict.mjs` — does the release job need to run coverage itself, or can it reuse nightly's verdict for this sha
 - `node scripts/run.mjs` — the one-line dispatcher: run a named command from commands.mjs, or --list every command declared
 - `node scripts/selection-skipped.mjs` — for a CI run id, whether `rstest --changed` skipped the test that failed it; for a merge time, the first-run pass rate 14 days either side
 - `node scripts/spotlight-exclude.mjs` — stop Spotlight indexing every git worktree on this machine

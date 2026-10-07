@@ -44,13 +44,17 @@
 # Removing any of the seven is a deliberate act. Do not remove them in the same change that changes what starts this.
 #
 # THE GUARDS ABOUT WHAT IS PUBLISHED ALL STAY, and are steps of the `guards` job that `release` NEEDS (the called workflow takes
-# no steps of the caller's, so a guard is a job it waits for): the coverage threshold, the part of `release:gate` a runner can
+# no steps of the caller's, so a guard is a job it waits for): the part of `release:gate` a runner can
 # prove, `consumer-gate.yml`'s currency, the packed-install check (`gate:isolation`), the manifest-repository check, the hold on
 # packages that have left (#3126), the access read-back, the refusal to publish older than the registry (#3167), the npm floor and
 # the provenance request. `release-publishes-to-next.test.ts` pins that each of them is still here, and
 # `release-publishes-only-what-stays.test.ts` pins the hold. THEY RUN ON THE `main` TREE, NOT ON THE RELEASE COMMIT (that commit
 # exists only inside the called workflow, after them), which is why a version bump they would have seen on `main` under the
 # version pull request is not what they read now.
+#
+# THE WHOLE-REPO COVERAGE FLOOR IS NOT A RELEASE GUARD (#3999). It is enforced on the pull request, in `ci/ts`'s one test run, where
+# its author can act, and `nightly.yml` keeps its own job for a regression a package-scoped run could not see. A release run found
+# a wrong floor twice (#3993), where nobody who caused it could act. `release-publishes-to-next.test.ts` pins that it is NOT here.
 #
 # TWO CHANNELS, AND THE FLEET'S VERDICT DECIDES THE SECOND (#3946 and #3947, outcome 3 of #3911: release channels and promotion by
 # evidence).
@@ -207,21 +211,6 @@ jobs:
             console.log(JSON.stringify(readings));
           ')
           echo "readings=$readings" >> "$GITHUB_OUTPUT"
-
-      # THE WHOLE-REPO COVERAGE THRESHOLD, HERE AND ON A NIGHTLY SCHEDULE (`nightly.yml`'s `coverage` job). Nothing else on the
-      # release path re-runs the full suite, so a threshold regression a package-scoped PR run could not see would otherwise ship.
-      # #1308: BUT NOT TWICE FOR THE SAME SHA. This step reads nightly's own `coverage` JOB conclusion for the EXACT sha being
-      # released; no verdict for this sha, or a failed one, and it runs coverage exactly as before.
-      - id: coverage-verdict
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: node scripts/release-reuses-verdict.mjs --sha=${{ github.sha }}
-
-      - name: Coverage — the whole-repo threshold
-        if: steps.coverage-verdict.outputs.reuse != 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: pnpm run coverage
 
       # The full gate, not a subset. NOT `continue-on-error`: a release that ships past its own gate is the thing this file exists
       # to prevent. `release:gate:ci` is the part a runner CAN prove: the artefact is safetensors, the weights have a changelog
