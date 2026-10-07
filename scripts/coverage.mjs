@@ -45,7 +45,9 @@ const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const REPORTS_DIRECTORY = join(ROOT, "coverage", "rstest");
 const MERGED_REPORT = join(REPORTS_DIRECTORY, "coverage-final.merged.json");
 const TEST_GLOB = "packages/*/src/**/*.test.ts";
-const MIN_TEST_FILES = 300;
+// Measured 2026-10-07 at e31b5ec69: the guard's own glob matched 140 files (it was 300 before the packages left the workspace, #3991).
+// Set a little under the count so ordinary deletions pass, while a typo'd or moved glob (which matches ~0) is still refused.
+const MIN_TEST_FILES = 130;
 
 /**
  * Which of `totals`' metrics read below `c8rc`'s own threshold for that metric, in c8's own error wording --
