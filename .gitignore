@@ -4,7 +4,7 @@
 # what the documented route for a fresh worktree PRODUCES. Measured on the agent host 2026-09-22: 118 of
 # 118 worktrees had a symlinked `node_modules` and none of them was ignored, and one of them had already
 # committed it. The slash-less form is strictly WIDER -- it still covers the real directory -- so there is
-# nothing to weigh up. `packages/lab/src/packaging/gitignore-covers-symlinks.test.ts` drives every entry
+# nothing to weigh up. `packages/guards/src/gitignore-covers-symlinks.test.ts` (the core's own, #3926) drives every entry
 # below through a real `git check-ignore`, as a symlink and as a directory, and fails on a new `name/`.
 node_modules
 # THE OTHER MANAGER'S LOCKFILES (#2897, row 10 of 10 of "Finish the move to pnpm"). This repository is pnpm's, so
