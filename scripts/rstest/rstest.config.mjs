@@ -139,6 +139,7 @@ const READ_FILE_TRIGGERS = [
   "docs/try-it.md",
   "docs/weekly-review.md",
   "examples/workflow.yml",
+  "layers.json",
   "packages/README.md",
   "packages/cli/README.md",
   "packages/cli/src/auth/fixtures/spelled-out-transcript.json",
