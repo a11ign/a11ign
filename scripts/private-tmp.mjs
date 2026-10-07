@@ -31,7 +31,7 @@
  * REMOVAL IS IN SMALL CALLS: one `unlink` or `rmdir` per entry, depth first, never one `rm -r` of a large tree, because the walk of a large tree is what locked
  * the kernel. What it cannot remove it records and throws at the end, after trying the rest.
  */
-import { accessSync, chmodSync, constants, lstatSync, mkdirSync, mkdtempSync, opendirSync, rmdirSync, unlinkSync } from "node:fs";
+import { accessSync, chmodSync, constants, lstatSync, mkdirSync, mkdtempSync, opendirSync, rmdirSync, statSync, unlinkSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { basename, isAbsolute, join, relative } from "node:path";
@@ -168,14 +168,17 @@ export function privateRunRoot({ home = homedir(), env = process.env } = {}) {
 /** @param {{ preferred: string, env: NodeJS.ProcessEnv, cause: unknown }} refused */
 function callersWritableTmpdir({ preferred, env, cause }) {
   const callers = env.TMPDIR;
-  const refusal = `private-tmp: no place to make a run directory: ${preferred} cannot be made or written, and TMPDIR is ${isShared(callers) ? `${callers ? `the shared ${callers}` : "unset"}, which is not a private choice` : `${callers}, which is not writable either`}. Set TMPDIR to a writable directory of your own, e.g. TMPDIR=/tmp/<dir>`;
+  const refusal = `private-tmp: no place to make a run directory: ${preferred} cannot be made or written, and TMPDIR is ${isShared(callers) ? `${callers ? `the shared ${callers}` : "unset"}, which is not a private choice` : `${callers}, which is not a writable directory either`}. Set TMPDIR to a writable directory of your own, e.g. TMPDIR=/tmp/<dir>`;
   if (isShared(callers)) throw new Error(refusal, { cause });
+  const root = /** @type {string} */ (callers);
   try {
-    accessSync(/** @type {string} */ (callers), constants.W_OK);
+    // A writable FILE passes `W_OK` and fails later in `mkdtemp` with ENOTDIR, so the caller's path must be a directory as well.
+    if (!statSync(root).isDirectory()) throw new Error(`${root} is not a directory`);
+    accessSync(root, constants.W_OK);
   } catch {
     throw new Error(refusal, { cause });
   }
-  return /** @type {string} */ (callers);
+  return root;
 }
 
 /**

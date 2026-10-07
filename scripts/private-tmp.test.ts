@@ -201,6 +201,28 @@ test("#3932 controls: a read-only home with no usable TMPDIR refuses once, namin
   }
 });
 
+test("#3932 controls: a TMPDIR that is a writable FILE, or a cache directory that exists but is read-only, is refused or fallen back from rather than returned", () => {
+  const home = tempDir("private-tmp-file-callers-home-");
+  const area = tempDir("private-tmp-file-callers-");
+  const file = join(area, "a-file");
+  writeFileSync(file, "writable, and not a directory");
+  chmodSync(home, READ_ONLY_MODE);
+  try {
+    assert.throws(() => privateRunRoot({ home, env: { TMPDIR: file } }), /no place to make a run directory/);
+  } finally {
+    chmodSync(home, WRITABLE_MODE);
+  }
+  // The cache directory exists (so `mkdir -p` succeeds) and cannot be written: only the write check refuses it, as in the sandbox where the cache is on a read-only mount.
+  const cache = join(home, PRIVATE_TMP_ROOT);
+  mkdirSync(cache, { recursive: true });
+  chmodSync(cache, READ_ONLY_MODE);
+  try {
+    assert.equal(privateRunRoot({ home, env: { TMPDIR: area } }), area, "an existing but unwritable cache falls back to the caller's directory");
+  } finally {
+    chmodSync(cache, WRITABLE_MODE);
+  }
+});
+
 test("#3932 controls: a failure of the home that is not an access error is rethrown, not answered with the caller's TMPDIR", () => {
   const home = tempDir("private-tmp-longname-home-");
   const callers = tempDir("private-tmp-callers-longname-");
