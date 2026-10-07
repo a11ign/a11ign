@@ -1,5 +1,33 @@
 # a11ign
 
+## 0.3.2
+
+### Patch Changes
+
+- 9ff9120: The README now states the measured `next`-to-`latest` time (3.4 hours on one release), from a dated reading.
+
+## 0.3.1
+
+### Patch Changes
+
+- 22c28a4: The remediation text for `auth-login-failed` now says `expect-not-met` is also what a page that never loaded ends as, and that the message's step and `could not be loaded (...)` line say which of the two it was, so a reader is no longer sent to fix an `expect:` that was never evaluated (#4015). The set of login-failure reasons is unchanged.
+
+## 0.3.0
+
+### Minor Changes
+
+- f2e2697: `exports` and `bin` now point at `.mjs` (and `.d.ts` for types) where they pointed at `.js`, because the packages are built by Rslib instead of `tsc --build`: a deep import of `<package>/dist/<file>.js` stops resolving, and the CLI's `bin` is `./dist/cli.mjs`, so this is `minor` (a breaking change on a 0.x package) for each of the four. The CLI is also now one bundle that inlines `@a11ign/documents` (and the `pdf-lib` behind it) and `yaml`, so a consumer no longer installs them (#3580, ADR 0043).
+
+### Patch Changes
+
+- 744f3c0: Declares `@a11ign/screenreader-fleet` as `^0.3.0`, where it was the exact `0.1.4`: the fleet package is no longer a sibling in the workspace but a package released from its own repository, and the isolation gate refuses an exact pin to a non-sibling (#3504). Nothing else in the package changed.
+- 176075d: The README now states which version `npx a11ign` runs (`latest`, or `a11ign@next` for the newest) and how long a merged fix took to reach `next`, from a dated reading.
+- 6029cb6: Consumes `@a11ign/screenreader-fleet` `^0.5.1` where it held `^0.3.0` across four releases, in the root, `cli`, `guards` and `lab` manifests, with the lockfile at `0.5.1` (#3803). What each release changes for the core: 0.4.0 removes `a11ign-worker-deploy`, so the root's `worker:deploy` script, whose target `deploy-worker.mjs` is no longer laid, is removed with it (`fleet:deploy` is the deploy); 0.4.1 and 0.4.2 stop `a11ign-doctor`, `a11ign-worker-compare` and `fleet-env` resolving monorepo paths from inside an installed package, and the core runs them from the laid copy at the monorepo path, so nothing changes for it; 0.5.0 replaces `expectedWorkerCode()` with the async `resolveExpectedWorkerCode({ checkoutRoot })`, which hashes the layer clone when there is one, and `worker-code-check.test.ts`, the one consumer, asks the new function (#3781); 0.5.1 makes `doctor`'s `dist-freshness` read `missingExportTargets` instead of asking `tsc --build --dry` (#3810's fleet half).
+- Updated dependencies [f2e2697]
+  - @a11ign/evidence@0.3.0
+  - @a11ign/judge@0.3.0
+  - @a11ign/scorer@0.3.0
+
 ## 0.2.7
 
 ### Patch Changes
