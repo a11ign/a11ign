@@ -50,7 +50,6 @@ const needsOf = (workflow: Workflow): string[] => [workflow.jobs?.release?.needs
 
 /** A guard that stays (item 3 of the row): its name, and how the PARSED `guards` job shows it is still there. */
 const GUARDS_THAT_STAY: readonly { name: string; present: (workflow: Workflow) => boolean }[] = [
-  { name: "the whole-repo coverage threshold", present: (w) => runsOf(w, "guards").some((r) => /pnpm run coverage\b/.test(r)) },
   { name: "release:gate:ci", present: (w) => runsOf(w, "guards").some((r) => /pnpm run release:gate:ci\b/.test(r)) },
   { name: "the consumer-gate currency check", present: (w) => runsOf(w, "guards").some((r) => /generate-consumer-gate\.mjs --check/.test(r)) },
   { name: "the packed-install check", present: (w) => runsOf(w, "guards").some((r) => /pnpm run gate:isolation\b/.test(r)) },
@@ -62,8 +61,11 @@ const GUARDS_THAT_STAY: readonly { name: string; present: (workflow: Workflow) =
   { name: "the provenance request", present: (w) => stepsOf(w, "guards").some((s) => s.env?.NPM_CONFIG_PROVENANCE === "true" && /release-publish-rehearsal\.mjs/.test(s.run ?? "")) },
 ];
 
-/** Item 3 of #3946 names this many guards that are steps of `guards`; the table may grow past it, never under. */
-const GUARDS_NAMED_BY_THE_ROW = 10;
+/**
+ * Item 3 of #3946 named ten guards that are steps of `guards`; #3999 moved the coverage floor to the pull request, so nine
+ * remain. The table may grow past it, never under.
+ */
+const GUARDS_NAMED_BY_THE_ROW = 9;
 
 /** The called workflows `release` waits for, which are guards run as jobs. */
 const JOBS_THAT_STAY = ["action-smoke", "capture-regression", "consumer-gate", "guards"] as const;
@@ -75,6 +77,7 @@ function refusals(text: string): string[] {
     ...verdictOnThePublishPath(workflow),
     ...stageRefusals(workflow),
     ...guardRefusals(workflow),
+    ...coverageRefusals(workflow),
   ];
 }
 
@@ -99,6 +102,13 @@ function guardRefusals(workflow: Workflow): string[] {
     else if (!needsOf(workflow).includes(job)) found.push(`\`release\` no longer needs the guard job ${job}`);
   }
   return found;
+}
+
+/** #3999: the whole-repo coverage floor is the pull request's (`ci/ts`), so a release run that re-measures it, or reads nightly's verdict, is back. */
+function coverageRefusals(workflow: Workflow): string[] {
+  return Object.entries(workflow.jobs ?? {}).flatMap(([name, job]) => (job.steps ?? [])
+    .filter((step) => /pnpm run coverage\b|release-reuses-verdict/.test(step.run ?? "") || step.id === "coverage-verdict")
+    .map(() => `the whole-repo coverage floor is back on the release path, in ${name}`));
 }
 
 function verdictOnThePublishPath(workflow: Workflow): string[] {
@@ -134,7 +144,7 @@ test("the real release.yml publishes to `next`, with the fleet verdict off the p
 });
 
 test("positive control: the checker is not vacuous (the table is non-empty and the unbroken file is the only thing it accepts)", () => {
-  assert.ok(GUARDS_THAT_STAY.length >= GUARDS_NAMED_BY_THE_ROW, "item 3 of the row names ten guards that are steps of `guards`");
+  assert.ok(GUARDS_THAT_STAY.length >= GUARDS_NAMED_BY_THE_ROW, "#3999 leaves nine of item 3's ten guards as steps of `guards`");
   assert.ok(refusals(brokenAs((w) => { delete w.jobs!.release.with!["dist-tag"]; })).length > 0);
 });
 
@@ -172,6 +182,13 @@ test("the `qualification-row` job back, and waited for by `release`, is REFUSED"
     workflow.jobs!.release.needs = [...needsOf(workflow), "qualification-row"];
   });
   assert.deepEqual(refusals(text), ["the `qualification-row` job exists", "`release` waits for `qualification-row`"]);
+});
+
+test("the coverage run, or nightly's verdict for it, back in `guards` is REFUSED, naming the job (#3999)", () => {
+  assert.deepEqual(refusals(brokenAs((w) => { w.jobs!.guards.steps!.push({ run: "pnpm run coverage" }); })),
+    ["the whole-repo coverage floor is back on the release path, in guards"]);
+  assert.deepEqual(refusals(brokenAs((w) => { w.jobs!.guards.steps!.push({ id: "coverage-verdict", run: "node scripts/release-reuses-verdict.mjs --sha=x" }); })),
+    ["the whole-repo coverage floor is back on the release path, in guards"]);
 });
 
 test("a `stage` call is REFUSED, and the file names the job it is in", () => {

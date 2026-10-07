@@ -41,6 +41,10 @@ on:
         description: "Run the TypeScript unit suite at all. Off for ci.yml's python job, which never ran any TS tests of its own."
         type: boolean
         default: false
+      run-coverage:
+        description: "Run the whole suite UNDER COVERAGE (`pnpm run coverage`, which fails on a total under .c8rc.json's thresholds) instead of `pnpm run test:all`: the same tests in the same single run. On for ci.yml's ts job (#3999); off for trunk's trunkGate. Needs run-ts-tests."
+        type: boolean
+        default: false
       run-python-tests:
         description: "Run the Python setup + pytest suite. On for ci.yml's python job and trunk's trunkGate; off for ci.yml's ts job, which never touched Python."
         type: boolean
@@ -117,6 +121,11 @@ jobs:
           echo "rstest build cache: ${{ steps.rstest-build-cache.outputs.cache-hit == 'true' && 'HIT' || 'MISS' }}"
           files=$( (find node_modules/.cache -path 'node_modules/.cache/rstest-*' -type f 2>/dev/null || true) | wc -l)
           echo "files under node_modules/.cache/rstest-* before the tests: $files"
+      # THE COVERAGE FLOOR IS ENFORCED HERE, ON THE PULL REQUEST, IN THE SAME RUN (#3999): `run-coverage` swaps `test:all` for `pnpm run
+      # coverage`, which runs the SAME glob under rstest with coverage and exits non-zero on a total under `.c8rc.json`'s thresholds, so
+      # a PR that moves the floor is red where its author can act. It used to be found only by `release.yml` and `nightly.yml`, after
+      # the merge (#3993: a wrong floor read by two release runs, where nobody who caused it could act). Measured locally, same
+      # tree, CI=1: `test:all` 47.9 s, `coverage` 48.8 s wall; the CI delta is quoted in #3999's PR.
       # THE WHOLE SUITE, for every caller (#3573, chairman via ceo, 2026-10-04): the PR `ts` job used to run a hand-built
       # selection of test files and trunk-guard ran everything; one answer now, because `rstest run --changed` is the only
       # selector left and it runs locally, in `verify`. Never a per-package slice: every merge needs the full answer regardless
@@ -130,7 +139,7 @@ jobs:
         # the org's 373 tests live in agent-org/guards/lab. "Unscoped" means every merge to main gets the
         # full answer, so it must be the glob that covers every package -- `test:ts` here would drop two
         # thirds of the suite and still read green, which is the exact shape this job exists to prevent.
-        run: pnpm run test:all
+        run: ${{ inputs.run-coverage && 'pnpm run coverage' || 'pnpm run test:all' }}
       # #1319: A CACHE THAT IS NEVER WRITTEN RESTORES NOTHING AND STILL READS GREEN. rstest ran above with its build cache
       # on, since CI is set, so the cache directory must now hold files. An empty one fails the job rather than leaving
       # the HIT or MISS line to describe a cache that does not exist. No workflow expressions, so

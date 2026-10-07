@@ -29,16 +29,18 @@ name: ci
 # multiplying the "a required check with no run blocks merge forever" exposure `gate` exists to remove. And
 # enabling the merge queue itself (a ruleset) is `ceo`'s to authorise, not a code change at all.
 #
-# THE `ts` JOB NO LONGER CARRIES COVERAGE OR ISOLATION, AND ITS TESTS NOW RUN THE WHOLE SUITE (below) -- chairman's
+# THE `ts` JOB NO LONGER CARRIES ISOLATION, AND ITS TESTS NOW RUN THE WHOLE SUITE (below) -- chairman's
 # follow-up, 2026-09-06, measuring `ci/ts` at 269s on a one-package PR (unit tests 84s, then a 154s step
 # running coverage/rules-check/scorer:verify/gate:isolation over the ENTIRE repository regardless of what
-# the PR actually touched). Budget dropped from four minutes to sixty seconds the same day. Two changes:
+# the PR actually touched). Budget dropped from four minutes to sixty seconds the same day. Three changes:
 #
-#   - Coverage (`.c8rc.json`'s whole-repo 78% threshold) and `gate:isolation` (every package's tarball is
-#     installable) left the PR job entirely -- see `release.yml` (gate:isolation, via `release:gate:ci`,
-#     already there) and `coverage.yml` (new: nightly schedule + release-time, threshold intact). Neither
-#     answers "did THIS PR's diff regress"; both answer "is the repository as a whole still sound", which
-#     does not need re-asking on every commit of every PR.
+#   - `gate:isolation` (every package's tarball is installable) left the PR job entirely -- see `release.yml`
+#     (via `release:gate:ci`, already there). It does not answer "did THIS PR's diff regress"; it answers "is
+#     the repository as a whole still sound", which does not need re-asking on every commit of every PR.
+#   - COVERAGE CAME BACK, AS THE UNIT-TEST STEP ITSELF (#3999, chairman via ceo, 2026-10-07): the whole suite runs
+#     every time since #3573, so the second full run that was the 154 s is gone and `.c8rc.json`'s whole-repo
+#     floor is measured IN the one run (`run-coverage` in `reusable-build-test.yml`). The release path no longer
+#     re-runs it; `nightly.yml`'s `coverage` job stays, for a regression a package-scoped run could not see.
 #   - The rules fitness gate (`pnpm run rules-check`) is now its own job below, `rulesFitness`, gated on
 #     `packages/judge` or `packages/evidence` having changed -- the only two paths that can move its
 #     answer, per `ci-changed.mjs`'s `rulesFitness` category.
@@ -195,6 +197,7 @@ jobs:
       run-lint-typecheck: true
       run-docs-coverage: true
       run-ts-tests: true
+      run-coverage: true
 
   # A1 (#452): CALLS `reusable-build-test.yml` for the one thing this job ever needed from it -- a real
   # `dist/`, since `@a11ign/screenreader-fleet/cli-flags` resolves through `package.json`'s `exports` map and a
