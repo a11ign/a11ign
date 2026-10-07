@@ -493,7 +493,7 @@ jobs:
   promote-action-tag:
     name: move the Action's major tag to the promoted version
     needs: [promote]
-    if: ${{ needs.promote.result == 'success' }}
+    if: ${{ !cancelled() && needs.promote.result == 'success' }}
     runs-on: ubuntu-latest
     concurrency:
       group: action-major-tag

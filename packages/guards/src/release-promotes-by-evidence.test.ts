@@ -741,3 +741,33 @@ test("the header of release.yml states the two channels and when `latest` moves 
   assert.match(header, /`latest` MOVES ONLY/);
   assert.doesNotMatch(header, /nothing here runs it/);
 });
+
+/** Every job with `ancestor` somewhere above it in `needs`, however many hops away (#4021). */
+function downstreamOf(workflow: Workflow, ancestor: string): string[] {
+  const jobs = workflow.jobs ?? {};
+  const reaches = (name: string, seen: Set<string>): boolean => [jobs[name]?.needs ?? []].flat().some((parent) => {
+    if (parent === ancestor) return true;
+    if (seen.has(parent)) return false;
+    return reaches(parent, seen.add(parent));
+  });
+  return Object.keys(jobs).filter((name) => reaches(name, new Set()));
+}
+
+/** A job with no status function gets an implicit `success()`, false when ANY ancestor was skipped, and `release` is skipped on a `status` run. */
+const missingCancelled = (workflow: Workflow) =>
+  downstreamOf(workflow, "release").filter((name) => !/(^|[^\w.])!cancelled\(\)/.test(workflow.jobs![name].if ?? ""));
+
+test("positive control: the jobs below `release` are the promotion path, and `promote-action-tag` is one of them (#4021)", () => {
+  const below = downstreamOf(realWorkflow(), "release");
+  for (const name of ["decide", "promote", "promote-action-tag", "promotion-record"]) assert.ok(below.includes(name), `${name} not found in ${below}`);
+  assert.ok(!below.includes("guards"), "a job ABOVE release is no descendant of it");
+});
+
+test("every job below `release` states `!cancelled()`, else a `status` run skips it with `release` (#4021, run 37683854478)", () => {
+  assert.deepEqual(missingCancelled(realWorkflow()), []);
+});
+
+test("REFUSED: the major-tag job loses its `!cancelled()`, the defect of run 37683854478", () => {
+  const broken = parse(brokenAs((w) => { w.jobs!["promote-action-tag"].if = "${{ needs.promote.result == 'success' }}"; })) as Workflow;
+  assert.deepEqual(missingCancelled(broken), ["promote-action-tag"]);
+});
