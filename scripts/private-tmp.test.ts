@@ -34,6 +34,12 @@ const BEYOND_NAME_MAX = 300;
 test("this run's TMPDIR is a subdirectory of a private run-<id> under ~/.cache/a11ign/tmp, and it exists", () => {
   const fileDir = process.env.TMPDIR ?? "";
   assert.equal(tmpdir(), fileDir, "os.tmpdir() follows TMPDIR, which is how every mkdtempSync(join(tmpdir(), ...)) in the suite lands inside it");
+  if (!process.env[RUN_ENV]) {
+    // A TMPDIR the caller set is the caller's and `setup` made no run (the last test below reads that): `verify` hands its own run down, and a sandbox that can
+    // write only /tmp hands one in (#3932). The ordinary run sets RUN_ENV for every worker, so the reading below is still made wherever the config made the run.
+    assert.ok(existsSync(fileDir) && fileDir !== "/tmp", `a caller's TMPDIR is a real directory of their own: ${fileDir}`);
+    return;
+  }
   const runDir = dirname(fileDir);
   assert.equal(dirname(runDir), join(homedir(), PRIVATE_TMP_ROOT));
   assert.match(basename(runDir), /^run-/);
