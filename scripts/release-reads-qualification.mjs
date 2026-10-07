@@ -64,11 +64,13 @@ export const RUNNER_ONLY_PACKAGES = ["scorer", "judge", "guards", "cli"];
 /** @type {string[]} */
 export const PRIVATE_PACKAGES = [];
 
-// The wall-clock after which a wait is a problem to raise rather than a state to sit in: #3132's worst observed time
-// to a CLEARED verdict -- 46:15 to the first verdict plus 45:02 for one re-run = 91:17, rounded up. An observed
-// maximum over ten runs, NOT a guarantee, and it leaves out the wake-to-serving time of a sleeping fleet (#2656),
-// which #3132 did not time. So an overdue wait is a prompt to look, and never a licence to skip.
-export const WAIT_BOUND_MINUTES = 92;
+// The wall-clock after which a wait is a problem to raise rather than a state to sit in: the longest first verdict
+// measured, doubled for one re-run, rounded up. That is 54:24 (`pending` 13:06:02Z to `success` 14:00:26Z on sha
+// 86b33f0d9cf3, read by `orchestrator` on #3289: 47 s dispatch, 53:32 of captures) x 2 = 108:48 -> 109. It replaces
+// #3132's 46:15 + 45:02 = 91:17 -> 92, which the first run after the lab became a layer exceeded. One run, an observed
+// maximum and NOT a guarantee, and it leaves out the wake-to-serving time of a SLEEPING fleet (#2656): neither #3132
+// nor the 54:24 run timed one (the worker was already up). So an overdue wait is a prompt to look, never a licence to skip.
+export const WAIT_BOUND_MINUTES = 109;
 
 // Paths a change to which cannot change what the fleet part reads. EVERYTHING ELSE counts as read: the list is of
 // exemptions, so a path nobody thought of invalidates the verdict rather than inheriting it. The first four are
@@ -289,7 +291,7 @@ export function rowToFile({ outcome, reason, overdue }, releaseSha, runUrl) {
   }
   if (outcome === "wait" && overdue) {
     return { title: `release ${releaseSha}: qualification wait overdue`, labels: ["qualification-overdue", "answer:orchestrator"],
-      body: `Release sha: ${releaseSha}\n${found}\nNo verdict inside the ${WAIT_BOUND_MINUTES} minute bound (#3132's worst observed time to a CLEARED verdict, a measured maximum and not a guarantee): ${reason}\n\n${stop} The writer of the \`${QUALIFICATION_CONTEXT}\` status is #3289, and until it exists every real release lands here. Once the lab has posted, re-run the failed jobs of the run.\n` };
+      body: `Release sha: ${releaseSha}\n${found}\nNo verdict inside the ${WAIT_BOUND_MINUTES} minute bound (a first verdict plus one re-run at the longest first verdict measured, 54:24 on #3289: a measured maximum and not a guarantee): ${reason}\n\n${stop} The writer of the \`${QUALIFICATION_CONTEXT}\` status is #3289, and until it exists every real release lands here. Once the lab has posted, re-run the failed jobs of the run.\n` };
   }
   return null;
 }
