@@ -17,7 +17,11 @@
 // FOUR OUTCOMES, as the decider says them: `proceed` promotes every package of the group; `wait` and `rerun` change nothing and are
 // read again at the next status; `regression` leaves `latest` where it is, which IS the rollback, and names ONE row. A wait past the
 // bound names its row too. Nothing here widens that: a missing status is `wait`, a status in a state nobody defined THROWS, and a
-// registry answer or tag that cannot be read blocks that group and is reported, never read as a pass.
+// registry answer or tag that cannot be read blocks that group and is reported, never read as a pass. A tag that does not EXIST yet
+// is the one unreadable thing that waits instead (#3969): the version is on the registry and the called workflow's tag job has not cut it.
+//
+// WHERE IT RUNS (#3969): in the `decide` job, which holds no `id-token`, because this script imports the `agent-org` tool cloned from
+// another repository. The job that can mint an npm token receives only the validated `name@x.y.z` list and checks it again.
 //
 // `latest` NEVER MOVES BACKWARDS: `promotionPlan` refuses a version older than the registry's latest for any package of the group,
 // and holds the whole group with it. A candidate is newer by construction; the refusal is for the day the registry changed between
@@ -179,14 +183,30 @@ function publicPackages() {
   });
 }
 
-/** The main sha a version was released on top of: the parent of the commit its tag `name@version` points at.
- * @param {string} name @param {string} version */
-function releaseShaOf(name, version) {
+/** The main sha a version was released on top of: the parent of the commit its tag `name@version` points at. null when the tag does not exist
+ * YET: the publish is on the registry and the called workflow's tag job has not cut the tag, which is a `wait` and not a fault. Every other
+ * failure THROWS, so a tag that exists and cannot be read still blocks.
+ * @param {string} name @param {string} version @param {(args: string[]) => string} [run] git, injectable so a test can use a repository of its own
+ * @returns {string | null} */
+export function releaseShaOf(name, version, run = git) {
   const tag = `${name}@${version}`;
+  if (!tagExists(tag, run)) return null;
   try {
-    return git(["rev-parse", `refs/tags/${tag}^`]);
+    return run(["rev-parse", `refs/tags/${tag}^`]);
   } catch (cause) {
-    throw new Error(`CANNOT_TELL: no tag ${tag} to read the release sha from (published, and the tag job has not cut it)`, { cause });
+    throw new Error(`CANNOT_TELL: tag ${tag} exists and its release sha (the parent of the commit it names) cannot be read`, { cause });
+  }
+}
+
+/** `rev-parse --verify --quiet` exits 1 and prints nothing for a ref that is not there; any other status is git failing, not the tag absent.
+ * @param {string} tag @param {(args: string[]) => string} run */
+function tagExists(tag, run) {
+  try {
+    run(["rev-parse", "--verify", "--quiet", `refs/tags/${tag}`]);
+    return true;
+  } catch (cause) {
+    if (/** @type {{ status?: number }} */ (cause).status === 1) return false;
+    throw new Error(`CANNOT_TELL: git could not say whether tag ${tag} exists`, { cause });
   }
 }
 
@@ -208,22 +228,39 @@ function writeOutputs(values) {
   else console.log(text);
 }
 
-/** @returns {Promise<{ sha: string, released: Released[], latest: Record<string, string | undefined> }[]>} the candidates, grouped by the sha they were released on */
+/** @typedef {{ name: string, directory: string, version: string, latest: string }} Candidate */
+/** @typedef {{ sha: string, released: Released[], latest: Record<string, string | undefined> }} Group */
+
+/**
+ * The candidates grouped by the sha they were released on, and the ones that WAIT because their tag is not cut yet (`shaOf` says null).
+ * @param {Candidate[]} candidates @param {(name: string, version: string) => string | null} shaOf
+ * @returns {{ groups: Group[], waiting: Candidate[] }}
+ */
+export function groupBySha(candidates, shaOf) {
+  /** @type {Map<string, Group>} */ const bySha = new Map();
+  /** @type {Candidate[]} */ const waiting = [];
+  for (const candidate of candidates) {
+    const sha = shaOf(candidate.name, candidate.version);
+    if (sha === null) {
+      waiting.push(candidate);
+      continue;
+    }
+    const group = bySha.get(sha) ?? { sha, released: [], latest: {} };
+    group.released.push({ name: candidate.name, version: candidate.version, directory: candidate.directory });
+    group.latest[candidate.name] = candidate.latest;
+    bySha.set(sha, group);
+  }
+  return { groups: [...bySha.values()], waiting };
+}
+
+/** @returns {Promise<{ groups: Group[], waiting: Candidate[] }>} */
 async function candidateGroups() {
   const readings = [];
   for (const { name, directory } of publicPackages()) {
     const tags = await readDistTags(name);
     if (tags) readings.push({ name, directory, tags });
   }
-  const bySha = new Map();
-  for (const candidate of candidatesFrom(readings)) {
-    const sha = releaseShaOf(candidate.name, candidate.version);
-    const group = bySha.get(sha) ?? { sha, released: [], latest: {} };
-    group.released.push({ name: candidate.name, version: candidate.version, directory: candidate.directory });
-    group.latest[candidate.name] = candidate.latest;
-    bySha.set(sha, group);
-  }
-  return [...bySha.values()];
+  return groupBySha(candidatesFrom(readings), (name, version) => releaseShaOf(name, version));
 }
 
 /** @param {{ sha: string, released: Released[], latest: Record<string, string | undefined> }} group */
@@ -243,7 +280,10 @@ async function main() {
   const promoted = [];
   const rows = [];
   let blocked = 0;
-  for (const group of await candidateGroups()) {
+  const { groups, waiting } = await candidateGroups();
+  // A version on `next` whose tag is not cut yet is a WAIT, and the next status or push reads it again. It is not counted in `blocked`.
+  for (const candidate of waiting) process.stdout.write(`release-promote: outcome=wait packages=${candidate.name}@${candidate.version} -- published, and the tag job has not cut the tag yet\n`);
+  for (const group of groups) {
     try {
       const result = decideGroup(group);
       blocked += result.refused.length > 0 ? 1 : 0;
