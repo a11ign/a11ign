@@ -69,6 +69,9 @@ packages/worker-fleet/tailscale-acl.hujson
 # A LAYER CHECKOUT, laid by `scripts/lay-layer.mjs` (#3504): `a11ign/screenreader-fleet`'s code at the path `control` imports it from. Never a commit here.
 /packages/worker-fleet
 
+# A LAYER CHECKOUT, laid by `scripts/lay-layer.mjs` (#3939): `a11ign/screenreader-worker`'s `src/` at the path the core reads the worker's files from, at the tag the lockfile pins. Never a commit here.
+/packages/nvda-worker
+
 # A LAYER CHECKOUT, laid by `scripts/lay-layer.mjs` (#3505): `a11ign/lab`'s scripts, source, baselines and rule table at the path the product's scripts and tests read them from, at the tag `layers.json` declares. Never a commit here.
 /packages/lab
 
