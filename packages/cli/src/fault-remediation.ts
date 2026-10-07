@@ -62,9 +62,10 @@ const AUTH_REMEDIATION: Record<AuthFault, FaultRemediation> = {
   },
   "auth-login-failed": {
     what: "the login could not be completed, so nothing behind it was examined. The reason is one of "
-      + "expect-not-met (the page after the login was not the one the flow expects), unbindable-field (a control "
-      + "the flow names could not be found by its accessible name) or left-origin (the login went to another "
-      + "site, such as an identity provider).",
+      + "expect-not-met (the page after the login was not the one the flow expects, OR a page never loaded at "
+      + "all: the message's step and its \"could not be loaded (...)\" line say which, and an expect: is only "
+      + "at fault in the first case), unbindable-field (a control the flow names could not be found by its "
+      + "accessible name) or left-origin (the login went to another site, such as an identity provider).",
     tryThis: "check the credentials belong to a working test account, and that the flow's last expect: names "
       + "something only the signed-in page shows. An unbindable-field is a real 4.1.2 finding about the login "
       + "form. left-origin means SSO or an outside identity provider: use a dedicated test account without MFA "
