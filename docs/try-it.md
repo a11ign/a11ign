@@ -160,7 +160,7 @@ Decide this before you spend anything, because each of these ends the path rathe
 
 - **A site whose only sign-in is SSO, MFA, SMS or an emailed code, or that puts a CAPTCHA in front of the login, is out of scope.** SMS codes, emailed codes and push approvals are a documented gap, and TOTP (an authenticator-app code) is deferred. **If the site has a way to make a test account without them** (a staging environment with MFA off, a role your admin exempts, a separate username and password login next to the SSO button), use that. If it has none, this path cannot reach your page today: say so rather than working around it.
 - **A CAPTCHA is never solved.** A login step that fails on a page showing a reCAPTCHA, hCaptcha or Turnstile widget ends the run with `auth-challenge-detected`, which names the challenge and stops.
-- **Attaching to your own signed-in browser is not built.** Neither is loading a saved sign-in state (`--auth-state`, [#2566](https://github.com/a11ign/a11ign/issues/2566)), which is the route through SSO and MFA and is named here as a way through only once it has merged. It has not.
+- **Attaching to your own signed-in browser is not built.** What exists instead is loading a sign-in state you saved by hand (`auth-state:`, [#2566](https://github.com/a11ign/a11ign/issues/2566), merged): it is the route for a site behind SSO or MFA, and it is **not walked in this section**, which is the plain username-and-password path. It has its own steps, the limits of the file and one measured reading in [`docs/github-action.md`](./github-action.md#logging-in-with-a-saved-state-auth-state): read that if a form login cannot reach your page.
 - **Only what your flows file names is pressed.** `probe-forms` and `probe-navigation` are switched off for a run that logs in, whatever you set.
 
 ### 1. The repository must be private
@@ -223,7 +223,7 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v7
-      - uses: a11ign/a11ign@c77c1ba0f65e94e0cef4fcdb8d3f3c7ac1be87fa
+      - uses: a11ign/a11ign@5768e1d44b7ea5d3e6182ca45d5aeb89bcaadc76
         id: a11ign
         env:                                     # the credential enters HERE, on the step that calls the Action
           APP_TEST_USER: ${{ secrets.APP_TEST_USER }}
@@ -242,7 +242,7 @@ jobs:
             ${{ steps.a11ign.outputs.summary-md }}
 ```
 
-- **Pin the Action to a full 40-character commit SHA, as above.** The `v0.1.0` tag the fastest route uses predates the login flow, so it would ignore `flows` and `login-flow` and examine your login page as though it were the product. No later tag exists yet.
+- **Pin the Action to a full 40-character commit SHA, as above.** The `v0.1.0` tag the fastest route uses predates the login flow, so it would ignore `flows` and `login-flow` and examine your login page as though it were the product. **No tag newer than `v0.1.0` exists on this repository, so a SHA is the only pin that has the login flow** (read 2026-10-07: `gh api repos/a11ign/a11ign/git/matching-refs/tags/v` lists `v0.1.0` alone; a reading at a moment, so look again). The SHA above is the `main` commit the section was last run cold against. The npm package has moved on without a tag: `npm view a11ign dist-tags` read `latest` `0.1.0` and `next` `0.3.0` the same day. **`next` is the release channel that carries the login work; `latest` does not yet.** That version is what `npx a11ign@next` runs on your own machine; the Action runs the code at the SHA you give it, not a registry version.
 - **The secrets go in `env:` on the step that calls the Action**, never in `with:`: an input is interpolated into shell text, and an environment variable is not. Give `flows` and `login-flow` together or neither.
 - **A pull request from a fork gets no secrets**, so it ends in `auth-credential-missing`. Run it from a branch of the repository itself.
 - **`task` is a label for the report and a hint about what a visitor is doing.** For a run that logs in it does not choose what is pressed; your flows file does.
