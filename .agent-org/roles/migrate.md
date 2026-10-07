@@ -167,7 +167,7 @@ this repo rather than invented for this file:
 
 **Concretely:** before starting a migration, run `pnpm run fleet:status` and `pnpm run lab:status` and
 confirm nothing is `busy`/running. If a capture is in flight, wait for it to finish or use `pnpm run
-lab:stop -- -e job=<name>` to end it deliberately (it reports what it discards first) rather than migrating
+lab:stop -e job=<name>` to end it deliberately (it reports what it discards first) rather than migrating
 underneath it.
 
 ## The drill — RUN 2026-09-20, PASS
