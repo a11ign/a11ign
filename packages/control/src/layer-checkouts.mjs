@@ -45,10 +45,35 @@ const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const MANIFEST = JSON.parse(readFileSync(new URL("../layers.json", import.meta.url), "utf8"));
 
 /**
+ * Where the control plane's own code is laid, when `layers.json` declares `pinned.control` (#3914): `packages/control` is then a laid
+ * copy of `a11ign/control` at a tag and no part of this repository's tree (#3506). Null while it declares none, which is every
+ * checkout until that lands, so nothing that reads it changes before then.
+ *
+ * @param {{ manifest: { pinned?: Record<string, { path: string }> }, root: string }} from
+ * @returns {{ name: string, path: string, dir: string } | null}
+ */
+function laidControlOf({ manifest, root }) {
+  const declared = manifest.pinned && Object.hasOwn(manifest.pinned, CONTROL_LAYER) ? manifest.pinned[CONTROL_LAYER] : undefined;
+  return declared ? { name: CONTROL_LAYER, path: declared.path, dir: resolve(root, declared.path) } : null;
+}
+
+/**
+ * The name of the layer whose directory is `path` or holds it. `startsWith` of the directory and a slash, so a sibling that shares a
+ * prefix (`packages/control-extra`) is not inside it.
+ *
+ * @param {string} path repo-relative
+ * @param {({ name: string, path: string } | null)[]} layers a null is a layer that is not declared, and owns nothing
+ * @returns {string | null}
+ */
+function owningLayer(path, layers) {
+  return layers.find((layer) => layer !== null && (path === layer.path || path.startsWith(`${layer.path}/`)))?.name ?? null;
+}
+
+/**
  * The resolver over one manifest and one repository root. The exports below close over the real ones; a test
  * closes over a fixture, which is how "a declared layer whose path is absent" is reachable at all.
  *
- * @param {{ manifest: { layers: Record<string, { path: string, remote?: string, branch?: string }> }, root: string }} from
+ * @param {{ manifest: { layers: Record<string, { path: string, remote?: string, branch?: string }>, pinned?: Record<string, { path: string, tag?: string }> }, root: string }} from
  */
 export function layersFrom({ manifest, root }) {
   /**
@@ -124,18 +149,52 @@ export function layersFrom({ manifest, root }) {
   /** @param {Record<string, string>} pins a value that has passed `layerPins` */
   const layerCheckoutMove = (pins) => checkoutMoveFor(manifest, pins);
 
+  /** The laid control, or null while `layers.json` declares none (`laidControlOf`). */
+  const laidControl = () => laidControlOf({ manifest, root });
+
   /**
-   * The separate layer whose directory holds `path` (repo-relative), or null when it is the core's. A file of a layer's
-   * is not tracked by this repository, so "does `git ls-files` list it" cannot be the question asked of it (#3845).
+   * The layer whose directory holds `path` (repo-relative): a separate layer, or the laid control, or null when it is the core's.
+   * A file of a layer's is not tracked by this repository, so "does `git ls-files` list it" cannot be the question asked of it (#3845).
    * @param {string} path
    * @returns {string | null}
    */
   function layerOwning(path) {
-    const owns = (/** @type {string} */ name) => path === manifest.layers[name].path || path.startsWith(`${manifest.layers[name].path}/`);
-    return separateLayers().find(owns) ?? null;
+    const separate = separateLayers().map((name) => ({ name, path: manifest.layers[name].path }));
+    return owningLayer(path, [...separate, laidControl()]);
   }
 
-  return { layerDeclaration, layerRoot, layerSourceDir, layerCodeVersion, separateLayers, layerPins, layerCheckoutMove, layerOwning };
+  return { layerDeclaration, layerRoot, layerSourceDir, layerCodeVersion, separateLayers, layerPins, layerCheckoutMove, layerOwning, laidControl };
+}
+
+/** The key of the control plane's own code in `layers.json`'s `pinned` section: the one pinned layer the closure of `fleet:auto-off` runs from (#3914). */
+export const CONTROL_LAYER = "control";
+
+/** What a declared tag looks like: `scripts/lay-layer.mjs`'s `DECLARED_TAG`, which this directory cannot import (ADR 0012). A branch or a sha is not a pin. */
+const DECLARED_TAG = /^v\d+\.\d+\.\d+$/;
+
+/**
+ * The tag a `pinned` layer is laid at, read from the text of a `layers.json` (`origin/main`'s, for the stale-checkout guard): the
+ * declaration's own `tag`, which is what `scripts/lay-layer.mjs`'s `tagToLay` lays. A manifest that is not JSON, a layer it does
+ * not pin, or a tag that is not `v<semver>` is a refusal, never a default.
+ *
+ * @param {string} manifestText
+ * @param {string} layer a key of `layers.json`'s `pinned`
+ * @returns {{ tag: string } | { refusal: string }}
+ */
+export function pinnedLayerTag(manifestText, layer) {
+  let manifest;
+  try {
+    manifest = JSON.parse(manifestText);
+  } catch (cause) {
+    return { refusal: `layers.json is not JSON (${cause instanceof Error ? cause.message : cause})` };
+  }
+  const pinned = manifest?.pinned;
+  const declared = pinned && typeof pinned === "object" && Object.hasOwn(pinned, layer) ? pinned[layer] : undefined;
+  if (declared === undefined) return { refusal: `layers.json declares no pinned layer ${layer}` };
+  if (typeof declared.tag !== "string" || !DECLARED_TAG.test(declared.tag)) {
+    return { refusal: `layers.json pins ${layer} at ${JSON.stringify(declared.tag)}, which is not a v<semver> tag: a branch or a sha is not a pin` };
+  }
+  return { tag: declared.tag };
 }
 
 /**
@@ -208,6 +267,7 @@ export const separateLayers = declared.separateLayers;
 export const layerPins = declared.layerPins;
 export const layerCheckoutMove = declared.layerCheckoutMove;
 export const layerOwning = declared.layerOwning;
+export const laidControl = declared.laidControl;
 
 /**
  * Every `--layer-ref=<name>=<sha>`, in order. REPEATABLE, which `flagValue` (first match only) is not: one
