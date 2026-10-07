@@ -31,7 +31,7 @@
  * REMOVAL IS IN SMALL CALLS: one `unlink` or `rmdir` per entry, depth first, never one `rm -r` of a large tree, because the walk of a large tree is what locked
  * the kernel. What it cannot remove it records and throws at the end, after trying the rest.
  */
-import { chmodSync, lstatSync, mkdirSync, mkdtempSync, opendirSync, rmdirSync, unlinkSync } from "node:fs";
+import { accessSync, chmodSync, constants, lstatSync, mkdirSync, mkdtempSync, opendirSync, rmdirSync, statSync, unlinkSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { basename, isAbsolute, join, relative } from "node:path";
@@ -48,6 +48,8 @@ const RUN_ENV = "A11Y_PRIVATE_TMP_RUN";
 const FILE_ENV = "A11Y_PRIVATE_TMP_FILE";
 /** The directories a caller means by "no private choice": setting `TMPDIR` to one of these is the same as leaving it unset. */
 const SHARED_TMP = ["/tmp", "/var/tmp"];
+/** What a directory that cannot be made or written reports: a read-only filesystem, a missing permission, or a path under a file. */
+const NOT_WRITABLE = ["EACCES", "EROFS", "EPERM", "ENOTDIR"];
 const OWNER_RWX = 0o700;
 /**
  * A file's directory is the `TMPDIR` of everything its tests spawn, and a unix socket path is capped at 107 bytes (measured: `bind` succeeds at 107 and fails with
@@ -105,12 +107,15 @@ function removeTree(path, failures) {
   }
 }
 
-/** The one place a run's directories may be removed from: `run-<id>` directly under the private root, never `/tmp` or a path a caller typed. */
-export function requirePrivateRunDir(/** @type {string | undefined} */ dir, /** @type {string} */ home) {
+/**
+ * The one place a run's directories may be removed from: `run-<id>` directly under the root the run was made in (`privateRunRoot`'s answer), never `/tmp` itself
+ * or a path a caller typed. A wider parent (a caller's `TMPDIR`) widens where a run is made, never what is removed.
+ */
+export function requirePrivateRunDir(/** @type {string | undefined} */ dir, /** @type {string} */ root) {
   if (!dir) throw new Error("private-tmp: no run directory to remove, so nothing is removed");
-  const insideRoot = isAbsolute(dir) && relative(join(home, PRIVATE_TMP_ROOT), dir) === basename(dir);
+  const insideRoot = isAbsolute(dir) && relative(root, dir) === basename(dir);
   if (!insideRoot || !basename(dir).startsWith(RUN_DIR_PREFIX)) {
-    throw new Error(`private-tmp: refusing to remove ${dir}, which is not a ${RUN_DIR_PREFIX}<id> directory under ~/${PRIVATE_TMP_ROOT}`);
+    throw new Error(`private-tmp: refusing to remove ${dir}, which is not a ${RUN_DIR_PREFIX}<id> directory under ${root}`);
   }
   return dir;
 }
@@ -140,18 +145,60 @@ function installExitHandlers() {
 }
 
 /**
- * Makes `~/.cache/a11ign/tmp/run-<id>`, points this process's `TMPDIR` at it, and removes it when the process exits.
+ * The directory a run's `run-<id>` is made in: `~/.cache/a11ign/tmp` when that can be made and written, else the `TMPDIR` the caller set. A sandbox that can write
+ * only `/tmp` (the reviewer's: `workspace-write` with `writable_roots = ["/tmp"]`) has a read-only home, and its caller's `TMPDIR=/tmp/<dir>` is the only place
+ * left (#3932). With neither it refuses ONCE, naming both, instead of a bare `EROFS` from inside the runner. Only access errors fall through to the caller's
+ * directory: any other failure of the home is a defect in it and is rethrown. A caller's `TMPDIR` is not made for them: it must already be a writable directory.
+ * @param {{ home?: string, env?: NodeJS.ProcessEnv }} [where]
+ * @returns {string}
+ */
+export function privateRunRoot({ home = homedir(), env = process.env } = {}) {
+  const preferred = join(home, PRIVATE_TMP_ROOT);
+  try {
+    mkdirSync(preferred, { recursive: true });
+    accessSync(preferred, constants.W_OK);
+    return preferred;
+  } catch (cause) {
+    const code = /** @type {NodeJS.ErrnoException} */ (cause).code;
+    if (!NOT_WRITABLE.includes(code ?? "")) throw cause;
+    return callersWritableTmpdir({ preferred, env, cause });
+  }
+}
+
+/** @param {{ preferred: string, env: NodeJS.ProcessEnv, cause: unknown }} refused */
+function callersWritableTmpdir({ preferred, env, cause }) {
+  const callers = env.TMPDIR;
+  const refusal = `private-tmp: no place to make a run directory: ${preferred} cannot be made or written, and TMPDIR is ${isShared(callers) ? `${callers ? `the shared ${callers}` : "unset"}, which is not a private choice` : `${callers}, which is not a writable directory either`}. Set TMPDIR to a writable directory of your own, e.g. TMPDIR=/tmp/<dir>`;
+  if (isShared(callers)) throw new Error(refusal, { cause });
+  const root = /** @type {string} */ (callers);
+  try {
+    // A writable FILE passes `W_OK` and fails later in `mkdtemp` with ENOTDIR, so the caller's path must be a directory as well.
+    if (!statSync(root).isDirectory()) throw new Error(`${root} is not a directory`);
+    accessSync(root, constants.W_OK);
+  } catch {
+    throw new Error(refusal, { cause });
+  }
+  return root;
+}
+
+/**
+ * Makes `run-<id>` under `privateRunRoot` (`~/.cache/a11ign/tmp`, or the caller's `TMPDIR` when the home is not writable), points this process's `TMPDIR` at it,
+ * and removes it when the process exits.
  * @param {{ home?: string }} [where]
  * @returns {string} the run's directory
  */
 export function privateRunTmp({ home = homedir() } = {}) {
-  const root = join(home, PRIVATE_TMP_ROOT);
-  mkdirSync(root, { recursive: true });
+  return makeRun({ home }).dir;
+}
+
+/** `privateRunTmp`, also saying which root the run was made in, so `endRun` checks its removal against the root that was USED rather than one read back off the directory. */
+function makeRun({ home = homedir() } = {}) {
+  const root = privateRunRoot({ home });
   const dir = mkdtempSync(join(root, RUN_DIR_PREFIX));
   process.env.TMPDIR = dir;
-  removeOnExit.add(requirePrivateRunDir(dir, home));
+  removeOnExit.add(requirePrivateRunDir(dir, root));
   installExitHandlers();
-  return dir;
+  return { dir, root };
 }
 
 /** @param {string} testPath */
@@ -217,7 +264,7 @@ export function formatLeftovers({ label, entries }) {
   return `private-tmp: ${label} left ${entries.length} entr${entries.length === 1 ? "y" : "ies"} in its TMPDIR (${shown}${more}); removed with the run, clean them up in the test\n`;
 }
 
-/** @type {{ dir: string, home: string } | null} the run this process began and has not ended */
+/** @type {{ dir: string, root: string } | null} the run this process began and has not ended */
 let begun = null;
 
 /** @param {string | undefined} tmpdir */
@@ -229,8 +276,8 @@ function isShared(tmpdir) {
 export function beginRun({ home = homedir() } = {}) {
   if (begun) endRun();
   delete process.env[FILE_ENV];
-  const dir = privateRunTmp({ home });
-  begun = { dir, home };
+  const { dir, root } = makeRun({ home });
+  begun = { dir, root };
   process.env[RUN_ENV] = dir;
 }
 
@@ -241,7 +288,7 @@ export function endRun() {
   delete process.env[RUN_ENV];
   if (!run) throw new Error("private-tmp: no run directory was begun by this process, so nothing is removed");
   removeOnExit.delete(run.dir);
-  removeInSmallCalls(requirePrivateRunDir(run.dir, run.home));
+  removeInSmallCalls(requirePrivateRunDir(run.dir, run.root));
 }
 
 /** globalSetup, before the first test file. */

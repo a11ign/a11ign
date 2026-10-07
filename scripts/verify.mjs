@@ -38,6 +38,7 @@ import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 import { refuseUnknownFlags, flagValue } from "./cli-flags.mjs";
 const { checkBody } = await toolModule("src/pr-open.mjs");
 import { classify, knownPackages, packedFiles } from "./ci-changed.mjs";
+import { privateRunRoot } from "./private-tmp.mjs";
 // NEVER a bare `pnpm` spawn -- unsafe on Windows (CVE-2024-27980), and this repo's own guard refuses one.
 import { pnpmCliInvocation } from "./npm-cli-executable.mjs";
 import { toolModule, toolPath } from "./agent-org-newest-tag.mjs";
@@ -190,21 +191,16 @@ export function removeInSmallCalls(dir) {
   rmSync(dir, { recursive: true, force: true });
 }
 
-/** Where a run's private temp directories are made, under the user's cache as the chairman's correction on #3846 names. */
-export const PRIVATE_TMP_ROOT = ".cache/a11ign/tmp";
-
 /**
  * A PRIVATE `TMPDIR` FOR THIS RUN AND EVERYTHING IT SPAWNS (chairman's 16:55Z correction on #3846, #3847): `~/.cache/a11ign/tmp/run-<id>`, made once,
- * exported as `TMPDIR` in this process's environment (so `tmpdir()`, `makeScratch` and every child inherit it) and removed, in small calls, on every
+ * (or a `run-<id>` under the caller's `TMPDIR` when the home is not writable, #3932: `privateRunRoot` decides and refuses naming both), exported as `TMPDIR` in this process's environment (so `tmpdir()`, `makeScratch` and every child inherit it) and removed, in small calls, on every
  * exit `makeScratch`'s trees are. The test directories the suites make land in it and go with it, instead of piling up in the shared `/tmp`.
  * THE INTERFACE #3855's rstest config can reuse: `privateRunTmp({ home? }) -> dir`, and `removeInSmallCalls(dir)` for its own removal.
  * @param {{ home?: string }} [where]
  * @returns {string} the run's directory
  */
 export function privateRunTmp({ home = homedir() } = {}) {
-  const root = join(home, PRIVATE_TMP_ROOT);
-  mkdirSync(root, { recursive: true });
-  const dir = makeScratch("run-", root);
+  const dir = makeScratch("run-", privateRunRoot({ home }));
   process.env.TMPDIR = dir;
   return dir;
 }

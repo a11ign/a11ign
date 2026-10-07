@@ -19,17 +19,27 @@ import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { tempDir } from "../packages/guards/src/test-tmp.mjs";
-import { adoptFileDirectory, endRun, fileDirectoryName, formatLeftovers, PRIVATE_TMP_ROOT, privateRunTmp, removeInSmallCalls, reportLeftovers, requirePrivateRunDir, withPrivateTmp } from "./private-tmp.mjs";
+import { adoptFileDirectory, endRun, fileDirectoryName, formatLeftovers, PRIVATE_TMP_ROOT, privateRunRoot, privateRunTmp, removeInSmallCalls, reportLeftovers, requirePrivateRunDir, withPrivateTmp } from "./private-tmp.mjs";
 import config from "./rstest/rstest.config.mjs";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 const HELPER = join(REPO, "scripts/private-tmp.mjs");
 const RSTEST = join(REPO, "node_modules/.bin/rstest");
 const RUN_ENV = "A11Y_PRIVATE_TMP_RUN";
+const READ_ONLY_MODE = 0o555;
+const WRITABLE_MODE = 0o755;
+/** Longer than the 255 bytes a filename may be on any filesystem this runs on. */
+const BEYOND_NAME_MAX = 300;
 
 test("this run's TMPDIR is a subdirectory of a private run-<id> under ~/.cache/a11ign/tmp, and it exists", () => {
   const fileDir = process.env.TMPDIR ?? "";
   assert.equal(tmpdir(), fileDir, "os.tmpdir() follows TMPDIR, which is how every mkdtempSync(join(tmpdir(), ...)) in the suite lands inside it");
+  if (!process.env[RUN_ENV]) {
+    // A TMPDIR the caller set is the caller's and `setup` made no run (the last test below reads that): `verify` hands its own run down, and a sandbox that can
+    // write only /tmp hands one in (#3932). The ordinary run sets RUN_ENV for every worker, so the reading below is still made wherever the config made the run.
+    assert.ok(existsSync(fileDir) && fileDir !== "/tmp", `a caller's TMPDIR is a real directory of their own: ${fileDir}`);
+    return;
+  }
   const runDir = dirname(fileDir);
   assert.equal(dirname(runDir), join(homedir(), PRIVATE_TMP_ROOT));
   assert.match(basename(runDir), /^run-/);
@@ -89,10 +99,10 @@ test("endRun refuses when beginRun made nothing, and requirePrivateRunDir refuse
   mkdirSync(decoy);
   assert.throws(() => endRun(), /no run directory was begun/);
   for (const dir of [decoy, scratch, "", undefined, "relative/run-x", join(scratch, PRIVATE_TMP_ROOT, "run-x", "nested")]) {
-    assert.throws(() => requirePrivateRunDir(dir, scratch), /no run directory to remove|not a run-<id> directory under/, String(dir));
+    assert.throws(() => requirePrivateRunDir(dir, join(scratch, PRIVATE_TMP_ROOT)), /no run directory to remove|not a run-<id> directory under/, String(dir));
   }
   const made = madeWithTmpdirRestored(scratch);
-  assert.equal(requirePrivateRunDir(made, scratch), made, "the control: a real run directory under the home it was made for is accepted");
+  assert.equal(requirePrivateRunDir(made, join(scratch, PRIVATE_TMP_ROOT)), made, "the control: a real run directory under the home it was made for is accepted");
   removeInSmallCalls(made);
   assert.ok(existsSync(decoy));
 });
@@ -115,6 +125,121 @@ test("privateRunTmp makes run-<id> under the given home and points TMPDIR at it"
   const dir = madeWithTmpdirRestored(home, (made) => assert.equal(process.env.TMPDIR, made));
   assert.equal(dirname(dir), join(home, PRIVATE_TMP_ROOT));
   assert.ok(existsSync(dir));
+});
+
+/** A home that cannot be written, as the reviewer's sandbox has: the directory exists and has no write bit. A test cleans it up with the mode restored. */
+function readOnlyHome(prefix: string) {
+  const home = tempDir(prefix);
+  chmodSync(home, READ_ONLY_MODE);
+  return home;
+}
+
+/** Runs `body` with `TMPDIR` as the caller's (`undefined` for unset) and puts it back, since `privateRunTmp` and a refusal both read it. */
+function withCallersTmpdir<T>(callers: string | undefined, body: () => T): T {
+  const before = process.env.TMPDIR;
+  if (callers === undefined) delete process.env.TMPDIR;
+  else process.env.TMPDIR = callers;
+  try {
+    return body();
+  } finally {
+    if (before === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = before;
+  }
+}
+
+test("#3932: a read-only home with a writable TMPDIR of the caller's makes its run directory under that TMPDIR, points TMPDIR at it, and removes it with the run", () => {
+  const home = readOnlyHome("private-tmp-ro-home-");
+  const callers = tempDir("private-tmp-callers-");
+  try {
+    const dir = withCallersTmpdir(callers, () => {
+      const made = privateRunTmp({ home });
+      assert.equal(process.env.TMPDIR, made, "TMPDIR now names the run, so every child inherits it");
+      return made;
+    });
+    assert.equal(dirname(dir), callers, "made directly under the caller's TMPDIR, not under the read-only home");
+    assert.match(basename(dir), /^run-/);
+    assert.ok(existsSync(dir));
+    assert.ok(!existsSync(join(home, ".cache")), "nothing was made under the read-only home");
+    removeInSmallCalls(requirePrivateRunDir(dir, callers));
+    assert.ok(!existsSync(dir));
+  } finally {
+    chmodSync(home, WRITABLE_MODE);
+  }
+});
+
+test("#3932 controls: a writable home is still used when the caller set a TMPDIR, so the fallback is not taken unconditionally", () => {
+  const home = tempDir("private-tmp-rw-home-");
+  const callers = tempDir("private-tmp-callers-unused-");
+  const dir = withCallersTmpdir(callers, () => madeWithTmpdirRestored(home));
+  assert.equal(dirname(dir), join(home, PRIVATE_TMP_ROOT));
+  assert.equal(privateRunRoot({ home, env: { TMPDIR: callers } }), join(home, PRIVATE_TMP_ROOT));
+  assert.deepEqual(readdirSync(callers), [], "the caller's directory was left alone");
+});
+
+test("#3932 controls: a read-only home with no usable TMPDIR refuses once, naming both places, rather than an EROFS from inside the runner", () => {
+  const home = readOnlyHome("private-tmp-ro-refuse-");
+  const notWritable = tempDir("private-tmp-callers-ro-");
+  chmodSync(notWritable, READ_ONLY_MODE);
+  try {
+    for (const callers of [undefined, "", "/tmp", "/tmp/", "/var/tmp", join(notWritable, "missing"), notWritable]) {
+      const refusal = (withCallersTmpdir(callers, () => {
+        try {
+          privateRunTmp({ home });
+        } catch (error) {
+          return error as Error;
+        }
+        return new Error("did not refuse");
+      }));
+      assert.match(refusal.message, /no place to make a run directory/, String(callers));
+      assert.ok(refusal.message.includes(join(home, PRIVATE_TMP_ROOT)), `names the cache location: ${refusal.message}`);
+      assert.ok(refusal.message.includes("TMPDIR"), `names TMPDIR: ${refusal.message}`);
+      assert.equal((refusal.cause as NodeJS.ErrnoException).code, "EACCES", "the underlying refusal travels as the cause");
+    }
+  } finally {
+    chmodSync(home, WRITABLE_MODE);
+    chmodSync(notWritable, WRITABLE_MODE);
+  }
+});
+
+test("#3932 controls: a TMPDIR that is a writable FILE, or a cache directory that exists but is read-only, is refused or fallen back from rather than returned", () => {
+  const home = tempDir("private-tmp-file-callers-home-");
+  const area = tempDir("private-tmp-file-callers-");
+  const file = join(area, "a-file");
+  writeFileSync(file, "writable, and not a directory");
+  chmodSync(home, READ_ONLY_MODE);
+  try {
+    assert.throws(() => privateRunRoot({ home, env: { TMPDIR: file } }), /no place to make a run directory/);
+  } finally {
+    chmodSync(home, WRITABLE_MODE);
+  }
+  // The cache directory exists (so `mkdir -p` succeeds) and cannot be written: only the write check refuses it, as in the sandbox where the cache is on a read-only mount.
+  const cache = join(home, PRIVATE_TMP_ROOT);
+  mkdirSync(cache, { recursive: true });
+  chmodSync(cache, READ_ONLY_MODE);
+  try {
+    assert.equal(privateRunRoot({ home, env: { TMPDIR: area } }), area, "an existing but unwritable cache falls back to the caller's directory");
+  } finally {
+    chmodSync(cache, WRITABLE_MODE);
+  }
+});
+
+test("#3932 controls: a failure of the home that is not an access error is rethrown, not answered with the caller's TMPDIR", () => {
+  const home = tempDir("private-tmp-longname-home-");
+  const callers = tempDir("private-tmp-callers-longname-");
+  // A name too long for any filesystem is a defect of the path, not of who may write, so it must not be quietly answered with another directory.
+  assert.throws(() => privateRunRoot({ home: join(home, "x".repeat(BEYOND_NAME_MAX)), env: { TMPDIR: callers } }), (error: NodeJS.ErrnoException) => error.code === "ENAMETOOLONG");
+});
+
+test("#3932 controls: requirePrivateRunDir judges against the root actually used, so a widened parent widens nothing that is removed", () => {
+  const callers = tempDir("private-tmp-callers-widen-");
+  const sibling = join(callers, "run-sibling");
+  mkdirSync(sibling);
+  mkdirSync(join(callers, "keep", "run-nested"), { recursive: true });
+  assert.equal(requirePrivateRunDir(sibling, callers), sibling, "the control: run-<id> directly under the root used");
+  for (const refused of [callers, join(callers, "keep"), join(callers, "keep", "run-nested"), join(callers, "not-a-run")]) {
+    assert.throws(() => requirePrivateRunDir(refused, callers), /not a run-<id> directory under|no run directory/, refused);
+  }
+  assert.throws(() => requirePrivateRunDir(sibling, join(callers, "elsewhere")), /not a run-<id> directory under/, "a run under another root is refused");
 });
 
 test("adoptFileDirectory is inert without a run, and idempotent for one test path", () => {
