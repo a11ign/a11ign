@@ -2578,17 +2578,24 @@ independently revertible commits for exactly the reason the paragraph below once
 capture, so the fleet recapture and the `log[0].type === "focusin"` check against fresh real-page evidence
 were still owed, by the orchestrator, before this section was CLOSED rather than merely fixed-in-source.
 
-**CORRECTED 2026-09-25 (#2551): THE EXCEPTION IS NOT DELETED.** `packages/judge/src/rules.ts` still has
-`if (i === 0)` in `focusLossVerdict` and returns `unpairable` for an orphaned `focusout` at index 0 unless it
-is a same-id reversed pair. #62 restored it on 2026-09-06 (commit `7e970dcf4`), after `rules:real-pages`
-produced 80 findings at index 0 on the captures then on disk; the code comment says the listener recording
-`document.activeElement` as the log's own first entry is explicitly NOT that function's fix. **The recapture
-this section waited on HAS run** (capture protocol 21 is current; the #1926 uniform recapture and #2478's
-real-page recapture both ran after the protocol-16 listener change). **The read it owed has NOT been taken:**
-`log[0].type` has never been counted across the corpus, so nobody can say whether the carve-out swallows real
-F55 findings or guards a state the capture no longer produces. That read is #2550. **This section stays
-open** until it is taken, and if it finds `focusout`-first captures, half 2 (record `document.activeElement`
-as the first entry) is a capture-path change with its own row.
+**CORRECTED AGAIN 2026-10-07 (#3913): THE EXCEPTION IS DELETED, AND THE 2026-09-25 CORRECTION BELOW IS SUPERSEDED.**
+`packages/judge/src/rules.ts` has no `if (i === 0)` in `focusLossVerdict`: #2602 deleted it on 2026-09-26, the day
+after the correction below was written, and `focusLossVerdict`'s own comment now says "NO POSITION IS SPECIAL".
+The read the correction said was owed WAS taken (#2550, `orchestrator`, 2026-09-26, capture protocol 22): **0 of 98
+real-page captures with a log open on a focusout**, beside 9 `initial` focusins, because protocol 22 (#2587)
+records what ALREADY held focus as an `initial: true` focusin, so a bare `focusout` at `log[0]` is no longer
+something a late-installed listener can produce. An orphaned `focusout` at index 0 is now judged like an orphan
+anywhere else; only a same-id reversed pair there reads as a finding by its own shape, as it always did. The
+recapture and `gate:stability` remainders of this section are the orchestrator's and are not touched here.
+`known-gaps-code-claims.test.ts` pins that a claim of the form "`file` still has `if (...)`" names a snippet that
+file contains, so this paragraph's shape cannot go stale silently again.
+
+**SUPERSEDED 2026-09-25 reading (#2551), kept as history:** `rules.ts` still had `if (i === 0)` in
+`focusLossVerdict` and returned `unpairable` for an orphaned `focusout` at index 0 unless it was a same-id
+reversed pair. #62 restored it on 2026-09-06 (commit `7e970dcf4`), after `rules:real-pages` produced 80 findings
+at index 0 on the captures then on disk. At that date `log[0].type` had never been counted across the corpus,
+so nobody could say whether the carve-out swallowed real F55 findings or guarded a state the capture no longer
+produced; that read was #2550, and its answer is the paragraph above.
 
 **The rest of this section is the ORIGINAL record of the trade being closed**, kept for the reasoning
 rather than rewritten, per this file's own practice of recording a correction in place.
