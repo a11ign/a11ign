@@ -27,9 +27,9 @@
     "eval:capture": "A11Y_PYTHON=.venv/bin/python node packages/lab/src/harnesses/capture-fixtures.mjs",
     "eval:gate": "A11Y_PYTHON=.venv/bin/python EVAL_GATE=1 EVAL_RUNS=3 tsx packages/lab/src/eval/run.ts",
     "typecheck": "tsc --noEmit",
-    "build": "node scripts/lay-layer.mjs screenreader-fleet && node scripts/lay-layer.mjs lab && node scripts/pnpm.mjs -r run build",
+    "build": "node scripts/lay-layer.mjs control && node scripts/lay-layer.mjs screenreader-fleet && node scripts/lay-layer.mjs lab && node scripts/pnpm.mjs -r run build",
     "preinstall": "node scripts/refuse-other-installers.mjs",
-    "prepare": "node scripts/install-git-hooks.mjs && node scripts/lay-layer.mjs screenreader-fleet && node scripts/lay-layer.mjs lab && node scripts/pnpm.mjs -r run build",
+    "prepare": "node scripts/install-git-hooks.mjs && node scripts/lay-layer.mjs control && node scripts/lay-layer.mjs screenreader-fleet && node scripts/lay-layer.mjs lab && node scripts/pnpm.mjs -r run build",
     "lint": "eslint .",
     "scan": "tsx packages/cli/src/scan/run-axe.ts",
     "training:generate": "node packages/lab/src/training/generate-screenreader-dataset.mjs",
@@ -157,8 +157,8 @@
     "fleet:control-host-install": "node packages/control/src/fleet-playbook.mjs --playbook=control-host-install.yml",
     "corpus:release": "node packages/lab/scripts/corpus-release.mjs",
     "corpus:release-nightly": "node packages/lab/scripts/corpus-release-nightly.mjs",
-    "test:org": "node packages/guards/src/assert-glob-not-empty.mjs \"packages/{agent-org,guards,control}/src/**/*.test.ts\" --min=50 --run --runner=rstest ${A11Y_TEST_CONCURRENCY:+--test-concurrency=$A11Y_TEST_CONCURRENCY}",
-    "test:all": "node packages/guards/src/assert-glob-not-empty.mjs \"packages/*/src/**/*.test.ts\" --min=159 --run --runner=rstest ${A11Y_TEST_CONCURRENCY:+--test-concurrency=$A11Y_TEST_CONCURRENCY}",
+    "test:org": "node packages/guards/src/assert-glob-not-empty.mjs \"packages/{agent-org,guards}/src/**/*.test.ts\" --min=12 --run --runner=rstest ${A11Y_TEST_CONCURRENCY:+--test-concurrency=$A11Y_TEST_CONCURRENCY}",
+    "test:all": "node packages/guards/src/assert-glob-not-empty.mjs \"packages/*/src/**/*.test.ts\" --min=107 --run --runner=rstest ${A11Y_TEST_CONCURRENCY:+--test-concurrency=$A11Y_TEST_CONCURRENCY}",
     "verify": "node scripts/verify.mjs"
   },
   "dependencies": {

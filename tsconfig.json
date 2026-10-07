@@ -70,7 +70,9 @@
   // The lab left the workspace (#3505) and is LAID at `packages/lab` for the scripts and tests that read it by path: untracked, a copy of another
   // repository's tree. It is typechecked THERE, where its own `@a11ign/control` link resolves; here the include patterns above would read its
   // `.mjs` as this repository's and report the imports it cannot resolve. (The same pattern lays the fleet's `src/`, which imports nothing it lacks.)
+  // `packages/control` (#3506) is laid and excluded for the same reason: it is typechecked in `a11ign/control`.
   "exclude": [
-    "packages/lab"
+    "packages/lab",
+    "packages/control"
   ]
 }

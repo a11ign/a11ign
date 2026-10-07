@@ -118,8 +118,6 @@ importers:
         specifier: ^1.63.0
         version: 1.63.0
 
-  packages/control: {}
-
   packages/evidence: {}
 
   packages/guards:
@@ -127,10 +125,6 @@ importers:
       '@a11ign/screenreader-fleet':
         specifier: ^0.5.1
         version: 0.5.1(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)
-    devDependencies:
-      '@a11ign/control':
-        specifier: 0.1.0
-        version: link:../control
 
   packages/judge:
     dependencies:

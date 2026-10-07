@@ -557,7 +557,7 @@ export function checkIsolation(packageDir) {
 const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 
 /** Where the one declaration of the layers lives, relative to a repository root. */
-const LAYERS_JSON = "packages/control/layers.json";
+const LAYERS_JSON = "layers.json";
 
 /**
  * The directories `layers.json` declares as the checkout of a layer that lives in a repository of its own (#3830).
@@ -571,7 +571,7 @@ const LAYERS_JSON = "packages/control/layers.json";
  * Read from the file directly, the way `scripts/lay-layer.mjs` does, and NOT through `control`'s `layer-checkouts.mjs`:
  * that module holds a computed `import()` (`layerCodeVersion`), and every guard that declares a walk scope has this
  * file in its import closure, where a computed import is refused (`declared-walk-scope.test.ts`). It is still the one
- * declaration, read here and never restated. #3506 deletes `packages/control`, and then this is the line it repoints.
+ * declaration, read here and never restated. It sat in `packages/control/` until #3506 deleted that directory, and is at the root now.
  *
  * A layer with no `remote` is inside this repository's checkout, which publishes it, so it is not a layer checkout.
  * An absent or unreadable `layers.json` throws: answering "no layers" would pack them again, silently.

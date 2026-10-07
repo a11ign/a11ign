@@ -298,7 +298,8 @@ test("#2301: package-lock.json is deleted, and no source under .github, scripts 
   const tracked = execFileSync("git", ["ls-files", "-z", "--", ".github", "scripts", "packages"],
     { cwd: REPO, encoding: "utf8", env: sandboxGitEnv() }).split("\0").filter(Boolean);
   const scanned = tracked.filter((file) => /\.(mjs|cjs|js|ts|ya?ml|json)$/.test(file));
-  assert.ok(scanned.length > 500, "the git listing returned almost nothing: it is broken, not the repo clean");
+  // 456 at #3506's delete (609 before `packages/control` left): a floor well under the real count, over what a broken listing returns (0 to a few).
+  assert.ok(scanned.length > 300, "the git listing returned almost nothing: it is broken, not the repo clean");
   // The emptiness below is controlled by the test above, which plants readers and expects them found.
   const readers = filesReadingTheOldLockfile(REPO, scanned);
   assert.deepEqual(readers, [], "these still name package-lock.json in code, and nothing produces it any more");

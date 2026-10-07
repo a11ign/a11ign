@@ -34,8 +34,8 @@ const walkScope = fileURLToPath(new URL("../../packages/guards/src/walk-scope.mj
 const A11IGN_LOADED_TRIGGERS = ["scripts/rstest/**", "pnpm-lock.yaml", "packages/guards/src/walk-scope*.mjs", "scripts/private-tmp.mjs"];
 
 /**
- * #3572: data directories a non-tree-wide test reads by path, whole, because a file added to one is read too. NONE IS UNDER `packages/lab/` (#3505): that
- * directory is laid and untracked, so a change to it is never in a diff and a trigger naming it would select nothing.
+ * #3572: data directories a non-tree-wide test reads by path, whole, because a file added to one is read too. NONE IS UNDER `packages/lab/` (#3505) OR `packages/control/` (#3506): those
+ * directories are laid and untracked, so a change to it is never in a diff and a trigger naming it would select nothing.
  */
 const READ_DIRECTORY_TRIGGERS = [
   ".agent-org/roles/**",
@@ -45,7 +45,6 @@ const READ_DIRECTORY_TRIGGERS = [
   "docs/adr/**",
   "docs/board/**",
   "packages/cli/src/fixtures/**",
-  "packages/control/ansible/**",
   "packages/scorer/models/screenreader-scorer/**",
   "packages/scorer/python/**",
   "packages/scorer/tests/**",
@@ -143,9 +142,6 @@ const READ_FILE_TRIGGERS = [
   "packages/README.md",
   "packages/cli/README.md",
   "packages/cli/src/auth/fixtures/spelled-out-transcript.json",
-  "packages/control/CLAUDE.md",
-  "packages/control/README.md",
-  "packages/control/layers.json",
   "packages/evidence/README.md",
   "packages/evidence/src/fixtures-exhausted-887.json",
   "packages/evidence/src/fixtures/submit-activation-cases.json",

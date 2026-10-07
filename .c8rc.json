@@ -16,6 +16,7 @@
     "  packages/cli/src/scan/run-axe.ts — CLI wrapper around the Playwright scan",
     "  scripts/coverage.mjs — spawns the test runner; measuring the measurer is circular",
     "  packages/lab/** — `a11ign/lab`'s code, LAID here (`scripts/lay-layer.mjs`, #3505) and not this repository's: its coverage and the reasons its integration files are unreachable by a unit test are its own repository's",
+    "  packages/control/** — `a11ign/control`'s code, LAID here (`scripts/lay-layer.mjs`, #3506) and not this repository's: its coverage and the reasons its integration files are unreachable by a unit test are its own repository's",
     "",
     "THE SPLIT OUTRAN THE EXCLUSION, and it is why main went red on 2026-09-06. capture-core.mjs was excluded because it drives NVDA. On 2026-09-05 it was split into three, and the exclusion followed only the PARENT - so 4,823 statements of guidepup-driving code entered the measured population at 0%, and packages/ fell from 87.18% to 77.64%. Nothing in the split was wrong and no test was deleted.",
     "",
@@ -53,7 +54,8 @@
     "packages/cli/src/scan/axe.ts",
     "packages/cli/src/scan/run-axe.ts",
     "scripts/coverage.mjs",
-    "packages/lab/**"
+    "packages/lab/**",
+    "packages/control/**"
   ],
   "reporter": [
     "text-summary",

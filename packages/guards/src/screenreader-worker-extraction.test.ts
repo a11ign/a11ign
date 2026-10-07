@@ -28,7 +28,8 @@ import { tmpdir } from "node:os";
 import { dirname, join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
-import { layersFrom } from "@a11ign/control/layer-checkouts";
+// By path, through the LAID `a11ign/control` (#3506): `@a11ign/control` is on no registry, so no name resolves to it.
+import { layersFrom } from "../../control/src/layer-checkouts.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const CONSUMED = "@a11ign/screenreader-worker";
@@ -231,7 +232,7 @@ test("POSITIVE CONTROL: an entry whose frontmatter names a departed package is r
 const HARNESS = "packages/lab/src/harnesses/occurrence-verdict-stability.mjs";
 /** The manifest of the real layer, over a root of the caller's choosing: the resolver is the production one, the checkout is a fixture. */
 const layerCheckoutAt = (root: string) => layersFrom({
-  manifest: JSON.parse(read(REPO_ROOT, "packages/control/layers.json")) as Parameters<typeof layersFrom>[0]["manifest"], root,
+  manifest: JSON.parse(read(REPO_ROOT, "layers.json")) as Parameters<typeof layersFrom>[0]["manifest"], root,
 });
 
 test("the harness reads nvda-speech through the layer checkout, never the workspace and never a package name", () => {
