@@ -52,10 +52,30 @@
 # exists only inside the called workflow, after them), which is why a version bump they would have seen on `main` under the
 # version pull request is not what they read now.
 #
-# A PUSH PUBLISHES TO THE DIST-TAG `next`, AND THE FLEET'S VERDICT NO LONGER GATES IT (#3946, outcome 3 of #3911: release channels and
-# promotion by evidence). Pre-merge CI and the guards above are the gate for `next`; the fleet part's qualification (#3136) is read
-# AFTER the publish, and `latest` moves only on a green one (the promotion row). `scripts/release-reads-qualification.mjs` stays in
-# the tree for that reading and nothing here runs it. `npm stage publish` is not used: it needs a person's 2FA approval per version.
+# TWO CHANNELS, AND THE FLEET'S VERDICT DECIDES THE SECOND (#3946 and #3947, outcome 3 of #3911: release channels and promotion by
+# evidence).
+#
+#   `next`    A PUSH THAT CARRIES A CHANGESET PUBLISHES HERE, and the fleet's verdict does not gate it. Pre-merge CI and the guards above
+#             are the gate for `next`.
+#   `latest`  `latest` MOVES ONLY WHEN THE FLEET PART'S QUALIFICATION (#3136) IS GREEN FOR THE SHA A VERSION WAS RELEASED ON, and stays on
+#             the last qualified version when it is red, which is the rollback by construction. The `promote` job reads it AFTER the
+#             publish with `scripts/release-reads-qualification.mjs`'s decider (`proceed`, `wait`, `rerun`, `regression`), through
+#             `scripts/release-promote.mjs`, and runs `npm dist-tag add <name>@<version> latest` by OIDC for each package of a release
+#             that `proceed`s. It never moves `latest` backwards, and a `regression` or an overdue `wait` files ONE row (`promotion-row`).
+#
+# WHAT STARTS THE PROMOTION: the `release` job's own push run, once the publish is done, and every `status` event, narrowed by the job's
+# `if` to the context the lab posts (`qualification`, #3289). A `status` event runs this file as it stands on `main`, never on a branch,
+# and the `npm-publish` environment is restricted to `main` as well. The event is only a reason to look: the job reads the registry for
+# every version on `next` that is not on `latest` and decides each, so a status on an earlier commit that qualifies a later release is
+# found, a failed run is re-run from the platform's "re-run failed jobs", and a promotion that did not happen is simply read again.
+# THE GUARD JOBS DO NOT RUN ON A STATUS EVENT (their `if`), the Windows one above all; `push`'s `paths` is not widened for any of it.
+# The workflow's concurrency group names the event, so a status run can never be the pending run that displaces a pending release.
+#
+# WHEN `latest` MOVED IS RECORDED IN THE GITHUB RELEASE of each promoted version, as a `Promoted to latest: <time>` line in its notes
+# (`promotion-record`, the one job here holding `contents: write` and running no repository code): npm's `time` lists when a version was
+# published and not when a dist-tag moved, and a Release's notes are readable with no token (`dora`). The Release of `a11ign` is marked
+# the latest Release then, and not before: the Release for a `next` publish is not (the called workflow's `--latest=false`).
+# `npm stage publish` is not used: it needs a person's 2FA approval per version.
 name: release
 
 on:
@@ -68,26 +88,36 @@ on:
   # THE REHEARSAL, KEPT (#3717): a person may run every guard below on any branch and publish nothing. The called workflow has no dry
   # run, so the rehearsal is the guards alone and the `release` job is skipped by its own `if`.
   workflow_dispatch:
+  # THE PROMOTION'S TRIGGER (#3947), narrowed to the `qualification` context by the `promote` job's own `if`: `on:` cannot filter a status
+  # by context. See the header.
+  status:
 
 # ONE RELEASE AT A TIME, AND NEVER CANCELLED IN FLIGHT. A publish that is cancelled half way leaves some packages on the
 # registry and some not, and a registry cannot be rolled back. GitHub holds ONE run pending behind the running one and drops
 # older pending runs, which loses nothing: the called workflow subtracts what the tags consumed, so the newer run releases both.
+#
+# A STATUS RUN HAS ITS OWN GROUP (#3947): GitHub keeps ONE run pending behind the running one, and a status event shares nothing with a
+# release, so in one group a status could be the pending run that drops a pending release. Dropping an older pending STATUS run loses
+# nothing: each reads the whole registry again.
 concurrency:
-  group: release
+  group: ${{ github.event_name == 'status' && 'release-status' || 'release' }}
   cancel-in-progress: false
 
 jobs:
   # GUARDS 5, 6 AND 7, RUN AS JOBS AGAINST THE EXACT SHA THIS WORKFLOW RAN AT. `uses:` a local workflow path calls it as a
   # reusable workflow (`workflow_call`); GitHub runs a called workflow at THIS workflow's own ref.
   action-smoke:
+    if: github.event_name != 'status'
     uses: ./.github/workflows/action-smoke.yml
 
   capture-regression:
+    if: github.event_name != 'status'
     uses: ./.github/workflows/capture-regression.yml
 
   # #494. `consumer-gate.yml`'s own `check-pin` job (#558) compares its pinned sha against `${{ github.sha }}`, which under
   # `workflow_call` is THIS release's own sha, so a stale pin fails here on ubuntu-latest before the Windows job starts.
   consumer-gate:
+    if: github.event_name != 'status'
     uses: ./.github/workflows/consumer-gate.yml
     # #1251. A called workflow may not request more than its caller grants, and this repository's default GITHUB_TOKEN is
     # read-only. consumer-gate.yml is generated from README.md's Quickstart fence, which gained `pull-requests: write` for the
@@ -101,6 +131,7 @@ jobs:
   # EVERY GUARD ABOUT WHAT IS PUBLISHED THAT IS A STEP, in one job the `release` job needs (see the header). It holds `contents: read`
   # and nothing else: no `id-token`, no write. The old `release` job held both writes beside all of these.
   guards:
+    if: github.event_name != 'status'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -331,3 +362,152 @@ jobs:
       gate-check: gate
       # #3946: every merge that carries a changeset goes to `next`; `latest` moves on a qualified reading, in the promotion row.
       dist-tag: next
+
+  # THE PROMOTION (#3947): the one job that moves `latest`, and what it holds is `id-token: write` for npm's OIDC dist-tag (the
+  # `npm-publish` environment, limited to `main`; "Allow npm dist-tag" is ticked on `a11ign`, `@a11ign/evidence`, `@a11ign/judge` and
+  # `@a11ign/scorer`) and the reads it needs. NO STORED TOKEN: a token would make npm use it and never exercise OIDC. It lives in THIS file and
+  # not a new one because npm's trusted-publisher entries name `release.yml` and the OIDC token names the CALLING file. THE FIRST REAL RUN
+  # IS THE CONFIRMATION that npm accepts an OIDC `dist-tag add` (#3778, Done-when 2): until it has run, nothing here has moved a tag.
+  #
+  # It `needs` the publish so a push run promotes only after its own release, and runs when that is skipped or failed (`!cancelled()`): what
+  # it acts on is the registry's state, not this run's. Its own concurrency group serialises it across a push run and a status run; a pending
+  # older one is dropped for the newer, which reads everything the older would.
+  promote:
+    name: promote to latest on a green qualification
+    needs: [release]
+    if: ${{ !cancelled() && (github.event_name == 'push' || (github.event_name == 'status' && github.event.context == 'qualification')) }}
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    concurrency:
+      group: promote-latest
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      statuses: read
+      id-token: write
+    outputs:
+      promote: ${{ steps.plan.outputs.promote }}
+      promoted: ${{ steps.plan.outputs.promoted }}
+      rows: ${{ steps.plan.outputs.rows }}
+      blocked: ${{ steps.plan.outputs.blocked }}
+      at: ${{ steps.move.outputs.at }}
+    steps:
+      # Every tag and every commit back to the release: the release sha is the parent of the commit a tag points at.
+      - uses: actions/checkout@v7
+        with: { fetch-depth: 0, persist-credentials: false }
+      - uses: actions/setup-node@v7
+        with: { node-version: 22, registry-url: https://registry.npmjs.org }
+      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
+        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+
+      # Trusted publishing needs npm 11.5.1 or newer, and Node 22 ships 10.x (the same floor and the same reason as `guards`).
+      - name: Upgrade npm to the trusted-publishing floor, and refuse below it
+        run: |
+          npm install -g "npm@^11.5.1"
+          have="$(npm --version)"
+          printf '%s\n%s\n' 11.5.1 "$have" | sort -V -C || {
+            echo "::error::npm $have is below 11.5.1, which trusted publishing needs. Nothing moved."
+            exit 1
+          }
+
+      # THE DECISION, which moves nothing: the registry's `next` against its `latest`, each version's release sha, and the decider's
+      # outcome for it. A wait, a rerun and a regression leave `promote` empty; a status that cannot be read leaves it empty and counts in
+      # `blocked`. The log names every outcome and sha, on every run.
+      - name: Decide with release-reads-qualification's qualificationDecision which versions on next may become latest
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release-promote.mjs
+
+      # THE MOVE: `npm dist-tag add` for each `name@version` the plan names, and nothing else. A spec is validated by the script to be
+      # `name@x.y.z`, so the word-splitting below can only split specs. Re-running it is harmless: adding the tag a version already has
+      # changes nothing, and a version that did not move is read again by the next run.
+      - name: Move latest to the versions the decision promoted
+        id: move
+        if: steps.plan.outputs.promote != ''
+        env:
+          PROMOTE: ${{ steps.plan.outputs.promote }}
+        run: |
+          set -euo pipefail
+          for spec in $PROMOTE; do
+            npm dist-tag add "$spec" latest
+            echo "moved latest -> $spec"
+          done
+          echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      # A group the script could not read (no tag, a status in no known state, a registry that did not answer, or a version older than
+      # latest) is never a pass and never silent: the run is red AFTER the others were promoted, so one bad group blocks no other.
+      - name: Say plainly that something could not be decided
+        if: steps.plan.outputs.blocked != '0'
+        run: |
+          echo "::error::${{ steps.plan.outputs.blocked }} group(s) could not be decided; see the lines above. Nothing for them was moved."
+          exit 1
+
+  # WHEN `latest` MOVED, recorded where `dora` reads it with no token (the header). The only job here holding `contents: write` for this,
+  # and it runs no repository code: no checkout, `gh` and `jq`. The line is appended once (a re-run finds it and leaves the notes alone), and
+  # `a11ign`'s Release is marked the latest Release only now.
+  promotion-record:
+    needs: [promote]
+    if: ${{ !cancelled() && needs.promote.outputs.at != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Record the time on each promoted version's Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PROMOTED: ${{ needs.promote.outputs.promoted }}
+          PROMOTED_AT: ${{ needs.promote.outputs.at }}
+        run: |
+          set -euo pipefail
+          while IFS=$'\t' read -r tag sha; do
+            body=$(gh release view "$tag" --json body --jq .body)
+            if ! grep -q '^Promoted to latest: ' <<<"$body"; then
+              printf '%s\n\nPromoted to latest: %s (qualification read on %s)\n' "$body" "$PROMOTED_AT" "$sha" > "$RUNNER_TEMP/notes.md"
+              gh release edit "$tag" --notes-file "$RUNNER_TEMP/notes.md"
+            fi
+            case "$tag" in
+              a11ign@*) gh release edit "$tag" --latest ;;
+            esac
+          done < <(jq -r '.[] | [.tag, .sha] | @tsv' <<<"$PROMOTED")
+
+  # THE ROW A REGRESSION OR AN OVERDUE WAIT FILES (#3291's rule, carried to the promotion): `issues: write` and `contents: read` and
+  # nothing else, no checkout and no install, so the one token that may write an issue never meets code from the repository, and the
+  # job holding `id-token` never holds it. Idempotent by TITLE, which names the whole sha: the next status re-reads the same regression
+  # and finds its row.
+  promotion-row:
+    needs: [promote]
+    if: ${{ !cancelled() && needs.promote.outputs.rows != '' && needs.promote.outputs.rows != '[]' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: File each row, unless it is already filed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ROWS: ${{ needs.promote.outputs.rows }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r row; do
+            ROW_TITLE=$(jq -r .title <<<"$row")
+            export ROW_TITLE
+            # The title is the row's identity. The search narrows, the exact comparison decides, and `--state all` means a
+            # row already closed still counts: ONE row per sha, never a second after the first was dealt with.
+            filed=$(gh issue list --state all --limit 100 --search "\"$ROW_TITLE\" in:title" --json title \
+              --jq '[.[] | select(.title == env.ROW_TITLE)] | length')
+            if [ "$filed" != "0" ]; then
+              echo "already filed: $ROW_TITLE"
+              continue
+            fi
+            label_args=()
+            while IFS= read -r label; do
+              # Create only what is missing: `gh label create --force` would repaint a label that exists.
+              present=$(LABEL="$label" gh label list --limit 1000 --json name --jq '[.[] | select(.name == env.LABEL)] | length')
+              if [ "$present" = "0" ]; then gh label create "$label"; fi
+              label_args+=(--label "$label")
+            done < <(jq -r '.labels[]' <<<"$row")
+            gh issue create --title "$ROW_TITLE" --body "$(jq -r .body <<<"$row")" "${label_args[@]}"
+          done < <(jq -c '.[]' <<<"$ROWS")
