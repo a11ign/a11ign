@@ -40,6 +40,7 @@ entry names what is missing, what it would cost, and what would tell you it is f
 - [§55](#55-githubs-closingissuesreferences-was-empty-for-prs-opened-from-0912z-on-2026-09-30-came-back-by-itself-and-the-cause-was-not-found-open-a-reading-2824) GITHUB'S closingIssuesReferences WAS EMPTY FOR PRs OPENED FROM 09:12Z ON 2026-09-30, CAME BACK BY ITSELF, AND THE CAUSE WAS NOT FOUND — OPEN, a reading (#2824)
 - [§56](#56-the-chairmans-chat-channel-is-not-cryptographic-its-classifier-is-a-heuristic-and-a-reply-waits-on-ceo-open-by-design-2899-2911) THE CHAIRMAN'S CHAT CHANNEL IS NOT CRYPTOGRAPHIC, ITS CLASSIFIER IS A HEURISTIC, AND A REPLY WAITS ON ceo — OPEN, by design (#2899, #2911)
 - [§57](#57-a-page-whose-first-visit-differs-from-every-later-one-is-not-something-gatestability-watches-open-by-design-3905-3130) A PAGE WHOSE FIRST VISIT DIFFERS FROM EVERY LATER ONE IS NOT SOMETHING gate:stability WATCHES — OPEN, by design (#3905, #3130)
+- [§58](#58-the-liaison-shares-the-host-and-the-account-the-do-it-for-me-queue-cannot-see-his-session-and-a-walk-through-verifies-only-what-a-read-can-see-open-by-design-3409-3429-3430) THE LIAISON SHARES THE HOST AND THE ACCOUNT, THE DO-IT-FOR-ME QUEUE CANNOT SEE HIS SESSION, AND A WALK-THROUGH VERIFIES ONLY WHAT A READ CAN SEE — OPEN, by design (#3409, #3429, #3430)
 <!-- known-gaps-index:end -->
 
 ## The order these should be done in
@@ -3781,3 +3782,43 @@ same run), and it gains nothing about first visits.
 **What would close it:** a capture that records whether its profile had met the page before, and a check that reads the first visit as its own
 reading rather than as a sample of the warm one. That is a decision about the capture protocol and not a change to this gate, and nothing in
 this row does it.
+
+## 58. THE LIAISON SHARES THE HOST AND THE ACCOUNT, THE DO-IT-FOR-ME QUEUE CANNOT SEE HIS SESSION, AND A WALK-THROUGH VERIFIES ONLY WHAT A READ CAN SEE — OPEN, by design (#3409, #3429, #3430)
+
+**Written 2026-10-07, when the chairman's messages began to go to the `liaison` rather than to `ceo`** (`.agent-org/roles/liaison.md`;
+`docs/chairman-messaging.md` lists the commands). §56 stated the limits of the chat channel while `ceo` was its only reader; this entry adds what the
+liaison design changes and does not repeat §56's. The limits are `a11ign/agent-org`'s `docs/messaging.md`, "What this design CANNOT promise", as row E1
+(#3429) wrote them; **that row had not merged when this was written, so the reading is of its branch (`agent/chairman-messaging-e1-3429` at
+`259a8fa`), and the source of truth is that document once it has.** It is a reading of a design and its tests, not a measurement of the
+running seat: **E2 (#3431) is the live conversation, and nothing below has been measured live.**
+
+**1. A recorded answer is traceable to a Telegram message ref the chairman can check, and is not cryptographically proven.** The liaison and every
+agent share the host and one GitHub account. `chairman:record` and `chairman:correct` refuse a ref the ledger lacks and words that do not hash to the
+receipt, and they say in the comment that the liaison wrote it; an agent with a shell can still write any comment with `gh`. *Cost:* a row never claims
+the chairman wrote what the liaison did, and a forged answer is found only by someone who compares the row with his own chat, which nothing does for
+him. *Fixed when:* the provenance carries something an agent on the host cannot produce, or a check reads the ledger against the recorded comments and
+reports one with no inbound line. §56 point 1 is the same limit for the listener's own comments and stays open.
+
+**2. The do-it-for-me queue cannot know his session is running.** It is a file that only his own session reads, and the only thing recorded about that
+session is `lastRead`, the time its `list` or `take` last ran. `chairman:queue status` can say "never read", "not read since <time>" or "last read
+<time>", and it cannot say "running". An ask can sit unread; nothing retries it or acts in its place, by design, because there is no executor.
+*Cost:* the liaison can tell him an ask is queued and not that anyone is doing it. *Fixed when:* never, by this design; an executor would be a decision
+about admin credentials reaching an agent, and the direction is that they never do.
+
+**3. A walk-through verifies only what a read can see.** A step whose `Verify:` is a placeholder is confirmed by the organisation's own reading; a
+step with none is confirmed on his word, and the message says so. A step done in a place the checked-facts vocabulary cannot read (a console, a
+device, an account on another service) is not verified, however the walk reads. *Cost:* "step 3 done" can mean "he said so". *Fixed when:* the
+vocabulary gains a read for that place, which is a row for that place and not a change to the walk.
+
+**4. The fallback reader has no memory of the conversation.** A message the liaison's queue refuses (the seat absent, its inbox full) goes to `ceo`,
+so the chairman is never left unanswered; the price is that `ceo` is cleared before each order. §56 point 4's wait (the tick plus `ceo`'s next turn)
+therefore still describes that path, and for the liaison's own path **nothing has measured the wait either**. *Fixed when:* E2's round trip is read
+back with its latency.
+
+**5. A `needs:chairman` brief's plain English is the labeller's, and no code reads it.** The alert source refuses a brief that lacks a required line
+and sends nothing; it cannot tell whether the words are plain, whether `Checked:` is true, or whether the ask is still needed
+(`docs/operational-lessons.md`, "A `needs:chairman` brief is a brief, not a ticket"). *Fixed when:* a reading of the briefs against the rows' state
+at alert time finds none sent for an act already done, which is the measure #3409 names on #928 as asks sent versus withdrawn.
+
+**What would close the entry as a whole:** E2's live reading, with each figure above that can be measured written beside the claim it supports.
+Until then these are documented boundaries of the design and not defects awaiting a fix.

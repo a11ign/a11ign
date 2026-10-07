@@ -2530,3 +2530,26 @@ the same outage with a log line attached: the guard did its job and the org did 
   host was shared test temp dirs under `/tmp`, not worktrees. It stays as ordinary backlog and is not listed above.
 - **Not done here:** the kernel panic sysctl lines and the kernel update are a `needs:chairman` brief that needs sudo, held
   on #3846 (its Done-when 3), and this section does not record them as applied.
+
+## A `needs:chairman` brief is a brief, not a ticket
+
+**The rule is one bullet in `.claude/rules/org-routing-and-timers.md` (Routing); this is its reason and its detail.**
+
+- **The chairman's direction, 2026-10-04 (#3409):** *"sending tickets isn't really ideal because it's a waste of my energy having to go into the
+  ticket and read the whole ticket ... I'd rather it was more of a conversation and explained what's needed from me"*, and *"a lot of the time things
+  are incorrectly labelled, and I need a back-and-forth."* The first is why a brief states what is happening and what is needed in plain English; the
+  second is why a labeller confirms the ask is still needed, and that his own Claude session cannot do it, before the label goes on.
+- **The shape, which the alert source reads** (`src/messaging/sources/requests.mjs` in `a11ign/agent-org`, read 2026-10-07 at `origin/main`): the
+  newest comment from an org account that opens `BRIEF for the chairman`, with one `Label: text` line each for `What is happening`, `Ask`,
+  `Only you because`, `Checked`, `How long` and `Unblocks`. A brief that offers options (a `chairman-options` block) also carries `Recommend` and
+  `Trade-off`; a brief with none carries `Not the chairman's Claude session because`. **A required line missing sends no alert and logs
+  `alert not sent: ...`**, so a labeller who skips one has labelled a row the chairman will never be told about.
+- **What no code checks:** that the words are plain English, that `Checked:` is true, and that the ask is still needed. The source says so
+  of itself: *"Whether the words are plain English is the labeller's rule (E3), not a check here."* That is the part this paragraph is.
+- **The earlier rules still stand and this adds to them:** the label is ONLY for what he alone can physically do or a genuine choice `ceo` cannot
+  make (#2623), the session that records the answer takes the label off in the same turn (#3392), and the alert must state the act (#3335) — all in
+  `.agent-org/roles/ceo.md`. **What was missing was the SHAPE of the body.** Measured 2026-10-03 (#3335): alerts reached his phone as a row title
+  only, nine of nine, four of the nine were cleared by his session without him, and #3226 was alerted after its act was done.
+- **Where the chat side is written down:** `.agent-org/roles/liaison.md` is the brief of the session that relays the conversation, and
+  `docs/chairman-messaging.md` the commands. The liaison's own rule is plain English, short, the reference last, so a row written as a brief can be
+  passed on without being rewritten.
