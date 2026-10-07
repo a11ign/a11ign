@@ -1,4 +1,4 @@
-// no-token: provisionAgentOrg -- runs `provisionAgentOrg` against throwaway repositories in a temp directory with a bare repository on disk as "origin"; no `gh` (the clone path is never taken), no network
+// no-token: gh -- drives `provisionAgentOrg` against throwaway repositories in a temp directory with a bare repository on disk as "origin"; its only `gh` call is the clone path, which every case here avoids by making the cache first, and nothing reaches the network
 /**
  * #3931: `verify` BRINGS THE AGENT-ORG CLONE IT MADE TO `origin/main`, AND TOUCHES NO OTHER CHECKOUT.
  *
