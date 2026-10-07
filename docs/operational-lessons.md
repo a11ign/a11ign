@@ -2497,3 +2497,36 @@ scp "${SRC:?}" "<guest>:<path>"         # push: either protocol works
 - **`red-pr-unattended` and `no-merge-while-work-exists` stop trusting the label:** a hold excuses its own two red jobs only while its condition is unresolved or unknown, a `manual` hold is under 4 hours old, or a hold with no reason has been quiet under 4 hours. `org-retro.mjs` and `queue-table.mjs` still ask the label alone (`isBrokenRed` is unchanged; `isBrokenRedWhere` is the new asker). `ready-row-refused` needed no change: it reads rows the claim OFFERS, which no wait hides.
 - **`wait-without-reason`'s age is time since the item's last activity (`updatedAt`), not the wait's own start**, as `pr-not-progressing`'s is: the start of a LABEL is a timeline read per item, and a held item somebody is commenting on is not a stall.
 - **Not done here, each its own row:** checking that a ruling TOOK EFFECT, a cross-repository landing closing its row, and an idle claimant with no field.
+
+## A watcher must not live only on the machine it watches, and a refusal nobody reads is an outage (#3846)
+
+**The rule (chairman, via `ceo`, 2026-10-06):** a watcher that runs only on the machine it watches goes down with it, so
+the thing that notices a hung host has to run somewhere else. And a refusal that is loud but that no reader acts on is
+the same outage with a log line attached: the guard did its job and the org did not. Both halves were read off one day.
+
+- **The hang.** The agents host hung for 2 h 15 min and nothing noticed. The previous boot's kernel log
+  (`journalctl -b -1 -k --utc`) shows a soft lockup at 14:09Z in `rmdir` (`__x64_sys_rmdir` -> `vfs_rmdir` -> `d_walk`) over
+  a `/tmp` of about 121,000 test temp dirs, on the root volume where nothing clears it; the last gate tick was 14:07:42Z, and
+  the host was power-cycled about 16:24Z. Every watcher the org had (the gate tick, `org-health`) ran ON that host, so
+  none could report that it had stopped. **Which process ran the `rmdir` is NOT established** (#3846 says so): this section
+  names no culprit, and the class fixes below do not depend on one.
+- **The refusal.** `fleet-auto-off` refused `stale-checkout` from about 04:21Z, 2,569 times over about 12 hours, because
+  files under `packages/worker-fleet` changed on `main` and the control plane's checkout did not follow. The refusal was
+  as loud as a refusal can be (exit 1, the unit FAILED, a state file) and the 15 mini PCs stayed on and idle, because
+  **nothing that raises read that record.** Loud is a property of the writer; an outage is decided by the reader.
+- **The class fixes, by row, as read 2026-10-07 at the claim of #3906** (a reading at a moment, so re-read the rows):
+  - *Do not let the pile form* (closed): #3854 (agent-org) and #3855 (the rstest config here) give every test run a
+    private `TMPDIR` removed when the run ends and name a test file that leaves anything in it; #3847 makes `verify`
+    remove its own trees on every exit; #3848 fixes the leaking tests and adds a guard that fails the suite for one.
+  - *Clear the existing pile gently* (**open**): #3849, a timer running `prune-tmp` in small niced batches, never
+    removing a large tree in one call. It carries a `Not-before` of 2026-10-14.
+  - *The control plane follows `main`* (closed): #3852, so `stale-checkout` is not a standing refusal.
+  - *A refusal is read* (closed): #3853, `org-health` raises when auto-off has refused for more than 15 minutes.
+  - *A watcher elsewhere* (**open**): #3851, an external heartbeat. The control plane reads the gate's last tick and
+    messages the chairman on Telegram when it is older than 10 minutes. This is the half of the rule that is not yet
+    true: until it lands, the host is still watched only from itself.
+- **Not a class fix of this incident:** #3850 (a worktree cap, prompt removal of finished worktrees, a prune in small niced
+  batches; closed). It was filed as one, and #3846's 16:55Z correction withdrew it, because the pile that locked the
+  host was shared test temp dirs under `/tmp`, not worktrees. It stays as ordinary backlog and is not listed above.
+- **Not done here:** the kernel panic sysctl lines and the kernel update are a `needs:chairman` brief that needs sudo, held
+  on #3846 (its Done-when 3), and this section does not record them as applied.
