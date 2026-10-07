@@ -1182,9 +1182,9 @@ test("#30: the OBJECTION'S OWN EXAMPLE — a search form to its results page is 
 
   // AND `sameDocument` IS STILL STRICT ABOUT THE QUERY, checked rather than asserted in prose. A hardcoded
   // `true` here would look checked and examine nothing, which is the shape this repo keeps paying for --
-  // so this reads the real source. If someone widens `sameDocument` on the strength of this change, the
+  // so this reads the real source (the layer publishes `dist/` only, #3937, where `browser-session.mjs` is bundled into this chunk). If someone widens `sameDocument` on the strength of this change, the
   // comparison below stops matching and this test says so.
-  const browserSession = readFileSync(layerFile("@a11ign/screenreader-worker", "src/browser-session.mjs", { from: import.meta.dirname }), "utf8");
+  const browserSession = readFileSync(layerFile("@a11ign/screenreader-worker", "dist/src_auth-flow_mjs.mjs", { from: import.meta.dirname }), "utf8");
   assert.match(browserSession, /return samePath\(actual\.pathname, expected\.pathname\) && actual\.search === expected\.search;/,
     "`sameDocument` must still compare `search` EXACTLY -- this fix deliberately does not touch it, because "
     + "a search results page really is a different page to measure");

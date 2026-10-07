@@ -17,7 +17,7 @@ import { join, resolve } from "node:path";
 import { parse } from "yaml";
 
 const ROOT = resolve(import.meta.dirname ?? new URL(".", import.meta.url).pathname, "../../../..");
-const PACKAGE_SERVER = "node_modules/@a11ign/screenreader-worker/src/server.mjs";
+const PACKAGE_SERVER = "node_modules/@a11ign/screenreader-worker/dist/server.mjs";
 const MS_PER_SECOND = 1000;
 const DEAD_WORKER_LIMIT_SECONDS = 30; // a dead pid ends the poll within a tick or two, not at the 3-minute budget
 const POLL_BUDGET_MS = 90_000; // far under the 360 x (0.5 s + curl) the poll would otherwise spend, far over a healthy start
@@ -56,8 +56,8 @@ if (IS_MAIN) createServer((_, res) => res.end('{"ok":true,"ready":true}')).liste
 function laidOut(serverSource: string): string {
   const project = mkdtempSync(join(tmpdir(), "worker-launch-"));
   const real = join(project, ".store", "screenreader-worker");
-  mkdirSync(join(real, "src"), { recursive: true });
-  writeFileSync(join(real, "src", "server.mjs"), serverSource);
+  mkdirSync(join(real, "dist"), { recursive: true });
+  writeFileSync(join(real, "dist", "server.mjs"), serverSource);
   mkdirSync(join(project, "node_modules", "@a11ign"), { recursive: true });
   symlinkSync(real, join(project, "node_modules", "@a11ign", "screenreader-worker"), "dir");
   return project;
@@ -77,7 +77,7 @@ test("the step carries A11Y_WORKER, which the poll reads, and no bare path to th
   assert.equal(capture?.env?.A11Y_WORKER, "http://127.0.0.1:8765");
   const bare = new RegExp(`node\\s+${PACKAGE_SERVER.replace(/[./]/g, "\\$&")}`);
   assert.doesNotMatch(capture?.run as string, bare, "the worker is launched by a link: IS_MAIN is false and it never listens (#3829)");
-  assert.match(readFileSync(resolve(ROOT, "package.json"), "utf8"), /"worker": ".*realpathSync\('node_modules\/@a11ign\/screenreader-worker\/src\/server\.mjs'\)/);
+  assert.match(readFileSync(resolve(ROOT, "package.json"), "utf8"), /"worker": ".*realpathSync\('node_modules\/@a11ign\/screenreader-worker\/dist\/server\.mjs'\)/);
 });
 
 test("POSITIVE CONTROL: through a pnpm-style link the bare path exits silently without listening, so the layout does bite", async () => {

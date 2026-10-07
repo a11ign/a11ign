@@ -27,16 +27,17 @@ import { layerFile } from "../../guards/src/layer-file.mjs";
 import { stripComments } from "./source-text.js";
 import type { CaptureRequest, CaptureFormState } from "./index.js";
 
-// BY PACKAGE NAME (#3447): the worker lives in its own repository and is installed from the registry.
-const SERVER_PATH = layerFile("@a11ign/screenreader-worker", "src/server.mjs", { from: import.meta.dirname });
-const CAPTURE_PURE_PATH = layerFile("@a11ign/screenreader-worker", "src/capture-pure.mjs", { from: import.meta.dirname });
+// BY PACKAGE NAME (#3447): the worker lives in its own repository and is installed from the registry, which publishes `dist/` only (#3937):
+// `server.mjs` is its own entry, and `capture-pure.mjs` is bundled into the `src_capture-pure_mjs.mjs` chunk.
+const SERVER_PATH = layerFile("@a11ign/screenreader-worker", "dist/server.mjs", { from: import.meta.dirname });
+const CAPTURE_PURE_PATH = layerFile("@a11ign/screenreader-worker", "dist/src_capture-pure_mjs.mjs", { from: import.meta.dirname });
 
 /** `PROBE_FLAGS`, straight out of `capture-pure.mjs`'s own `Object.freeze([...])` array literal —
  *  the worker's own copy of the ten opt-in probe names. */
 function probeFlagsFromSource(): string[] {
   assert.ok(existsSync(CAPTURE_PURE_PATH), "capture-pure.mjs has moved; update CAPTURE_PURE_PATH");
   const source = stripComments(readFileSync(CAPTURE_PURE_PATH, "utf8"));
-  const start = source.indexOf("export const PROBE_FLAGS = Object.freeze([");
+  const start = source.indexOf("const PROBE_FLAGS = Object.freeze([");
   assert.notEqual(start, -1, "PROBE_FLAGS declaration not found — capture-pure.mjs has moved");
   const end = source.indexOf("]);", start);
   assert.notEqual(end, -1, "PROBE_FLAGS's closing ]); not found");
