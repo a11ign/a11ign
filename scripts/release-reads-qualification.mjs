@@ -23,6 +23,9 @@
 //               the one a default of "proceed" would pass, and `release-reads-qualification.test.ts` pins it
 //
 // A FAILURE IS NEVER SOFTENED by an older success: the NEAREST commit that carries a status decides.
+//
+// ONLY THE LAB'S IDENTITY WRITES IT (#3969): a status of that context counts when its `creator.login` is `QUALIFICATION_WRITER`, and one from
+// anyone else is ignored and named in the log, in either direction (a forged `success` and a forged `failure` alike).
 import { realpathSync, appendFileSync, readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
@@ -39,6 +42,13 @@ import { toolModule } from "./agent-org-newest-tag.mjs";
 /** @typedef {"proceed" | "wait" | "rerun" | "regression"} Outcome */
 
 export const QUALIFICATION_CONTEXT = "qualification";
+
+// WHO MAY SAY `qualification` (#3969). A commit status is writable by anyone holding `repo:status` here, and the context is only a name, so
+// reading by context alone made every such holder a source of the fleet's verdict: harmless while a verdict gated a publish to `next`, and
+// not once it moves `latest`. The lab's poster runs on the agents host and posts as that host's routed account, which #3289 measured as this
+// login (`creator` of status 55536724380, read back on 2026-10-04). If the host is ever routed to another account the release WAITS, which
+// is the safe state, and the log below names whose status it ignored; moving this constant is the one change that restores it.
+export const QUALIFICATION_WRITER = "a11ign-ai-leads";
 
 // Outcome 4's table, consumed as DATA from #3132 (reading 3, derived from what each stage reads; posted on #3136 by
 // `orchestrator`). Directories under `packages/`. A package named in NEITHER list is treated as GATED: a new package
@@ -191,13 +201,28 @@ function git(args) {
   return execFileSync("git", args, { encoding: "utf8", env: sandboxGitEnv() }).trim();
 }
 
+/** The lab's own `qualification` statuses out of a commit's listing, in the order GitHub gave them (newest first). A status of that context
+ * from any other identity is IGNORED AND NAMED through `report`, never counted and never silent; a creator that cannot be read is another
+ * identity, because absence is not the lab. PURE apart from `report`.
+ * @param {{ context: string, state: string, description?: string | null, creator?: { login?: string } | null }[]} listing
+ * @param {string} sha
+ * @param {(line: string) => void} [report] one line per ignored status
+ * @returns {Status[]} */
+export function qualificationStatusesFrom(listing, sha, report = (line) => process.stderr.write(`${line}\n`)) {
+  /** @type {Status[]} */ const kept = [];
+  for (const status of listing) {
+    if (status.context !== QUALIFICATION_CONTEXT) continue;
+    const login = status.creator?.login;
+    if (login === QUALIFICATION_WRITER) kept.push({ state: status.state, description: status.description ?? undefined });
+    else report(`release-reads-qualification: IGNORED a ${QUALIFICATION_CONTEXT} status "${status.state}" on ${sha} from ${login ?? "a creator that could not be read"}: only ${QUALIFICATION_WRITER} writes it`);
+  }
+  return kept;
+}
+
 /** Newest first. A lookup failure THROWS: CANNOT ASK is never the same as "no status", which reads as `wait`.
  * @param {string} sha */
 function qualificationStatuses(sha) {
-  const all = JSON.parse(gh(["api", `repos/${REPO}/commits/${sha}/statuses?per_page=100`]));
-  return all
-    .filter((/** @type {{ context: string }} */ s) => s.context === QUALIFICATION_CONTEXT)
-    .map((/** @type {{ state: string, description: string | null }} */ s) => ({ state: s.state, description: s.description ?? undefined }));
+  return qualificationStatusesFrom(JSON.parse(gh(["api", `repos/${REPO}/commits/${sha}/statuses?per_page=100`])), sha);
 }
 
 /** The release sha first, then its first-parent ancestors, each with the paths changed since and its statuses. The

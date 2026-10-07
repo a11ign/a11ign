@@ -58,10 +58,13 @@
 #   `next`    A PUSH THAT CARRIES A CHANGESET PUBLISHES HERE, and the fleet's verdict does not gate it. Pre-merge CI and the guards above
 #             are the gate for `next`.
 #   `latest`  `latest` MOVES ONLY WHEN THE FLEET PART'S QUALIFICATION (#3136) IS GREEN FOR THE SHA A VERSION WAS RELEASED ON, and stays on
-#             the last qualified version when it is red, which is the rollback by construction. The `promote` job reads it AFTER the
+#             the last qualified version when it is red, which is the rollback by construction. The `decide` job reads it AFTER the
 #             publish with `scripts/release-reads-qualification.mjs`'s decider (`proceed`, `wait`, `rerun`, `regression`), through
-#             `scripts/release-promote.mjs`, and runs `npm dist-tag add <name>@<version> latest` by OIDC for each package of a release
-#             that `proceed`s. It never moves `latest` backwards, and a `regression` or an overdue `wait` files ONE row (`promotion-row`).
+#             `scripts/release-promote.mjs`, and the `promote` job runs `npm dist-tag add <name>@<version> latest` by OIDC for each
+#             package of a release that `proceed`s. THE JOB HOLDING `id-token` RUNS NO CODE FROM ANOTHER REPOSITORY (#3969): the one that
+#             clones the tool and runs the decider holds none, and the verdict it reads counts only from the lab's own identity
+#             (`QUALIFICATION_WRITER`). It never moves `latest` backwards, and a `regression` or an overdue `wait` files ONE row
+#             (`promotion-row`).
 #
 # WHAT STARTS THE PROMOTION: the `release` job's own push run, once the publish is done, and every `status` event, narrowed by the job's
 # `if` to the context the lab posts (`qualification`, #3289). A `status` event runs this file as it stands on `main`, never on a branch,
@@ -88,7 +91,7 @@ on:
   # THE REHEARSAL, KEPT (#3717): a person may run every guard below on any branch and publish nothing. The called workflow has no dry
   # run, so the rehearsal is the guards alone and the `release` job is skipped by its own `if`.
   workflow_dispatch:
-  # THE PROMOTION'S TRIGGER (#3947), narrowed to the `qualification` context by the `promote` job's own `if`: `on:` cannot filter a status
+  # THE PROMOTION'S TRIGGER (#3947), narrowed to the `qualification` context by the `decide` job's own `if`: `on:` cannot filter a status
   # by context. See the header.
   status:
 
@@ -363,19 +366,77 @@ jobs:
       # #3946: every merge that carries a changeset goes to `next`; `latest` moves on a qualified reading, in the promotion row.
       dist-tag: next
 
-  # THE PROMOTION (#3947): the one job that moves `latest`, and what it holds is `id-token: write` for npm's OIDC dist-tag (the
-  # `npm-publish` environment, limited to `main`; "Allow npm dist-tag" is ticked on `a11ign`, `@a11ign/evidence`, `@a11ign/judge` and
-  # `@a11ign/scorer`) and the reads it needs. NO STORED TOKEN: a token would make npm use it and never exercise OIDC. It lives in THIS file and
-  # not a new one because npm's trusted-publisher entries name `release.yml` and the OIDC token names the CALLING file. THE FIRST REAL RUN
-  # IS THE CONFIRMATION that npm accepts an OIDC `dist-tag add` (#3778, Done-when 2): until it has run, nothing here has moved a tag.
+  # THE PROMOTION, IN TWO JOBS (#3947, split by #3969): the job that can mint an npm token runs no code from another repository.
+  # `decide` clones the newest `agent-org` tag and runs `release-promote.mjs` (which imports that tool), so it holds NO `id-token` and
+  # no environment: it reads the registry, the tags and the lab's statuses, and its only product is a list of `name@x.y.z`. `promote`
+  # holds `id-token: write` for npm's OIDC dist-tag (the `npm-publish` environment, limited to `main`; "Allow npm dist-tag" is ticked on
+  # `a11ign`, `@a11ign/evidence`, `@a11ign/judge` and `@a11ign/scorer`), has NO checkout and clones nothing, and runs `npm dist-tag add`
+  # over that list after checking each entry again: a job that receives a string from a job that ran foreign code does not trust it.
+  # NO STORED TOKEN: a token would make npm use it and never exercise OIDC. Both live in THIS file and not a new one because npm's
+  # trusted-publisher entries name `release.yml` and the OIDC token names the CALLING file. THE FIRST REAL RUN IS THE CONFIRMATION that
+  # npm accepts an OIDC `dist-tag add` (#3778, Done-when 2): until it has run, nothing here has moved a tag.
   #
-  # It `needs` the publish so a push run promotes only after its own release, and runs when that is skipped or failed (`!cancelled()`): what
-  # it acts on is the registry's state, not this run's. Its own concurrency group serialises it across a push run and a status run; a pending
-  # older one is dropped for the newer, which reads everything the older would.
-  promote:
-    name: promote to latest on a green qualification
+  # The job still called `promote` is the MOVE, so what follows it (`promote-action-tag`, `promotion-record`) keeps reading `needs.promote`.
+  # `decide` `needs` the publish so a push run promotes only after its own release, and runs when that is skipped or failed (`!cancelled()`):
+  # what it acts on is the registry's state, not this run's. Its own concurrency group serialises it across a push run and a status run; a
+  # pending older one is dropped for the newer, which reads everything the older would. The move has a group of its own, so two moves
+  # never overlap; one that arrives after a newer one could put `latest` back on an older qualified version, and the next decision reads
+  # the newer as a candidate again and corrects it.
+  decide:
+    name: decide which versions on next may become latest
     needs: [release]
     if: ${{ !cancelled() && (github.event_name == 'push' || (github.event_name == 'status' && github.event.context == 'qualification')) }}
+    runs-on: ubuntu-latest
+    concurrency:
+      group: promote-latest-decision
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      statuses: read
+    outputs:
+      promote: ${{ steps.plan.outputs.promote }}
+      promoted: ${{ steps.plan.outputs.promoted }}
+      rows: ${{ steps.plan.outputs.rows }}
+      blocked: ${{ steps.plan.outputs.blocked }}
+    steps:
+      # Every tag and every commit back to the release: the release sha is the parent of the commit a tag points at.
+      - uses: actions/checkout@v7
+        with: { fetch-depth: 0, persist-credentials: false }
+      - uses: actions/setup-node@v7
+        with: { node-version: 22 }
+      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
+        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+
+      # THE DECISION, which moves nothing: the registry's `next` against its `latest`, each version's release sha, and the decider's
+      # outcome for it. A wait, a rerun and a regression leave `promote` empty; a status that cannot be read leaves it empty and counts in
+      # `blocked`. A version whose tag is not cut yet waits and is not counted. The log names every outcome and sha, on every run, and
+      # every `qualification` status it ignored for coming from anyone but the lab.
+      - name: Decide with release-reads-qualification's qualificationDecision which versions on next may become latest
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release-promote.mjs
+
+      # A group the script could not read (no readable tag, a status in no known state, a registry that did not answer, or a version
+      # older than latest) is never a pass and never silent: this job is red, and the move below still runs for the groups that WERE
+      # decided, so one bad group blocks no other. The count goes in through `env:`, never through `${{ }}` in a script.
+      - name: Say plainly that something could not be decided
+        if: steps.plan.outputs.blocked != '0'
+        env:
+          BLOCKED: ${{ steps.plan.outputs.blocked }}
+        run: |
+          echo "::error::${BLOCKED} group(s) could not be decided; see the lines above. Nothing for them was moved."
+          exit 1
+
+  # THE MOVE: `npm dist-tag add` for each `name@version` the decision named, and nothing else. It `needs` `decide` and runs when `decide`
+  # was RED, because a blocked group is red and must not hold back the groups that were decided; what it acts on is the decision's output
+  # and an empty one skips it, which is also what a `decide` that failed before it decided leaves. NO CHECKOUT, no clone and no repository
+  # script: `npm dist-tag add` reads the registry, and `setup-node` only points npm at it. Re-running it is harmless: adding the tag a
+  # version already has changes nothing, and a version that did not move is read again by the next decision.
+  promote:
+    name: move latest to the versions the decision promoted
+    needs: [decide]
+    if: ${{ !cancelled() && needs.decide.outputs.promote != '' }}
     runs-on: ubuntu-latest
     environment: npm-publish
     concurrency:
@@ -383,22 +444,13 @@ jobs:
       cancel-in-progress: false
     permissions:
       contents: read
-      statuses: read
       id-token: write
     outputs:
-      promote: ${{ steps.plan.outputs.promote }}
-      promoted: ${{ steps.plan.outputs.promoted }}
-      rows: ${{ steps.plan.outputs.rows }}
-      blocked: ${{ steps.plan.outputs.blocked }}
+      promoted: ${{ needs.decide.outputs.promoted }}
       at: ${{ steps.move.outputs.at }}
     steps:
-      # Every tag and every commit back to the release: the release sha is the parent of the commit a tag points at.
-      - uses: actions/checkout@v7
-        with: { fetch-depth: 0, persist-credentials: false }
       - uses: actions/setup-node@v7
-        with: { node-version: 22, registry-url: https://registry.npmjs.org }
-      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        with: { node-version: 22, registry-url: "https://registry.npmjs.org" }
 
       # Trusted publishing needs npm 11.5.1 or newer, and Node 22 ships 10.x (the same floor and the same reason as `guards`).
       - name: Upgrade npm to the trusted-publishing floor, and refuse below it
@@ -410,38 +462,27 @@ jobs:
             exit 1
           }
 
-      # THE DECISION, which moves nothing: the registry's `next` against its `latest`, each version's release sha, and the decider's
-      # outcome for it. A wait, a rerun and a regression leave `promote` empty; a status that cannot be read leaves it empty and counts in
-      # `blocked`. The log names every outcome and sha, on every run.
-      - name: Decide with release-reads-qualification's qualificationDecision which versions on next may become latest
-        id: plan
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: node scripts/release-promote.mjs
-
-      # THE MOVE: `npm dist-tag add` for each `name@version` the plan names, and nothing else. A spec is validated by the script to be
-      # `name@x.y.z`, so the word-splitting below can only split specs. Re-running it is harmless: adding the tag a version already has
-      # changes nothing, and a version that did not move is read again by the next run.
+      # EVERY spec is checked before ANY is moved, with the same shape `release-promote.mjs` checks (`SPEC`): `name@x.y.z`, scoped or not.
+      # What does not match moves nothing at all, so a list that was tampered with in transit costs a red run and no tag.
       - name: Move latest to the versions the decision promoted
         id: move
-        if: steps.plan.outputs.promote != ''
         env:
-          PROMOTE: ${{ steps.plan.outputs.promote }}
+          PROMOTE: ${{ needs.decide.outputs.promote }}
         run: |
           set -euo pipefail
-          for spec in $PROMOTE; do
+          spec_shape='^(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*@[0-9]+\.[0-9]+\.[0-9]+$'
+          # `set -f` so that splitting the list on whitespace can never also expand a glob; `read` would stop at the first newline instead.
+          set -f
+          specs=($PROMOTE)
+          [ "${#specs[@]}" -gt 0 ] || { echo "::error::CANNOT_TELL: the decision named nothing to move. Nothing moved."; exit 1; }
+          for spec in "${specs[@]}"; do
+            [[ "$spec" =~ $spec_shape ]] || { echo "::error::CANNOT_TELL: '$spec' is not a name@x.y.z. Nothing moved."; exit 1; }
+          done
+          for spec in "${specs[@]}"; do
             npm dist-tag add "$spec" latest
             echo "moved latest -> $spec"
           done
           echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
-
-      # A group the script could not read (no tag, a status in no known state, a registry that did not answer, or a version older than
-      # latest) is never a pass and never silent: the run is red AFTER the others were promoted, so one bad group blocks no other.
-      - name: Say plainly that something could not be decided
-        if: steps.plan.outputs.blocked != '0'
-        run: |
-          echo "::error::${{ steps.plan.outputs.blocked }} group(s) could not be decided; see the lines above. Nothing for them was moved."
-          exit 1
 
   # THE ACTION'S MAJOR TAG (#3948): `uses: a11ign/a11ign@v0` follows the version the promotion has qualified, so a user of the Action gets a fix
   # once the fleet's qualification has passed and never on a `next` publish. It `needs` the promotion's SUCCESS and reads only what that job moved
@@ -538,8 +579,8 @@ jobs:
   # job holding `id-token` never holds it. Idempotent by TITLE, which names the whole sha: the next status re-reads the same regression
   # and finds its row.
   promotion-row:
-    needs: [promote]
-    if: ${{ !cancelled() && needs.promote.outputs.rows != '' && needs.promote.outputs.rows != '[]' }}
+    needs: [decide]
+    if: ${{ !cancelled() && needs.decide.outputs.rows != '' && needs.decide.outputs.rows != '[]' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -549,7 +590,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          ROWS: ${{ needs.promote.outputs.rows }}
+          ROWS: ${{ needs.decide.outputs.rows }}
         run: |
           set -euo pipefail
           while IFS= read -r row; do
