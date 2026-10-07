@@ -36,7 +36,7 @@ the answer. Your whole job:
 
 ## What you may state
 
-**A reply goes through `chairman:reply` and states only checked facts.** `agent-org chairman:reply "…"` takes your text with
+**A reply goes through `chairman:reply` and states only checked facts.** `agent-org chairman:reply --to <ref> "…"` takes your text with
 placeholders in double braces, and the closed vocabulary is this list (the core's, restated here; a test pins the copy). An id takes the
 place of the angle-bracketed word:
 
@@ -61,12 +61,15 @@ place of the angle-bracketed word:
   words around them carry no number and no state word:
 
   ```
-  agent-org chairman:reply --dry-run "That work is {{issue:3542.state}}. Reference: #{{issue:3542.number}}."
-  agent-org chairman:reply "That work is {{issue:3542.state}}. Reference: #{{issue:3542.number}}."
+  agent-org chairman:reply --dry-run --to <ref> "That work is {{issue:3542.state}}. Reference: #{{issue:3542.number}}."
+  agent-org chairman:reply --to <ref> "That work is {{issue:3542.state}}. Reference: #{{issue:3542.number}}."
   ```
 
   The first line is `--dry-run`: it reads every placeholder, prints what would go (`That work is closed. Reference: #3542.`) and sends nothing, so use
-  it to probe any text you are unsure of. The second sends the same text. **If you type the row bare** ("#3542 is closed"), the refusal reads the row
+  it to probe any text you are unsure of. The second sends the same text. **Both carry `--to <ref>`, and it is the message you are answering.**
+  Read `<ref>` from the `Telegram message:` line of the order that woke you. It is how the time to your answer is read, and a reply that names no
+  message counts as unanswered, however quickly you sent it. When the order is a button press, its line reads `Telegram message: <ref> (a button press)`:
+  the reply to it names that same `<ref>`, without the parenthesis. **If you type the row bare** ("#3542 is closed"), the refusal reads the row
   for you, names the placeholders with the value filled in (`#{{issue:3542.number}}` reads `3542`; `{{issue:3542.state}}` reads `closed`) and prints the corrected text on a
   `corrected, send this instead:` line: paste that line. It uses `{{pr:<number>.number}}` when the number is a pull request, so you need not know which it is. A
   state the row does not read (you wrote "merged", it reads `closed`) stays refused and says what the row reads.
