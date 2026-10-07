@@ -31,7 +31,7 @@ the words NVDA spoke.
   trained component only ever says *this is worth a person's look*. A referral on a page you believe is
   fine is expected behaviour, not a bug.
 - **It needs Windows**, because NVDA is Windows-only. That is the real cost of the two hours.
-- **It is published to npm, and it still needs a Windows machine.** `a11ign@0.1.0` was the registry's `latest` when this was last checked (2026-10-03, `npm view a11ign dist-tags.latest`: a reading at a moment, so check it again). `npx a11ign <url>` saves the clone and the build, not the machine: it needs the same capture worker as a clone does. [The commands are below](#the-other-route-run-it-from-the-repository).
+- **It is published to npm, and it still needs a Windows machine.** `a11ign@0.3.0` was both the registry's `latest` and its `next` when this was last checked (2026-10-07, `npm view a11ign dist-tags`: a reading at a moment, so check it again). `npx a11ign <url>` saves the clone and the build, not the machine: it needs the same capture worker as a clone does. [The commands are below](#the-other-route-run-it-from-the-repository).
 
 ## The fastest route: a GitHub Actions run
 
@@ -53,27 +53,30 @@ jobs:
       pull-requests: write       # for the PR comment below; omit it and the report still runs, only quieter
     steps:
       - uses: actions/checkout@v7
-      - uses: a11ign/a11ign@v0.1.0
-        # Pinned to v0.1.0, the first tagged release. Use the full 40-character commit SHA instead if
-        # your CI must not move even across a release -- GitHub refuses an abbreviated one outright, it
-        # does not just discourage it.
+      - uses: a11ign/a11ign@890cd490276d16102b3f371007951a24942950da   # the commit of the release tagged a11ign@0.3.0
+        # Pinned to the full 40-character commit of release 0.3.0, so your CI does not move when a newer
+        # one is published -- GitHub refuses an abbreviated SHA outright, it does not just discourage it.
+        # To take a newer release, read `npm view a11ign dist-tags` for its number and
+        # `git ls-remote https://github.com/a11ign/a11ign 'refs/tags/a11ign@*'` for its commit.
         id: a11ign
         with:
           url: https://your-site.example/the-page
           task: Send an enquiry
       # Keep the evidence: the full result, transcript included. Guarded on the output existing, so a run
-      # that failed does not also fail the upload. v0.1.0 has no `summary-md` output, so there is no report file.
+      # that failed does not also fail the upload. `summary-md` is the rendered report; upload it beside the result.
       - uses: actions/upload-artifact@v7
         if: always() && steps.a11ign.outputs.result-json != ''
         with:
           name: a11ign-result
-          path: ${{ steps.a11ign.outputs.result-json }}
+          path: |
+            ${{ steps.a11ign.outputs.result-json }}
+            ${{ steps.a11ign.outputs.summary-md }}
           if-no-files-found: warn
 ```
 
 Save it as `.github/workflows/a11ign.yml`. It runs on every pull request, and `workflow_dispatch` also lets you start it by hand from the repository's Actions tab (or `gh workflow run a11ign.yml`) — `workflow_dispatch` resolves the workflow from the default branch as GitHub sees it at dispatch time, so trigger it only after the push that changed the workflow has landed, not in the same breath as the push.
 
-**Not on a pull request, no comment.** A run started by hand or by a push has nothing to comment on: the log's last line is the count (`a11ign: N finding(s)`), with a line before it for anything that bounds that count (an examination that ended early, a capture spanning more than one document, criteria resting on an examination known to be partial), and another for the criteria axe-core FAILED (`a11ign: N criteria FAILED by the rule layer (axe-core)`), which sit beside the count rather than in it, and the full result, transcript included, is in the `a11ign-result` artifact the upload step saves above. The rendered report is in the pull-request comment and the run's job summary, and a CLI-only reader has no route to the job summary; the `v0.1.0` tag has no `summary-md` output to put the report in the artifact (the next tag will), so the artifact carries the result alone until then, and it is the one that works headlessly ([`docs/github-action.md`](./github-action.md#why-it-looks-like-this) has the reason and the `gh` commands).
+**Not on a pull request, no comment.** A run started by hand or by a push has nothing to comment on: the log's last line is the count (`a11ign: N finding(s)`), with a line before it for anything that bounds that count (an examination that ended early, a capture spanning more than one document, criteria resting on an examination known to be partial), and another for the criteria axe-core FAILED (`a11ign: N criteria FAILED by the rule layer (axe-core)`), which sit beside the count rather than in it, and the full result, transcript included, is in the `a11ign-result` artifact the upload step saves above. The rendered report is in the pull-request comment and the run's job summary, and a CLI-only reader has no route to the job summary; release `0.3.0` has the `summary-md` output, so the upload step above puts the same report in the artifact beside the result, and the artifact is the one that works headlessly ([`docs/github-action.md`](./github-action.md#why-it-looks-like-this) has the reason and the `gh` commands).
 
 **`task` is load-bearing, but the word match it enables is not the guard on what gets operated.** It is
 what a user is trying to *do*, in plain words. On this shipped default (`probe-forms` on), a run always
@@ -223,7 +226,7 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v7
-      - uses: a11ign/a11ign@5768e1d44b7ea5d3e6182ca45d5aeb89bcaadc76
+      - uses: a11ign/a11ign@890cd490276d16102b3f371007951a24942950da   # the commit of the release tagged a11ign@0.3.0
         id: a11ign
         env:                                     # the credential enters HERE, on the step that calls the Action
           APP_TEST_USER: ${{ secrets.APP_TEST_USER }}
@@ -242,7 +245,7 @@ jobs:
             ${{ steps.a11ign.outputs.summary-md }}
 ```
 
-- **Pin the Action to a full 40-character commit SHA, as above.** The `v0.1.0` tag the fastest route uses predates the login flow, so it would ignore `flows` and `login-flow` and examine your login page as though it were the product. **No tag newer than `v0.1.0` exists on this repository, so a SHA is the only pin that has the login flow** (read 2026-10-07: `gh api repos/a11ign/a11ign/git/matching-refs/tags/v` lists `v0.1.0` alone; a reading at a moment, so look again). The SHA above is the `main` commit the section was last run cold against. The npm package has moved on without a tag: `npm view a11ign dist-tags` read `latest` `0.1.0` and `next` `0.3.0` the same day. **`next` is the release channel that carries the login work; `latest` does not yet.** That version is what `npx a11ign@next` runs on your own machine; the Action runs the code at the SHA you give it, not a registry version.
+- **Pin the Action to the full 40-character commit SHA of a release that has the login flow, as above.** Release `0.3.0` (tag `a11ign@0.3.0`) is the first that does; the `v0.1.0` tag predates the login flow, so a workflow pinned to it would ignore `flows` and `login-flow` and examine your login page as though it were the product. Both npm channels read `0.3.0` on 2026-10-07 (`npm view a11ign dist-tags`: `latest` and `next` alike; a reading at a moment, so look again). The Action runs the code at the SHA you give it, not a registry version, so the SHA is what decides what you get. **Do not write `a11ign/a11ign@v0`:** the Action's major tag does not exist yet (`git ls-remote --tags https://github.com/a11ign/a11ign refs/tags/v0` printed nothing on 2026-10-07), so that line ends in a resolution error. The cold runs behind this section used a commit earlier than the `0.3.0` release (an ancestor of it, with the same login flow); the release's own commit was checked by one run afterwards, not by a fresh reader.
 - **The secrets go in `env:` on the step that calls the Action**, never in `with:`: an input is interpolated into shell text, and an environment variable is not. Give `flows` and `login-flow` together or neither.
 - **A pull request from a fork gets no secrets**, so it ends in `auth-credential-missing`. Run it from a branch of the repository itself.
 - **`task` is a label for the report and a hint about what a visitor is doing.** For a run that logs in it does not choose what is pressed; your flows file does.
