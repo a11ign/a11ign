@@ -43,7 +43,12 @@ const READINGS: Reading[] = [
     figures: ["40 minutes"],
   },
 ];
-const QUANTITIES: Reading["quantity"][] = ["merge-to-next", "next-to-latest"];
+/** What names each quantity in the README, so "not yet measured" is checked on the block that talks about THAT quantity. */
+const QUANTITY_LABEL: Record<Reading["quantity"], RegExp> = {
+  "merge-to-next": /merge to `(?:main|next)`/i,
+  "next-to-latest": /`next` to `latest`/i,
+};
+const BLOCK_BOUNDARY = /\n(?=- )|\n\s*\n/;
 
 function sectionOf(text: string): string | undefined {
   return SECTION.exec(text)?.[1];
@@ -63,6 +68,26 @@ function figuresBacked(line: string, date: string): string[] {
     .map((f) => `"${f}" in a Measured ${date} line is not a figure of any reading dated ${date}`);
 }
 
+/**
+ * A quantity no reading covers must be written "not yet measured" in the block that names it, with no figure beside it. A phrase
+ * elsewhere in the section does not count: the reviewer of #4007 showed a README stating "24 hours" for `next` to `latest`
+ * passing on an unrelated "not yet measured".
+ */
+function unmeasuredRefusals(section: string): string[] {
+  const blocks = section.split(BLOCK_BOUNDARY);
+  const out: string[] = [];
+  for (const q of Object.keys(QUANTITY_LABEL) as Reading["quantity"][]) {
+    if (READINGS.some((r) => r.quantity === q)) continue;
+    const naming = blocks.filter((b) => QUANTITY_LABEL[q].test(b));
+    if (naming.length === 0) out.push(`${q} has no reading and no block of the section names it as "not yet measured"`);
+    for (const b of naming) {
+      if (!/not yet measured/i.test(b)) out.push(`${q} has no reading but its block does not say "not yet measured"`);
+      if (b.match(FIGURE)) out.push(`${q} has no reading but its block states a figure`);
+    }
+  }
+  return out;
+}
+
 /** Every reason the section may not stand, each naming what is wrong; empty means it states only what a reading backs. */
 function refusals(section: string): string[] {
   const out: string[] = [];
@@ -76,18 +101,15 @@ function refusals(section: string): string[] {
       out.push(`the section does not cite the reading it states (${r.source})`);
     }
   }
-  for (const q of QUANTITIES) {
-    const measured = READINGS.some((r) => r.quantity === q);
-    if (!measured && !/not yet measured/i.test(section)) out.push(`${q} has no reading and the section does not say "not yet measured"`);
-  }
+  out.push(...unmeasuredRefusals(section));
   if (PROMISE.test(section)) out.push("the section promises a time (under/within N minutes or hours)");
   return out;
 }
 
 const GOOD = [
-  "Run `npx a11ign` for `latest`, `npx a11ign@next` for the newest; `npm view a11ign dist-tags` reads both.",
-  `Measured 2026-10-07: merge to \`next\` took 40 minutes (${READINGS[0]?.source}).`,
-  "Next to `latest`: not yet measured.",
+  "- Run `npx a11ign` for `latest`, `npx a11ign@next` for the newest; `npm view a11ign dist-tags` reads both.",
+  `- Measured 2026-10-07: merge to \`next\` took 40 minutes (${READINGS[0]?.source}).`,
+  "- `next` to `latest`: not yet measured.",
 ].join("\n");
 
 test("the real README carries the section, and it states only what a reading backs", () => {
@@ -107,7 +129,7 @@ test("positive control: the section extractor finds the section and stops at the
 
 test("a target stated as if it were measured is REFUSED", () => {
   const stated = GOOD.replace("took 40 minutes", "took under 30 minutes").replace("not yet measured", "24 hours");
-  const out = refusals(stated.replace("Next to", "Measured 2026-10-07: next to"));
+  const out = refusals(stated.replace("- `next` to", "- Measured 2026-10-07: `next` to"));
   assert.ok(out.some((r) => /"24 hours".*not a figure/.test(r)), out.join("\n"));
   assert.ok(out.some((r) => /promises a time/.test(r)), out.join("\n"));
 });
@@ -128,6 +150,12 @@ test("a Measured line dated otherwise than any reading is REFUSED", () => {
 test("a section that does not cite its reading is REFUSED", () => {
   const uncited = GOOD.replace(` (${READINGS[0]?.source})`, "");
   assert.ok(refusals(uncited).some((r) => /does not cite the reading/.test(r)));
+});
+
+test("a figure for an unmeasured quantity is REFUSED even when 'not yet measured' appears elsewhere (#4007 review)", () => {
+  const out = refusals(GOOD.replace("`next` to `latest`: not yet measured.", "`next` to `latest`: 24 hours.\n- Something else is not yet measured."));
+  assert.ok(out.some((r) => /next-to-latest has no reading but its block does not say/.test(r)), out.join("\n"));
+  assert.ok(out.some((r) => /next-to-latest has no reading but its block states a figure/.test(r)), out.join("\n"));
 });
 
 test("an unmeasured quantity not marked 'not yet measured' is REFUSED", () => {
