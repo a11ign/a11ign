@@ -42,6 +42,12 @@ const READINGS: Reading[] = [
     quantity: "merge-to-next",
     figures: ["40 minutes"],
   },
+  {
+    date: "2026-10-07",
+    source: "https://github.com/a11ign/a11ign/issues/3778#issuecomment-6046521057",
+    quantity: "next-to-latest",
+    figures: ["3.4 hours", "207 minutes", "54 minutes"],
+  },
 ];
 /** What names each quantity in the README, so "not yet measured" is checked on the block that talks about THAT quantity. */
 const QUANTITY_LABEL: Record<Reading["quantity"], RegExp> = {
@@ -58,8 +64,8 @@ function measuredLines(section: string): { line: string; date: string }[] {
   return [...section.matchAll(MEASURED_LINE)].map((m) => ({ line: m[0], date: m[1] ?? "" }));
 }
 
-function figuresBacked(line: string, date: string): string[] {
-  const reading = READINGS.filter((r) => r.date === date);
+function figuresBacked(line: string, date: string, readings: Reading[]): string[] {
+  const reading = readings.filter((r) => r.date === date);
   if (reading.length === 0) return [`"Measured ${date}" has no reading in READINGS`];
   const allowed = new Set(reading.flatMap((r) => r.figures));
   return (line.match(FIGURE) ?? [])
@@ -73,11 +79,11 @@ function figuresBacked(line: string, date: string): string[] {
  * elsewhere in the section does not count: the reviewer of #4007 showed a README stating "24 hours" for `next` to `latest`
  * passing on an unrelated "not yet measured".
  */
-function unmeasuredRefusals(section: string): string[] {
+function unmeasuredRefusals(section: string, readings: Reading[]): string[] {
   const blocks = section.split(BLOCK_BOUNDARY);
   const out: string[] = [];
   for (const q of Object.keys(QUANTITY_LABEL) as Reading["quantity"][]) {
-    if (READINGS.some((r) => r.quantity === q)) continue;
+    if (readings.some((r) => r.quantity === q)) continue;
     const naming = blocks.filter((b) => QUANTITY_LABEL[q].test(b));
     if (naming.length === 0) out.push(`${q} has no reading and no block of the section names it as "not yet measured"`);
     for (const b of naming) {
@@ -88,24 +94,30 @@ function unmeasuredRefusals(section: string): string[] {
   return out;
 }
 
-/** Every reason the section may not stand, each naming what is wrong; empty means it states only what a reading backs. */
-function refusals(section: string): string[] {
+/**
+ * Every reason the section may not stand, each naming what is wrong; empty means it states only what a reading backs. `readings`
+ * defaults to READINGS and is narrowed only by the controls below: once every quantity has a reading, the "not yet measured" refusals
+ * can be exercised on nothing else.
+ */
+function refusals(section: string, readings: Reading[] = READINGS): string[] {
   const out: string[] = [];
   if (!/a11ign@next/.test(section)) out.push("the section does not spell `a11ign@next`");
   if (!/dist-tags/.test(section)) out.push("the section does not name `dist-tags`");
   const lines = measuredLines(section);
   if (lines.length === 0) out.push("the section has no `Measured YYYY-MM-DD` line");
-  for (const { line, date } of lines) out.push(...figuresBacked(line, date));
-  for (const r of READINGS) {
+  for (const { line, date } of lines) out.push(...figuresBacked(line, date, readings));
+  for (const r of readings) {
     if (lines.some((l) => l.date === r.date) && !section.includes(r.source)) {
       out.push(`the section does not cite the reading it states (${r.source})`);
     }
   }
-  out.push(...unmeasuredRefusals(section));
+  out.push(...unmeasuredRefusals(section, readings));
   if (PROMISE.test(section)) out.push("the section promises a time (under/within N minutes or hours)");
   return out;
 }
 
+/** The readings that existed before `next` to `latest` was measured: the controls for "not yet measured" need a quantity with none. */
+const MERGE_ONLY = READINGS.filter((r) => r.quantity === "merge-to-next");
 const GOOD = [
   "- Run `npx a11ign` for `latest`, `npx a11ign@next` for the newest; `npm view a11ign dist-tags` reads both.",
   `- Measured 2026-10-07: merge to \`next\` took 40 minutes (${READINGS[0]?.source}).`,
@@ -119,7 +131,20 @@ test("the real README carries the section, and it states only what a reading bac
 });
 
 test("positive control: the fixture that states only what the readings back is accepted", () => {
-  assert.deepEqual(refusals(GOOD), []);
+  assert.deepEqual(refusals(GOOD, MERGE_ONLY), []);
+});
+
+test("positive control: a section stating both measured quantities, each with its own reading, is accepted", () => {
+  const both = [
+    GOOD.split("\n").slice(0, 2).join("\n"),
+    `- Measured 2026-10-07: \`next\` to \`latest\` took 3.4 hours (about 207 minutes), 54 minutes of it lab run (${READINGS[1]?.source}).`,
+  ].join("\n");
+  assert.deepEqual(refusals(both), []);
+});
+
+test("a next-to-latest figure no reading gives is REFUSED now that the quantity has a reading", () => {
+  const wrong = `${GOOD.split("\n").slice(0, 2).join("\n")}\n- Measured 2026-10-07: \`next\` to \`latest\` took 5 hours (${READINGS[1]?.source}).`;
+  assert.ok(refusals(wrong).some((r) => /"5 hours".*not a figure/.test(r)), refusals(wrong).join("\n"));
 });
 
 test("positive control: the section extractor finds the section and stops at the next heading", () => {
@@ -129,37 +154,37 @@ test("positive control: the section extractor finds the section and stops at the
 
 test("a target stated as if it were measured is REFUSED", () => {
   const stated = GOOD.replace("took 40 minutes", "took under 30 minutes").replace("not yet measured", "24 hours");
-  const out = refusals(stated.replace("- `next` to", "- Measured 2026-10-07: `next` to"));
+  const out = refusals(stated.replace("- `next` to", "- Measured 2026-10-07: `next` to"), MERGE_ONLY);
   assert.ok(out.some((r) => /"24 hours".*not a figure/.test(r)), out.join("\n"));
   assert.ok(out.some((r) => /promises a time/.test(r)), out.join("\n"));
 });
 
 test("a figure on the wrapped continuation of a Measured line is still REFUSED", () => {
   const wrapped = GOOD.replace("took 40 minutes", "took 40 minutes,\n  and `latest` followed in 3 hours");
-  assert.ok(refusals(wrapped).some((r) => /"3 hours".*not a figure/.test(r)), refusals(wrapped).join("\n"));
+  assert.ok(refusals(wrapped, MERGE_ONLY).some((r) => /"3 hours".*not a figure/.test(r)), refusals(wrapped, MERGE_ONLY).join("\n"));
 });
 
 test("a figure no reading gives is REFUSED even on a dated line", () => {
-  assert.ok(refusals(GOOD.replace("40 minutes", "12 minutes")).some((r) => /"12 minutes".*not a figure/.test(r)));
+  assert.ok(refusals(GOOD.replace("40 minutes", "12 minutes"), MERGE_ONLY).some((r) => /"12 minutes".*not a figure/.test(r)));
 });
 
 test("a Measured line dated otherwise than any reading is REFUSED", () => {
-  assert.ok(refusals(GOOD.replace("Measured 2026-10-07", "Measured 2026-10-08")).some((r) => /no reading in READINGS/.test(r)));
+  assert.ok(refusals(GOOD.replace("Measured 2026-10-07", "Measured 2026-10-08"), MERGE_ONLY).some((r) => /no reading in READINGS/.test(r)));
 });
 
 test("a section that does not cite its reading is REFUSED", () => {
   const uncited = GOOD.replace(` (${READINGS[0]?.source})`, "");
-  assert.ok(refusals(uncited).some((r) => /does not cite the reading/.test(r)));
+  assert.ok(refusals(uncited, MERGE_ONLY).some((r) => /does not cite the reading/.test(r)));
 });
 
 test("a figure for an unmeasured quantity is REFUSED even when 'not yet measured' appears elsewhere (#4007 review)", () => {
-  const out = refusals(GOOD.replace("`next` to `latest`: not yet measured.", "`next` to `latest`: 24 hours.\n- Something else is not yet measured."));
+  const out = refusals(GOOD.replace("`next` to `latest`: not yet measured.", "`next` to `latest`: 24 hours.\n- Something else is not yet measured."), MERGE_ONLY);
   assert.ok(out.some((r) => /next-to-latest has no reading but its block does not say/.test(r)), out.join("\n"));
   assert.ok(out.some((r) => /next-to-latest has no reading but its block states a figure/.test(r)), out.join("\n"));
 });
 
 test("an unmeasured quantity not marked 'not yet measured' is REFUSED", () => {
-  assert.ok(refusals(GOOD.replace("not yet measured", "soon")).some((r) => /next-to-latest has no reading/.test(r)));
+  assert.ok(refusals(GOOD.replace("not yet measured", "soon"), MERGE_ONLY).some((r) => /next-to-latest has no reading/.test(r)));
 });
 
 test("a section without the next spelling, the dist-tags command or a Measured line is REFUSED", () => {

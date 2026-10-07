@@ -50,8 +50,10 @@ repeat that decision.
 - Measured 2026-10-07: a merge to `main` reached `next` in 40 minutes. That release's run was re-run once after a failed first attempt, so it is the slow case
   of a single reading, not an average. The commands and times are in
   [the reading on #3778](https://github.com/a11ign/a11ign/issues/3778#issuecomment-6043356294).
-- `next` to `latest`: not yet measured. `latest` was still `0.1.0` when this was written. The reading is
-  [#3778](https://github.com/a11ign/a11ign/issues/3778)'s second Done-when, and this line changes when it is posted.
+- Measured 2026-10-07: `next` to `latest` took 3.4 hours (about 207 minutes) on one release, `0.3.0`. That includes about 54 minutes of
+  lab run, and a fleet that had to be woken first. It is a single reading, and `0.3.1` has been published since, so this is `0.3.0`'s
+  figure and not the latest release's. The commands and times are in
+  [the reading on #3778](https://github.com/a11ign/a11ign/issues/3778#issuecomment-6046521057).
 
 ## What "a rule scanner cannot see" means, concretely
 
