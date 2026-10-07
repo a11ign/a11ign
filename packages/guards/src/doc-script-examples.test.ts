@@ -18,9 +18,12 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { sandboxGitEnv } from "./git-env.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const RECORD = new Set(["docs/backlog.md"]);
+/** The repository carries hundreds of documents; a listing this short means the git read failed and the emptiness below proves nothing. */
+const FEWEST_DOCUMENTS = 50;
 
 /** The scripts that hand their whole argv to `ansible-playbook` as written in `package.json`. */
 export function ansibleScripts(scripts: Record<string, string>): string[] {
@@ -51,8 +54,8 @@ test("POSITIVE CONTROL: the `--` form is flagged, wrapped or under npm, and the 
 });
 
 test("no documented example puts `--` after a script that forwards its argv to ansible-playbook", () => {
-  const tracked = execFileSync("git", ["ls-files", "*.md"], { cwd: REPO_ROOT, encoding: "utf8" }).split("\n").filter((file) => file && !RECORD.has(file));
-  assert.ok(tracked.length > 50, `read ${tracked.length} documents`);
+  const tracked = execFileSync("git", ["ls-files", "*.md"], { cwd: REPO_ROOT, env: sandboxGitEnv(), encoding: "utf8" }).split("\n").filter((file) => file && !RECORD.has(file));
+  assert.ok(tracked.length > FEWEST_DOCUMENTS, `read ${tracked.length} documents`);
   const population = ansibleScripts(SCRIPTS);
   const offenders = tracked.flatMap((file) => doubleDashExamples(readFileSync(join(REPO_ROOT, file), "utf8"), population).map((hit) => `${file}: ${hit}`));
   assert.deepEqual(offenders, []);
