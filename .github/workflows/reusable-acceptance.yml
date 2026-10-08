@@ -66,7 +66,15 @@ jobs:
       # THIS IS THE ONLY STEP THAT HOLDS A TOKEN. The body is handed on as a step OUTPUT, which the two steps below
       # take as `PR_BODY` data in `env:` and never as shell text. A failed read, or an empty body, FAILS the job with
       # the reason: falling back to the event payload's body would reintroduce the stale read silently.
-      - name: Read the PR's LIVE body (#3286)
+      #
+      # THE LABELS OF THE ROWS THE BODY CLOSES ARE READ HERE TOO (#4138), because this is the only step that may ask GitHub and the
+      # `Class:` check of #4123 needs them: a PR that closes a `defect` row owes a `Class:` line, and the step below is tracker-less on
+      # purpose. They go out as the step output `row-labels`, `{"owner/repo#N": ["label", ...]}`, which the step below takes as
+      # `ACCEPTANCE_ROW_LABELS` data. THE ROWS ARE NAMED BY THE TOOL'S OWN PARSE (`extractClosesDeclaration`, `closesReferences`), not by a
+      # second regex here, and a bare `#N` is keyed `${REPO}#N` as the tool keys it from `GITHUB_REPOSITORY`. A row whose read fails gets
+      # NO ENTRY, never `[]`: the tool prints `CLASS: UNKNOWN` and refuses for an absent row, whereas `[]` would read as "no `defect`
+      # label" and pass. The tool runs without the token (`env -u`), and a row name is checked before it reaches an API path.
+      - name: Read the PR's LIVE body (#3286) and the labels of the rows it closes (#4138)
         id: live-body
         env:
           GH_TOKEN: ${{ github.token }}
@@ -85,6 +93,29 @@ jobs:
           # value early and let the rest write other step outputs.
           delimiter="PR_BODY_$(openssl rand -hex 16)"
           { echo "body<<${delimiter}"; printf '%s\n' "$body"; echo "${delimiter}"; } >> "$GITHUB_OUTPUT"
+          rows="$(PR_BODY="$body" env -u GH_TOKEN node -e "
+            import('file://' + process.env.AGENT_ORG_TOOL + '/src/acceptance-commands.mjs').then((m) => {
+              const declaration = m.extractClosesDeclaration(process.env.PR_BODY);
+              if (declaration.kind !== 'closes') return;
+              for (const row of m.closesReferences(declaration)) console.log((row.repo ?? process.env.REPO) + '#' + row.number);
+            });
+          ")" || {
+            echo "::error::could not work out which rows the body of ${REPO}#${PR_NUMBER} closes"
+            exit 1
+          }
+          max_rows=20
+          row_labels='{}'
+          count=0
+          while IFS= read -r row; do
+            [[ -n "$row" ]] || continue
+            count=$((count + 1))
+            # Past the cap, or a name that is not `owner/repo#N`, gets NO entry: UNKNOWN is a refusal, so neither is a way round the check.
+            (( count <= max_rows )) || continue
+            [[ "$row" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]*/[A-Za-z0-9_][A-Za-z0-9._-]*#[0-9]+$ ]] || continue
+            labels="$(gh api "repos/${row%#*}/issues/${row##*#}" --jq '[.labels[].name]')" || continue
+            row_labels="$(jq -c --arg row "$row" --argjson labels "$labels" '. + {($row): $labels}' <<<"$row_labels")" || continue
+          done <<<"$rows"
+          echo "row-labels=${row_labels}" >> "$GITHUB_OUTPUT"
       # #497: DEEPEN THE CHECKOUT ONLY WHEN THE PR BODY ASKS FOR IT, via the SAME function
       # `acceptance-commands.mjs` uses to decide what to refuse -- `hasFullHistoryDeclaration`, imported
       # from the already-built module rather than re-typing the `History: full` regex a second time in
@@ -109,7 +140,11 @@ jobs:
       # NO GH_TOKEN AND NO OTHER SECRET IS PASSED TO THIS STEP -- ruled explicitly (#382-adjacent, restated
       # 2026-09-08 on worker-capture's refusal): an author-written command in a PR body runs read-only and
       # tracker-less, always. That constraint moves with the job, not just with the file.
+      #
+      # `ACCEPTANCE_ROW_LABELS` (#4138) IS DATA FROM THE STEP ABOVE, NOT A CREDENTIAL: it is what lets `acceptance-commands` refuse a PR that
+      # closes a `defect` row without a `Class:` line while still holding no token. Unset, the tool prints `CLASS: NOT CHECKED` and passes.
       - name: Run the PR's own stated Acceptance command(s)
         env:
           PR_BODY: ${{ steps.live-body.outputs.body }}
+          ACCEPTANCE_ROW_LABELS: ${{ steps.live-body.outputs.row-labels }}
         run: agent-org acceptance-commands
