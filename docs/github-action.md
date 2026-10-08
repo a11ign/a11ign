@@ -449,6 +449,33 @@ form state) and, for a failed page, `error`. The `findings` output is the sum ov
 `task-completable` is `true` only when every page was captured and judged completable. The CLI takes the same list:
 `pnpm run witness <url> <url> ...` or `--urls "<url> <url>"`, with `--max-pages N` as the override.
 
+## Run it nightly
+
+[`examples/nightly-workflow.yml`](../examples/nightly-workflow.yml) is the scheduled form: a `schedule:` trigger (plus
+`workflow_dispatch`, so you can start it by hand before the first night), a list of ten `urls`, `max-pages: "10"` raised on
+purpose to match, `comment-on-pr: "false"` because no pull request exists on a schedule, and a `timeout-minutes` that fits the list
+at the **slowest capture measured**, not the typical one. **Do not take the `timeout-minutes: 20` of the workflow at the top of
+this page to a nightly list:** it fits two captures, so a ten-page list written from that page alone is killed by its own timeout,
+and a killed run leaves no log and no artifact.
+
+What a nightly costs, per run and over a month of 30 runs. **Every figure is read from the "Cap basis" table of
+[`capture-cost.md`](./capture-cost.md), not retyped from memory**, and `nightly-example.test.ts` fails when one drifts from it:
+
+| pages (`max-pages`) | typical capture, runner-minutes per run | slowest capture measured, per run | per month (30 runs), slowest | private repository, per month, slowest |
+|---|---|---|---|---|
+| 5 (the default cap) | 33 | 43 | 1290 | $12.90 |
+| 10 (the example) | 65 | 85 | 2550 | $25.50 |
+| 25 (the ceiling) | 158 | 208 | 6240 | $62.40 |
+
+- **A public repository on a standard GitHub-hosted runner pays nothing; a private one pays the dollar column.** That is
+  GitHub's price of $0.010 a Windows minute, as `capture-cost.md` fetched it, and a reading at a moment.
+- **Set `timeout-minutes` to the slowest column plus a margin** (the example uses 5): the Action prints the figure it needs
+  before it captures anything, and a timeout under it kills the run on its last pages. The timeout is also the most a hung run bills.
+- **Ten and 25 pages are the document's fitted model, not a run.** No Action run has captured more than two pages
+  (`capture-cost.md`, "What this does not show"), so treat the 10 and 25 rows as an upper estimate until one has.
+- **`schedule:` runs only from the default branch,** in UTC and sometimes late under load; the example uses an off-the-hour
+  minute for that reason. In a public repository GitHub disables a scheduled workflow after 60 days without repository activity.
+
 ## Logging in: `flows` and `login-flow`
 
 To test a page BEHIND a login, give the Action a flows file and the name of the flow in it that logs in

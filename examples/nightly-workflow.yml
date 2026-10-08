@@ -1,0 +1,92 @@
+# Copy this into .github/workflows/accessibility-nightly.yml in your own repository.
+#
+# What it does: once a night, drives a real screen reader (NVDA) over a list of ten pages you name, one
+# after another, and puts what it heard in the job summary. It is the scheduled sibling of
+# `examples/workflow.yml`, which runs on pull requests over one page.
+#
+# THE BUDGET, because ten Windows captures are not free and a nightly run repeats it every night.
+# Every figure below is read from docs/capture-cost.md (its "Cap basis" table, N = 10), where it is a
+# reading at 2026-09-24 on `windows-2022`; re-read that document before relying on one, and note that
+# N = 10 there is the fitted model extrapolated from a two-capture fit, not a ten-capture run.
+#
+# BUDGET:BEGIN -- test: nightly-example.test.ts reads every figure between these markers against
+#                 docs/capture-cost.md, so do not TYPE a new one here: change the page list, then take the
+#                 figures from that document's row for your page count.
+#   per run, at the worst capture observed (460 s):  85 runner-minutes, $0.85 on a private repository
+#   per run, at a typical capture (340 s):           65 runner-minutes, $0.65 on a private repository
+#   per month, 30 runs, worst case:                  2550 runner-minutes, $25.50 on a private repository
+#   per month, 30 runs, typical:                     1950 runner-minutes, $19.50 on a private repository
+# BUDGET:END
+#
+# A public repository on a standard GitHub-hosted runner pays nothing; a private one pays the figures
+# above. The `timeout-minutes` below is the worst case plus a margin of five minutes, so a page slower
+# than any measured does not kill the run unseen; it is also the most one hung run can bill.
+#
+# More or fewer pages: the timeout and `max-pages` move with the list. Add a URL and both below go up by
+# one capture (about 8.25 minutes at worst). The Action prints "N captures, about X minutes" before it
+# captures anything, and refuses a list above 5 unless `max-pages` is raised (25 is a ceiling it cannot
+# pass).
+name: accessibility-nightly
+
+on:
+  # GitHub runs `schedule:` from the DEFAULT branch only, in UTC, and can start it late under load; an
+  # off-the-hour minute is kinder to both. In a public repository, GitHub disables a scheduled workflow
+  # after 60 days without repository activity.
+  schedule:
+    - cron: "17 3 * * *"
+  # Start it by hand from the Actions tab (or `gh workflow run accessibility-nightly.yml`) to see the
+  # budget above for yourself before the first night.
+  workflow_dispatch:
+
+jobs:
+  screen-reader:
+    # NVDA is Windows-only, so this cannot run on ubuntu-latest. The action fails fast and says so.
+    runs-on: windows-2022
+    # 85 minutes at the worst measured capture + 5. A run that will not finish says so here, not after
+    # GitHub's own default of six hours of Windows minutes.
+    timeout-minutes: 90
+
+    # No pull request exists on a schedule, so there is no comment to write and no write permission to ask for.
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: a11ign/a11ign@890cd490276d16102b3f371007951a24942950da   # the commit of the release tagged a11ign@0.3.0
+        id: witness
+        with:
+          # REPLACE these with your own pages. A list you write, not a crawl: nothing follows a link, so
+          # a page not named here is not examined. Ten URLs, and `max-pages` below says ten on purpose.
+          urls: |
+            https://example.com/
+            https://example.com/about
+            https://example.com/contact
+            https://example.com/pricing
+            https://example.com/products
+            https://example.com/support
+            https://example.com/blog
+            https://example.com/login
+            https://example.com/signup
+            https://example.com/checkout
+          task: Read and understand this page
+
+          # RAISED ON PURPOSE, to the number of URLs above. The default cap is 5 and refuses a longer list;
+          # setting it is the decision to spend the minutes in the budget at the top of this file.
+          max-pages: "10"
+
+          # There is no pull request, so there is nothing to comment on. The report is in the job summary.
+          comment-on-pr: "false"
+
+          # Report without failing the run, which is how you find out what the tool says about your site
+          # before you decide to gate on it. A page that could not be measured still exits 2.
+          fail-on: never
+
+      # Keep the evidence: the full result, transcript included. Guarded on the output existing, so a run
+      # that failed does not also fail the upload (see examples/workflow.yml for the incident).
+      - uses: actions/upload-artifact@v7
+        if: always() && steps.witness.outputs.result-json != ''
+        with:
+          name: a11ign-result
+          path: ${{ steps.witness.outputs.result-json }}
+          if-no-files-found: warn
