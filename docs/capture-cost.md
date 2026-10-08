@@ -198,7 +198,7 @@ This section measured; nothing was cut, and **no capture was run with a probe of
   `probe-focus` (which gates the Tab walk, focus context AND focus reveal: 57.0-137.4 s on the four deadline-free pages here) and `probe-navigation` (the route-change probe, 17 s). The CLI adds `--no-probe-focus-context`; **nothing turns off
   `focus reveal` alone.**
 - **`action.yml` says `probe-focus` "costs roughly 8 seconds per capture."** On these records the Tab walk alone is 3.2-86.5 s and the three probes it gates together 16.2-137.4 s
-  (ikea 16.2 only because the deadline cut them). That sentence is out of date or measured on a page that stops at once; it sits outside this row's Region and is filed as its own row (below).
+  (ikea 16.2 only because the deadline cut them). That sentence is out of date or measured on a page that stops at once; it sits outside this row's Region and is filed as #4102.
 - **A cut to the fixed probes does not shorten the captures the worst-case model is built on.** The 460 s figure is a deadline-bound capture, where the probes got 13.0 s (`A-ikea-4`), so removing
   them would leave the deadline where it is and let `graphic` and `link` finish instead (A-ikea: 0-71 s and 0-38 s, depending on how long `formField` took). For a nightly priced at the worst case
   the lever inside the capture is `formField`, bounded by `MAX_SWEEP_STEPS` and the 420 s budget. **For a nightly of pages that finish early, the lever is the fixed 68 s.** Which of the two a given
@@ -208,7 +208,8 @@ This section measured; nothing was cut, and **no capture was run with a probe of
 
 - **Fleet, not runner.** The Action section above found a runner within 10% of the fleet on two pages and the Action runs the same capture code, but **no runner-side record survives to split**: `action-smoke.yml`
   uploads only `a11ign-result.json` and `a11ign-summary.md`, none of the 8 `action-smoke` runs listed (7 finished) holds an artifact, and run `35976874484`'s log (856 lines) carries no `atMs`. A per-phase reading on a
-  runner needs a run that keeps the capture record (or `--debug`, which prints `diagnostics` to stderr); that is filed as its own row.
+  runner needs a run that keeps the capture record (or `--debug`, which prints `diagnostics` to stderr), which is a run on the Action and a change to `action-smoke.yml`, so it is
+  routed to `orchestrator` on #4095 and not worked around here.
 - **Constants were read in the worker source, not observed at runtime.** `DEFAULT_BUDGET_MS`, `POST_READ_RESERVE_MS`, `MAX_SWEEP_STEPS` (250), `MAX_TAB_STOPS` (150), `FOCUS_PROBE_BUDGET_MS` (120 s), `DEFAULT_STEPS` (150)
   and the two `*_STOPS` (8) are identical at `50d52e750` and `dd84eee`. No record reached `MAX_TAB_STOPS` or the 120 s walk budget (the longest walk is 108 stops, 82.6-88.3 s on hubspot).
 - **One day, one build, ten boxes, as above.** The spread inside a cell is small for the fixed probes and the page-ended phases (on the four deadline-free pages every phase is within 4.1 s of its min across repeats, except hubspot's Tab walk at 5.6 s: 82.6-88.3 s) and large for the deadline-bound
