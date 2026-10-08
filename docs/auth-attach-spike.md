@@ -83,18 +83,18 @@ a second browser, profile B, launched with the SAME --remote-debugging-port=3440
 
 ## Question 3: can the worker reach a debugging endpoint on the person's loopback?
 
-Only on the same host, or through a relay the person sets up. The endpoint listens on `127.0.0.1` alone and refuses its own host's LAN address. A plain TCP relay makes it reachable, and the endpoint then accepts a `Host` header that is an IP address or `localhost` and rejects a name.
+Only on the same host, or through a relay the person sets up. The endpoint listens on `127.0.0.1` alone and refuses its own host's LAN address. A plain TCP relay makes it reachable, and the endpoint then accepts a `Host` header that is an IP address or `localhost` and rejects a name. (The script masks the last two octets of this host's LAN address: a committed transcript with a real internal address is a leak.)
 
 ```
 $ LD_LIBRARY_PATH=$HOME/.cache/a11y-spike-libs/root/usr/lib/x86_64-linux-gnu node --import tsx packages/cli/src/auth/attach-spike.mjs q3
-this host's non-loopback IPv4: 192.168.1.108
+this host's non-loopback IPv4: 192.168.x.x
 listening sockets for the debugging port:
-LISTEN 0      10                       127.0.0.1:39853      0.0.0.0:*
-from this host, via its own LAN address 192.168.1.108:39853  -> error ECONNREFUSED
-a plain TCP relay 0.0.0.0:40159 -> 127.0.0.1:39853 (what an SSH -R or a port proxy amounts to):
-  Host: 192.168.1.108:40159            -> HTTP 200 { "Browser": "Chrome/149.0.7827.55", "Protocol-Version": "1.3", 
+LISTEN 0      10                       127.0.0.1:46789      0.0.0.0:*
+from this host, via its own LAN address 192.168.x.x:46789  -> error ECONNREFUSED
+a plain TCP relay 0.0.0.0:43659 -> 127.0.0.1:46789 (what an SSH -R or a port proxy amounts to):
+  Host: 192.168.x.x:43659            -> HTTP 200 { "Browser": "Chrome/149.0.7827.55", "Protocol-Version": "1.3", 
   Host: person-laptop.example   -> HTTP 500 Host header is specified and is not an IP address or localhost.
-  Host: localhost:40159        -> HTTP 200 { "Browser": "Chrome/149.0.7827.55", "Protocol-Version": "1.3", 
+  Host: localhost:43659        -> HTTP 200 { "Browser": "Chrome/149.0.7827.55", "Protocol-Version": "1.3", 
 ```
 
 So the host a capture runs on decides it. **The CLI (this repository, a person's own machine): yes**, loopback is loopback, and question 1 is the proof. **The worker on a fleet box: no, not by default.** The person's browser is on a different machine and the endpoint will not leave its loopback. A relay can carry it, at the price of exposing a port that controls the whole browser, signed-in session included, to everything that can reach the relay. That is a security decision for `ceo`, not a spike result, and ADR 0038 already scopes mechanism 3 to "CLI-only, loopback-only" (`docs/adr/0038-authenticated-capture.md:186`).

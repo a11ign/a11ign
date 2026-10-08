@@ -158,6 +158,9 @@ async function q2() {
   } finally { await owner.stop(); server.close(); }
 }
 
+/** The host's LAN address is printed with its last two octets masked: the transcript is committed, and a real internal address is a leak (tracked-source-leak-guard). */
+const masked = (address) => address.replace(/\.\d+\.\d+$/, ".x.x");
+
 function lanAddress() {
   return Object.values(networkInterfaces()).flat().find((i) => i && i.family === "IPv4" && !i.internal)?.address;
 }
@@ -180,15 +183,15 @@ async function q3() {
   try {
     await waitForEndpoint(port);
     const lan = lanAddress();
-    say(`this host's non-loopback IPv4: ${lan ?? "(none)"}`);
+    say(`this host's non-loopback IPv4: ${lan ? masked(lan) : "(none)"}`);
     say(`listening sockets for the debugging port:`);
     say(execFileSync("sh", ["-c", `ss -ltn | grep ":${port} " || true`], { encoding: "utf8" }).trimEnd());
-    if (lan) say(`from this host, via its own LAN address ${lan}:${port}  -> ${await getWithHost({ port, host: `${lan}:${port}`, address: lan })}`);
+    if (lan) say(`from this host, via its own LAN address ${masked(lan)}:${port}  -> ${await getWithHost({ port, host: `${lan}:${port}`, address: lan })}`);
     const forward = createTcpServer((client) => { const up = connect(port, "127.0.0.1"); client.pipe(up).pipe(client); client.on("error", () => up.destroy()); up.on("error", () => client.destroy()); });
     await new Promise((resolve) => forward.listen(0, "0.0.0.0", resolve));
     const relay = forward.address().port;
     say(`a plain TCP relay 0.0.0.0:${relay} -> 127.0.0.1:${port} (what an SSH -R or a port proxy amounts to):`);
-    if (lan) say(`  Host: ${lan}:${relay}            -> ${await getWithHost({ port: relay, host: `${lan}:${relay}`, address: lan })}`);
+    if (lan) say(`  Host: ${masked(lan)}:${relay}            -> ${await getWithHost({ port: relay, host: `${lan}:${relay}`, address: lan })}`);
     say(`  Host: person-laptop.example   -> ${await getWithHost({ port: relay, host: "person-laptop.example", address: "127.0.0.1" })}`);
     say(`  Host: localhost:${relay}        -> ${await getWithHost({ port: relay, host: `localhost:${relay}`, address: "127.0.0.1" })}`);
     forward.close();
