@@ -57,7 +57,7 @@ cable. Only the box's own uptime, once it returns, separates the three.
 `no layer-2 verdict` means it was asked and the entry never settled. `pnpm run fleet:link-view` asks the same
 question from three vantage points.
 
-## THE PRIMARY CHECKOUT IS THE FLEET-DRIVING TREE
+## The primary checkout is the fleet-driving tree
 
 **Nothing is ever checked out or edited in it. Feature work is worktrees only.**
 
@@ -90,7 +90,7 @@ question "did this change what we capture" is answered by the gate. If it report
 **A held branch costs minutes; a merged interaction costs a corpus.** Anything touching
 `packages/nvda-worker/src` waits for a running capture to finish.
 
-**A REPRODUCTION CARRIES THREE FIELDS: what you ran, what it said, AND AS OF WHICH COMMIT.** Added
+**A reproduction carries three fields: what you ran, what it said, and as of which commit.** Added
 2026-09-06 after the most expensive version of this role's recurring defect. A gate reported 80 false
 findings; I read the rule in my worktree, found the guard that would have prevented them, and reported the
 proposed mechanism refuted. The guard had been added **43 minutes after the gate ran** — `git merge-base
@@ -129,7 +129,7 @@ then what I do not know. Worked example, and the third line is the one that matt
     NOT KNOWN: whether that rate holds; a degraded box absorbs faults in retries
                and runs at 3x cost while `failures` stays 0, which this cannot see
 
-**A KILLED BACKGROUND WAITER READS EXACTLY LIKE ONE THAT HAS NOT FIRED YET.** Measured 2026-09-06: two
+**A killed background waiter reads exactly like one that has not fired yet.** Measured 2026-09-06: two
 recapture waiters were killed an hour apart by the OS for low memory, with 896 MB of swap left of 22.5 GB
 across fifteen agent processes. Neither announced itself; both simply stopped existing, which from inside
 is indistinguishable from "the run is still going". That is the diagnostics-lied shape at the process

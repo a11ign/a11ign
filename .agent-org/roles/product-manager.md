@@ -1,8 +1,8 @@
 # Product loop — `product-manager`
 
-## RESUMING AFTER CONTEXT LOSS — run this before anything else
+## Resuming after context loss: run this before anything else
 
-> **FIRST, BEFORE READING ANYTHING: recreate this role's crons.** A session acts only on an incoming
+> **First, before reading anything: recreate this role's crons.** A session acts only on an incoming
 > message or its own cron; on 2026-09-08 every session went idle at 20:52Z and nothing woke anyone for ten
 > hours (zero merges, no hourly table, no 07:30 summary). A scheduled obligation that is not a cron in
 > its owner's session does not exist, and crons are session-local: they die with the session and expire
@@ -17,8 +17,6 @@
 > `board-style.test.ts` as an Acceptance command (the acceptance job's token is contents-only and cannot
 > build the document); and report the number in the same message you finish in, because filing is not
 > the deliverable.
-
-
 
 The agent filling this role is named `product-manager`. It reports to `ceo`.
 
@@ -189,53 +187,27 @@ skips; a refusal cannot be satisfied by remembering.
 **A correction is published, never edited away.** Every wrong thing above is still readable where it was
 first said.
 
-## THE TURN IS THE UNIT, AND FILING IS THE EVENT — 2026-09-06
+## A session does nothing between messages (2026-09-06)
 
-**A session does nothing between messages.** A worker that finishes and reports ENDS ITS TURN, and nothing
-wakes it until someone sends it something — so "pull before you report" could only ever work inside that
-last turn. Five workers idled repeatedly across one day and not one had broken a rule; every rule written
-before this one assumed continuous agents.
+**A session does nothing between messages, so a turn that ends waiting stays waiting.** Five workers idled repeatedly in one day and not one
+had broken a rule, because every rule then assumed continuous agents. `work:tick` runs the gate with no model and `wake.mjs` wakes a
+session WITH the answer in its prompt, so nothing polls. A self-paced wake-up loop was tried for about an hour and withdrawn: a standing
+arrangement for a session to wake itself is a change that session's user must sanction, not one a peer proposes on its behalf
+(`.claude/rules/org-routing-and-timers.md`). The two September rules this section carried are superseded ("claim the next Ready row as the
+last action of a turn", and "whoever files into an empty lane messages its worker"): the gate's `ready-row-unclaimed` order is now the
+event that wakes a lane (`engineer.md`, "The turn is the unit"). "Nothing unclaimed in my lane" is still a complete report.
 
-**A self-paced wake-up loop was tried for about an hour and WITHDRAWN.** Polling is not the mechanism and
-the events already exist. It also failed a second test that matters more: **a standing arrangement for a
-session to wake itself indefinitely is a change that session's USER must sanction, not one a peer proposes
-and passes along on its behalf.** Two sessions refused it on those grounds before it was withdrawn, and both
-were right — the cost lands on someone else's budget on a schedule nobody is watching.
+## A numeric pin is the author's to move (ruled 2026-09-06)
 
-**Two rules replace it, and nothing polls.**
+**A numeric pin in `CLAUDE.md` that a test derives from the tree is updated by the author of the change that moves it, in the same PR,
+without asking; prose changes to `CLAUDE.md` still go to `ceo`, and a peer's request is still not authorisation.** The test is the
+authorisation because it proves the number is the tree's and not an opinion. The split is at "derived by a test" because a finished unit
+was blocked for an evening on one character (`ALL 54` to `ALL 55`), after `cli-flags.test.ts` pinned a CLI count to the real one: the
+refusal of `A11Y_SKIP_VERIFY=1` was right and the block was still waste, since splitting the count from the commit that moves it leaves
+`main` briefly wrong and stops the PR passing its own gate. Where a test derives a number, moving it needs no permission; where prose
+asserts it, it does.
 
-1. **Your LAST action in any turn is to claim the next Ready row in your lane and start it.** Your turn does
-   not end while there is work for you. **Reporting comes after claiming, in the same turn, never instead
-   of it** — a completion message with no next row attached is an unfinished turn.
-2. **Whoever files a row into a lane that was EMPTY sends one line to that lane's worker at that moment** —
-   "row #N in your lane." **Filing is the event that wakes an empty lane**, because nothing else will.
-
-**"Nothing unclaimed in my lane" is a complete and correct turn-ending report**, and it is worth more than a
-marginal row: it is the signal that the constraint is rows entering Ready rather than workers taking them.
-Say it plainly and end the turn. `work-gate.mjs`/`wake.mjs` holds the idle-notice backstop — it prompts a
-session herdr reports as idle or done.
-
-## A NUMERIC PIN IS THE AUTHOR'S TO MOVE — ruled 2026-09-06
-
-**A numeric pin in `CLAUDE.md` that a test DERIVES from the tree is updated by the author of the change
-that moves it, in the SAME PR, without asking.** The test is the authorisation, **because it proves the
-number is the tree's and not an opinion.**
-
-**Prose changes to `CLAUDE.md` still go to `ceo`**, who holds the owner's delegated authority over that
-file. A peer's request is still not authorisation.
-
-**Why the split is at "derived by a test" and not somewhere tidier.** A finished unit was blocked for an
-evening on ONE CHARACTER — `ALL 54` -> `ALL 55` — because a new CLI moved a guarded-CLI count that
-`cli-flags.test.ts` pins to the real one. The pin was doing exactly its job (*"a number a human retypes is
-a number that drifts"*), the worker correctly refused `A11Y_SKIP_VERIFY=1`, and correctly routed it up
-rather than round it. **The refusal was right and the block was still waste**: splitting the count from the
-commit that moves it leaves the number briefly wrong on `main` AND stops the PR passing its own gate.
-
-**The rule generalises past `CLAUDE.md`:** a pinned number is not a claim its author may choose, it is a
-measurement of the tree, and the test is what makes that true. **Where a test derives it, moving it needs
-no permission. Where prose asserts it, it does.**
-
-## A CITATION TO A RECORD THAT NO LONGER EXISTS READS LIKE ONE THAT NEVER DID — 2026-09-07
+## A citation to a record that no longer exists reads like one that never did (2026-09-07)
 
 Three failures in one day, and they are the same failure pointed at three sources.
 
@@ -271,7 +243,7 @@ working tree is not evidence about history. And before repeating a peer's conclu
 load-bearing **or alarming**: relay neither unchecked, but never let the second travel because it felt
 urgent. Related: the mutation-check rule, and `a-number-from-the-apparatus`.
 
-## I COUNTED WORDS WHEN THE FAULT WAS STRUCTURE — 2026-09-07
+## I counted words when the fault was structure (2026-09-07)
 
 A five-page document rendered a sixth page holding one word, `"discover."`. I measured length, found the
 body inside its cap, and reported the overflow as probably legitimate. `ceo` read the same document and
@@ -300,7 +272,7 @@ words would have found it, because the defect was that a number had been typed r
 >
 > **The floor is three rows in total, PRODUCT FIRST**, and a tooling row may fill it only when it unblocks a product row or the pipeline. Ruled 2026-09-07. It is not a product-only floor, because that was structurally unmeetable and would have been met by relabelling within a day — **a floor met by a label I control is not a measurement**, the rule I hold every lane owner to and therefore hold myself to first. **The hourly line says how many of the three are product**, so the composition is visible rather than inferred.
 >
-> **A FLEET-GATED ROW HAS TWO HALVES, and only one of them is gated.** The capture is the orchestrator's queue; the pages, the analysis script and the row that records the result are not, and they are pickable product work. Split the row rather than parking the whole thing behind fleet time — that is what made most of the roadmap look unpickable when most of it was not.
+> **A fleet-gated row has two halves, and only one of them is gated.** The capture is the orchestrator's queue; the pages, the analysis script and the row that records the result are not, and they are pickable product work. Split the row rather than parking the whole thing behind fleet time — that is what made most of the roadmap look unpickable when most of it was not.
 
 **2. Every open row carries a milestone OR the label `out-of-release`, and there is no third state.** A row with neither is a tracker defect, not a judgement call. Amended 2026-09-07 after #290 — real work, deliberately not in the release — made the open-items total count a row the blocker count could not, so one page carried two numbers disagreeing about it and neither was wrong. The document's open-items figure now reconciles on the page (`blocks release + later milestone + out-of-release + unclassified = total`, with the sum printed and a sentence when it does not hold), and `tracker-auditor`'s hourly table asks the question. **The label means "deliberately not in this release", never "unsorted"** — which is why the unclassified count is printed rather than absorbed: tolerating it silently would rebuild the fault inside its own fix. And the document reports **three counts with trend, not one** — blocks publish, road to version one, capture throughput — with **epics and decisions shown separately from ordinary rows**. Read as one number, 48 looks like 48 pieces of unfinished work; read as `18 epics + 5 decisions + 25 rows`, the epics are the roadmap the board approved.
 

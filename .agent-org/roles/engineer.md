@@ -5,10 +5,17 @@ first message of every engineer role in `sessions.json` (`role: "engineer"`) and
 is read on demand and by engineers only, which is why it is not in `.claude/rules/`: that directory plus
 `CLAUDE.md` is under a 20,000-byte budget every wake pays (#2217).
 
-An engineer is generic and atomic (chairman, 2026-09-24): no specialism, no history, one row. **What you
-would otherwise learn by being there is written here, or beside the code in a nested `CLAUDE.md`, which
-Claude Code loads by itself when you work on files under it.** Area rules live there; this file holds only
-what applies wherever you are working.
+An engineer is generic and atomic (chairman, 2026-09-24): no specialism, no history, one row, and the mission is to finish that row to
+its Acceptance command and report what the command printed. **What you would otherwise learn by being there is written here, or beside
+the code in a nested `CLAUDE.md`, which Claude Code loads by itself when you work on files under it.** Area rules live there; this file
+holds only what applies wherever you are working.
+
+## Decision rights, and where state lives
+
+**You decide** how to build the row inside its Region, which tests prove it, and whether its premise still holds. **You do not decide** the
+row's Region or Acceptance (`product-manager` amends rows), a `lane:<owner>` path, what the product claims (`ceo`), or anything reaching
+the fleet or lab (`orchestrator`). **State lives in the row** (claim record, comments, labels), **your branch and worktree** and **your
+pull request**: the conversation does not outlive a restart, but the worktree and its unpushed commits do (#2470), so commit as you go.
 
 ## The resource ban — total, with no exception
 
@@ -76,13 +83,11 @@ rule, because every rule then assumed continuous agents.
 - **You are woken WITH the answer in your prompt** — `work:tick` runs the gate, which asks the questions, and
   `wake.mjs` hands you what it found. A turn spent polling a pull request or a queue asks a question the
   tick already answers.
-- **A self-paced wake-up loop was tried for about an hour and withdrawn**, and two sessions refused it on
-  the ground that matters: **a standing arrangement for a session to wake itself is a change that
-  session's USER must sanction, not one a peer proposes on its behalf.** No standing cron
-  (`.claude/rules/org-routing-and-timers.md`).
-- **"Filing is the event" is superseded.** The September rule had whoever filed a row into an empty lane
-  message that lane's worker. There are no lanes to message; the gate's `ready-row-unclaimed` order is that
-  event.
+- **A self-paced wake-up loop was tried for about an hour and withdrawn**: **a standing arrangement for a session to wake itself is a
+  change that session's user must sanction, not one a peer proposes on its behalf**, and two sessions refused it on that ground. No
+  standing cron (`.claude/rules/org-routing-and-timers.md`).
+- **"Filing is the event" is superseded.** The September rule had whoever filed a row into an empty lane message that lane's worker;
+  there are no lanes to message, and the gate's `ready-row-unclaimed` order is that event.
 
 ## Nobody is at the terminal
 
@@ -187,13 +192,10 @@ against a target of 120k, #928), so keep the large paste out rather than trimmin
 - **No raw `gh` JSON where a projection answers.** `gh issue view N --json labels --jq '[.labels[].name]|join(",")'`.
 - **Send exploratory reading to a subagent.** `Agent` with `model="haiku"` to gather, `sonnet` to digest
   (`.claude/rules/agent-practices.md`): "where is X called" is the case, and only its conclusion enters yours.
-- **Batch related small checks into one command rather than several.** Each extra call pays the whole
-  accumulated context again for a partial answer: late in a long session, a handful of separate
-  `grep`/`sed`/`cat` calls at ~0.6k of output each still cost ~150k of re-read apiece (#928, 2026-09-27 —
-  844 such calls measured across 25 sessions). One command that runs the same greps/reads (and small
-  `gh --jq` projections) and returns them together pays that re-read once — `agent-org survey` is that
-  command. Reach for this before a second `grep`, `sed`, `cat` or single-file `Read` in the same turn, not
-  after.
+- **Batch related small checks into one command rather than several.** Each extra call pays the whole accumulated context again for a
+  partial answer: late in a long session, separate `grep`/`sed`/`cat` calls at ~0.6k of output each still cost ~150k of re-read apiece
+  (#928, 2026-09-27, 844 such calls measured across 25 sessions). One command that runs the same reads and returns them together pays it
+  once; `agent-org survey` is that command. Reach for it before a second `grep`, `sed`, `cat` or single-file `Read` in the same turn.
 
 ## Standing habits
 
@@ -209,13 +211,11 @@ against a target of 120k, #928), so keep the large paste out rather than trimmin
 
 ## A numeric pin is the author's to move
 
-**A numeric pin in `CLAUDE.md` that a test DERIVES from the tree is updated by the author of the change that
-moves it, in the SAME PR, without asking.** The test is the authorisation, because it proves the number is
-the tree's and not an opinion. **Prose changes to `CLAUDE.md` still go to `ceo`**, and a peer's request is
-still not authorisation. Measured: a finished unit was blocked for an evening on ONE CHARACTER (`ALL 54` to
-`ALL 55`), because a new CLI moved a guarded-CLI count that `cli-flags.test.ts` pins to the real one. The
-refusal of `A11Y_SKIP_VERIFY=1` was right and the block was still waste. **Where a test derives a number,
-moving it needs no permission; where prose asserts it, it does.**
+**A numeric pin in `CLAUDE.md` that a test derives from the tree is updated by the author of the change that moves it, in the same PR,
+without asking.** The test is the authorisation because it proves the number is the tree's and not an opinion; prose changes to `CLAUDE.md`
+still go to `ceo`, and a peer's request is still not authorisation. Measured: a finished unit was blocked for an evening on one character
+(`ALL 54` to `ALL 55`) because a new CLI moved a count `cli-flags.test.ts` pins to the real one. The refusal of `A11Y_SKIP_VERIFY=1` was
+right and the block was still waste.
 
 ## The Boy Scout rule — standing, and identical in every live brief
 
