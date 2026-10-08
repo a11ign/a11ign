@@ -707,10 +707,17 @@ runs:
         # be missing on exactly the runs where someone needs them. Verified both ways before relying on
         # it: `false; status=$?` exits 1 without reaching the next line, `false || status=$?` continues.
         status=0
+        # #4089: say in the summary that no form was submitted, so a default run reads "not probed" and never clean. An
+        # authenticated run passes nothing: its own list of what it pressed is the whole account (ADR 0038).
+        probed_flag=()
+        if [ -z "${{ inputs.flows }}" ]; then
+          if [ "${{ inputs.probe-forms }}" = "true" ] || [ -n "${{ inputs.forms }}" ]; then probed_flag=(--forms-probed=true); else probed_flag=(--forms-probed=false); fi
+        fi
         npx tsx packages/cli/src/action/run.ts \
           --result="${{ steps.capture.outputs.result-json }}" \
           --fail-on="${{ inputs.fail-on }}" \
           --summary-out="$RUNNER_TEMP/a11ign-summary.md" \
+          "${probed_flag[@]}" \
           --marker=a11ign || status=$?
         # Outputs are set BEFORE propagating the failure, so a failing check still exposes its numbers to
         # later steps. Reading them from the result rather than re-deriving keeps one source of truth.

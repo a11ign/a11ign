@@ -77,6 +77,11 @@ function reportPages(multi: MultiPageResult, options: { failOn: FailOn; marker: 
   if (code !== 0) process.exit(code);
 }
 
+/** #4089: `--forms-probed=true|false` from the Action; anything else (including absent) is "not said", which renders nothing. */
+function formsProbedFlag(value: string | undefined): boolean | undefined {
+  return value === "true" ? true : value === "false" ? false : undefined;
+}
+
 function main(): void {
   const arg = (name: string, fallback?: string): string | undefined => flagValue(process.argv, name) ?? fallback;
 
@@ -115,6 +120,7 @@ function main(): void {
   const label = taskVerdictLabel();
   const markdown = renderSummary(result, {
     marker, taskQuestion: label.question, isTaskClaim: label.isTaskClaim, stateChangesObserved: observedStateChanges(result),
+    formsProbed: formsProbedFlag(arg("forms-probed")),
   });
 
   // An unverified capture is an infrastructure failure, not a verdict about the page — so it exits 2, the

@@ -79,6 +79,37 @@ test("CONTROL: a step that passes --probe-forms unconditionally fails the argume
   assert.equal(argsLine(argumentsFor(always, { "probe-forms": "false" })), "--json --probe-forms");
 });
 
+/** The Report step's `probed_flag` block, run under bash with the inputs filled in: what `run.ts` is handed. */
+function reportFlag(actionText: string, inputs: Record<string, string>): string {
+  const action = parse(actionText) as { runs: { steps: Step[] } };
+  const script = action.runs.steps.map((step) => step.run ?? "").find((run) => run.includes("probed_flag=()"));
+  assert.ok(script, "no step builds the --forms-probed flag for run.ts");
+  const lines = script.split("\n");
+  const first = lines.findIndex((line) => line.includes("probed_flag=()"));
+  const last = lines.findIndex((line, index) => index > first && line.trim() === "fi");
+  const block = lines.slice(first, last + 1).join("\n")
+    .replace(/\$\{\{\s*inputs\.([\w-]+)\s*\}\}/g, (_, name: string) => inputs[name] ?? "");
+  const run = spawnSync("bash", ["-c", `${block}\necho "FLAG: \${probed_flag[*]}"`], { encoding: "utf8" });
+  assert.equal(run.status, 0, run.stderr);
+  return /^FLAG: (.*)$/m.exec(run.stdout)?.[1] ?? assert.fail("no FLAG line");
+}
+
+test("action.yml: the summary is told whether any form was submitted, and an authenticated run is told nothing", () => {
+  const action = read("action.yml");
+  assert.equal(reportFlag(action, {}), "--forms-probed=false");
+  assert.equal(reportFlag(action, { "probe-forms": "false" }), "--forms-probed=false");
+  assert.equal(reportFlag(action, { "probe-forms": "true" }), "--forms-probed=true");
+  assert.equal(reportFlag(action, { forms: "forms.yml" }), "--forms-probed=true");
+  assert.equal(reportFlag(action, { flows: "f.yml", "login-flow": "in" }), "");
+});
+
+test("CONTROL: a Report step that always says probed fails the default assertion", () => {
+  const action = read("action.yml");
+  const always = action.replace(/else probed_flag=\(--forms-probed=false\); fi/, "else probed_flag=(--forms-probed=true); fi");
+  assert.notEqual(always, action, "the mutation changed nothing, so it controls nothing");
+  assert.equal(reportFlag(always, {}), "--forms-probed=true");
+});
+
 // ---- examples/workflow.yml ------------------------------------------------------------------------------------------
 
 /** The explicit opt-in an adopter copies, and the comment above it that states the cost. */

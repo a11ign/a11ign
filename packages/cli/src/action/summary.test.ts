@@ -18,7 +18,7 @@ import { documentIdentity } from "@a11ign/evidence/document-identity";
 import { criterionOutcomes } from "@a11ign/judge/outcomes";
 import { printJson } from "../cli.js";
 import {
-  logLines, partialExaminationCount, renderSummary, ruleLayerFailedCount, shouldFail, type RunFinding, type RunResult,
+  logLines, notProbedLines, partialExaminationCount, renderSummary, ruleLayerFailedCount, shouldFail, type RunFinding, type RunResult,
 } from "./summary.js";
 
 const finding = (severity: RunFinding["severity"], issue = "issue", mapping?: RunFinding["mapping"]): RunFinding => ({
@@ -768,9 +768,34 @@ test("#3297: rehearsal 3's real result lists the controls its probes pressed, by
 
 test("#3297: the heading says the probes pressed unprompted, and never claims the authenticated list's completeness", () => {
   const out = renderSummary(probed([{ control: "Search, button", kind: "submit", after: "x" }]));
-  assert.match(out, /`probe-forms` submits forms with no valid input/);
-  assert.match(out, /set either to `false` to stop it/);
+  assert.match(out, /`probe-forms`, when you set it, submits forms with no valid input/);
+  assert.match(out, /`probe-navigation: false` stops the link/);
+  assert.ok(!out.includes("set either to"), "probe-forms is off by default, so `false` is not how you stop it");
   assert.ok(!out.includes("presses only what its files name"));
+});
+
+const NOT_PROBED = /\*\*Not probed:\*\* no form was submitted \(`probe-forms` is off\), so 3\.3\.1 and 4\.1\.3 were not assessed\. That is not a pass\./;
+
+test("#4089: a run that submitted no form says 3.3.1 and 4.1.3 were NOT assessed, and a probing run does not", () => {
+  const change = [{ control: "Search, button", kind: "submit", after: "x" }];
+  assert.match(renderSummary(probed([]), { formsProbed: false }), NOT_PROBED);
+  assert.match(renderSummary(probed(change), { formsProbed: false }), NOT_PROBED);
+  assert.doesNotMatch(renderSummary(probed(change), { formsProbed: true }), /Not probed/);
+  // Absent says nothing: an older caller and an authenticated run cannot say, and "not probed" would be a claim.
+  assert.doesNotMatch(renderSummary(probed(change)), /Not probed/);
+});
+
+test("#4089: the not-probed line is ONE line, placed under the pressed list and above the verdict", () => {
+  const out = renderSummary(probed([]), { formsProbed: false });
+  assert.equal(out.split("\n").filter((line) => line.includes("Not probed")).length, 1);
+  assert.ok(out.indexOf("Not probed") > out.indexOf(PRESSED_HEADING));
+  assert.ok(out.indexOf("Not probed") < out.indexOf("Two layers, deliberately"));
+});
+
+test("CONTROL: the not-probed line is a function of the flag, so a renderer that ignored it would fail the assertion above", () => {
+  assert.deepEqual(notProbedLines(true), []);
+  assert.deepEqual(notProbedLines(undefined), []);
+  assert.notDeepEqual(notProbedLines(false), []);
 });
 
 test("#3297: a submit that left the page says where it went; one that stayed says nothing of the kind", () => {
