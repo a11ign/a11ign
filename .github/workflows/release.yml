@@ -556,7 +556,7 @@ jobs:
           [ -n "$new" ] || fail "no tag a11ign@$version to point $major_tag at (promoted, and the tag job has not cut it)"
           # THE DEFAULT `GITHUB_TOKEN` CANNOT DO THESE WRITES, and no fallback to it exists on purpose (#4154): it holds no `workflows` permission, and GitHub
           # refuses any ref at a commit whose `.github/workflows` differ from `main`'s tip, which a release commit cut from an older `main` always does.
-          # The refusal reads `Resource not accessible by integration` over the API and names the cause only on a `git push`. An empty secret is red.
+          # The refusal reads `Resource not accessible by integration` over the API and names the cause only when the ref is sent over git itself. An empty secret is red.
           [ -n "${GH_TOKEN:-}" ] || fail "the secret A11IGN_BOT_TOKEN is empty, and $major_tag cannot be written without a token holding contents: write and workflows"
           # THE EXACT `v<version>` TAG (#4058): Dependabot reads version-shaped tags, and `a11ign@<version>` is not one. Created at the same commit,
           # never moved: one that exists at the commit is left, and one anywhere else is red, for a tag a consumer may have pinned is not ours to move.
