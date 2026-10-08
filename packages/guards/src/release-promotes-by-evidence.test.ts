@@ -473,7 +473,9 @@ function holdRefusals(workflow: Workflow, { move, decide }: Pair): string[] {
 
 function otherJobRefusals(name: string, job: Job): string[] {
   const found: string[] = [];
-  if (job.permissions?.["id-token"] === "write") found.push(`${name} also holds id-token: write`);
+  // The tag move mints an Octo STS token with it (#4194); no environment, so it cannot mint the npm OIDC token the publish path is limited to.
+  const mintsOctoSts = job.environment === undefined && (job.steps ?? []).some((step) => step.uses?.startsWith("octo-sts/action@"));
+  if (job.permissions?.["id-token"] === "write" && !mintsOctoSts) found.push(`${name} also holds id-token: write`);
   if (job.permissions?.["issues"] === "write" && /dist-tag/.test(stepsText(job))) found.push(`${name} holds issues: write beside a dist-tag`);
   return found;
 }

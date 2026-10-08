@@ -1236,22 +1236,48 @@ test("#3710: an unset secret fails with its own cause, and no run ever prints th
 });
 
 /**
- * #4154 (`ceo`, replacing the #3717 pin "no live line of release.yml reads the bot token"): `promote-action-tag` alone reads it, in a STEP's
- * `env` (never a job's), because the default `GITHUB_TOKEN` cannot write a ref at a commit whose workflows differ from `main`'s tip. The
- * `release` job, which holds `id-token`, reads none: the PAT and the OIDC publish token never share a job. The count of jobs reading it is
- * asserted to be 1, not 0, so a scan that finds nothing cannot pass for one that found the right job.
+ * #4194 (`ceo`, replacing #4154's pin that `promote-action-tag` alone reads `A11IGN_BOT_TOKEN`): NO job of `release.yml` reads a stored GitHub
+ * token. `promote-action-tag` alone mints an Octo STS token (`octo-sts/action`), in a job holding `contents: read` and `id-token: write` and nothing
+ * more, and reads it in the one STEP's `env` that writes refs, because the default `GITHUB_TOKEN` cannot write a ref at a commit whose workflows
+ * differ from `main`'s tip. The policy it mints from grants `contents: write` and `workflows: write` on this repository, to this workflow as it is on
+ * `main`. The count of jobs minting is asserted to be 1, not 0, and the stored-token scan is shown to find a read, so a scan that finds nothing
+ * cannot pass for one that found the right job.
  */
 const TAG_MOVE_JOB = "promote-action-tag";
-function assertBotTokenReadOnlyByTheTagMove(): void {
+const TAG_MOVE_POLICY = ".github/chainguard/promote-action-tag.sts.yaml";
+const STORED_TOKEN = "A11IGN_BOT_TOKEN";
+type ReleaseStep = { id?: string; uses?: string; with?: Record<string, string>; env?: unknown; run?: string };
+type ReleaseJob = { env?: unknown; permissions?: Record<string, string>; steps?: ReleaseStep[] };
+const jobsContaining = (jobs: Record<string, ReleaseJob>, needle: string) => Object.entries(jobs).filter(([, job]) => JSON.stringify(job).includes(needle)).map(([name]) => name);
+
+function assertTagMoveMintsItsToken(): void {
   const live = readFileSync(join(REPO_ROOT, RELEASE_WORKFLOW), "utf8").split("\n").filter((line) => !line.trim().startsWith("#")).join("\n");
-  const jobs = (parseYaml(live) as { jobs: Record<string, { env?: unknown; steps?: { env?: unknown; run?: string }[] }> }).jobs;
-  const reading = Object.entries(jobs).filter(([, job]) => JSON.stringify(job).includes("A11IGN_BOT_TOKEN")).map(([name]) => name);
-  assert.deepEqual(reading, [TAG_MOVE_JOB], "exactly one job of release.yml reads the bot token: the Action's major-tag move (#4154), and not the release job");
+  const jobs = (parseYaml(live) as { jobs: Record<string, ReleaseJob> }).jobs;
+  const control = { reader: { steps: [{ env: { GH_TOKEN: "${{ secrets.A11IGN_BOT_TOKEN }}" } }] } };
+  assert.deepEqual(jobsContaining(control, STORED_TOKEN), ["reader"], "POSITIVE CONTROL: the scan finds a job that reads the stored token");
+  assert.deepEqual(jobsContaining(jobs, STORED_TOKEN), [], "no job of release.yml reads the stored bot token (#4194)");
+  assert.deepEqual(jobsContaining(jobs, "octo-sts/action"), [TAG_MOVE_JOB], "exactly one job mints an Octo STS token: the Action's major-tag move, and not the release job");
   const move = jobs[TAG_MOVE_JOB];
-  assert.ok(!JSON.stringify(move.env ?? {}).includes("A11IGN_BOT_TOKEN"), "the secret is read in a step's env, never the job's");
-  const reads = (move.steps ?? []).filter((step) => JSON.stringify(step.env ?? {}).includes("A11IGN_BOT_TOKEN"));
-  assert.equal(reads.length, 1, "one step reads it, and it is the step that writes the refs");
-  assert.match(reads[0].run ?? "", /git\/refs/, "the step that reads the secret is the one that writes refs");
+  assert.deepEqual(move.permissions, { contents: "read", "id-token": "write" }, "the job holds contents: read and id-token: write, and nothing more");
+  assert.ok(!JSON.stringify(move.env ?? {}).includes("octo-sts"), "the minted token is read in a step's env, never the job's");
+  const steps = move.steps ?? [];
+  const mint = steps.findIndex((step) => step.uses?.startsWith("octo-sts/action@"));
+  assert.equal(steps[mint]?.id, "octo-sts");
+  assert.equal(steps[mint]?.with?.identity, TAG_MOVE_JOB, "the identity names the policy file");
+  const reads = steps.map((step, index) => ({ step, index })).filter(({ step }) => JSON.stringify(step.env ?? {}).includes("steps.octo-sts.outputs.token"));
+  assert.equal(reads.length, 1, "one step reads the minted token, and it is the step that writes the refs");
+  assert.ok(reads[0].index > mint, "the token is minted before it is read");
+  assert.match(reads[0].step.run ?? "", /git\/refs/, "the step that reads the token is the one that writes refs");
+}
+
+/** The policy the mint is refused or granted by: least permission, this repository only, and bound to the workflow as on `main`. */
+function assertTagMovePolicyBindsToMain(): void {
+  const policy = parseYaml(readFileSync(join(REPO_ROOT, TAG_MOVE_POLICY), "utf8")) as { subject?: string; repositories?: unknown; claim_pattern?: Record<string, string>; permissions?: Record<string, string> };
+  assert.deepEqual(policy.permissions, { contents: "write", workflows: "write" }, "only what the three ref writes need");
+  assert.equal(policy.repositories, undefined, "a repository policy reaches its own repository, and says nothing wider");
+  assert.match(policy.subject ?? "", /:ref:refs\/heads\/main$/, "a dispatch from a branch presents that branch's subject and is refused");
+  assert.equal(policy.claim_pattern?.ref, "refs/heads/main");
+  assert.match(policy.claim_pattern?.job_workflow_ref ?? "", /release\\\.yml@refs\/heads\/main$/, "the workflow claim names release.yml as ON main, so a branch's copy of it cannot mint");
 }
 
 test("#3710/#3717: the probe is a separate job named for the cell, in a file of its own that no release job reads the token from, and nothing waits on it", () => {
@@ -1261,7 +1287,8 @@ test("#3710/#3717: the probe is a separate job named for the cell, in a file of 
   const waiting = Object.entries(jobs).filter(([, job]) => [job.needs ?? []].flat().includes(TOKEN_JOB)).map(([name]) => name);
   assert.deepEqual(waiting, [], "no job may need the probe: the arm step keeps its GITHUB_TOKEN fallback");
   assert.equal(protectionEntries().find((e) => e.repo === FORMER_LITERAL)?.tokenProbe, "token-reach.yml", "the declaration points where the job lives");
-  assertBotTokenReadOnlyByTheTagMove();
+  assertTagMoveMintsItsToken();
+  assertTagMovePolicyBindsToMain();
 });
 
 test("#3705: a declared repository with no row is a failure, and the table renders a cell for every column", () => {

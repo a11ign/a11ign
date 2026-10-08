@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/octo-sts/app/refs/heads/main/pkg/octosts/octosts.TrustPolicy.json
+#
+# THE TOKEN `dependency-pr-body.yml` WRITES A DEPENDABOT PULL REQUEST'S BODY WITH (#4197). Octo STS v0.11.2 syntax; a repository policy
+# reaches only the repository it sits in, so it cannot name another.
+#
+# WHY AN INSTALLATION TOKEN AT ALL: an edit made with `GITHUB_TOKEN` fires no `edited` event, and `ci.yml`'s `acceptance` job only re-reads
+# the body on one. An Octo STS token is a GitHub App installation token, and those do fire workflow events.
+#
+# WHAT BINDS IT TO `main` (claims measured on #4191, comment 6068015545, run 37835437240): `pull_request` and `pull_request_target` present
+# the SAME `sub` (`...:pull_request`), so `subject` alone would also mint for a `pull_request` run, whose workflow comes from the branch's
+# merge ref. They differ in `job_workflow_ref`, which for `pull_request_target` names the workflow as it is on `main`. `sub` carries
+# immutable ids (`repo:a11ign@320310787/a11ign@1280353940`), so a subject written with names never matches. The patterns are matched
+# against the whole value (README), hence no `^` or `$`.
+#
+# THE GAP: a Dependabot-triggered run was UNMEASURED when this was written (no Dependabot pull request was open). Its `sub` is expected
+# to read the same `...:pull_request`; if it differs, the mint is refused and the step fails loudly, which is the safe direction.
+issuer: https://token.actions.githubusercontent.com
+subject: repo:a11ign@320310787/a11ign@1280353940:pull_request
+claim_pattern:
+  job_workflow_ref: a11ign/a11ign/.github/workflows/dependency-pr-body.yml@refs/heads/main
+  event_name: pull_request_target
+
+# The least it needs: PATCH on the pull request. The job reads the file list and the base commit's owned-path list with its own
+# `GITHUB_TOKEN`, which is why `contents` is not here.
+permissions:
+  pull_requests: write

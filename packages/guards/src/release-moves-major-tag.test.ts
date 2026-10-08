@@ -5,8 +5,8 @@
  * A user of the Action writes `uses: a11ign/a11ign@<ref>`. A moving `v0` follows `latest`, so a fix reaches that user once the fleet's
  * qualification has passed and not before. Two halves, as `release-promotes-by-evidence.test.ts`:
  *
- * 1. THE WORKFLOW, parsed: the job that writes the tag `needs` the promotion job, holds `contents: read` and nothing else (no `id-token`; the write is the bot token, #4154:
- *    the npm token stays in the promotion job), and writes no ref but the major tag and the CREATION of the exact `v<version>` tag (#4058).
+ * 1. THE WORKFLOW, parsed: the job that writes the tag `needs` the promotion job, holds `contents: read` and `id-token: write` and nothing else (the write is an Octo STS token, #4194,
+ *    minted for this workflow as on `main`; the npm token stays in the promotion job), and writes no ref but the major tag and the CREATION of the exact `v<version>` tag (#4058).
  * 2. THE STEP, run: the job's own script is extracted from the parsed YAML and executed under `bash` against a stub `git` and a stub `gh`,
  *    so what the tag does on a first move, a re-run, an older version, a tag it cannot account for and a registry it cannot read is
  *    OBSERVED, not read off the text. Nothing here reaches the network.
@@ -15,7 +15,7 @@
  *
  * "It does not move the tag backwards" is true of a job that never moves it. So the table has the rows that MUST move it, and
  * `scenarioFaults` is run against a script that always moves (refused by the older, equal, unaccounted and unreadable rows) and one that never
- * moves (refused by the moving rows). `workflowFaults` is run against four mutants of the real workflow: no `needs` edge, `id-token: write`,
+ * moves (refused by the moving rows). `workflowFaults` is run against mutants of the real workflow: no `needs` edge, a grant beyond `id-token: write`,
  * a deletion of a per-version tag, a write that names a per-version tag, and a MOVE of the exact `v<version>` tag.
  */
 import { test } from "node:test";
@@ -54,7 +54,7 @@ function workflowFaults(workflow: Workflow): string[] {
   const [, tagJob] = tagJobs[0];
   const faults: string[] = [];
   if (!needsOf(tagJob).includes(promotionName)) faults.push(`the tag job does not \`needs\` the promotion job (${promotionName})`);
-  if (JSON.stringify(tagJob.permissions) !== JSON.stringify({ contents: "read" })) faults.push(`the tag job's permissions are ${text(tagJob.permissions)}, not \`contents: read\` alone`);
+  if (JSON.stringify(tagJob.permissions) !== JSON.stringify({ contents: "read", "id-token": "write" })) faults.push(`the tag job's permissions are ${text(tagJob.permissions)}, not \`contents: read\` and \`id-token: write\` alone`);
   if (/\buses:\s*actions\/checkout/.test(text(tagJob.steps?.map((s) => s.uses)))) faults.push("the tag job checks the repository out: it runs no repository code");
   faults.push(...tagWriteFaults(scriptOf(tagJob)));
   return faults;
@@ -92,7 +92,7 @@ const withScript = (job: Job, edit: (script: string) => string) => {
   step.run = edit(step.run!);
 };
 
-test("the workflow: a job that `needs` the promotion job writes the major tag with `contents: read` alone (the bot token writes, #4154)", () => {
+test("the workflow: a job that `needs` the promotion job writes the major tag with `contents: read` and `id-token: write` alone (an Octo STS token writes, #4194)", () => {
   assert.deepEqual(workflowFaults(load()), []);
 });
 
@@ -109,9 +109,14 @@ test("a tag job that does not `needs` the promotion job is refused", () => {
   assert.ok(faults.some((f) => /does not `needs` the promotion job/.test(f)), faults.join("; "));
 });
 
-test("a tag job holding `id-token: write` is refused", () => {
-  const faults = workflowFaults(mutated((job) => { job.permissions = { contents: "read", "id-token": "write" }; }));
-  assert.ok(faults.some((f) => /not `contents: read` alone/.test(f)), faults.join("; "));
+test("a tag job holding `contents: write` beside the minted token is refused", () => {
+  const faults = workflowFaults(mutated((job) => { job.permissions = { contents: "write", "id-token": "write" }; }));
+  assert.ok(faults.some((f) => /alone/.test(f)), faults.join("; "));
+});
+
+test("a tag job with no `id-token: write` is refused: it could not mint the token", () => {
+  const faults = workflowFaults(mutated((job) => { job.permissions = { contents: "read" }; }));
+  assert.ok(faults.some((f) => /alone/.test(f)), faults.join("; "));
 });
 
 test("a tag job that deletes a per-version tag is refused", () => {

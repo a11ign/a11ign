@@ -124,7 +124,9 @@ test("action.yml: the same URLs on one line still arrive as they did, and url an
   const spaced = handedToCli({ actionText: shippedAction(), env: { URLS: PAGES.join(" ") } });
   assert.deepEqual(urlsSeenByCli(spaced), PAGES);
   const single = handedToCli({ actionText: shippedAction(), env: { URL: "https://example.test/a b", MAX_PAGES: "25" } });
-  assert.deepEqual(single.args.slice(2), ["--json", "https://example.test/a b", "--max-pages", "25", "--no-axe"]);
+  // #4252: a single result also asks for the evidence pack, at a path under RUNNER_TEMP (the test's `work`).
+  assert.deepEqual(single.args.slice(2, -1), ["--json", "https://example.test/a b", "--max-pages", "25", "--no-axe", "--evidence-pack"]);
+  assert.match(single.args.at(-1) ?? "", /\/a11ign-evidence-pack\.md$/);
   assert.equal(urlsSeenByCli(single), null);
 });
 

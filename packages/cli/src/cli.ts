@@ -69,6 +69,7 @@ import { draftFormsConfig } from "./forms/draft.js";
 import { MAX_CAPTURE_ATTEMPTS, PageListError, captureCount, loginReport, minimumLogins, multiPageJson, newLoginTally, rejectedScorer, runSingleUrl,
   refuseMalformedUrls, resolveMaxPages, resolvePageList, rollUpLines, runPageList, surfaceFromEnv,
   type LoginReport, type LoginTally, type PageEntry } from "./multi-page.js";
+import { renderEvidencePack, type EvidencePackInput } from "./evidence-pack.js";
 
 interface Args {
   /**
@@ -146,6 +147,8 @@ interface Args {
   plan: boolean;
   /** Path to axe results produced elsewhere, used instead of running our own scan. */
   axeResults: string | null;
+  /** #4252: where to write the Markdown evidence pack (`renderEvidencePack`) beside the `--json` result; null writes none. */
+  evidencePack: string | null;
   /**
    * Write the capture to `runs/witness/<stamp>-<slug>.json` after this run, and print the path. ON by
    * default -- #431: a `witness` run kept nothing, so the reader whose run went wrong (a consent overlay,
@@ -171,7 +174,7 @@ const USAGE =
   + "[--no-probe-navigation] [--no-probe-focus-context] "
   + "[--forms <file>] [--flows <file> --login-flow <name> [--auth-state <file>] [--send-authenticated-transcript-to-judge-vendor]] "
   + "[--emit-form-config] [--plan] "
-  + "[--no-axe] [--axe-results <file>] [--no-keep]";
+  + "[--no-axe] [--axe-results <file>] [--evidence-pack <file.md> (needs --json)] [--no-keep]";
 
 function defaultArgs(): Args {
   return {
@@ -229,6 +232,7 @@ function defaultArgs(): Args {
     plan: false,
     axe: process.env.A11Y_AXE !== "0",
     axeResults: process.env.A11Y_AXE_RESULTS ?? null,
+    evidencePack: null,
     keep: true,
   };
 }
@@ -270,7 +274,16 @@ const LIST_FLAGS: Readonly<Record<string, (args: Args, value: string | undefined
   "--flows": (a, value) => { a.flows = value ?? a.flows; },
   "--login-flow": (a, value) => { a.loginFlow = value ?? a.loginFlow; },
   "--auth-state": (a, value) => { a.authState = value ?? a.authState; },
+  "--evidence-pack": (a, value) => { a.evidencePack = evidencePackPath(value); },
 });
+
+/** A path or a refusal: a bare `--evidence-pack` (or one followed by another flag) would otherwise write no pack and say nothing. */
+function evidencePackPath(value: string | undefined): string {
+  if (!value || value.startsWith("--")) {
+    throw new PageListError(`--evidence-pack needs the path of the Markdown file to write.\n${USAGE}`);
+  }
+  return value;
+}
 
 /**
  * `--task ""` is no task, so it keeps the default. `??` only falls back on a MISSING value, and the Action's
@@ -474,6 +487,36 @@ type JsonSink = (json: object) => void;
 const printAsJson: JsonSink = (json) => console.log(JSON.stringify(json, null, 2));
 
 /**
+ * #4252: the lone page's sink, which prints the result JSON and, under `--evidence-pack`, writes `renderEvidencePack` of that
+ * same object beside it, so the pack and the JSON cannot describe two runs. A result with no `outcomes` (a PDF's tag-tree
+ * scan has no screen-reader layer) gets NO pack and a line on stderr: a pack of zero criteria would read as a clean one.
+ */
+export function resultSink(evidencePack: string | null): JsonSink {
+  return (json) => {
+    printAsJson(json);
+    if (!evidencePack) return;
+    if (!("outcomes" in json)) {
+      process.stderr.write(`No evidence pack written to ${evidencePack}: this result has no per-criterion outcomes.\n`);
+      return;
+    }
+    writeFileSync(evidencePack, `${renderEvidencePack(json as EvidencePackInput)}\n`);
+    process.stderr.write(`Evidence pack written to ${evidencePack}\n`);
+  };
+}
+
+/**
+ * What `--evidence-pack` cannot do, refused before the first capture, for the reason `refuseUnsupportedForLists` gives:
+ * "ignored" would leave the Action's output naming a file that was never written.
+ */
+function refuseUnusableEvidencePack(args: Args, formStates: number): void {
+  if (!args.evidencePack) return;
+  const refusal = !args.json ? "it is written beside the --json result, so pass --json too"
+    : args.urls.length > 1 ? `it takes one page, not a list of ${args.urls.length}`
+      : formStates > 1 ? `it takes one capture, and this forms config makes ${formStates}` : null;
+  if (refusal) throw new PageListError(`--evidence-pack: ${refusal}.`);
+}
+
+/**
  * What a list cannot do, refused before the first capture. Each names the rule, because "ignored" would put
  * the answer for page one on every other page without saying so.
  */
@@ -576,8 +619,9 @@ async function formStateCount(args: Args): Promise<number> {
 async function main(): Promise<void> {
   const args = await withAuthentication(parseArgs());
   if (await planOnly(args)) return;
+  refuseUnusableEvidencePack(args, args.urls.length > 1 ? 0 : await formStateCount(args));
   if (args.urls.length > 1) { await runPages(args); return; }
-  if (looksLikePdfUrl(args.url)) { await runPdfLayer(args); return; }
+  if (looksLikePdfUrl(args.url)) { await runPdfLayer(args, resultSink(args.evidencePack)); return; }
   const lease = await leaseWorker(args);
   process.stderr.write(`Using ${lease.worker} (${describeSource(lease.source)})\n`);
   if (lease.source === "default") await refuseIfNothingListening(lease.worker);
@@ -591,7 +635,7 @@ async function main(): Promise<void> {
     // evidence and a report of the same shape, or every consumer downstream needs to know which it is
     // holding — which is the fact-stated-twice defect with a report attached.
     await runSingleUrl({
-      url: args.url, unmeasured: recordUnmeasured(args), states, tally: args.logins, axe: args.axe, auth: args.auth, emit: printAsJson, say: (line) => process.stderr.write(`${noticeLine(line)}\n`),
+      url: args.url, unmeasured: recordUnmeasured(args), states, tally: args.logins, axe: args.axe, auth: args.auth, emit: resultSink(args.evidencePack), say: (line) => process.stderr.write(`${noticeLine(line)}\n`),
       capture: ({ formState, index, sink }) => {
         if (formState) {
           process.stderr.write(`\n=== form state ${index + 1}/${states.length}: `

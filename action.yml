@@ -248,6 +248,12 @@ outputs:
       Path to the rendered report -- the same markdown written to the job summary -- so a CI-only
       consumer can read it without a browser. Upload it alongside result-json.
     value: ${{ steps.report.outputs.summary-md }}
+  evidence-pack:
+    description: >-
+      Path to the evidence pack -- the result's per-criterion outcomes and the NVDA announcements behind them, as one
+      Markdown file for an assessor (not a VPAT or ACR, and no statement of conformance). Empty for a run of a `urls`
+      list, a `forms` config or a PDF, which write none. Upload it alongside result-json.
+    value: ${{ steps.capture.outputs.evidence-pack }}
 
 runs:
   using: composite
@@ -710,6 +716,10 @@ runs:
         [ -n "$state_path" ] && args+=(--auth-state "$state_path")
         [ "$SEND_TRANSCRIPT" = "true" ] && args+=(--send-authenticated-transcript-to-judge-vendor)
         [ "$AXE" = "true" ] || args+=(--no-axe)
+        # #4252: the evidence pack, for a run that makes ONE result. The CLI refuses the flag with a list of pages or a forms
+        # config (one pack cannot be several captures), so it is not passed there, and the `evidence-pack` output is then empty.
+        pack="$RUNNER_TEMP/a11ign-evidence-pack.md"
+        [ -z "$URLS" ] && [ -z "$FORMS" ] && args+=(--evidence-pack "$pack")
         # stdout is the JSON result; the CLI's diagnostics go to stderr and stay in the log.
         #
         # `|| status=$?`, for the reason the Report step gives: this step runs under `-eo pipefail`, and a list
@@ -723,6 +733,8 @@ runs:
         # there is nothing for the Report step to read, so fail here exactly as before.
         if [ "$status" -ne 0 ] && [ ! -s "$out" ]; then exit "$status"; fi
         echo "result-json=$out" >> "$GITHUB_OUTPUT"
+        # Only a pack that exists: a PDF page or a failed page writes none, and an output naming a missing file is an upload warning.
+        [ -s "$pack" ] && echo "evidence-pack=$pack" >> "$GITHUB_OUTPUT"
         echo "capture-status=$status" >> "$GITHUB_OUTPUT"
 
     - name: Report
