@@ -11,7 +11,7 @@ The evaluator's complaint was review load: 395 referrals on the 40 conformant pa
 - **Repeat share** = repeats over all referrals. The total is the sum over pages, never the mean of per-page shares.
 - **Decision: a total at or above 20% means the claimant of #4241 files the row that groups repeats in `summary.ts` and `report.ts`; below 20%, grouping would not cut the load by a fifth and the next lever is something other than grouping** (for example fewer referring subtypes, or ranking, which this document does not measure).
 
-The tool is `referral-repeat-share.mjs` in `a11ign/lab` (`packages/lab/scripts/`, PR a11ign/lab#31), tested on fixtures, including the positive control that five referrals with three repeats read 0.6.
+The tool is `referral-repeat-share.mjs` in `a11ign/lab` (`packages/lab/scripts/`, PRs a11ign/lab#31 and #35), tested on fixtures, including the positive control that five referrals with three repeats read 0.6.
 
 ## Why there is no figure
 
@@ -23,10 +23,10 @@ Looked for on this host, 2026-10-08, and not found:
 
 ## What the run needs to produce
 
-For each of the 40 conformant calibration pages at the current protocol, the judgment the shipped path produces (`findings` with `wcag`, `evidence`, `mapping`), one JSON file per page. Then:
+The calibration sweep's one file, `runs/abstention/calibration-judgments.json` (row #4293: `{ pages: [{ url, claim, findings: [{ wcag, evidence, mapping }], cantTell, predicted }] }`, one record per scored page, fetched with `lab:fetch` as the `calibration-judgments` artifact). The reader takes that file as it is (a11ign/lab#35, after lab#31); one JSON per page also works. Then:
 
 ```bash
-node packages/lab/scripts/referral-repeat-share.mjs <dir>/*.json
+node packages/lab/scripts/referral-repeat-share.mjs calibration-judgments.json
 ```
 
 prints per-page referrals, repeats and share, then the total and which side of 20% it falls. This document is updated with that output, the date and the command, and the grouping row is filed or declined on it.
