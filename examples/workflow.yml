@@ -38,7 +38,7 @@ jobs:
           url: https://example.com/contact
           # Say what a USER is trying to do, not what you want tested.
           #
-          # Know what it affects, though: with `probe-forms: true` — the default, and what is set below —
+          # Know what it affects, though: with `probe-forms: "true"` — OFF by default, and set below on purpose —
           # it decides WHICH buttons get activated (a button sharing a meaningful word with the task), so
           # it is LOAD-BEARING on this example as written. With an LLM backend it also drives the "could
           # someone finish this?" verdict; the default `local` scorer never sees it.
