@@ -249,6 +249,13 @@ jobs:
       # Every other nightly job that runs tests (`coverage`, `nightly-only`, `doc-report`) builds for the
       # same reason.
       - run: pnpm run build
+      # #4195, A NAMED GAP: THIS READ STAYS ON `A11IGN_BOT_TOKEN`, for two reasons that each suffice.
+      #   1. IDENTITY. An Octo STS token is the app's installation, not the identity that completes a merge here (`DanBeckDev`, above)
+      #      until the auto-arm rows (#4198) re-point arming; `current_user_can_bypass` would then be a true statement about the wrong
+      #      subject, which this job's header refuses. Re-point this read to the arming identity WHEN that lands, not before.
+      #   2. REACH. The loop below reads every declared code repository, and a repository policy reaches only the repository it sits in
+      #      (Octo STS v0.11.2 forces `repositories` to that one). Nine repositories means an organisation policy in `a11ign/.github`,
+      #      which is outside this row's Region.
       - name: Ask GitHub, once per code repository, whether the default branch's `pull_request` rule binds the identity that merges here
         env:
           A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
@@ -354,8 +361,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      issues: read
-      pull-requests: read
+      id-token: write   # the Octo STS exchange below and nothing else (#4195)
     steps:
       - uses: actions/checkout@v7
         with: { ref: main, fetch-depth: 0 }
@@ -365,18 +371,19 @@ jobs:
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
         run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+      # #4195: the tracker and the board are read with an Octo STS token (policy `nightly-board-read`, which carries the claims it
+      # binds to and why), not a stored PAT. A failed exchange fails the job: there is deliberately NO fallback to `github.token`,
+      # which cannot resolve the organisation's ProjectV2 and would turn the board-membership check into a warning nobody reads.
+      - name: Exchange this run's identity for a token that reads the tracker and the board (Octo STS)
+        id: octo
+        uses: octo-sts/action@v1.1.1
+        with:
+          scope: a11ign/a11ign
+          identity: nightly-board-read
       - name: Audit the tracker's labels once a day
         env:
-          A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          if [ -n "$A11IGN_BOT_TOKEN" ]; then
-            export GH_TOKEN="$A11IGN_BOT_TOKEN"
-          else
-            export GH_TOKEN="$GITHUB_TOKEN"
-            echo "::warning::A11IGN_BOT_TOKEN is not set -- GITHUB_TOKEN cannot resolve a user-owned ProjectV2, so the board-membership check will report as unable to run. See #416."
-          fi
-          agent-org ready:audit
+          GH_TOKEN: ${{ steps.octo.outputs.token }}
+        run: agent-org ready:audit
 
   # #948 (The CI Reset, step 3 of the doc-guard triage #905): the doc cross-reference REPORT, once a night,
   # as one comment. Until #954 retires them, the ~14 doc cross-reference guards still run on every PR; this
