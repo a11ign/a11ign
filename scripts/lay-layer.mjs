@@ -73,6 +73,31 @@ const DECLARED_TAG = /^v\d+\.\d+\.\d+$/;
 const DEFAULT_LAYS = ["src"];
 
 /**
+ * The first version whose repository tags a release `v<semver>` rather than `<package>@<version>`, by package (#4119). The tag form is the
+ * REPOSITORY's, not the version's: `screenreader-worker` moved to `v<semver>` at 0.3.0 (its tags are `@a11ign/screenreader-worker@0.2.0`, `v0.3.0`,
+ * `v0.4.0`), while `screenreader-fleet` is still `@a11ign/screenreader-fleet@0.5.1`, so a rule on the version alone would break the fleet.
+ */
+const BARE_TAGS_FROM = { "@a11ign/screenreader-worker": [0, 3, 0] };
+
+/** @param {string} version @returns {number[]} major, minor, patch */
+const semverParts = (version) => version.split(".").slice(0, 3).map(Number);
+
+/**
+ * The tag a registry release is laid at: `v<version>` once its package's repository tags that way, `<package>@<version>` otherwise.
+ *
+ * @param {string} name the registry name, `@a11ign/<package>`
+ * @param {string} version
+ * @returns {string}
+ */
+export function releaseTag(name, version) {
+  const from = BARE_TAGS_FROM[/** @type {keyof typeof BARE_TAGS_FROM} */ (name)];
+  if (from === undefined) return `${name}@${version}`;
+  const [major, minor, patch] = semverParts(version);
+  const atOrAfter = major !== from[0] ? major > from[0] : minor !== from[1] ? minor > from[1] : patch >= from[2];
+  return atOrAfter ? `v${version}` : `${name}@${version}`;
+}
+
+/**
  * The tag to lay: the declaration's own when it has one (a layer that is not on the registry), else the release the lockfile pins.
  * The registry package is the declaration's `package` (#3939), because a layer's key is not always its package (`nvda-worker` is `@a11ign/screenreader-worker`);
  * a declaration without one means `@a11ign/<key>`. It is declared, never inferred from the repository name: `layers.json` is the one place that says.
@@ -89,7 +114,7 @@ function tagToLay(entry, lockfile, layer) {
   const name = `@a11ign/${entry.package ?? layer}`;
   const pinned = pinnedVersion(lockfile, name);
   if ("refusal" in pinned) return pinned;
-  return { tag: `${name}@${pinned.version}` };
+  return { tag: releaseTag(name, pinned.version) };
 }
 
 /**
