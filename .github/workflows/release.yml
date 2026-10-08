@@ -495,9 +495,10 @@ jobs:
   # once the fleet's qualification has passed and never on a `next` publish. It `needs` the promotion's SUCCESS and reads only what that job moved
   # (`promoted`), so a red qualification, a wait and a `next` publish leave it alone. `contents: write` and nothing else: no `id-token` (the npm
   # token stays in `promote`), and no checkout, so no repository code runs beside the write. The Action is the `a11ign` package, whose tag is
-  # `a11ign@<version>`; the major tag is `v<major>` (`v0` while the version is 0.x) and is the ONLY ref this job writes.
+  # `a11ign@<version>`; the major tag is `v<major>` (`v0` while the version is 0.x), and with `v<version>` (Dependabot cannot see `a11ign@...`) the only refs this job writes.
   #
-  # THE PER-VERSION TAGS STAY IMMUTABLE: nothing here deletes, pushes or writes one. The tags are read with `git ls-remote --tags` and never
+  # THE PER-VERSION TAGS STAY IMMUTABLE: nothing here deletes or moves one, and the only one it writes is the exact `v<version>` (#4058), created
+  # when absent and never touched once it exists; `a11ign@<version>` is only read. The tags are read with `git ls-remote --tags` and never
   # assumed (the first move, and the major tag's absence before it, are that reading), and the log names the old target, the new target and the
   # version on every run. THE TAG NEVER MOVES BACKWARDS: the version it follows is the highest per-version tag on its current commit, and a
   # promotion that is not newer leaves it and says so. A tag it cannot account for, or a listing it cannot read, is red and moves nothing.
@@ -533,6 +534,18 @@ jobs:
           commit_of() { awk -F'\t' -v t="$1" '$1 == t { print $2 }' <<<"$commits"; }
           new=$(commit_of "a11ign@$version")
           [ -n "$new" ] || fail "no tag a11ign@$version to point $major_tag at (promoted, and the tag job has not cut it)"
+          # THE EXACT `v<version>` TAG (#4058): Dependabot reads version-shaped tags, and `a11ign@<version>` is not one. Created at the same commit,
+          # never moved: one that exists at the commit is left, and one anywhere else is red, for a tag a consumer may have pinned is not ours to move.
+          version_tag="v$version"
+          existing=$(commit_of "$version_tag")
+          if [ -z "$existing" ]; then
+            gh api -X POST "repos/$GH_REPO/git/refs" -f ref="refs/tags/$version_tag" -f sha="$new" >/dev/null
+            echo "$version_tag: was absent, now $new (a11ign@$version)"
+          elif [ "$existing" = "$new" ]; then
+            echo "$version_tag: already at $new; left"
+          else
+            fail "$version_tag is at $existing but a11ign@$version is at $new, and a per-version tag is never moved"
+          fi
           old=$(commit_of "$major_tag")
           if [ -z "$old" ]; then
             gh api -X POST "repos/$GH_REPO/git/refs" -f ref="refs/tags/$major_tag" -f sha="$new" >/dev/null
