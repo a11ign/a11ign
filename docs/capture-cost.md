@@ -127,6 +127,94 @@ Extrapolated with the fitted model (N = 5, 25 and 50 are extrapolations, the fit
 1. **`timeout-minutes: 20` in the documented workflow ([`github-action.md`](./github-action.md)) fits two captures and no more:** at 340 s the model gives 20.3 minutes for three; at 460 s, 26.3. A URL list with the documented timeout fails its third page, and the failure leaves no log and no artifact (the note in that file). Any count-first line has to print the timeout the run needs (`ceil(1.5 + 8.25 x N)` at worst) beside the count.
 2. **A capture that leaves the site is cheap, so the count-first estimate is an upper bound and says so.** 138 s and 425 s are both the same calendly URL; an estimate built from the typical figure overstates a run whose probes navigate away and understates none of the pages measured.
 
+## Where a capture's time goes
+
+Measured 2026-10-08 for #4095, **read from the 33 records of the section above and no new capture** (no `fleet:*` or `lab:*`
+command was run; the records are on the agents host, gitignored, and a path is not a link). So everything here is a **reading of
+fleet captures at protocol 21, workerCode `ce5ba647396883b4`, on 2026-09-24**, split by the capture's own `diagnostics[].atMs`.
+**It is not a reading from a `windows-2022` runner:** see the first limitation below.
+
+**How it was split.** An entry's `atMs` is stamped when the entry is pushed, so the time since the previous entry is charged to the
+LATER entry. After the last `sweep` entry, each entry belongs to the probe whose closing mark comes next (`focusContextBrowseRestored`,
+`focusRevealBrowseRestored`, `focusOrder`, `routeChange`). `before the first announcement` is everything up to `afterStart`;
+`between probes` is the remainder and is the least certain row. **In all 33 records the phases sum to the last `atMs` exactly.**
+Each column is the capture nearest the median of its cell, and the record it was read from is named under the table.
+
+| phase, in seconds | `A-example-2` | `A-w3home-1` | `A-hubspot-2` | `A-w3survey-3` | `A-ikea-4` | `A-calendly-1` | `B-calendly-2` |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| before the first announcement (browser, NVDA, load, settle, first phrase) | 9.9 | 10.1 | 12.9 | 9.5 | 12.2 | 11.6 | 13.3 |
+| readThrough | 2.0 | 33.3 | 23.9 | 31.1 | 54.4 | 51.0 | 52.6 |
+| sweep formField | 1.6 | 5.0 | 19.3 | 124.7 | 319.4 | 39.1 | 137.2 |
+| sweep link | 0.9 | 28.6 | 37.3 | 21.6 | 0.0 | 0.0 | 42.1 |
+| sweep graphic | 0.6 | 6.3 | 13.6 | 3.7 | 0.0 | 0.0 | 6.0 |
+| sweep heading + landmark | 1.4 | 1.4 | 23.2 | 5.0 | 38.6 | 28.8 | 31.0 |
+| sweep list + frame + postSubmit | 2.2 | 1.8 | 9.8 | 9.9 | 0.0 | 0.0 | 5.3 |
+| between probes (browse-mode set-up, page-state reads) | 12.1 | 12.6 | 17.7 | 14.1 | 15.8 | 8.0 | 11.8 |
+| focus context (8 Tab stops) | 29.7 | 27.7 | 27.0 | 29.2 | 6.4 | 0.0 | 32.0 |
+| focus reveal (8 Tab stops) | 21.2 | 23.0 | 23.9 | 21.8 | 6.6 | 0.0 | 22.0 |
+| focus order (the Tab walk) | 6.1 | 21.1 | 86.5 | 48.9 | 3.2 | 0.0 | 71.5 |
+| route-change probe | 17.0 | 17.1 | 16.7 | 16.9 | 0.0 | 0.0 | 0.0 |
+| **total (last `atMs`)** | **104.6** | **188.1** | **311.9** | **336.7** | **456.6** | **138.4** | **424.7** |
+
+Records, under `runs/capture-cost-2271/`: `A-example-2` = `A-example-2/witness/2026-09-24T08-30-45-677Z-example-com.json`;
+`A-w3home-1` = `…/2026-09-24T08-59-17-642Z-www-w3-org.json`; `A-hubspot-2` = `…/2026-09-24T08-32-17-189Z-www-hubspot-com.json`;
+`A-w3survey-3` = `…/2026-09-24T09-01-45-733Z-www-w3-org.json`; `A-ikea-4` = `…/2026-09-24T08-43-39-848Z-www-ikea-com.json`;
+`A-calendly-1` = `…/2026-09-24T08-29-23-713Z-calendly-com.json`; `B-calendly-2` = `…/2026-09-24T08-36-40-296Z-calendly-com.json`
+(each under its own `<command>-<page>-<n>/witness/`; command A adds `--probe-forms`, B is the bare command, as in the Fleet section).
+**`A-calendly-1` left the site at 138 s**, so its three focus probes and the route-change probe never ran, and it is a short capture, not a cheap page.
+
+**Reading it.** Three kinds of phase, by what ends them:
+
+1. **Ended by the page** (`exhausted`, `repeatBottom`, `cycled` or `stalled` in the record): readThrough on hubspot and the two W3C pages, every sweep
+   on those three pages and on example.com, and the Tab walk on all four. This is the part a smaller page makes cheaper. On hubspot it is 23.9 s of
+   reading, 103.2 s of sweeps and 86.5 s of Tab walk (68% of the capture, 213.6 s).
+2. **Ended by a number the capture chose, and the same on any page: the three probes after the sweeps.** `focus context`, `focus reveal`
+   and the `route-change probe` read **27.0-29.7, 21.2-23.9 and 16.7-17.1 s on the four pages that reached them without the deadline**
+   (example.com, W3C home, hubspot, W3C survey), whose Tab walks are 3 to 108 stops: 67.6-68.0 s together. `FOCUS_CONTEXT_STOPS` and
+   `FOCUS_REVEAL_STOPS` are both 8 in the worker (`capture-probes.mjs`, unchanged between the measured revision `50d52e750` and `dd84eee`),
+   and the route-change probe activates ONE link. **On example.com, with 4 announcements, 96.1 of the 104.6 s are phases that are not readThrough or a sweep**,
+   and the three probes are 68 s of it. This is a floor under every capture that is not cut short, and it explains why the floor page costs 105 s.
+   The record shows nine `titleSource` marks inside `focus context`, 1.2-6.0 s apart; **that the title read is what costs the time was not isolated.**
+3. **Ended by the budget: the deadline.** `DEFAULT_BUDGET_MS` is 420 s and `readThroughDeadline` reserves 60 s after the read. **11 of the 33 captures ended on a
+   `deadline` stop: all 5 of A-ikea, all 3 of B-ikea and all 3 of B-calendly** (counted from the `stopReason`/`prevStop`/`nextStop`/`stop` of the records). B-calendly's Tab walk was cut
+   at 84-86 stops and its route-change probe never ran; on ikea the Tab walk stopped at 0 stops in all 8, and in A-ikea the `graphic` and `link` sweeps after `formField` ran 0-71 s and 0-38 s. `B-calendly-2` ends 0.1 s after its deadline
+   (424.6 s, from `readBudget`); ikea ends 28-32 s after its own (deadline 424.2-427.5 s, last mark 452.1-459.8 s over the 8 captures), the unwinding after the deadline.
+   **The 460 s top of the range is the budget plus that unwinding, not a page getting to its natural end.**
+
+**The slowest sweep is `formField`, and on ikea it is the cap, not the page, that ends it.** `formField` is 227-319 s on A-ikea (49-70% of the capture),
+125 s on W3C survey and 137-143 s on B-calendly. In `A-ikea-1` its previous-direction pass took 501 round trips in 221.5 s (442 ms a trip) and stopped on
+`cap`, which is `MAX_SWEEP_STEPS` = 250 in each direction; the heading sweep's next-direction pass in the same record cost 156 ms a trip. The cap stopped it on 4 of
+the 5 A-ikea captures and all 3 of B-ikea; in the fifth A-ikea it stopped on `silent` and then the deadline. Why `formField` trips are slow is #659's open question
+and is not answered here. **No phase is the biggest one on every page:** the largest single phase is `focus context` on example.com (28%), `readThrough` on W3C home (18%),
+the Tab walk on hubspot (28%), `formField` on W3C survey (37%), ikea (70%) and B-calendly (32%), and `readThrough` on A-calendly (37%).
+
+### What a cut would and would not buy
+
+This section measured; nothing was cut, and **no capture was run with a probe off, so every saving below is the time attributed to a phase here, an upper bound and not an A/B.**
+
+- **The three fixed probes are about 68 s on a capture that reaches all three, and 20-65% of the captures that do** (example.com 65%, W3C home 36%, hubspot 22%, W3C survey 20%; B-calendly
+  lost its route-change probe to the deadline, so its 54.0 s is 13%). Each one is what a criterion reads: `focus context` is 3.2.1, `focus reveal` is 1.4.13's Dismissable bullet, the route-change probe is
+  2.4.1 and 2.4.2 (`action.yml` and `cli.ts` say so, and that dropping one makes the criterion unreachable rather than clean). **The knobs do not line up with the cost.** The Action has
+  `probe-focus` (which gates the Tab walk, focus context AND focus reveal: 57.0-137.4 s on the four deadline-free pages here) and `probe-navigation` (the route-change probe, 17 s). The CLI adds `--no-probe-focus-context`; **nothing turns off
+  `focus reveal` alone.**
+- **`action.yml` says `probe-focus` "costs roughly 8 seconds per capture."** On these records the Tab walk alone is 3.2-86.5 s and the three probes it gates together 16.2-137.4 s
+  (ikea 16.2 only because the deadline cut them). That sentence is out of date or measured on a page that stops at once; it sits outside this row's Region and is filed as #4102.
+- **A cut to the fixed probes does not shorten the captures the worst-case model is built on.** The 460 s figure is a deadline-bound capture, where the probes got 13.0 s (`A-ikea-4`), so removing
+  them would leave the deadline where it is and let `graphic` and `link` finish instead (A-ikea: 0-71 s and 0-38 s, depending on how long `formField` took). For a nightly priced at the worst case
+  the lever inside the capture is `formField`, bounded by `MAX_SWEEP_STEPS` and the 420 s budget. **For a nightly of pages that finish early, the lever is the fixed 68 s.** Which of the two a given
+  nightly is depends on its pages, and the row's list of ten was not read here.
+
+**Limitations specific to this section.**
+
+- **Fleet, not runner.** The Action section above found a runner within 10% of the fleet on two pages and the Action runs the same capture code, but **no runner-side record survives to split**: `action-smoke.yml`
+  uploads only `a11ign-result.json` and `a11ign-summary.md`, none of the 8 `action-smoke` runs listed (7 finished) holds an artifact, and run `35976874484`'s log (856 lines) carries no `atMs`. A per-phase reading on a
+  runner needs a run that keeps the capture record (or `--debug`, which prints `diagnostics` to stderr), which is a run on the Action and a change to `action-smoke.yml`, so it is
+  routed to `orchestrator` on #4095 and not worked around here.
+- **Constants were read in the worker source, not observed at runtime.** `DEFAULT_BUDGET_MS`, `POST_READ_RESERVE_MS`, `MAX_SWEEP_STEPS` (250), `MAX_TAB_STOPS` (150), `FOCUS_PROBE_BUDGET_MS` (120 s), `DEFAULT_STEPS` (150)
+  and the two `*_STOPS` (8) are identical at `50d52e750` and `dd84eee`. No record reached `MAX_TAB_STOPS` or the 120 s walk budget (the longest walk is 108 stops, 82.6-88.3 s on hubspot).
+- **One day, one build, ten boxes, as above.** The spread inside a cell is small for the fixed probes and the page-ended phases (on the four deadline-free pages every phase is within 4.1 s of its min across repeats, except hubspot's Tab walk at 5.6 s: 82.6-88.3 s) and large for the deadline-bound
+  ones (`A-ikea` formField 226.5-319.4 s).
+
 ## What this does not show
 
 - **One day, one build, one runner image, ten fleet boxes.** Not variance over days, builds, hours or Edge versions.
