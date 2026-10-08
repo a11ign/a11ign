@@ -534,6 +534,13 @@ export interface SummaryOptions {
    * empty renders nothing, which is also what a result without the probe gets.
    */
   stateChangesObserved?: readonly ObservedStateChange[];
+  /**
+   * #4089: whether the run submitted any form (`probe-forms`, or a `forms` config). `false` is the Action's DEFAULT, and
+   * it makes 3.3.1 and 4.1.3 unreachable, so the summary says "not assessed" rather than leaving a quiet report to read as
+   * clean. Passed in because the result does not record the setting, for the reason `taskQuestion` is: this renderer is
+   * pure. ABSENT says nothing, which is what an authenticated run and an older caller get.
+   */
+  formsProbed?: boolean;
 }
 
 const DEFAULT_LIMIT = 20;
@@ -796,8 +803,8 @@ function automaticPressLines(interaction: RunResult["interaction"], limit: numbe
   ];
   const seen = new Set<string>();
   const pressed = entries.filter(({ control }) => !seen.has(control) && seen.add(control));
-  const heading = "**What this run pressed on its own** (`probe-forms` submits forms with no valid input and `probe-navigation` "
-    + "follows a link, unprompted; set either to `false` to stop it):";
+  const heading = "**What this run pressed on its own** (`probe-navigation` follows a link and the disclosure probe opens collapsed "
+    + "controls, unprompted; `probe-forms`, when you set it, submits forms with no valid input; `probe-navigation: false` stops the link):";
   if (pressed.length === 0) return ["", heading, "- nothing pressed"];
   const navigated = interaction.navigatedOnSubmit;
   return [
@@ -811,6 +818,16 @@ function automaticPressLines(interaction: RunResult["interaction"], limit: numbe
       ? [`- _A submit took the run from ${code(navigated.from)} to ${code(navigated.to)}._`]
       : []),
   ];
+}
+
+/**
+ * #4089 (ceo's condition): A RUN THAT SUBMITTED NO FORM READS AS "NOT PROBED", NEVER AS CLEAN. 3.3.1 and 4.1.3 are about what a
+ * submit does, so with probing off they are unreachable, and a report with no finding under them looks the same as a pass.
+ * Silent when `formsProbed` is not `false`.
+ */
+export function notProbedLines(formsProbed: boolean | undefined): string[] {
+  if (formsProbed !== false) return [];
+  return ["", "**Not probed:** no form was submitted (`probe-forms` is off), so 3.3.1 and 4.1.3 were not assessed. That is not a pass."];
 }
 
 /** An authenticated run lists its own files' presses; every other run lists what its probes pressed. */
@@ -891,6 +908,7 @@ export function renderSummary(result: RunResult, options: SummaryOptions = {}): 
     `**Task:** ${result.task} _${TASK_LABEL_NOTE}_`,
     `**Screen reader:** ${result.screenReader}${result.transcript ? ` · ${result.transcript.length} announcements` : ""}`,
     ...pressedSection(result, limit),
+    ...notProbedLines(options.formsProbed),
     "",
     // See SummaryOptions.taskQuestion/isTaskClaim. This is posted on a PULL REQUEST in bold, and with
     // the shipped local scorer it used to ask "could a screen-reader user complete the task?" (or claim
