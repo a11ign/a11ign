@@ -287,12 +287,15 @@ runs:
     # to test. Merging them, or picking one, would silently change what was captured (#2272).
     - name: Check exactly one of url and urls is given
       shell: bash
+      env:
+        URL: ${{ inputs.url }}
+        URLS: ${{ inputs.urls }}
       run: |
-        if [ -n "${{ inputs.url }}" ] && [ -n "${{ inputs.urls }}" ]; then
+        if [ -n "$URL" ] && [ -n "$URLS" ]; then
           echo "::error::Give exactly one of url and urls, not both: url is one page, urls is a list of pages." >&2
           exit 1
         fi
-        if [ -z "${{ inputs.url }}" ] && [ -z "$(echo "${{ inputs.urls }}" | tr -d '[:space:]')" ]; then
+        if [ -z "$URL" ] && [ -z "$(printf '%s' "$URLS" | tr -d '[:space:]')" ]; then
           echo "::error::Give exactly one of url and urls: no page was given." >&2
           exit 1
         fi
@@ -587,6 +590,11 @@ runs:
         ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
         JUDGE_MODEL: ${{ inputs.judge-model }}
         JUDGE_BASE_URL: ${{ inputs.judge-base-url }}
+        # The page inputs come through `env:`, never as `${{ inputs.* }}` inside the script (GitHub's documented script-injection
+        # pattern, and a multi-line `urls` pasted into shell text is a quoting question, not a value) (#4221).
+        URL: ${{ inputs.url }}
+        URLS: ${{ inputs.urls }}
+        MAX_PAGES: ${{ inputs.max-pages }}
         # Windows runners have no venv here; the packages above went to the system interpreter.
         A11Y_PYTHON: python
       run: |
@@ -652,9 +660,14 @@ runs:
         # ONE OF THESE TWO, decided by the step above. The CLI takes a positional URL or `--urls <list>` and
         # refuses both. `max-pages` is the cap override: the flag, and only the flag -- nothing in the
         # environment reaches it, so raising the cap is always written in the workflow file (#2272).
-        [ -n "${{ inputs.url }}" ] && args+=("${{ inputs.url }}")
-        [ -n "${{ inputs.urls }}" ] && args+=(--urls "${{ inputs.urls }}")
-        [ -n "${{ inputs.max-pages }}" ] && args+=(--max-pages "${{ inputs.max-pages }}")
+        #
+        # `urls` is documented as one URL per line, and a newline inside ONE argument does not survive `npx.cmd` under Git Bash
+        # on Windows: the argument is cut at it and the CLI scans the first URL alone, with the run green (a11ign 0.4.0
+        # scanned 1 page of 10, #4221). So the list is flattened to ONE line of spaces here; `splitUrlList` splits on any
+        # whitespace, so the CLI reads the same pages either way.
+        [ -n "$URL" ] && args+=("$URL")
+        [ -n "$URLS" ] && args+=(--urls "$(printf '%s' "$URLS" | tr -s '[:space:]' ' ')")
+        [ -n "$MAX_PAGES" ] && args+=(--max-pages "$MAX_PAGES")
         # OFF unless the input is exactly "true" (#4089): the default is "false" and the CLI's own default is off, so
         # nothing here is inverted. Said in the log, because a run that never submitted must not read as one that
         # found no form problems.
