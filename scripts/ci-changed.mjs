@@ -82,6 +82,9 @@ export function knownPackages(repoRoot) {
 const ROOT_TS_FILES = new Set([
   "package.json", "pnpm-lock.yaml", "tsconfig.json", "tsconfig.base.json",
   ".eslintrc.json", ".eslintrc.cjs", "eslint.config.js", "eslint.config.mjs",
+  // The `ts` job is the only one running `generate-consumer-gate.test.ts`, whose stale-pin guard (#4162) must fire
+  // in the very PR that edits `action.yml` and so makes the pin stale (#4164).
+  "action.yml",
 ]);
 
 // Exported: `scripts/board-only-check.mjs` needs the identical set to decide "is this a doc-touching
@@ -395,7 +398,7 @@ export function jobsFor(files, repoRoot = process.cwd()) {
  *   changeset: boolean, rulesFitness: boolean, packages: string[] }} ClassifyResult
  * @returns {ClassifyResult}
  */
-export function classify(files, allPackages,
+export function classify(files, allPackages = knownPackages(process.cwd()),
   { repoRoot = process.cwd(), getPackedFiles = packedFiles, getTestDependencyMap = testDependencyMap,
     getDocsReadingTests = docsReadingTests } = {}) {
   const rootTsChanged = files.some((f) => ROOT_TS_FILES.has(f));
