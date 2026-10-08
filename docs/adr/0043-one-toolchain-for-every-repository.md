@@ -56,13 +56,18 @@ every package, and each package's `dist` is one `.js` per source file.
 
 ## Decision
 
-Six decisions. Each carries its reading and the row that makes it true.
+Eight decisions. Each carries its reading and the row that makes it true.
 
-### DECISION 1: TypeScript source in every repository, converted when a file is touched or moved
+### DECISION 1: TypeScript source in every repository, converted by a sweep per repository and held by a ratchet
 
-**Decision:** new source is `.ts`. An existing `.mjs` becomes `.ts` in the pull request that touches or moves it, never in a big-bang
-rewrite. A per-repository count of tracked `.mjs` files may only go down (the ratchet is row 4d, #3556). A file may stay `.mjs` while it is
-on that count; nothing is exempt for good.
+**Decision:** new source is `.ts`. An existing `.mjs` becomes `.ts` in one conversion sweep per repository, done by the conversion script
+(token cost is a hard constraint, so agents fix only the residue the script cannot), together with that repository's layout flatten
+(Decision 7) so each file moves once. A per-repository count of tracked `.mjs` files may only go down, and a NEW `.mjs` fails the ratchet (row
+4d, #3556; its adoption in the other repositories is #4243). A file may stay `.mjs` while it is on that count; nothing is exempt for good.
+
+**The earlier rule, that a file was converted in the pull request touching or moving it, is withdrawn: it had no check.** Read on row #4246
+(2026-10-08, carried, not re-derived here): 46 new `.mjs` files landed after it was written, 18 of agent-org's last 30 count rises were new `.mjs` that "a
+shipped command imports" (`mjs-source-count.test.ts` since #3556), and a rule with no check is an intention. The ratchet is the check; the sweep is the conversion.
 
 **How JSDoc types become TypeScript, so the conversion is mechanical.** Every row but the last four was exercised on the worked example below;
 the last four are standard TypeScript and are listed because a converter meets them, **not exercised here**.
@@ -365,6 +370,100 @@ README says a test fails if `@a11ign/evidence` imports it; that test is not re-r
 other (section 13 of both), and the published tarball never contained it. The fold is **not done by this row**: it is a
 `screenreader-worker` row plus a one-line lab row, filed by `product-manager`, and until both land lab reads the old path and the
 repository stays as it is.
+
+### DECISION 8: how un-bundled code runs: `.ts` under `node --import tsx`, from the checkout
+
+**Decision (ONE answer):** **published** packages ship Rslib's built `.mjs` and `.d.ts` (Decision 4, not in question). **Code RUN FROM A CHECKOUT**
+(agent-org's gate and scripts, the work-tick units, `pnpm run` scripts, the Ansible one-liners) is `.ts` source that runs as
+`/usr/bin/node --import tsx <file>.ts` with the checkout as the working directory. No host change, no build step in a unit. `tsx` is installed
+in every checkout that has run `pnpm install` (measured: agent-org `node_modules/.bin/tsx` v4.23.15, a11ign's root `node_modules/tsx` 4.23.15), and
+`typescript` stays the only type check (Decision 2): neither `tsx` nor Node's stripping checks a type.
+
+**The default this ADR was asked to test was Node's own type stripping (v22.22.1, `erasableSyntaxOnly`, `rewriteRelativeImportExtensions`). It does
+not run on this host as it stands**, measured 2026-10-08 on this host, where `node` is `/usr/bin/node`, the Ubuntu `nodejs 22.22.1+dfsg` package:
+
+```
+$ node -p "process.version + ' typescript=' + process.features.typescript"
+v22.22.1 typescript=false
+$ node --experimental-strip-types t.ts          # t.ts: const x: number = 1
+node:internal/util:226  throw new ERR_NO_TYPESCRIPT();
+$ node t.ts                                     # no package.json beside it, so CommonJS
+SyntaxError: Unexpected identifier ...          # NOT ERR_NO_TYPESCRIPT: the flag-less form fails differently
+$ node <file>.ts                                # beside a "type": "module" package.json
+ERR_UNKNOWN_FILE_EXTENSION
+```
+
+**Read the three errors apart: only the flagged form prints `ERR_NO_TYPESCRIPT`** (the row's own Open-check grepped the flag-less form and got
+`0`). The cause is inferred to be the build, not the version (the package reports no stripper; the unflagged default is from Node's release notes, not re-read here): upstream Node 22.18 and later strip types unflagged, and this package is built without the
+stripper, so no flag and no version bump of THIS package fixes it.
+
+**Weighed, per unit, on this host:**
+
+| | what it needs | measured here | cost per unit | verdict |
+|---|---|---|---|---|
+| (i) a host Node built with type stripping | a HOST install (an upstream build beside `/usr/bin/node`, or a replacement); `orchestrator` and the chairman's host, never an engineer. Proof: `node -p process.features.typescript` prints `true` | **refused by the host as it stands** (above) | every `ExecStart` pins the new binary's path; one more Node to patch | **not chosen:** a host change, and it still cannot run the pinned copy (trap a) |
+| (ii) `tsx` | nothing new: a dependency every checkout already installs | **runs** a `.ts` as a unit would, from a checkout, and **under `node_modules`** (below) | `node -e 0` 0.17 s; `node --import tsx -e 0` 0.45 s (3 runs each, warm, trivial file): about **+0.28 s per process start** | **chosen** |
+| (iii) a BUILD of the host-run code, the units running `dist/` | a build before every tick, after every `primary:update` and `update-tool` | not run | a build step in `ExecStartPre`, so a broken build stops the tick; a stale `dist` is the failure `docs/operational-lessons.md#resolves-to-dist-does-not-say-whose` records | **not chosen:** it moves the failure from startup to every update |
+
+**Why (ii):** it is the only option that needs no host change, it is the only one measured to run the pinned copy, and the +0.28 s is paid by
+timers and one-shot scripts, not by a hot path. **What it costs, honestly:** `tsx` becomes a RUNTIME dependency of checkout-run code (it is a
+`devDependency` today), so removing it from a checkout breaks the units; the sweep row for agent-org pins that with a test that names the loader in
+every `ExecStart`. And the day `process.features.typescript` prints `true` on the host, (ii) can be replaced by plain `node` by editing the
+`ExecStart` lines only, because the files are already written to the stripping subset.
+
+**Trap (a): Node REFUSES to strip types under `node_modules`, and `host:check` via pnpm runs the PINNED agent-org copy from there.** Measured: the
+pinned copy is `node_modules/.pnpm/agent-org@https+++codeload.github.com+a11ign+agent-org+tar.gz+<sha>_typescript@6.0.3/node_modules/agent-org/`,
+which carries the repository's `src` and `host` as raw source (no build) and, in its own `node_modules`, only `typescript`. A `.ts` file placed in it
+**ran under `node --import tsx` from a11ign's root** (`pinned-copy ran 7 true`, the `true` being `import.meta.url.includes("node_modules")`),
+and **plain `node` on it died** (`ERR_UNKNOWN_FILE_EXTENSION`, the host having no stripper at all; on a Node that has one, the refusal under
+`node_modules` is documented behaviour and was NOT exercised here). So after the conversion the pinned copy is `.ts` run by the CONSUMER's `tsx`,
+and every consumer of agent-org gets `tsx` as a peer dependency. **Not measured, and the agent-org sweep row proves it before it merges:** that a
+tarball install gives `bin` a built file. A `bin` needs `#!/usr/bin/env node`, which cannot load a loader, so **`bin` is always built output**
+(`dist/bin.mjs` by Rslib), never a `.ts`.
+
+**Trap (b): `erasableSyntaxOnly` forbids enums, namespaces and parameter properties.** Counted at each repository's `origin/main` on 2026-10-08
+with `git grep -E` over tracked `*.ts` (enums `^\s*(export )?(declare )?(const )?enum`, namespaces `namespace|module <name>`, parameter
+properties `constructor(... public|private|protected|readonly ...)`), a count of lines, not of files:
+
+| repository | tracked `.ts` | enums | namespaces | parameter properties |
+|---|---|---|---|---|
+| agent-org (`9799faf`) | 318 | 0 | 0 | **1** (`src/packaging/shadow-reads.test.ts:246`, a test fixture class) |
+| a11ign (`bbedfa8b4`) | 249 | 0 | 0 | 0 |
+| screenreader-worker (`0b7bc93`) | 86 | 0 | 0 | 0 |
+| screenreader-fleet (`ed16dd2`) | 32 | 0 | 0 | 0 |
+| control (`8a322e4`) | 38 | 0 | 0 | 0 |
+| lab (`9d874a7e`) | 441 | 0 | 0 | 0 |
+| documents (`91dac0b`) | 2 | 0 | 0 | 0 |
+| toolchain (`e7f0aff`) | 0 | 0 | 0 | 0 |
+
+So the flag costs one line today (the fixture), not nothing. **It is set once, in the shared `packages/toolchain/tsconfig.base.json`** that the
+repositories extend (Decision 3), by the conversion-script row, and it is worth setting even though `tsx` does not need it: it keeps every file
+runnable by the stripper, which is what makes (ii) replaceable.
+
+**What each name becomes** (every line is `tsx` at the end of its row's sweep; none is changed by THIS row):
+
+| where | today | after |
+|---|---|---|
+| agent-org `host/*.service.in`, 6 `ExecStart` lines (`kernel-reboot`, `otel-receiver`, `shadow-window`, `tmp-prune`, `trace-publish`, `work-tick`) | `/usr/bin/node packages/agent-org/src/<x>.mjs` | `/usr/bin/node --import tsx <path>/<x>.ts` |
+| the `work-tick` unit's `--import` | `--import=./.../crash-exit.mjs` | `--import tsx --import=./.../crash-exit.ts` (two `--import`s run in order; measured with a stand-in) |
+| agent-org units that run `pnpm run` (`chairman-listen`, `chairman-watch`, `worktree-prune`, `primary:update`) | `ExecStart=%h/.local/bin/pnpm run ...` | the `ExecStart` is unchanged; the **11 `package.json` scripts** that say `node src/<x>.mjs` become `node --import tsx src/<x>.ts` |
+| a11ign `.agent-org/units/*.service`, 3 `.mjs` lines (`corpus-release-nightly`, `token-cost-weekly`, `weekly-review`) | `/usr/bin/node <path>.mjs` | `/usr/bin/node --import tsx <path>.ts` |
+| control `a11y-fleet-auto-off.service` (the unit whose script broke fleet auto-off once) | `/usr/bin/node /root/a11y-witness/packages/control/src/fleet-auto-off.mjs --apply` | the same with `--import tsx` **if the fleet box's checkout has `tsx`, which is NOT measured here (the fleet is off limits to an engineer)**: this is the one host question, on the row |
+| `bin` in `package.json` | agent-org `src/bin.mjs`; a11ign `dist/cli.mjs`; the scorer `bin/fetch-encoder.mjs` (hand-written); the worker `dist/server.mjs`; fleet `dist/*.mjs` and `src/local-worker/worker-ctl.sh` | agent-org and the scorer become built `dist/*.mjs`; the rest are already built output or a shell script and **stay** |
+| Ansible `deploy.yml`, the inline `import("./packages/control/src/layer-checkouts.mjs")` in `node --input-type=module -e` | `.mjs` path | `node --import tsx --input-type=module -e 'await import("./.../layer-checkouts.ts")'`, where the playbook runs |
+| CI one-liners that `import()` a `.mjs` (`nightly.yml`, `release.yml`, `reusable-acceptance.yml`; the last imports agent-org's `acceptance-commands.mjs` from `AGENT_ORG_TOOL`, a path under `node_modules`) | `node -e 'import(...)'` | `node --import tsx -e '...'` |
+| **the installed host copies** (`~/.config/systemd/user/a11ign-*.service`, rendered from the templates) | name `.mjs` | **unchanged until `host:install` renders them again**: a host action for `orchestrator`, and the window in which template and installed copy disagree is the one `host:check` exists to flag |
+
+**Order, so nothing runs a name that is gone:** the sweep for a repository edits its templates and scripts in one pull request; `host:install`
+follows the merge; until it runs, the installed units still name `.mjs` files that are `.ts` in the checkout, so **a unit's `.mjs` is not
+deleted by a sweep until its replacement is installed** (the sweep row names the order and `orchestrator` runs the install). That, and the control
+unit above, are the host changes this ADR names; it makes none.
+
+**Falsified by:** `node -p process.features.typescript` printing `true` on the host AND the pinned copy no longer living under `node_modules`
+(then (i) costs less than (ii)); or the tarball install failing to give agent-org a built `bin` (then the pinned copy needs (iii) for that file).
+
+**Owner:** the conversion-script row (the flag, the rewrite of every `ExecStart` and `package.json` script); each repository's sweep row for its own
+units; the host rows `product-manager` files from this decision's comment on #4246.
 
 ## Consequences (including the ones the chairman will not like)
 
