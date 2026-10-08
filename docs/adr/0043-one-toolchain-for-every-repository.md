@@ -289,10 +289,82 @@ bundle before this form is kept.
 
 ### DECISION 6: what this ADR leaves alone
 
-It changes no release mechanism (ADR 0041), no package boundary (ADR 0004), and no repository's CI beyond the two named jobs
+It changes no release mechanism (ADR 0041), no package boundary (ADR 0004, except the one fold Decision 7 rules on, which its own rows carry out), and no repository's CI beyond the two named jobs
 (`typecheck`, and `rstest run --trace` once). **ADR 0031's deploy path is untouched and is Consequence 3.**
 
 **The one release standard it does state, for every repository: the publish job runs under `environment: npm-publish`** (screenreader-worker, documents and screenreader-fleet do; a11ign's `release` job does since #3624, pinned in `release-triggers-itself.test.ts`). The name is part of the OIDC claim npm checks, so each package's trusted publisher carries it.
+
+### DECISION 7: how a repository is laid out: the package at the root when there is one
+
+Decisions 1 to 6 fix what a repository is built and tested WITH and say nothing about how it is LAID OUT, so the split repositories kept the
+monorepo's shape (`packages/<dir>/` under a private `*-workspace` root, two READMEs, two `package.json` files, a `pnpm-workspace.yaml`). A
+reader who has never seen the monorepo meets that first, and an outside evaluator reads these repositories first (v3 adopter-readiness).
+`agent-org` is flat and is the model. **The standard** (`ceo`, from the chairman's direction of 2026-10-08):
+
+> A single-package repository has its package at the ROOT: one README (also the npm page), one package.json, one tsconfig (plus a build
+> one if Rslib needs it), one LICENSE, no workspace file. A multi-package repository exists only when it publishes more than one
+> package, and each directory is named after its package.
+
+**The four things the layout check fails on** (the next row of this set writes the check; it fails on exactly these, so a repository can
+read this list and know whether it passes):
+
+1. **A workspace with exactly one package.** A `pnpm-workspace.yaml` (or a `workspaces` field) whose members resolve to one package is
+   machinery that does nothing; the package belongs at the root.
+2. **A package directory whose name does not match its package name.** `packages/pdf/` holding `@a11ign/documents` makes the reader
+   learn a second name for one thing. Each directory is named after its package (`@a11ign/<name>` lives in `<name>/`).
+3. **A second README describing the same package.** A root README and `packages/<dir>/README.md` for one package say the same thing
+   twice and disagree within a quarter. The root README is also the npm page.
+4. **Leftovers of a layout that is gone:** `lerna.json`, a `*-workspace` root `package.json`, a `packages/` directory that holds
+   nothing, a `.changeset/config.json` listing packages that no longer exist.
+
+**A repository that cannot meet this says why in its own README**, in one sentence under its first heading, naming the rule it departs
+from and the reason. Silence is the failure; a stated departure is a decision someone can argue with.
+
+**What the rule allows for a private second package.** One predicate decides whether a repository is multi-package: **it publishes more
+than one package.** A private package that is never published does not count toward it, so a repository publishing one package is
+single-package whatever else it holds, and a private package under `packages/` beside it is failure 1 (a workspace of one published
+package plus a member that publishes nothing). The default is to fold it into the published package's `src/`. It may stay separate only
+when a consumer outside the published package, or a build target, needs it separate (the claimant measures and posts the reading, as
+row #4209 does below). A package kept on that ground is **a stated departure, not the multi-package case**: the repository's README says
+so under the sentence above, its directory is named for its package (failure 2 still applies), and the layout check reads the README
+sentence as the allowance. It is never a reason to leave a second README or a `*-workspace` root in place.
+
+**The ruling on `nvda-speech` (row #4209): FOLD.** `screenreader-worker`'s root is the public package `@a11ign/screenreader-worker`
+(AGPL-3.0-or-later) and it nests `packages/nvda-speech/`, the private `@a11ign/nvda-speech` (GPL-3.0-or-later, derived from NVDA,
+never published), tied together by a `pnpm-workspace.yaml` of `.` and `packages/*`. Read at screenreader-worker `0b7bc93` and lab
+`0e98109c` on 2026-10-08, by `git grep` over `origin/main` of each repository and by reading the files the greps named; a reading at a
+moment, to be re-run before it is quoted:
+
+- **Nothing imports or runs it as a package.** The package holds Python only (`nvda_speech/labels.py`, `symbols.py`, `scripts/*.py`,
+  `tests/test_symbols.py`) and a `package.json` of name, version, `private`, `license`, `type`; no `main`, `exports`, `scripts` or dependency.
+  The worker's `src/`, `scripts/`, `package.json` scripts, `rstest.config.mjs` and `isolation-smoke.mjs` do not name it. Its only importers
+  are its own scripts and test (`from nvda_speech.labels import ...`, `measure_announcement_shapes.py:25`, `measure_heading_accuracy.py:34,35`,
+  `tests/test_symbols.py:29`).
+- **No build target needs it separate.** `rslib.config.mjs` builds one library from `tsconfig.build.json` (`include: ["src"]`, TypeScript
+  and `.mjs`), and `tsconfig.json` includes `src/**/*.ts` and `scripts/**/*.ts`; neither reaches a `.py` file. The tarball is `files:
+  ["dist", "README.md", "LICENSE"]`, so the speech package is not in it today and would not be after a fold. `ci.yml` runs no Python;
+  its one mention is `releasable-paths: src/ packages/nvda-speech/` (line 39).
+- **The one consumer outside the worker reads a FILE, and by path.** lab's `packages/lab/src/harnesses/occurrence-verdict-stability.mjs:65`
+  builds `["packages", "nvda-speech", "nvda_speech", "labels.py"]` and `:70` reads it with `readFileSync` under `layerRoot("nvda-worker")` to get
+  NVDA's role and state words. It imports nothing and runs nothing, and it refuses loudly where the file is absent, so a fold is a one-line
+  change there, not a reason to keep a package.
+- **The other mentions are names, not consumers:** worker `.changeset/README.md:7`, `.github/dependabot.yml:19`, `CLAUDE.md:170`,
+  `eslint.config.mjs:2` (a comment) and `pnpm-lock.yaml`; lab `.github/dependabot.yml:17,30`, `ci.yml:8` and `exit-code-contract.test.ts:40,667`
+  (a comment and a planted path); this repository's `.agent-org/project.json:26` (`releasablePaths`), `PLAN.md:807`, `README.md:376`,
+  `packages/README.md:38` and `packages/guards/layer-edges.baseline.json`.
+- **The fold does not move the fleet's code hash.** `/health.code` is `codeVersion()` over `WORKER_FILES`, an explicit ordered list in
+  `src/worker-files.mjs`, not a walk of `src/`, so Python files under `src/` leave it unchanged.
+
+**Where it goes: `src/nvda-speech/`**, the Python subtree moved whole (`nvda_speech/`, `scripts/`, `tests/`, and its README kept as
+`src/nvda-speech/README.md`, since it documents the GPL boundary and is not a second README for the worker package). Its `package.json`,
+`LICENSE` and `.gitignore` go; `pnpm-workspace.yaml` goes (failure 1); the three names in `releasable-paths`, `dependabot.yml` and
+`.changeset/README.md` go with it, and `releasablePaths` in `.agent-org/project.json` becomes `["src/"]`. lab's path becomes
+`["src", "nvda-speech", "nvda_speech", "labels.py"]`. **The licence is not folded away:** every moved `.py` file gets an SPDX
+`GPL-3.0-or-later` line and the README keeps its "derived from NVDA, MUST NOT be imported by Apache-2.0 packages" boundary (its
+README says a test fails if `@a11ign/evidence` imports it; that test is not re-read here). GPL-3.0 and AGPL-3.0 each permit combination with the
+other (section 13 of both), and the published tarball never contained it. The fold is **not done by this row**: it is a
+`screenreader-worker` row plus a one-line lab row, filed by `product-manager`, and until both land lab reads the old path and the
+repository stays as it is.
 
 ## Consequences (including the ones the chairman will not like)
 
