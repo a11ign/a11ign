@@ -18,7 +18,7 @@ import { notAConformanceClaim, type ConformanceRequirement }
   from "@a11ign/evidence/conformance";
 import { outcomeTally, type CriterionOutcome } from "@a11ign/judge/outcomes";
 import { WCAG_22_AA } from "@a11ign/evidence/wcag";
-import { documentsSpannedSentence, insideFrame, TASK_LABEL_NOTE } from "./action/summary.js";
+import { documentsSpannedSentence, insideFrame, TASK_LABEL_NOTE, uncoveredNewIn22 } from "./action/summary.js";
 
 /**
  * A bare criterion number, with its plain-language name appended when we know it -- "4.1.2 Name,
@@ -316,6 +316,12 @@ function outcomesSection(outcomes: CriterionOutcome[] | undefined): string[] {
     `  asserted ${tally.failed}   referred ${tally.cantTell}   passed ${tally.passed}   `
       + `inapplicable ${tally.inapplicable}   untested ${tally.untested}`,
   ];
+  // #4091: the untested count alone does not say WHICH criteria; for WCAG 2.2 AA, which the tool reports against, it does.
+  const uncovered = uncoveredNewIn22(outcomes);
+  if (uncovered.length) {
+    lines.push("  Not covered, and new in WCAG 2.2 AA (nothing here checks them, so silence is not a pass): "
+      + uncovered.map((c) => `${c.num} ${c.name}`).join("; "));
+  }
   // The ASSESSOR is in the tag, not left to be read out of the prose. ADR 0021 turns on which layer is
   // entitled to claim what, so a reader deciding how much weight to give a `failed` needs to know whether
   // it came from a DOM rule or from driving a real screen reader — and a consumer parsing these lines

@@ -643,6 +643,43 @@ test("#1563: rehearsal 2's real result counts its eight partial criteria in the 
   assert.match(md, /\*\*8 of the referred criteria rest on an examination known to be partial:\*\*/);
 });
 
+// #4091: the WCAG 2.2 criteria rehearsal 3 records `untested` (2.5.7, 3.2.6, 3.3.7, 3.3.8 and, by its own outcomes, 2.4.11) are named in the summary, not only counted.
+const REHEARSAL3 = new URL("../fixtures/rehearsal3-34774183433-a11ign-result.json", import.meta.url);
+const rehearsal3 = (): RunResult => JSON.parse(readFileSync(REHEARSAL3, "utf8")) as RunResult;
+const NEW_IN_22_UNTESTED = ["2.4.11 Focus Not Obscured (Minimum)", "2.5.7 Dragging Movements", "3.2.6 Consistent Help", "3.3.7 Redundant Entry",
+  "3.3.8 Accessible Authentication (Minimum)"];
+const notCoveredLine = (md: string) => md.split("\n").find((line) => line.includes("Not covered, and new in WCAG 2.2 AA"));
+const assessedAs = (result: RunResult, criteria: string[]): RunResult => ({
+  ...result,
+  outcomes: result.outcomes?.map((o) => criteria.includes(o.criterion) ? { ...o, outcome: "passed" } : o),
+});
+
+test("#4091: the summary names the untested WCAG 2.2 criteria of rehearsal 3 (the row's four, plus 2.4.11 which the run also records untested), by number and name", () => {
+  const line = notCoveredLine(renderSummary(rehearsal3()));
+  assert.ok(line, "no 'Not covered' line for a run with four untested 2.2 criteria");
+  for (const criterion of NEW_IN_22_UNTESTED) assert.ok(line.includes(criterion), `${criterion} missing from: ${line}`);
+  assert.doesNotMatch(line, /2\.5\.8/, "2.5.8 reads cantTell in that run, so it was assessed and is not uncovered");
+});
+
+test("#4091 control: a criterion rewritten to an assessed outcome leaves the summary's list, and the others stay", () => {
+  const line = notCoveredLine(renderSummary(assessedAs(rehearsal3(), ["3.3.8"])));
+  assert.ok(line);
+  assert.doesNotMatch(line, /3\.3\.8/);
+  for (const criterion of NEW_IN_22_UNTESTED.filter((c) => !c.startsWith("3.3.8"))) assert.ok(line.includes(criterion));
+  assert.equal(notCoveredLine(renderSummary(assessedAs(rehearsal3(), ["2.4.11", "2.5.7", "3.2.6", "3.3.7", "3.3.8"]))), undefined,
+    "with none of the 2.2 criteria untested there is no line at all");
+});
+
+test("#4091: a result with no outcomes prints no 'Not covered' line", () => {
+  assert.equal(notCoveredLine(renderSummary({ ...rehearsal3(), outcomes: undefined })), undefined);
+});
+
+test("#4091: an untested criterion that is NOT new in WCAG 2.2 is not listed", () => {
+  const md = renderSummary(withOutcomes([{ criterion: "1.4.3", outcome: "untested", reason: "no assessor covers it" }]));
+  assert.equal(notCoveredLine(md), undefined);
+  assert.match(md, /1 are not covered by any assessor/, "the existing count wording is unchanged");
+});
+
 test("a run where everything WAS determined adds no noise", () => {
   const md = renderSummary(withOutcomes([
     { criterion: "4.1.2", outcome: "passed", reason: "examined in full" },
