@@ -194,6 +194,8 @@ arrangement for a session to wake itself is a change that session's user must sa
 last action of a turn", and "whoever files into an empty lane messages its worker"): the gate's `ready-row-unclaimed` order is now the
 event that wakes a lane (`engineer.md`, "The turn is the unit"). "Nothing unclaimed in my lane" is still a complete report.
 
+**A session does not poll GitHub (#4148).** Do not run `gh pr checks`, `gh pr view` or `gh issue view` in a loop, behind a `sleep`, or on a repeat to see whether a CI run, a review or a merge has landed: the tick reads GitHub once and the gate wakes you WITH the answer. The GraphQL pool is 5,000 points an hour shared by every session on the account, about 4,400 of them went on the same reads asked again in 72 minutes (measured 2026-10-08), and a dry pool puts every session on that account to sleep until the reset. `host/gh` answers an IDENTICAL repeated read from disk for 20 seconds (never more than 30) and drops that cache on any write by the account, and never caches `gh api rate_limit` or an `X-Ratelimit-*` header (#1967), so a read you repeat is free, a read you loop on is still a defect. `api-pool-low` now names the top spender of the last hour.
+
 ## A numeric pin is the author's to move (ruled 2026-09-06)
 
 **A numeric pin in `CLAUDE.md` that a test derives from the tree is updated by the author of the change that moves it, in the same PR,

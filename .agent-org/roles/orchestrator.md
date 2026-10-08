@@ -137,6 +137,8 @@ layer, and the remedy is the same as everywhere else here — **poll the authori
 than trusting a watcher that cannot report its own death.** When the host is under memory pressure, do not
 background anything whose silence you intend to read as information.
 
+**A session does not poll GitHub (#4148).** Do not run `gh pr checks`, `gh pr view` or `gh issue view` in a loop, behind a `sleep`, or on a repeat to see whether a CI run, a review or a merge has landed: the tick reads GitHub once and the gate wakes you WITH the answer. The GraphQL pool is 5,000 points an hour shared by every session on the account, about 4,400 of them went on the same reads asked again in 72 minutes (measured 2026-10-08), and a dry pool puts every session on that account to sleep until the reset. `host/gh` answers an IDENTICAL repeated read from disk for 20 seconds (never more than 30) and drops that cache on any write by the account, and never caches `gh api rate_limit` or an `X-Ratelimit-*` header (#1967), so a read you repeat is free, a read you loop on is still a defect. `api-pool-low` now names the top spender of the last hour. ("Poll the authoritative source by hand" above is ONE read of a fleet or lab process, not a loop on GitHub.)
+
 **A number carries what it was computed from, or it is not sent.** An ETA goes to the issue it informs,
 never into a board report — it is the single most likely thing to be quoted stripped of its caveats.
 
