@@ -20,11 +20,12 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { parse as parseYaml } from "yaml";
 import { sandboxGitEnv, withGitSandbox, type GitSandbox } from "../../../scripts/test-support/git-sandbox.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const ci = await import(pathToFileURL(join(REPO_ROOT, "scripts/ci-changed.mjs")).href);
-const { DOC_ROOT_FILES, boardOnly, candidatePackedPaths, reachesPacked, classify, jobsFor, knownPackages, testDependencyMap, docsReadingTests } = ci;
+const { DOC_ROOT_FILES, boardOnly, candidatePackedPaths, reachesPacked, feedsBuiltOutput, noReleaseReason, classify, jobsFor, knownPackages, testDependencyMap, docsReadingTests } = ci;
 
 interface Deps {
   getPackedFiles?: (repoRoot: string, pkgName: string) => Set<string>;
@@ -240,6 +241,60 @@ test("classify: changeset is what npm PACKS from a PUBLISHED package, not anythi
     assert.equal(classifyIn(sandbox.dir, ["packages/ghost/src/index.ts"]).changeset, false, "not a known package");
     assert.equal(classifyIn(sandbox.dir, ["docs/x.md", "packages/pub/notes.txt", "packages/pub/src/index.ts"]).changeset, true, "any one file suffices");
   });
+});
+
+test("classify: a BUNDLED package's source reaches the tarball although no dist file is named for it (#4136)", () => {
+  withGitSandbox((sandbox) => {
+    trackFixtureRepo(sandbox);
+    const bundle = new Set(["package.json", "README.md", "dist/cli.mjs", "dist/9.mjs", "dist/index.mjs", "dist/cli.d.ts"]);
+    const bundled = (file: string) => classifyIn(sandbox.dir, [file], { getPackedFiles: () => bundle }).changeset;
+    assert.equal(bundled("packages/pub/src/action/run.ts"), true, "bundled into dist/cli.mjs: the 1:1 name mapping misses it, and #4098, #4106, #4108 passed on that");
+    assert.equal(bundled("packages/pub/src/auth/flows.mjs"), true, "any extension under src/");
+    assert.equal(bundled("packages/pub/src/action/run.test.ts"), false, "a test is not shipped, bundled or not");
+    assert.equal(bundled("packages/pub/src/action/run.spec.ts"), false, "the shared check's glob names .spec. too");
+    assert.equal(bundled("packages/pub/rslib.config.ts"), false, "outside src/, only a packed path counts");
+    assert.equal(bundled("packages/pub/README.md"), true, "a packed literal path still counts");
+    const raw = new Set(["package.json", "README.md", "src/cli.mjs"]);
+    const rawShip = (file: string) => classifyIn(sandbox.dir, [file], { getPackedFiles: () => raw }).changeset;
+    assert.equal(rawShip("packages/pub/src/cli.mjs"), true, "shipped raw: its own path is packed");
+    assert.equal(rawShip("packages/pub/src/fixtures/x.mjs"), false, "a package that ships no dist keeps the npm answer: not packed, not shipped");
+  });
+});
+
+test("feedsBuiltOutput: only a non-test file under src/, and only where dist ships", () => {
+  const dist = new Set(["dist/cli.mjs"]);
+  assert.equal(feedsBuiltOutput(dist, "src/a.ts"), true);
+  assert.equal(feedsBuiltOutput(dist, "src/a.test.ts"), false);
+  assert.equal(feedsBuiltOutput(dist, "scripts/a.ts"), false, "not under src/");
+  assert.equal(feedsBuiltOutput(new Set(["package.json", "src/a.ts"]), "src/b.ts"), false, "no dist is packed");
+});
+
+// The cases `noReleaseReason` in a11ign/toolchain's `scripts/changeset-required.test.ts` pins, so the two vocabularies stay one (#4136).
+test("noReleaseReason: a line with a real reason settles; nothing, whitespace and the template's <reason> do not", () => {
+  assert.equal(noReleaseReason("Closes #1\nno-release: a refactor, no behaviour change\n"), "a refactor, no behaviour change");
+  assert.equal(noReleaseReason("  no-release:   indented and padded  \r\nmore"), "indented and padded", "CRLF and surrounding whitespace");
+  assert.equal(noReleaseReason("no-release:"), null, "nothing after the colon");
+  assert.equal(noReleaseReason("no-release:    "), null, "only whitespace");
+  assert.equal(noReleaseReason("no-release: <reason>"), null, "the template's placeholder is empty");
+  assert.equal(noReleaseReason("no-release: <reason>\nno-release: tests only"), "tests only", "the first line WITH a reason wins");
+  assert.equal(noReleaseReason("we said no-release: in prose"), null, "the line must start with it");
+  assert.equal(noReleaseReason(""), null);
+});
+
+test("ci.yml: the changeset job reads the live body for `no-release:` and its refusal waits on the answer (#4136)", () => {
+  const workflow = parseYaml(readFileSync(join(REPO_ROOT, ".github/workflows/ci.yml"), "utf8")) as {
+    jobs: Record<string, { permissions?: Record<string, string>; steps: { id?: string; if?: string; run?: string; env?: Record<string, string> }[] }>;
+  };
+  const job = workflow.jobs.changeset;
+  assert.equal(job.permissions?.["pull-requests"], "read", "the step reads the body through the API");
+  const noRelease = job.steps.find((step) => step.id === "noRelease");
+  assert.ok(noRelease, "the changeset job has a noRelease step");
+  assert.match(noRelease.run ?? "", /gh api "repos\/\$REPO\/pulls\/\$number"/, "the LIVE body, never the event payload's stale copy");
+  assert.match(noRelease.run ?? "", /ci-changed\.mjs --no-release/);
+  assert.ok(noRelease.env?.QUEUE_MESSAGE, "a queue entry finds its pull request through the merge commit message");
+  assert.ok(!JSON.stringify(noRelease.run).includes("pull_request.body"), "the body is never interpolated into a shell line");
+  const refusal = job.steps.find((step) => /changeset status/.test(step.run ?? ""));
+  assert.match(refusal?.if ?? "", /steps\.noRelease\.outputs\.settled != 'true'/, "the line settles the refusal");
 });
 
 test("classify: the packed manifest is read once per package, however many of its files changed", () => {
