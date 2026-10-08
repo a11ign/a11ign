@@ -87,9 +87,10 @@ function reportFlag(actionText: string, inputs: Record<string, string>): string 
   const lines = script.split("\n");
   const first = lines.findIndex((line) => line.includes("probed_flag=()"));
   const last = lines.findIndex((line, index) => index > first && line.trim() === "fi");
-  const block = lines.slice(first, last + 1).join("\n")
-    .replace(/\$\{\{\s*inputs\.([\w-]+)\s*\}\}/g, (_, name: string) => inputs[name] ?? "");
-  const run = spawnSync("bash", ["-c", `${block}\necho "FLAG: \${probed_flag[*]}"`], { encoding: "utf8" });
+  const block = lines.slice(first, last + 1).join("\n");
+  // The step reads these from its `env:` (never interpolated into the shell text: authenticated-action.test.ts), so run it with them set.
+  const env = { ...process.env, FLOWS: inputs.flows ?? "", PROBE_FORMS: inputs["probe-forms"] ?? "", FORMS: inputs.forms ?? "" };
+  const run = spawnSync("bash", ["-c", `${block}\necho "FLAG: \${probed_flag[*]}"`], { encoding: "utf8", env });
   assert.equal(run.status, 0, run.stderr);
   return /^FLAG: (.*)$/m.exec(run.stdout)?.[1] ?? assert.fail("no FLAG line");
 }

@@ -701,6 +701,10 @@ runs:
       id: report
       shell: bash
       working-directory: ${{ github.action_path }}
+      env:
+        FLOWS: ${{ inputs.flows }}
+        PROBE_FORMS: ${{ inputs.probe-forms }}
+        FORMS: ${{ inputs.forms }}
       run: |
         # `|| status=$?`, not `; status=$?`. GitHub runs `shell: bash` with `-eo pipefail`, so a bare
         # failing command aborts the step immediately and the lines below never run — the outputs would
@@ -710,8 +714,8 @@ runs:
         # #4089: say in the summary that no form was submitted, so a default run reads "not probed" and never clean. An
         # authenticated run passes nothing: its own list of what it pressed is the whole account (ADR 0038).
         probed_flag=()
-        if [ -z "${{ inputs.flows }}" ]; then
-          if [ "${{ inputs.probe-forms }}" = "true" ] || [ -n "${{ inputs.forms }}" ]; then probed_flag=(--forms-probed=true); else probed_flag=(--forms-probed=false); fi
+        if [ -z "$FLOWS" ]; then
+          if [ "$PROBE_FORMS" = "true" ] || [ -n "$FORMS" ]; then probed_flag=(--forms-probed=true); else probed_flag=(--forms-probed=false); fi
         fi
         npx tsx packages/cli/src/action/run.ts \
           --result="${{ steps.capture.outputs.result-json }}" \
