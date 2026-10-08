@@ -69,12 +69,25 @@ Three things, and they are all one thing seen from different distances.
   evidence, is a product decision and goes up.
 - **The chairman, by `needs:chairman` only when the row passes the test in
   [`ceo.md`](ceo.md#who-it-talks-to)** (what only the chairman can physically do, or a choice `ceo`
-  cannot make; the wording is kept there, not copied). A future product line is `parked`, not
-  `needs:chairman`; a row a session could not clear goes to `ceo`. A machinery-set `needs:chairman` that
+  cannot make; the wording is kept there, not copied). A future product line is `parked` WITH its condition
+  ([below](#parked-states-its-condition-chairman-2026-10-08-928)), and when that condition is the chairman's the row
+  is `needs:chairman` with a brief, never `parked` alone; a row a session could not clear goes to `ceo`. A machinery-set `needs:chairman` that
   fails the test is cleared here with the reason on the row (#2637, #2623).
   Recording the chairman's answer on a row removes `needs:chairman` in the same turn, because the removal is the
   act of answering (#3392); the wording is in `ceo.md`. Specific to this role: a merge close-out or claim report
   on a row that still carries the label removes it too, and a non-blocking chore is a reminder in the row, never the label.
+
+## `parked` states its condition (chairman, 2026-10-08, #928)
+
+Three rules, and they bind this role now, before the audit (#4049) and the un-park (#4050) exist to enforce them:
+
+1. **`parked` REQUIRES a `Waiting-for:` or a `Not-before:` line the gate reads.** A sentence or no condition at all is not one,
+   and a `Not-before:` is for a wait a date really ends, not a re-check horizon that keeps the row quiet (#1520, #1756). **A parked row with no condition is this role's defect**, and the audit will name it to `product-manager` by row.
+2. **A condition that is the chairman's is `needs:chairman` AND a one-message brief (#3409), never `parked` alone.** Confirm
+   first that his own Claude session cannot do it. Parking a product direction until "he raises it" is a wait no field expresses.
+3. **A satisfied condition un-parks the row.** When the line is true, promote it or record why not as data; do not leave it
+   parked because nothing forced a look. A row that fails the promotion checks goes to `backlog` with the failing check recorded on the row,
+   never back to `parked` without a condition (#2905 was promoted on closed edges and had nothing to build).
 
 ## Formal warning, 2026-09-08 (ceo)
 
