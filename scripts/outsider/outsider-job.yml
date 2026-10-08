@@ -139,7 +139,7 @@ jobs:
           - docs/try-it.md: "The other route: run it from the repository", and the authenticated run behind a login
 
           ### Substitutions: every line that differs from README.md's fence
-          - README.md line 178: `- uses: a11ign/a11ign@890cd490276d16102b3f371007951a24942950da   # the commit of the release tagged a11ign@0.3.0` became `- uses: a11ign/a11ign@<the release's full commit sha, as pinned on that line of this file>   # the commit of the release tagged a11ign@0.3.0`
+          - README.md line 178: `- uses: a11ign/a11ign@<the release's full commit sha, as pinned on that line of this file>   # the commit of the release tagged a11ign@0.3.0` became `- uses: a11ign/a11ign@<the release's full commit sha, as pinned on that line of this file>   # the commit of the release tagged a11ign@0.3.0`
           - README.md line 183: `url: https://example.com/contact` became `url: https://www.w3.org/WAI/demos/bad/before/home.html`
           - README.md line 184: `task: Send an enquiry` became `task: Find the main navigation and reach the survey.`
           - added: `needs: [pin]` under the job's key, so it waits for the pin check
