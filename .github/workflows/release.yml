@@ -521,7 +521,7 @@ jobs:
           PROMOTED: ${{ needs.promote.outputs.promoted }}
         run: |
           set -euo pipefail
-          fail() { echo "::error::CANNOT_TELL: $1. Nothing moved."; exit 1; }
+          fail() { echo "::error::CANNOT_TELL: $1. No existing tag was moved."; exit 1; }
           version=$(jq -r '[.[] | .tag | select(startswith("a11ign@")) | ltrimstr("a11ign@")] | sort_by(split(".") | map(tonumber)) | last // empty' <<<"${PROMOTED:-[]}")
           if [ -z "$version" ]; then
             echo "no version of the Action was promoted; the major tag stays where it is"
