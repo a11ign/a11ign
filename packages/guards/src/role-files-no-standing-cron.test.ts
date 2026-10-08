@@ -18,6 +18,11 @@ import { resolve } from "node:path";
 const ROLES = resolve(import.meta.dirname, "../../../.agent-org/roles");
 const FORBIDS = /\b(?:never|not|no|don't)\b/i;
 
+/** Every Markdown file under the roles directory, nested ones (`memory/`) included, as paths relative to it. */
+function roleFiles(): string[] {
+  return readdirSync(ROLES, { recursive: true, encoding: "utf8" }).filter((f) => f.endsWith(".md"));
+}
+
 function sentences(text: string): string[] {
   return text.replace(/^>\s?/gm, "").replace(/\s+/g, " ").split(/(?<=[.!?])\s/);
 }
@@ -55,14 +60,22 @@ test("negative control: product-manager.md as it stood before #4093 is refused",
   assert.equal(createInstructions(BEFORE_4093).length, 1);
 });
 
+test("the two rewritten files state the rule, not just omit the old instruction", () => {
+  for (const f of ["product-manager.md", "worker-loop-orchestrator.md"]) {
+    const text = readFileSync(resolve(ROLES, f), "utf8").replace(/^>\s?/gm, "").replace(/\s+/g, " ");
+    assert.match(text, /`CronList` once and `CronDelete` every one you find/, f);
+    assert.match(text, /No session holds a standing cron/, f);
+  }
+});
+
 test("the role files exist, so the sweep below is not an empty population", () => {
-  const files = readdirSync(ROLES).filter((f) => f.endsWith(".md"));
+  const files = roleFiles();
   for (const expected of ["ceo.md", "product-manager.md", "worker-loop-orchestrator.md"]) assert.ok(files.includes(expected), expected);
+  assert.ok(files.some((f) => f.startsWith("memory/")), "the sweep reaches the nested memory/ files");
 });
 
 test("no file under .agent-org/roles/ tells its reader to CronCreate", () => {
-  const offenders = readdirSync(ROLES)
-    .filter((f) => f.endsWith(".md"))
+  const offenders = roleFiles()
     .flatMap((f) => createInstructions(readFileSync(resolve(ROLES, f), "utf8")).map((s) => `${f}: ${s.slice(0, 80)}`));
   assert.deepEqual(offenders, []);
 });
