@@ -30,6 +30,7 @@ import { sandboxGitEnv } from "../../packages/guards/src/git-env.mjs";
 import { pnpmCliInvocation } from "../npm-cli-executable.mjs";
 import { outsiderVerdict } from "./verdict.mjs";
 import { toolModule } from "../agent-org-newest-tag.mjs";
+import { promotionTimeFrom } from "../release-promote.mjs";
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));
 const REPO_ROOT = join(HERE, "../..");
@@ -116,7 +117,7 @@ export function regressionBody({ version, tagSha, result, outsiderRepository, ru
 }
 
 /**
- * The four facts `outsiderVerdict` takes, from the registry's packument and the tag. Refused when `latest` has no publish time:
+ * The registry facts `outsiderVerdict` takes, from the registry's packument (the promotion time comes from the Release, `readPromotedAt`). Refused when `latest` has no publish time:
  * an age nobody can read would make `absent` unreachable, which is the reader saying `pending` forever.
  * @param {{ "dist-tags"?: { latest?: string }, time?: Record<string, string> }} packument
  * @returns {{ latest: string, publishedAt: string }}
@@ -153,12 +154,29 @@ function readLatest() {
   return latestFromPackument(JSON.parse(execFileSync(command, args, { encoding: "utf8", cwd: REPO_ROOT, maxBuffer: MAX_GH_OUTPUT_BYTES })));
 }
 
+/**
+ * When `latest` moved to this version, from the `Promoted to latest:` line of its GitHub Release (public, `github.token`), parsed by the
+ * promoter's own `promotionTimeFrom`. null when the Release has no such line or does not exist: the verdict then ages from the publish
+ * and says so. Any OTHER failure of `gh` propagates, because an unreadable Release is not an unpromoted one.
+ * @param {string} version
+ * @returns {string | null}
+ */
+function readPromotedAt(version) {
+  try {
+    return promotionTimeFrom(gh(["release", "view", `${PACKAGE}@${version}`, "--repo", PRODUCT_REPO, "--json", "body", "--jq", ".body"]));
+  } catch (error) {
+    const stderr = String(/** @type {{ stderr?: unknown }} */ (error).stderr ?? "");
+    if (/release not found/i.test(stderr)) return null;
+    throw error;
+  }
+}
+
 /** @param {string} outsiderRepository */
 function readFacts(outsiderRepository) {
   const { latest, publishedAt } = readLatest();
   const runs = JSON.parse(gh(["run", "list", "--repo", outsiderRepository, "--limit", String(RUN_LIST_LIMIT),
     "--json", "displayTitle,status,conclusion,createdAt"]));
-  return { latest, tagSha: tagShaOf(latest), publishedAt, now: new Date().toISOString(), runs };
+  return { latest, tagSha: tagShaOf(latest), publishedAt, promotedAt: readPromotedAt(latest), now: new Date().toISOString(), runs };
 }
 
 /**
@@ -242,7 +260,7 @@ const runUrl = () => process.env.GITHUB_RUN_ID
   : "(a run outside Actions)";
 
 /**
- * `A11Y_OUTSIDER_FACTS` names a JSON file holding the four facts and the run list, read INSTEAD of the network, so the command can be
+ * `A11Y_OUTSIDER_FACTS` names a JSON file holding the facts and the run list, read INSTEAD of the network, so the command can be
  * driven end to end by a test (`docs/proving-a-gate.md` step 2). A fixture never files: it prints the plan and stops, because a test
  * must not be able to create a row.
  * @returns {number} process exit code
