@@ -1,6 +1,6 @@
 # Referral load: how much of it is the same referral said again (#4241, #4084 outcome 4)
 
-**Status 2026-10-08: NOT MEASURED. The recorded outcomes the measurement reads do not exist on this host, so there is no figure, and no side of 20% to report.** That is the row's own stated finding for this case, and the run is asked of `orchestrator` on #4241.
+**Status 2026-10-09: NOT MEASURED. The recorded outcomes the measurement reads do not exist on this host, so there is no figure, and no side of 20% to report.** That is the row's own stated finding for this case. The lab pin that carries the sweep's `calibration-judgments.json` writer (v0.1.11, #4312) has merged, so the run is now `orchestrator`'s to make, asked on #4241.
 
 ## The question and the decision it carries
 
