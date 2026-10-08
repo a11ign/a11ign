@@ -1,0 +1,18 @@
+# Octo STS trust policy (octo-sts/app v0.11.2) for `release.yml`'s `promote-action-tag` job (#4194, replacing the A11IGN_BOT_TOKEN read of #4154).
+# A repository policy reaches exactly this repository (the server forces it), so there is no `repositories:` key and none is allowed.
+#
+# THE LEAST THE THREE REF WRITES NEED: `contents: write` for `v<version>` and `v<major>` (git/refs), `workflows: write` because GitHub refuses
+# a ref at a commit whose `.github/workflows` differ from `main`'s tip, which a release commit cut from an older `main` always does.
+#
+# BOUND TO THE WORKFLOW AS IT IS ON `main` (read off real runs, #4191): `sub` carries the IMMUTABLE ids, never `a11ign/a11ign`, and
+# `release.yml` runs on `push` and `status` (default branch) and on `workflow_dispatch`, all presenting `ref:refs/heads/main` when on `main`.
+# A `workflow_dispatch` started on any other branch presents that branch's `sub` and `ref`, so BOTH the subject and the `ref` / `job_workflow_ref`
+# claims refuse it: a branch cannot edit this workflow and mint. Every pattern is matched against the whole value.
+issuer: https://token.actions.githubusercontent.com
+subject: repo:a11ign@320310787/a11ign@1280353940:ref:refs/heads/main
+claim_pattern:
+  job_workflow_ref: a11ign/a11ign/\.github/workflows/release\.yml@refs/heads/main
+  ref: refs/heads/main
+permissions:
+  contents: write
+  workflows: write

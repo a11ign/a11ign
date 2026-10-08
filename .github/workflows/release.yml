@@ -35,7 +35,7 @@
 #      tree still holds the defect. It publishes what a push would: the called workflow's `plan` reads what no tag has consumed, so a
 #      dispatch after a push that already released publishes NOTHING.
 #   3. Nothing here writes `main` or opens a pull request, and the `release` job holds no token beyond its own. `promote-action-tag`
-#      alone reads `A11IGN_BOT_TOKEN`, for three ref writes (#4154). The called workflow writes tags and
+#      alone holds a ref-write token, an Octo STS one bound to this workflow as on `main`, for three ref writes (#4154, #4194). The called workflow writes tags and
 #      nothing else; the approving review `main` requires (#2022) stands where the typed confirmation once stood.
 #   4. `.changeset/config.json` must say `"access": "public"`, and the `guards` job reads the file back rather than assuming it
 #      (the called `publish` job reads it again before it sends anything). It reads `public` today; it was flipped there on
@@ -363,7 +363,7 @@ jobs:
   # THE RELEASE: one call, and the only job here that can publish. Every job above is a guard it WAITS FOR, so a red one stops the call
   # and nothing is skipped to get a pass. The permissions are what the called workflow's jobs may use (a called workflow can keep or
   # reduce a permission and never gain one): `contents: write` for its tags, `checks: read` for its gate, `id-token: write` for the
-  # OIDC publish in the `npm-publish` environment (ADR 0043), limited to `main`. NO STORED REGISTRY TOKEN AND NO `A11IGN_BOT_TOKEN` (the `release` job holds no token; `promote-action-tag` holds it for three ref writes, #4154):
+  # OIDC publish in the `npm-publish` environment (ADR 0043), limited to `main`. NO STORED REGISTRY TOKEN AND NO STORED GITHUB TOKEN (the `release` job holds no token; `promote-action-tag` mints an Octo STS one for three ref writes, #4154, #4194):
   # there is no pull request to open. The file name is the one npm's trusted-publisher entries name (workflow `release.yml`,
   # environment `npm-publish`): the OIDC token names the CALLING file, so renaming this file breaks the publish.
   release:
@@ -502,8 +502,9 @@ jobs:
 
   # THE ACTION'S MAJOR TAG (#3948): `uses: a11ign/a11ign@v0` follows the version the promotion has qualified, so a user of the Action gets a fix
   # once the fleet's qualification has passed and never on a `next` publish. It `needs` the promotion's SUCCESS and reads only what that job moved
-  # (`promoted`), so a red qualification, a wait and a `next` publish leave it alone. `contents: read` and the bot token, in the one step that writes a ref (#4154, `ceo`): no `id-token` (the npm
-  # token stays in `promote`, and the PAT and the OIDC token never share a job), and no checkout, so no repository code runs beside the write. The Action is the `a11ign` package, whose tag is
+  # (`promoted`), so a red qualification, a wait and a `next` publish leave it alone. `contents: read` and `id-token: write` (#4194): the token is minted by Octo STS from `.github/chainguard/promote-action-tag.sts.yaml`, which grants
+  # `contents: write` and `workflows: write` on this repository to this workflow as ON `main` only, and is read in the one step that writes a ref. The npm publish token stays in `promote`,
+  # and there is no checkout, so no repository code runs beside the write. The Action is the `a11ign` package, whose tag is
   # `a11ign@<version>`; the major tag is `v<major>` (`v0` while the version is 0.x), and with `v<version>` (Dependabot cannot see `a11ign@...`) the only refs this job writes.
   #
   # THE PER-VERSION TAGS STAY IMMUTABLE: nothing here deletes or moves one, and the only one it writes is the exact `v<version>` (#4058), created
@@ -522,10 +523,17 @@ jobs:
       cancel-in-progress: false
     permissions:
       contents: read
+      id-token: write
     steps:
+      - name: Mint the ref-write token (Octo STS; refused for a run of this workflow that is not on main)
+        id: octo-sts
+        uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05   # v1.1.1
+        with:
+          scope: ${{ github.repository }}
+          identity: promote-action-tag
       - name: Move v<major> to the commit of the promoted a11ign version's tag, or leave it and say why
         env:
-          GH_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
           GH_REPO: ${{ github.repository }}
           PROMOTED: ${{ needs.promote.outputs.promoted }}
           ONLY_VERSION: ${{ inputs.action-tag-version }}
@@ -556,8 +564,8 @@ jobs:
           [ -n "$new" ] || fail "no tag a11ign@$version to point $major_tag at (promoted, and the tag job has not cut it)"
           # THE DEFAULT `GITHUB_TOKEN` CANNOT DO THESE WRITES, and no fallback to it exists on purpose (#4154): it holds no `workflows` permission, and GitHub
           # refuses any ref at a commit whose `.github/workflows` differ from `main`'s tip, which a release commit cut from an older `main` always does.
-          # The refusal reads `Resource not accessible by integration` over the API and names the cause only when the ref is sent over git itself. An empty secret is red.
-          [ -n "${GH_TOKEN:-}" ] || fail "the secret A11IGN_BOT_TOKEN is empty, and $major_tag cannot be written without a token holding contents: write and workflows"
+          # The refusal reads `Resource not accessible by integration` over the API and names the cause only when the ref is sent over git itself. An empty token is red.
+          [ -n "${GH_TOKEN:-}" ] || fail "the Octo STS token (step octo-sts) is empty, and $major_tag cannot be written without a token holding contents: write and workflows"
           # THE EXACT `v<version>` TAG (#4058): Dependabot reads version-shaped tags, and `a11ign@<version>` is not one. Created at the same commit,
           # never moved: one that exists at the commit is left, and one anywhere else is red, for a tag a consumer may have pinned is not ours to move.
           version_tag="v$version"
