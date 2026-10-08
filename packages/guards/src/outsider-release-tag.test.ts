@@ -150,10 +150,10 @@ test("positive control: nothing promoted writes nothing, so the writes above are
   assert.deepEqual(calls, []);
 });
 
-test("an empty A11IGN_BOT_TOKEN is red before any write, and names the secret: there is no fallback to GITHUB_TOKEN (#4154)", () => {
+test("an empty Octo STS token is red before any write, and names the step that minted it: there is no fallback to GITHUB_TOKEN (#4154, #4194)", () => {
   const { status, calls, out } = runStep(BEFORE, undefined, { GH_TOKEN: "" });
   assert.notEqual(status, 0, out);
-  assert.match(out, /A11IGN_BOT_TOKEN/);
+  assert.match(out, /Octo STS token \(step octo-sts\)/);
   assert.deepEqual(calls, []);
 });
 
