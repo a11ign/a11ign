@@ -26,7 +26,7 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const gen = await import(pathToFileURL(join(REPO_ROOT, "scripts/generate-consumer-gate.mjs")).href);
 const {
   README_PATH, OUT, ACTION_DEFINITION, extractDocumentedJobsBlock, pinActionRef, substituteTarget, extractJobName, extractPinnedSha,
-  buildConsumerGateWorkflow, generate, refuseDirtyGenerationInputs, currentHeadSha, actionPinVerdict, PIN_COMMENT,
+  buildConsumerGateWorkflow, generate, refuseDirtyGenerationInputs, currentHeadSha, actionPinVerdict, PIN_COMMENT, restatePinComment,
 } = gen;
 
 const SHA = "0123456789abcdef0123456789abcdef01234567";
@@ -134,13 +134,20 @@ test("extractJobName: no jobs, several none carrying the Action, and several car
   assert.throws(() => extractJobName(both), /2 carry the Action \(a, b\)/);
 });
 
-test("pinActionRef: README's trailing comment on the Action's line is replaced by what the pin IS, and a line without one gains none (#4153)", () => {
+test("restatePinComment: README's trailing comment on the Action's line becomes what the pin IS, and a line without one gains none (#4153)", () => {
   const readmeLine = "      - uses: a11ign/a11ign@890cd490276d16102b3f371007951a24942950da   # the commit of the release tagged a11ign@0.3.0";
-  const pinned = pinActionRef(FENCE.replace("      - uses: a11ign/a11ign@v0.1.0", readmeLine), SHA);
-  assert.ok(pinned.includes(`      - uses: a11ign/a11ign@${SHA}   # ${PIN_COMMENT}\n`), pinned);
-  assert.ok(!pinned.includes("release tagged"), "README's comment describes README's pin, which this file's is not");
-  assert.ok(!pinActionRef(FENCE, SHA).includes("#"), "no comment in, none out");
-  assert.match(PIN_COMMENT, /regenerated/);
+  const restated = restatePinComment(pinActionRef(FENCE.replace("      - uses: a11ign/a11ign@v0.1.0", readmeLine), SHA));
+  assert.ok(restated.includes(`      - uses: a11ign/a11ign@${SHA}   # ${PIN_COMMENT}\n`), restated);
+  assert.ok(!restated.includes("release tagged"), "README's comment describes README's pin, which this file's is not");
+  assert.ok(!restatePinComment(pinActionRef(FENCE, SHA)).includes("#"), "no comment in, none out");
+  assert.match(restated, /^ {6}- uses: actions\/checkout@v7$/m, "another uses: step is untouched");
+  assert.ok(pinActionRef(readmeLine, SHA).includes("release tagged"), "pinActionRef itself still passes the comment through: the outsider generator relies on it");
+});
+
+test("generate: the real README's pin line carries PIN_COMMENT, not README's release-tag comment (#4153)", () => {
+  const workflow = generate(readFileSync(README_PATH, "utf8"), SHA) as string;
+  assert.ok(workflow.includes(`uses: a11ign/a11ign@${SHA}   # ${PIN_COMMENT}\n`), "the pin line");
+  assert.ok(!workflow.includes("release tagged"));
 });
 
 test("extractPinnedSha: reads back what pinActionRef baked, and refuses a block that was never pinned", () => {

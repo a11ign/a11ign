@@ -184,21 +184,33 @@ export function extractDocumentedJobsBlock(markdown) {
  * @returns {string}
  */
 export function pinActionRef(yamlText, sha) {
-  const pattern = new RegExp(`${ACTION_USES}@[^\\s]+([ \\t]+#[^\n]*)?`, "i");
+  const pattern = new RegExp(`${ACTION_USES}@[^\\s]+`, "i");
   if (!pattern.test(yamlText)) {
     throw new Error(`no "uses: ${ACTION_IDENTITY_NAMES[0]}@<ref>" line (nor "uses: ${ACTION_IDENTITY_NAMES[1]}@<ref>") found `
       + "to pin -- the extraction may have captured the wrong fence");
   }
-  return yamlText.replace(pattern, (_whole, identity, comment) =>
-    `uses: ${identity}@${sha}${comment === undefined ? "" : comment.replace(/#.*/, `# ${PIN_COMMENT}`)}`);
+  return yamlText.replace(pattern, (_whole, identity) => `uses: ${identity}@${sha}`);
 }
 
 /**
  * What the generated `uses:` line says its sha IS (#4153). README's fence carries a comment for ITS pin, "the commit of the release
  * tagged a11ign@0.3.0", and that is true of README's sha and false of this file's, which is `git rev-parse HEAD` at regeneration and
  * has been since #558; the comment rode through `pinActionRef` unedited and was false for every regenerated pin.
+ *
+ * A step of its own, NOT part of `pinActionRef`: `scripts/outsider/generate.mjs` imports that and pins README's own release sha,
+ * for which README's comment is the true one.
  */
 export const PIN_COMMENT = "the commit this file was regenerated at, not a release tag (node scripts/generate-consumer-gate.mjs)";
+
+/**
+ * Replaces the trailing comment on the Action's `uses:` line with `PIN_COMMENT`; a line with no comment gains none.
+ *
+ * @param {string} yamlText
+ * @returns {string}
+ */
+export function restatePinComment(yamlText) {
+  return yamlText.replace(new RegExp(`(${ACTION_USES}@[^\\s]+[ \\t]+)#[^\n]*`, "i"), (_whole, head) => `${head}# ${PIN_COMMENT}`);
+}
 
 /**
  * Replaces the `url:`/`task:` VALUES only, preserving every key, every other line, and all indentation.
@@ -618,7 +630,7 @@ function currentGenerationInputsStatus() {
  */
 export function generate(readmeText, sha) {
   const jobsBlock = extractDocumentedJobsBlock(readmeText);
-  const pinned = pinActionRef(jobsBlock, sha);
+  const pinned = restatePinComment(pinActionRef(jobsBlock, sha));
   const targeted = substituteTarget(pinned, {
     url: "https://www.w3.org/WAI/demos/bad/before/home.html",
     task: "Find the main navigation and reach the survey.",
