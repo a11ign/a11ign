@@ -34,3 +34,28 @@ test("positive control: a README fence without its summary-md line is NOT ok", (
   const result = checkCommitted(readme.replace(SUMMARY_MD_LINE, ""), committed);
   assert.equal(result.ok, false);
 });
+
+const { generateOutsiderJob } = await import(pathToFileURL(`${REPO}scripts/outsider/generate.mjs`).href);
+
+const RELEASE_SHA = "d92e97384b11edb7bf1cdfcf150394af46a9a2f6";
+const PIN_LINE = /^\s*- uses: a11ign\/a11ign@.*$/m;
+
+test("--version replaces README's own comment on the pin line with `# v<version>`, and a regeneration of README at HEAD does not throw (#4041)", () => {
+  assert.match(readme, /uses: a11ign\/a11ign@[0-9a-f]{40}\s+# /, "README's pin line no longer carries a comment: this test's premise moved");
+  const pin = PIN_LINE.exec(generateOutsiderJob(readme, RELEASE_SHA, "0.4.0"))?.[0];
+  assert.equal(pin?.trim(), `- uses: a11ign/a11ign@${RELEASE_SHA} # v0.4.0`);
+});
+
+test("positive control: trailing text that is not a comment is still refused, and no --version writes no comment", () => {
+  const notAComment = readme.replace(/(uses: a11ign\/a11ign@[0-9a-f]{40})\s+#[^\n]*/, "$1 extra");
+  assert.notEqual(notAComment, readme, "the control did not change README");
+  assert.throws(() => generateOutsiderJob(notAComment, RELEASE_SHA, "0.4.0"), /not a comment/);
+  assert.doesNotMatch(generateOutsiderJob(readme, RELEASE_SHA, undefined), /# v0\.4\.0/);
+});
+
+test("the generated job carries exactly one full-sha `uses: a11ign/a11ign@` text: the substitution record does not quote README's pin (#4041)", () => {
+  const generated: string = generateOutsiderJob(readme, RELEASE_SHA, "0.4.0");
+  const pins = generated.match(/uses: a11ign\/a11ign@[0-9a-f]{40}/g) ?? [];
+  assert.deepEqual(pins, [`uses: a11ign/a11ign@${RELEASE_SHA}`]);
+  assert.ok(/README\.md line \d+: `- uses: a11ign\/a11ign@<the release's full commit sha/.test(generated), "the record line this test guards is gone: the control moved");
+});

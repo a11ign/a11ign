@@ -112,8 +112,10 @@ const MASK = { ref: "<ref>", target: { url: "<url>", task: "<task>" } };
 const PIN_VERSION_COMMENT = /^(\s*(?:- )?uses:\s*\S+@[0-9a-f]{40}) # v(\S+)$/m;
 
 /**
- * Appends ` # v<version>` to the Action's pinned `uses:` line, and refuses one that already has a trailing comment
- * (two would leave Dependabot reading whichever came first).
+ * Puts ` # v<version>` on the Action's pinned `uses:` line, REPLACING a trailing comment README's fence already carries there.
+ * README's comment ("the commit of the release tagged a11ign@0.3.0") names README's own release; the sha pinned here is `--sha`'s,
+ * the tag commit of `--version`, so that comment would be false and a second one would leave Dependabot reading whichever came
+ * first. Trailing text that is not a comment is still refused: it is not this function's to discard.
  * @param {string} jobText a job whose `uses:` line `pinActionRef` has already pinned
  * @param {string} version
  * @returns {string}
@@ -123,8 +125,8 @@ function annotatePin(jobText, version) {
   const line = new RegExp(`^\\s*(?:- )?uses:\\s*\\S+@${extractPinnedSha(jobText)}(.*)$`, "m").exec(jobText);
   if (!line) throw new Error("the Action's pinned `uses:` line cannot be found to annotate");
   const [whole, rest] = line;
-  if (rest.trim()) throw new Error(`the Action's pin line already ends in ${JSON.stringify(rest.trim())}, so \`# v${version}\` cannot be its comment`);
-  return jobText.replace(whole, `${whole} # v${version}`);
+  if (rest.trim() && !rest.trim().startsWith("#")) throw new Error(`the Action's pin line already ends in ${JSON.stringify(rest.trim())}, which is not a comment, so \`# v${version}\` cannot replace it`);
+  return jobText.replace(whole, `${whole.slice(0, whole.length - rest.length)} # v${version}`);
 }
 
 /** @param {string} workflowText @returns {string | undefined} the version the committed pin line names, if it names one */
@@ -269,7 +271,8 @@ const lineNumberOf = (text, fragment) => text.slice(0, text.indexOf(fragment)).s
 
 /**
  * Every line of README's fence that the generated job does not carry as written, by README line, plus the line the
- * generator adds. Printed in the job's summary so nothing is added silently.
+ * generator adds. Printed in the job's summary so nothing is added silently. README's own pinned sha is masked on its side too:
+ * the quoted line was a second full-sha `uses:` line in the file (#4041), which `grep -oE` over the file read as two pins.
  *
  * @param {{ readmeText: string, fence: string, targeted: string }} texts
  * @returns {string[]}
@@ -279,7 +282,7 @@ export function substitutionList({ readmeText, fence, targeted }) {
   const was = fence.split("\n");
   const now = targeted.split("\n").map(withoutBakedPin);
   const changed = was.flatMap((line, i) => (line === now[i] ? [] : [
-    `README.md line ${firstLine + i}: \`${line.trim()}\` became \`${now[i].trim()}\``,
+    `README.md line ${firstLine + i}: \`${withoutBakedPin(line.trim())}\` became \`${now[i].trim()}\``,
   ]));
   return [...changed, `added: \`${NEEDS_PIN_LINE.trim()}\` under the job's key, so it waits for the pin check`];
 }
