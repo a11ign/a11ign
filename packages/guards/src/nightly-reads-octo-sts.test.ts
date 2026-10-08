@@ -19,6 +19,7 @@ import { parse as parseYaml } from "yaml";
 const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const WORKFLOW = ".github/workflows/nightly.yml";
 const MINTING_JOB = "ready-audit";
+const PROBE_JOB = "rulesetReadAsApp";
 const GAP_STEP = /^Ask GitHub, once per code repository/;
 
 type Step = { id?: string; name?: string; uses?: string; run?: string; with?: Record<string, string>; env?: Record<string, string> };
@@ -64,8 +65,19 @@ test("#4195 POSITIVE CONTROLS: the checkers see a minter, a stored read and a mi
   assert.equal(bindingFaults({ ...good, claim_pattern: { job_workflow_ref: good.claim_pattern?.job_workflow_ref ?? "" } }).length, 1, "a policy without ref must be refused");
 });
 
-test("#4195: only the job that mints holds id-token: write", () => {
-  assert.deepEqual(minters(workflow), [MINTING_JOB]);
+test("#4195: only the two jobs that mint hold id-token: write", () => {
+  assert.deepEqual(minters(workflow).sort(), [MINTING_JOB, PROBE_JOB].sort());
+});
+
+test("#4195: the ruleset measurement job mints a metadata-read token under a policy bound to nightly.yml on main, and holds no stored token", () => {
+  const step = workflow.jobs[PROBE_JOB].steps?.find((s) => s.uses?.startsWith("octo-sts/action@"));
+  assert.ok(step, `${PROBE_JOB} has no octo-sts/action step`);
+  assert.match(step.uses ?? "", /^octo-sts\/action@[0-9a-f]{40}\s*$/, "pinned to a commit: this job holds id-token: write and then runs fetched code");
+  assert.equal(step.with?.scope, "a11ign/a11ign");
+  const policy = parseYaml(read(`.github/chainguard/${step.with?.identity}.sts.yaml`)) as Policy;
+  assert.deepEqual(bindingFaults(policy), []);
+  assert.deepEqual(policy.permissions, { metadata: "read" });
+  assert.deepEqual(storedTokenReads(workflow).filter((r) => r.job === PROBE_JOB), [], "the measurement must read as the installation, never the PAT");
 });
 
 test("#4195: the minting step names a policy that exists, is bound to nightly.yml on main, and asks for no write", () => {
@@ -92,6 +104,6 @@ test("#4195: the one remaining stored-token read is the ruleset step, whose gap 
   const reads = storedTokenReads(workflow);
   assert.equal(reads.length, 1, `expected exactly the named gap, found ${JSON.stringify(reads)}`);
   assert.match(reads[0].step, GAP_STEP);
-  assert.notEqual(reads[0].job, MINTING_JOB, "the ruleset read must not share the job that mints");
+  assert.deepEqual(minters(workflow).filter((job) => job === reads[0].job), [], "the ruleset read must not share a job that mints");
   assert.match(read(WORKFLOW), /#4195, A NAMED GAP/);
 });

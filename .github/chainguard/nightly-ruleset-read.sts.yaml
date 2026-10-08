@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/octo-sts/app/refs/heads/main/pkg/octosts/octosts.TrustPolicy.json
+#
+# #4195: what `nightly.yml`'s `rulesetReadAsApp` job reads `a11ign/a11ign`'s `main` rules with, to MEASURE what an Octo STS installation
+# token answers for `current_user_can_bypass`. Octo STS v0.11.2. A REPOSITORY policy, so the token reaches a11ign/a11ign alone (the loop in
+# `mainRulesetBinds` reads nine repositories, which needs an organisation policy in `a11ign/.github`: `ceo`'s crossing, not this row's).
+#
+# `metadata: read` is the one permission `rules/branches/{branch}` and `rulesets/{id}` ask of a fine-grained token. Nothing else, and no write.
+#
+# Bound exactly as `nightly-board-read` is (see its header for the immutable-id subject and why `job_workflow_ref` and `ref` are pinned to
+# `main`): a dispatch on a branch presents that branch's `sub` and is refused.
+issuer: https://token.actions.githubusercontent.com
+subject: repo:a11ign@320310787/a11ign@1280353940:ref:refs/heads/main
+claim_pattern:
+  job_workflow_ref: a11ign/a11ign/\.github/workflows/nightly\.yml@refs/heads/main
+  ref: refs/heads/main
+permissions:
+  metadata: read
