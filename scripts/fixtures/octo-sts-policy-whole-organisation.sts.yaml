@@ -1,0 +1,9 @@
+# FIXTURE for packages/guards/src/octo-sts-policies.test.ts -- NOT a policy. It sits here, not under
+# .github/chainguard/, because a file there would be a real trust policy. It must be CAUGHT when read as an
+# organisation-level policy (a11ign/.github) WITHOUT naming either forbidden repository anywhere in the file,
+# or it would be caught for the wrong reason: with no `repositories:` list, Octo STS v0.11.2 grants on EVERY
+# repository the app is installed on.
+issuer: https://token.actions.githubusercontent.com
+subject_pattern: "repo:a11ign/.*:ref:refs/heads/main"
+permissions:
+  contents: read

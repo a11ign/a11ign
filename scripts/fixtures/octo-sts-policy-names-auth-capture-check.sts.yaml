@@ -1,0 +1,8 @@
+# FIXTURE for packages/guards/src/octo-sts-policies.test.ts -- NOT a policy. It sits here, not under
+# .github/chainguard/, because a file there would be a real trust policy. It must be CAUGHT: it names auth-capture-check.
+issuer: https://token.actions.githubusercontent.com
+subject: repo:a11ign/a11ign:ref:refs/heads/main
+repositories:
+  - auth-capture-check
+permissions:
+  contents: read
