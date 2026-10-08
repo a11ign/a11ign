@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@a11ign/screenreader-worker': 0.4.0
+  '@a11ign/screenreader-worker': 0.5.0
 
 importers:
 
@@ -24,8 +24,8 @@ importers:
         specifier: ^0.5.1
         version: 0.5.1(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)
       '@a11ign/screenreader-worker':
-        specifier: 0.4.0
-        version: 0.4.0
+        specifier: 0.5.0
+        version: 0.5.0
       '@anthropic-ai/sdk':
         specifier: ^0.131.0
         version: 0.131.0
@@ -180,8 +180,8 @@ packages:
     engines: {node: '>=20'}
     hasBin: true
 
-  '@a11ign/screenreader-worker@0.4.0':
-    resolution: {integrity: sha512-GsHuhdY//mgfLlR6DoORUOOXhNd16UoQ2sgfvnmXMi4vpbWnB8dZLciF+IgPEHTOMb3ni5YHU6igXUz+KuZkew==}
+  '@a11ign/screenreader-worker@0.5.0':
+    resolution: {integrity: sha512-4EBf+ZbomyJm/cPq9Ns9yO2NEPe4msfp8ozFQ2oced0pKOgp1I9aFnCyqmw+M8/v+wf8YWlODCw4Cv6bHfg3fw==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -1930,13 +1930,13 @@ snapshots:
   '@a11ign/screenreader-fleet@0.5.1(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)':
     dependencies:
       '@a11ign/judge': 0.1.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)
-      '@a11ign/screenreader-worker': 0.4.0
+      '@a11ign/screenreader-worker': 0.5.0
     transitivePeerDependencies:
       - '@a11ign/scorer'
       - '@anthropic-ai/sdk'
       - '@huggingface/transformers'
 
-  '@a11ign/screenreader-worker@0.4.0':
+  '@a11ign/screenreader-worker@0.5.0':
     dependencies:
       '@guidepup/guidepup': 0.31.0
 
