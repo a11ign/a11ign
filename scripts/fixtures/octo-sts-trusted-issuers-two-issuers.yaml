@@ -1,0 +1,7 @@
+# FIXTURE for octo-sts-trusted-issuers.test.ts, never deployed: an allowlist that trusts a SECOND issuer
+# beside GitHub Actions. The guard must read this RED; the real file lists the Actions issuer only.
+mode: enforce
+
+issuers:
+  - https://token.actions.githubusercontent.com
+  - https://accounts.google.com
