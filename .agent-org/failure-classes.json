@@ -1,0 +1,104 @@
+{
+  "_doc": "The failure-class index (#4122, chairman 2026-10-08). A CLASS is a way the org fails that has happened more than once; the question asked of every defect before it closes is 'where else can this occur, and what stops it everywhere?'. THIS FILE HOLDS DEFINITIONS ONLY: id, name, guard. An INSTANCE is a closed row carrying the label class:<id>, counted by the gate, so a defect PR never edits this file (every PR appending here would hold every other by file overlap). A second closed row under one class:<id> is a REPEAT, and a repeat means the guard failed. `seed` lists the instances named when the file was written, with the BASIS for each: 'chairman-named' (the chairman's direction on #4122; class membership not re-read by ceo), 'title states it' (ceo read the row title, which says so), 'ceo read'. Re-read the row before relying on a seed. `guard` is a detector or rule IN FORCE that stops the class everywhere, or null with a guardNote saying what is missing or still unmerged: a control that is ordered, open or partial is a guardNote, never a guard. A class with a null guard is the first thing to fix. An instance with no row number (a pull request in another repository) is written <owner/name>#<n>.",
+  "classes": [
+    {
+      "id": "unreleased-merge",
+      "name": "A merge changes shipped code but nothing releases it: no changeset arrived, or no trigger ran, so the fleet or the registry still runs the old version.",
+      "guard": null,
+      "seed": [
+        {
+          "ref": "a11ign/a11ign#4000",
+          "basis": "title states it",
+          "note": "10-07: a failed release whose cause was fixed waited for the next changeset push"
+        },
+        {
+          "ref": "a11ign/a11ign#4107",
+          "basis": "chairman-named",
+          "note": "10-08: the fleet ran worker 0.2.0 without the identity-provider origins; the row title is about the NVDA reading, not the class"
+        },
+        {
+          "ref": "a11ign/a11ign#4118",
+          "basis": "title states it",
+          "note": "10-08: the release of the two merges that carried no changeset"
+        },
+        {
+          "ref": "a11ign/screenreader-worker#25",
+          "basis": "ceo read",
+          "note": "merged 10:02Z, changed src/ only, no .changeset/ file"
+        },
+        {
+          "ref": "a11ign/screenreader-worker#26",
+          "basis": "ceo read",
+          "note": "merged 10:47Z, changed src/ only, no .changeset/ file"
+        }
+      ],
+      "guardNote": "none in force. Ordered 2026-10-08 on #4084 and unfiled when this was written: a shared-CI check that a PR touching a releasablePaths entry carries a changeset or a 'no-release: <reason>' line, and an org-health cause when main is ahead of the latest release for over a day. Set guard to that rule when both merge."
+    },
+    {
+      "id": "unread-hold",
+      "name": "A hold or a wait written in a form no gate reads (a prose umbrella, a Waiting-for line on a PR the gate does not scan), so it outlives its condition.",
+      "guard": null,
+      "seed": [
+        {
+          "ref": "a11ign/a11ign#3778",
+          "basis": "chairman-named"
+        },
+        {
+          "ref": "a11ign/a11ign#2885",
+          "basis": "chairman-named"
+        },
+        {
+          "ref": "a11ign/a11ign#2887",
+          "basis": "chairman-named"
+        }
+      ],
+      "guardNote": "none that covers the class. Waiting conditions are fields (rules/waiting-conditions.md) and pr:hold --until clears them, but a keyed-repository PR hold is not read by pr:hold, so a resolved hold on an agent-org PR waits for its owner (agent-org#369, #374 on 2026-10-08). The 'gate lifts a resolved keyed-repository hold' row is unfiled; a control that leaves the case open is not a guard for the class."
+    },
+    {
+      "id": "parked-without-condition",
+      "name": "A row is parked with no condition that will ever un-park it, so it sits until a person notices.",
+      "guard": null,
+      "guardNote": "none named. #4050 un-parks a row whose every condition came TRUE; it does not catch a parked row that has no condition at all.",
+      "seed": [
+        {
+          "ref": "a11ign/a11ign#3449",
+          "basis": "chairman-named"
+        },
+        {
+          "ref": "a11ign/a11ign#2628",
+          "basis": "chairman-named"
+        }
+      ]
+    },
+    {
+      "id": "epic-not-closing",
+      "name": "An epic whose children are done stays open, because no rule says who closes it or on what reading.",
+      "guard": null,
+      "guardNote": "none named.",
+      "seed": [
+        {
+          "ref": "a11ign/a11ign#2899",
+          "basis": "chairman-named"
+        },
+        {
+          "ref": "a11ign/a11ign#69",
+          "basis": "chairman-named"
+        }
+      ]
+    },
+    {
+      "id": "detector-pages-managers",
+      "name": "A detector reports to the managers something they cannot act on, or reports it repeatedly, so alarms cost a turn each and are read less.",
+      "guard": null,
+      "seed": [],
+      "guardNote": "none in force. #4065 (org-health: one wake per new signal class or severity crossing, suppression logged, the rest in a digest) is open; set guard to it when it merges."
+    },
+    {
+      "id": "two-versions-running",
+      "name": "Two versions of one tool run at once (an installed copy beside a checkout, a pinned release beside main), so a fix is merged and not in effect.",
+      "guard": null,
+      "guardNote": "none named. Related rows that mention it but are not seeded as instances: #3316, #3468.",
+      "seed": []
+    }
+  ]
+}
