@@ -514,7 +514,7 @@ function actionDefinitionDiffers({ from, to, cwd }) {
     const error = /** @type {Error & { status?: number, stderr?: Buffer }} */ (caught);
     if (error.status === 1) return true;
     throw new Error(`could not compare ${ACTION_DEFINITION.join(", ")} between ${from} and ${to}: ${error.stderr?.toString().trim() || error.message}`,
-      { cause: error });
+      { cause: caught });
   }
 }
 
