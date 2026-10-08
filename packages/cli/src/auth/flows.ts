@@ -80,6 +80,11 @@ export interface FlowsFile {
   version: 1;
   /** The only origin this file may be applied to, normalised to `URL.origin`. */
   origin: string;
+  /**
+   * The identity-provider origins a LOGIN may pass through (`idp-origins:`), each normalised to `URL.origin`; empty when the file
+   * declares none, which is every file written before the key existed. Never the app's own origin.
+   */
+  idpOrigins: string[];
   flows: Flow[];
 }
 
@@ -161,6 +166,38 @@ function parseOrigin(raw: unknown, path: string): string {
       + "committed; a login takes its secrets from-env: only.");
   }
   return origin as string;
+}
+
+/** The entry as the refusal may print it: a password in a committed file is bad enough without a CI log repeating it. */
+const withoutCredentials = (entry: unknown): unknown => (typeof entry === "string" ? entry.replace(/\/\/[^/?#]*@/, "//") : entry);
+
+/** Why one `idp-origins:` entry is not an origin this file may allow, or `null` when it is one. Each reason is a sentence about the ENTRY. */
+function idpOriginProblem(entry: unknown, appOrigin: string): string | null {
+  if (!isName(entry)) return "is not a text";
+  const text = entry as string;
+  if (text.includes("*")) return "holds a wildcard; list each origin exactly";
+  const origin = originOf(text);
+  if (origin === null) return "is not an http or https origin";
+  const parsed = new URL(text);
+  if (parsed.username !== "" || parsed.password !== "") return "carries a username or password";
+  if (parsed.pathname !== "/" || parsed.search !== "" || parsed.hash !== "") return "carries a path, query or fragment; an origin is a scheme, a host and a port";
+  return origin === appOrigin ? "is the app's own origin, which needs no allowance" : null;
+}
+
+/**
+ * `idp-origins:` — the origins a login may pass through, EXACT and nothing wider. A list of origins as `URL.origin` reads them, so
+ * the comparison the interpreters make is a string equality and never a prefix or a suffix; absent is `[]`, and the pin then holds
+ * for every origin but the app's.
+ */
+function parseIdpOrigins(raw: unknown, path: string, appOrigin: string): string[] {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) fail("file-shape", `${path}: idp-origins: must be a list of origins, such as [https://login.example.test].`);
+  const origins = (raw as unknown[]).map((entry, index) => {
+    const problem = idpOriginProblem(entry, appOrigin);
+    if (problem !== null) fail("file-shape", `${path}: idp-origins: entry ${index + 1} (${JSON.stringify(withoutCredentials(entry))}) ${problem}.`);
+    return originOf(entry as string) as string;
+  });
+  return [...new Set(origins)];
 }
 
 /**
@@ -322,14 +359,15 @@ export function parseFlowsFile(text: string, path = "the flows file"): FlowsFile
   }
   if (!isObject(parsed)) fail("file-shape", `${path} is empty or is not a mapping.`);
   const doc = parsed as Record<string, unknown>;
-  refuseUnknownKeys(doc, ["version", "origin", "flows"], path);
+  refuseUnknownKeys(doc, ["version", "origin", "idp-origins", "flows"], path);
   if (doc.version !== 1) fail("file-shape", `${path}: version: must be 1 (found ${JSON.stringify(doc.version ?? null)}).`);
   const origin = parseOrigin(doc.origin, path);
+  const idpOrigins = parseIdpOrigins(doc["idp-origins"], path, origin);
   if (!isObject(doc.flows) || Object.keys(doc.flows).length === 0) {
     fail("file-shape", `${path}: flows: lists nothing, so this file would do nothing.`);
   }
   const flows = Object.entries(doc.flows as Record<string, unknown>).map(([name, flow]) => parseFlow(name, flow, origin));
-  return { version: 1, origin, flows };
+  return { version: 1, origin, idpOrigins, flows };
 }
 
 /**

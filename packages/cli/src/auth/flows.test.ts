@@ -231,3 +231,37 @@ test("an empty file, invalid YAML, and a flow with no steps are each refused as 
   refusedBy("file-shape", () => parseFlowsFile(`version: 1\norigin: ${ORIGIN}\nflows: {}`));
   refusedBy("file-shape", () => parseFlowsFile(`version: 1\norigin: ${ORIGIN}\nflows: { a: { steps: [] } }`));
 });
+
+// `idp-origins:` (#4088): the identity-provider origins a login may pass through. EXACT origins, so the interpreters' comparison is a string equality.
+const withIdp = (entries: string) => `${VALID.replace("flows:", `idp-origins:\n${entries}\nflows:`)}`;
+
+test("idp-origins: is normalised to URL.origin, de-duplicated, and absent means none", () => {
+  assert.deepEqual(parseFlowsFile(VALID).idpOrigins, []);
+  assert.deepEqual(parseFlowsFile(withIdp("  - https://IDP.example.test:443\n  - https://idp.example.test/\n  - http://127.0.0.1:8080")).idpOrigins,
+    ["https://idp.example.test", "http://127.0.0.1:8080"]);
+  assert.deepEqual(parseFlowsFile(`${VALID.replace("flows:", "idp-origins: []\nflows:")}`).idpOrigins, []);
+});
+
+test("idp-origins: refuses a wildcard, a path, a credential, a query, the app's own origin, a non-http scheme and a non-list, naming the file", () => {
+  const refusals: Array<[string, string]> = [
+    ["  - https://*.example.test", "wildcard"],
+    ["  - https://idp.example.test/oauth", "path"],
+    ["  - https://idp.example.test?x=1", "path"],
+    ["  - https://user:secret@idp.example.test", "username or password"],
+    [`  - ${ORIGIN}`, "app's own origin"],
+    [`  - ${ORIGIN}/`, "app's own origin"],
+    ["  - ftp://idp.example.test", "http or https"],
+    ["  - 42", "not a text"],
+  ];
+  for (const [entry, why] of refusals) {
+    assert.throws(() => parseFlowsFile(withIdp(entry), "login.yml"), (e: Error) => {
+      assert.ok(e instanceof FlowsError);
+      assert.equal(e.rule, "file-shape");
+      assert.match(e.message, /^login\.yml: idp-origins: entry 1 /, `${entry}: the file's name leads the message`);
+      assert.ok(e.message.includes(why), `${entry}: ${e.message}`);
+      assert.ok(!e.message.includes("secret"), "a credential in an origin is never echoed back as a bare word");
+      return true;
+    });
+  }
+  refusedBy("file-shape", () => parseFlowsFile(`${VALID.replace("flows:", "idp-origins: https://idp.example.test\nflows:")}`));
+});
