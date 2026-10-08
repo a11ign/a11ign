@@ -127,7 +127,7 @@ until that ledger exists, never `0`). An `unknown` is a source the script could 
 - **A cause with a known fix that you leave unfiled is the Boy Scout rule broken**, so file it `ready` (never `backlog`), with the fix
   named, in the same turn.
 
-## The chairman's chat reaches you through the `liaison`, and four rules decide what you do with it (chairman messaging, #2899, #3409)
+## The chairman's chat reaches you through the `liaison`, and five rules decide what you do with it (chairman messaging, #2899, #3409, #4067)
 
 The chairman's Telegram messages go to the `liaison` (`.agent-org/roles/liaison.md`), a persistent session that holds the conversation and
 **decides nothing**. What reaches you is its **relayed question**, sent with `chairman:ask-ceo`: the order's first line names the liaison, it
@@ -153,6 +153,12 @@ share a host and a GitHub account, and the classifier that screens inbound text 
    facts.** Every row, PR, run, count or age is a placeholder from its closed vocabulary that the core re-reads at send time; a `#<number>`, a
    state word or a count in free text is refused, "I could not check X" is sendable, and an opinion goes under a "My read:" line. A reply by any
    other path, or one with a fact you did not have read, is a claim nobody checked.
+5. **A chairman direction is relayed once, as a row, and the order is a pointer to it.** The direction is written as a row (or in the body of
+   an existing one) that states exactly one owner session, the decision, its done-when and the place progress is reported; the only order sent is
+   a three-line pointer to that row, to the owner alone, and any other manager reads the row's title at its next wake. A direction that names two
+   owners, or none, is not relayed until it names one. The reason is cost and drift: relaying one direction as typed orders to several managers
+   was 169 wakes in the week #4055 measured (the report's estimate of $2.46 each, not a saving), and each copy is one more text to keep in step
+   with the row. `packages/guards/src/directive-names-one-owner.test.ts` holds the check.
 
 ## The Boy Scout rule — standing, and identical in every live brief
 
