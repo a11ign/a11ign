@@ -1235,6 +1235,25 @@ test("#3710: an unset secret fails with its own cause, and no run ever prints th
   }
 });
 
+/**
+ * #4154 (`ceo`, replacing the #3717 pin "no live line of release.yml reads the bot token"): `promote-action-tag` alone reads it, in a STEP's
+ * `env` (never a job's), because the default `GITHUB_TOKEN` cannot write a ref at a commit whose workflows differ from `main`'s tip. The
+ * `release` job, which holds `id-token`, reads none: the PAT and the OIDC publish token never share a job. The count of jobs reading it is
+ * asserted to be 1, not 0, so a scan that finds nothing cannot pass for one that found the right job.
+ */
+const TAG_MOVE_JOB = "promote-action-tag";
+function assertBotTokenReadOnlyByTheTagMove(): void {
+  const live = readFileSync(join(REPO_ROOT, RELEASE_WORKFLOW), "utf8").split("\n").filter((line) => !line.trim().startsWith("#")).join("\n");
+  const jobs = (parseYaml(live) as { jobs: Record<string, { env?: unknown; steps?: { env?: unknown; run?: string }[] }> }).jobs;
+  const reading = Object.entries(jobs).filter(([, job]) => JSON.stringify(job).includes("A11IGN_BOT_TOKEN")).map(([name]) => name);
+  assert.deepEqual(reading, [TAG_MOVE_JOB], "exactly one job of release.yml reads the bot token: the Action's major-tag move (#4154), and not the release job");
+  const move = jobs[TAG_MOVE_JOB];
+  assert.ok(!JSON.stringify(move.env ?? {}).includes("A11IGN_BOT_TOKEN"), "the secret is read in a step's env, never the job's");
+  const reads = (move.steps ?? []).filter((step) => JSON.stringify(step.env ?? {}).includes("A11IGN_BOT_TOKEN"));
+  assert.equal(reads.length, 1, "one step reads it, and it is the step that writes the refs");
+  assert.match(reads[0].run ?? "", /git\/refs/, "the step that reads the secret is the one that writes refs");
+}
+
 test("#3710/#3717: the probe is a separate job named for the cell, in a file of its own that no release job reads the token from, and nothing waits on it", () => {
   const jobs = probeWorkflow().jobs ?? {};
   assert.ok(jobs[TOKEN_JOB], `${TOKEN_REACH_WORKFLOW} has no \`${TOKEN_JOB}\` job`);
@@ -1242,8 +1261,7 @@ test("#3710/#3717: the probe is a separate job named for the cell, in a file of 
   const waiting = Object.entries(jobs).filter(([, job]) => [job.needs ?? []].flat().includes(TOKEN_JOB)).map(([name]) => name);
   assert.deepEqual(waiting, [], "no job may need the probe: the arm step keeps its GITHUB_TOKEN fallback");
   assert.equal(protectionEntries().find((e) => e.repo === FORMER_LITERAL)?.tokenProbe, "token-reach.yml", "the declaration points where the job lives");
-  assert.doesNotMatch(readFileSync(join(REPO_ROOT, RELEASE_WORKFLOW), "utf8").split("\n").filter((line) => !line.trim().startsWith("#")).join("\n"), /A11IGN_BOT_TOKEN/,
-    "release.yml reads the bot token on no live line: the version pull request that needed it is gone (#3717), and the probe lives in its own file");
+  assertBotTokenReadOnlyByTheTagMove();
 });
 
 test("#3705: a declared repository with no row is a failure, and the table renders a cell for every column", () => {

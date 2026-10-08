@@ -88,7 +88,7 @@ const line = (sha: string, ref: string) => `${sha}\trefs/tags/${ref}`;
 const BEFORE = [line(OLD, "v0"), line(OLD, "v0.1.0"), line(OLD, "a11ign@0.1.0"), line(NEW, "a11ign@0.3.1")];
 
 /** Runs the step with a `git` that prints `listing` and a `gh` that records its argv, one call a line, and returns the exit code and those calls. */
-function runStep(listing: string[], promoted: object[] = [{ tag: "a11ign@0.3.1" }]) {
+function runStep(listing: string[], promoted: object[] = [{ tag: "a11ign@0.3.1" }], env: Record<string, string> = { GH_TOKEN: "token" }, ghBody?: string) {
   const dir = mkdtempSync(join(tmpdir(), "promote-action-tag-"));
   try {
     const stub = (name: string, body: string) => {
@@ -97,9 +97,9 @@ function runStep(listing: string[], promoted: object[] = [{ tag: "a11ign@0.3.1" 
     };
     writeFileSync(join(dir, "listing"), listing.join("\n") + "\n");
     stub("git", `cat "${dir}/listing"`);
-    stub("gh", `echo "$*" >> "${dir}/gh-calls"`);
+    stub("gh", ghBody ?? `echo "$*" >> "${dir}/gh-calls"`);
     const result = spawnSync("bash", ["-c", stepScript()], {
-      env: { PATH: `${dir}:${process.env.PATH}`, GH_REPO: "a11ign/a11ign", GITHUB_SERVER_URL: "https://github.com", PROMOTED: JSON.stringify(promoted) },
+      env: { PATH: `${dir}:${process.env.PATH}`, GH_REPO: "a11ign/a11ign", GITHUB_SERVER_URL: "https://github.com", PROMOTED: JSON.stringify(promoted), ...env },
       encoding: "utf8",
     });
     let calls: string[] = [];
@@ -148,4 +148,27 @@ test("positive control: nothing promoted writes nothing, so the writes above are
   const { status, calls, out } = runStep(BEFORE, []);
   assert.equal(status, 0, out);
   assert.deepEqual(calls, []);
+});
+
+test("an empty A11IGN_BOT_TOKEN is red before any write, and names the secret: there is no fallback to GITHUB_TOKEN (#4154)", () => {
+  const { status, calls, out } = runStep(BEFORE, undefined, { GH_TOKEN: "" });
+  assert.notEqual(status, 0, out);
+  assert.match(out, /A11IGN_BOT_TOKEN/);
+  assert.deepEqual(calls, []);
+});
+
+test("a refused ref write prints the response body and is red (#4154: `>/dev/null` hid it from the first real run)", () => {
+  const refusal = `echo '{"message":"Resource not accessible by integration","status":"403"}'; exit 1`;
+  const { status, out } = runStep(BEFORE, undefined, { GH_TOKEN: "token" }, refusal);
+  assert.notEqual(status, 0, out);
+  assert.match(out, /Resource not accessible by integration/);
+});
+
+test("a dispatch naming a version promotes that version, and a malformed one moves nothing", () => {
+  const named = runStep(BEFORE, [], { GH_TOKEN: "token", ONLY_VERSION: "0.3.1" });
+  assert.equal(named.status, 0, named.out);
+  assert.deepEqual(writesTo(named.calls, "v0"), [`api -X PATCH repos/a11ign/a11ign/git/refs/tags/v0 -f sha=${NEW} -F force=true`]);
+  const bad = runStep(BEFORE, [], { GH_TOKEN: "token", ONLY_VERSION: "0.3.1; rm -rf x" });
+  assert.notEqual(bad.status, 0, bad.out);
+  assert.deepEqual(bad.calls, []);
 });

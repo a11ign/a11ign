@@ -5,7 +5,7 @@
  * A user of the Action writes `uses: a11ign/a11ign@<ref>`. A moving `v0` follows `latest`, so a fix reaches that user once the fleet's
  * qualification has passed and not before. Two halves, as `release-promotes-by-evidence.test.ts`:
  *
- * 1. THE WORKFLOW, parsed: the job that writes the tag `needs` the promotion job, holds `contents: write` and nothing else (no `id-token`:
+ * 1. THE WORKFLOW, parsed: the job that writes the tag `needs` the promotion job, holds `contents: read` and nothing else (no `id-token`; the write is the bot token, #4154:
  *    the npm token stays in the promotion job), and writes no ref but the major tag and the CREATION of the exact `v<version>` tag (#4058).
  * 2. THE STEP, run: the job's own script is extracted from the parsed YAML and executed under `bash` against a stub `git` and a stub `gh`,
  *    so what the tag does on a first move, a re-run, an older version, a tag it cannot account for and a registry it cannot read is
@@ -54,7 +54,7 @@ function workflowFaults(workflow: Workflow): string[] {
   const [, tagJob] = tagJobs[0];
   const faults: string[] = [];
   if (!needsOf(tagJob).includes(promotionName)) faults.push(`the tag job does not \`needs\` the promotion job (${promotionName})`);
-  if (JSON.stringify(tagJob.permissions) !== JSON.stringify({ contents: "write" })) faults.push(`the tag job's permissions are ${text(tagJob.permissions)}, not \`contents: write\` alone`);
+  if (JSON.stringify(tagJob.permissions) !== JSON.stringify({ contents: "read" })) faults.push(`the tag job's permissions are ${text(tagJob.permissions)}, not \`contents: read\` alone`);
   if (/\buses:\s*actions\/checkout/.test(text(tagJob.steps?.map((s) => s.uses)))) faults.push("the tag job checks the repository out: it runs no repository code");
   faults.push(...tagWriteFaults(scriptOf(tagJob)));
   return faults;
@@ -92,7 +92,7 @@ const withScript = (job: Job, edit: (script: string) => string) => {
   step.run = edit(step.run!);
 };
 
-test("the workflow: a job that `needs` the promotion job writes the major tag with `contents: write` alone", () => {
+test("the workflow: a job that `needs` the promotion job writes the major tag with `contents: read` alone (the bot token writes, #4154)", () => {
   assert.deepEqual(workflowFaults(load()), []);
 });
 
@@ -110,8 +110,8 @@ test("a tag job that does not `needs` the promotion job is refused", () => {
 });
 
 test("a tag job holding `id-token: write` is refused", () => {
-  const faults = workflowFaults(mutated((job) => { job.permissions = { contents: "write", "id-token": "write" }; }));
-  assert.ok(faults.some((f) => /not `contents: write` alone/.test(f)), faults.join("; "));
+  const faults = workflowFaults(mutated((job) => { job.permissions = { contents: "read", "id-token": "write" }; }));
+  assert.ok(faults.some((f) => /not `contents: read` alone/.test(f)), faults.join("; "));
 });
 
 test("a tag job that deletes a per-version tag is refused", () => {
