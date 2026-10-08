@@ -16,7 +16,9 @@
  * It exists so a reading of "the state cannot carry it" has something to differ from.
  *
  * IMPORTS NOTHING BUT NODE BUILT-INS, so a second repository can copy this one file (the worker's interpreter test does; the copy is
- * named as a copy there). Loopback only, ephemeral ports, and every credential below is fake and belongs to no account.
+ * named as a copy there). Ephemeral ports, and every credential below is fake and belongs to no account. LOOPBACK IS THE DEFAULT:
+ * with no options both origins bind `127.0.0.1`. A LAN bind (`host`, and `publicHost` for the name the URLs carry) is an explicit
+ * option, and `serve-cross-origin-idp.mjs` is the one place that offers it, so a worker on another machine can open the fixture.
  */
 import { createServer } from "node:http";
 import { randomBytes } from "node:crypto";
@@ -24,7 +26,11 @@ import { randomBytes } from "node:crypto";
 const LOOPBACK = "127.0.0.1";
 const REDIRECT = 302;
 
-/** @typedef {{ storage?: "memory" | "local", email?: string, password?: string }} IdpOptions */
+/**
+ * `host` is the address both servers bind (default loopback); `publicHost` is the name written into the URLs and redirects they hand
+ * out (default the bind address). They differ because a wildcard bind (`0.0.0.0`) is an address no URL can carry.
+ * @typedef {{ storage?: "memory" | "local", email?: string, password?: string, host?: string, publicHost?: string }} IdpOptions
+ */
 /** @typedef {{ appUrl: string, idpUrl: string, email: string, password: string, stop: () => Promise<void> }} CrossOriginIdp */
 
 /** @param {string} title @param {string} body */
@@ -172,11 +178,14 @@ function idpServer({ origins, email, password }) {
   });
 }
 
-/** @param {import("node:http").Server} server @returns {Promise<string>} the origin it listens on */
-async function listen(server) {
-  await new Promise((resolve) => server.listen(0, LOOPBACK, () => resolve(undefined)));
+/** An IPv6 literal needs brackets to sit in a URL. @param {string} host */
+const hostInUrl = (host) => (host.includes(":") && !host.startsWith("[") ? `[${host}]` : host);
+
+/** @param {import("node:http").Server} server @param {{ host: string, publicHost: string }} where @returns {Promise<string>} the origin it is reached at */
+async function listen(server, { host, publicHost }) {
+  await new Promise((resolve) => server.listen(0, host, () => resolve(undefined)));
   const address = /** @type {import("node:net").AddressInfo} */ (server.address());
-  return `http://${LOOPBACK}:${address.port}`;
+  return `http://${hostInUrl(publicHost)}:${address.port}`;
 }
 
 /** @param {import("node:http").Server} server */
@@ -188,12 +197,13 @@ const close = (server) => new Promise((resolve) => { server.close(() => resolve(
  * @param {IdpOptions} [options]
  * @returns {Promise<CrossOriginIdp>}
  */
-export async function startCrossOriginIdp({ storage = "memory", email = "user@example.test", password = "correct horse battery" } = {}) {
+export async function startCrossOriginIdp({ storage = "memory", email = "user@example.test", password = "correct horse battery", host = LOOPBACK, publicHost = host } = {}) {
+  const where = { host, publicHost };
   const origins = { app: "", idp: "" };
   const app = appServer({ storage, origins });
   const idp = idpServer({ origins, email, password });
-  origins.app = await listen(app);
-  origins.idp = await listen(idp);
+  origins.app = await listen(app, where);
+  origins.idp = await listen(idp, where);
   return {
     appUrl: origins.app, idpUrl: origins.idp, email, password,
     stop: async () => { await Promise.all([close(app), close(idp)]); },
