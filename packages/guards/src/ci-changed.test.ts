@@ -136,7 +136,7 @@ test("classify: a file under a package marks that package, sorted and deduplicat
 test("classify: a root config file or a scripts/*.mjs file touches EVERY package; a scripts file of another extension does not", () => {
   withGitSandbox((sandbox) => {
     trackFixtureRepo(sandbox);
-    for (const file of ["package.json", "pnpm-lock.yaml", "tsconfig.base.json", "eslint.config.mjs", "scripts/cli-flags.mjs"]) {
+    for (const file of ["package.json", "pnpm-lock.yaml", "tsconfig.base.json", "eslint.config.mjs", "action.yml", "scripts/cli-flags.mjs"]) {
       const result = classifyIn(sandbox.dir, [file]);
       assert.deepEqual(result.packages, ALL_PACKAGES, file);
       assert.equal(result.ts, true, file);
