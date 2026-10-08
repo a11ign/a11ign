@@ -454,8 +454,8 @@ form state) and, for a failed page, `error`. The `findings` output is the sum ov
 [`examples/nightly-workflow.yml`](../examples/nightly-workflow.yml) is the scheduled form: a `schedule:` trigger (plus
 `workflow_dispatch`, so you can start it by hand before the first night), a list of ten `urls`, `max-pages: "10"` raised on
 purpose to match, `comment-on-pr: "false"` because no pull request exists on a schedule, and a `timeout-minutes` that fits the list
-at the **slowest capture measured**, not the typical one. **Do not take the `timeout-minutes: 20` of the workflow at the top of
-this page to a nightly list:** it fits two captures, so a ten-page list written from that page alone is killed by its own timeout,
+at the **slowest capture measured**, not the typical one. **Do not carry the `timeout-minutes: 20` of the workflow at the top of
+this page over to a nightly list:** it fits two captures, so a ten-page list written from that page alone is killed by its own timeout,
 and a killed run leaves no log and no artifact.
 
 What a nightly costs, per run and over a month of 30 runs. **Every figure is read from the "Cap basis" table of
@@ -468,7 +468,7 @@ What a nightly costs, per run and over a month of 30 runs. **Every figure is rea
 | 25 (the ceiling) | 158 | 208 | 6240 | $62.40 |
 
 - **A public repository on a standard GitHub-hosted runner pays nothing; a private one pays the dollar column.** That is
-  GitHub's price of $0.010 a Windows minute, as `capture-cost.md` fetched it, and a reading at a moment.
+  GitHub's price of $0.010 a Windows minute, fetched 2026-09-24 and recorded in the document linked above, and a reading at a moment.
 - **Set `timeout-minutes` to the slowest column plus a margin** (the example uses 5): the Action prints the figure it needs
   before it captures anything, and a timeout under it kills the run on its last pages. The timeout is also the most a hung run bills.
 - **Ten and 25 pages are the document's fitted model, not a run.** No Action run has captured more than two pages
