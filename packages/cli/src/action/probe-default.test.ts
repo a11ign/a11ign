@@ -129,10 +129,10 @@ function runsAssertedToActivate(smokeText: string): Step[] {
     .map((assertion) => runAssertedBy(steps, assertion) ?? assert.fail(`${assertion.name}: asserts activation on no \`uses: ./\` run`));
 }
 
-/** Every `uses: ./` run with NO probe-forms input, whose result is asserted to activate NOTHING. */
+/** Every `uses: ./` run with NO probe-forms input, whose result is asserted to press nothing `probe-forms` owns. */
 function defaultRunsAssertedInert(smokeText: string): Step[] {
   const steps = stepsOf(smokeText, "consumer");
-  return steps.filter((step) => step.run?.includes("activationCount") && step.run.includes("n !== 0"))
+  return steps.filter((step) => step.run?.includes("pressed.length !== 0"))
     .map((assertion) => runAssertedBy(steps, assertion) ?? assert.fail(`${assertion.name}: asserts inertness on no \`uses: ./\` run`));
 }
 
@@ -142,7 +142,7 @@ test("action-smoke.yml: the run that asserts --expect-activation sets probe-form
   for (const run of asserted) assert.equal(run.with?.["probe-forms"], "true", `${run.name} asserts activation without asking for probing`);
 });
 
-test("action-smoke.yml: a run with no probe-forms input is asserted to activate NOTHING", () => {
+test("action-smoke.yml: a run with no probe-forms input is asserted to press NOTHING that probe-forms owns", () => {
   const inert = defaultRunsAssertedInert(read(SMOKE));
   assert.ok(inert.length >= 1, "no default run is asserted inert: the new default is unproven where it counts");
   for (const run of inert) {
@@ -160,7 +160,14 @@ test("CONTROL: run 1 without probe-forms \"true\" fails (the smoke would assert 
 
 test("CONTROL: a smoke whose default run was deleted has no inert assertion", () => {
   const smoke = read(SMOKE);
-  const withoutRun = smoke.replace(/\n {6}- name: A run with no probe-forms input\n[\s\S]*?(?=\n {6}- name: A default run must operate NOTHING)/, "");
+  const withoutRun = smoke.replace(/\n {6}- name: A run with no probe-forms input\n[\s\S]*?(?=\n {6}- name: A default run must press NOTHING that probe-forms owns)/, "");
   assert.notEqual(withoutRun, smoke, "the mutation changed nothing, so it controls nothing");
   assert.throws(() => defaultRunsAssertedInert(withoutRun), /asserts inertness on no `uses: \.\/` run/);
+});
+
+test("action-smoke.yml: the default run's zero has a positive control on run 1's own report", () => {
+  const steps = stepsOf(read(SMOKE), "consumer");
+  const control = steps.find((step) => step.run?.includes("pressed.length === 0"));
+  assert.ok(control, "nothing demands that a probing run presses something, so run 3's zero proves nothing");
+  assert.ok(control.run?.includes("steps.witness.outputs.result-json"), "the control reads a report other than run 1's");
 });
