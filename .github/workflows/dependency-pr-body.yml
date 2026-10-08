@@ -42,9 +42,13 @@ name: dependency-pr-body
 # ## The edit has to be seen by `ci.yml`
 #
 # `acceptance` reads the body in `ci.yml`'s `pull_request` event, whose types include `edited`. An edit made with the
-# default `GITHUB_TOKEN` fires NO workflow, so `acceptance` would keep reporting the body Dependabot opened with.
-# `A11IGN_BOT_TOKEN` (the credential `auto-arm.yml` arms with) fires `edited`; without it the edit still lands and a
-# warning says that CI will not re-read it, the same fallback `auto-arm.yml` takes.
+# default `GITHUB_TOKEN` fires NO workflow, so `acceptance` would keep reporting the body Dependabot opened with. The PATCH is
+# therefore made with an Octo STS token (#4197): an installation token, which does fire `edited`, minted for exactly this workflow
+# as it is on `main` and holding `pull_requests: write` and nothing else (`.github/chainguard/dependency-pr-body.sts.yaml`). There is
+# no fallback to `GITHUB_TOKEN`: a body written without the event is a body `acceptance` never re-reads, so a failed mint fails the
+# job instead. The READS (the file list, the owned-path list at the base commit) use `GITHUB_TOKEN` and never the minted one.
+#
+# `id-token: write` is held by a job that checks out and runs NO pull-request code: that is what makes it safe on this trigger.
 on:
   pull_request_target:
     types: [opened, reopened, synchronize]
@@ -56,16 +60,24 @@ jobs:
     if: github.actor == 'dependabot[bot]' && github.event.pull_request.user.login == 'dependabot[bot]'
     runs-on: ubuntu-latest
     permissions:
-      pull-requests: write
+      id-token: write
+      contents: read
+      pull-requests: read
     steps:
+      - name: Mint a token that may edit pull requests, for this workflow as it is on main
+        id: octo-sts
+        uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05 # v1.1.1
+        with:
+          scope: ${{ github.repository }}
+          identity: dependency-pr-body
       - name: Write the fixed body fragment onto a minor or patch bump of the manifests
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
-          FALLBACK_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
+          EDIT_TOKEN: ${{ steps.octo-sts.outputs.token }}
         run: |
           set -euo pipefail
           title_pattern='^deps: bump ([@A-Za-z0-9._/-]+) from (([0-9]+)\.([0-9]+)[0-9A-Za-z.+-]*) to (([0-9]+)\.([0-9]+)[0-9A-Za-z.+-]*)( in /[A-Za-z0-9._/-]*)?$'
@@ -80,8 +92,6 @@ jobs:
             echo "::notice::not auto-declared: $name goes from $old to $new, a major bump, so it waits for a human like any other pull request"
             exit 0
           fi
-          export GH_TOKEN="${A11IGN_BOT_TOKEN:-$FALLBACK_TOKEN}"
-          [ -n "$A11IGN_BOT_TOKEN" ] || echo "::warning::A11IGN_BOT_TOKEN is not set -- the body is written with GITHUB_TOKEN, which fires no 'edited' event, so ci.yml's acceptance job will not re-read it"
           files="$(gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/files" --jq '.[].filename')"
           if [ -z "$files" ] || grep -qvE "$allowed_files" <<< "$files"; then
             echo "::notice::not auto-declared: $name touches something other than the manifests and the lockfile, so it waits like any other pull request"
@@ -109,5 +119,5 @@ jobs:
 
           Closes: none -- dependency update by dependabot[bot] (ADR 0041)
           EOF
-          gh api --method PATCH "repos/$REPO/pulls/$PR_NUMBER" -F body=@"$body_file" --silent
+          GH_TOKEN="$EDIT_TOKEN" gh api --method PATCH "repos/$REPO/pulls/$PR_NUMBER" -F body=@"$body_file" --silent
           echo "::notice::wrote the fixed body fragment for $name $old -> $new"
