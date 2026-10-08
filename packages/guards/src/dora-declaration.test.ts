@@ -61,7 +61,9 @@ const readText = (path: string) => readFileSync(`${REPO_ROOT}${path}`, "utf8");
 const MOVED_TO_THE_REGISTRY: Record<string, string> = {
   "packages/pdf/": "packages/cli/node_modules/@a11ign/documents/package.json",
   // `nvda-speech/` has no entry: it is private and not in the published package, and the check reads only public manifests.
-  "packages/nvda-worker/": "node_modules/@a11ign/screenreader-worker/package.json",
+  // `src/` is the worker repository's own layout (#4092: the old key, `packages/nvda-worker/`, named a directory it never had there). It
+  // is safe as a key because the only other `src/` declared is agent-org's, a `tag` repository whose manifest is never read.
+  "src/": "node_modules/@a11ign/screenreader-worker/package.json",
   "packages/worker-fleet/": "node_modules/@a11ign/screenreader-fleet/package.json",
   "packages/toolchain/": "node_modules/@a11ign/toolchain/package.json",
 };
@@ -214,6 +216,34 @@ test("control: a kind that disagrees with the ADR, a package no manifest carries
 test("control: a declaration that is not a list, or lists a repository twice, is REFUSED", () => {
   assert.deepEqual(refusals(undefined), ["`dora` must be a list"]);
   assert.deepEqual(refusals([...SOUND, SOUND[0]]), ["a11ign/a11ign: declared twice"]);
+});
+
+/** The prefixes a repository's `dora` entry declares, or an empty list when it has none. */
+const releasablePathsOf = (repo: string, declared: unknown): string[] => {
+  const entry = Array.isArray(declared) ? (declared as Declared[]).find((candidate) => candidate.repo === repo) : undefined;
+  return Array.isArray(entry?.releasablePaths) ? (entry.releasablePaths as string[]) : [];
+};
+
+/** #4092: a prefix the worker repository does not have, which no test above could see because claim 3 reads the installed manifest. */
+const STALE_WORKER_PREFIX = "packages/nvda-worker/";
+const WORKER = "a11ign/screenreader-worker";
+
+/** Why the worker's declared paths do not name its own layout (`src/`), or null when they do. */
+function staleWorkerPathRefusal(declared: unknown): string | null {
+  const paths = releasablePathsOf(WORKER, declared);
+  if (paths.includes(STALE_WORKER_PREFIX)) return `${WORKER} still declares ${STALE_WORKER_PREFIX}, which that repository does not have`;
+  return paths.includes("src/") ? null : `${WORKER} declares ${JSON.stringify(paths)}, and its code is under src/`;
+}
+
+test("the worker's releasable paths name its own layout (src/), not the directory it left behind (#4092)", () => {
+  assert.equal(staleWorkerPathRefusal(realDeclared), null);
+});
+
+test("control: the old prefix put back, or no src/, is REFUSED, naming it", () => {
+  const withPaths = (releasablePaths: string[]) => (realDeclared as Declared[]).map((entry) => (entry.repo === WORKER ? { ...entry, releasablePaths } : entry));
+  assert.match(staleWorkerPathRefusal(withPaths([STALE_WORKER_PREFIX, "packages/nvda-speech/"])) ?? "", /still declares packages\/nvda-worker\//);
+  assert.match(staleWorkerPathRefusal(withPaths(["packages/nvda-speech/"])) ?? "", /its code is under src\//);
+  assert.match(staleWorkerPathRefusal([]) ?? "", /declares \[\]/);
 });
 
 const realCode = project.code;
