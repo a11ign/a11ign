@@ -4,8 +4,9 @@
 //   - `runQuestion` drives a REAL Chromium and prints what it saw. It is run by hand (`node --import tsx <this file> <q1|q2|q3>`)
 //     and its output is pasted into `docs/auth-attach-spike.md`. `--import tsx` because the driver it exercises is TypeScript and the
 //     agent host's plain `node` has no type stripping.
-//   - `checkSpikeDocument` reads only the DOCUMENT. It is what `attach-spike.test.ts` runs, so the test needs no browser and no
-//     libraries and never skips: it asserts the SHAPE of the result (a verdict, a transcript per question, citations that exist).
+//   - The check of the DOCUMENT's shape lives in `attach-spike.test.ts`, which needs no browser and no libraries and never skips.
+//     This file is excluded from coverage (`.c8rc.json`) because it IS an integration with a browser a unit test cannot have, and
+//     it holds no pure core: the one pure part moved to the test file rather than stay here at 0%.
 //
 // The person's sign-in is a stand-in: a mouse click sent over a raw CDP socket, by a different process from the one that attaches.
 // It is not a human at a keyboard and not an identity provider, and the document says so.
@@ -204,59 +205,4 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   const question = QUESTIONS[process.argv[2] ?? ""];
   if (!question) { say("usage: node --import tsx attach-spike.mjs <q1|q2|q3>"); process.exit(2); }
   await question();
-}
-
-// ---------------------------------------------------------------------------------------------------------------------------------
-// The document's shape. Pure: no browser, no filesystem but the injected reader.
-
-const VERDICT_LINE = /^Verdict: (attach works|attach conflicts: \S.*)$/m;
-const QUESTION_HEADING = /^## Question ([123])\b/m;
-const FENCE = /^```(?:\w*)\n([\s\S]*?)^```$/gm;
-
-/** The fenced blocks of one section, in order. */
-function blocksOf(section) { return [...section.matchAll(FENCE)].map((m) => m[1]); }
-
-/** A transcript block is a command line (`$ …`) with at least one line of output directly under it. */
-function transcriptProblem(block) {
-  const lines = block.split("\n").filter((l) => l.trim() !== "");
-  if (!lines[0]?.startsWith("$ ")) return "does not begin with a command line ($ …)";
-  if (lines.length < 2 || lines.slice(1).every((l) => l.startsWith("$ "))) return "has a command and no output under it";
-  return undefined;
-}
-
-/** `path:line` cites of this repository, written `` `path/to/file.ext:NN` `` and resolved at `commit`. */
-const REPO_CITE = /`((?:packages|docs|scripts|\.github)\/[\w./-]+\.\w+):(\d+)`/g;
-/** Cites of the worker, written `` `screenreader-worker@<sha> src/file.mjs:NN` ``; the evidence is the `grep -n` output pasted in the document. */
-const WORKER_CITE = /`screenreader-worker@([0-9a-f]{7,40}) (src\/[\w./-]+\.\w+):(\d+)`/g;
-
-/**
- * @param {string} text the document
- * @param {{ lineCountAt: (commit: string, path: string) => number | undefined, commit: string }} where
- * @returns {string[]} every way the document fails its shape; empty means it holds
- */
-export function checkSpikeDocument(text, where) {
-  const problems = [];
-  if (!VERDICT_LINE.test(text)) problems.push("no `Verdict: attach works` / `Verdict: attach conflicts: <reason>` line");
-  const sections = text.split(/^(?=## Question [123]\b)/m).filter((s) => QUESTION_HEADING.test(s));
-  for (const n of ["1", "2", "3"]) {
-    const section = sections.find((s) => s.startsWith(`## Question ${n}`));
-    const blocks = section ? blocksOf(section) : [];
-    if (!blocks.length) { problems.push(`question ${n} has no transcript block`); continue; }
-    for (const block of blocks) {
-      const problem = transcriptProblem(block);
-      if (problem) problems.push(`question ${n}: a transcript block ${problem}`);
-    }
-  }
-  for (const [, path, line] of text.matchAll(REPO_CITE)) {
-    const count = where.lineCountAt(where.commit, path);
-    if (count === undefined) problems.push(`cites ${path}:${line}, which does not exist at ${where.commit}`);
-    else if (Number(line) > count) problems.push(`cites ${path}:${line}, but the file has ${count} lines at ${where.commit}`);
-  }
-  for (const [, , path, line] of text.matchAll(WORKER_CITE)) {
-    const base = path.split("/").pop();
-    const evidence = new RegExp(`^${line}:`, "m");
-    const quoted = [...text.matchAll(FENCE)].some((m) => m[1].includes(base) && evidence.test(m[1].split("\n").slice(1).join("\n")));
-    if (!quoted) problems.push(`cites ${path}:${line} of the worker with no \`grep -n\` line ${line}: pasted from ${base}`);
-  }
-  return problems;
 }

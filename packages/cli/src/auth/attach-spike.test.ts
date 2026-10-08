@@ -10,7 +10,6 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { sandboxGitEnv } from "../../../guards/src/git-env.mjs";
-import { checkSpikeDocument } from "./attach-spike.mjs";
 
 const ROOT = resolve(import.meta.dirname ?? new URL(".", import.meta.url).pathname, "../../../..");
 const DOCUMENT = readFileSync(resolve(ROOT, "docs/auth-attach-spike.md"), "utf8");
@@ -30,7 +29,60 @@ function lineCountAt(commit: string, path: string): number | undefined {
   }
 }
 
-const check = (text: string) => checkSpikeDocument(text, { lineCountAt, commit: COMMIT }) as string[];
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// The document's shape. It lives HERE and not in `attach-spike.mjs`: that file is an integration with a real browser and is excluded
+// from coverage (`.c8rc.json`), and a pure function left in it would be excluded with it.
+
+const VERDICT_LINE = /^Verdict: (attach works|attach conflicts: \S.*)$/m;
+const QUESTION_HEADING = /^## Question ([123])\b/m;
+const FENCE = /^```(?:\w*)\n([\s\S]*?)^```$/gm;
+
+/** The fenced blocks of one section, in order. */
+function blocksOf(section: string): string[] { return [...section.matchAll(FENCE)].map((m) => m[1]); }
+
+/** A transcript block is a command line (`$ …`) with at least one line of output directly under it. */
+function transcriptProblem(block: string): string | undefined {
+  const lines = block.split("\n").filter((l) => l.trim() !== "");
+  if (!lines[0]?.startsWith("$ ")) return "does not begin with a command line ($ …)";
+  if (lines.length < 2 || lines.slice(1).every((l) => l.startsWith("$ "))) return "has a command and no output under it";
+  return undefined;
+}
+
+/** `path:line` cites of this repository, written `` `path/to/file.ext:NN` `` and resolved at the commit the document names. */
+const REPO_CITE = /`((?:packages|docs|scripts|\.github)\/[\w./-]+\.\w+):(\d+)`/g;
+/** Cites of the worker, written `` `screenreader-worker@<sha> src/file.mjs:NN` ``; the evidence is the `grep -n` output pasted in the document. */
+const WORKER_CITE = /`screenreader-worker@([0-9a-f]{7,40}) (src\/[\w./-]+\.\w+):(\d+)`/g;
+
+/** Every way the document fails its shape; empty means it holds. */
+function checkSpikeDocument(text: string, where: { lineCountAt: (commit: string, path: string) => number | undefined; commit: string }): string[] {
+  const problems: string[] = [];
+  if (!VERDICT_LINE.test(text)) problems.push("no `Verdict: attach works` / `Verdict: attach conflicts: <reason>` line");
+  const sections = text.split(/^(?=## Question [123]\b)/m).filter((s) => QUESTION_HEADING.test(s));
+  for (const n of ["1", "2", "3"]) {
+    const section = sections.find((s) => s.startsWith(`## Question ${n}`));
+    const blocks = section ? blocksOf(section) : [];
+    if (!blocks.length) { problems.push(`question ${n} has no transcript block`); continue; }
+    for (const block of blocks) {
+      const problem = transcriptProblem(block);
+      if (problem) problems.push(`question ${n}: a transcript block ${problem}`);
+    }
+  }
+  for (const [, path, line] of text.matchAll(REPO_CITE)) {
+    const count = where.lineCountAt(where.commit, path);
+    if (count === undefined) problems.push(`cites ${path}:${line}, which does not exist at ${where.commit}`);
+    else if (Number(line) > count) problems.push(`cites ${path}:${line}, but the file has ${count} lines at ${where.commit}`);
+  }
+  for (const [, , path, line] of text.matchAll(WORKER_CITE)) {
+    const base = path.split("/").pop() ?? path;
+    const evidence = new RegExp(`^${line}:`, "m");
+    const quoted = [...text.matchAll(FENCE)].some((m) => m[1].includes(base) && evidence.test(m[1].split("\n").slice(1).join("\n")));
+    if (!quoted) problems.push(`cites ${path}:${line} of the worker with no \`grep -n\` line ${line}: pasted from ${base}`);
+  }
+  return problems;
+}
+
+const check = (text: string) => checkSpikeDocument(text, { lineCountAt, commit: COMMIT });
 
 test("the document names the commit it was read at", () => {
   assert.notEqual(COMMIT, "");
