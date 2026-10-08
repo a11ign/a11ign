@@ -48,28 +48,29 @@ interface Manifest {
   name?: string;
   private?: boolean;
 }
-type ReadManifest = (directory: string) => Manifest | null;
+type ReadManifest = (repo: string, directory: string) => Manifest | null;
 
 const readText = (path: string) => readFileSync(`${REPO_ROOT}${path}`, "utf8");
 
 /**
  * A package that has MOVED (#3125: `documents`, #3447: `screenreader-worker`, #3504: `screenreader-fleet`, #3625: `toolchain`) is no longer under `packages/` here, but its own repository keeps the layout
  * `releasablePaths` names. Its manifest is read from the copy this workspace INSTALLED from the registry, which is the published one, so the
- * name is still read from a real manifest and not assumed. The key is the declared prefix, the value where that manifest now is. The root imports
+ * name is still read from a real manifest and not assumed. The key is the repository and the declared prefix, the value where that manifest now is. The root imports
  * the worker and the fleet since the lab left the workspace (#3505), so those two are read from the root's `node_modules`, not from the lab's.
  */
 const MOVED_TO_THE_REGISTRY: Record<string, string> = {
-  "packages/pdf/": "packages/cli/node_modules/@a11ign/documents/package.json",
+  // `documents` holds its package at the ROOT of its repository since the flatten (#4218, published as 0.1.2), so its prefix is `src/`.
+  "a11ign/documents src/": "packages/cli/node_modules/@a11ign/documents/package.json",
   // `nvda-speech/` has no entry: it is private and not in the published package, and the check reads only public manifests.
-  // `src/` is the worker repository's own layout (#4092: the old key, `packages/nvda-worker/`, named a directory it never had there). It
-  // is safe as a key because the only other `src/` declared is agent-org's, a `tag` repository whose manifest is never read.
-  "src/": "node_modules/@a11ign/screenreader-worker/package.json",
-  "packages/worker-fleet/": "node_modules/@a11ign/screenreader-fleet/package.json",
-  "packages/toolchain/": "node_modules/@a11ign/toolchain/package.json",
+  // `src/` is the worker repository's own layout (#4092: the old key, `packages/nvda-worker/`, named a directory it never had there). The key
+  // carries the repository because `documents` declares `src/` too (#4218), so the prefix alone no longer says whose manifest to read.
+  "a11ign/screenreader-worker src/": "node_modules/@a11ign/screenreader-worker/package.json",
+  "a11ign/screenreader-fleet packages/worker-fleet/": "node_modules/@a11ign/screenreader-fleet/package.json",
+  "a11ign/toolchain packages/toolchain/": "node_modules/@a11ign/toolchain/package.json",
 };
 
-const workspaceManifest: ReadManifest = (directory) => {
-  const file = MOVED_TO_THE_REGISTRY[directory] ?? `${directory}package.json`;
+const workspaceManifest: ReadManifest = (repo, directory) => {
+  const file = MOVED_TO_THE_REGISTRY[`${repo} ${directory}`] ?? `${directory}package.json`;
   return existsSync(`${REPO_ROOT}${file}`) ? (JSON.parse(readText(file)) as Manifest) : null;
 };
 
@@ -110,7 +111,7 @@ function entryRefusal(entry: Declared, adr: AdrRepository, manifest: ReadManifes
   const name = entry.release?.package;
   if (typeof name !== "string" || name === "") return `${repo}: an npm repository must name its package, and this one names none`;
   const names = (paths as string[]).flatMap((path) => {
-    const found = manifest(path);
+    const found = manifest(repo, path);
     return found === null || found.private === true || found.name === undefined ? [] : [found.name];
   });
   return names.includes(name) ? null : `${repo}: package ${JSON.stringify(name)} is not the name of a public manifest under ${paths.join(", ")} (found ${JSON.stringify(names)})`;
@@ -180,7 +181,7 @@ const SOUND: Declared[] = expected.map((row) => ({
   release: row.kind === "npm" ? { kind: "npm", package: `@fixture/${row.repo.slice(OWNER.length)}` } : { kind: "tag" },
   releasablePaths: [`packages/${row.repo.slice(OWNER.length)}/`],
 }));
-const fixtureManifest: ReadManifest = (directory) => {
+const fixtureManifest: ReadManifest = (_repo, directory) => {
   const name = directory.split("/")[1];
   return { name: `@fixture/${name}`, private: expected.find((row) => row.repo === `${OWNER}${name}`)?.kind === "tag" };
 };
