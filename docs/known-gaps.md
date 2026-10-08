@@ -3442,10 +3442,19 @@ this commit, not against the ADR's prose.**
   flow that already ended on the requested page is no longer loaded again, which needs an OPTIONAL `url()` on the driver (both shipped
   drivers have it); a driver without one reloads, as before. Read on the local fixture of #4086 only (a real Chromium through the CLI's
   real run and the worker's interpreter), not on a hosted provider.
-  **A reading not taken:** the worker's `capture-auth.mjs` marks the window navigated after a login (`markWindowNavigatedByLogin`) so NVDA
-  re-reads its buffer, and it now makes that mark on the path that does not reload. A unit test on a fake driver shows the mark is made;
-  **that NVDA then reads the signed-in page, not the page it held before the login, has NOT been verified against the real NVDA worker**
-  (the resource ban was in force, #4088). A row that takes that reading on a worker with NVDA is the product manager's to file.
+  **A reading taken, once (#4107, 2026-10-08):** the worker's `capture-auth.mjs` marks the window navigated after a login
+  (`markWindowNavigatedByLogin`) so NVDA re-reads its buffer, and it makes that mark on the path that does not reload. On
+  `a11y-worker-2` (a real NVDA, Edge, screenreader-worker `v0.5.0` at `640ff9c8`, a11ign `e3083ef3d`, worker code `b016ce2d1a9cedf4`),
+  a worker-local `capture.mjs --auth` run of #4086's fixture, which the login leaves on `/account` with the token only in page memory,
+  **announced `heading, level 1, Account`, the signed-in page and not the login page it held before**, in the marked run. **The same run
+  with the mark suppressed (`A11Y_DIAG_SKIP_LOGIN_MARK=1`) announced the same heading, twice**, so on this fixture and this box the mark
+  is not what makes NVDA read the signed-in page: **the reading supports "NVDA reads the signed-in page after a login that never
+  reloaded it" and does not support "the mark is needed".** It does not show the mark is harmless elsewhere (a page with a longer
+  buffer, another NVDA version, a hosted provider). Counts: one marked reading and two unmarked, all on one box; a first marked run on
+  the same visit failed with `nvda.start failed: NVDA cannot be started` before it reached the page (the first capture after the standing
+  worker was stopped, on both visits) and is not a reading; each capture's transcript held 2 phrases. An earlier visit that asked the
+  worker for `/` rather than `/account` announced `Home` in both modes: that asked for a page the login did not end on, so the worker
+  navigated away and discarded the token, which is the reload this section's premise rules out, not a finding about the mark.
 - **MFA is caught only by the flow's own `expect:`.** Every login flow must end in an `expect:` (`login-final-expect`),
   and a login that stops at a code prompt fails it (`expect-not-met`) **if, and only if, that `expect:` names something
   only the signed-in page shows.** The tool cannot check that it does: a weak one (a heading the login wall also has)
