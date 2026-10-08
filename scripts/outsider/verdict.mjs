@@ -20,14 +20,23 @@
 const HOUR_MS = 3_600_000;
 
 /**
- * How long a version may go with no run before `pending` becomes `absent`. MEASURED 2026-10-03 (the commands and
- * output are in generate.mjs's header): the worst gap between consecutive runs of an hourly cron on this
- * organisation's own repository was 7.2 h over 100 runs, dispatch-to-start is seconds, and the windows-2022 job on
- * a green run took 6:07 at most. So a publish is run-complete within about 7.4 h, and this is that plus roughly a
- * quarter. INFERRED from those parts: no release has yet gone through a poll, because the outside repository
- * does not exist.
+ * How long a version may go with no run before `pending` becomes `absent`. MEASURED 2026-10-08T07:55Z on the outside repository
+ * itself (#4059, found by #3224): `gh run list --repo a11ign-labs/a11ign-consumer-check --workflow outsider-job.yml --event schedule
+ * --limit 100 --json createdAt` returned 21 scheduled runs since 2026-10-03T16:32Z, so 20 gaps: minimum 2.8 h, median 6.1 h,
+ * MAXIMUM 9.3 h (GitHub ran about one hourly tick in six). A publish just after a poll waits that whole gap for the next one, and
+ * the windows-2022 job on a green run took 6:07 at most (generate.mjs's header), so a publish is run-complete within about
+ * 9.3 h + 0.1 h = 9.4 h at the worst gap seen; this is that plus roughly a quarter, rounded up.
+ * SUPERSEDED: the first window, 9 h, was built on a 7.2 h worst gap over 100 runs of the organisation's own repository (INFERRED:
+ * the outside repository did not exist yet). The sample of 20 is small and its maximum moved by 2.1 h between the two
+ * repositories, so the margin is the point: widen it again if a gap longer than this window is read.
+ *
+ * A VERSION SUPERSEDED AS `latest` BEFORE ANY POLL SAW IT IS NEVER `absent`, because it is never asked about. This reader judges
+ * only the release `latest` points at (`verdict-job.mjs` passes the registry's `latest`), and a version that stopped being
+ * `latest` no longer has a verdict to give: not `absent` ("the rehearsal did not run"), not anything else. Measured:
+ * a11ign@0.3.0 was promoted at 2026-10-07T20:41:30Z, 51 s after a poll, and superseded by 0.3.1 (22:51:23Z) before the next one:
+ * it never got a run and that is not a failure of the job. The outsider test pins this.
  */
-const WINDOW_HOURS = 9;
+const WINDOW_HOURS = 12;
 export const WINDOW_MS = WINDOW_HOURS * HOUR_MS;
 
 /** The conclusions that ANSWER: a run that ended any other way (cancelled, skipped, neutral, stale) never said. */
