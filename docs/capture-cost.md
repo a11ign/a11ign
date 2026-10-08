@@ -197,8 +197,8 @@ This section measured; nothing was cut, and **no capture was run with a probe of
   2.4.1 and 2.4.2 (`action.yml` and `cli.ts` say so, and that dropping one makes the criterion unreachable rather than clean). **The knobs do not line up with the cost.** The Action has
   `probe-focus` (which gates the Tab walk, focus context AND focus reveal: 57.0-137.4 s on the four deadline-free pages here) and `probe-navigation` (the route-change probe, 17 s). The CLI adds `--no-probe-focus-context`; **nothing turns off
   `focus reveal` alone.**
-- **`action.yml` says `probe-focus` "costs roughly 8 seconds per capture."** On these records the Tab walk alone is 3.2-86.5 s and the three probes it gates together 16.2-137.4 s
-  (ikea 16.2 only because the deadline cut them). That sentence is out of date or measured on a page that stops at once; it sits outside this row's Region and is filed as #4102.
+- **`action.yml` used to say `probe-focus` "costs roughly 8 seconds per capture", and no longer does (#4102, #4112).** On these records the Tab walk alone is 3.2-86.5 s and the three probes it gates together 16.2-137.4 s
+  (ikea 16.2 only because the deadline cut them), so the sentence was out of date or measured on a page that stops at once. `action.yml` now states that range and points back to this section.
 - **A cut to the fixed probes does not shorten the captures the worst-case model is built on.** The 460 s figure is a deadline-bound capture, where the probes got 13.0 s (`A-ikea-4`), so removing
   them would leave the deadline where it is and let `graphic` and `link` finish instead (A-ikea: 0-71 s and 0-38 s, depending on how long `formField` took). For a nightly priced at the worst case
   the lever inside the capture is `formField`, bounded by `MAX_SWEEP_STEPS` and the 420 s budget. **For a nightly of pages that finish early, the lever is the fixed 68 s.** Which of the two a given
