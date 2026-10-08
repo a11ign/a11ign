@@ -1,0 +1,9 @@
+# FIXTURE for packages/guards/src/octo-sts-policies.test.ts -- NOT a policy. It must stay SILENT: an organisation-level
+# policy that lists the code repositories it covers and names neither forbidden repository.
+issuer: https://token.actions.githubusercontent.com
+subject: repo:a11ign/a11ign:ref:refs/heads/main
+repositories:
+  - a11ign
+  - screenreader-worker
+permissions:
+  contents: read

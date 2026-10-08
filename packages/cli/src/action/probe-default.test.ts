@@ -28,7 +28,7 @@ function probeFormsDefault(actionText: string): unknown {
   return action.inputs["probe-forms"].default;
 }
 
-/** The `if … fi` block of the step that builds the CLI arguments, with `${{ inputs.x }}` filled in and run under bash. */
+/** The `if … fi` block of the step that builds the CLI arguments, run under bash with the inputs in the environment. */
 function argumentsFor(actionText: string, inputs: Record<string, string>): string {
   const action = parse(actionText) as { runs: { steps: Step[] } };
   const script = action.runs.steps.map((step) => step.run ?? "").find((run) => run.includes("args+=(--probe-forms)"));
@@ -37,9 +37,10 @@ function argumentsFor(actionText: string, inputs: Record<string, string>): strin
   const first = lines.findIndex((line) => line.includes("args+=(--probe-forms)")) - 1;
   const last = lines.findIndex((line, index) => index > first && line.trim() === "fi");
   assert.ok(first >= 0 && last > first, "the probe-forms branch is not an if … fi block this test can read");
-  const block = lines.slice(first, last + 1).join("\n")
-    .replace(/\$\{\{\s*inputs\.([\w-]+)\s*\}\}/g, (_, name: string) => inputs[name] ?? "");
-  const run = spawnSync("bash", ["-c", `args=(--json)\n${block}\necho "ARGS: \${args[*]}"`], { encoding: "utf8" });
+  const block = lines.slice(first, last + 1).join("\n");
+  // The step reads these from its `env:` (never interpolated into the shell text: inputs-reach-scripts-by-env.test.ts), so run it with them set.
+  const env = { ...process.env, PROBE_FORMS: inputs["probe-forms"] ?? "", FORMS: inputs.forms ?? "" };
+  const run = spawnSync("bash", ["-c", `args=(--json)\n${block}\necho "ARGS: \${args[*]}"`], { encoding: "utf8", env });
   assert.equal(run.status, 0, run.stderr);
   return run.stdout;
 }
@@ -74,7 +75,7 @@ test("CONTROL: action.yml with the default put back to \"true\" fails the defaul
 });
 
 test("CONTROL: a step that passes --probe-forms unconditionally fails the argument assertion", () => {
-  const always = read("action.yml").replace('if [ "${{ inputs.probe-forms }}" = "true" ]; then', "if true; then");
+  const always = read("action.yml").replace('if [ "$PROBE_FORMS" = "true" ]; then', "if true; then");
   assert.notEqual(always, read("action.yml"), "the mutation changed nothing, so it controls nothing");
   assert.equal(argsLine(argumentsFor(always, { "probe-forms": "false" })), "--json --probe-forms");
 });
