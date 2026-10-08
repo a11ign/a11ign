@@ -81,6 +81,38 @@ test("#4119: the worker lays `<package>@<version>` below 0.3.0 and `v<version>` 
   assert.equal(layingPlan(manifest, lockfile(NAME, "0.5.1"), "screenreader-fleet").tag, `${NAME}@0.5.1`);
 });
 
+test("#4119: `source` is where the layer is in ITS repository and `path` stays where it is laid; without it the two are one; the real worker declares the root", () => {
+  const worker = { path: "packages/nvda-worker", package: "screenreader-worker", remote: "https://example.invalid/screenreader-worker.git" };
+  const lockfile = `importers:\n\n  .:\n    dependencies:\n      '@a11ign/screenreader-worker':\n        specifier: 0.4.0\n        version: 0.4.0\n`;
+  assert.equal(layingPlan({ layers: { "nvda-worker": { ...worker, source: "." } } }, lockfile, "nvda-worker").source, ".");
+  assert.ok(!("source" in layingPlan({ layers: { "nvda-worker": worker } }, lockfile, "nvda-worker")), "no declaration, no key: the plan is the one every layer had");
+  const real = JSON.parse(readFileSync(join(REPO_ROOT, "layers.json"), "utf8"));
+  const plan = layingPlan(real, readFileSync(join(REPO_ROOT, "pnpm-lock.yaml"), "utf8"), "nvda-worker");
+  assert.equal(plan.path, "packages/nvda-worker");
+  assert.equal(plan.source, ".", "v0.3.0 and later hold the package at the repository root");
+});
+
+test("#4119: lay reads the layer from `source` in the repository and lays it at `path` here", () => {
+  withGitSandbox((sandbox) => {
+    mkdirSync(join(sandbox.dir, "src"), { recursive: true });
+    writeFileSync(join(sandbox.dir, "src/index.mjs"), "export const ROOT = true;\n");
+    writeFileSync(join(sandbox.dir, "package.json"), "{}\n");
+    sandbox.run(["add", "-A"]);
+    sandbox.commit("root layout");
+    sandbox.run(["tag", "v0.4.0"]);
+    const root = mkdtempSync(join(tmpdir(), "lay-layer-root-"));
+    try {
+      const plan = { remote: pathToFileURL(sandbox.dir).href, tag: "v0.4.0", path: "packages/nvda-worker", lays: ["src"] };
+      // CONTROL: without `source` the plan looks for packages/nvda-worker/src in the repository, which is not there.
+      assert.throws(() => lay(root, plan), /holds no packages\/nvda-worker\/src/);
+      assert.equal(lay(root, { ...plan, source: "." }), "laid v0.4.0 at packages/nvda-worker");
+      assert.deepEqual(walk(join(root, "packages/nvda-worker")), [REF_FILE, "src/index.mjs"]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
 /** A repository that holds the layer the way its own repository does: the package at `packages/worker-fleet`, plus tests and a manifest. */
 function layerRepository(sandbox: { dir: string; run(args: string[]): string; commit(message: string): string }, version: string): void {
   const write = (path: string, text: string) => {
