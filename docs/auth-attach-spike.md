@@ -67,15 +67,15 @@ What each site does to a person's browser, inferred from the lines above:
 | `screenreader-worker@291ed35 src/capture-setup.mjs:1618` and `src/capture-setup.mjs:1623` | Closing a capture asks every browser of the configured image to quit, then `taskkill /im <image> /f`. It names an IMAGE, not a process id, so the person's Edge goes with the worker's. |
 | `screenreader-worker@291ed35 src/browser-profile.mjs:245` and `src/server.mjs:169` | At worker boot, any browser of that image counted by `processCounts` is `taskkill`ed as an orphan. The person's signed-in browser is indistinguishable from one. |
 
-The port collision, run on Chromium: a second browser with its own profile launched with the same port (what `launchReusable` spawns) logs that it could not bind, keeps running, and every request to the port is still answered by the FIRST browser.
+The port collision, run on Chromium (the script prints a stderr line only if it is the bind or address-in-use diagnostic, else `(none)`): a second browser with its own profile launched with the same port (what `launchReusable` spawns) logs that it could not bind, keeps running, and every request to the port is still answered by the FIRST browser.
 
 ```
 $ LD_LIBRARY_PATH=$HOME/.cache/a11y-spike-libs/root/usr/lib/x86_64-linux-gnu node --import tsx packages/cli/src/auth/attach-spike.mjs q2
-person's browser (profile A) holds port 34407: ws://127.0.0.1:34407/devtools/browser/478cd6fb-b027-4b8d-ad2d-8e64b6b7ecff
-a second browser, profile B, launched with the SAME --remote-debugging-port=34407 (what launchReusable spawns):
+person's browser (profile A) holds port 45315: ws://127.0.0.1:45315/devtools/browser/4c9b7c35-c656-4625-873b-2a72d924f7d5
+a second browser, profile B, launched with the SAME --remote-debugging-port=45315 (what launchReusable spawns):
   second browser still running: true
-  second browser's stderr about the port: [1580569:1580681:1008/100301.665416:ERROR:net/socket/socket_posix.cc:175] bind() failed: Address already in use (98)
-  endpoint after the second launch: ws://127.0.0.1:34407/devtools/browser/478cd6fb-b027-4b8d-ad2d-8e64b6b7ecff
+  second browser's stderr about the port: [2200997:2201109:1008/103924.217576:ERROR:net/socket/socket_posix.cc:175] bind() failed: Address already in use (98)
+  endpoint after the second launch: ws://127.0.0.1:45315/devtools/browser/4c9b7c35-c656-4625-873b-2a72d924f7d5
   endpoint answered by profile A's browser, not B's: true
 ```
 

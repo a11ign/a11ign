@@ -152,7 +152,7 @@ async function q2() {
     const after = await endpointVersion(port);
     say(`a second browser, profile B, launched with the SAME --remote-debugging-port=${port} (what launchReusable spawns):`);
     say(`  second browser still running: ${second.child.exitCode === null}`);
-    say(`  second browser's stderr about the port: ${(second.stderr().split("\n").find((l) => /bind|address already in use|port/i.test(l)) ?? "(none)").slice(0, 160)}`);
+    say(`  second browser's stderr about the port: ${(second.stderr().split("\n").find((l) => /bind\(\) failed|address already in use/i.test(l)) ?? "(none)").slice(0, 160)}`);
     say(`  endpoint after the second launch: ${after.webSocketDebuggerUrl}`);
     say(`  endpoint answered by profile A's browser, not B's: ${after.webSocketDebuggerUrl === before.webSocketDebuggerUrl}`);
     await second.stop();
