@@ -1,0 +1,27 @@
+# Trust policy for `.github/workflows/auto-arm.yml`'s `arm` and `sweep` jobs (#4198), Octo STS v0.11.2 syntax (octo-sts/app, README and
+# `octosts.TrustPolicy.json`, read 2026-10-08). Every pattern is matched against the WHOLE claim, so none is anchored here.
+#
+# WHY A TOKEN THAT IS NOT GITHUB_TOKEN: a merge completed with `GITHUB_TOKEN` fires no `pull_request: closed` and no `push` (#416, 19 of
+# 19 bot merges ran no `close-rows`). An app installation token is an ordinary identity and fires both; that is the Acceptance of #4198
+# (Done-when 2), read off a real merge, never assumed.
+#
+# WHAT IT HOLDS: pull-request write (enable auto-merge) and contents write (the merge itself), on THIS repository only. A repository
+# policy cannot widen itself: the server forces `repositories` to the repository the file sits in. Nothing else, `issues` included: #333
+# measured that the native `Closes #N` closure is performed by the merging identity and needs no grant on the token.
+#
+# WHAT IT CANNOT BIND, AND THE GAP NAMED (measured on #4191, comment 6068015545): `pull_request` runs the workflow as it is on the
+# BRANCH'S merge ref (`job_workflow_ref` = `...@refs/pull/N/merge`) and presents `sub` = `...:pull_request`, the same `sub` a
+# `pull_request_target` run presents. So a branch that edits `auto-arm.yml` can mint this token, and no claim can tell it from the real
+# file. That is no worse than the stored token it replaces, which every same-repository branch could already read, and the permission set
+# above is NARROWER than that token's. `push` and `workflow_dispatch` on `main` DO bind to `main` (`sub` = `ref:refs/heads/main`,
+# `job_workflow_ref` = `...@refs/heads/main`); a dispatch on another branch presents that branch's ref and matches neither alternative.
+#
+# `sub` carries IMMUTABLE ids (`repo:<owner>@<id>/<repo>@<id>`), so `repo:a11ign/a11ign:...` never matches (#4191).
+issuer: https://token.actions.githubusercontent.com
+subject_pattern: repo:a11ign@320310787/a11ign@1280353940:(pull_request|ref:refs/heads/main)
+claim_pattern:
+  job_workflow_ref: a11ign/a11ign/\.github/workflows/auto-arm\.yml@(refs/heads/main|refs/pull/[0-9]+/merge)
+  event_name: pull_request|push|workflow_dispatch
+permissions:
+  pull_requests: write
+  contents: write

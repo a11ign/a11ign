@@ -87,39 +87,40 @@ name: auto-arm
 # which is this repo's own preference: a rule that asks a human to remember something is a rule that
 # gets broken.
 #
-# ## `A11IGN_BOT_TOKEN`, WITH A FALLBACK -- #416, measured 2026-09-08
+# ## THE ARMING TOKEN IS AN OCTO STS APP TOKEN, NOT A STORED ONE -- #416 (why a real identity), #4198 (which one)
 #
 # GitHub does not trigger workflows from events created with `GITHUB_TOKEN`. A merge completed by
 # `github-actions[bot]` -- every merge THIS workflow arms and GitHub later completes -- fires neither
 # `pull_request: closed` nor a `push`, so `trunk-guard`, `close-rows` and every push watchdog go silent
 # for exactly the merges the pipeline performs (37 data points, no exceptions: 18 of 18 PAT merges ran
 # `close-rows`, 19 of 19 bot merges never did; 5 of 5 sampled bot-merge SHAs never ran `trunk-guard` at
-# all). Arming with a real, fine-grained PAT instead means the completed merge is attributed to that
-# identity, its push fires every trigger that currently goes silent, and `Closes #N` closes natively.
+# all). Arming with a real identity instead means the completed merge is attributed to that identity, its
+# push fires every trigger that currently goes silent, and `Closes #N` closes natively. Until #4198 that
+# identity was a stored fine-grained PAT (the `A11IGN_BOT_TOKEN` secret, 90-day expiry, a person's); it is now
+# the Octo STS GitHub App, minted per job by `octo-sts/action` against `.github/chainguard/auto-arm.sts.yaml`
+# and revoked by the action's post step when the job ends. An app installation token DOES fire workflow
+# events, and that is #4198's Done-when 2, read off a real merge rather than assumed.
 #
-# CREATING THE TOKEN IS NOT PART OF THIS ROW -- `ceo` asks the chairman for it; nobody here creates, reads
-# or pastes it. This is the workflow's half: read the secret when present, and FALL BACK to `GITHUB_TOKEN`
-# with a printed warning when it is not, so the pipeline keeps arming before the token exists rather than
-# stopping -- #382's own lesson: a job that cannot do its intended work must say which path it took, not
-# go silent. The SAME four-line shell snippet appears in both `arm` and `sweep` below, deliberately: the
-# decision is one `[ -n "$A11IGN_BOT_TOKEN" ]` test, trivial enough that a composite action to share it
-# would be more surface than the thing it shares -- unlike the real logic elsewhere in this pipeline
-# (`closurePlan`, `stalledVerdict`) that this repo is right to insist on a single copy of.
+# NO FALLBACK TO `GITHUB_TOKEN`, deliberately. The PAT version fell back with a warning so the pipeline kept
+# arming before the token existed (#382: say which path was taken). A fallback that arms with the token that
+# fires nothing is #416's defect restored quietly, and a failed mint is a red step that names itself, so
+# `arm` fails and `sweep` annotates (`continue-on-error`) instead of arming the wrong way. A policy is read
+# from the DEFAULT branch (octo-sts/app v0.11.2, `octosts.go` `GetContents` with empty options), so the
+# pull request that ADDS the policy mints nothing on its own `arm` run; it is armed by `pr:open`.
+#
+# THE GAP, NAMED: `pull_request` runs this file as it is on the BRANCH, so a branch editing it can mint the
+# token and the policy cannot bind to `main` for that trigger (measured on #4191). The policy's header says
+# what it holds -- pull-request write and contents write on this repository, nothing else -- and why that
+# is no worse than the stored token it replaced.
+#
+# THE TOKEN IS NEVER ECHOED, NEVER AN ARGUMENT, NEVER LOGGED -- it goes from the action's `token` output
+# through an `env:` mapping into `GH_TOKEN`, so `gh`'s own CLI reads it and the value never appears on a
+# command line a log could capture (the way `PR_BODY` is handled in `ci.yml`'s `acceptance` job).
 #
 # NOT `issues: write` for this -- #333 already measured that granting it changed nothing, because the
 # native `Closes #N` closure is performed by GitHub AS THE MERGING IDENTITY and needs no extra grant on
-# the workflow's own token. The permission stays here (below) for #298's existing bot-merge case, which
-# this token change does not remove until every merge in this repo's history is one.
-#
-# THE SECRET IS NEVER ECHOED, NEVER AN ARGUMENT, NEVER LOGGED -- it goes through an `env:` mapping into
-# `GH_TOKEN` exactly the way `PR_BODY` is handled in `ci.yml`'s `acceptance` job, and for the same reason:
-# `gh`'s own CLI reads `GH_TOKEN` from the environment, so the value never appears on a command line a
-# log could capture.
-#
-# EXPIRY IS A SCHEDULED OUTAGE. A 90-day PAT stops working on a known date, and the failure mode is this
-# same fallback -- a silent reversion to today's defect, not a loud one. Record the expiry wherever this
-# repository already tracks dated obligations once the token exists; this workflow cannot see its own
-# secret's expiry date to warn about it in advance.
+# the workflow's own token. The permission stays below for #298's existing bot-merge case, which this
+# change does not remove until every merge in this repo's history is one.
 #
 # ## `push: [main]` -- and NO job here pushes `main` into a PR branch (#3046)
 #
@@ -170,7 +171,7 @@ jobs:
   arm:
     # ## A TOKEN THAT IS SET IS NOT A TOKEN THAT WORKS -- #1969, measured 2026-09-22
     #
-    # The `A11IGN_BOT_TOKEN` section above, and `auto-arm-token.test.ts` with it, ask ONE question of the
+    # The (former, #4198) `A11IGN_BOT_TOKEN` section above, and `auto-arm-token.test.ts` with it, ask ONE question of the
     # secret: is it SET? On 2026-09-22 that was the wrong question. The secret was set, this step took the
     # PAT path, and the PAT identity's GRAPHQL pool was exhausted from 18:45:53Z to 19:13:44Z -- 28
     # minutes. Every `pull_request`- and `push`-triggered run of this workflow failed, both jobs, and what
@@ -208,6 +209,11 @@ jobs:
     # every other event -- GitHub coerces an absent `draft` to 0 == false, so without this the base clause
     # alone was keeping arm off push and workflow_run.
     if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.base.ref == 'main' && github.event.action != 'auto_merge_enabled'
+    # THE JOB'S OWN `GITHUB_TOKEN` IS REDUCED to `contents: read` (checkout) plus `id-token: write` (the request Octo STS needs); the
+    # writes come from the minted token, whose grant is `auto-arm.sts.yaml`'s. A job-level `permissions` REPLACES the workflow-level one.
+    permissions:
+      contents: read
+      id-token: write
     runs-on: ubuntu-latest
     steps:
       # #645: this step ran `gh pr merge --auto` UNCONDITIONALLY, so a PR held by a ruling was re-armed by
@@ -219,18 +225,16 @@ jobs:
         with: { node-version: 22 }
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
         run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+      - name: Mint the arming token (Octo STS, `auto-arm.sts.yaml`) -- no fallback to `GITHUB_TOKEN`, see the header (#4198)
+        id: octo-sts
+        uses: octo-sts/action@v1.1.1 # f603d3be9d8dd9871a265776e625a27b00effe05
+        with:
+          scope: ${{ github.repository }}
+          identity: auto-arm
       - name: Enable auto-merge (merge commit) -- unless held. GitHub still withholds until `gate` is green
         env:
-          A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
-          FALLBACK_TOKEN: ${{ github.token }}
-        run: |
-          if [ -n "$A11IGN_BOT_TOKEN" ]; then
-            export GH_TOKEN="$A11IGN_BOT_TOKEN"
-          else
-            echo "::warning::A11IGN_BOT_TOKEN is not set -- arming with GITHUB_TOKEN instead. A merge completed with it fires no workflow events (trunk.yml's closeRows, watchdogs and trunkGate/trunkBuildTest/trunkRecheck chain) -- see #416. And arming with it fires no auto_merge_enabled run, so no auto_merge_enabled-triggered sweep ran on arming (the update-branch job, deleted in #3046) and #1094 returns with no log line -- see #1094."
-            export GH_TOKEN="$FALLBACK_TOKEN"
-          fi
-          agent-org arm-pr --pr="${{ github.event.pull_request.number }}" --repo="${{ github.repository }}"
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
+        run: agent-org arm-pr --pr="${{ github.event.pull_request.number }}" --repo="${{ github.repository }}"
 
   sweep:
     # ARM EVERY PR THE `arm` JOB ABOVE CANNOT SEE -- the ones already open, #344.
@@ -306,6 +310,10 @@ jobs:
     # the triggering PR either -- and it stays exit 2 from the script, so every other caller still sees it.
     if: github.event_name != 'workflow_run'
     continue-on-error: true
+    # Reduced to checkout plus the OIDC request, as `arm` is; the writes come from the minted token (#4198).
+    permissions:
+      contents: read
+      id-token: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -313,18 +321,17 @@ jobs:
         with: { node-version: 22 }
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
         run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+      - name: Mint the arming token (Octo STS, `auto-arm.sts.yaml`) -- no fallback to `GITHUB_TOKEN`, see the header (#4198)
+        id: octo-sts
+        uses: octo-sts/action@v1.1.1 # f603d3be9d8dd9871a265776e625a27b00effe05
+        with:
+          scope: ${{ github.repository }}
+          identity: auto-arm
       - name: Arm every open, non-draft, unheld, tested PR against main that nothing has armed
         env:
-          A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
-          FALLBACK_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
-          if [ -n "$A11IGN_BOT_TOKEN" ]; then
-            export GH_TOKEN="$A11IGN_BOT_TOKEN"
-          else
-            echo "::warning::A11IGN_BOT_TOKEN is not set -- arming with GITHUB_TOKEN instead. A merge completed with it fires no workflow events (trunk.yml's closeRows, watchdogs and trunkGate/trunkBuildTest/trunkRecheck chain) -- see #416. And arming with it fires no auto_merge_enabled run, so no auto_merge_enabled-triggered sweep ran on arming (the update-branch job, deleted in #3046) and #1094 returns with no log line -- see #1094."
-            export GH_TOKEN="$FALLBACK_TOKEN"
-          fi
           # `|| status=$?` and not a bare call: the default shell is `bash -e`, which would abort the step
           # before this can read the code. A command on the left of `||` does not trigger errexit.
           status=0
