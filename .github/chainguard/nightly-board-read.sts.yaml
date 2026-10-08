@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/octo-sts/app/refs/heads/main/pkg/octosts/octosts.TrustPolicy.json
+#
+# #4195: what `nightly.yml`'s `ready-audit` job reads the tracker and the board with, in place of `secrets.A11IGN_BOT_TOKEN`.
+# Octo STS v0.11.2. A REPOSITORY policy, so the server scopes the token to a11ign/a11ign alone (it cannot widen itself).
+#
+# THE BOARD IS ORGANISATION-OWNED, not user-owned as the row's body said (`organization(login: "a11ign") { projectV2(number: 1) }` answers,
+# measured 2026-10-08), so `organization_projects: read` is the permission that resolves it. `GITHUB_TOKEN` cannot, because a workflow
+# token carries no organisation-project scope.
+#
+# THE SUBJECT IS THE IMMUTABLE-ID FORM (#4191, measured by `ceo` from the probe's logs): `repo:a11ign@<owner id>/a11ign@<repo id>:...`,
+# never the names, which never match. `schedule` and a `workflow_dispatch` ON `main` both present `ref:refs/heads/main`; a dispatch on a
+# branch presents that branch's ref, so the subject alone refuses it, and `job_workflow_ref` and `ref` are pinned to `main` as well so
+# that no other trigger and no other workflow file on `main` can mint this identity.
+issuer: https://token.actions.githubusercontent.com
+subject: repo:a11ign@320310787/a11ign@1280353940:ref:refs/heads/main
+claim_pattern:
+  job_workflow_ref: a11ign/a11ign/\.github/workflows/nightly\.yml@refs/heads/main
+  ref: refs/heads/main
+permissions:
+  issues: read
+  pull_requests: read
+  organization_projects: read
