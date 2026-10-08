@@ -181,7 +181,7 @@ describe("the printed command and a remote worker", () => {
   test("the script's loopback reading agrees with the CLI's isRemoteWorker on every address", () => {
     const workers = [
       "http://127.0.0.1:8765", "http://127.9.9.9:1", "http://localhost:8765", "http://[::1]:8765", "http://[::ffff:7f00:1]:1",
-      "http://203.0.113.7:8765", "http://worker.example.test:8765", "http://0.0.0.0:8765", "http://10.0.0.5:8765", "not a url",
+      "http://203.0.113.7:8765", "http://worker.example.test:8765", "http://0.0.0.0:8765", "http://198.51.100.9:8765", "not a url",
     ];
     for (const worker of workers) {
       assert.equal(remoteWorkerNotice(worker) !== "", isRemoteWorker(worker), worker);
