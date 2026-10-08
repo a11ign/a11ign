@@ -181,6 +181,45 @@ export function reachesPacked(packed, candidates) {
 }
 
 /**
+ * #4136: THE SAME GLOB THE SHARED `changeset-required` CHECK USES (a11ign/toolchain, `scripts/changeset-required.mjs`, #4127): a test is not
+ * shipped, so a test-only change releases nothing. One definition of "does this path count", not a second one that differs silently.
+ */
+const TEST_FILE = /\.(test|spec)\.[^/]*$/;
+
+/**
+ * #4136: A BUNDLE HAS NO FILE PER SOURCE FILE, so the 1:1 name mapping above reads a bundled package's source as unshipped. Measured on the
+ * built tree: `packages/cli` packs `dist/cli.mjs`, `9.mjs`, `index.mjs` and `rslib-runtime.mjs` and nothing named for `src/action/run.ts`, so
+ * `classify` answered `changeset: false` for `run.ts` and `flows.ts`, and of the last 30 merged pull requests #4098, #4106 and #4108 changed CLI code
+ * that IS bundled, with no changeset, and passed. A non-test file under `src/` of a package that ships `dist` therefore counts, which is
+ * what the shared check says too; the 1:1 mapping still decides everything outside `src/`, and a package that ships no `dist` is untouched.
+ * @param {Set<string>} packed
+ * @param {string} relPath path relative to the package root
+ * @returns {boolean}
+ */
+export function feedsBuiltOutput(packed, relPath) {
+  if (!relPath.startsWith("src/") || TEST_FILE.test(relPath)) return false;
+  return [...packed].some((p) => p.startsWith("dist/"));
+}
+
+const NO_RELEASE_LINE = /^[ \t]*no-release:[ \t]*(.*?)[ \t]*$/;
+const NO_RELEASE_PLACEHOLDER = "<reason>";
+
+/**
+ * #4136: `no-release: <reason>` in a pull request body says nothing should ship, and settles a refusal here exactly as it does in the shared
+ * check (`noReleaseReason` in a11ign/toolchain's `scripts/changeset-required.mjs`): the first such line with a non-empty reason that is not the
+ * template's own `<reason>` placeholder. Two vocabularies would be two rules, so `ci-changed.test.ts` pins the cases that parser pins.
+ * @param {string} body
+ * @returns {string | null} the reason, or null when no line carries one
+ */
+export function noReleaseReason(body) {
+  for (const line of body.split(/\r?\n/)) {
+    const reason = NO_RELEASE_LINE.exec(line)?.[1];
+    if (reason && reason !== NO_RELEASE_PLACEHOLDER) return reason;
+  }
+  return null;
+}
+
+/**
  * Whether `packages/<pkgName>` is ever published — a `private: true` package has no changeset question.
  * @param {string} repoRoot
  * @param {string} pkgName
@@ -413,7 +452,7 @@ export function classify(files, allPackages,
     if (!allPackages.includes(pkgName) || !isPublished(repoRoot, pkgName)) return false;
     if (!packedCache.has(pkgName)) packedCache.set(pkgName, getPackedFiles(repoRoot, pkgName));
     const packed = packedCache.get(pkgName);
-    return reachesPacked(packed, candidatePackedPaths(relPath));
+    return reachesPacked(packed, candidatePackedPaths(relPath)) || feedsBuiltOutput(packed, relPath);
   });
 
   // NARROW ON PURPOSE, unlike every other category above -- chairman's direction, 2026-09-06. Coverage
@@ -465,14 +504,27 @@ function writeOutputs(result) {
   appendFileSync(outFile, `${lines.join("\n")}\n`);
 }
 
+/**
+ * #4136: `--no-release` reads the pull request's LIVE body from `PR_BODY` (the step fetches it; the event payload's copy is stale on a rerun)
+ * and writes `settled=true` when it carries a `no-release: <reason>` line, which the `changeset` job reads to skip its refusal.
+ * @param {string} body
+ */
+function writeNoRelease(body) {
+  const reason = noReleaseReason(body);
+  if (!reason) return console.log("no `no-release: <reason>` line in the body: the changeset check decides");
+  console.log(`the body says no-release: ${reason}`);
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, "settled=true\n");
+}
+
 async function main() {
   // --precise: the `changeset` job passes this AFTER its own `npm ci`, to get the real, `npm pack`-backed
   // answer -- see `everythingIsPacked`'s own comment for why the `changed` job (no install at all) must
   // never take this path. Its ABSENCE is not "changeset: false"; it is "changeset: true whenever a
   // published package changed at all", a deliberate over-approximation that only decides whether the
   // `changeset` job runs, never whether anything is actually enforced.
-  const KNOWN_FLAGS = ["--event", "--base", "--repo", "--precise"];
+  const KNOWN_FLAGS = ["--event", "--base", "--repo", "--precise", "--no-release"];
   refuseUnknownFlags(KNOWN_FLAGS, { entry: import.meta.url, command: "ci-changed" });
+  if (process.argv.includes("--no-release")) return writeNoRelease(process.env.PR_BODY ?? "");
 
   // `--event` stays a required, explicit flag rather than being dropped outright: a caller that types
   // `--event=push` today gets a clear refusal naming why, instead of silently falling through some
