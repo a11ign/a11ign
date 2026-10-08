@@ -41,6 +41,7 @@ entry names what is missing, what it would cost, and what would tell you it is f
 - [§56](#56-the-chairmans-chat-channel-is-not-cryptographic-its-classifier-is-a-heuristic-and-a-reply-waits-on-ceo-open-by-design-2899-2911) THE CHAIRMAN'S CHAT CHANNEL IS NOT CRYPTOGRAPHIC, ITS CLASSIFIER IS A HEURISTIC, AND A REPLY WAITS ON ceo — OPEN, by design (#2899, #2911)
 - [§57](#57-a-page-whose-first-visit-differs-from-every-later-one-is-not-something-gatestability-watches-open-by-design-3905-3130) A PAGE WHOSE FIRST VISIT DIFFERS FROM EVERY LATER ONE IS NOT SOMETHING gate:stability WATCHES — OPEN, by design (#3905, #3130)
 - [§58](#58-the-liaison-shares-the-host-and-the-account-the-do-it-for-me-queue-cannot-see-his-session-and-a-walk-through-verifies-only-what-a-read-can-see-open-by-design-3409-3429-3430) THE LIAISON SHARES THE HOST AND THE ACCOUNT, THE DO-IT-FOR-ME QUEUE CANNOT SEE HIS SESSION, AND A WALK-THROUGH VERIFIES ONLY WHAT A READ CAN SEE — OPEN, by design (#3409, #3429, #3430)
+- [§59](#59-the-first-real-use-of-the-drained-kernel-reboot-is-unmeasured-open-until-the-next-kernel-apt-installs-4046) THE FIRST REAL USE OF THE DRAINED KERNEL REBOOT IS UNMEASURED — OPEN, until the next kernel apt installs (#4046)
 <!-- known-gaps-index:end -->
 
 ## The order these should be done in
@@ -3822,3 +3823,16 @@ at alert time finds none sent for an act already done, which is the measure #340
 
 **What would close the entry as a whole:** E2's live reading, with each figure above that can be measured written beside the claim it supports.
 Until then these are documented boundaries of the design and not defects awaiting a fix.
+
+---
+
+## 59. THE FIRST REAL USE OF THE DRAINED KERNEL REBOOT IS UNMEASURED — OPEN, until the next kernel apt installs (#4046)
+
+**`host:check` notes a newer kernel than the one running, and `node src/host-kernel.mjs --reboot` does the drained reboot; neither has met a real kernel
+upgrade.** The code is `a11ign/agent-org`'s `src/host-kernel.mjs`, tested through injected readers only (the version order, `NOT READ`, the deferral, the one
+privileged command, the 24-hour loop guard). The host runs the newest kernel today (`7.0.0-38-generic`), so the live note is silent by design, and no test
+reboots anything. *Not measured:* that `sudo systemctl reboot` is accepted from the process that runs it (the grant is `/etc/sudoers.d/a11ign-reboot`, root-owned and
+unreadable here; `sudo -n -l` lists it), that the 30-minute bound is a sensible wait, that the read-back's tick, seat and trace-page reads answer on a freshly
+booted host, and **that anything runs `--reboot` at all: the module is the procedure, and no unit or tick calls it yet** (the row's Region was three files).
+*Cost:* the note is a note, and a note wakes nobody, so until a trigger is wired a newer kernel waits for a person to read `host:check`. *Fixed when:* the
+first kernel apt installs after this lands is booted by the org, and the reading (`uname -r`, the sysctl values, the tick, the seats, the trace pages) is posted on #4046.
