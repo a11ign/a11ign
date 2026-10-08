@@ -11,6 +11,7 @@ export type Severity = "blocker" | "serious" | "moderate" | "minor";
 
 import type { CaptureInteraction, CaptureStructure } from "@a11ign/evidence";
 import type { Judgment } from "@a11ign/judge";
+import { WCAG_22_AA, type Criterion } from "@a11ign/evidence/wcag";
 import type { announcedStateChanges } from "@a11ign/judge/rules";
 
 export interface RunFinding {
@@ -397,7 +398,30 @@ function outcomeSection(outcomes: RunResult["outcomes"]): string[] {
   // it outright, correctly: a reader with no legend gets no term to misread.
   return ["", `**Not determined:** ${undetermined} criteria we cover were referred — worth a person's `
     + `eyes, the tool cannot decide these on its own — and ${untested} are not covered by any assessor `
-    + `of ours. Neither is a pass — see the run artifact for the per-criterion reasons.${cutShort}`];
+    + `of ours. Neither is a pass — see the run artifact for the per-criterion reasons.${cutShort}`,
+  ...uncoveredCriteriaLine(outcomes)];
+}
+
+/**
+ * The WCAG 2.2 criteria this run did NOT cover, by name -- the part of the `untested` count an outside evaluator
+ * targeting 2.2 AA needs and a bare number withheld (#4091, #4084 outcome 2).
+ *
+ * Derived from the run's own `outcomes` and the criterion list's `since`, never a fixed four: a 2.2 criterion the
+ * run assessed (2.4.11 and 2.5.8 read `cantTell` through the rule layer) is not "uncovered" and must not be listed.
+ * Absent outcomes (an older run) return `[]`, because no record is not "nothing was untested".
+ */
+export function uncoveredNewIn22(outcomes: RunResult["outcomes"]): Criterion[] {
+  if (!outcomes) return [];
+  const untested = new Set(outcomes.filter((o) => o.outcome === "untested").map((o) => o.criterion));
+  return WCAG_22_AA.filter((c) => c.since === "2.2" && untested.has(c.num));
+}
+
+/** One line for the PR comment; no line at all when every WCAG 2.2 criterion was assessed or the run recorded no outcomes. */
+function uncoveredCriteriaLine(outcomes: RunResult["outcomes"]): string[] {
+  const uncovered = uncoveredNewIn22(outcomes);
+  if (uncovered.length === 0) return [];
+  return ["", `**Not covered, and new in WCAG 2.2 AA:** ${uncovered.map((c) => `${c.num} ${c.name}`).join("; ")}. `
+    + "Nothing in this tool checks these, so their absence from the findings is not a pass."];
 }
 
 /**
