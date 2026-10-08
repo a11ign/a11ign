@@ -260,25 +260,31 @@ runs:
           exit 1
         fi
 
+    # Every input arrives through `env:` and none is interpolated into the shell text (GitHub's documented script-injection
+    # pattern: an input a pipeline fills from an issue title becomes shell) (#4238).
     - name: Check the judge is usable
       shell: bash
+      env:
+        JUDGE_BACKEND: ${{ inputs.judge-backend }}
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        JUDGE_BASE_URL: ${{ inputs.judge-base-url }}
       run: |
-        case "${{ inputs.judge-backend }}" in
+        case "$JUDGE_BACKEND" in
           local) ;;
           anthropic)
-            if [ -z "${{ inputs.anthropic-api-key }}" ]; then
+            if [ -z "$ANTHROPIC_API_KEY" ]; then
               echo "::error::judge-backend: anthropic needs anthropic-api-key. Use judge-backend: local for no key." >&2
               exit 1
             fi ;;
           openai)
-            if [ -z "${{ inputs.judge-base-url }}" ]; then
+            if [ -z "$JUDGE_BASE_URL" ]; then
               echo "::error::judge-backend: openai needs judge-base-url." >&2
               exit 1
             fi ;;
           *)
             # Refuse an unknown backend rather than silently falling through to a default. A typo must not
             # quietly change which judge assessed the page.
-            echo "::error::judge-backend must be local, anthropic or openai (got '${{ inputs.judge-backend }}')." >&2
+            echo "::error::judge-backend must be local, anthropic or openai (got '$JUDGE_BACKEND')." >&2
             exit 1 ;;
         esac
 
@@ -287,12 +293,15 @@ runs:
     # to test. Merging them, or picking one, would silently change what was captured (#2272).
     - name: Check exactly one of url and urls is given
       shell: bash
+      env:
+        URL: ${{ inputs.url }}
+        URLS: ${{ inputs.urls }}
       run: |
-        if [ -n "${{ inputs.url }}" ] && [ -n "${{ inputs.urls }}" ]; then
+        if [ -n "$URL" ] && [ -n "$URLS" ]; then
           echo "::error::Give exactly one of url and urls, not both: url is one page, urls is a list of pages." >&2
           exit 1
         fi
-        if [ -z "${{ inputs.url }}" ] && [ -z "$(echo "${{ inputs.urls }}" | tr -d '[:space:]')" ]; then
+        if [ -z "$URL" ] && [ -z "$(printf '%s' "$URLS" | tr -d '[:space:]')" ]; then
           echo "::error::Give exactly one of url and urls: no page was given." >&2
           exit 1
         fi
@@ -587,6 +596,17 @@ runs:
         ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
         JUDGE_MODEL: ${{ inputs.judge-model }}
         JUDGE_BASE_URL: ${{ inputs.judge-base-url }}
+        # Every input comes through `env:`, never as `${{ inputs.* }}` inside the script (GitHub's documented script-injection
+        # pattern, and a multi-line `urls` pasted into shell text is a quoting question, not a value) (#4221, #4238).
+        TASK: ${{ inputs.task }}
+        FORMS: ${{ inputs.forms }}
+        PROBE_FORMS: ${{ inputs.probe-forms }}
+        PROBE_FOCUS: ${{ inputs.probe-focus }}
+        PROBE_NAVIGATION: ${{ inputs.probe-navigation }}
+        AXE: ${{ inputs.axe }}
+        URL: ${{ inputs.url }}
+        URLS: ${{ inputs.urls }}
+        MAX_PAGES: ${{ inputs.max-pages }}
         # Windows runners have no venv here; the packages above went to the system interpreter.
         A11Y_PYTHON: python
       run: |
@@ -648,19 +668,24 @@ runs:
         # `task` is optional, and the CLI has its own default. Pass the flag only when the input says something:
         # an unset input is the empty string, and `--task ""` is not "no task" to a parser that only falls
         # back on a MISSING value (#2268).
-        [ -n "${{ inputs.task }}" ] && args+=(--task "${{ inputs.task }}")
+        [ -n "$TASK" ] && args+=(--task "$TASK")
         # ONE OF THESE TWO, decided by the step above. The CLI takes a positional URL or `--urls <list>` and
         # refuses both. `max-pages` is the cap override: the flag, and only the flag -- nothing in the
         # environment reaches it, so raising the cap is always written in the workflow file (#2272).
-        [ -n "${{ inputs.url }}" ] && args+=("${{ inputs.url }}")
-        [ -n "${{ inputs.urls }}" ] && args+=(--urls "${{ inputs.urls }}")
-        [ -n "${{ inputs.max-pages }}" ] && args+=(--max-pages "${{ inputs.max-pages }}")
+        #
+        # `urls` is documented as one URL per line, and a newline inside ONE argument does not survive `npx.cmd` under Git Bash
+        # on Windows: the argument is cut at it and the CLI scans the first URL alone, with the run green (a11ign 0.4.0
+        # scanned 1 page of 10, #4221). So the list is flattened to ONE line of spaces here; `splitUrlList` splits on any
+        # whitespace, so the CLI reads the same pages either way.
+        [ -n "$URL" ] && args+=("$URL")
+        [ -n "$URLS" ] && args+=(--urls "$(printf '%s' "$URLS" | tr -s '[:space:]' ' ')")
+        [ -n "$MAX_PAGES" ] && args+=(--max-pages "$MAX_PAGES")
         # OFF unless the input is exactly "true" (#4089): the default is "false" and the CLI's own default is off, so
         # nothing here is inverted. Said in the log, because a run that never submitted must not read as one that
         # found no form problems.
-        if [ "${{ inputs.probe-forms }}" = "true" ]; then
+        if [ "$PROBE_FORMS" = "true" ]; then
           args+=(--probe-forms)
-        elif [ -z "${{ inputs.forms }}" ]; then
+        elif [ -z "$FORMS" ]; then
           echo '::notice::probe-forms is off and no forms config is set, so no form was submitted: 3.3.1 and 4.1.3 were NOT assessed (not passed). Set probe-forms: "true" to assess them.'
         fi
         # A DECLARED config, and it is separate from `probe-forms` rather than replacing it. The
@@ -671,20 +696,20 @@ runs:
         #
         # `-n` rather than a `!= ""` comparison: the default is the empty string, and an unset input and
         # an empty one must behave the same way.
-        [ -n "${{ inputs.forms }}" ] && args+=(--forms "${{ inputs.forms }}")
+        [ -n "$FORMS" ] && args+=(--forms "$FORMS")
         # Inverted, because the CLI defaults this ON: only an explicit false turns it off. Tab activates
         # nothing, so unlike probe-forms there is no reason to make a consumer opt in to it.
-        [ "${{ inputs.probe-focus }}" = "false" ] && args+=(--no-probe-focus)
+        [ "$PROBE_FOCUS" = "false" ] && args+=(--no-probe-focus)
         # Inverted for the same reason (#1392, ceo 5655434240): the CLI defaults navigation ON, so only an
         # explicit false turns it off. Unlike Tab it activates a link, which is why a consumer needs the input.
-        [ "${{ inputs.probe-navigation }}" = "false" ] && args+=(--no-probe-navigation)
+        [ "$PROBE_NAVIGATION" = "false" ] && args+=(--no-probe-navigation)
         # An authenticated run's two arguments, and the override, which is an argument here as everywhere and never an
         # environment variable the CLI reads. `probe-forms` and `probe-navigation` may still be "true" above (their defaults
         # cannot be told from a choice); the CLI turns both off for an authenticated run and says so.
         [ -n "$flows_path" ] && args+=(--flows "$flows_path" --login-flow "$LOGIN_FLOW")
         [ -n "$state_path" ] && args+=(--auth-state "$state_path")
         [ "$SEND_TRANSCRIPT" = "true" ] && args+=(--send-authenticated-transcript-to-judge-vendor)
-        [ "${{ inputs.axe }}" = "true" ] || args+=(--no-axe)
+        [ "$AXE" = "true" ] || args+=(--no-axe)
         # stdout is the JSON result; the CLI's diagnostics go to stderr and stay in the log.
         #
         # `|| status=$?`, for the reason the Report step gives: this step runs under `-eo pipefail`, and a list
@@ -708,6 +733,7 @@ runs:
         FLOWS: ${{ inputs.flows }}
         PROBE_FORMS: ${{ inputs.probe-forms }}
         FORMS: ${{ inputs.forms }}
+        FAIL_ON: ${{ inputs.fail-on }}
       run: |
         # `|| status=$?`, not `; status=$?`. GitHub runs `shell: bash` with `-eo pipefail`, so a bare
         # failing command aborts the step immediately and the lines below never run — the outputs would
@@ -722,7 +748,7 @@ runs:
         fi
         npx tsx packages/cli/src/action/run.ts \
           --result="${{ steps.capture.outputs.result-json }}" \
-          --fail-on="${{ inputs.fail-on }}" \
+          --fail-on="$FAIL_ON" \
           --summary-out="$RUNNER_TEMP/a11ign-summary.md" \
           "${probed_flag[@]}" \
           --marker=a11ign || status=$?
