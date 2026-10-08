@@ -6,8 +6,28 @@ evidence pack is that JSON as one Markdown document an assessor can attach to th
 in `packages/cli/src/evidence-pack.ts` produces it.
 
 **It is evidence, not a statement of conformance.** The README says a11ign is not a VPAT or ACR generator, and the
-document says so in its first line. The pack is not yet reachable from any command: a CLI flag and an Action output
-that write it beside the result JSON are a separate row (#4244 Done-when 3).
+document says so in its first line.
+
+## How to get it
+
+Ask for it on the run that produces the result JSON, so the pack and the JSON describe the same capture (#4252):
+
+```bash
+npm run witness -- https://example.com --json --evidence-pack ./a11ign-evidence-pack.md > a11ign-result.json
+```
+
+`--evidence-pack <file.md>` needs `--json` and takes ONE capture: it is refused with a list of pages (`--urls`) or a
+forms config that makes more than one capture, before anything is captured, and a PDF page or a failed page has no
+screen-reader outcomes and writes no pack (stderr says so). A run without the flag writes none.
+
+In the GitHub Action the `evidence-pack` output is the path of that file (empty where none is written: a `urls` list, a
+`forms` config, a PDF), to upload beside `result-json`:
+
+```yaml
+path: |
+  ${{ steps.a11ign.outputs.result-json }}
+  ${{ steps.a11ign.outputs.evidence-pack }}
+```
 
 ## What is in it
 
