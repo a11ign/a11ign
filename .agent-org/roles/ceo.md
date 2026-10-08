@@ -114,6 +114,7 @@ until that ledger exists, never `0`). An `unknown` is a source the script could 
   | `redPrs` | 1, which was a held PR and a measurement defect (#2954); the true baseline is 0 | above 0 |
   | `tokensPerMergedPr` | 10,393,972 | above 13,000,000 (about +25%), the one number with no bound before a second reading |
   | `handFixes` | `ledger absent` (#2954 since fixed; none read) | above 0, the ledger's own target |
+  | `unwaitedStockRows` (#4175) | 3 by hand at 2026-10-08T17:00Z (#2568, #1740, #20) | above 0: the report names each row, and `product-manager` rules on it (a wait as data, promoted, or closed) |
 
   The two-times and +25% figures are judgments from one reading, not measurements of a spread. Replace each with a measured one once the readings file holds
   a week.
