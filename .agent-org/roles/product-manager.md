@@ -1,15 +1,12 @@
 # Product loop — `product-manager`
 
-## Resuming after context loss: run this before anything else
+## Resuming after context loss: list your crons, then read these
 
-> **First, before reading anything: recreate this role's crons.** A session acts only on an incoming
-> message or its own cron; on 2026-09-08 every session went idle at 20:52Z and nothing woke anyone for ten
-> hours (zero merges, no hourly table, no 07:30 summary). A scheduled obligation that is not a cron in
-> its owner's session does not exist, and crons are session-local: they die with the session and expire
-> after seven days. So a resumed product-manager schedules these with `CronCreate` before its first read:
-> - `25 7 * * *` (London): write and push the day's board summary from the state at that moment.
-> - `4 21 * * *` (London): run the full tracker audit and send `ceo` its counts.
-> Confirm the schedules to `ceo` in the first message after resuming.
+> **First, before reading anything: list your crons once with `CronList` and `CronDelete` every one you find.** No session holds a
+> standing cron (`.claude/rules/org-routing-and-timers.md`): the 2026-09-08 stall, when every session went idle at 20:52Z and nothing woke
+> anyone for ten hours, was answered by `work:tick`, which runs the gate with no model and wakes you WITH the answer in your prompt. The
+> day's board summary runs from `a11ign-board-report.timer` and the full tracker audit as `board-truth-audit` in the gate's tick, so a
+> resumed `product-manager` schedules neither: it reads that prompt, then the row, the PR and the API, before it acts.
 
 > **And read these six before the first command; each cost a PR on 2026-09-09, in this role's own words:**
 > read the clock first; `git -C <dir>`, never a bare `cd` (a failed `cd` in a chain runs the rest in the
