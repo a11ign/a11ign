@@ -80,10 +80,12 @@ const workspaceManifest: ReadManifest = (directory) => {
 const BEYOND_THE_ADR: AdrRepository[] = [{ repo: TOOLCHAIN, kind: "npm", source: "ADR 0043" }];
 
 /**
- * A `code` repository the daily reading deliberately does not measure, with the reason. EMPTY today: every declared repository
- * releases and is read. An entry here without a reason, or for a repository that has a `dora` entry anyway, is refused.
+ * A `code` repository the daily reading deliberately does not measure, with the reason. An entry here without a reason, or for a
+ * repository that has a `dora` entry anyway, is refused.
  */
-const NO_DORA_READING: Record<string, string> = {};
+const NO_DORA_READING: Record<string, string> = {
+  "a11ign/.github": "it releases nothing: it holds the org-wide community-health files and the Octo STS trust policies, which take effect on merge and are never published as a package, tag or Release (#4190)",
+};
 
 /** The rows of ADR 0041's "The seven repositories" table: the repository and how its "release mechanism" cell publishes. */
 function adrRepositories(adr: string): AdrRepository[] {

@@ -15,6 +15,7 @@
     { "repo": "a11ign/control", "defaultBranch": "main", "requiredCheck": "gate", "publishes": false, "tokenProbe": "auto-arm.yml" },
     { "repo": "a11ign/lab", "defaultBranch": "main", "requiredCheck": "gate", "publishes": false, "tokenProbe": "auto-arm.yml" },
     { "repo": "a11ign/toolchain", "defaultBranch": "main", "requiredCheck": "gate", "publishes": true, "tokenProbe": "auto-arm.yml" },
-    { "repo": "a11ign/documents", "defaultBranch": "main", "requiredCheck": "gate", "publishes": true, "tokenUnused": "its workflows read no secret named A11IGN_BOT_TOKEN; its release.yml calls the per-merge release and names the token only in a comment saying it has none (#3716)" }
+    { "repo": "a11ign/documents", "defaultBranch": "main", "requiredCheck": "gate", "publishes": true, "tokenUnused": "its workflows read no secret named A11IGN_BOT_TOKEN; its release.yml calls the per-merge release and names the token only in a comment saying it has none (#3716)" },
+    { "repo": "a11ign/.github", "defaultBranch": "main", "requiredCheck": "gate", "publishes": false, "tokenUnused": "it holds a README only and no workflow (read 2026-10-08, #4190); the Octo STS policy rows add the first, and the first to read secrets.A11IGN_BOT_TOKEN would be refused here" }
   ]
 }
