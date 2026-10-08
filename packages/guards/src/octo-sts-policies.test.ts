@@ -160,12 +160,31 @@ const LIVE_SWITCH = "A11Y_CHECK_OCTO_STS_POLICIES";
 type DirectoryEntry = { name: string; type: string };
 type LiveRead = { state: "READ"; files: PolicyFile[] } | { state: "CANNOT_TELL"; why: string };
 
+/**
+ * `ghApiRead` reports 403 and 404 alike as `refused`, so a refused listing is "no such directory" OR "you may not look", and only the first
+ * is an empty population. Told apart by walking down from the repository root, which is listable whenever the repository is: the
+ * directory is absent only when some listing on the way shows its next segment missing. A listing that is itself refused, or that shows
+ * the whole path present (so the refusal was a 403), is CANNOT_TELL.
+ */
+function directoryAbsence(read: typeof ghApiRead): LiveRead {
+  let path = "";
+  for (const segment of POLICY_DIRECTORY.split("/")) {
+    const listing = read(`repos/${ORG_POLICY_REPO}/contents${path === "" ? "" : `/${path}`}`);
+    if (listing.kind !== "ok" || !Array.isArray(listing.value)) {
+      return { state: "CANNOT_TELL", why: `the policy directory listing was refused and ${path || "the repository root"} could not be listed to tell absent from forbidden` };
+    }
+    if (!(listing.value as DirectoryEntry[]).some((e) => e.name === segment)) return { state: "READ", files: [] };
+    path = path === "" ? segment : `${path}/${segment}`;
+  }
+  return { state: "CANNOT_TELL", why: "the policy directory exists but its listing was refused (403): policies may be there that were not read" };
+}
+
 /** Lists the org policy repository's policy directory and fetches every policy; any read that failed makes the whole population CANNOT_TELL. */
 function readOrgPolicies(read: typeof ghApiRead): LiveRead {
   const repo = read(`repos/${ORG_POLICY_REPO}`);
   if (repo.kind !== "ok") return { state: "CANNOT_TELL", why: `${ORG_POLICY_REPO} itself could not be read (${repo.kind === "refused" ? "403/404: absent or forbidden" : repo.why})` };
   const listing = read(`repos/${ORG_POLICY_REPO}/contents/${POLICY_DIRECTORY}`);
-  if (listing.kind === "refused") return { state: "READ", files: [] }; // the repository is readable, so a 404 on the directory is "no such directory"
+  if (listing.kind === "refused") return directoryAbsence(read);
   if (listing.kind !== "ok" || !Array.isArray(listing.value)) return { state: "CANNOT_TELL", why: `the policy directory listing was unreadable${listing.kind === "unreadable" ? `: ${listing.why}` : ""}` };
   const files: PolicyFile[] = [];
   for (const entry of (listing.value as DirectoryEntry[]).filter((e) => e.type === "file" && e.name.endsWith(POLICY_SUFFIX))) {
@@ -189,7 +208,18 @@ test("#4192 POSITIVE CONTROL for the live read: an unreadable policy is CANNOT_T
   const read = readOrgPolicies(asked({ [`repos/${ORG_POLICY_REPO}`]: repo, [dir]: listing, [`${dir}/x.sts.yaml`]: { kind: "ok", value: { content: body } } }));
   assert.equal(read.state, "READ");
   assert.deepEqual(read.state === "READ" && offenders(read.files, "organisation"), [{ file: "x.sts.yaml", reaches: ["corpus-backups"] }]);
-  assert.deepEqual(readOrgPolicies(asked({ [`repos/${ORG_POLICY_REPO}`]: repo, [dir]: { kind: "refused" } })), { state: "READ", files: [] });
+  const root = `repos/${ORG_POLICY_REPO}/contents`;
+  const refusedListing = { [`repos/${ORG_POLICY_REPO}`]: repo, [dir]: { kind: "refused" } } as const;
+  const entries = (...names: string[]) => ({ kind: "ok", value: names.map((name) => ({ name, type: "dir" })) }) as const;
+  // absent: the root has no `.github`, or `.github` has no `chainguard` (404)
+  assert.deepEqual(readOrgPolicies(asked({ ...refusedListing, [root]: entries("README.md") })), { state: "READ", files: [] });
+  assert.deepEqual(readOrgPolicies(asked({ ...refusedListing, [root]: entries(".github"), [`${root}/.github`]: entries("workflows") })), { state: "READ", files: [] });
+  // forbidden (403): every segment is listed as present, so the refusal was not "absent"
+  assert.equal(readOrgPolicies(asked({ ...refusedListing, [root]: entries(".github"), [`${root}/.github`]: entries("chainguard") })).state, "CANNOT_TELL");
+  // a listing on the way is refused too: cannot tell absent from forbidden
+  assert.equal(readOrgPolicies(asked({ ...refusedListing, [root]: { kind: "refused" } })).state, "CANNOT_TELL");
+  assert.equal(readOrgPolicies(asked({ ...refusedListing, [root]: entries(".github"), [`${root}/.github`]: { kind: "refused" } })).state, "CANNOT_TELL");
+  assert.equal(readOrgPolicies(asked(refusedListing)).state, "CANNOT_TELL");
 });
 
 test("#4192 LIVE: no policy in a11ign/.github's .github/chainguard/ names or grants on corpus-backups or auth-capture-check", () => {
