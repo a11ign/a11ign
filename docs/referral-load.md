@@ -23,10 +23,10 @@ Looked for on this host, 2026-10-08, and not found:
 
 ## What the run needs to produce
 
-The calibration sweep's one file, `runs/abstention/calibration-judgments.json` (row #4293: `{ pages: [{ url, claim, findings: [{ wcag, evidence, mapping }], cantTell, predicted }] }`, one record per scored page, fetched with `lab:fetch` as the `calibration-judgments` artifact). The reader takes that file as it is (a11ign/lab#35, after lab#31); one JSON per page also works. Then:
+The calibration sweep's one file, `runs/abstention/calibration-judgments.json` (row #4293: `{ pages: [{ url, claim, findings: [{ wcag, evidence, mapping }], cantTell, predicted }] }`, one record per scored page, fetched with `lab:fetch` as the `calibration-judgments` artifact). The reader takes that file as it is (a11ign/lab#35, after lab#31); one JSON per page also works. `runs/abstention/` is its path on the lab host; the fetched copy lands wherever `lab:fetch` is told to put it, so the command takes that path, not the lab's. Then:
 
 ```bash
-node packages/lab/scripts/referral-repeat-share.mjs calibration-judgments.json
+node packages/lab/scripts/referral-repeat-share.mjs <where lab:fetch left it>/calibration-judgments.json
 ```
 
 prints per-page referrals, repeats and share, then the total and which side of 20% it falls. This document is updated with that output, the date and the command, and the grouping row is filed or declined on it.
