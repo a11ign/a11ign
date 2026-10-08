@@ -32,6 +32,12 @@ export interface AuthRequest {
    * the worker reads and validates the file itself, so a request cannot make it load a value the CLI did not show it.
    */
   readonly state?: { readonly path: string };
+  /**
+   * The identity-provider origins the flows file declared (`idp-origins:`, #4088), exact origins already normalised and checked
+   * by `parseFlowsFile`: the login's steps may pass through them and nothing else may. Absent: none declared, and every origin
+   * but the app's ends the run `left-origin`. The worker validates the list again on arrival, because the request is untrusted there.
+   */
+  readonly idpOrigins?: readonly string[];
 }
 
 /** Undefined means the run asked for no authentication, and every function below is then a no-op. */

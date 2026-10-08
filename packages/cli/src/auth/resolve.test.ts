@@ -165,6 +165,25 @@ test("a valid request resolves: the login's steps, a scrub set, the probes turne
   assert.ok(!JSON.stringify(resolved.notices).includes(FAKE_USER) && !JSON.stringify(resolved.notices).includes(FAKE_SECRET));
 });
 
+const FLOWS_WITH_IDP = FLOWS.replace(`origin: ${ORIGIN}\n`, `origin: ${ORIGIN}\nidp-origins:\n  - https://login.idp.example.test\n`);
+
+test("IDP ORIGINS: the declaration reaches the plan, and a flows file that declares none sends the plan it always sent", async () => {
+  const declared = await withJudge("local", () => resolveAuthentication(request({ readText: async () => FLOWS_WITH_IDP })));
+  assert.deepEqual(declared?.auth.idpOrigins, ["https://login.idp.example.test"], "planFrom must carry the file's idp-origins into the request");
+  const none = await withJudge("local", () => resolveAuthentication(request()));
+  assert.ok(none);
+  assert.ok(!("idpOrigins" in none.auth), "an absent declaration is an absent key, so the wire is unchanged for every flow that does not declare one");
+});
+
+test("IDP ORIGINS: a saved-state run carries none, since it performs no login to pass through the provider", async () => {
+  const withState = await withJudge("local", () => resolveAuthentication(request({
+    args: { authState: "/tmp/state.json" },
+    readText: async (path) => (path === "flows.yml" ? FLOWS_WITH_IDP : JSON.stringify({ cookies: [], origins: [] })),
+  })));
+  assert.ok(withState);
+  assert.ok(!("idpOrigins" in withState.auth));
+});
+
 test("the pre-run notice states a MINIMUM and says so, and names what a repeated capture can raise it to", () => {
   const notice = loginNotice({ captures: 3, axe: true });
   assert.match(notice, /will perform at least 6 logins \(a minimum: one per capture, and one per capture for the rule layer\)/);

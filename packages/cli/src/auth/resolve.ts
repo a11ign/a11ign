@@ -172,9 +172,14 @@ async function resolveState(
   return { state: { path }, credentials: found.credentials, notices: stateScrubNotices(found) };
 }
 
-/** The plan the interpreters and the wire share, from the resolved login flow. */
-function planFrom(steps: AuthPlan["login"], state?: { path: string }): AuthRequest {
-  return state === undefined ? { login: steps } : { login: steps, state };
+/**
+ * The plan the interpreters and the wire share, from the resolved login flow. **The declared identity-provider origins ride
+ * with it, and only when there are some**: a flow that declares none sends the request it always sent, so the pin cannot be
+ * loosened by a key that was merely absent. **A state run carries none**: it performs no login, so there is no hop to allow.
+ */
+function planFrom(steps: AuthPlan["login"], state?: { path: string }, idpOrigins: readonly string[] = []): AuthRequest {
+  if (state !== undefined) return { login: steps, state };
+  return idpOrigins.length === 0 ? { login: steps } : { login: steps, idpOrigins };
 }
 
 /**
@@ -206,7 +211,7 @@ export async function resolveAuthentication(request: ResolveRequest): Promise<Re
     refuseIfWrongOrigin(file, url);
   }
   const stated = await resolveState(request, file.origin);
-  const plan = planFrom(login.steps, stated?.state);
+  const plan = planFrom(login.steps, stated?.state, file.idpOrigins);
   const captures = await request.countCaptures();
   // Before anything is leased or captured, beside the other refusals: a run that asks a real account for more logins than
   // the bound is refused whole (PageListError, exit 2), and a single URL with many form states is caught here too.

@@ -73,6 +73,8 @@ export async function openPlaywrightDriver(page: Page): Promise<AuthDriver> {
       }
     },
     origin: async () => String(await page.evaluate("location.origin")),
+    // Lets a declared login that already landed on the requested page skip the reload that would discard a memory-held token.
+    url: async () => String(await page.evaluate("location.href")),
     async axNodes() {
       const { nodes } = await send("Accessibility.getFullAXTree");
       return (nodes as RawAxNode[]).map(axNodeOf);

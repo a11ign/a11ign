@@ -3427,6 +3427,25 @@ this commit, not against the ADR's prose.**
   is `auth-login-failed` with reason `left-origin` (`assertStillOnOrigin`, `interpreter.ts`), and the remedy names the
   dedicated test account. **This is checked when an `expect:` is met and again after the requested page loads, not after
   every step**, so the run reads the redirect at those two moments and not earlier.
+  **A flow may DECLARE the identity-provider origins its login passes through (`idp-origins:` in the flows file, #4088), and then
+  only those are allowed**, only between the login's steps (the last step, the `expect:`, and the requested page must be on the
+  app's origin, so a run that ends parked on the provider is still `left-origin`), and nothing is typed into an origin that is not
+  declared. **What this is for:** a hosted provider whose token lives only in the page's memory (an SPA SDK's `cacheLocation:
+  'memory'`) cannot be carried by a saved state, because there is nothing in cookies or `localStorage` to save; a login that
+  round-trips through the provider in the SAME browser as the capture holds the token for the run, and the requested page is then
+  not loaded a second time when the login already ended on it (a load discards the token). **It works unattended for a test
+  account without MFA, which is the CI case. It does NOT answer MFA, a CAPTCHA or a person present**, and an origin the flow does
+  not name still ends `left-origin` with the sentence above. **How a run reaches it:** `resolve.ts` carries the declaration into the
+  plan (`AuthRequest.idpOrigins`, a test fails if `planFrom` drops it), a flow that declares none sends the request it always sent, and a
+  saved-state run carries none. **The premise held only once the final `navigate(url)` was skipped:** `signIn` used to end by loading the
+  requested page, which discards a token held only in page memory (measured in a real Chromium: the heading read `Sign in`). A declared
+  flow that already ended on the requested page is no longer loaded again, which needs an OPTIONAL `url()` on the driver (both shipped
+  drivers have it); a driver without one reloads, as before. Read on the local fixture of #4086 only (a real Chromium through the CLI's
+  real run and the worker's interpreter), not on a hosted provider.
+  **A reading not taken:** the worker's `capture-auth.mjs` marks the window navigated after a login (`markWindowNavigatedByLogin`) so NVDA
+  re-reads its buffer, and it now makes that mark on the path that does not reload. A unit test on a fake driver shows the mark is made;
+  **that NVDA then reads the signed-in page, not the page it held before the login, has NOT been verified against the real NVDA worker**
+  (the resource ban was in force, #4088). A row that takes that reading on a worker with NVDA is the product manager's to file.
 - **MFA is caught only by the flow's own `expect:`.** Every login flow must end in an `expect:` (`login-final-expect`),
   and a login that stops at a code prompt fails it (`expect-not-met`) **if, and only if, that `expect:` names something
   only the signed-in page shows.** The tool cannot check that it does: a weak one (a heading the login wall also has)
