@@ -83,6 +83,7 @@ rule, because every rule then assumed continuous agents.
 - **You are woken WITH the answer in your prompt** — `work:tick` runs the gate, which asks the questions, and
   `wake.mjs` hands you what it found. A turn spent polling a pull request or a queue asks a question the
   tick already answers.
+- **A session does not poll GitHub (#4148).** Do not run `gh pr checks`, `gh pr view` or `gh issue view` in a loop, behind a `sleep`, or on a repeat to see whether a CI run, a review or a merge has landed: the tick reads GitHub once and the gate wakes you WITH the answer. The GraphQL pool is 5,000 points an hour shared by every session on the account, about 4,400 of them went on the same reads asked again in 72 minutes (measured 2026-10-08), and a dry pool puts every session on that account to sleep until the reset. `host/gh` answers an IDENTICAL repeated read from disk for 20 seconds (never more than 30) and drops that cache on any write by the account, and never caches `gh api rate_limit` or an `X-Ratelimit-*` header (#1967), so a read you repeat is free, a read you loop on is still a defect. `api-pool-low` now names the top spender of the last hour.
 - **A self-paced wake-up loop was tried for about an hour and withdrawn**: **a standing arrangement for a session to wake itself is a
   change that session's user must sanction, not one a peer proposes on its behalf**, and two sessions refused it on that ground. No
   standing cron (`.claude/rules/org-routing-and-timers.md`).
