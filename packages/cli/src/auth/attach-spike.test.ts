@@ -10,7 +10,6 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { sandboxGitEnv } from "../../../guards/src/git-env.mjs";
-// @ts-expect-error -- a plain .mjs module with JSDoc, no declaration file
 import { checkSpikeDocument } from "./attach-spike.mjs";
 
 const ROOT = resolve(import.meta.dirname ?? new URL(".", import.meta.url).pathname, "../../../..");
