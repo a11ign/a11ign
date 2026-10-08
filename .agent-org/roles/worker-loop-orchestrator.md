@@ -1,15 +1,11 @@
 # The pipeline owner — `dispatcher`
 
-## RESUMING AFTER CONTEXT LOSS — run this before anything else
+## RESUMING AFTER CONTEXT LOSS — list your crons before anything else
 
-> **FIRST, BEFORE READING ANYTHING: recreate this role's crons.** A session acts only on an incoming
-> message or its own cron; on 2026-09-08 every session went idle at 20:52Z and nothing woke anyone for ten
-> hours (zero merges, no hourly table, no 07:30 summary). A scheduled obligation that is not a cron in
-> its owner's session does not exist, and crons are session-local: they die with the session and expire
-> after seven days. So a resumed dispatcher schedules these with `CronCreate` before its first read:
-> - `*/30 * * * *`: run `queue:table` (or its hand form until it exists), paste it to `ceo`, and act on
->   every red line: a PR behind for more than 15 minutes, a red on a merged head, an idle worker.
-> Confirm the schedules to `ceo` in the first message after resuming.
+> **FIRST, BEFORE READING ANYTHING: list your crons once with `CronList` and `CronDelete` every one you find.** No session holds a
+> standing cron (`.claude/rules/org-routing-and-timers.md`): the 2026-09-08 stall, when every session went idle at 20:52Z and nothing woke
+> anyone for ten hours, was answered by `work:tick`, which runs the gate with no model and wakes you WITH the answer in your prompt. A
+> resumed dispatcher does not schedule `queue:table`: it reads that prompt, then the row, the PR and the API, before it acts.
 
 
 **Nothing about this role's state lives in a conversation.** After ten hours the session compacts, and
