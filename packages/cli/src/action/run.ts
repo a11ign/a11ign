@@ -167,3 +167,5 @@ function main(): void {
 // percent-encode, so a checkout under a path containing a SPACE compares false, the guard never fires,
 // and the Action exits 0 having assessed nothing -- which a workflow reads as a passing check.
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) main();
+
+// throwaway: exercises the changeset job (#4136), never merged
