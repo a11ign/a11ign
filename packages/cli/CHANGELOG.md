@@ -1,5 +1,52 @@
 # a11ign
 
+## 0.4.1
+
+### Patch Changes
+
+- f7236ef: Every input of the Action is now passed to its scripts through the environment (`env:`) and none is interpolated into a `run:` script with `${{ inputs.* }}`. `task`, `forms`, `judge-backend`, `anthropic-api-key`, `judge-base-url`, `probe-forms`, `probe-focus`, `probe-navigation`, `axe` and `fail-on` were still expanded into shell text, GitHub's documented script-injection pattern: a `task` filled from an issue title or a pull-request body could close its quote and run commands on the runner. A test now fails on any `${{ inputs.* }}` inside a `run:` script (#4238).
+- 0f2c191: The Action's multi-line `urls` input now scans every page it lists. With `urls: |` and one URL per line, as `examples/nightly-workflow.yml` and the docs show, a11ign 0.4.0 on a Windows runner scanned only the first page and reported success: a newline inside one argument does not survive `npx.cmd`. The list now reaches the CLI as one line, so the documented form scans every page. The `url`, `urls` and `max-pages` inputs also reach the scripts through `env:` rather than `${{ }}` inside `run:`, closing the script-injection shape (#4221).
+
+## 0.4.0
+
+### Minor Changes
+
+- 2408d4f: **The Action's `probe-forms` input now defaults to `false`.** If your workflow relied on the old default, set `probe-forms: "true"` to keep submitting your forms with no valid input and reading what the page announces; a run that leaves it off logs that success criteria 3.3.1 and 4.1.3 were not assessed. `probe-forms` presses buttons, so `SECURITY.md` has a new section on running it against a staging app rather than production (#4108).
+  
+  A flows file may now list `idp-origins:`, the identity-provider origins a login passes through. Each must be an exact `http(s)` origin: a wildcard, a path, a credential, or your app's own origin is refused when the file loads. Those origins are allowed between the login's steps and nowhere else, so a run that ends parked on the provider is still reported as `left-origin` (#4106).
+  
+  The Action summary and the terminal report now name the WCAG 2.2 criteria the run did not cover (2.4.11, 2.5.7, 3.2.6, 3.3.7 and 3.3.8 on the recorded run) and say that their absence from the findings is not a pass (#4098).
+  
+  `examples/nightly-workflow.yml` is a scheduled workflow whose timeout and monthly budget are read from `docs/capture-cost.md`. It is an example only and changes nothing in the package's code (#4096).
+
+## 0.3.2
+
+### Patch Changes
+
+- 9ff9120: The README now states the measured `next`-to-`latest` time (3.4 hours on one release), from a dated reading.
+
+## 0.3.1
+
+### Patch Changes
+
+- 22c28a4: The remediation text for `auth-login-failed` now says `expect-not-met` is also what a page that never loaded ends as, and that the message's step and `could not be loaded (...)` line say which of the two it was, so a reader is no longer sent to fix an `expect:` that was never evaluated (#4015). The set of login-failure reasons is unchanged.
+
+## 0.3.0
+
+### Minor Changes
+
+- f2e2697: `exports` and `bin` now point at `.mjs` (and `.d.ts` for types) where they pointed at `.js`, because the packages are built by Rslib instead of `tsc --build`: a deep import of `<package>/dist/<file>.js` stops resolving, and the CLI's `bin` is `./dist/cli.mjs`, so this is `minor` (a breaking change on a 0.x package) for each of the four. The CLI is also now one bundle that inlines `@a11ign/documents` (and the `pdf-lib` behind it) and `yaml`, so a consumer no longer installs them (#3580, ADR 0043).
+
+### Patch Changes
+
+- 744f3c0: Declares `@a11ign/screenreader-fleet` as `^0.3.0`, where it was the exact `0.1.4`: the fleet package is no longer a sibling in the workspace but a package released from its own repository, and the isolation gate refuses an exact pin to a non-sibling (#3504). Nothing else in the package changed.
+- 176075d: The README now states which version `npx a11ign` runs (`latest`, or `a11ign@next` for the newest) and how long a merged fix took to reach `next`, from a dated reading.
+- 6029cb6: Consumes `@a11ign/screenreader-fleet` `^0.5.1` where it held `^0.3.0` across four releases, in the root, `cli`, `guards` and `lab` manifests, with the lockfile at `0.5.1` (#3803). What each release changes for the core: 0.4.0 removes `a11ign-worker-deploy`, so the root's `worker:deploy` script, whose target `deploy-worker.mjs` is no longer laid, is removed with it (`fleet:deploy` is the deploy); 0.4.1 and 0.4.2 stop `a11ign-doctor`, `a11ign-worker-compare` and `fleet-env` resolving monorepo paths from inside an installed package, and the core runs them from the laid copy at the monorepo path, so nothing changes for it; 0.5.0 replaces `expectedWorkerCode()` with the async `resolveExpectedWorkerCode({ checkoutRoot })`, which hashes the layer clone when there is one, and `worker-code-check.test.ts`, the one consumer, asks the new function (#3781); 0.5.1 makes `doctor`'s `dist-freshness` read `missingExportTargets` instead of asking `tsc --build --dry` (#3810's fleet half).
+- Updated dependencies [f2e2697]
+  - @a11ign/evidence@0.3.0
+  - @a11ign/judge@0.3.0
+  - @a11ign/scorer@0.3.0
+
 ## 0.2.7
 
 ### Patch Changes
