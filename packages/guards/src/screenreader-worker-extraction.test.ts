@@ -8,7 +8,7 @@
  *   1. Neither package is in the workspace: `pnpm-workspace.yaml`'s globs match no directory of either name, and no workspace manifest
  *      carries either package's name (so a copy under a different directory is caught too).
  *   2. `pnpm-lock.yaml` holds no `link:` to either, and no importer under their old paths.
- *   3. The `@a11ign/screenreader-worker` entry is a REGISTRY entry: `version: 0.2.0` under every importer that declares it, and a
+ *   3. The `@a11ign/screenreader-worker` entry is a REGISTRY entry: `version: 0.4.0` under every importer that declares it, and a
  *      `packages:` entry whose `resolution` carries an `integrity`. A version with no integrity is a version nobody verified.
  *   4. No pending changeset names either package. `.changeset/README.md` is prose and may name them; an entry's frontmatter may not,
  *      because `changeset version` would then try to version a package this workspace does not have.
@@ -33,7 +33,7 @@ import { layersFrom } from "../../control/src/layer-checkouts.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const CONSUMED = "@a11ign/screenreader-worker";
-const CONSUMED_VERSION = "0.2.0";
+const CONSUMED_VERSION = "0.4.0";
 /** The two directories that left, and every name either has been published or reserved under. */
 const DEPARTED_DIRECTORIES = ["nvda-worker", "nvda-speech"] as const;
 // BUILT, NOT WRITTEN: `package-rename-nvda-worker.test.ts` refuses any non-document file that spells the old name whole.
@@ -162,7 +162,7 @@ const REAL_INTEGRITY = `sha512-${"A".repeat(86)}==`;
 /** A minimal lockfile: `importer` declares the package at `version`, with `integrity` (or none) in `packages:`. */
 function lockfileWith({ version, integrity, extra = "" }: { version: string; integrity?: string; extra?: string }): string {
   const resolution = integrity === undefined ? "" : `    resolution: {integrity: ${integrity}}\n`;
-  return `lockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    dependencies:\n      '${CONSUMED}':\n        specifier: ^0.2.0\n        version: ${version}\n${extra}\n`
+  return `lockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    dependencies:\n      '${CONSUMED}':\n        specifier: ^0.4.0\n        version: ${version}\n${extra}\n`
     + `packages:\n\n  '${CONSUMED}@${CONSUMED_VERSION}':\n${resolution}    engines: {node: '>=20'}\n`;
 }
 
@@ -170,7 +170,7 @@ test("pnpm-lock.yaml holds no link: to either package and no importer under eith
   assert.deepEqual(linkRefusals(read(REPO_ROOT, "pnpm-lock.yaml")), []);
 });
 
-test("pnpm-lock.yaml holds @a11ign/screenreader-worker at version 0.2.0 with an integrity, under every importer that declares it", () => {
+test("pnpm-lock.yaml holds @a11ign/screenreader-worker at version 0.4.0 with an integrity, under every importer that declares it", () => {
   const lockfile = read(REPO_ROOT, "pnpm-lock.yaml");
   assert.deepEqual(registryEntryRefusals(lockfile), []);
   // Derived a second way: the manifests that declare it are the importers the lockfile must resolve, so a lockfile that lost one is not "enough".
