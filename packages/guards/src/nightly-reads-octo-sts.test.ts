@@ -21,7 +21,7 @@ const WORKFLOW = ".github/workflows/nightly.yml";
 const MINTING_JOB = "ready-audit";
 const GAP_STEP = /^Ask GitHub, once per code repository/;
 
-type Step = { name?: string; uses?: string; with?: Record<string, string>; env?: Record<string, string> };
+type Step = { id?: string; name?: string; uses?: string; run?: string; with?: Record<string, string>; env?: Record<string, string> };
 type Job = { permissions?: Record<string, string>; steps?: Step[] };
 type Workflow = { jobs: Record<string, Job> };
 type Policy = { issuer?: string; subject?: string; claim_pattern?: Record<string, string>; permissions?: Record<string, string> };
@@ -71,11 +71,21 @@ test("#4195: only the job that mints holds id-token: write", () => {
 test("#4195: the minting step names a policy that exists, is bound to nightly.yml on main, and asks for no write", () => {
   const step = octoStep(workflow);
   assert.ok(step, `${MINTING_JOB} has no octo-sts/action step`);
+  assert.match(step.uses ?? "", /^octo-sts\/action@[0-9a-f]{40}\s*$/, "the action is pinned to a commit: this job holds id-token: write and then runs fetched code");
   assert.equal(step.with?.scope, "a11ign/a11ign");
   const policy = parseYaml(read(`.github/chainguard/${step.with?.identity}.sts.yaml`)) as Policy;
   assert.deepEqual(bindingFaults(policy), []);
+  assert.deepEqual(policy.permissions, { issues: "read", pull_requests: "read", organization_projects: "read" });
   const writes = Object.entries(policy.permissions ?? {}).filter(([, level]) => level !== "read");
   assert.deepEqual(writes, [], "the board read is a read");
+});
+
+test("#4195: the audit runs on the minted token, not on a stored one or the workflow token", () => {
+  const steps = workflow.jobs[MINTING_JOB].steps ?? [];
+  const audit = steps.find((s) => s.run?.includes("agent-org ready:audit"));
+  assert.ok(audit, `${MINTING_JOB} has no ready:audit step`);
+  assert.equal(audit.env?.GH_TOKEN, `\${{ steps.${octoStep(workflow)?.id}.outputs.token }}`);
+  assert.ok(steps.indexOf(octoStep(workflow) as Step) < steps.indexOf(audit), "the exchange must come before the audit");
 });
 
 test("#4195: the one remaining stored-token read is the ruleset step, whose gap the workflow names", () => {

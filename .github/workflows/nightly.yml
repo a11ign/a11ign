@@ -376,7 +376,7 @@ jobs:
       # which cannot resolve the organisation's ProjectV2 and would turn the board-membership check into a warning nobody reads.
       - name: Exchange this run's identity for a token that reads the tracker and the board (Octo STS)
         id: octo
-        uses: octo-sts/action@v1.1.1
+        uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05   # v1.1.1
         with:
           scope: a11ign/a11ign
           identity: nightly-board-read
