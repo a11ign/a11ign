@@ -67,10 +67,35 @@ export function pinnedVersion(lockfile, name) {
 
 /** What a declared tag looks like: `v` and a semver. A branch or a bare sha is not a pin. */
 const DECLARED_TAG = /^v\d+\.\d+\.\d+$/;
-/** @typedef {{ path: string, package?: string, remote?: string, tag?: string, lays?: string[], declares?: string, keeps?: string[] }} Declaration */
-/** @typedef {{ remote: string, tag: string, path: string, lays: string[], declares?: string, keeps?: string[] }} LayingPlan */
+/** @typedef {{ path: string, source?: string, package?: string, remote?: string, tag?: string, lays?: string[], declares?: string, keeps?: string[] }} Declaration */
+/** @typedef {{ remote: string, tag: string, path: string, source?: string, lays: string[], declares?: string, keeps?: string[] }} LayingPlan */
 /** What `lay` puts down when a declaration names nothing else. */
 const DEFAULT_LAYS = ["src"];
+
+/**
+ * The first version whose repository tags a release `v<semver>` rather than `<package>@<version>`, by package (#4119). The tag form is the
+ * REPOSITORY's, not the version's: `screenreader-worker` moved to `v<semver>` at 0.3.0 (its tags are `@a11ign/screenreader-worker@0.2.0`, `v0.3.0`,
+ * `v0.4.0`), while `screenreader-fleet` is still `@a11ign/screenreader-fleet@0.5.1`, so a rule on the version alone would break the fleet.
+ */
+const BARE_TAGS_FROM = { "@a11ign/screenreader-worker": [0, 3, 0] };
+
+/** @param {string} version @returns {number[]} major, minor, patch */
+const semverParts = (version) => version.split(".").slice(0, 3).map(Number);
+
+/**
+ * The tag a registry release is laid at: `v<version>` once its package's repository tags that way, `<package>@<version>` otherwise.
+ *
+ * @param {string} name the registry name, `@a11ign/<package>`
+ * @param {string} version
+ * @returns {string}
+ */
+export function releaseTag(name, version) {
+  const from = BARE_TAGS_FROM[/** @type {keyof typeof BARE_TAGS_FROM} */ (name)];
+  if (from === undefined) return `${name}@${version}`;
+  const [major, minor, patch] = semverParts(version);
+  const atOrAfter = major !== from[0] ? major > from[0] : minor !== from[1] ? minor > from[1] : patch >= from[2];
+  return atOrAfter ? `v${version}` : `${name}@${version}`;
+}
 
 /**
  * The tag to lay: the declaration's own when it has one (a layer that is not on the registry), else the release the lockfile pins.
@@ -89,12 +114,13 @@ function tagToLay(entry, lockfile, layer) {
   const name = `@a11ign/${entry.package ?? layer}`;
   const pinned = pinnedVersion(lockfile, name);
   if ("refusal" in pinned) return pinned;
-  return { tag: `${name}@${pinned.version}` };
+  return { tag: releaseTag(name, pinned.version) };
 }
 
 /**
  * What to lay, from the manifest and the lockfile: the repository, the tag, the path inside the repository, what of it to lay, and the path here.
- * The layer's repository keeps the directory at the same path it had in the monorepo (ADR 0040), so `path` names both ends.
+ * The layer's repository kept the directory at the same path it had in the monorepo (ADR 0040), so `path` named both ends; a release that moved the
+ * package (the worker's root, from v0.3.0, #4119) declares `source`, where the layer is in ITS repository, and `path` stays where it is laid HERE.
  * @param {{ layers: Record<string, Declaration>, pinned?: Record<string, Declaration> }} manifest
  * @param {string} lockfile
  * @param {string} layer
@@ -107,7 +133,7 @@ export function layingPlan(manifest, lockfile, layer) {
   const pinned = tagToLay(entry, lockfile, layer);
   if ("refusal" in pinned) return pinned;
   return { remote: entry.remote, tag: pinned.tag, path: entry.path, lays: entry.lays ?? DEFAULT_LAYS,
-    ...(entry.declares === undefined ? {} : { declares: entry.declares }), ...(entry.keeps === undefined ? {} : { keeps: entry.keeps }) };
+    ...(entry.source === undefined ? {} : { source: entry.source }), ...(entry.declares === undefined ? {} : { declares: entry.declares }), ...(entry.keeps === undefined ? {} : { keeps: entry.keeps }) };
 }
 
 /** @param {string[]} args @param {string} cwd */
@@ -204,6 +230,7 @@ function alreadyLaid(root, target, plan) {
  */
 export function lay(root, plan) {
   const target = join(root, plan.path);
+  const source = plan.source ?? plan.path;
   if (alreadyLaid(root, target, plan)) return `already at ${plan.tag}`;
   const unsafe = existsSync(join(target, ".git")) ? whyNotDisposable(target) : null;
   if (unsafe) throw new Error(`NOT LAID: ${target} is a git clone and ${unsafe}; push or discard that work, or remove the directory, and run this again`);
@@ -212,12 +239,12 @@ export function lay(root, plan) {
     git(["-c", "advice.detachedHead=false", "clone", "--quiet", "--depth", "1", "--branch", plan.tag, plan.remote, scratch], root);
     // A name the tag does not hold is a wrong declaration, never an empty layer, and it is read BEFORE the old copy goes.
     for (const part of plan.lays) {
-      if (!existsSync(join(scratch, plan.path, part))) throw new Error(`NOT LAID: ${plan.tag} of ${plan.remote} holds no ${plan.path}/${part}`);
+      if (!existsSync(join(scratch, source, part))) throw new Error(`NOT LAID: ${plan.tag} of ${plan.remote} holds no ${source}/${part}`);
     }
     const kept = keptFiles(target, plan.keeps ?? []);
     rmSync(target, { recursive: true, force: true });
     mkdirSync(target, { recursive: true });
-    for (const part of plan.lays) cpSync(join(scratch, plan.path, part), join(target, part), { recursive: true, filter: (path) => !TESTS.test(path) });
+    for (const part of plan.lays) cpSync(join(scratch, source, part), join(target, part), { recursive: true, filter: (path) => !TESTS.test(path) });
     for (const [path, bytes] of kept) writeFileSync(join(target, path), bytes);
     if (plan.declares) cpSync(join(root, "layers.json"), join(target, plan.declares));
     writeFileSync(join(target, REF_FILE), `${plan.tag}\n`);
