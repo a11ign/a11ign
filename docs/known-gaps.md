@@ -3427,6 +3427,17 @@ this commit, not against the ADR's prose.**
   is `auth-login-failed` with reason `left-origin` (`assertStillOnOrigin`, `interpreter.ts`), and the remedy names the
   dedicated test account. **This is checked when an `expect:` is met and again after the requested page loads, not after
   every step**, so the run reads the redirect at those two moments and not earlier.
+  **A flow may DECLARE the identity-provider origins its login passes through (`idp-origins:` in the flows file, #4088), and then
+  only those are allowed**, only between the login's steps (the last step, the `expect:`, and the requested page must be on the
+  app's origin, so a run that ends parked on the provider is still `left-origin`), and nothing is typed into an origin that is not
+  declared. **What this is for:** a hosted provider whose token lives only in the page's memory (an SPA SDK's `cacheLocation:
+  'memory'`) cannot be carried by a saved state, because there is nothing in cookies or `localStorage` to save; a login that
+  round-trips through the provider in the SAME browser as the capture holds the token for the run, and the requested page is then
+  not loaded a second time when the login already ended on it (a load discards the token). **It works unattended for a test
+  account without MFA, which is the CI case. It does NOT answer MFA, a CAPTCHA or a person present**, and an origin the flow does
+  not name still ends `left-origin` with the sentence above. Read on the local fixture of #4086 only (a real Chromium, both
+  interpreters' tests), not on a hosted provider; and a run through the CLI reaches it only once `resolve.ts` carries the
+  declaration to the interpreters (**not yet: the key is parsed and honoured by `signIn`, and `planFrom` does not pass it on**).
 - **MFA is caught only by the flow's own `expect:`.** Every login flow must end in an `expect:` (`login-final-expect`),
   and a login that stops at a code prompt fails it (`expect-not-met`) **if, and only if, that `expect:` names something
   only the signed-in page shows.** The tool cannot check that it does: a weak one (a heading the login wall also has)
