@@ -162,6 +162,15 @@ test("a response WITH authApplied: true is the report, and the request carried t
   } finally { await worker.close(); }
 });
 
+test("DECLARED IDP ORIGINS cross the wire as part of the request, so the worker's interpreter holds the list the CLI's does (#4088)", async () => {
+  const worker = await listener("127.0.0.1", { transcript: ["Dashboard, heading level 1"], authApplied: true });
+  try {
+    const declared: AuthRequest = { ...AUTH, idpOrigins: ["https://login.idp.example.test"] };
+    await captureViaWorker("https://app.example.test/", { ...REQUEST, worker: worker.url, auth: declared });
+    assert.deepEqual((worker.received[0] as { auth: unknown }).auth, declared);
+  } finally { await worker.close(); }
+});
+
 const STATE_PATH = "/home/runner/work/_temp/a11y-state.json";
 const STATE_AUTH: AuthRequest = { ...AUTH, state: { path: STATE_PATH } };
 

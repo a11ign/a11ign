@@ -5,7 +5,7 @@
 // the declaration removed beside it, so "works" and "still refused" are shown by one browser and one flow.
 //
 //   1. The FAKE DRIVER (an app origin, a declared IdP origin, a third origin): the allowance's edges, one test each.
-//   2. REAL CHROMIUM on #4086's fixture: the whole sign-in, and the flows file that declares it. SKIPS, with its reason printed,
+//   2. REAL CHROMIUM on #4086's fixture, through the CLI's real run (flows text, `resolveAuthentication`, `ruleLayerSignIn`, the shipped Playwright driver). SKIPS, with its reason printed,
 //      where no Chromium starts here.
 //
 // The worker's half is `src/auth-flow-idp.test.ts` in its repository, which holds the SAME sentences below as literals.
@@ -13,9 +13,11 @@ import { after, describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { chromium, type Browser } from "playwright";
 
-import { parseFlowsFile, resolveLoginFlow, type FlowStep } from "./flows.js";
+import { type FlowStep } from "./flows.js";
 import { signIn, type AuthDriver, type AuthPlan, type AxNode } from "./interpreter.js";
 import { openPlaywrightDriver } from "./playwright-driver.js";
+import { resolveAuthentication } from "./resolve.js";
+import { ruleLayerSignIn } from "./rule-layer.js";
 import { startCrossOriginIdp } from "./fixtures/cross-origin-idp.mjs";
 
 const APP = "https://app.example.test";
@@ -193,20 +195,37 @@ ${declared ? `idp-origins:\n  - ${fixture.idpUrl}\n` : ""}flows:
 `;
 
 /**
- * Sign in through the flows file in a FRESH context, and read the heading the requested page shows afterwards.
- * **`openPlaywrightDriver` has no `url()` yet** (`playwright-driver.ts` is outside #4088's Region), so `withUrl` supplies the one line it
- * would hold; `withUrl: false` is the driver as shipped, and it reloads.
+ * The CLI's REAL run, up to the browser: the flows file's TEXT goes through `resolveAuthentication` (so `planFrom` decides what the
+ * plan holds), and the plan it returns goes through `ruleLayerSignIn` and the shipped `openPlaywrightDriver`. Nothing is built by hand
+ * between the file and the page, which is what a plan that drops `idp-origins:` would be caught by.
  */
-async function headingAfterSignIn(fixture: Awaited<ReturnType<typeof startCrossOriginIdp>>, { declared, withUrl }: { declared: boolean; withUrl: boolean }): Promise<string> {
+async function resolvedPlan(fixture: { appUrl: string; idpUrl: string; email: string; password: string }, declared: boolean): Promise<{ plan: AuthPlan; env: Record<string, string> }> {
+  const env = { IDP_USER: fixture.email, IDP_PASSWORD: fixture.password };
+  const before = process.env.JUDGE_BACKEND;
+  process.env.JUDGE_BACKEND = "local";
+  try {
+    const resolved = await resolveAuthentication({
+      args: { flows: "login.yml", loginFlow: "login", authState: null, sendAuthenticatedTranscriptToJudgeVendor: false },
+      urls: [`${fixture.appUrl}/account`], task: "Read and understand this page", axe: true, countCaptures: async () => 1, env,
+      readText: async () => flowsFileFor(fixture, declared), isPdf: () => false,
+    });
+    return { plan: (resolved as NonNullable<typeof resolved>).auth, env };
+  } finally { if (before === undefined) delete process.env.JUDGE_BACKEND; else process.env.JUDGE_BACKEND = before; }
+}
+
+/** Sign in in a FRESH context and read the heading the requested page shows afterwards. `reload: true` removes the driver's `url()`, so the old behaviour stands. */
+async function headingAfterSignIn(fixture: Awaited<ReturnType<typeof startCrossOriginIdp>>, { declared, reload }: { declared: boolean; reload: boolean }): Promise<string> {
   const context = await (launched.browser as Browser).newContext();
   try {
     const page = await context.newPage();
-    const file = parseFlowsFile(flowsFileFor(fixture, declared), "login.yml");
-    const plan: AuthPlan = { login: resolveLoginFlow(file, "login").steps, idpOrigins: file.idpOrigins };
-    const env = { IDP_USER: fixture.email, IDP_PASSWORD: fixture.password };
-    const shipped = await openPlaywrightDriver(page);
-    const driver: AuthDriver = withUrl ? { ...shipped, url: async () => page.url() } : shipped;
-    await signIn({ plan, url: `${fixture.appUrl}/account`, driver, env, mark: () => undefined });
+    const { plan, env } = await resolvedPlan(fixture, declared);
+    const url = `${fixture.appUrl}/account`;
+    if (reload) {
+      const shipped = await openPlaywrightDriver(page);
+      await signIn({ plan, url, driver: { ...shipped, url: undefined }, env, mark: () => undefined });
+    } else {
+      await ruleLayerSignIn({ plan, url, env })(page);
+    }
     return (await page.getByRole("heading").first().textContent()) ?? "";
   } finally { await context.close(); }
 }
@@ -216,23 +235,23 @@ describe("in a real Chromium, on #4086's fixture", () => {
 
   test("IdP declared: the run signs in through the second origin and the requested page reads Account", { skip: SKIP }, async () => {
     const fixture = await startCrossOriginIdp();
-    try { assert.equal(await headingAfterSignIn(fixture, { declared: true, withUrl: true }), "Account"); } finally { await fixture.stop(); }
+    try { assert.equal(await headingAfterSignIn(fixture, { declared: true, reload: false }), "Account"); } finally { await fixture.stop(); }
   });
 
   test("CONTROL: the same declared run through a driver that cannot say where it is RELOADS the page, and the memory-only token is gone", { skip: SKIP }, async () => {
     const fixture = await startCrossOriginIdp();
-    try { assert.equal(await headingAfterSignIn(fixture, { declared: true, withUrl: false }), "Sign in"); } finally { await fixture.stop(); }
+    try { assert.equal(await headingAfterSignIn(fixture, { declared: true, reload: true }), "Sign in"); } finally { await fixture.stop(); }
   });
 
   test("CONTROL: the storage: local fixture survives the reload, so the reload is the whole difference", { skip: SKIP }, async () => {
     const fixture = await startCrossOriginIdp({ storage: "local" });
-    try { assert.equal(await headingAfterSignIn(fixture, { declared: true, withUrl: false }), "Account"); } finally { await fixture.stop(); }
+    try { assert.equal(await headingAfterSignIn(fixture, { declared: true, reload: true }), "Account"); } finally { await fixture.stop(); }
   });
 
   test("FALSIFIER: the same run with the IdP undeclared ends auth-login-failed / left-origin", { skip: SKIP }, async () => {
     const fixture = await startCrossOriginIdp();
     try {
-      await assert.rejects(headingAfterSignIn(fixture, { declared: false, withUrl: true }), (error: Error & { reason?: string }) => {
+      await assert.rejects(headingAfterSignIn(fixture, { declared: false, reload: false }), (error: Error & { reason?: string }) => {
         assert.equal(error.reason, "left-origin");
         assert.match(error.message, new RegExp(`the page is on ${fixture.idpUrl}, not ${fixture.appUrl}`));
         return true;
