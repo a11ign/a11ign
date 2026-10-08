@@ -373,6 +373,54 @@ test("#869 MUTATION TARGET: two invalid tokens on the same page are both reporte
 });
 
 /**
+ * 3.3.8 Accessible Authentication (Minimum) — #4259 (#4084 outcome 2). Hand-built evidence shaped like the
+ * corpus pair in a11ign/lab#33: `paste-allowed-good.html` and `paste-blocked-bad.html` are identical except
+ * `onpaste="return false"` on the password input, so the two fixtures below differ ONLY in `pasteCancelled`.
+ */
+const PASTE_PAIR_FIELDS = [
+  { tag: "input", type: "text", autocomplete: "username" },
+  { tag: "input", type: "password", autocomplete: "current-password" },
+];
+const pasteEvidence = (pasteCancelled: boolean) => ({
+  transcript: [],
+  formInputs: PASTE_PAIR_FIELDS.map((field) => (field.type === "password" ? { ...field, pasteCancelled } : field)),
+}) as never;
+const on338 = (findings: ReturnType<typeof ruleFindings>) => findings.filter((f) => f.wcag.startsWith("3.3.8"));
+
+test("#4259: a password field that cancels paste is a REFERRED 3.3.8 finding (paste-blocked-bad)", () => {
+  const findings = on338(ruleFindings(pasteEvidence(true)));
+  assert.equal(findings.length, 1);
+  assert.match(findings[0].evidence, /<input type="password" autocomplete="current-password"> cancels the paste event/);
+  assert.equal(findings[0].mapping, "secondary",
+    "'unless an alternative is provided' is the criterion's own exception, which this evidence cannot see");
+});
+
+test("#4259: the same page with paste allowed makes no 3.3.8 finding (paste-allowed-good)", () => {
+  assert.equal(on338(ruleFindings(pasteEvidence(false))).length, 0);
+});
+
+test("#4259: the pair's evidence differs only in the paste outcome", () => {
+  const [good, bad] = [pasteEvidence(false), pasteEvidence(true)] as unknown as
+    { formInputs: Record<string, unknown>[] }[];
+  const differing = good.formInputs.flatMap((field, i) =>
+    Object.keys({ ...field, ...bad.formInputs[i] }).filter((key) => field[key] !== bad.formInputs[i][key]));
+  assert.deepEqual(differing, ["pasteCancelled"]);
+});
+
+test("#4259: not checked is not a finding -- no formInputs, or a password field with no paste outcome", () => {
+  assert.equal(on338(ruleFindings({ transcript: [] } as never)).length, 0);
+  assert.equal(on338(ruleFindings({
+    transcript: [], formInputs: [{ tag: "input", type: "password", autocomplete: null }],
+  } as never)).length, 0, "absence of a paste outcome must not read as 'paste is cancelled'");
+});
+
+test("#4259: a cancelled paste on a non-password field is not this rule's claim", () => {
+  assert.equal(on338(ruleFindings({
+    transcript: [], formInputs: [{ tag: "input", type: "text", autocomplete: null, pasteCancelled: true }],
+  } as never)).length, 0, "the Understanding text is about passwords and one-time codes, not every field");
+});
+
+/**
  * 2.1.2 No Keyboard Trap — a non-interference criterion, and the only failure here that is TOTAL: a
  * keyboard user who cannot leave a control cannot use the rest of the page at all.
  *

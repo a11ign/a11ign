@@ -236,7 +236,7 @@ It was 190 at the swap (2026-10-03), and **that number is a reading, not a failu
 
 ## Known limitations, stated plainly
 
-- **On a real page, eleven criteria are actually assessed — seven of them partially.** Twenty in total can
+- **On a real page, eleven criteria are actually assessed — seven of them partially.** Twenty-one in total can
   produce a finding, but four (2.4.6, 3.3.1, 3.3.2, 4.1.3) come only from the trained scorer, which abstains
   on pages unlike its training data — which today is still many real pages. A fifth, 3.3.3, is decided by a
   rule and still cannot fire on a page you do not own: it reads the form probe, which is deliberately off
@@ -254,8 +254,9 @@ It was 190 at the swap (2026-10-03), and **that number is a reading, not a failu
     focused or typed into, and an announced validation error that names the problem and not the remedy.
     All three are rule-decided and exact, and all three read probes that press, type or submit — off for
     pages you do not own, so on somebody else's site they cannot fire in either direction.
-  - **Rule-decided but never yet demonstrated on a real page: 1.3.5, 1.4.2, 1.4.13** — three different
-    reasons, and none is a consent boundary. 1.3.5 has no worker-side census populating its evidence on any
+  - **Rule-decided but never yet demonstrated on a real page: 1.3.5, 1.4.2, 1.4.13, 3.3.8** — three different
+    reasons, and none is a consent boundary. 1.3.5 and 3.3.8 (a password field that cancels paste, a referral
+    rather than an assertion) have no worker-side census populating their evidence on any
     capture yet; 1.4.2's probe runs and has simply never observed autoplaying media on a real capture;
     1.4.13's probe has simply not been turned on for real-page captures yet, which is an open gap rather
     than a measured absence.

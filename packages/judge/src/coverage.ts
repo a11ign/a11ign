@@ -100,7 +100,7 @@ export const SCORED_CRITERIA = [
  * about. `add()` in `rules.ts` now throws on an unlisted criterion, so this cannot go stale silently again.
  */
 export const RULE_CRITERIA = ["1.1.1", "1.3.1", "1.3.5", "1.4.2", "1.4.13", "2.1.1", "2.1.2", "2.4.1",
-  "2.4.2", "2.4.3", "2.4.4", "2.4.7", "3.2.1", "3.2.2", "3.3.2", "3.3.3", "4.1.2"] as const;
+  "2.4.2", "2.4.3", "2.4.4", "2.4.7", "3.2.1", "3.2.2", "3.3.2", "3.3.3", "3.3.8", "4.1.2"] as const;
 
 /** Everything the shipped judge can return a finding for, deduplicated and sorted. */
 export function assessedCriteria(): string[] {

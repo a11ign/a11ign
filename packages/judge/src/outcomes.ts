@@ -83,7 +83,8 @@ export interface CriterionOutcome {
 // two focus reads the worker already computed -- not a quick-nav sweep, so the same reasoning applies.
 // 1.3.5 joined on 2026-09-09 (#869, issue #79): its evidence is `formInputs`, one DOM query for the
 // `autocomplete` attribute that either ran or did not -- no quick-nav sweep, so no completeness caveat.
-export const NOT_SWEEP_DERIVED: readonly string[] = ["1.4.2", "1.3.5", "3.2.1", "3.2.2", "3.3.3", "1.4.13"];
+// 3.3.8 joined on 2026-10-09 (#4259): the same `formInputs` query, one paste event per password field.
+export const NOT_SWEEP_DERIVED: readonly string[] = ["1.4.2", "1.3.5", "3.2.1", "3.2.2", "3.3.3", "1.4.13", "3.3.8"];
 
 const SWEEPS_FEEDING: Record<string, readonly string[]> = {
   "1.1.1": ["graphic"],
