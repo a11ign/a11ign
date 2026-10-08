@@ -8,6 +8,9 @@
 //   4. The command the script PRINTS parses with the CLI's own `parseArgs`, and the flows file it names loads through the CLI's own
 //      flows reader with `idp-origins:` declared and the IdP's origin in it. The script is RUN as a child process, so the printed text
 //      is the real one. The CONTROL is the flows file with the `idp-origins:` block removed, which the same reader reads as declaring none.
+//   5. The printed command reaches a worker only over loopback (ADR 0038 Constraint 1): with a remote `--worker` the CLI exits 2 with
+//      `auth-refused-remote-worker`, so the script says so beside the command (#4172). The CONTROL is a loopback `--worker`, which gets no
+//      such sentence, and the script's loopback test is held to the CLI's own `isRemoteWorker` over a list of addresses.
 //
 // NOTHING HERE REACHES A WORKER: it proves the printed command is well-formed, not that a worker opened the fixture (#4107's reading).
 import { after, describe, test } from "node:test";
@@ -21,7 +24,8 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "../cli.js";
 import { parseFlowsFile } from "./flows.js";
 import { startCrossOriginIdp } from "./fixtures/cross-origin-idp.mjs";
-import { readServeOptions } from "./fixtures/serve-cross-origin-idp.mjs";
+import { readServeOptions, remoteWorkerNotice } from "./fixtures/serve-cross-origin-idp.mjs";
+import { isRemoteWorker } from "./refusals.js";
 
 const SERVE_SCRIPT = fileURLToPath(new URL("./fixtures/serve-cross-origin-idp.mjs", import.meta.url));
 const WORKER_URL = "http://worker.example.test:8765";
@@ -148,5 +152,39 @@ describe("the printed command", () => {
     assert.equal(code, 1);
     assert.match(stderr, /--public-host/);
     assert.equal(stdout, "");
+  });
+});
+
+describe("the printed command and a remote worker", () => {
+  const printed = async (worker: string[]) => {
+    const out = await mkdtemp(join(tmpdir(), "serve-idp-"));
+    scratch.push(out);
+    return (await runServeScript(["--out", out, ...worker])).stdout.split("\n");
+  };
+
+  test("a LAN --worker prints the refusal beside the command, naming the fault and the constraint", async () => {
+    const lines = await printed(["--worker", "http://203.0.113.7:8765"]);
+    const command = lines.findIndex((line) => line.startsWith(COMMAND_PREFIX));
+    assert.ok(command > 0, lines.join("\n"));
+    assert.match(lines[command - 1], /auth-refused-remote-worker/, "the sentence is the line above the command");
+    assert.match(lines[command - 1], /Constraint 1/);
+  });
+
+  test("CONTROL: a loopback --worker, and no --worker at all, print no such sentence", async () => {
+    for (const worker of [["--worker", "http://127.0.0.1:8765"], []]) {
+      const text = (await printed(worker)).join("\n");
+      assert.doesNotMatch(text, /auth-refused-remote-worker|Constraint 1/, worker.join(" "));
+      assert.ok(text.includes(COMMAND_PREFIX), "the command is still printed");
+    }
+  });
+
+  test("the script's loopback reading agrees with the CLI's isRemoteWorker on every address", () => {
+    const workers = [
+      "http://127.0.0.1:8765", "http://127.9.9.9:1", "http://localhost:8765", "http://[::1]:8765", "http://[::ffff:7f00:1]:1",
+      "http://203.0.113.7:8765", "http://worker.example.test:8765", "http://0.0.0.0:8765", "http://10.0.0.5:8765", "not a url",
+    ];
+    for (const worker of workers) {
+      assert.equal(remoteWorkerNotice(worker) !== "", isRemoteWorker(worker), worker);
+    }
   });
 });

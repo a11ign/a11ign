@@ -2,7 +2,7 @@
 // @ts-check
 /**
  * Serve #4086's declared-IdP fixture so a worker on ANOTHER machine can reach it, and print the command that runs an authenticated
- * capture of it through that worker (#4110, #4084 outcome 1; the reading itself is #4107's).
+ * capture of it, which reaches a worker ONLY OVER LOOPBACK (#4110, #4084 outcome 1; the reading itself is #4107's).
  *
  *   node serve-cross-origin-idp.mjs --out <dir> [--host <address>] [--public-host <name>] [--worker <url>]
  *
@@ -10,6 +10,11 @@
  * servers bind (default loopback, which no other machine can reach); `--public-host` is the name the URLs and redirects carry, and
  * what the worker's browser has to resolve. A wildcard bind (`0.0.0.0`, `::`) is REFUSED without `--public-host`, because a URL
  * cannot carry a wildcard and the first redirect would send the browser to an address it cannot open.
+ *
+ * A remote `--worker` is REFUSED BY DESIGN (ADR 0038 Constraint 1): the CLI exits 2 with `auth-refused-remote-worker` and sends nothing,
+ * because the worker takes plain HTTP with no authentication and a session is a credential. So with a non-loopback `--worker` the
+ * script prints that sentence beside the command rather than presenting it as runnable; the command that works from the worker's own
+ * machine is another row's (#4172).
  *
  * Nothing here talks to a worker. It prints a command; running it is another session's job.
  */
@@ -20,6 +25,8 @@ import { pathToFileURL } from "node:url";
 import { startCrossOriginIdp } from "./cross-origin-idp.mjs";
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "[::1]", "localhost"]);
+const MAPPED_LOOPBACK = /^\[::ffff:7f[0-9a-f]{2}:[0-9a-f]{1,4}\]$/;
+const IPV4_LOOPBACK = /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
 const WILDCARD_HOSTS = new Set(["0.0.0.0", "::", "[::]"]);
 const LOGIN_FLOW = "login";
 const FLOWS_FILE = "flows.yml";
@@ -65,6 +72,29 @@ export const networkNotice = (host) => isLoopbackBind(host)
   : `NOTICE: this server is reachable from the network (bound to ${host}). It serves only fake credentials, and belongs to no account; stop it when the reading is taken.`;
 
 /**
+ * Whether the CLI would refuse an authenticated run against this worker. Mirrors `isRemoteWorker` in `refusals.ts` (a `.mjs` script run
+ * by plain `node` cannot import it); the test holds the two to the same answer. An unparseable address is remote, as there.
+ * @param {string} worker
+ */
+const isRemoteWorkerUrl = (worker) => {
+  try {
+    const { hostname } = new URL(worker);
+    return !(hostname === "localhost" || hostname === "[::1]" || MAPPED_LOOPBACK.test(hostname) || IPV4_LOOPBACK.test(hostname));
+  } catch {
+    return true;
+  }
+};
+
+/**
+ * The sentence printed above the command when its `--worker` is not loopback. Empty for loopback and for the placeholder, which names no
+ * worker yet. @param {string} worker
+ */
+export const remoteWorkerNotice = (worker) => worker === WORKER_PLACEHOLDER || !isRemoteWorkerUrl(worker)
+  ? ""
+  : "NOT RUNNABLE AS PRINTED: the --worker below is not loopback, so the CLI exits 2 with auth-refused-remote-worker and sends nothing "
+    + "(ADR 0038 Constraint 1: the worker takes plain HTTP with no authentication, and a session is a credential).";
+
+/**
  * The flows file the printed command names. The origin is the app's and the IdP's is declared, so the login may leave the app for it
  * and nothing else. The credentials are read from the environment, never written here.
  * @param {{ appUrl: string, idpUrl: string }} fixture
@@ -100,6 +130,7 @@ export function startupReport({ fixture, flowsPath, worker, host }) {
     networkNotice(host),
     worker === WORKER_PLACEHOLDER ? `${WORKER_PLACEHOLDER} is not known to this script: pass --worker <url> to have it printed, or replace it.` : "",
     `run this with the two credentials above in the environment:`,
+    remoteWorkerNotice(worker),
     witnessCommand({ appUrl: fixture.appUrl, flowsPath, worker }),
   ];
   return lines.filter((line) => line !== "").join("\n");
