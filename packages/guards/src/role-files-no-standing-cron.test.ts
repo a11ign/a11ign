@@ -63,7 +63,7 @@ test("negative control: product-manager.md as it stood before #4093 is refused",
 test("the two rewritten files state the rule, not just omit the old instruction", () => {
   for (const f of ["product-manager.md", "worker-loop-orchestrator.md"]) {
     const text = readFileSync(resolve(ROLES, f), "utf8").replace(/^>\s?/gm, "").replace(/\s+/g, " ");
-    assert.match(text, /`CronList` once and `CronDelete` every one you find/, f);
+    assert.match(text, /list your crons once with `CronList` and `CronDelete` every one you find/, f);
     assert.match(text, /No session holds a standing cron/, f);
   }
 });
