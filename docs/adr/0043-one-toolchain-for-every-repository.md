@@ -320,10 +320,14 @@ read this list and know whether it passes):
 **A repository that cannot meet this says why in its own README**, in one sentence under its first heading, naming the rule it departs
 from and the reason. Silence is the failure; a stated departure is a decision someone can argue with.
 
-**What the rule allows for a private second package.** A package that is private and never published does not make a repository
-multi-package: "publishes more than one package" is the test, and a private one publishes nothing. It is the multi-package case only if
-its directory is named for its package; a private package under `packages/` in a repository that publishes one package is the
-single-package case with a workspace of one (failure 1) and is folded unless a consumer or a build target needs it separate.
+**What the rule allows for a private second package.** One predicate decides whether a repository is multi-package: **it publishes more
+than one package.** A private package that is never published does not count toward it, so a repository publishing one package is
+single-package whatever else it holds, and a private package under `packages/` beside it is failure 1 (a workspace of one published
+package plus a member that publishes nothing). The default is to fold it into the published package's `src/`. It may stay separate only
+when a consumer outside the published package, or a build target, needs it separate (the claimant measures and posts the reading, as
+row #4209 does below). A package kept on that ground is **a stated departure, not the multi-package case**: the repository's README says
+so under the sentence above, its directory is named for its package (failure 2 still applies), and the layout check reads the README
+sentence as the allowance. It is never a reason to leave a second README or a `*-workspace` root in place.
 
 **The ruling on `nvda-speech` (row #4209): FOLD.** `screenreader-worker`'s root is the public package `@a11ign/screenreader-worker`
 (AGPL-3.0-or-later) and it nests `packages/nvda-speech/`, the private `@a11ign/nvda-speech` (GPL-3.0-or-later, derived from NVDA,
