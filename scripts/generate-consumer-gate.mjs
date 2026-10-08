@@ -193,6 +193,26 @@ export function pinActionRef(yamlText, sha) {
 }
 
 /**
+ * What the generated `uses:` line says its sha IS (#4153). README's fence carries a comment for ITS pin, "the commit of the release
+ * tagged a11ign@0.3.0", and that is true of README's sha and false of this file's, which is `git rev-parse HEAD` at regeneration and
+ * has been since #558; the comment rode through `pinActionRef` unedited and was false for every regenerated pin.
+ *
+ * A step of its own, NOT part of `pinActionRef`: `scripts/outsider/generate.mjs` imports that and pins README's own release sha,
+ * for which README's comment is the true one.
+ */
+export const PIN_COMMENT = "the commit this file was regenerated at, not a release tag (node scripts/generate-consumer-gate.mjs)";
+
+/**
+ * Replaces the trailing comment on the Action's `uses:` line with `PIN_COMMENT`; a line with no comment gains none.
+ *
+ * @param {string} yamlText
+ * @returns {string}
+ */
+export function restatePinComment(yamlText) {
+  return yamlText.replace(new RegExp(`(${ACTION_USES}@[^\\s]+[ \\t]+)#[^\n]*`, "i"), (_whole, head) => `${head}# ${PIN_COMMENT}`);
+}
+
+/**
  * Replaces the `url:`/`task:` VALUES only, preserving every key, every other line, and all indentation.
  * The README's own values are placeholders (`https://example.com/checkout`, "Complete the checkout")
  * that no real page answers to -- this is the one deliberate substitution #494 allows, so the gate can
@@ -491,6 +511,63 @@ function buildVerifyReportJob(jobName) {
   ].join("\n");
 }
 
+/**
+ * Does `action.yml` differ between two commits? `git diff --quiet` exits 1 for "yes", 0 for "no" and anything else for a question
+ * git could not answer (an unknown commit, a shallow clone), which is thrown rather than read as "no".
+ *
+ * @param {{ from: string, to: string, cwd: string }} range
+ * @returns {boolean}
+ */
+function actionDefinitionDiffers({ from, to, cwd }) {
+  try {
+    execFileSync("git", ["diff", "--quiet", from, to, "--", ...ACTION_DEFINITION], { cwd, env: sandboxGitEnv(), stdio: "pipe" });
+    return false;
+  } catch (caught) {
+    const error = /** @type {Error & { status?: number, stderr?: Buffer }} */ (caught);
+    if (error.status === 1) return true;
+    throw new Error(`could not compare ${ACTION_DEFINITION.join(", ")} between ${from} and ${to}: ${error.stderr?.toString().trim() || error.message}`,
+      { cause: caught });
+  }
+}
+
+/**
+ * The pull-request-time reading of `check-pin`'s second step (#4153). Release runs that step too late: it lives in `consumer-gate.yml`,
+ * which no pull request triggers, so #4089's three commits and #4102's one merged green and refused the release afterwards.
+ *
+ * WHAT A PULL REQUEST CAN SEE, AND WHAT IT CANNOT. The pin must be a commit already on main that contains the `action.yml` change, so a
+ * pull request that changes `action.yml` can never carry a pin containing its own change: that commit does not exist until it merges.
+ * So there are two cases, and only one of them can be red:
+ *   - the pin predates `action.yml` on the BASE (`pin..base`): somebody already merged a change and nobody regenerated. RED, and it
+ *     goes green in the regeneration pull request, whose pin is the tip of main.
+ *   - the pull request's own change (`base...head`): CANNOT be red, since no pin could satisfy it. `ok` stays true and `message` says
+ *     what the merge will do, which is the announcement.
+ * The first case wins when both hold: a stale base is red whatever else the pull request touches.
+ *
+ * @param {{ pin: string, base: string, head: string, cwd?: string }} refs `base` is the branch the pull request merges into
+ * @returns {{ ok: boolean, ownChange: boolean, message: string }}
+ */
+export function actionPinVerdict({ pin, base, head, cwd = REPO }) {
+  const files = ACTION_DEFINITION.join(", ");
+  const baseSide = actionDefinitionDiffers({ from: pin, to: base, cwd });
+  if (baseSide) {
+    return {
+      ok: false, ownChange: false,
+      message: `${files} changed between the pin, ${pin}, and the base, ${base}: the a11y job would run the OLD Action -- `
+        + "regenerate (node scripts/generate-consumer-gate.mjs) at a commit containing the change",
+    };
+  }
+  // From the MERGE BASE, not the base's tip: commits main gained since the branch point are not this pull request's change.
+  const branchPoint = execFileSync("git", ["merge-base", base, head], { cwd, env: sandboxGitEnv(), encoding: "utf8" }).trim();
+  const ownChange = actionDefinitionDiffers({ from: branchPoint, to: head, cwd });
+  return {
+    ok: true, ownChange,
+    message: ownChange
+      ? `this pull request changes ${files}, which no pin can contain until it merges: the merge will refuse the next release until `
+        + "`node scripts/generate-consumer-gate.mjs` is run and merged"
+      : `${files} at the pin, ${pin}, is ${files} at ${base}`,
+  };
+}
+
 /** The real, current commit HEAD is on -- what the generated file's `uses:` step gets pinned to. */
 export function currentHeadSha() {
   return execFileSync("git", ["rev-parse", "HEAD"], { cwd: REPO, env: sandboxGitEnv(), encoding: "utf8" }).trim();
@@ -553,7 +630,7 @@ function currentGenerationInputsStatus() {
  */
 export function generate(readmeText, sha) {
   const jobsBlock = extractDocumentedJobsBlock(readmeText);
-  const pinned = pinActionRef(jobsBlock, sha);
+  const pinned = restatePinComment(pinActionRef(jobsBlock, sha));
   const targeted = substituteTarget(pinned, {
     url: "https://www.w3.org/WAI/demos/bad/before/home.html",
     task: "Find the main navigation and reach the survey.",

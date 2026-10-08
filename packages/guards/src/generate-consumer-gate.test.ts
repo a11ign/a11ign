@@ -17,16 +17,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { sandboxGitEnv } from "../../../scripts/test-support/git-sandbox.ts";
+import { sandboxGitEnv, withGitSandbox, type GitSandbox } from "../../../scripts/test-support/git-sandbox.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const gen = await import(pathToFileURL(join(REPO_ROOT, "scripts/generate-consumer-gate.mjs")).href);
 const {
   README_PATH, OUT, ACTION_DEFINITION, extractDocumentedJobsBlock, pinActionRef, substituteTarget, extractJobName, extractPinnedSha,
-  buildConsumerGateWorkflow, generate, refuseDirtyGenerationInputs, currentHeadSha,
+  buildConsumerGateWorkflow, generate, refuseDirtyGenerationInputs, currentHeadSha, actionPinVerdict, PIN_COMMENT, restatePinComment,
 } = gen;
 
 const SHA = "0123456789abcdef0123456789abcdef01234567";
@@ -132,6 +132,22 @@ test("extractJobName: no jobs, several none carrying the Action, and several car
   assert.throws(() => extractJobName(none), (e: Error) => /lists 2 jobs \(a, b\) and none carries `uses: /.test(e.message) && /\(#1305\)/.test(e.message));
   const both = "jobs:\n  a:\n    steps:\n      - uses: a11ign/a11ign@v1\n  b:\n    steps:\n      - uses: a11ign/a11ign@v2";
   assert.throws(() => extractJobName(both), /2 carry the Action \(a, b\)/);
+});
+
+test("restatePinComment: README's trailing comment on the Action's line becomes what the pin IS, and a line without one gains none (#4153)", () => {
+  const readmeLine = "      - uses: a11ign/a11ign@890cd490276d16102b3f371007951a24942950da   # the commit of the release tagged a11ign@0.3.0";
+  const restated = restatePinComment(pinActionRef(FENCE.replace("      - uses: a11ign/a11ign@v0.1.0", readmeLine), SHA));
+  assert.ok(restated.includes(`      - uses: a11ign/a11ign@${SHA}   # ${PIN_COMMENT}\n`), restated);
+  assert.ok(!restated.includes("release tagged"), "README's comment describes README's pin, which this file's is not");
+  assert.ok(!restatePinComment(pinActionRef(FENCE, SHA)).includes("#"), "no comment in, none out");
+  assert.match(restated, /^ {6}- uses: actions\/checkout@v7$/m, "another uses: step is untouched");
+  assert.ok(pinActionRef(readmeLine, SHA).includes("release tagged"), "pinActionRef itself still passes the comment through: the outsider generator relies on it");
+});
+
+test("generate: the real README's pin line carries PIN_COMMENT, not README's release-tag comment (#4153)", () => {
+  const workflow = generate(readFileSync(README_PATH, "utf8"), SHA) as string;
+  assert.ok(workflow.includes(`uses: a11ign/a11ign@${SHA}   # ${PIN_COMMENT}\n`), "the pin line");
+  assert.ok(!workflow.includes("release tagged"));
 });
 
 test("extractPinnedSha: reads back what pinActionRef baked, and refuses a block that was never pinned", () => {
@@ -254,4 +270,72 @@ test("currentHeadSha: a full 40-hex commit id equal to what git reports for this
   const sha = currentHeadSha() as string;
   assert.match(sha, new RegExp(`^[0-9a-f]{${SHA_LENGTH}}$`));
   assert.equal(sha, execFileSync("git", ["rev-parse", "HEAD"], { cwd: REPO_ROOT, env: sandboxGitEnv(), encoding: "utf8" }).trim());
+});
+
+/** Two commits of a fixture repo's `action.yml`: `v1` is what a pin at the first commit runs, `v2` what main has since. */
+function commitActionYml(sandbox: GitSandbox, body: string): string {
+  writeFileSync(join(sandbox.dir, "action.yml"), `${body}\n`);
+  sandbox.run(["add", "action.yml"]);
+  sandbox.commit(`action.yml: ${body}`);
+  return sandbox.run(["rev-parse", "HEAD"]).trim();
+}
+
+test("actionPinVerdict (#4153): a pin that predates action.yml on the BASE is red, a pin that contains it is green", () => {
+  withGitSandbox((sandbox) => {
+    sandbox.run(["init", "-q", "-b", "main"]);
+    const v1 = commitActionYml(sandbox, "v1");
+    const v2 = commitActionYml(sandbox, "v2");
+    const stale = actionPinVerdict({ pin: v1, base: v2, head: v2, cwd: sandbox.dir });
+    assert.equal(stale.ok, false, "the positive control: the pin is at v1, main has v2");
+    assert.match(stale.message, /action\.yml changed between the pin, [0-9a-f]{40}, and the base, [0-9a-f]{40}/);
+    assert.match(stale.message, /the a11y job would run the OLD Action/);
+    assert.match(stale.message, /node scripts\/generate-consumer-gate\.mjs/);
+    assert.equal(actionPinVerdict({ pin: v2, base: v2, head: v2, cwd: sandbox.dir }).ok, true, "the clean counterpart");
+  });
+});
+
+test("actionPinVerdict (#4153): a pull request that changes action.yml itself is NOT red, and says what its merge will do", () => {
+  withGitSandbox((sandbox) => {
+    sandbox.run(["init", "-q", "-b", "main"]);
+    const v1 = commitActionYml(sandbox, "v1");
+    const v2 = commitActionYml(sandbox, "v2");
+    const own = actionPinVerdict({ pin: v2, base: v2, head: commitActionYml(sandbox, "v3"), cwd: sandbox.dir });
+    assert.equal(own.ok, true, "its own change cannot be in a pin: the commit does not exist until it merges");
+    assert.equal(own.ownChange, true);
+    assert.match(own.message, /refuse the next release until `node scripts\/generate-consumer-gate\.mjs` is run and merged/);
+    assert.equal(actionPinVerdict({ pin: v2, base: v2, head: v2, cwd: sandbox.dir }).ownChange, false);
+    assert.equal(actionPinVerdict({ pin: v1, base: v2, head: v2, cwd: sandbox.dir }).ownChange, false);
+    const staleAndOwn = actionPinVerdict({ pin: v1, base: v2, head: sandbox.run(["rev-parse", "HEAD"]).trim(), cwd: sandbox.dir });
+    assert.equal(staleAndOwn.ok, false, "a pin already stale on the base is red even when the pull request also changes action.yml");
+  });
+});
+
+test("actionPinVerdict (#4153): a commit git cannot resolve is an error, never 'unchanged'", () => {
+  withGitSandbox((sandbox) => {
+    sandbox.run(["init", "-q", "-b", "main"]);
+    const v1 = commitActionYml(sandbox, "v1");
+    assert.throws(() => actionPinVerdict({ pin: OTHER_SHA, base: v1, head: v1, cwd: sandbox.dir }), /could not compare action\.yml/);
+  });
+});
+
+test("actionPinVerdict (#4153): the real tree -- the committed pin contains every action.yml change on origin/main", () => {
+  const pin = extractPinnedSha(readFileSync(OUT, "utf8")) as string;
+  const verdict = actionPinVerdict({ pin, base: "origin/main", head: "HEAD", cwd: REPO_ROOT });
+  assert.equal(verdict.ok, true, verdict.message);
+  if (verdict.ownChange) process.stdout.write(`::notice title=consumer-gate.yml::${verdict.message}\n`);
+});
+
+test("actionPinVerdict (#4153): the refusal says what the release's own check-pin says, so the two cannot drift", () => {
+  const phrases = ["would run the OLD Action", "regenerate (node scripts/generate-consumer-gate.mjs)"];
+  const workflow = generate(readFileSync(README_PATH, "utf8"), SHA) as string;
+  withGitSandbox((sandbox) => {
+    sandbox.run(["init", "-q", "-b", "main"]);
+    const v1 = commitActionYml(sandbox, "v1");
+    const v2 = commitActionYml(sandbox, "v2");
+    const { message } = actionPinVerdict({ pin: v1, base: v2, head: v2, cwd: sandbox.dir });
+    for (const phrase of phrases) {
+      assert.ok(workflow.includes(phrase), `check-pin no longer says "${phrase}"`);
+      assert.ok(message.includes(phrase), `the pull-request refusal no longer says "${phrase}"`);
+    }
+  });
 });
