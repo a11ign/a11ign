@@ -66,7 +66,7 @@ jobs:
     steps:
       - name: Mint a token that may edit pull requests, for this workflow as it is on main
         id: octo-sts
-        uses: octo-sts/action@v1.1.1
+        uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05 # v1.1.1
         with:
           scope: ${{ github.repository }}
           identity: dependency-pr-body
