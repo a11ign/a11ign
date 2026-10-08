@@ -1,6 +1,6 @@
 # 0024 — A form is configured with STATES, not values
 
-**Status:** accepted, 2026-09-02
+**Status:** accepted, 2026-09-02; amended 2026-10-08 (the Action's `probe-forms` default, below)
 **Supersedes nothing. Unblocks:** `known-gaps.md` §21 (4.1.3 real-page grounding), and 3.2.2's
 `realPageEvidence: false`.
 
@@ -200,3 +200,28 @@ one that completes the form — if the run dies midway, it dies having done the 
 **`state:` is `error` or `success` in v1, and nothing else.** A fixed vocabulary is what makes the
 criterion mapping in the table above computable; free-text state names would make "properly tested" a
 judgement again. Custom states are v2, alongside multi-step flows.
+
+## Amendment, 2026-10-08 (#4089, part of #4084): the Action's `probe-forms` defaults OFF
+
+**Direction:** the chairman, on #4084 ("ship a safer default: probing off, or an explicit allowlist, or a dry run"),
+ruled OFF by `product-manager` and approved by `ceo` on #4089.
+
+**What changed.** This ADR, and `action.yml`, had the Action's `probe-forms` default ON "because you own that app".
+That premise holds for a repository pointed at its own throwaway app and fails for an adopter pointing the Action at a
+staging app that holds seeded data: a button named like the task (*Save*, *Send*, *Submit*) was pressed on every run.
+The default is now `"false"`, equal to the CLI's. `examples/workflow.yml` sets `probe-forms: "true"` explicitly, so a
+copied workflow keeps probing, and `action-smoke.yml` sets it on the run that asserts activation and adds a run with no
+input that asserts nothing was activated.
+
+**What it costs.** With probing off, 3.3.1 and 4.1.3 are structurally unreachable by default, not clean. A default run
+says so as a `::notice::`, and the README, the example and SECURITY.md ("Running it against a staging app") state it.
+
+**What did not change.**
+
+- **The CLI default**: `--probe-forms` was already opt-in there.
+- **`probeTyping`**: still off everywhere. Only a forms config types values.
+- **A forms config's explicit consent**: `forms` presses exactly the controls it names, with or without `probe-forms`
+  (the two still compose, neither implies the other).
+- **Disclosures and `probe-navigation`**: still activated by default; this amendment moves `probe-forms` only.
+- **The worker's activation guard** (`probeKindFor`): untouched. The allowlist and dry-run alternatives are left for a
+  later row, should the chairman want them.

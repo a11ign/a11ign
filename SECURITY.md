@@ -18,10 +18,10 @@ are worth understanding before you point it at something.
 `probeForms` **submits forms and activates buttons** — that is how criteria 3.3.1 (error identification) and
 4.1.3 (status messages) are reachable at all; an error nobody hears only exists after a submit.
 
-It therefore defaults **on in the GitHub Action and off in the CLI**, and the split follows who owns the page:
-
-- a workflow runs against your own application, where submitting is intended
-- the CLI can be aimed at any URL, and **pressing *Book* on a stranger's site is not a review**
+It therefore defaults **off, in the CLI and in the GitHub Action** (since 2026-10-08, ADR 0024's amendment, on the
+chairman's direction in #4084; the Action used to default on, "because you own that app"). A staging app is yours and
+still holds seeded data, and the first run an adopter makes should not change it. See
+[Running it against a staging app](#running-it-against-a-staging-app).
 
 `probeKindFor` decides what may be pressed, `chooseProbe` only dispatches on its answer, and the decision is
 unit-tested (`probe-choice.test.ts`). A control is activated only
@@ -100,8 +100,8 @@ classify is the one three separate layers have now each had to learn about separ
 
 Two things bound this and both are load-bearing:
 
-- **It changes nothing on a stranger's site.** `probeForms` is off in the CLI, so this only widens what
-  happens where the operator has already said they own the page. A widening inside an existing consent is
+- **It changes nothing on a stranger's site.** `probeForms` is off in the CLI and the Action, so this only widens what
+  happens where the operator has already switched it on. A widening inside an existing consent is
   a different decision from granting one.
 - **It is strictly more conservative than the disclosure rule already shipped.** Disclosures are activated
   with no gate at all, on the reasoning that expanding is harmless — which is an assumption about author
@@ -110,6 +110,50 @@ Two things bound this and both are load-bearing:
 We are not claiming a checkbox can never do something surprising; an `onchange` handler can do anything a
 disclosure's can. The claim is narrower and checkable: **it cannot navigate**, and navigation is what
 separates "we observed the page" from "we left it".
+
+### Running it against a staging app
+
+**What a default run does.** With no `probe-forms` input the Action submits no form and presses no button your `task`
+names. The CLI is the same. That is the whole claim, and it is narrower than "presses nothing":
+
+- **Disclosures are still activated, with no gate** (a collapsed menu, an accordion, a `<select>`, which NVDA announces
+  as *collapsed*): the probe presses **Enter**, expanding is the point, and Enter does not change a `<select>`'s value.
+  A disclosure's handler can still do anything a handler can.
+- **The first link on the page is followed** by `probe-navigation`, on by default in both. On most pages that is
+  the skip link; set `probe-navigation: "false"` if you would rather it were not followed.
+- **Tab moves focus** (`probe-focus`) and activates nothing.
+
+The report lists what the run pressed under **What this run pressed on its own**, by control name and never a value.
+
+**What `probe-forms: "true"` presses, and how the `task` word chooses.** Under it the probe operates:
+
+- a **submit-like** button (`submit`, `sign in`, `save`, `send`, ...), with no valid input, whatever the task says; and
+- any **other** button only if its announced name shares a meaningful word with the `task`: "show only bags" presses
+  *Bags* and never *Delete account*; and
+- checkboxes and radio buttons (table above).
+
+So *Save*, *Send* and *Submit* are pressed on every run, and a button the task happens to name is pressed too.
+
+**What opting in costs when it is off.** 3.3.1 and 4.1.3 are unreachable, not clean: the evidence only exists after a
+control is operated. A default run says so as a `::notice::` in the log. A run that submitted nothing has not shown
+those two criteria pass.
+
+**How to run it against a staging app.**
+
+1. Point it at a **seeded test organisation**: a throwaway account whose data may be changed, **not a shared one**
+   that colleagues or customers' demos read. Seed it so an empty submit and a press on *Save* cost nothing.
+2. Add the one line, `probe-forms: "true"`, to the step. Without it nothing is submitted.
+3. Name the states you mean instead of letting the probe guess, where you can: a `forms` config presses only the
+   controls it names ([ADR 0024](docs/adr/0024-a-form-is-configured-with-states-not-values.md)). That one **types
+   values**, so its consent is separate and explicit.
+4. Do not give the run a login that can reach production data. An authenticated run turns `probe-forms` and
+   `probe-navigation` off and presses only what its own files name (below).
+
+**What is NOT guaranteed.** The word match is a guard, not a sandbox. It matches on an **announced name**, which the
+page controls: a button named *Save draft* is pressed by a task saying "save", and a *Delete* button labelled with a
+word from your task is pressed too. A submit-like name is pressed whatever the task says. Nothing here undoes a press,
+and nothing stops a handler from doing more than its label says. If a press would hurt, the data must be safe to
+change before the run starts: that is the seeded organisation, not the word match.
 
 ### It can log in to the page it examines, and then it holds a credential — 2026-09-24 (ADR 0038)
 

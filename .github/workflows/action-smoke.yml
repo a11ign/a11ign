@@ -54,6 +54,10 @@ jobs:
           url: https://www.w3.org/WAI/demos/bad/after/survey.html
           task: "Submit the survey without filling it in and see what is announced."
           judge-backend: local
+          # EXPLICIT since 2026-10-08 (#4089): the Action's default is now off, so this run asks for probing, as an
+          # adopter who wants 3.3.1 and 4.1.3 does, and still proves that probing works when asked for. Run 3 is the
+          # mirror: no input, nothing activated.
+          probe-forms: "true"
 
       - name: A conformant page must produce a report, an interaction, and NO 1.1.1 accusation
         shell: bash
@@ -61,8 +65,8 @@ jobs:
           path="${{ steps.witness.outputs.result-json }}"
           if [ -z "$path" ]; then echo "::error::the action produced no result-json output" >&2; exit 1; fi
           test -s "$path" || { echo "::error::result-json path '$path' is empty or missing" >&2; exit 1; }
-          # --expect-activation because `probe-forms` DEFAULTS on here: a default run that operates nothing
-          # means the default silently regressed and every 3.3.1/4.1.3 finding is unreachable while this
+          # --expect-activation because this run SETS `probe-forms: "true"`: a probing run that operates nothing
+          # means probing silently regressed and every 3.3.1/4.1.3 finding is unreachable while this
           # job stays green. --forbid-wcag because W3C publishes this page as conformant, so an ASSERTED
           # 1.1.1 (outcome `failed`) is a false accusation by their own claim. A REFERRED one (`cantTell`,
           # the scorer triaging) is not, and it varied capture to capture on this page (#3373): it is
@@ -91,6 +95,39 @@ jobs:
           test -s "$path" || { echo "::error::the inaccessible run produced no result-json" >&2; exit 1; }
           node packages/lab/src/harnesses/assert-action-report.mjs "$path" --require-wcag=1.1.1 --require-rule-layer
 
+      # Run 3 — the default, and the reason run 1 cannot stand alone on the other side (#4089). Run 1 proves probing
+      # works when ASKED FOR; this proves a run that asks for nothing presses nothing. It is run 1's page and task
+      # with NO `probe-forms` input, because that task names a button ("Submit the survey"): the exact case where the
+      # old default (ON) pressed it, and the case an adopter pointing the Action at a staging app is in. A green run 1
+      # with the default still ON would pass every assertion above, so this is the one that fails if it regresses.
+      - name: A run with no probe-forms input
+        id: default
+        uses: ./
+        with:
+          url: https://www.w3.org/WAI/demos/bad/after/survey.html
+          task: "Submit the survey without filling it in and see what is announced."
+          judge-backend: local
+
+      # `activationCount` is the asserter's own count of controls the capture operated (`formChanges` plus
+      # `stateChanges`), imported rather than re-derived so the two cannot drift. The asserter has no "expect none"
+      # flag and the script is a11ign/lab's, so the inversion is written here. The report is argv[1] and the script
+      # argv[2], not the reverse: the script runs its own `main` when argv[1] is itself. The positive control is run 1: the
+      # same page and task, probing asked for, `--expect-activation` above. A count of zero is only informative
+      # because that run counts more than zero on this very page.
+      - name: A default run must operate NOTHING
+        shell: bash
+        run: |
+          path="${{ steps.default.outputs.result-json }}"
+          test -s "$path" || { echo "::error::the default run produced no result-json" >&2; exit 1; }
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            import { pathToFileURL } from "node:url";
+            const { activationCount } = await import(pathToFileURL(process.argv[2]).href);
+            const n = activationCount(JSON.parse(readFileSync(process.argv[1], "utf8")));
+            console.log("controls activated by a run with no probe-forms input: " + n);
+            if (n !== 0) { console.error("::error::a default run operated " + n + " control(s); `probe-forms` no longer defaults off"); process.exit(1); }
+          ' "$path" "$PWD/packages/lab/src/harnesses/assert-action-report.mjs"
+
       # NAMED BY THE PATH THE ACTION ALWAYS WRITES, never by the failing step's OUTPUT.
       #
       # This read `steps.witness.outputs.result-json`, which that step sets on its LAST line — so when it
@@ -104,7 +141,7 @@ jobs:
       # The summary rides along for the same reason. `warn` rather than `ignore`: if this now collects
       # nothing, that is itself a finding about the run, and silence is what hid the bug for 85 runs.
       #
-      # NOTE, not fixed here: both `uses: ./` runs write the SAME filename, so run 2 overwrites run 1.
+      # NOTE, not fixed here: all three `uses: ./` runs write the SAME filename, so each overwrites the one before.
       # That only loses information when run 1 passed and run 2 failed; naming them apart needs an input
       # on `action.yml`, which is a consumer-facing change and does not belong in a workflow fix.
       - name: Keep the report when this fails
