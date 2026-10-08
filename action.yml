@@ -196,8 +196,11 @@ inputs:
       §5.2.5 applies to all content whether or not it is relied upon, and a keyboard trap is a total
       blocker: a user who cannot leave a control cannot use the rest of the page.
 
-      Costs roughly 8 seconds per capture. Set false to skip it, and note what that costs — 2.1.2 becomes
-      unreachable rather than clean, and the report says so.
+      The cost depends on the page and is not small: on 33 fleet captures at protocol 21 (not a `windows-2022`
+      runner) the Tab walk alone read 3.2-86.5 s, and the three probes this gates (Tab walk, focus context,
+      focus reveal) read 16.2-137.4 s per capture. The page ends the walk; the capture's own constants end the
+      other two (8 Tab stops each). See docs/capture-cost.md, "Where a capture's time goes". Set false to skip
+      it, and note what that costs — 2.1.2 becomes unreachable rather than clean, and the report says so.
     required: false
     default: "true"
   probe-navigation:
