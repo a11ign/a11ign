@@ -34,7 +34,8 @@
 #      cause was fixed is not left waiting for the next changeset: the platform's "re-run failed jobs" re-runs the SAME sha, whose
 #      tree still holds the defect. It publishes what a push would: the called workflow's `plan` reads what no tag has consumed, so a
 #      dispatch after a push that already released publishes NOTHING.
-#   3. Nothing here writes `main`, opens a pull request or holds `A11IGN_BOT_TOKEN`. The called workflow writes tags and
+#   3. Nothing here writes `main` or opens a pull request, and the `release` job holds no token beyond its own. `promote-action-tag`
+#      alone reads `A11IGN_BOT_TOKEN`, for three ref writes (#4154). The called workflow writes tags and
 #      nothing else; the approving review `main` requires (#2022) stands where the typed confirmation once stood.
 #   4. `.changeset/config.json` must say `"access": "public"`, and the `guards` job reads the file back rather than assuming it
 #      (the called `publish` job reads it again before it sends anything). It reads `public` today; it was flipped there on
@@ -101,6 +102,14 @@ on:
   # run, so the rehearsal is the guards alone and the `release` job is skipped by its own `if`. THE ONE EXCEPTION IS A DISPATCH ON `main`
   # (#4000), which is the release: the retry of a failed one whose cause is fixed, without waiting for the next changeset.
   workflow_dispatch:
+    inputs:
+      # THE ONE JOB, ON ITS OWN (#4154): `promote-action-tag` alone, for a version that is already on `latest`. A promotion that has
+      # happened leaves `decide` nothing to promote, so no later run reaches the job, and "re-run failed jobs" re-runs the OLD file.
+      # A dispatch ON `main` with this set runs that job and nothing else (every other job's `if` below names it).
+      action-tag-version:
+        description: "x.y.z of an a11ign version already promoted: move the Action's major tag to it, and run nothing else"
+        type: string
+        default: ""
   # THE PROMOTION'S TRIGGER (#3947), narrowed to the `qualification` context by the `decide` job's own `if`: `on:` cannot filter a status
   # by context. See the header.
   status:
@@ -120,17 +129,17 @@ jobs:
   # GUARDS 5, 6 AND 7, RUN AS JOBS AGAINST THE EXACT SHA THIS WORKFLOW RAN AT. `uses:` a local workflow path calls it as a
   # reusable workflow (`workflow_call`); GitHub runs a called workflow at THIS workflow's own ref.
   action-smoke:
-    if: github.event_name != 'status'
+    if: github.event_name != 'status' && inputs.action-tag-version == ''
     uses: ./.github/workflows/action-smoke.yml
 
   capture-regression:
-    if: github.event_name != 'status'
+    if: github.event_name != 'status' && inputs.action-tag-version == ''
     uses: ./.github/workflows/capture-regression.yml
 
   # #494. `consumer-gate.yml`'s own `check-pin` job (#558) compares its pinned sha against `${{ github.sha }}`, which under
   # `workflow_call` is THIS release's own sha, so a stale pin fails here on ubuntu-latest before the Windows job starts.
   consumer-gate:
-    if: github.event_name != 'status'
+    if: github.event_name != 'status' && inputs.action-tag-version == ''
     uses: ./.github/workflows/consumer-gate.yml
     # #1251. A called workflow may not request more than its caller grants, and this repository's default GITHUB_TOKEN is
     # read-only. consumer-gate.yml is generated from README.md's Quickstart fence, which gained `pull-requests: write` for the
@@ -144,7 +153,7 @@ jobs:
   # EVERY GUARD ABOUT WHAT IS PUBLISHED THAT IS A STEP, in one job the `release` job needs (see the header). It holds `contents: read`
   # and nothing else: no `id-token`, no write. The old `release` job held both writes beside all of these.
   guards:
-    if: github.event_name != 'status'
+    if: github.event_name != 'status' && inputs.action-tag-version == ''
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -354,7 +363,7 @@ jobs:
   # THE RELEASE: one call, and the only job here that can publish. Every job above is a guard it WAITS FOR, so a red one stops the call
   # and nothing is skipped to get a pass. The permissions are what the called workflow's jobs may use (a called workflow can keep or
   # reduce a permission and never gain one): `contents: write` for its tags, `checks: read` for its gate, `id-token: write` for the
-  # OIDC publish in the `npm-publish` environment (ADR 0043), limited to `main`. NO STORED REGISTRY TOKEN AND NO `A11IGN_BOT_TOKEN`:
+  # OIDC publish in the `npm-publish` environment (ADR 0043), limited to `main`. NO STORED REGISTRY TOKEN AND NO `A11IGN_BOT_TOKEN` (the `release` job holds no token; `promote-action-tag` holds it for three ref writes, #4154):
   # there is no pull request to open. The file name is the one npm's trusted-publisher entries name (workflow `release.yml`,
   # environment `npm-publish`): the OIDC token names the CALLING file, so renaming this file breaks the publish.
   release:
@@ -392,7 +401,7 @@ jobs:
   decide:
     name: decide which versions on next may become latest
     needs: [release]
-    if: ${{ !cancelled() && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || (github.event_name == 'status' && github.event.context == 'qualification')) }}
+    if: ${{ !cancelled() && inputs.action-tag-version == '' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || (github.event_name == 'status' && github.event.context == 'qualification')) }}
     runs-on: ubuntu-latest
     concurrency:
       group: promote-latest-decision
@@ -493,8 +502,8 @@ jobs:
 
   # THE ACTION'S MAJOR TAG (#3948): `uses: a11ign/a11ign@v0` follows the version the promotion has qualified, so a user of the Action gets a fix
   # once the fleet's qualification has passed and never on a `next` publish. It `needs` the promotion's SUCCESS and reads only what that job moved
-  # (`promoted`), so a red qualification, a wait and a `next` publish leave it alone. `contents: write` and nothing else: no `id-token` (the npm
-  # token stays in `promote`), and no checkout, so no repository code runs beside the write. The Action is the `a11ign` package, whose tag is
+  # (`promoted`), so a red qualification, a wait and a `next` publish leave it alone. `contents: read` and the bot token, in the one step that writes a ref (#4154, `ceo`): no `id-token` (the npm
+  # token stays in `promote`, and the PAT and the OIDC token never share a job), and no checkout, so no repository code runs beside the write. The Action is the `a11ign` package, whose tag is
   # `a11ign@<version>`; the major tag is `v<major>` (`v0` while the version is 0.x), and with `v<version>` (Dependabot cannot see `a11ign@...`) the only refs this job writes.
   #
   # THE PER-VERSION TAGS STAY IMMUTABLE: nothing here deletes or moves one, and the only one it writes is the exact `v<version>` (#4058), created
@@ -506,23 +515,34 @@ jobs:
   promote-action-tag:
     name: move the Action's major tag to the promoted version
     needs: [promote]
-    if: ${{ !cancelled() && needs.promote.result == 'success' }}
+    if: ${{ !cancelled() && (needs.promote.result == 'success' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.action-tag-version != '')) }}
     runs-on: ubuntu-latest
     concurrency:
       group: action-major-tag
       cancel-in-progress: false
     permissions:
-      contents: write
+      contents: read
     steps:
       - name: Move v<major> to the commit of the promoted a11ign version's tag, or leave it and say why
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
           GH_REPO: ${{ github.repository }}
           PROMOTED: ${{ needs.promote.outputs.promoted }}
+          ONLY_VERSION: ${{ inputs.action-tag-version }}
         run: |
           set -euo pipefail
           fail() { echo "::error::CANNOT_TELL: $1. No existing tag was moved."; exit 1; }
-          version=$(jq -r '[.[] | .tag | select(startswith("a11ign@")) | ltrimstr("a11ign@")] | sort_by(split(".") | map(tonumber)) | last // empty' <<<"${PROMOTED:-[]}")
+          # A ref write prints the response BODY when it is refused (`>/dev/null` hid it from the first real run, #4154), and exits red.
+          write_ref() {
+            local response
+            response=$("$@" 2>&1) || { echo "::error::refused: ${*:1:4}"; echo "$response"; exit 1; }
+          }
+          if [ -n "${ONLY_VERSION:-}" ]; then
+            [[ "$ONLY_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "'$ONLY_VERSION' is not an x.y.z"
+            version=$ONLY_VERSION
+          else
+            version=$(jq -r '[.[] | .tag | select(startswith("a11ign@")) | ltrimstr("a11ign@")] | sort_by(split(".") | map(tonumber)) | last // empty' <<<"${PROMOTED:-[]}")
+          fi
           if [ -z "$version" ]; then
             echo "no version of the Action was promoted; the major tag stays where it is"
             exit 0
@@ -534,12 +554,16 @@ jobs:
           commit_of() { awk -F'\t' -v t="$1" '$1 == t { print $2 }' <<<"$commits"; }
           new=$(commit_of "a11ign@$version")
           [ -n "$new" ] || fail "no tag a11ign@$version to point $major_tag at (promoted, and the tag job has not cut it)"
+          # THE DEFAULT `GITHUB_TOKEN` CANNOT DO THESE WRITES, and no fallback to it exists on purpose (#4154): it holds no `workflows` permission, and GitHub
+          # refuses any ref at a commit whose `.github/workflows` differ from `main`'s tip, which a release commit cut from an older `main` always does.
+          # The refusal reads `Resource not accessible by integration` over the API and names the cause only on a `git push`. An empty secret is red.
+          [ -n "${GH_TOKEN:-}" ] || fail "the secret A11IGN_BOT_TOKEN is empty, and $major_tag cannot be written without a token holding contents: write and workflows"
           # THE EXACT `v<version>` TAG (#4058): Dependabot reads version-shaped tags, and `a11ign@<version>` is not one. Created at the same commit,
           # never moved: one that exists at the commit is left, and one anywhere else is red, for a tag a consumer may have pinned is not ours to move.
           version_tag="v$version"
           existing=$(commit_of "$version_tag")
           if [ -z "$existing" ]; then
-            gh api -X POST "repos/$GH_REPO/git/refs" -f ref="refs/tags/$version_tag" -f sha="$new" >/dev/null
+            write_ref gh api -X POST "repos/$GH_REPO/git/refs" -f ref="refs/tags/$version_tag" -f sha="$new"
             echo "$version_tag: was absent, now $new (a11ign@$version)"
           elif [ "$existing" = "$new" ]; then
             echo "$version_tag: already at $new; left"
@@ -548,7 +572,7 @@ jobs:
           fi
           old=$(commit_of "$major_tag")
           if [ -z "$old" ]; then
-            gh api -X POST "repos/$GH_REPO/git/refs" -f ref="refs/tags/$major_tag" -f sha="$new" >/dev/null
+            write_ref gh api -X POST "repos/$GH_REPO/git/refs" -f ref="refs/tags/$major_tag" -f sha="$new"
             echo "$major_tag: was absent, now $new for $version (a11ign@$version)"
             exit 0
           fi
@@ -562,7 +586,7 @@ jobs:
             echo "the major tag never moves backwards: a promotion of $version leaves $major_tag at $old, which follows $followed"
             exit 0
           fi
-          gh api -X PATCH "repos/$GH_REPO/git/refs/tags/$major_tag" -f sha="$new" -F force=true >/dev/null
+          write_ref gh api -X PATCH "repos/$GH_REPO/git/refs/tags/$major_tag" -f sha="$new" -F force=true
           echo "$major_tag: was $old (follows $followed), now $new for $version (a11ign@$version)"
 
   # WHEN `latest` MOVED, recorded where `dora` reads it with no token (the header). The only job here holding `contents: write` for this,
