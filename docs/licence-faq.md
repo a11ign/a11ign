@@ -58,15 +58,15 @@ Having a contractor or a service provider make modifications, or run the program
 
 ## 4. Are all the packages under the same licence?
 
-No. The repository is `AGPL-3.0-or-later` except two packages, and the split is deliberate:
+No. Two packages carry other licences, and the split is deliberate. Only `evidence` is in this repository; `nvda-speech` moved to another one:
 
 | package | licence | where to read it |
 |---|---|---|
 | `evidence` | **Apache-2.0** | [`packages/evidence/LICENSE`](../packages/evidence/LICENSE) and the `license` field of its `package.json`. Its wire types and pure predicates can be embedded in other people's code. |
 | `nvda-speech` | **GPL-3.0-or-later** | Derived from NVDA's own GPL-licensed code, so it carries the GPL. It does not publish, and it now lives in the `a11ign/screenreader-worker` repository (`packages/nvda-speech/`), not in this one. |
 
-The split is recorded in [`packages/README.md`](../packages/README.md), which is the authority for it; every other package
-in this repository is `AGPL-3.0-or-later`, as its own `package.json` says.
+The split is recorded in [`packages/README.md`](../packages/README.md), which is the authority for it. Every package in this
+repository other than `evidence` is `AGPL-3.0-or-later`, as its own `package.json` says.
 
 The AGPL itself speaks to combining a covered work with a GPL version 3 work:
 
