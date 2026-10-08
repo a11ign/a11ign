@@ -9,19 +9,21 @@
 # policy cannot widen itself: the server forces `repositories` to the repository the file sits in. Nothing else, `issues` included: #333
 # measured that the native `Closes #N` closure is performed by the merging identity and needs no grant on the token.
 #
-# WHAT IT CANNOT BIND, AND THE GAP NAMED (measured on #4191, comment 6068015545): `pull_request` runs the workflow as it is on the
-# BRANCH'S merge ref (`job_workflow_ref` = `...@refs/pull/N/merge`) and presents `sub` = `...:pull_request`, the same `sub` a
-# `pull_request_target` run presents. So a branch that edits `auto-arm.yml` can mint this token, and no claim can tell it from the real
-# file. That is no worse than the stored token it replaces, which every same-repository branch could already read, and the permission set
-# above is NARROWER than that token's. `push` and `workflow_dispatch` on `main` DO bind to `main` (`sub` = `ref:refs/heads/main`,
-# `job_workflow_ref` = `...@refs/heads/main`); a dispatch on another branch presents that branch's ref and matches neither alternative.
+# WHAT BINDS IT TO `main` (measured on #4191, comment 6068015545): `pull_request` runs the workflow as it is on the BRANCH'S merge ref
+# (`job_workflow_ref` = `...@refs/pull/N/merge`) and presents `sub` = `...:pull_request`, the SAME `sub` a `pull_request_target` run
+# presents, so `sub` alone cannot tell a branch's edited copy from `main`'s. The claim that can is `job_workflow_ref` pinned to
+# `@refs/heads/main`, with `event_name` naming the three triggers `auto-arm.yml`'s minting jobs run on: `pull_request_target` (the file as on
+# `main`), `push` on `main` and `workflow_dispatch` on `main`. A `pull_request` run, a dispatch on another branch (its `sub` and ref are
+# that branch's) and every other workflow are refused. No alternative for `refs/pull/N/merge` exists, so a branch that edits `auto-arm.yml`
+# cannot mint (#4287 review, `ceo`: whether the Octo STS app is exempt from the `main` approval requirement is the chairman's reading,
+# and this binding is what makes the answer stop mattering).
 #
 # `sub` carries IMMUTABLE ids (`repo:<owner>@<id>/<repo>@<id>`), so `repo:a11ign/a11ign:...` never matches (#4191).
 issuer: https://token.actions.githubusercontent.com
 subject_pattern: repo:a11ign@320310787/a11ign@1280353940:(pull_request|ref:refs/heads/main)
 claim_pattern:
-  job_workflow_ref: a11ign/a11ign/\.github/workflows/auto-arm\.yml@(refs/heads/main|refs/pull/[0-9]+/merge)
-  event_name: pull_request|push|workflow_dispatch
+  job_workflow_ref: a11ign/a11ign/\.github/workflows/auto-arm\.yml@refs/heads/main
+  event_name: pull_request_target|push|workflow_dispatch
 permissions:
   pull_requests: write
   contents: write

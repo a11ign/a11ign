@@ -4,7 +4,7 @@
  *
  * Two halves, each with the control that shows it can fail:
  *   - the POLICY (`.github/chainguard/auto-arm.sts.yaml`): grants pull-request write and contents write and nothing else, and its patterns
- *     accept the `push`, `workflow_dispatch` and `pull_request` claims of this workflow and refuse the ones measured on #4191 that are not.
+ *     accept the `push`, `workflow_dispatch` and `pull_request_target` claims of main's copy of this workflow and refuse the ones measured on #4191 that are not.
  *     Octo STS matches every pattern against the WHOLE claim (v0.11.2 README), which `fullMatch` reproduces.
  *   - the WORKFLOW: `arm` and `sweep` each mint before they use, hold `id-token: write` and no other write, and no step falls back to
  *     `github.token` (the fallback is #416's defect restored quietly).
@@ -40,20 +40,22 @@ test("#4198: the policy grants pull-request write and contents write, and nothin
   assert.deepEqual(POLICY.permissions, { pull_requests: "write", contents: "write" });
 });
 
-test("#4198: the policy mints for the three runs this workflow takes and refuses the ones that are not its own", () => {
+test("#4198: the policy mints for the three runs of main's copy of this workflow and refuses the ones that are not its own", () => {
   const sub = (tail: string) => `${REPOSITORY_SUB}:${tail}`;
   const accepted = [
     ["push on main", { sub: sub("ref:refs/heads/main"), job_workflow_ref: `${WORKFLOW}@refs/heads/main`, event_name: "push" }],
     ["workflow_dispatch on main", { sub: sub("ref:refs/heads/main"), job_workflow_ref: `${WORKFLOW}@refs/heads/main`, event_name: "workflow_dispatch" }],
-    // THE NAMED GAP: a branch's own copy of the file mints here, and no claim can tell it from `main`'s (#4191).
-    ["pull_request (the branch's copy)", { sub: sub("pull_request"), job_workflow_ref: `${WORKFLOW}@refs/pull/4226/merge`, event_name: "pull_request" }],
+    // `pull_request_target` runs `main`'s copy and presents the same sub as `pull_request` (#4191), so the workflow ref is what is pinned.
+    ["pull_request_target (main's copy)", { sub: sub("pull_request"), job_workflow_ref: `${WORKFLOW}@refs/heads/main`, event_name: "pull_request_target" }],
   ] as const;
   for (const [label, claims] of accepted) assert.ok(mints(POLICY, claims), `${label} must mint`);
 
   const refused = [
     ["another workflow in this repository", { sub: sub("ref:refs/heads/main"), job_workflow_ref: "a11ign/a11ign/.github/workflows/oidc-claims-probe.yml@refs/heads/main", event_name: "push" }],
     ["a dispatch on another branch", { sub: sub("ref:refs/heads/agent/x"), job_workflow_ref: `${WORKFLOW}@refs/heads/agent/x`, event_name: "workflow_dispatch" }],
-    ["pull_request_target, which presents the same sub", { sub: sub("pull_request"), job_workflow_ref: `${WORKFLOW}@refs/heads/main`, event_name: "pull_request_target" }],
+    // THE GAP #4287's REVIEW CLOSED: a branch's own copy of the file must not mint, whatever its sub says.
+    ["pull_request, the branch's copy of the file", { sub: sub("pull_request"), job_workflow_ref: `${WORKFLOW}@refs/pull/4226/merge`, event_name: "pull_request" }],
+    ["pull_request_target claims carrying a branch's workflow ref", { sub: sub("pull_request"), job_workflow_ref: `${WORKFLOW}@refs/pull/4226/merge`, event_name: "pull_request_target" }],
     ["another repository's id", { sub: "repo:a11ign@320310787/other@1:ref:refs/heads/main", job_workflow_ref: `${WORKFLOW}@refs/heads/main`, event_name: "push" }],
     ["the name-form subject, which never matches (#4191)", { sub: "repo:a11ign/a11ign:ref:refs/heads/main", job_workflow_ref: `${WORKFLOW}@refs/heads/main`, event_name: "push" }],
     ["a workflow file merely ending the same way", { sub: sub("ref:refs/heads/main"), job_workflow_ref: `${WORKFLOW}.evil@refs/heads/main`, event_name: "push" }],
@@ -63,7 +65,7 @@ test("#4198: the policy mints for the three runs this workflow takes and refuses
 
 test("#4198 POSITIVE CONTROL for the matcher: a policy widened to any subject mints for what the real one refuses", () => {
   const widened = { ...POLICY, subject_pattern: ".*" };
-  const claims = { sub: "repo:evil@1/evil@2:pull_request", job_workflow_ref: `${WORKFLOW}@refs/pull/1/merge`, event_name: "pull_request" };
+  const claims = { sub: "repo:evil@1/evil@2:ref:refs/heads/main", job_workflow_ref: `${WORKFLOW}@refs/heads/main`, event_name: "push" };
   assert.ok(mints(widened, claims), "the matcher must be able to say yes");
   assert.ok(!mints(POLICY, claims), "and the real policy says no");
 });
@@ -90,4 +92,19 @@ test("#4198: no step falls back to github.token or reads a stored token, and `st
     }
   }
   assert.equal(jobs().stalled!.steps.some((s) => s.env?.GH_TOKEN === "${{ github.token }}"), true, "stalled is the one job that keeps GITHUB_TOKEN");
+});
+
+test("#4198 (#4287 review): the minting jobs never run the branch's copy of the file, and the action is pinned to its commit", () => {
+  const text = read(".github/workflows/auto-arm.yml");
+  const doc = parseYaml(text) as { on: Record<string, unknown> };
+  assert.ok("pull_request_target" in doc.on, "arm needs the trigger that runs main's copy");
+  const armIf = (jobs().arm as Job & { if: string }).if;
+  assert.match(armIf, /github\.event_name == 'pull_request_target'/);
+  assert.doesNotMatch(armIf, /github\.event_name == 'pull_request'(?!_)/, "arm must not run on pull_request");
+  assert.match((jobs().sweep as Job & { if: string }).if, /github\.event_name != 'pull_request'(?!_)/, "sweep must refuse pull_request");
+  assert.match((jobs().stalled as Job & { if: string }).if, /github\.event_name != 'pull_request_target'/, "stalled keeps pull_request only");
+  for (const name of MINTING_JOBS) {
+    const uses = jobs()[name]!.steps.find((s) => s.uses?.startsWith("octo-sts/action@"))!.uses!;
+    assert.match(uses, /^octo-sts\/action@[0-9a-f]{40}$/, `${name}: pin the commit, not the movable tag`);
+  }
 });
