@@ -34,16 +34,21 @@ name: trunk
 # Until 2026-09-10 they were three workflows of their own, each firing on every push to main -- 777 runs
 # on the day measured, for three scripts that each take seconds. They ask whether the board editions are
 # still arriving (`board-report.yml` and `board-summary-check.yml`, watched by
-# `packages/agent-org/src/board-schedule-liveness.mjs`), whether the first-publish NPM_TOKEN is still present (#73), and
+# `packages/agent-org/src/board-schedule-liveness.mjs`), and
 # whether the pull request that produced this commit was actually tested (#118). Each is a property of
 # TIME, and each MUST still run on push and never on a cron: GitHub disables scheduled workflows
 # repository-wide after 60 days of inactivity, so a scheduled watchdog dies in the same breath as the jobs
 # it guards, while a push cannot be disabled by inactivity because a push IS the activity. This workflow
-# already runs on every push, so the three steps here cost no workflow runs of their own. They are
+# already runs on every push, so the two steps here cost no workflow runs of their own. They are
 # `continue-on-error`, deliberately: each finding is about the pipeline or a secret, never about the commit
 # that happened to trigger it, and failing the push would blame an unrelated author. `trunkRecheck` does
 # not depend on this job, so a red watchdog can never be read as a red `main`. `board-liveness.test.ts`,
-# `npm-token-liveness.test.ts` and `workflow-run-liveness.test.ts` pin all of that against this file.
+# and `workflow-run-liveness.test.ts` pin all of that against this file.
+#
+# THE THIRD WATCHDOG, "Is NPM_TOKEN still there? (#73)", IS GONE (#4196): it was the only step that read a stored token
+# (the organisation-secrets read token), and the question it asked is dead. `grep NPM_TOKEN` over the workflows of all nine
+# a11ign repositories finds no reader (`release.yml` publishes by OIDC, "NO STORED REGISTRY TOKEN"), so there is no
+# first-publish token left to be revoked or to linger.
 #
 # UNSCOPED, DELIBERATELY, as `ci.yml`'s `ts` job now is too (#3573); this was once the only whole-suite run. A push to `main` is a merge, which by
 # definition can touch anything, and pushes to `main` are far less frequent than PR commits -- there is no
@@ -115,7 +120,7 @@ jobs:
   # check runs) and #416 (the permanent fix: arm with a real PAT so bot merges stop being invisible to
   # every `pull_request`/`push` trigger in this repository, not just this one).
 
-  # THE WATCHDOGS (#901): three continue-on-error steps, one per liveness script. See the header for why
+  # THE WATCHDOGS (#901): two continue-on-error steps, one per liveness script. See the header for why
   # they are here rather than in `nightly.yml`, and why `trunkRecheck` must never depend on this job.
   watchdogs:
     runs-on: ubuntu-latest
@@ -142,11 +147,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: agent-org board:liveness --post --issue=20
-      - name: Is NPM_TOKEN still there? (#73)
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.ORG_SECRETS_READ_TOKEN || github.token }}
-        run: node scripts/npm-token-liveness.mjs --post --issue=73
 
   # THE ONLY QUESTION THIS JOB ANSWERS: did this push silently revert work already on main. `trunkBuildTest`
   # below answers the OTHER half (is main's new tip actually green); `trunkRecheck` records whether either
