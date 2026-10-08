@@ -20,6 +20,11 @@
 const HOUR_MS = 3_600_000;
 
 /**
+ * THE CLOCK STARTS WHEN THE POLL COULD FIRST SEE THE RELEASE, which is the later of its publish and its promotion to `latest` (#4163,
+ * found by #4160). The poll runs `npm view a11ign dist-tags.latest`, so a version published to `next` is invisible to it until promoted.
+ * MEASURED 2026-10-08: a11ign@0.3.2 was published 2026-10-07T23:59:49Z and promoted 2026-10-08T14:23:14Z, 14.4 h later; aged from the
+ * publish it read `absent` 1.2 h after the poll could first see it. release.yml documents a long `next`-to-`latest` wait as normal.
+ *
  * How long a version may go with no run before `pending` becomes `absent`. MEASURED 2026-10-08T07:55Z on the outside repository
  * itself (#4059, found by #3224): `gh run list --repo a11ign-labs/a11ign-consumer-check --workflow outsider-job.yml --event schedule
  * --limit 100 --json createdAt` returned 21 scheduled runs since 2026-10-03T16:32Z, so 20 gaps: minimum 2.8 h, median 6.1 h,
@@ -101,16 +106,30 @@ function verdictOfRun(run) {
 }
 
 /**
- * @param {{ latest: string, tagSha: string, publishedAt: string, now: string, runs: OutsiderRun[] }} facts
+ * When the release became visible to the poll: the later of publish and promotion. A promotion time that is absent is NOT read as
+ * "promoted at publish": the publish time stands in, and `noted` says so, because absence is not proof.
+ * @param {{ publishedAt: string, promotedAt?: string | null }} facts
+ * @returns {{ since: number, noted: string }}
+ */
+function visibleSince({ publishedAt, promotedAt }) {
+  const published = timeOf(publishedAt, "the version's publish time");
+  if (!promotedAt) return { since: published, noted: "; the promotion time was not found, so the age runs from the publish" };
+  return { since: Math.max(published, timeOf(promotedAt, "the version's promotion time")), noted: "" };
+}
+
+/**
+ * @param {{ latest: string, tagSha: string, publishedAt: string, promotedAt?: string | null, now: string, runs: OutsiderRun[] }} facts
  * @returns {OutsiderVerdict}
  */
-export function outsiderVerdict({ latest, tagSha, publishedAt, now, runs }) {
+export function outsiderVerdict({ latest, tagSha, publishedAt, promotedAt, now, runs }) {
   refuseUnreadableRelease({ latest, tagSha });
-  const age = timeOf(now, "now") - timeOf(publishedAt, "the version's publish time");
+  const { since, noted } = visibleSince({ publishedAt, promotedAt });
+  const age = timeOf(now, "now") - since;
   const answers = runs.filter((run) => isNamedForRelease(run, { latest, tagSha }) && hasAnswered(run));
   if (answers.length > 0) return verdictOfRun(newestOf(answers));
   const hours = (age / HOUR_MS).toFixed(1);
+  const seen = promotedAt ? "visible as latest" : "published";
   return age <= WINDOW_MS
-    ? { verdict: "pending", reason: `no run yet for v${latest}, published ${hours} h ago, inside the ${WINDOW_HOURS} h window` }
-    : { verdict: "absent", reason: `no run for v${latest}, published ${hours} h ago, past the ${WINDOW_HOURS} h window: the rehearsal did not run` };
+    ? { verdict: "pending", reason: `no run yet for v${latest}, ${seen} ${hours} h ago, inside the ${WINDOW_HOURS} h window${noted}` }
+    : { verdict: "absent", reason: `no run for v${latest}, ${seen} ${hours} h ago, past the ${WINDOW_HOURS} h window: the rehearsal did not run${noted}` };
 }

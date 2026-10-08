@@ -5,6 +5,8 @@
  * was 9 h; the outside repository's scheduled poll was MEASURED with a worst gap of 9.3 h (20 gaps, 2026-10-08), so a publish just after
  * a poll was called `absent` while the next poll was still on its way. Nothing in this repository tested `outsiderVerdict` before.
  *
+ * #4163 adds `promotedAt`: the age runs from the later of publish and promotion, tested at the bottom.
+ *
  * Positive controls: every `pending` case below is paired with an `absent` one past the same window, so a window that grew without
  * bound (always `pending`) or a reader that threw away its runs would break a test of its own.
  */
@@ -57,4 +59,42 @@ test("a release superseded as latest before any poll is never asked about, so it
   // The other half: a run named for the superseded version answers nothing about the newest one.
   const runForSuperseded = { ...runForNewest, displayTitle: outsiderRunTitle({ version: "0.3.0", sha: SHA }) };
   assert.equal(verdictAt(3, [runForSuperseded], "0.3.1").verdict, "pending");
+});
+
+// #4163 (found by #4160): the clock starts when the poll could first see the release, the later of publish and promotion to `latest`.
+// a11ign@0.3.2 was published 2026-10-07T23:59:49Z and promoted 2026-10-08T14:23:14Z; at 15:38Z it read `absent`, 1.2 h after the poll could see it.
+const PUBLISHED_032 = "2026-10-07T23:59:49.178Z";
+const PROMOTED_032 = "2026-10-08T14:23:14Z";
+const TAG_032 = "cde359831fc072b5a1c85bec596cf0423f6ae44a";
+const at032 = (now: string, promotedAt?: string | null) =>
+  outsiderVerdict({ latest: "0.3.2", tagSha: TAG_032, publishedAt: PUBLISHED_032, promotedAt, now, runs: [] });
+
+test("a release promoted long after its publish is aged from the promotion: the 0.3.2 reading is pending", () => {
+  assert.equal(at032("2026-10-08T15:38:00Z", PROMOTED_032).verdict, "pending");
+});
+
+test("positive control: the same release more than the window after its PROMOTION is absent", () => {
+  assert.equal(at032(hoursAfter(PROMOTED_032, WINDOW_MS / HOUR_MS + 0.1), PROMOTED_032).verdict, "absent");
+  assert.equal(at032(hoursAfter(PROMOTED_032, WINDOW_CEILING_H), PROMOTED_032).verdict, "absent");
+});
+
+test("a promotion EARLIER than the publish does not move the clock back", () => {
+  const early = "2026-10-07T12:00:00Z";
+  // 6 h after the publish is 18 h after `early`: aged from the promotion it would be absent, from the later of the two it is pending.
+  assert.equal(at032(hoursAfter(PUBLISHED_032, 6), early).verdict, "pending");
+  assert.equal(at032(hoursAfter(PUBLISHED_032, WINDOW_MS / HOUR_MS + 0.1), early).verdict, "absent");
+});
+
+test("a missing promotedAt behaves as today, and the reason says the promotion time was not found", () => {
+  for (const promotedAt of [undefined, null, ""]) {
+    const result = at032("2026-10-08T15:38:00Z", promotedAt);
+    assert.equal(result.verdict, "absent", "aged from the publish: absence is not 'promoted at publish', and it is not 'just promoted' either");
+    assert.match(result.reason, /promotion time was not found/);
+  }
+  assert.equal(at032(hoursAfter(PUBLISHED_032, 1), undefined).verdict, "pending");
+  assert.doesNotMatch(at032("2026-10-08T15:38:00Z", PROMOTED_032).reason, /not found/);
+});
+
+test("an unreadable promotedAt throws rather than guessing", () => {
+  assert.throws(() => at032("2026-10-08T15:38:00Z", "yesterday-ish"), /promotion time/);
 });
