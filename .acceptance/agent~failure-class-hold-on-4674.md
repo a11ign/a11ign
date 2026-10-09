@@ -7,4 +7,6 @@
 
 Acceptance: node -e "const c=JSON.parse(require('node:fs').readFileSync('.agent-org/failure-classes.json','utf8')).classes.find((c)=>c.id==='hold-on-idle-row'); const h=require('node:crypto').createHash('sha1').update(String(c.guard)).digest('hex'); process.exit(c.guard!==null&&h!=='2be88ca4242c76e8253ac62474851065032d6833'?0:1)"
 
+Class: hold-on-idle-row — any `pr:hold --until closed #N` on a row nobody works; guard: a11ign/agent-org#563 refuses it, detector not yet wired (named in the index guardNote)
+
 Closes #4674
