@@ -6,7 +6,9 @@ Acceptance:
 ```bash
 node -e 'const fs=require("fs");const f=fs.readdirSync("docs/adr").find(n=>/^0046-/.test(n));if(!f){console.log("no 0046");process.exit(1)}const t=fs.readFileSync("docs/adr/"+f,"utf8");const need=["## Status","read an item","post a decision","change state","subscribe","code host","Linear"];const miss=need.filter(w=>!t.includes(w));if(miss.length){console.log("missing",miss.join(","));process.exit(1)}if(!/\*\*Accepted/.test(t)){console.log("not Accepted");process.exit(1)}console.log("ok")'
 ```
-Printed `ok` at 1c1206f37.
+## Evidence
+
+The command above printed `ok` at 1c1206f37.
 
 Not run locally: `pnpm run verify` (the fresh worktree has no `node_modules`; the change is two markdown files under `docs/adr/`). CI's `gate` is the check.
 
