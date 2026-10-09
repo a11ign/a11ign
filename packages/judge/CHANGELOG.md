@@ -1,5 +1,43 @@
 # @a11ign/judge
 
+## 0.5.0
+
+### Minor Changes
+
+- 6062ac4: 3.3.7 Redundant Entry can now produce a finding: a later REQUIRED `type="email"` control that stayed empty after an earlier email control in the same form was filled is a REFERRED finding (`secondary`, so `cantTell`, never asserted). The pairing reads the input type and never the label, so a password confirmation (the criterion's own security exception) stays silent. It is read from optional `formInputs[].form`, `.required` and `.populatedFromEarlier`, and silent when any is absent. The criterion's coverage note no longer says W3C shows the email-and-confirm form: the Understanding page and G221 contain no such example, and the failure is a reading of its text (#4355). No worker-side census populates the fields on a real capture yet, so the rule has not fired on a real page.
+
+### Patch Changes
+
+- Updated dependencies [d2912d5]
+  - @a11ign/evidence@0.3.2
+  - @a11ign/scorer@0.3.2
+
+## 0.4.1
+
+### Patch Changes
+
+- Updated dependencies [38d5ec9]
+  - @a11ign/evidence@0.3.1
+  - @a11ign/scorer@0.3.1
+
+## 0.4.0
+
+### Minor Changes
+
+- aed675e: 3.3.8 Accessible Authentication (Minimum) can now produce a finding: a password field whose paste event is cancelled is a REFERRED finding (`secondary`, so `cantTell`, never asserted), read from an optional `formInputs[].pasteCancelled` and silent when it is absent or false. The criterion's coverage note cites the Understanding page's own paste text and no longer cites F109, which is titled "preventing password or code re-entry in the same format" (#4259). No worker-side census populates the field on a real capture yet, so the rule has not fired on a real page.
+
+## 0.3.0
+
+### Minor Changes
+
+- f2e2697: `exports` and `bin` now point at `.mjs` (and `.d.ts` for types) where they pointed at `.js`, because the packages are built by Rslib instead of `tsc --build`: a deep import of `<package>/dist/<file>.js` stops resolving, and the CLI's `bin` is `./dist/cli.mjs`, so this is `minor` (a breaking change on a 0.x package) for each of the four. The CLI is also now one bundle that inlines `@a11ign/documents` (and the `pdf-lib` behind it) and `yaml`, so a consumer no longer installs them (#3580, ADR 0043).
+
+### Patch Changes
+
+- Updated dependencies [f2e2697]
+  - @a11ign/evidence@0.3.0
+  - @a11ign/scorer@0.3.0
+
 ## 0.2.3
 
 ### Patch Changes

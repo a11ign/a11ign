@@ -1,6 +1,6 @@
 {
   "name": "a11ign-monorepo",
-  "version": "0.0.0",
+  "version": "0.5.0",
   "private": true,
   "description": "Judge the real assistive-technology experience of a website with AI: drive a real screen reader through real navigation and assess whether the experience is coherent and usable.",
   "type": "module",
@@ -162,14 +162,14 @@
     "verify": "node scripts/verify.mjs"
   },
   "dependencies": {
-    "@a11ign/evidence": "0.2.0",
-    "@a11ign/judge": "0.2.3",
-    "@a11ign/scorer": "0.2.1",
+    "@a11ign/evidence": "0.3.2",
+    "@a11ign/judge": "0.5.0",
+    "@a11ign/scorer": "0.3.2",
     "@a11ign/screenreader-fleet": "^0.5.3",
     "@a11ign/screenreader-worker": "^0.5.0",
     "@anthropic-ai/sdk": "^0.131.0",
     "@guidepup/guidepup": "^0.31.0",
-    "a11ign": "0.2.7"
+    "a11ign": "0.5.2"
   },
   "devDependencies": {
     "@a11ign/toolchain": "0.1.4",

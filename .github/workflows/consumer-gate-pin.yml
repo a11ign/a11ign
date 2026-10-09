@@ -10,10 +10,12 @@ name: consumer-gate-pin
 #
 #   decide      `scripts/consumer-gate-pin-needed.ts` reads the pin AT THIS COMMIT against `action.yml` AT THIS COMMIT (the two refusals of
 #               `check-pin`) and answers `regenerate` or `nothing to do`. It never reads which files the push touched, so a re-run is harmless.
-#   regenerate  runs `node scripts/generate-consumer-gate.mjs`, REFUSES the run unless `consumer-gate.yml` is the only file that changed,
-#               force-pushes it to ONE branch (`automation/consumer-gate-pin`, so a second `action.yml` change updates the open repair and
-#               never opens a second) and opens the pull request if none is open. `auto-arm.yml` arms it like any other non-draft pull
-#               request: it meets the queue, the approving review and the `Closes` declaration a person's would. Nothing is merged here.
+#   regenerate  runs `node scripts/generate-consumer-gate.mjs`, REFUSES the run unless `consumer-gate.yml` is the only file that changed, and
+#               uploads that one file. It holds no `id-token`: it is the job that runs repository and third-party code (see below).
+#   repair      mints the token, shape-checks the uploaded file, force-moves ONE branch (`automation/consumer-gate-pin`, so a second `action.yml`
+#               change updates the open repair and never opens a second) to this commit, writes the file onto it and opens the pull request if
+#               none is open. `auto-arm.yml` arms it like any other non-draft pull request: it meets the queue, the approving review and the
+#               `Closes` declaration a person's would. Nothing is merged here.
 #   release     the repair carries no changeset, so it starts no release run, and the run the stale pin failed leaves its changesets
 #               unreleased. When this push is the repair merging (the pin is current), and the newest release run on `main` died in
 #               `consumer-gate / check-pin`, `release.yml` is dispatched on `main`: the retry-after-the-cause-is-fixed that workflow already
@@ -25,14 +27,23 @@ name: consumer-gate-pin
 # On the host `.agent-org/host.json` names the checkout; on a runner no tool exists until `agent-org-newest-tag.mjs --dest` has cloned one, so each job
 # that runs either script carries that step BEFORE it. The first real run (37881883814) died in `decide` without it, because the tests read this file as text.
 #
-# ## Authority: Octo STS, no stored token (chairman direction (a))
+# ## Authority: Octo STS, no stored token (chairman direction (a)), and the job that holds it runs no repository code (ceo, #4374)
 #
-# The branch push and the pull request are written with a token minted by `octo-sts/action` under
-# `.github/chainguard/consumer-gate-pin-write.sts.yaml`, which binds it to THIS workflow's `job_workflow_ref` at `@refs/heads/main` and to a
-# subject of `main`. A branch that edits this file cannot mint (its `job_workflow_ref` and `sub` name the branch), and a dispatch on another
-# branch is refused. An installation token, unlike `GITHUB_TOKEN`, fires `pull_request` on the repair, so `ci.yml` runs on it. The mint has NO
-# fallback to `GITHUB_TOKEN`: a repair pull request that starts no CI is the failure this exists to remove, so a failed mint fails the job.
-# `workflow_dispatch` mints on every run, even when there is nothing to regenerate, so a dispatch is the live reading of the authority.
+# The branch and the pull request are written with a token minted by `octo-sts/action` under `.github/chainguard/consumer-gate-pin-write.sts.yaml`,
+# which binds it to THIS workflow's `job_workflow_ref` at `@refs/heads/main` and to a subject of `main`. A branch that edits this file cannot mint
+# (its `job_workflow_ref` and `sub` name the branch), and a dispatch on another branch is refused. An installation token, unlike `GITHUB_TOKEN`,
+# fires `pull_request` on the repair, so `ci.yml` runs on it. The mint has NO fallback to `GITHUB_TOKEN`: a repair pull request that starts no CI is
+# the failure this exists to remove, so a failed mint fails the job. `workflow_dispatch` mints on every run, even when there is nothing to
+# regenerate, so a dispatch is the live reading of the authority.
+#
+# THE POLICY GRANTS `workflows: write`, BECAUSE THE REPAIR IS A WRITE UNDER `.github/workflows/` and GitHub refuses one for a token without it
+# (the first version of this file refused to widen the policy and so could never complete the repair #4331 promised). That grant is only as safe
+# as what can ask for the token, so the job that holds `id-token` is `repair` and it has NO checkout, NO install, NO node and NO pnpm: `id-token:
+# write` puts the OIDC request URL in the environment of every step of its job, and a dependency lifecycle script run by `pnpm install` could ask
+# for the audience Octo STS accepts and push a workflow file to this repository. `regenerate` runs that code with `contents: read` alone and hands
+# on one file; `repair` accepts it only when it is byte-for-byte the file already on this commit with the old pin replaced by this commit (the
+# shape of `release.yml`'s `refresh-outsider-pin`, #4365). The installation behind Octo STS must hold the `workflows` permission on this repository:
+# if the mint or the write is refused for the App, that is the one step outside the repository, and the error says so.
 #
 # ## What the unrelated pull request sees meanwhile
 #
@@ -75,36 +86,23 @@ jobs:
 
   regenerate:
     needs: [decide]
-    if: needs.decide.outputs.action == 'regenerate' || github.event_name == 'workflow_dispatch'
+    if: needs.decide.outputs.action == 'regenerate'
     runs-on: ubuntu-latest
-    # The job's own `GITHUB_TOKEN` is reduced to `contents: read` (checkout) plus the OIDC request Octo STS needs; the writes come from the
-    # minted token, whose grant is `consumer-gate-pin-write.sts.yaml`'s.
+    # Runs repository code (`pnpm install`, the generator), so it holds NO `id-token`: it cannot ask for the token `repair` mints.
     permissions:
       contents: read
-      id-token: write
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Mint a token that may push a branch and open a pull request, for this workflow as it is on main (no fallback to GITHUB_TOKEN)
-        id: octo-sts
-        uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05 # v1.1.1
-        with:
-          scope: ${{ github.repository }}
-          identity: consumer-gate-pin-write
       - uses: pnpm/action-setup@v6
-        if: needs.decide.outputs.action == 'regenerate'
       - uses: actions/setup-node@v7
-        if: needs.decide.outputs.action == 'regenerate'
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
-        if: needs.decide.outputs.action == 'regenerate'
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        if: needs.decide.outputs.action == 'regenerate'
         run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
       - name: Regenerate the pin at this commit, and refuse anything that changed but consumer-gate.yml
-        if: needs.decide.outputs.action == 'regenerate'
         run: |
           set -euo pipefail
           node scripts/generate-consumer-gate.mjs
@@ -114,30 +112,72 @@ jobs:
             echo "$changed"
             exit 1
           fi
-      - name: Push the repair to its one branch, and open the pull request unless one is open
+      - name: Hand on the one regenerated file
+        uses: actions/upload-artifact@v7
+        with:
+          name: consumer-gate-pin
+          path: .github/workflows/consumer-gate.yml
+          if-no-files-found: error
+          retention-days: 1
+
+  repair:
+    needs: [decide, regenerate]
+    # `regenerate` is skipped exactly when `decide` answered `nothing to do`; a dispatch still mints then, as the live reading of the authority.
+    if: ${{ !cancelled() && needs.decide.result == 'success' && (needs.regenerate.result == 'success' || (github.event_name == 'workflow_dispatch' && needs.regenerate.result == 'skipped')) }}
+    runs-on: ubuntu-latest
+    # NO checkout, install, node or pnpm in this job (the header says why): `gh`, `jq`, `base64`, `sed`, `cmp` only. The writes come from the minted
+    # token, whose grant is `consumer-gate-pin-write.sts.yaml`'s; the job's own `GITHUB_TOKEN` is reduced to the artifact read plus the OIDC request.
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Mint a token that may push a branch, change a workflow file and open a pull request, for this workflow as it is on main (no fallback to GITHUB_TOKEN)
+        id: octo-sts
+        uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05 # v1.1.1
+        with:
+          scope: ${{ github.repository }}
+          identity: consumer-gate-pin-write
+      - name: Take the regenerated file
+        if: needs.decide.outputs.action == 'regenerate'
+        uses: actions/download-artifact@v8
+        with:
+          name: consumer-gate-pin
+          path: ${{ runner.temp }}/regenerated
+      - name: Move the repair branch to this commit, write the file onto it, and open the pull request unless one is open
         if: needs.decide.outputs.action == 'regenerate'
         env:
           GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
           REPO: ${{ github.repository }}
           BRANCH: automation/consumer-gate-pin
+          FILE_PATH: .github/workflows/consumer-gate.yml
           PIN: ${{ github.sha }}
+          HANDED: ${{ runner.temp }}/regenerated
         run: |
           set -euo pipefail
-          git switch -c "$BRANCH"
-          git add .github/workflows/consumer-gate.yml
-          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
-            commit -m "consumer-gate.yml: regenerate the pin at ${PIN} (#4331)"
+          fail() { echo "::error::$1. Nothing was written."; exit 1; }
+          [ -n "${GH_TOKEN:-}" ] || fail "the Octo STS token (step octo-sts) is empty"
+          # What the previous job handed over came from a job that ran repository code: it is data, and it is written only if it is the file on this
+          # commit with its old pin replaced by this commit.
+          [[ "$PIN" =~ ^[0-9a-f]{40}$ ]] || fail "'$PIN' is not a full commit sha"
+          [ "$(find "$HANDED" -type f | wc -l)" = 1 ] && [ -f "$HANDED/consumer-gate.yml" ] || fail "the artifact is not exactly consumer-gate.yml"
+          scratch="$(mktemp -d)"
+          gh api "repos/$REPO/contents/$FILE_PATH?ref=$PIN" > "$scratch/current.json" || fail "$FILE_PATH at $PIN could not be read"
+          jq -r .content "$scratch/current.json" | base64 -d > "$scratch/current.yml"
+          old="$(grep -oE 'uses: a11ign/a11ign@[0-9a-f]{40}' "$scratch/current.yml" | sort -u | sed 's/.*@//')"
+          [[ "$old" =~ ^[0-9a-f]{40}$ ]] || fail "$FILE_PATH at $PIN does not pin exactly one commit"
+          sed "s/$old/$PIN/g" "$scratch/current.yml" | cmp - "$HANDED/consumer-gate.yml" || fail "the handed file is not $FILE_PATH with its pin ($old) moved to $PIN"
           # The branch belongs to this workflow alone, so a newer repair replaces an older one rather than queueing behind it.
-          # A push that changes anything under `.github/workflows/` needs the `workflows` permission, which this policy does not grant and must
-          # not (the grant stays `contents` + `pull_requests`). GitHub refuses it with a message naming `workflows`; say so, rather than leave a
-          # bare "remote rejected" for a person to decode.
-          if ! push_log="$(git push --force "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "HEAD:refs/heads/${BRANCH}" 2>&1)"; then
-            printf '%s\n' "$push_log"
-            if printf '%s' "$push_log" | grep -qi 'workflows'; then
-              echo "::error::the push was refused for the 'workflows' permission: the minted token may not change .github/workflows/consumer-gate.yml, and the policy is not widened for it. The repair has to be pushed another way (node scripts/generate-consumer-gate.mjs, by a person, on a branch)."
-            else
-              echo "::error::the push of ${BRANCH} was refused; the output above says why."
-            fi
+          if gh api "repos/$REPO/git/ref/heads/$BRANCH" > /dev/null 2>&1; then
+            gh api -X PATCH "repos/$REPO/git/refs/heads/$BRANCH" -f sha="$PIN" -F force=true > /dev/null
+          else
+            gh api -X POST "repos/$REPO/git/refs" -f ref="refs/heads/$BRANCH" -f sha="$PIN" > /dev/null
+          fi
+          # A write under `.github/workflows/` needs the `workflows` permission on BOTH the policy and the App installation behind Octo STS.
+          # A refusal reads `Resource not accessible by integration`; say which of the two to look at, rather than leave a bare 403.
+          if ! response="$(gh api -X PUT "repos/$REPO/contents/$FILE_PATH" -f message="consumer-gate.yml: regenerate the pin at ${PIN} (#4331)" \
+            -f content="$(base64 -w0 "$HANDED/consumer-gate.yml")" -f sha="$(jq -r .sha "$scratch/current.json")" -f branch="$BRANCH" 2>&1)"; then
+            printf '%s\n' "$response"
+            echo "::error::the write of ${BRANCH} was refused; if the response says 'Resource not accessible by integration', the Octo STS App installation lacks the 'workflows' permission on ${REPO} (the policy grants it): a person must accept it in the installation's settings (#4374)."
             exit 1
           fi
           open="$(gh api "repos/${REPO}/pulls?state=open&head=${REPO%%/*}:${BRANCH}" --jq '.[0].number // empty')"
