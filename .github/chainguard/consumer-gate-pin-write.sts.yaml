@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/octo-sts/app/refs/heads/main/pkg/octosts/octosts.TrustPolicy.json
+#
+# THE TOKEN `consumer-gate-pin.yml` PUSHES THE PIN REGENERATION BRANCH AND OPENS ITS PULL REQUEST WITH (#4331). Octo STS v0.11.2 syntax; a
+# repository policy reaches only the repository it sits in, so it cannot name another. Every pattern is matched against the WHOLE claim, so
+# none is anchored here.
+#
+# WHY AN INSTALLATION TOKEN AT ALL: `GITHUB_TOKEN` writes fire no workflow, so the repair pull request would sit with no `ci.yml` run and
+# never become mergeable (#416). An Octo STS token is an ordinary app identity, and its events fire.
+#
+# WHAT BINDS IT TO `main`: `subject` is the EXACT `sub` of a run on the `main` ref, which both of the workflow's triggers (`push` on `main`
+# and `workflow_dispatch` on `main`) present. A run on any other ref presents that ref in `sub` and is refused, so a dispatch on a branch gets
+# no token. `job_workflow_ref` pinned to `@refs/heads/main` closes the other door: a `pull_request` run takes the workflow from the branch's
+# merge ref (`...@refs/pull/N/merge`), so a branch that edits `consumer-gate-pin.yml` cannot mint (measured on #4191, run 37835437240). No
+# `pull_request*` event is named in `event_name`. `sub` carries IMMUTABLE ids (`repo:<owner>@<id>/<repo>@<id>`), so a subject written with
+# names never matches (#4191).
+#
+# WHAT IT HOLDS: `contents: write` (create or force-update the one `automation/consumer-gate-pin` branch) and `pull_requests: write` (open the
+# pull request), on THIS repository only, and nothing else. It is not a merge identity: the repair is armed by `auto-arm.yml` and needs the
+# approving review `main` requires.
+issuer: https://token.actions.githubusercontent.com
+subject: repo:a11ign@320310787/a11ign@1280353940:ref:refs/heads/main
+claim_pattern:
+  job_workflow_ref: a11ign/a11ign/\.github/workflows/consumer-gate-pin\.yml@refs/heads/main
+  event_name: push|workflow_dispatch
+permissions:
+  contents: write
+  pull_requests: write

@@ -20,6 +20,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { regenerationInFlight } from "../../../scripts/consumer-gate-pin-needed.ts";
 import { sandboxGitEnv, withGitSandbox, type GitSandbox } from "../../../scripts/test-support/git-sandbox.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -28,6 +29,7 @@ const {
   README_PATH, OUT, ACTION_DEFINITION, extractDocumentedJobsBlock, pinActionRef, substituteTarget, extractJobName, extractPinnedSha,
   buildConsumerGateWorkflow, generate, refuseDirtyGenerationInputs, currentHeadSha, actionPinVerdict, PIN_COMMENT, restatePinComment,
 } = gen;
+
 
 const SHA = "0123456789abcdef0123456789abcdef01234567";
 const OTHER_SHA = "fedcba9876543210fedcba9876543210fedcba98";
@@ -318,10 +320,19 @@ test("actionPinVerdict (#4153): a commit git cannot resolve is an error, never '
   });
 });
 
-test("actionPinVerdict (#4153): the real tree -- the committed pin contains every action.yml change on origin/main", () => {
+test("actionPinVerdict (#4153, #4331): the real tree -- the committed pin contains every action.yml change on origin/main, or its repair is open", () => {
   const pin = extractPinnedSha(readFileSync(OUT, "utf8")) as string;
   const verdict = actionPinVerdict({ pin, base: "origin/main", head: "HEAD", cwd: REPO_ROOT });
-  assert.equal(verdict.ok, true, verdict.message);
+  if (!verdict.ok) {
+    // A pin that predates action.yml on the BASE reds every unrelated branch cut from it (#4325 reddened #4326, which touched neither file),
+    // and the repair is already running: `consumer-gate-pin.yml` started it at the merge that staled the pin. So while the repair branch is
+    // on origin AND carries a pin containing the base's action.yml, this REPORTS; with no repair open, or one that is itself stale, it fails
+    // exactly as before. A pull request whose OWN diff stales the pin is a different case and is decided by the verdict above (ownChange).
+    const repair = regenerationInFlight({ base: "origin/main", cwd: REPO_ROOT });
+    assert.equal(repair.inFlight, true, `${verdict.message} -- and no repair is on its way: ${repair.reason}`);
+    process.stdout.write(`::warning title=consumer-gate.yml::stale pin on the base, repair open: ${repair.reason}\n`);
+    return;
+  }
   if (verdict.ownChange) process.stdout.write(`::notice title=consumer-gate.yml::${verdict.message}\n`);
 });
 

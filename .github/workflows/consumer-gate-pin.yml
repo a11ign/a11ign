@@ -1,0 +1,183 @@
+name: consumer-gate-pin
+
+# THE MERGE THAT STALES `consumer-gate.yml`'S PIN STARTS ITS REPAIR (#4331). Eleven rows were filed by hand for one fault: #3140, #3774, #3788,
+# #3863, #3864, #3992, #4153, #4253/#4254, #4306, #4325.
+#
+# A pull request that changes `action.yml` can never carry a pin containing its own change: that commit does not exist until it merges (#558).
+# So every such merge leaves the generated pin stale the moment it lands, and until now a person noticed. The last one (#4315) turned
+# `ts / run` red on every branch cut from `main` afterwards and failed the release at that sha in `consumer-gate / check-pin`, which skipped
+# the release. This workflow is the detector's missing repair: on a push to `main` that touches `action.yml` or `consumer-gate.yml`,
+#
+#   decide      `scripts/consumer-gate-pin-needed.ts` reads the pin AT THIS COMMIT against `action.yml` AT THIS COMMIT (the two refusals of
+#               `check-pin`) and answers `regenerate` or `nothing to do`. It never reads which files the push touched, so a re-run is harmless.
+#   regenerate  runs `node scripts/generate-consumer-gate.mjs`, REFUSES the run unless `consumer-gate.yml` is the only file that changed,
+#               force-pushes it to ONE branch (`automation/consumer-gate-pin`, so a second `action.yml` change updates the open repair and
+#               never opens a second) and opens the pull request if none is open. `auto-arm.yml` arms it like any other non-draft pull
+#               request: it meets the queue, the approving review and the `Closes` declaration a person's would. Nothing is merged here.
+#   release     the repair carries no changeset, so it starts no release run, and the run the stale pin failed leaves its changesets
+#               unreleased. When this push is the repair merging (the pin is current), and the newest release run on `main` died in
+#               `consumer-gate / check-pin`, `release.yml` is dispatched on `main`: the retry-after-the-cause-is-fixed that workflow already
+#               documents (#4000). A release that failed for any OTHER reason is not re-dispatched.
+#
+# ## Authority: Octo STS, no stored token (chairman direction (a))
+#
+# The branch push and the pull request are written with a token minted by `octo-sts/action` under
+# `.github/chainguard/consumer-gate-pin-write.sts.yaml`, which binds it to THIS workflow's `job_workflow_ref` at `@refs/heads/main` and to a
+# subject of `main`. A branch that edits this file cannot mint (its `job_workflow_ref` and `sub` name the branch), and a dispatch on another
+# branch is refused. An installation token, unlike `GITHUB_TOKEN`, fires `pull_request` on the repair, so `ci.yml` runs on it. The mint has NO
+# fallback to `GITHUB_TOKEN`: a repair pull request that starts no CI is the failure this exists to remove, so a failed mint fails the job.
+# `workflow_dispatch` mints on every run, even when there is nothing to regenerate, so a dispatch is the live reading of the authority.
+#
+# ## What the unrelated pull request sees meanwhile
+#
+# `generate-consumer-gate.test.ts` reports (rather than fails on) a stale pin on the base while `automation/consumer-gate-pin` exists on `origin`
+# carrying a pin that contains the base's `action.yml`. `check-pin` in the release is unchanged and still refuses a real stale pin.
+on:
+  push:
+    branches: [main]
+    paths: [action.yml, .github/workflows/consumer-gate.yml]
+  workflow_dispatch:
+
+permissions: {}
+
+# One repair at a time. Never cancelled: a cancelled run could stop between the push and the pull request.
+concurrency:
+  group: consumer-gate-pin
+  cancel-in-progress: false
+
+jobs:
+  decide:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      action: ${{ steps.decide.outputs.action }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Does the pin at this commit predate action.yml at this commit?
+        id: decide
+        run: pnpm exec tsx scripts/consumer-gate-pin-needed.ts --commit=HEAD
+
+  regenerate:
+    needs: [decide]
+    if: needs.decide.outputs.action == 'regenerate' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    # The job's own `GITHUB_TOKEN` is reduced to `contents: read` (checkout) plus the OIDC request Octo STS needs; the writes come from the
+    # minted token, whose grant is `consumer-gate-pin-write.sts.yaml`'s.
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Mint a token that may push a branch and open a pull request, for this workflow as it is on main (no fallback to GITHUB_TOKEN)
+        id: octo-sts
+        uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05 # v1.1.1
+        with:
+          scope: ${{ github.repository }}
+          identity: consumer-gate-pin-write
+      - uses: pnpm/action-setup@v6
+        if: needs.decide.outputs.action == 'regenerate'
+      - uses: actions/setup-node@v7
+        if: needs.decide.outputs.action == 'regenerate'
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+        if: needs.decide.outputs.action == 'regenerate'
+      - name: Regenerate the pin at this commit, and refuse anything that changed but consumer-gate.yml
+        if: needs.decide.outputs.action == 'regenerate'
+        run: |
+          set -euo pipefail
+          node scripts/generate-consumer-gate.mjs
+          changed="$(git status --porcelain)"
+          if [ "$changed" != " M .github/workflows/consumer-gate.yml" ]; then
+            echo "::error::regeneration must change .github/workflows/consumer-gate.yml and nothing else; git status says:"
+            echo "$changed"
+            exit 1
+          fi
+      - name: Push the repair to its one branch, and open the pull request unless one is open
+        if: needs.decide.outputs.action == 'regenerate'
+        env:
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: automation/consumer-gate-pin
+          PIN: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          git switch -c "$BRANCH"
+          git add .github/workflows/consumer-gate.yml
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -m "consumer-gate.yml: regenerate the pin at ${PIN} (#4331)"
+          # The branch belongs to this workflow alone, so a newer repair replaces an older one rather than queueing behind it.
+          # A push that changes anything under `.github/workflows/` needs the `workflows` permission, which this policy does not grant and must
+          # not (the grant stays `contents` + `pull_requests`). GitHub refuses it with a message naming `workflows`; say so, rather than leave a
+          # bare "remote rejected" for a person to decode.
+          if ! push_log="$(git push --force "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "HEAD:refs/heads/${BRANCH}" 2>&1)"; then
+            printf '%s\n' "$push_log"
+            if printf '%s' "$push_log" | grep -qi 'workflows'; then
+              echo "::error::the push was refused for the 'workflows' permission: the minted token may not change .github/workflows/consumer-gate.yml, and the policy is not widened for it. The repair has to be pushed another way (node scripts/generate-consumer-gate.mjs, by a person, on a branch)."
+            else
+              echo "::error::the push of ${BRANCH} was refused; the output above says why."
+            fi
+            exit 1
+          fi
+          open="$(gh api "repos/${REPO}/pulls?state=open&head=${REPO%%/*}:${BRANCH}" --jq '.[0].number // empty')"
+          if [ -n "$open" ]; then
+            echo "::notice::updated the open repair pull request #${open}"
+            exit 0
+          fi
+          body_file="$(mktemp)"
+          cat > "$body_file" <<EOF
+          Regenerates \`consumer-gate.yml\`'s pin at ${PIN}, which contains the latest \`action.yml\` change. Opened by \`consumer-gate-pin.yml\` (#4331): the merge that staled the pin started this repair.
+
+          Acceptance:
+          pnpm exec rstest run --config=scripts/rstest/rstest.config.mjs --include packages/guards/src/generate-consumer-gate.test.ts
+
+          Closes: none -- automated regeneration of consumer-gate.yml's pin (#4331)
+          EOF
+          gh api --method POST "repos/${REPO}/pulls" -f title="consumer-gate.yml: regenerate the pin (action.yml changed)" \
+            -f head="$BRANCH" -f base=main -F body=@"$body_file" --jq '"::notice::opened repair pull request #\(.number)"'
+
+  release:
+    needs: [decide]
+    # The repair merging is a push that touches consumer-gate.yml with the pin current. A dispatch of this workflow is not a repair merge.
+    if: needs.decide.outputs.action == 'nothing' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # The decider is TypeScript (the `.mjs` count may only go down, ADR 0043), so this job installs what `tsx` needs.
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Is a release owed -- did the newest release run on main die in consumer-gate / check-pin?
+        id: owed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          id="$(gh run list --workflow=release.yml --branch=main --status=completed --limit=1 --json databaseId --jq '.[0].databaseId // empty')"
+          runs="$RUNNER_TEMP/release-runs.json"
+          if [ -z "$id" ]; then echo '[]' > "$runs"; else
+            gh run view "$id" --json databaseId,conclusion,jobs \
+              --jq '[{id: .databaseId, conclusion, jobs: [.jobs[] | {name, conclusion}]}]' > "$runs"
+          fi
+          pnpm exec tsx scripts/consumer-gate-pin-needed.ts --release-runs="$runs"
+      - name: Dispatch the release on main
+        if: steps.owed.outputs.release == 'owed'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run release.yml --ref main
