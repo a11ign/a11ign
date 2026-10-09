@@ -80,11 +80,29 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
-          body="$(gh api "repos/${REPO}/pulls/${PR_NUMBER}" --jq '.body // ""')" || {
+          read_live_body() {
+            gh api "repos/${REPO}/pulls/${PR_NUMBER}" --jq '.body // ""'
+          }
+          body="$(read_live_body)" || {
             echo "::error::could not read the live body of ${REPO}#${PR_NUMBER}; refusing to fall back to the event payload's body"
             exit 1
           }
+          # A DEPENDABOT PR'S BODY IS REWRITTEN BY `dependency-pr-body` WITHIN A MINUTE OF THE EVENT (#4479), and this read can land first
+          # (#4472: read at 08:45:54Z, rewritten at 08:46:03Z). So for that author alone, and only while the body has no `Acceptance:` line,
+          # read again every 5 seconds, at most 18 times (90 seconds). A body that never gains the section is passed on as it is and fails in the
+          # tool with the same message; every other author reads once. The author is `env:` data from the event, which no PR body can change.
+          if [[ "$PR_AUTHOR" == "dependabot[bot]" ]]; then
+            for _ in $(seq 18); do
+              grep -qE '^[[:space:]]*Acceptance:' <<<"$body" && break
+              sleep 5
+              body="$(read_live_body)" || {
+                echo "::error::could not read the live body of ${REPO}#${PR_NUMBER}; refusing to fall back to the event payload's body"
+                exit 1
+              }
+            done
+          fi
           if [[ ! "$body" =~ [^[:space:]] ]]; then
             echo "::error::the live body of ${REPO}#${PR_NUMBER} is empty; refusing to fall back to the event payload's body"
             exit 1
