@@ -14,7 +14,7 @@ It is not estimated here. The two things the row asks for are missing for differ
 |---|---|---|
 | boxes awake and capture-capable at the start (`fleet:status` ready count) | **not recorded** | `fleet:status` prints it to a terminal; nothing writes it beside a capture run |
 | boxes that took part | recorded for **1 run** on this host, otherwise **not recorded** | the run's stdout is the only record (`Across N worker(s)`), and only one such log survives locally |
-| runs where participants < ready | **not recorded** | needs both figures |
+| count of runs where participants < ready | **not recorded** | needs both figures |
 | why a box sat out (exit 3 then an exclusion; asleep; down) | **not recorded** | `capture-fleet-guard.mjs` reports `FLEET INCONSISTENT` on stderr and exits 3; the exclusion that follows is a hand edit of the worker list, and the guard's own comment says `capture-real-pages.mjs` "writes no structured run record" |
 
 **The field that would have to be written** is one per-run record, at the start of every capture run:
@@ -25,7 +25,7 @@ It is filed as a row: see [Rows filed](#rows-filed).
 
 One row per run whose participants are recorded. `ready at start` is "not recorded" in every row.
 
-| run | date (UTC) | captured into | participants | ready at start | participants < ready | why |
+| capture | date (UTC) | captured into | participants | ready at start | participants < ready | why |
 |---|---|---|---|---|---|---|
 | run 1: `capture-real-pages`, 49 real pages | 2026-09-24T15:30 | `/opt/a11y/runs/real-page-corpus` | 10 (last octets `.107 .59 .175 .224 .90 .21 .146 .217 .80 .74`) | not recorded | not recorded | not recorded |
 
