@@ -17,7 +17,8 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -38,14 +39,17 @@ function withFixture(body: (fx: Fixture) => void): void {
   try {
     spawnSync("mkdir", [scratch]);
     writeFileSync(file, GOOD);
-    body({ dir, file, scratch, stashes: () => readdirSync(scratch) });
+    body({ dir, file, scratch, stashes: () => readdirSync(scratch).filter((name) => !name.startsWith("tsx-")) });  // tsx keeps its own cache in TMPDIR
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 }
 
+// #4273: the script is TypeScript, and a bare `node` cannot run one (ADR 0043 Decision 8: `node --import tsx`).
+const TSX = pathToFileURL(createRequire(import.meta.url).resolve("tsx")).href;
+
 function runTool(fx: Fixture, args: string[]) {
-  const result = spawnSync(process.execPath, ["--import", import.meta.resolve("tsx"), SCRIPT, ...args], {
+  const result = spawnSync(process.execPath, ["--import", TSX, SCRIPT, ...args], {
     cwd: fx.dir, encoding: "utf8", env: { ...process.env, TMPDIR: fx.scratch },
   });
   return { status: result.status, stdout: result.stdout, stderr: result.stderr };

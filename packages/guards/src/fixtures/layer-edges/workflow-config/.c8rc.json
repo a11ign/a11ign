@@ -1,1 +1,1 @@
-{ "include": ["packages/nvda-worker/src/own.mjs"] }
+{ "include": ["packages/nvda-worker/src/own.ts"] }

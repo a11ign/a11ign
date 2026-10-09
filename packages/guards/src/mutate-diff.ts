@@ -61,7 +61,7 @@ const require = createRequire(import.meta.url);
  * @param {string} name
  * @returns {any}
  */
-const lazy = (name: string): any => require(name);
+const lazy = <T>(name: string): T => require(name);
 
 /** One line-local text edit; `to === null` deletes the line. */
 export type Edit = { op: string, from: number, len: number, to: string | null };
@@ -176,11 +176,12 @@ function applyEdit(line: string, edit: Edit): string | null {
  */
 export function parses(kind: Kind, file: string, text: string): boolean {
   if (kind === "json") return jsonParses(text);
-  if (kind === "yml") return lazy("yaml").parseDocument(text).errors.length === 0;
+  if (kind === "yml") return lazy<typeof import("yaml")>("yaml").parseDocument(text).errors.length === 0;
   if (kind === "md") return true;
-  const out = lazy("typescript").transpileModule(text, { reportDiagnostics: true,
-    fileName: file.replace(/\.mjs$/, ".mts"), compilerOptions: { target: "esnext" } });
-  return out.diagnostics.length === 0;
+  const ts = lazy<typeof import("typescript")>("typescript");
+  const out = ts.transpileModule(text, { reportDiagnostics: true,
+    fileName: file.replace(/\.mjs$/, ".mts"), compilerOptions: { target: ts.ScriptTarget.ESNext } });
+  return (out.diagnostics ?? []).length === 0;
 }
 
 /** `JSON.parse` throws a SyntaxError for text that is not JSON; anything else it throws is not this question's answer. */

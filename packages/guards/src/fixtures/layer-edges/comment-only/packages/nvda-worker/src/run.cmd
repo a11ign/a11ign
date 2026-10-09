@@ -1,4 +1,4 @@
 @echo off
-rem node "packages\other\src\x.mjs" -- the old launcher line
-:: node "packages\other\src\x.mjs"
-node "%~dp0own.mjs"
+rem node "packages\other\src\x.ts" -- the old launcher line
+:: node "packages\other\src\x.ts"
+node "%~dp0own.ts"

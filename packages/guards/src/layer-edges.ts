@@ -728,7 +728,7 @@ export function judgeEdges(edges: Edge[], baseline: unknown): { unlisted: Edge[]
  * @param {any} entry
  * @returns {string[]}
  */
-function malformedReasons(entry: any): string[] {
+function malformedReasons(entry: Record<string, string>): string[] {
   const missing = ["from", "to", "kind", "direction", "disposition", "reason"]
     .filter((f) => typeof entry?.[f] !== "string" || entry[f].trim() === "");
   if (missing.length > 0) return [`missing ${missing.join(", ")}`];

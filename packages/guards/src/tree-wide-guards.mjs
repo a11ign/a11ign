@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // @ts-check
 // command: every tracked *.test.ts file that DECLARES ITSELF a TREE-WIDE GUARD by importing and calling
-// `packages/guards/src/tree-wide-guard.mjs`'s marker -- a guard whose population is the whole repository rather than
+// `packages/guards/src/tree-wide-guard.ts`'s marker -- a guard whose population is the whole repository rather than
 // one file, so its own green run on a PR's diff is not a prediction: #704. #716 measured 21 such files at
 // 141.3s together and made five of them (138 of the 141) fast, so the pre-push hook can run every one of
 // them with no exclusion list.
@@ -11,7 +11,7 @@
 // this repo's own most-repeated defect shape. `localImports` (`local-import-closure.mjs`, #621/B8) parses
 // real ES import statements, comment-stripped -- the same discipline that lets B8 derive a test's
 // requirements from its import closure rather than scanning it for a keyword a future guard might not
-// happen to spell. See `tree-wide-guard.mjs`'s own header for why the check is IMPORT AND CALL, never the
+// happen to spell. See `tree-wide-guard.ts`'s own header for why the check is IMPORT AND CALL, never the
 // import alone.
 //
 //   node packages/guards/src/tree-wide-guards.mjs                    one path per line, for `npm run guards:sweep`
@@ -26,7 +26,7 @@ import { toolPath } from "../../../scripts/agent-org-newest-tag.mjs";
 
 /** Exported so the discovery's own test can construct a fixture that genuinely resolves to this module,
  *  rather than guessing at the path a real `localImports` call would compute. */
-export const MARKER_MODULE = resolve(new URL(".", import.meta.url).pathname, "tree-wide-guard.mjs");
+export const MARKER_MODULE = resolve(new URL(".", import.meta.url).pathname, "tree-wide-guard.ts");
 /** #2623 (child 5 of #69): `agent-org`'s own copy of `tree-wide-guard.mjs` is a SECOND valid resolved path --
  *  a travelling guard repointed at the copy must stay discovered, exactly as it was importing the original.
  *  Both are checked, never swapped: `MARKER_MODULE` alone stays exported and correct for anything still
@@ -41,7 +41,7 @@ const defaultLsFiles = () =>
   execFileSync("git", ["ls-files", "*.test.ts"], { encoding: "utf8", env: sandboxGitEnv() });
 
 /**
- * Every tracked `*.test.ts` file that IMPORTS `tree-wide-guard.mjs`'s marker AND calls it -- a guard
+ * Every tracked `*.test.ts` file that IMPORTS `tree-wide-guard.ts`'s marker AND calls it -- a guard
  * declares its own membership; the population is a fact the tree computes from the import graph, never a
  * text pattern a guard's own source might or might not happen to contain.
  *

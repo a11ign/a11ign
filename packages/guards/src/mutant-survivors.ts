@@ -34,6 +34,7 @@
 // `apply` is what `mutation-check.ts` is handed as its `--mutate` command; it exits 2 when the mutant does not exist.
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync, realpathSync } from "node:fs";
+import { createRequire } from "node:module";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import path from "node:path";
 import { sandboxGitEnv } from "./git-env.mjs";
@@ -46,7 +47,8 @@ const MUTATE = fileURLToPath(new URL("./mutation-check.ts", import.meta.url));
 const SELF = fileURLToPath(import.meta.url);
 // #4273: both scripts are TypeScript now, and a bare `node` cannot run one (ADR 0043 Decision 8: `node --import tsx`). The loader is
 // handed by ABSOLUTE URL because the mutant runs with the mutated repo as its cwd, where a bare `tsx` need not resolve.
-const TSX = import.meta.resolve("tsx");
+// (`createRequire`, not `import.meta.resolve`: the test runner does not implement the latter.)
+const TSX = pathToFileURL(createRequire(import.meta.url).resolve("tsx")).href;
 // `mutation-check.ts`'s own exit codes, named because every branch below reads them.
 const EXIT = { KILLED: 0, SURVIVED: 1, REFUSED: 2, RESTORE_FAILED: 3 };
 
