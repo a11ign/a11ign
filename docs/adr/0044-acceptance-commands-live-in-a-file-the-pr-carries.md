@@ -51,8 +51,12 @@ sibling is never a verdict) and does not wait on this ADR. It stays valuable aft
 line must still run the checks. This ADR removes the larger class: **after it, the verdict's only body input is the `Closes`
 declaration, and every other input is in the reviewed tree at the head SHA.**
 
-**2. The file.** One file per pull request, in the directory `.acceptance/`, named for the branch with `/` replaced by `--` (the branch
-`agent/foo-4415` is `.acceptance/agent--foo-4415.md`). Its content is **the body's own grammar**: the same `Acceptance:` header, the same
+**2. The file.** One file per pull request, in the directory `.acceptance/`, named for the branch with each `/` replaced by `~` (the branch
+`agent/foo-4415` is `.acceptance/agent~foo-4415.md`). **The mapping is injective because `~` cannot appear in a git ref name**
+(`git check-ref-format` forbids it), so no two branches share a file; `--` was the first draft and was refused in review, because
+`agent/foo--bar` and `agent/foo/bar` both gave `agent--foo--bar.md`. Two collisions remain and both are loud, not silent: branches
+differing only in case on a case-insensitive checkout, and a branch name reused within the 14-day sweep window; each surfaces as git's own
+add/add conflict on the second PR, never as one PR running another's commands, because CI reads the file the PR ADDS. Its content is **the body's own grammar**: the same `Acceptance:` header, the same
 `Refutation`, `Mutation`, hand-run and full-history sections, parsed by the SAME `acceptanceReport` and `extract*Section` functions, which
 already take a string. The only change to the parser is where the string comes from, which is the cheapest migration available and the
 reason the grammar is not redesigned here (a second grammar is a second parser, and `pr-open.ts`'s own header says a local re-derivation of "is this body valid" is how a body
