@@ -1,14 +1,17 @@
 // no-token: gh -- reads this repository's own `nightly.yml` and `.github/chainguard/`, and calls nothing.
 /**
- * #4195: `nightly.yml`'s board read mints an Octo STS token under a policy bound to that workflow on `main`, and the one stored-token
- * read left is a NAMED GAP.
+ * #4195: `nightly.yml` mints two Octo STS tokens under policies bound to that workflow on `main`, and the one stored-token read left (the
+ * settings table, which a `metadata: read` token cannot reach) is a NAMED GAP.
  *
- * Three things are pinned, each against the workflow's parsed YAML (not its text, where a comment mentioning a token would count):
- *   1. the job that mints holds `id-token: write`, and no other job in the file does (the permission is the right to mint);
- *   2. its `octo-sts/action` step names a policy that exists in `.github/chainguard/`, and that policy is bound to `nightly.yml` as it is
- *      on `main` through `job_workflow_ref` AND `ref`, because a `workflow_dispatch` on a branch presents that branch's `sub`;
- *   3. `secrets.A11IGN_BOT_TOKEN` is read exactly where the gap is named (the ruleset step), so a SECOND stored read cannot appear
- *      unnoticed and the gap cannot be closed without this test saying so.
+ * Pinned against the workflow's parsed YAML (not its text, where a comment mentioning a token would count):
+ *   1. exactly the two jobs that mint hold `id-token: write`, and no other job in the file does (the permission is the right to mint);
+ *   2. the board read's `octo-sts/action` step names a policy in `.github/chainguard/` that is bound to `nightly.yml` as it is on `main`
+ *      through `job_workflow_ref` AND `ref`, because a `workflow_dispatch` on a branch presents that branch's `sub`. The ruleset read's
+ *      policy is an ORGANISATION policy in `a11ign/.github` (#4330), whose file this repository cannot read: its step is pinned to the
+ *      org scope and the identity name, and #4330's Acceptance pins the file;
+ *   3. the ruleset loop is read with the minted token and the stored token is exported only AFTER it, for the settings table alone;
+ *   4. `secrets.A11IGN_BOT_TOKEN` is read exactly where the gap is named, so a SECOND stored read cannot appear unnoticed and the gap
+ *      cannot be closed without this test saying so.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -18,8 +21,11 @@ import { parse as parseYaml } from "yaml";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const WORKFLOW = ".github/workflows/nightly.yml";
-const MINTING_JOB = "ready-audit";
+const BOARD_JOB = "ready-audit";
+const RULESET_JOB = "mainRulesetBinds";
 const GAP_STEP = /^Ask GitHub, once per code repository/;
+const ORG_SCOPE = "a11ign";
+const ORG_IDENTITY = "nightly-ruleset-read-org";
 
 type Step = { id?: string; name?: string; uses?: string; run?: string; with?: Record<string, string>; env?: Record<string, string> };
 type Job = { permissions?: Record<string, string>; steps?: Step[] };
@@ -37,7 +43,7 @@ function storedTokenReads(workflow: Workflow): { job: string; step: string }[] {
     steps.filter((s) => JSON.stringify([s.env, s.with]).includes("secrets.A11IGN_BOT_TOKEN")).map((s) => ({ job, step: s.name ?? "(unnamed)" })));
 }
 
-const octoStep = (workflow: Workflow) => workflow.jobs[MINTING_JOB].steps?.find((s) => s.uses?.startsWith("octo-sts/action@"));
+const octoStep = (workflow: Workflow, job: string) => workflow.jobs[job].steps?.find((s) => s.uses?.startsWith("octo-sts/action@"));
 
 /** What is wrong with a policy as a binding of this workflow; empty means it is bound as intended. */
 function bindingFaults(policy: Policy): string[] {
@@ -64,13 +70,13 @@ test("#4195 POSITIVE CONTROLS: the checkers see a minter, a stored read and a mi
   assert.equal(bindingFaults({ ...good, claim_pattern: { job_workflow_ref: good.claim_pattern?.job_workflow_ref ?? "" } }).length, 1, "a policy without ref must be refused");
 });
 
-test("#4195: only the one job that mints holds id-token: write", () => {
-  assert.deepEqual(minters(workflow), [MINTING_JOB]);
+test("#4195: only the two jobs that mint hold id-token: write", () => {
+  assert.deepEqual(minters(workflow).sort(), [RULESET_JOB, BOARD_JOB].sort());
 });
 
-test("#4195: the minting step names a policy that exists, is bound to nightly.yml on main, and asks for no write", () => {
-  const step = octoStep(workflow);
-  assert.ok(step, `${MINTING_JOB} has no octo-sts/action step`);
+test("#4195: the board read's step names a policy that exists, is bound to nightly.yml on main, and asks for no write", () => {
+  const step = octoStep(workflow, BOARD_JOB);
+  assert.ok(step, `${BOARD_JOB} has no octo-sts/action step`);
   assert.match(step.uses ?? "", /^octo-sts\/action@[0-9a-f]{40}\s*$/, "the action is pinned to a commit: this job holds id-token: write and then runs fetched code");
   assert.equal(step.with?.scope, "a11ign/a11ign");
   const policy = parseYaml(read(`.github/chainguard/${step.with?.identity}.sts.yaml`)) as Policy;
@@ -81,17 +87,35 @@ test("#4195: the minting step names a policy that exists, is bound to nightly.ym
 });
 
 test("#4195: the audit runs on the minted token, not on a stored one or the workflow token", () => {
-  const steps = workflow.jobs[MINTING_JOB].steps ?? [];
+  const steps = workflow.jobs[BOARD_JOB].steps ?? [];
   const audit = steps.find((s) => s.run?.includes("agent-org ready:audit"));
-  assert.ok(audit, `${MINTING_JOB} has no ready:audit step`);
-  assert.equal(audit.env?.GH_TOKEN, `\${{ steps.${octoStep(workflow)?.id}.outputs.token }}`);
-  assert.ok(steps.indexOf(octoStep(workflow) as Step) < steps.indexOf(audit), "the exchange must come before the audit");
+  assert.ok(audit, `${BOARD_JOB} has no ready:audit step`);
+  assert.equal(audit.env?.GH_TOKEN, `\${{ steps.${octoStep(workflow, BOARD_JOB)?.id}.outputs.token }}`);
+  assert.ok(steps.indexOf(octoStep(workflow, BOARD_JOB) as Step) < steps.indexOf(audit), "the exchange must come before the audit");
 });
 
-test("#4195: the one remaining stored-token read is the ruleset step, whose gap the workflow names", () => {
+test("#4195: the ruleset step mints under the organisation policy and reads the loop with that token, not the stored one", () => {
+  const steps = workflow.jobs[RULESET_JOB].steps ?? [];
+  const mint = octoStep(workflow, RULESET_JOB);
+  assert.ok(mint, `${RULESET_JOB} has no octo-sts/action step`);
+  assert.match(mint.uses ?? "", /^octo-sts\/action@[0-9a-f]{40}\s*$/, "pinned to a commit, as the board read's is");
+  assert.deepEqual(mint.with, { scope: ORG_SCOPE, identity: ORG_IDENTITY }, "an organisation policy is named by the org, not by a repository");
+  const read = steps.find((s) => GAP_STEP.test(s.name ?? ""));
+  assert.ok(read, `${RULESET_JOB} has no step named like ${GAP_STEP}`);
+  assert.ok(steps.indexOf(mint) < steps.indexOf(read), "the exchange must come before the read");
+  assert.equal(read.env?.OCTO_TOKEN, `\${{ steps.${mint.id}.outputs.token }}`);
+  const run = read.run ?? "";
+  const loopAt = run.indexOf("A11Y_PROTECTION_REPO=");
+  const asApp = run.indexOf('export GH_TOKEN="$OCTO_TOKEN"');
+  const asStored = run.indexOf('export GH_TOKEN="$A11IGN_BOT_TOKEN"');
+  assert.ok(asApp >= 0 && asApp < loopAt, "the protection loop must run with the minted token exported before it");
+  assert.ok(asStored > loopAt, "the stored token may be exported only after the loop, for the settings table alone");
+});
+
+test("#4195: the one remaining stored-token read is the settings-table step, whose gap the workflow names", () => {
   const reads = storedTokenReads(workflow);
   assert.equal(reads.length, 1, `expected exactly the named gap, found ${JSON.stringify(reads)}`);
+  assert.deepEqual(reads[0].job, RULESET_JOB);
   assert.match(reads[0].step, GAP_STEP);
-  assert.deepEqual(minters(workflow).filter((job) => job === reads[0].job), [], "the ruleset read must not share a job that mints");
-  assert.match(read(WORKFLOW), /#4195, A NAMED GAP/);
+  assert.match(read(WORKFLOW), /THE SETTINGS TABLE BELOW STAYS ON THE STORED TOKEN, A NAMED GAP/);
 });
