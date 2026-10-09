@@ -152,8 +152,12 @@ test("#4331: the REGENERATE side of the same property, in a fixture where an unr
   });
 });
 
-test("#4331: the live tree -- the committed pin is current at HEAD, so a dispatch on main today answers 'nothing to do'", () => {
-  assert.equal(decideAtCommit({ commit: "HEAD", cwd: REPO_ROOT }).action, NOTHING_TO_DO);
+test("#4331: the live tree -- the committed pin is current where this branch left main, so a dispatch on main today answers 'nothing to do'", () => {
+  // Read at the BRANCH POINT, not at HEAD: a pull request that changes action.yml cannot carry a pin containing its own change (the header of
+  // consumer-gate-pin-needed.ts, #558), so at HEAD it would answer REGENERATE and every such pull request would be red for the property it
+  // exists to hand to the merge. On `main` itself the branch point is HEAD, so the reading there is unchanged.
+  const branchPoint = gitIn(REPO_ROOT, ["merge-base", "HEAD", "origin/main"]).trim();
+  assert.equal(decideAtCommit({ commit: branchPoint, cwd: REPO_ROOT }).action, NOTHING_TO_DO);
 });
 
 // --- 3. the workflow and its policy --------------------------------------------------------------------------------------------------
