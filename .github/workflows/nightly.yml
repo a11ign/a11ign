@@ -191,17 +191,15 @@ jobs:
   # IDENTITY ONLY. So the read is worth exactly as much as the subject it asks about. `${{ github.token }}`
   # is the `github-actions` app, which authors nothing and merges nothing here: a nightly `BINDS_ME` under
   # it would be a TRUE STATEMENT ABOUT THE WRONG SUBJECT, and it would read in the log exactly like the
-  # useful one. `A11IGN_BOT_TOKEN` is the identity that actually completes every merge -- `trunk.yml`'s own
-  # header ("since #416 every merge is completed with the A11IGN_BOT_TOKEN PAT"), and measured 2026-09-23 on
-  # the three most recently merged PRs (#2109, #2112, #2115): `merged_by` is `DanBeckDev` on all three,
-  # while the PRs themselves are authored by `a11ign-ai-workers`. `DanBeckDev` is also the identity #2022
-  # singled out as `bypass_pull_request_allowances`'s sole entry, so it is precisely the subject whose
-  # exemption state the requirement turns on.
+  # useful one. UNTIL #4195 the subject was the identity of `A11IGN_BOT_TOKEN`, then the one completing every merge (measured
+  # 2026-09-23 on #2109, #2112 and #2115: `merged_by` `DanBeckDev`, the identity #2022 singled out as
+  # `bypass_pull_request_allowances`'s sole entry). SINCE #4195 the loop below is read as the Octo STS app, and the step says what that
+  # does and does not certify: four identities complete merges today, and the app is one of them.
   #
   # SO THERE IS NO FALLBACK, AND THAT IS THE DIFFERENCE FROM EVERY OTHER JOB IN THIS FILE. `ready-audit`
   # below falls back to `GITHUB_TOKEN` with a warning because a degraded answer about the tracker is still
   # an answer about the tracker. Here a fallback would silently SWAP THE SUBJECT and certify the wrong one,
-  # which is the exact defect the paragraph above refuses. A missing secret is CANNOT_TELL, and
+  # which is the exact defect the paragraph above refuses. A failed exchange or an empty token is CANNOT_TELL, and
   # CANNOT_TELL fails the job.
   #
   # THE ADMIN-ONLY HALF IS DELIBERATELY LEFT OUT, AND A LATER READER MUST NOT ADD IT.
@@ -234,6 +232,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      id-token: write   # the Octo STS exchange below and nothing else (#4195)
     steps:
       - uses: actions/checkout@v7
         with: { ref: main }
@@ -249,27 +248,37 @@ jobs:
       # Every other nightly job that runs tests (`coverage`, `nightly-only`, `doc-report`) builds for the
       # same reason.
       - run: pnpm run build
-      # #4195, A NAMED GAP: THIS READ STAYS ON `A11IGN_BOT_TOKEN`, and the identity half is now MEASURED while the reach half is not closable here.
-      #   1. IDENTITY. Since #4198 (PR #4304, `mergedBy: app/octo-sts`) the identity that completes a merge is the Octo STS app, and this read
-      #      still answers for the PAT's owner (`DanBeckDev`, above): a true statement about the subject that no longer merges, so it certifies
-      #      less than it appears to. MEASURED 2026-10-09 (run 37863640022, a dispatch on `main`, a `metadata: read` installation token): the app
-      #      reads `rules/branches/main` (`merge_queue` and `pull_request`, both from ruleset 23681721) and `rulesets/23681721` answers
-      #      `current_user_can_bypass: "never"` with no `bypass_actors` field, so an installation token DOES return the field and the read
-      #      could answer for the merging identity. That answer is for the asking identity alone, as ever (`main-review-requirement.md`).
-      #   2. REACH. The loop below reads every declared code repository, and a repository policy reaches only the repository it sits in
-      #      (Octo STS v0.11.2 forces `repositories` to that one). Nine repositories means an organisation policy in `a11ign/.github`,
-      #      which is outside this row's Region and `ceo`'s crossing. Re-point this read to the app when that policy exists; until then it
-      #      stays on the token, and a half-and-half guard (one repository as the app, eight as the PAT) would read as one subject and be two.
-      - name: Ask GitHub, once per code repository, whether the default branch's `pull_request` rule binds the identity that merges here
+      # #4195: THE RULESET READ IS MADE WITH AN OCTO STS TOKEN, AND ANSWERS FOR THE OCTO STS APP -- NOT FOR THE PAT'S OWNER, and nothing else in
+      # this paragraph widens that. The policy is an ORGANISATION policy in `a11ign/.github` (`nightly-ruleset-read-org`, #4330): a repository
+      # policy reaches only the repository it sits in (Octo STS v0.11.2 forces `repositories` to that one) and the loop below reads nine.
+      # It is `metadata: read` and nothing else, its `repositories` list equals `.agent-org/project.json`'s `code` array, and it is bound to
+      # this file on `main` by `job_workflow_ref` AND `ref`, so a dispatch from a branch is refused at the exchange and fails this job.
+      #   IDENTITY, MEASURED 2026-10-09 over the last 40 merged PRs (`gh pr list --state merged --json mergedBy`): `a11ign-ai-workers` 22,
+      #   `a11ign-ci` 10, `app/octo-sts` 7, `a11ign-ai-leads` 1. Four identities complete merges, so there is no single "merging identity" to
+      #   certify. The app is the arming identity `auto-arm.yml` uses since #4198, which is the path the chain is moving to, and a run on
+      #   `main` (37863640022) showed an installation token DOES return `current_user_can_bypass` (`"never"`, no `bypass_actors` field). So
+      #   `BINDS_ME` here reads "the requirement exists and THE APP cannot walk past it", and it does NOT say nobody else is exempt
+      #   (`main-review-requirement.md`: CANNOT_TELL stands for that). The former PAT's owner is no longer the subject.
+      #   THE SETTINGS TABLE BELOW STAYS ON THE STORED TOKEN, A NAMED GAP. It reads `contents/`, `git/trees`, `environments`,
+      #   `deployment-branch-policies` and `orgs/a11ign/teams/bots/repos`, which a `metadata: read` token does not carry (INFERRED from the
+      #   endpoints' documented permissions, not measured: only a run on `main` can mint, and the first one after this lands is the
+      #   measurement). Widening the org policy is `ceo`'s crossing, not this row's, so the table keeps its token and says so here.
+      - name: Exchange this run's identity for a token that reads the nine repositories' rulesets (Octo STS, organisation policy)
+        id: octo
+        uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05   # v1.1.1
+        with:
+          scope: a11ign
+          identity: nightly-ruleset-read-org
+      - name: Ask GitHub, once per code repository, whether the default branch's `pull_request` rule binds the Octo STS app, then read the settings table
         env:
+          OCTO_TOKEN: ${{ steps.octo.outputs.token }}
           A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
         run: |
           set -o pipefail
-          if [ -z "$A11IGN_BOT_TOKEN" ]; then
-            echo '::error::CANNOT_TELL: A11IGN_BOT_TOKEN is not set, so the ruleset read could not be made AS THE MERGING IDENTITY, and NOTHING WAS READ. Deliberately not falling back to github.token: that reads current_user_can_bypass for the github-actions app, which merges nothing here -- a true statement about the wrong subject. This is not a pass. See #2120.'
+          if [ -z "$OCTO_TOKEN" ]; then
+            echo '::error::CANNOT_TELL: the Octo STS exchange returned no token, so the ruleset read could not be made as the app, and NOTHING WAS READ. Deliberately not falling back to github.token or the stored token: either would read current_user_can_bypass for a different identity, a true statement about the wrong subject. This is not a pass. See #2120.'
             exit 1
           fi
-          export GH_TOKEN="$A11IGN_BOT_TOKEN"
           # Read the runner's config path out of its single owner rather than re-typing it here; see the
           # block above the job for why this workflow must not spell it.
           #
@@ -294,6 +303,7 @@ jobs:
             exit 1
           fi
           FAILED=""
+          export GH_TOKEN="$OCTO_TOKEN"
           for repo in $REPOS; do
             LOG="ruleset-read-${repo//\//-}.log"
             # `set +e` for the one pipeline only: a repository that fails must not stop the others being read,
@@ -325,9 +335,7 @@ jobs:
           # environment, the bots team, the token probe, the release shape -- and until now nothing ran it
           # unattended, so a repository that drifted was found by the release that failed on it. It reads ALL of
           # them in one run, so it follows the loop rather than sitting inside it. It is not a step of its own
-          # because the secret would then be named a third time in this file, and `agent-org`'s own test pins
-          # that count at two (#2358: a change of name is a change of who acts). Sharing the step shares the
-          # token check, the config derivation and the repository list above, and `FAILED` below still names
+          # because it shares the config derivation and the repository list above, and `FAILED` below still names
           # it, so a drifting setting never hides a protection failure or the other way round.
           #
           # A GREEN EXIT IS NOT A PASS HERE EITHER, and the table test prints no pass line of its own. What it
@@ -335,24 +343,32 @@ jobs:
           # repository, which its `NOT RUN` return never reaches. Requiring each repository's own line, at `OK`
           # because a cell that is not `OK` already failed the run, is what makes a skip red.
           TABLE_LOG="settings-table.log"
-          set +e
-          A11Y_CHECK_MAIN_RULESET=1 pnpm exec rstest run --config "$RSTEST_CONFIG" \
-            --include packages/guards/src/layer-repository-protection.test.ts \
-            --disableConsoleIntercept 2>&1 | tee "$TABLE_LOG"
-          STATUS=$?
-          set -e
-          if [ "$STATUS" -ne 0 ]; then
-            echo "::error::CANNOT_TELL: the settings table FAILED (exit $STATUS): a repository drifts from the creation runbook, or a setting could not be read. The table above names the cell. This is not a pass. See #3705."
+          # The table is read with the stored token (the named gap above), and an absent one is CANNOT_TELL for the table alone: the
+          # protection loop has already been read as the app, and its result must not be lost to a missing secret.
+          if [ -z "$A11IGN_BOT_TOKEN" ]; then
+            echo '::error::CANNOT_TELL: A11IGN_BOT_TOKEN is not set, so the settings table could not be read and NOTHING WAS READ. This is not a pass. See #3705.'
             FAILED="$FAILED <the-settings-table>"
           else
-            TABLE_MISSING=""
-            grep -qF "LIVE PASS (per-repository) over" "$TABLE_LOG" || TABLE_MISSING="$TABLE_MISSING <the-protection-read>"
-            for repo in $REPOS; do
-              grep -qF "release-shape ${repo}: OK" "$TABLE_LOG" || TABLE_MISSING="$TABLE_MISSING $repo"
-            done
-            if [ -n "$TABLE_MISSING" ]; then
-              echo "::error::CANNOT_TELL: the settings table exited green but never printed its output for:$TABLE_MISSING, so the live read did not happen and nothing was certified. Look for a \"NOT RUN\" line in the log. This is not a pass. See #3708."
+            export GH_TOKEN="$A11IGN_BOT_TOKEN"
+            set +e
+            A11Y_CHECK_MAIN_RULESET=1 pnpm exec rstest run --config "$RSTEST_CONFIG" \
+              --include packages/guards/src/layer-repository-protection.test.ts \
+              --disableConsoleIntercept 2>&1 | tee "$TABLE_LOG"
+            STATUS=$?
+            set -e
+            if [ "$STATUS" -ne 0 ]; then
+              echo "::error::CANNOT_TELL: the settings table FAILED (exit $STATUS): a repository drifts from the creation runbook, or a setting could not be read. The table above names the cell. This is not a pass. See #3705."
               FAILED="$FAILED <the-settings-table>"
+            else
+              TABLE_MISSING=""
+              grep -qF "LIVE PASS (per-repository) over" "$TABLE_LOG" || TABLE_MISSING="$TABLE_MISSING <the-protection-read>"
+              for repo in $REPOS; do
+                grep -qF "release-shape ${repo}: OK" "$TABLE_LOG" || TABLE_MISSING="$TABLE_MISSING $repo"
+              done
+              if [ -n "$TABLE_MISSING" ]; then
+                echo "::error::CANNOT_TELL: the settings table exited green but never printed its output for:$TABLE_MISSING, so the live read did not happen and nothing was certified. Look for a \"NOT RUN\" line in the log. This is not a pass. See #3708."
+                FAILED="$FAILED <the-settings-table>"
+              fi
             fi
           fi
           if [ -n "$FAILED" ]; then
