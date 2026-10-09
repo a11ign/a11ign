@@ -14,8 +14,10 @@
 # `pull_request*` event is named in `event_name`. `sub` carries IMMUTABLE ids (`repo:<owner>@<id>/<repo>@<id>`), so a subject written with
 # names never matches (#4191).
 #
-# WHAT IT HOLDS: `contents: write` (create or force-update the one `automation/consumer-gate-pin` branch) and `pull_requests: write` (open the
-# pull request), on THIS repository only, and nothing else. It is not a merge identity: the repair is armed by `auto-arm.yml` and needs the
+# WHAT IT HOLDS: `contents: write` (create or force-update the one `automation/consumer-gate-pin` branch), `workflows: write` (the repair IS a change
+# to `.github/workflows/consumer-gate.yml`, which GitHub refuses to any token without it; `ceo`, #4374) and `pull_requests: write` (open the pull
+# request), on THIS repository only, and nothing else. `workflows` is safe only because the job that can mint runs no repository code (the header of
+# `consumer-gate-pin.yml`), and the App installation behind Octo STS must hold the same permission. It is not a merge identity: the repair is armed by `auto-arm.yml` and needs the
 # approving review `main` requires.
 issuer: https://token.actions.githubusercontent.com
 subject: repo:a11ign@320310787/a11ign@1280353940:ref:refs/heads/main
@@ -25,3 +27,4 @@ claim_pattern:
 permissions:
   contents: write
   pull_requests: write
+  workflows: write

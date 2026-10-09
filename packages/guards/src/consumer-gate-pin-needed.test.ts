@@ -11,6 +11,8 @@
  *   2. A COMMIT THAT TOUCHED NEITHER FILE CHANGES NOTHING: over a window of recent history, the decision at such a commit equals the
  *      decision at its parent, and the window holds both answers somewhere in this suite (the fixture below is the REGENERATE side).
  *   3. THE WORKFLOW HAS NO STORED TOKEN, mints under a policy bound to `main`, and cannot be tricked by a branch: pinned by reading both files.
+ *      The policy grants `workflows: write` (the repair is a write under `.github/workflows/`, #4374), so THE JOB HOLDING `id-token` RUNS NO
+ *      REPOSITORY CODE: `regenerate` runs it and uploads one file, `repair` mints and writes, and only `repair` holds `id-token`.
  *   4. A RELEASE IS RE-DISPATCHED ONLY FOR THE STALE PIN: a run that failed elsewhere is not retried, a green one is not either.
  *   5. A STALE PIN IS EXCUSED ONLY WHILE ITS REPAIR IS OPEN AND ITSELF CURRENT.
  */
@@ -169,7 +171,7 @@ test("#4331: the live tree -- the committed pin is current where this branch lef
 // --- 3. the workflow and its policy --------------------------------------------------------------------------------------------------
 
 type Step = { uses?: string; run?: string; if?: string; with?: Record<string, string>; env?: Record<string, string> };
-type Job = { permissions?: Record<string, string>; if?: string; steps: Step[] };
+type Job = { permissions?: Record<string, string>; if?: string; needs?: string[]; steps: Step[] };
 const workflow = parseYaml(WORKFLOW) as { on: Record<string, { branches?: string[]; paths?: string[] } | null>; permissions: unknown; jobs: Record<string, Job> };
 const policy = parseYaml(POLICY) as { subject: string; claim_pattern: Record<string, string>; permissions: Record<string, string> };
 
@@ -185,31 +187,72 @@ test("#4331: the workflow runs on a push to main that touches action.yml or cons
 
 test("#4331: NO STORED TOKEN -- the only secret-shaped value is the minted one, and the mint has no GITHUB_TOKEN fallback", () => {
   assert.doesNotMatch(WORKFLOW, /\$\{\{\s*secrets\./, "a stored secret");
-  const regenerate = workflow.jobs.regenerate;
-  const mint = regenerate.steps.find((step) => step.uses?.startsWith("octo-sts/action@"));
-  assert.ok(mint, "the regenerate job mints through Octo STS");
+  const repair = workflow.jobs.repair;
+  const mint = repair.steps.find((step) => step.uses?.startsWith("octo-sts/action@"));
+  assert.ok(mint, "the repair job mints through Octo STS");
   assert.equal(mint.with?.identity, "consumer-gate-pin-write");
-  const writes = regenerate.steps.filter((step) => step.env?.GH_TOKEN !== undefined);
+  const writes = repair.steps.filter((step) => step.env?.GH_TOKEN !== undefined);
   assert.ok(writes.length > 0, "positive control: some step writes");
   for (const step of writes) assert.match(step.env?.GH_TOKEN ?? "", /steps\.octo-sts\.outputs\.token/, "a write that does not use the minted token");
 });
 
 test("#4331: id-token is held by the one job that mints, and only that job; the release job holds actions: write and nothing that mints", () => {
-  assert.equal(workflow.jobs.regenerate.permissions?.["id-token"], "write");
-  assert.equal(workflow.jobs.decide.permissions?.["id-token"], undefined);
-  assert.equal(workflow.jobs.release.permissions?.["id-token"], undefined);
+  assert.equal(workflow.jobs.repair.permissions?.["id-token"], "write");
+  for (const name of ["decide", "regenerate", "release"]) assert.equal(workflow.jobs[name].permissions?.["id-token"], undefined, `${name} holds id-token`);
   assert.deepEqual(workflow.jobs.release.permissions, { contents: "read", actions: "write" });
   assert.deepEqual(workflow.jobs.decide.permissions, { contents: "read" });
+  assert.deepEqual(workflow.jobs.regenerate.permissions, { contents: "read" });
+});
+
+test("#4374: THE JOB HOLDING id-token RUNS NO REPOSITORY CODE: no checkout, no install, no node, no pnpm, no script of the repository", () => {
+  const steps = workflow.jobs.repair.steps;
+  const uses = steps.map((step) => step.uses ?? "").filter((u) => u !== "");
+  assert.deepEqual(uses.map((u) => u.split("@")[0]), ["octo-sts/action", "actions/download-artifact"], "the minting job uses the mint and the artifact read, nothing else");
+  // A heredoc body is text the job WRITES (the pull request's Acceptance names `pnpm exec rstest`), not a command it runs.
+  const scripts = steps.map((step) => (step.run ?? "").replace(/<<EOF\n[\s\S]*?\n\s*EOF\n/g, "")).join("\n");
+  assert.doesNotMatch(scripts, /\b(pnpm|npm|npx|node|tsx|yarn)\b|scripts\//, "a run step of the minting job reaches repository code or a package manager");
+  assert.match(scripts, /gh api -X PUT/, "positive control: the scan reads the step that writes");
+  // The control the scan must not miss: the job that hands the file on DOES run them, and holds no id-token.
+  const regenerateText = JSON.stringify(workflow.jobs.regenerate.steps);
+  assert.match(regenerateText, /actions\/checkout/);
+  assert.match(regenerateText, /pnpm install/);
+  assert.match(regenerateText, /generate-consumer-gate\.mjs/);
+  assert.match(regenerateText, /actions\/upload-artifact/);
+});
+
+test("#4374: repair needs regenerate, takes its artifact by the name it was uploaded under, and still mints on a dispatch with nothing to do", () => {
+  const upload = workflow.jobs.regenerate.steps.find((s) => s.uses?.startsWith("actions/upload-artifact@"));
+  const download = workflow.jobs.repair.steps.find((s) => s.uses?.startsWith("actions/download-artifact@"));
+  assert.ok(upload?.with?.name && download?.with?.name, "positive control: both halves of the hand-over exist");
+  assert.equal(download.with.name, upload.with.name, "the artifact is uploaded under one name and downloaded under another");
+  assert.equal(upload.with.path, CONSUMER_GATE_PATH, "the upload carries the one file the generator may change");
+  assert.deepEqual(workflow.jobs.repair.needs, ["decide", "regenerate"]);
+  const condition = workflow.jobs.repair.if ?? "";
+  assert.match(condition, /needs\.regenerate\.result == 'success'/, "a failed regenerate must not mint");
+  assert.match(condition, /workflow_dispatch.*needs\.regenerate\.result == 'skipped'/, "a dispatch with nothing to regenerate is the live reading of the authority");
+  assert.equal(workflow.jobs.regenerate.if, "needs.decide.outputs.action == 'regenerate'");
+  assert.equal(workflow.jobs.repair.steps.find((s) => s.uses?.startsWith("octo-sts/action@"))?.if, undefined, "the mint runs on every dispatch");
 });
 
 test("#4331: the regeneration runs the generator, refuses any change but consumer-gate.yml, and pushes the ONE branch the in-flight reading looks for", () => {
   const text = workflow.jobs.regenerate.steps.map((s) => s.run ?? "").join("\n");
   assert.match(text, /node scripts\/generate-consumer-gate\.mjs/);
   assert.ok(text.includes('" != " M .github/workflows/consumer-gate.yml" ]'), "the only-consumer-gate.yml guard");
-  const pushStep = workflow.jobs.regenerate.steps.find((s) => s.env?.BRANCH !== undefined);
+  const pushStep = workflow.jobs.repair.steps.find((s) => s.env?.BRANCH !== undefined);
   assert.equal(pushStep?.env?.BRANCH, REGENERATION_BRANCH, "the workflow and the in-flight reading name different branches");
   assert.match(pushStep?.run ?? "", /Closes: none -- /, "the pull request it opens declares Closes");
   assert.match(pushStep?.run ?? "", /^\s*Acceptance:$/m, "and an Acceptance section");
+});
+
+test("#4374: what the minting job was handed is shape-checked before it is written, and the write is the contents API on the repair branch", () => {
+  const script = workflow.jobs.repair.steps.find((s) => s.env?.BRANCH !== undefined)?.run ?? "";
+  assert.match(script, /\[ -n "\$\{GH_TOKEN:-\}" \]/, "an empty token is refused");
+  assert.match(script, /\[0-9a-f\]\{40\}/, "shas are shape-checked");
+  assert.match(script, /find "\$HANDED" -type f \| wc -l\)" = 1/, "the artifact holds exactly one file");
+  assert.match(script, /sed "s\/\$old\/\$PIN\/g" .* \| cmp - "\$HANDED\/consumer-gate\.yml"/, "the file is the one on this commit with only its pin moved");
+  assert.match(script, /gh api -X PATCH "repos\/\$REPO\/git\/refs\/heads\/\$BRANCH" -f sha="\$PIN" -F force=true/, "a newer repair replaces an older one");
+  assert.match(script, /gh api -X PUT "repos\/\$REPO\/contents\/\$FILE_PATH".* -f branch="\$BRANCH"/s);
+  assert.doesNotMatch(script, /\bgit (push|commit|switch|add)\b/, "no repository checkout to commit in");
 });
 
 const RESOLVES_THE_TOOL = /agent-org-newest-tag\.mjs --dest=/;
@@ -229,13 +272,11 @@ test("#4373: every job that runs a script reaching repo-identity.mjs resolves th
   }
 });
 
-test("#4331: a push refused for the 'workflows' permission says so and says the repair goes another way; the policy is NOT widened to avoid it", () => {
-  const pushStep = workflow.jobs.regenerate.steps.find((s) => s.env?.BRANCH !== undefined);
-  const text = pushStep?.run ?? "";
-  assert.match(text, /if ! push_log="\$\(git push --force .*2>&1\)"; then/, "the push's stderr is captured, not left to a bare 'remote rejected'");
-  assert.match(text, /grep -qi 'workflows'/, "the refusal is classified by the message GitHub gives");
-  assert.match(text, /::error::the push was refused for the 'workflows' permission.*pushed another way/, "and the error names the permission and the way out");
-  assert.equal("workflows" in policy.permissions, false, "the answer to a workflows refusal is not to grant it");
+test("#4374: a write refused for the 'workflows' permission names the App installation, the one step outside this repository", () => {
+  const script = workflow.jobs.repair.steps.find((s) => s.env?.BRANCH !== undefined)?.run ?? "";
+  assert.match(script, /if ! response="\$\(gh api -X PUT .*2>&1\)"; then/s, "the response is captured, not left to a bare 403");
+  assert.match(script, /::error::the write of \$\{BRANCH\} was refused;.*Octo STS App installation lacks the 'workflows' permission/, "and the error names where to look");
+  assert.equal(policy.permissions.workflows, "write", "the policy asks for the permission the write needs");
 });
 
 test("#4331: the policy binds the token to this workflow as it is on main, and to a subject of main", () => {
@@ -253,8 +294,8 @@ test("#4331: the policy binds the token to this workflow as it is on main, and t
   assert.deepEqual(Object.keys(policy.claim_pattern).sort(), ["event_name", "job_workflow_ref"]);
 });
 
-test("#4331: the policy grants contents and pull-request write on this repository, and nothing else", () => {
-  assert.deepEqual(policy.permissions, { contents: "write", pull_requests: "write" });
+test("#4374: the policy grants contents, workflows and pull-request write on this repository, and nothing else", () => {
+  assert.deepEqual(policy.permissions, { contents: "write", pull_requests: "write", workflows: "write" });
   assert.doesNotMatch(POLICY, /^repositories:/m, "a repository policy cannot name another repository");
 });
 
