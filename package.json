@@ -6,6 +6,9 @@
   "type": "module",
   "license": "AGPL-3.0-or-later",
   "packageManager": "pnpm@10.34.5",
+  "config": {
+    "boundaryCheckToolchain": "0.4.0"
+  },
   "engines": {
     "npm": "use pnpm instead: run pnpm install"
   },
