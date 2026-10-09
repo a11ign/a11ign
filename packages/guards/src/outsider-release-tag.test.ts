@@ -172,3 +172,31 @@ test("a dispatch naming a version promotes that version, and a malformed one mov
   assert.notEqual(bad.status, 0, bad.out);
   assert.deepEqual(bad.calls, []);
 });
+
+/*
+ * THE VERSIONS A PROMOTION LEAPT OVER (#4544, found by #4526). `a11ign@0.5.2` was superseded by 0.5.3 before it qualified, so no promotion
+ * named it and `v0.5.2` was never written, though 0.5.1 and 0.5.3 have theirs. The step now tags every older `a11ign@<version>` it finds bare.
+ */
+const SKIPPED = line(OTHER, "a11ign@0.3.0");
+const NEWER = line("d".repeat(40), "a11ign@0.3.2");
+
+test("a promotion also writes the v<older> of an older a11ign@<older> that has none, at that tag's own commit (#4544)", () => {
+  const { status, calls, out } = runStep([...BEFORE, SKIPPED]);
+  assert.equal(status, 0, out);
+  assert.deepEqual(writesTo(calls, "v0.3.0"), [`api -X POST repos/a11ign/a11ign/git/refs -f ref=refs/tags/v0.3.0 -f sha=${OTHER}`]);
+  assert.deepEqual(writesTo(calls, "v0.3.1"), [`api -X POST repos/a11ign/a11ign/git/refs -f ref=refs/tags/v0.3.1 -f sha=${NEW}`]);
+});
+
+test("a version NEWER than the promoted one has not qualified and gets no v<version>; one that already has a tag is left wherever it points (#4544)", () => {
+  const { status, calls, out } = runStep([...BEFORE, NEWER, SKIPPED, line(NEW, "v0.3.0")]);
+  assert.equal(status, 0, out);
+  assert.deepEqual(writesTo(calls, "v0.3.2"), []);
+  assert.deepEqual(writesTo(calls, "v0.3.0"), []);
+});
+
+test("positive control: the older-version loop is what writes v<older>, so with every older version already tagged only the promoted one is written (#4544)", () => {
+  const { status, calls, out } = runStep(BEFORE);
+  assert.equal(status, 0, out);
+  assert.deepEqual(writesTo(calls, "v0.1.0"), []);
+  assert.equal(calls.filter((c) => c.includes("-X POST")).length, 1);
+});
