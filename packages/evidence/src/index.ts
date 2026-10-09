@@ -316,15 +316,16 @@ export interface CaptureResult {
    * contract as `media`: `autocomplete` has no accessibility-tree equivalent, `null` means the census did not
    * run (NOT an empty page), and `autocomplete: null` on an entry means that control has no attribute. The
    * attribute as written, never the browser's normalised property, which reads a malformed token as `""`.
-   *
-   * `pasteCancelled` (#4324, 3.3.8 Accessible Authentication): did a cancelable `paste` event dispatched at this
-   * control come back default-prevented? Absent = not examined (NOT "paste is allowed"), `false` = dispatched and
-   * not cancelled. The worker census (#4314) carries it; the rule that reads it is #4259.
    */
   formInputs?: {
     tag: string;
     type: string | null;
     autocomplete: string | null;
+    /**
+     * 3.3.8 Accessible Authentication (#4259, #4324): did a cancelable `paste` event dispatched at this control
+     * come back default-prevented? Absent = not examined (NOT "paste is allowed"), `false` = dispatched and not
+     * cancelled. Filled by the worker census (#4314).
+     */
     pasteCancelled?: boolean;
   }[] | null;
   /**
