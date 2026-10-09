@@ -736,6 +736,70 @@ test("the promotion row is filed by title, once, by a job that has no `needs` on
   assert.deepEqual([row.needs].flat(), [decideJobName(realWorkflow())]);
 });
 
+// ---- the row-filing step, RUN: a label past any list cap still reads as present (#4466) -----------------------------------------
+
+/** The row-filing step's `run:` under bash (the real one unless `script` is given) with a `gh` that records its calls; its `label list` never holds the label, as a capped list would not. */
+function runRowFiling(opts: { labels: string[]; failLookupWith?: string; script?: string }): { status: number | null; calls: string[]; output: string } {
+  const dir = mkdtempSync(join(tmpdir(), "release-row-"));
+  try {
+    const bin = join(dir, "bin");
+    mkdirSync(bin);
+    const log = join(dir, "gh.log");
+    const fake = [
+      "#!/bin/bash",
+      `echo "$*" >> "${log}"`,
+      `case "$1 $2" in`,
+      `  "issue list") echo 0 ;;`,
+      `  "label list") echo 0 ;;`, // a capped list never holds the label: the defect this test exists to refuse
+      `  "label create") ;;`,
+      `  "issue create") ;;`,
+      `  "api repos/a11ign/a11ign/labels/"*)`,
+      opts.failLookupWith ? `    echo "${opts.failLookupWith}" >&2; exit 1 ;;` : `    case "$2" in *"/labels/missing-label") echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;; esac ;;`,
+      `esac`,
+      "",
+    ].join("\n");
+    writeFileSync(join(bin, "gh"), fake, { mode: 0o755 });
+    const rows = JSON.stringify([{ title: "promotion f4377e7b: qualification wait overdue", body: "b", labels: opts.labels }]);
+    const step = realWorkflow().jobs!["promotion-row"].steps![0];
+    const done = spawnSync("bash", ["-c", opts.script ?? step.run!], { cwd: dir, encoding: "utf8",
+      env: { PATH: `${bin}:${process.env.PATH}`, ROWS: rows, GH_REPO: "a11ign/a11ign", GH_TOKEN: "x" } });
+    const calls = (() => { try { return readFileSync(log, "utf8").split("\n").filter(Boolean); } catch { return []; } })();
+    return { status: done.status, calls, output: `${done.stdout}${done.stderr}` };
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+}
+
+test("the row-filing step, run: a label that exists is read by name and NOT created, however many labels the repo has", () => {
+  const got = runRowFiling({ labels: ["qualification-overdue", "answer:orchestrator"] });
+  assert.equal(got.status, 0, got.output);
+  assert.deepEqual(got.calls.filter((c) => c.startsWith("label ")), []);
+  assert.ok(got.calls.some((c) => c === "api repos/a11ign/a11ign/labels/qualification-overdue --silent"), JSON.stringify(got.calls));
+  assert.ok(got.calls.some((c) => c === "api repos/a11ign/a11ign/labels/answer%3Aorchestrator --silent"), "a colon is encoded: " + JSON.stringify(got.calls));
+  assert.ok(got.calls.some((c) => c.startsWith("issue create ")), "the row is filed");
+});
+
+test("the row-filing step, run: a label the API answers 404 for is created once, then the row is filed", () => {
+  const got = runRowFiling({ labels: ["missing-label"] });
+  assert.equal(got.status, 0, got.output);
+  assert.deepEqual(got.calls.filter((c) => c.startsWith("label ")), ["label create missing-label"]);
+  assert.ok(got.calls.some((c) => c.startsWith("issue create ")));
+});
+
+test("the row-filing step, run: a lookup that fails for any reason but 404 files nothing and creates nothing", () => {
+  const got = runRowFiling({ labels: ["qualification-overdue"], failLookupWith: "gh: Server Error (HTTP 502)" });
+  assert.notEqual(got.status, 0);
+  assert.deepEqual(got.calls.filter((c) => c.startsWith("label ") || c.startsWith("issue create")), []);
+  assert.match(got.output, /HTTP 502/);
+});
+
+test("REFUSED: the row-filing step asks for a capped label list again (the defect of run 37902742804)", () => {
+  const real = realWorkflow().jobs!["promotion-row"].steps![0].run!;
+  assert.doesNotMatch(real.replace(/^\s*#.*$/gm, ""), /gh label list/, "the step's code (its comments may name the defect) lists labels");
+  const listing = real.replace(/if ! looked=[\s\S]*?\n\s*fi\n/, `present=$(gh label list --limit 1000 --json name --jq 'length')\n if [ "$present" = "0" ]; then gh label create "$label"; fi\n`);
+  assert.notEqual(listing, real, "the mutation took");
+  const got = runRowFiling({ labels: ["qualification-overdue"], script: listing });
+  assert.ok(got.calls.includes("label create qualification-overdue"), "the capped list reads an existing label as missing and creates it: " + JSON.stringify(got.calls));
+});
+
 test("the header of release.yml states the two channels and when `latest` moves (#2052)", () => {
   const header = readFileSync(WORKFLOW, "utf8").split("\nname: release")[0];
   assert.match(header, /TWO CHANNELS/);
