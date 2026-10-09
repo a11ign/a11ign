@@ -6,7 +6,7 @@
  *
  *   1. the root `preinstall` runs `scripts/refuse-other-installers.ts`, which refuses any installer whose user agent is not
  *      pnpm's (an unknown one included: unknown is not pnpm), naming pnpm and the `packageManager` pin. The CHECK fetches nothing
- *      (it imports built-ins and `cli-flags.mjs` by relative path, and no network-capable built-in: read below). What npm had
+ *      (it imports built-ins and `cli-flags.ts` by relative path, and no network-capable built-in: read below). What npm had
  *      already fetched BEFORE it ran the check is a limit of every lifecycle script, pinned below as the positive control
  *      for the next half;
  *   2. `engines.npm` in the root manifest (a range no npm satisfies, whose text names pnpm) plus `engine-strict=true` in the root
@@ -137,13 +137,13 @@ function outsideTheAllowance(specifier: string, relativeAllowed: readonly string
   return !relativeAllowed.includes(specifier);
 }
 
-const CLI_FLAGS = "./cli-flags.mjs";
+const CLI_FLAGS = "./cli-flags.ts";
 
-test("the script fetches nothing: its imports are built-ins and cli-flags.mjs by relative path, and nothing calls fetch", () => {
+test("the script fetches nothing: its imports are built-ins and cli-flags.ts by relative path, and nothing calls fetch", () => {
   const code = stripComments(readFileSync(SCRIPT, "utf8"));
   assert.deepEqual(importsOf(code).filter((specifier) => outsideTheAllowance(specifier, [CLI_FLAGS])), []);
   assert.doesNotMatch(code, /\bfetch\b|\bprocess\.binding\b/);
-  assert.ok(importsOf(code).includes(CLI_FLAGS), "the script no longer imports cli-flags.mjs: update this test and the header, which say it does");
+  assert.ok(importsOf(code).includes(CLI_FLAGS), "the script no longer imports cli-flags.ts: update this test and the header, which say it does");
   // The file it reaches runs before node_modules exists too, so it is held to the same allowance (built-ins only, none reaching out).
   const reached = stripComments(readFileSync(join(REPO, "scripts/cli-flags.ts"), "utf8"));
   assert.deepEqual(importsOf(reached).filter((specifier) => outsideTheAllowance(specifier, [])), []);
@@ -158,7 +158,7 @@ test("the control for the line above: the same reading REFUSES a package, a netw
     'const m = await import("zod");',
     'const r = require("node:net");',
     'import { realpathSync } from "node:fs";',
-    'import { refuseUnknownFlags } from "./cli-flags.mjs";',
+    'import { refuseUnknownFlags } from "./cli-flags.ts";',
   ].join("\n");
   assert.deepEqual(importsOf(fixture).filter((specifier) => outsideTheAllowance(specifier, [CLI_FLAGS])),
     ["left-pad", "node:https", "node:child_process", "../other.mjs", "zod", "node:net"]);

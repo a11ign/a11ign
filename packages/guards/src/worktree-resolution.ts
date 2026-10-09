@@ -17,7 +17,7 @@
 // symlink, so the classifier stays: it is how a tree says which population it belongs to. The defect is that
 // NOTHING SAYS the tree you are testing in is not the tree you are testing. This file says it, and since
 // #2218 `suiteStartVerdict` REFUSES a suite start in a tree that reads another checkout or a frozen copy
-// (callers: `assert-glob-not-empty.mjs`, `worktree-owner.mjs`), with `OVERRIDE_ENV` as the one loud way past.
+// (callers: `assert-glob-not-empty.ts`, `worktree-owner.mjs`), with `OVERRIDE_ENV` as the one loud way past.
 // It is not retired by the pnpm migration: retiring the symlink removes the cause, and the refusal is what
 // catches the trees not yet converted, which is a separate decision from converting them.
 //

@@ -176,7 +176,7 @@ test("the thin config at the old path contains no run-record, reporter or alias 
 });
 
 test("the four other files are gone from scripts/rstest/, so a copy beside the package cannot pass", () => {
-  assert.deepEqual(readdirSync(join(REPO, "scripts/rstest")), ["rstest.config.mjs"]);
+  assert.deepEqual(readdirSync(join(REPO, "scripts/rstest")), ["rstest.config.ts"]);
 });
 
 test("control: the old config body's own lines are RED", () => {

@@ -8,10 +8,10 @@
 // script. It stays so the record can be reproduced, not because the tool is adopted.
 //
 // AUTHOR-CHOSEN MUTANTS MEASURE DILIGENCE, NOT COVERAGE. On #2368 the author ran 13 mutants, every one red, and
-// the reviewer still found the path no test exercised. `mutation-check.mjs` cannot help there: it applies the ONE
+// the reviewer still found the path no test exercised. `mutation-check.ts` cannot help there: it applies the ONE
 // mutation its caller supplies and has no operator table, no line targeting and no idea what changed. This file is
 // the part it lacks -- WHO CHOOSES -- and nothing else: applying a mutant, proving the file came back byte for
-// byte, and reading whether the test bit are all `mutation-check.mjs`'s, called as a subprocess per mutant and
+// byte, and reading whether the test bit are all `mutation-check.ts`'s, called as a subprocess per mutant and
 // never restated (its exit codes are the contract: 0 bites, 1 survived, 2 refused, 3 restore failed).
 //
 // WHAT IT CHOOSES. Only lines the diff ADDED, in source files (never a test file: mutating the test proves
@@ -31,7 +31,7 @@
 //   node packages/guards/src/mutant-survivors.ts run --base=<rev> --test='<shell>' [--budget=<seconds>] [--cap=<n>] [--json]
 //   node packages/guards/src/mutant-survivors.ts apply --file=<path> --line=<n> --operator=<id> --occurrence=<k>
 //
-// `apply` is what `mutation-check.mjs` is handed as its `--mutate` command; it exits 2 when the mutant does not exist.
+// `apply` is what `mutation-check.ts` is handed as its `--mutate` command; it exits 2 when the mutant does not exist.
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -49,7 +49,7 @@ const SELF = fileURLToPath(import.meta.url);
 // handed by ABSOLUTE URL because the mutant runs with the mutated repo as its cwd, where a bare `tsx` need not resolve.
 // (`createRequire`, not `import.meta.resolve`: the test runner does not implement the latter.)
 const TSX = pathToFileURL(createRequire(import.meta.url).resolve("tsx")).href;
-// `mutation-check.mjs`'s own exit codes, named because every branch below reads them.
+// `mutation-check.ts`'s own exit codes, named because every branch below reads them.
 const EXIT = { KILLED: 0, SURVIVED: 1, REFUSED: 2, RESTORE_FAILED: 3 };
 
 export type Site = { start: number, end: number, replacement: string };
@@ -308,7 +308,7 @@ export type Hunt = { total: number, ran: number, killed: number, unknown: number
  * Run the mutants one at a time until they are done or the budget is spent.
  *
  * THE BUDGET GATES STARTING A MUTANT, NEVER KILLS ONE: a mutant killed mid-run leaves its file mutated, which is
- * the exit-3 state `mutation-check.mjs` exists to report. The last mutant may therefore run past the budget by
+ * the exit-3 state `mutation-check.ts` exists to report. The last mutant may therefore run past the budget by
  * its own duration. A restore that fails (exit 3) STOPS the hunt at once: every later result would be read off
  * a tree that is not what it was.
  * @param {{ mutants: Mutant[], runMutant: (mutant: Mutant) => number, budgetSeconds: number,
@@ -361,7 +361,7 @@ export function renderSurvivors(result: Hunt, { cap = DEFAULT_CAP }: { cap?: num
 }
 
 /**
- * The real runner: one `mutation-check.mjs` per mutant, applied through this file's own `apply`. The file is
+ * The real runner: one `mutation-check.ts` per mutant, applied through this file's own `apply`. The file is
  * copied aside first and compared after, so a check that was itself killed cannot leave a mutated file behind
  * unnoticed; a difference is put back from the copy and reported as exit 3.
  * @param {{ cwd: string, test: string, spawn?: typeof spawnSync }} where `spawn` is the seam a test replaces
@@ -382,7 +382,7 @@ export function mutateRunner({ cwd, test, spawn = spawnSync }: { cwd: string; te
 
 /**
  * The exit code, believed only when the tool's own sentence agrees with it. A Node process that CRASHES exits 1
- * -- the code for "the guard did not bite" -- so a `mutation-check.mjs` that could not even start (no build, a
+ * -- the code for "the guard did not bite" -- so a `mutation-check.ts` that could not even start (no build, a
  * missing module) would read as a survivor on every mutant. Its verdict lines are printed only by its own
  * paths, so a code without its line is REFUSED (exit 2: says nothing either way).
  * @param {{ status: number | null, stdout?: string | null, stderr?: string | null }} done

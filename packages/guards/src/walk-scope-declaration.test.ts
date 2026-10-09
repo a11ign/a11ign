@@ -1,5 +1,5 @@
 /**
- * `walk-scope-declaration.mjs` (#929): a guard's `WALK_SCOPE` declaration, read statically from its SOURCE TEXT.
+ * `walk-scope-declaration.ts` (#929): a guard's `WALK_SCOPE` declaration, read statically from its SOURCE TEXT.
  *
  * Three things have to hold or the CI selector silently stops running a guard, or crashes on every pull request:
  *   1. `null` AND `[]` ARE DIFFERENT ANSWERS. `null` is "this guard has not said" (keep running it); `[]` is "it reads nothing outside its imports".

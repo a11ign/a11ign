@@ -160,7 +160,7 @@ const NOT_REACHES: Record<string, [string, string]> = {
   "a declared export in a workflow": [".github/workflows/w.yml", "          import('agent-org/acceptance-commands').then((m) => m.run())"],
   "the bin": ["scripts/x.mjs", 'spawnSync("agent-org", ["owned-path-signoff", diff]);'],
   "the toolchain import (a package, not agent-org's src)": ["scripts/x.mjs", 'import { defineToolchainConfig } from "@a11ign/toolchain/rstest-config";'],
-  "a bare import of the resolver module, which calls nothing": ["scripts/x.mjs", 'import { toolModule } from "./agent-org-newest-tag.mjs";'],
+  "a bare import of the resolver module, which calls nothing": ["scripts/x.mjs", 'import { toolModule } from "./agent-org-newest-tag.ts";'],
   "the DEFINITION of a resolver": ["scripts/x.mjs", "export function toolPath(relative) {"],
   "AGENT_ORG_TOOL set with no src path": ["packages/guards/src/t.test.ts", 'const env = { AGENT_ORG_TOOL: join(dir, "tool") };'],
 };

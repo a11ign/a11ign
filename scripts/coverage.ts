@@ -5,7 +5,7 @@
 // #1320, STEP 4 OF THE RSTEST ADOPTION (#1317): coverage moves off c8 onto `@rstest/coverage-v8`. Three
 // pieces, each already built and tested for a reason of its own, wired together here for the first time:
 //
-//   - THE SAME VACUITY FLOOR `test:ts`/`test:all` use (#355/#1319) -- `assert-glob-not-empty.mjs`, run as a
+//   - THE SAME VACUITY FLOOR `test:ts`/`test:all` use (#355/#1319) -- `assert-glob-not-empty.ts`, run as a
 //     CHECK ONLY, never `--run`: the real run below is rstest's own, over the population `.c8rc.json`
 //     already declares, and passing that population to the floor a second time would be a second copy of
 //     the same fact typed twice.

@@ -16,7 +16,7 @@
 // that lane. Nine readers asked the question and each spelled it itself; #938 fixed one of them.
 //
 // A LEAF MODULE, like `region-paths.mjs`: its only import is `git-env.mjs`, which imports nothing, so
-// `ci-changed.mjs` -- an entry that runs before `npm ci` -- can use it without gaining a package specifier.
+// `ci-changed.ts` -- an entry that runs before `npm ci` -- can use it without gaining a package specifier.
 // `select-changed-tests.mjs` re-exports it rather than keeping the copy #938 wrote there.
 //
 // A FLAG ADDED AT NINE CALL SITES IS NINE COPIES OF A PREDICATE, and a tenth reader would write its own.
@@ -27,9 +27,9 @@ import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 import { sandboxGitEnv } from "./git-env.ts";
-// RELATIVE, NOT `@a11ign/screenreader-fleet/cli-flags`, for the reason `ci-changed.mjs` records above its own:
+// RELATIVE, NOT `@a11ign/screenreader-fleet/cli-flags`, for the reason `ci-changed.ts` records above its own:
 // this module is reachable from a pre-install entry, and a package specifier there dies with
-// ERR_MODULE_NOT_FOUND before `npm ci` finishes. `cli-flags.mjs` imports only `node:` builtins, so the
+// ERR_MODULE_NOT_FOUND before `npm ci` finishes. `cli-flags.ts` imports only `node:` builtins, so the
 // leaf property above survives the import -- `pre-install-import-graph.test.ts` is what checks that, and
 // it walks relative imports rather than taking this comment's word for it.
 import { refuseUnknownFlags } from "../../../scripts/cli-flags.ts";

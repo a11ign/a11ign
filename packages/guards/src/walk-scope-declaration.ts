@@ -1,12 +1,12 @@
 // @ts-check
 // A GUARD'S WALK_SCOPE DECLARATION, READ STATICALLY -- #929.
 //
-// Split out of `walk-scope.mjs` so that reading a declaration does not install the observer. The selector
-// parses every always-run guard, and it used to import `walk-scope.mjs` to do it -- which wrapped `fs`,
+// Split out of `walk-scope.ts` so that reading a declaration does not install the observer. The selector
+// parses every always-run guard, and it used to import `walk-scope.ts` to do it -- which wrapped `fs`,
 // `child_process`, `process` and `node:test` in the CI selector's own process, for nothing. A declaring guard
-// still imports `walk-scope.mjs`, which re-exports these.
+// still imports `walk-scope.ts`, which re-exports these.
 //
-// THE STRING-AWARE `stripComments`, which `select-changed-tests.mjs` already uses. `local-import-closure.mjs`
+// THE STRING-AWARE `stripComments`, which `select-changed-tests.mjs` already uses. `local-import-closure.ts`
 // has its own, a regex that does not know about strings -- so a `//` inside one (any URL) blanks the rest of
 // its line. The first version imported that one, and a guard whose first import named a `file://` URL read as
 // declaring nothing. Two copies of one function; this uses the right one.

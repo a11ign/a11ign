@@ -1,5 +1,5 @@
 /**
- * `changed-packages.mjs`: which `packages/<name>` directories a branch touched against `origin/main`'s MERGE-BASE with HEAD, for the pre-push fast gate and CI.
+ * `changed-packages.ts`: which `packages/<name>` directories a branch touched against `origin/main`'s MERGE-BASE with HEAD, for the pre-push fast gate and CI.
  *
  * What is pinned:
  *   1. `changedPackages` (pure) names each package once, sorted, from the diff's path lines, and ignores everything not directly under `packages/<name>/`

@@ -8,7 +8,7 @@
 //
 // IMPORT-BASED, never a grep -- ceo's ruling 2026-09-09, after a comment-aware text-grep for "ls-files"
 // (this file's own first version) still counted as "a test deriving its expectations from source TEXT",
-// this repo's own most-repeated defect shape. `localImports` (`local-import-closure.mjs`, #621/B8) parses
+// this repo's own most-repeated defect shape. `localImports` (`local-import-closure.ts`, #621/B8) parses
 // real ES import statements, comment-stripped -- the same discipline that lets B8 derive a test's
 // requirements from its import closure rather than scanning it for a keyword a future guard might not
 // happen to spell. See `tree-wide-guard.ts`'s own header for why the check is IMPORT AND CALL, never the

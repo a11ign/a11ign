@@ -44,7 +44,7 @@ export function stripComments(text: string): string {
   // `@a11ign/*` -- opened a block-comment match that closed at the next `*/` ANYWHERE LATER IN THE FILE,
   // blanking every line between, real code included. Measured across the tree the night this was found:
   // 10 of 89 `scripts/*.mjs` with relative imports derived NONE, `packages/agent-org/src/row-claim.mjs` among them --
-  // twelve real imports, zero visible -- and with them `select-changed-tests.mjs` and `ci-changed.mjs`,
+  // twelve real imports, zero visible -- and with them `select-changed-tests.mjs` and `ci-changed.ts`,
   // which decide what CI runs.
   //
   // IT NEEDED BOTH HALVES, which is why it survived a test written for exactly this class (#725): the

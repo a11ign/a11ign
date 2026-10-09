@@ -105,8 +105,8 @@ export function toolExportPath(subpath: string, root: string = toolRoot()): stri
  * A declared export of the tool, imported. A computed `import()`, so the caller names the shape it uses; the target may be `.ts`, so the importer runs under tsx or a
  * node that strips types, as `bin.mjs` runs its programs.
  * @param {string} subpath
- * @returns {Promise<any>}
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the caller names the shape it uses; the target is the tool's own module
 export function toolExport(subpath: string): Promise<any> {
   return import(pathToFileURL(toolExportPath(subpath)).href);
 }
@@ -168,8 +168,8 @@ export function main(argv: string[]): number {
   const injected = flag(argv, "tags");
   const dest = flag(argv, "dest");
   if (injected === undefined && dest === undefined) {
-    console.error("usage: agent-org-newest-tag.mjs --dest=<dir>   (CI: clone the newest stable tag and export AGENT_ORG_TOOL)\n"
-      + "       agent-org-newest-tag.mjs --tags=v0.9.0,v0.22.0   (print the newest stable of these; reads no remote)");
+    console.error("usage: agent-org-newest-tag.ts --dest=<dir>   (CI: clone the newest stable tag and export AGENT_ORG_TOOL)\n"
+      + "       agent-org-newest-tag.ts --tags=v0.9.0,v0.22.0   (print the newest stable of these; reads no remote)");
     return 2;
   }
   const tags = injected !== undefined ? injected.split(",") : remoteTags(TOOL_REPO_URL);

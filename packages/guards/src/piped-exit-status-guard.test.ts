@@ -1,5 +1,5 @@
 /**
- * `piped-exit-status-guard.mjs` (#180, #375, #535, #1642): `cmd | head; echo $?` reports `head`'s status, not `cmd`'s.
+ * `piped-exit-status-guard.ts` (#180, #375, #535, #1642): `cmd | head; echo $?` reports `head`'s status, not `cmd`'s.
  *
  * What is pinned, and why each matters:
  *   1. THE HAZARD NEEDS BOTH HALVES. A pipeline ending in head/tail/grep is refused only when a `$?` is read in the same text; a pipe with
@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { checkPipedExitStatus, checkPipedExitStatusInText, judgeLines, splitIntoBlocks } from "./piped-exit-status-guard.ts";
 
-const SCRIPT = join(resolve(dirname(fileURLToPath(import.meta.url))), "piped-exit-status-guard.mjs");
+const SCRIPT = join(resolve(dirname(fileURLToPath(import.meta.url))), "piped-exit-status-guard.ts");
 const EXIT = { ALLOW: 0, HAZARD: 1, ERROR: 2 };
 
 test("a pipe into head/tail/grep followed by a $? read is a hazard, naming the statement", () => {

@@ -1,6 +1,6 @@
 /**
- * `walk-scope-discovery.mjs` (#3573): "which SOURCE files does this one file reach, by relative import or workspace-package specifier, transitively".
- * `walk-scope.mjs` asks it what a declaring guard's WALK_SCOPE may read, so a miss here is a guard that reads a file its scope never named.
+ * `walk-scope-discovery.ts` (#3573): "which SOURCE files does this one file reach, by relative import or workspace-package specifier, transitively".
+ * `walk-scope.ts` asks it what a declaring guard's WALK_SCOPE may read, so a miss here is a guard that reads a file its scope never named.
  *
  * What is pinned, against a fixture repository built in a temp directory (never this checkout):
  *   1. `packageIndex` reads each `packages/<dir>/package.json` into name -> { dir, exportsMap }, with `{}` for a manifest that has no `exports`.

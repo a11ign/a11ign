@@ -38,10 +38,16 @@
 // bucket read as defects and all six were correct, so the shape does not decide it and a human must.
 
 /**
- * `assert.deepEqual(X, [])` -- the first of the two spellings #1123 measured.
- * @param {any} node @returns {any}
+ * An ESTree node as ESLint hands it over: duck-typed on purpose. Every reader below probes with `?.` and compares `type` strings, so a
+ * precise union would rewrite each of them to say the same thing with more ceremony.
  */
-function deepEqualEmptySubject(node: any): any {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AstNode = any;
+
+/**
+ * `assert.deepEqual(X, [])` -- the first of the two spellings #1123 measured.
+ */
+function deepEqualEmptySubject(node: AstNode): AstNode {
   const [first, second] = node.arguments ?? [];
   const isEmptyArray = second?.type === "ArrayExpression" && second.elements.length === 0;
   return first?.type === "Identifier" && isEmptyArray ? first : null;
@@ -49,9 +55,8 @@ function deepEqualEmptySubject(node: any): any {
 
 /**
  * `assert.equal(X.length, 0)` -- the second spelling.
- * @param {any} node @returns {any}
  */
-function lengthZeroSubject(node: any): any {
+function lengthZeroSubject(node: AstNode): AstNode {
   const [first, second] = node.arguments ?? [];
   if (second?.type !== "Literal" || second.value !== 0) return null;
   const isLength = first?.type === "MemberExpression" && first.property?.name === "length";
@@ -66,10 +71,8 @@ function lengthZeroSubject(node: any): any {
  * the function DECLARATION and the directive sat inside the body, so it was an unused directive beside a
  * live error. A disable that does not disable is the same shape as everything else found today: it had
  * the form of a suppression without being one.
- *
- * @param {any} node @returns {any}
  */
-function emptinessSubject(node: any): any {
+function emptinessSubject(node: AstNode): AstNode {
   if (node.callee?.type !== "MemberExpression") return null;
   const method = node.callee.property?.name;
   if (method === "deepEqual") return deepEqualEmptySubject(node);
@@ -79,9 +82,8 @@ function emptinessSubject(node: any): any {
 
 /**
  * The local collection `name` was derived from -- `SOURCE.filter(...)` -- or null if it was not.
- * @param {any} variable @returns {string | null}
  */
-function derivedFrom(variable: any): string | null {
+function derivedFrom(variable: AstNode): string | null {
   const def = variable?.defs?.[0];
   const init = def?.node?.type === "VariableDeclarator" ? def.node.init : null;
   if (init?.type !== "CallExpression" || init.callee?.type !== "MemberExpression") return null;
@@ -94,9 +96,8 @@ function derivedFrom(variable: any): string | null {
 
 /**
  * The nearest enclosing `test(...)` / `it(...)` call, or null.
- * @param {any} node @returns {any}
  */
-function enclosingTest(node: any): any {
+function enclosingTest(node: AstNode): AstNode {
   for (let n = node; n; n = n.parent) {
     if (n.type === "CallExpression" && n.callee?.type === "Identifier"
       && (n.callee.name === "test" || n.callee.name === "it")) return n;
@@ -126,11 +127,10 @@ function enclosingTest(node: any): any {
  * pin in #1160; `||`, `!` and `?:` are refused rather than handled, because each would need a claim about
  * the other branch that this rule cannot make.
  *
- * @param {any} node an expression inside an assertion call
  * @param {string} name the population's identifier
  * @returns {boolean}
  */
-function assertsNonEmpty(node: any, name: string): boolean {
+function assertsNonEmpty(node: AstNode, name: string): boolean {
   if (!node) return false;
   if (node.type === "LogicalExpression" && node.operator === "&&") {
     return assertsNonEmpty(node.left, name) || assertsNonEmpty(node.right, name);
@@ -145,15 +145,14 @@ function assertsNonEmpty(node: any, name: string): boolean {
   return false;
 }
 
-/** `name.length` as a member expression. @param {any} n @param {string} name @returns {boolean} */
-function isLengthOf(n: any, name: string): boolean {
+/** `name.length` as a member expression. */
+function isLengthOf(n: AstNode, name: string): boolean {
   return n?.type === "MemberExpression" && n.property?.name === "length"
     && n.object?.type === "Identifier" && n.object.name === name;
 }
 
-/** `assert.equal(name.length, <non-zero>)` pins; `, 0` asserts the OPPOSITE and must not.
- * @param {any[]} args @param {string} name @returns {boolean} */
-function pinsViaEqual(args: any[], name: string): boolean {
+/** `assert.equal(name.length, <non-zero>)` pins; `, 0` asserts the OPPOSITE and must not. */
+function pinsViaEqual(args: AstNode[], name: string): boolean {
   const [first, second] = args;
   const assertsZero = second?.type === "Literal" && second.value === 0;
   return isLengthOf(first, name) && !assertsZero;
@@ -163,10 +162,8 @@ function pinsViaEqual(args: any[], name: string): boolean {
  * Is this call itself a pin on `name`? One predicate per assertion method, because together they were a
  * single function at complexity 19 against a ceiling of 15 -- and before that a single arrow at 31.
  * Optional chaining costs a branch each, so the shape that reads as flat is not.
- *
- * @param {any} n @param {string} name @returns {boolean}
  */
-function isPinningCall(n: any, name: string): boolean {
+function isPinningCall(n: AstNode, name: string): boolean {
   if (n.type !== "CallExpression" || n.callee?.type !== "MemberExpression") return false;
   const args = n.arguments ?? [];
   const method = n.callee.property?.name;
@@ -182,14 +179,12 @@ function isPinningCall(n: any, name: string): boolean {
  * Walks the enclosing test's AST rather than its text, so a commented-out pin is not a pin. Exported so
  * the edges above are driven directly rather than only through a lint run.
  *
- * @param {any} testNode the enclosing `test(...)` call
  * @param {string} name
  * @returns {boolean}
  */
-export function pinnedWithin(testNode: any, name: string): boolean {
+export function pinnedWithin(testNode: AstNode, name: string): boolean {
   let found = false;
-  /** @param {any} n */
-  const walk = (n: any) => {
+  const walk = (n: AstNode) => {
     if (found || !n || typeof n !== "object") return;
     if (isPinningCall(n, name)) { found = true; return; }
     for (const key of Object.keys(n)) {

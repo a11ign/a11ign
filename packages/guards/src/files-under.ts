@@ -52,7 +52,7 @@ export type WalkChoices = {
  * directory is a link, not a directory, so the walk terminates over the cycle in the header above. It is
  * not reported either, because a link's target is either already inside `root` -- where following it
  * double-counts a file this walk has already visited or will -- or outside it, where a caller that
- * declared a subtree (`walk-scope.mjs`) never agreed to read.
+ * declared a subtree (`walk-scope.ts`) never agreed to read.
  *
  * An unreadable directory THROWS, and is meant to: a walk that swallows its own `readdirSync` reports
  * success having examined nothing, which is the failure every caller here already carries a floor

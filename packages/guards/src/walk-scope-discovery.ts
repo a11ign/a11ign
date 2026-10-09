@@ -1,9 +1,9 @@
 // @ts-check
-// THE WORKSPACE IMPORT CLOSURE, for `walk-scope.mjs` -- #3573.
+// THE WORKSPACE IMPORT CLOSURE, for `walk-scope.ts` -- #3573.
 //
 // `sourceClosure` answers "which SOURCE files does this one file reach, by relative import or workspace-package
 // specifier, transitively", and `packageIndex` is the table that resolves a bare `@a11ign/*` specifier back to a source
-// file rather than the `dist/*.js` its `exports` field points a real resolution at. `walk-scope.mjs` asks it what a
+// file rather than the `dist/*.js` its `exports` field points a real resolution at. `walk-scope.ts` asks it what a
 // declaring guard's WALK_SCOPE may read. It was written for the hand-built test selector and lives there still:
 // #3573 deletes the selector (`rstest --changed` replaced it), and these two have a live importer, so they move here
 // rather than going with it. They are the same code in both places only until that deletion.
@@ -65,7 +65,7 @@ function exportTarget(value: unknown): string | null {
 
 /**
  * One `dist/*.js` (or `dist/*.d.ts`) export target back to its SOURCE counterpart, mirroring
- * `candidatePackedPaths`'s inverse in `ci-changed.mjs`: every `tsc --build` package here uses
+ * `candidatePackedPaths`'s inverse in `ci-changed.ts`: every `tsc --build` package here uses
  * `rootDir: src`, `outDir: dist`, so `dist/foo.js` is built from `src/foo.ts`. A package shipping `src`
  * RAW (`nvda-worker`) has no `dist/` in its own targets at all, so the swap is a no-op and the literal
  * target -- already a real source file -- is tried as-is.
@@ -127,7 +127,7 @@ function resolveWorkspacePackage(spec: string, repoRoot: string, packages: Map<s
 
 /**
  * Everything reachable from `entryFile` by relative import or workspace-package specifier, transitively
- * -- the reverse of what `ci-changed.mjs`'s own header calls the point of ITS second pass: that file asks
+ * -- the reverse of what `ci-changed.ts`'s own header calls the point of ITS second pass: that file asks
  * "who depends on this PACKAGE"; this asks "which SOURCE FILES does this one TEST FILE actually reach",
  * so a change to any of them is a reason to run it.
  *

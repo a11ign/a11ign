@@ -698,7 +698,7 @@ test("the move step, run: a second line smuggled into the list is checked like t
   assert.deepEqual(empty.moved, []);
 });
 
-test("the move step re-applies the SAME shape `release-promote.mjs` checks: one regex, two places", () => {
+test("the move step re-applies the SAME shape `release-promote.ts` checks: one regex, two places", () => {
   const source = readFileSync(join(REPO, "scripts/release-promote.ts"), "utf8");
   const script = /const SPEC = \/(.+)\/;/.exec(source)![1];
   const step = moveOf(realWorkflow()).steps!.find((s) => /dist-tag add/.test(s.run ?? ""))!.run!;

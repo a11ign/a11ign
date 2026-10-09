@@ -51,7 +51,7 @@ const MIN_WORKFLOWS = 10;
 const MIN_RELOCATED = 15;
 /** The tree-wide guards beyond the three that stayed: the leak scans and the fence, which declare themselves too. */
 const RELOCATED_GUARDS = 3;
-/** What a declared tag looks like: `v` and a semver. Spelled here as well as in `lay-layer.mjs`, so a loosening in one is a failure in the other. */
+/** What a declared tag looks like: `v` and a semver. Spelled here as well as in `lay-layer.ts`, so a loosening in one is a failure in the other. */
 const SEMVER_TAG = /^v\d+\.\d+\.\d+$/;
 
 /**
@@ -275,7 +275,7 @@ function pinRefusals({ manifest, scripts, gitignore }: { manifest: LayersManifes
     ...(SEMVER_TAG.test(entry.tag ?? "") ? [] : [`the layer's tag is ${entry.tag}: a pin is a v<semver> tag, never a branch or a sha`]),
     ...(Array.isArray(entry.lays) && entry.lays.length > 0 ? [] : ["the layer names nothing to lay"]),
   ];
-  const laid = ["build", "prepare"].filter((name) => !(scripts[name] ?? "").includes("lay-layer.mjs lab")).map((name) => `\`${name}\` does not lay lab`);
+  const laid = ["build", "prepare"].filter((name) => !(scripts[name] ?? "").includes("lay-layer.ts lab")).map((name) => `\`${name}\` does not lay lab`);
   const ignored = gitignore.split("\n").some((line) => line.trim() === `/${DEPARTED_PATH}`) ? [] : [`.gitignore does not ignore /${DEPARTED_PATH}`];
   return [...declaration, ...laid, ...ignored];
 }

@@ -17,7 +17,7 @@
 // `main` and a merge-base against today's `main` would be the head itself, an empty diff that "skips" nothing.
 //
 // A TREE-WIDE GUARD IS NOT A `--changed` MISS. #3572 leaves the tests ABOUT the repository (`declareTreeWideGuard`) to CI
-// on purpose and ruled that line, so a failing file the head's own `tree-wide-guards.mjs` lists reads `ci-only` even
+// on purpose and ruled that line, so a failing file the head's own `tree-wide-guards.ts` lists reads `ci-only` even
 // when it fails inside the `ts` job, and never `yes`: widening `forceRerunTriggers` for it would be the whole suite.
 //
 // THE SIX ANSWERS, because absence is not proof. `yes` and `no` are the headline. `gone` is a failing file the head does
@@ -316,7 +316,7 @@ function rstestList({ tree, mergeBase }: { tree: string; mergeBase: string; }): 
 }
 
 /**
- * The tree-wide guards AT THE HEAD, from the head's own `tree-wide-guards.mjs` (the population is derived from its tree, and
+ * The tree-wide guards AT THE HEAD, from the head's own `tree-wide-guards.ts` (the population is derived from its tree, and
  * a guard declared since is not one then). Run in the head's worktree, which `rstestList` has already linked.
  * @param {{ tree: string }} where @returns {string[]}
  */

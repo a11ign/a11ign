@@ -30,7 +30,7 @@
 import { readFileSync } from "node:fs";
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-// RELATIVE, NOT `@a11ign/screenreader-fleet/cli-flags` -- same reason `ci-changed.mjs` gives for its own
+// RELATIVE, NOT `@a11ign/screenreader-fleet/cli-flags` -- same reason `ci-changed.ts` gives for its own
 // identical choice: this runs from `coverage.yml`'s OWN failure step, which must report an `npm ci`
 // failure cleanly -- and if `npm ci` never succeeded, the workspace symlink the package specifier resolves
 // through was never created. A relative import to plain `.mjs` source costs nothing and cannot fail this

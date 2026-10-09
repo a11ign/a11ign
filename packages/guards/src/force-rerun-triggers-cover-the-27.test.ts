@@ -29,7 +29,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const REPO = fileURLToPath(new URL("../../..", import.meta.url));
 
-const config = (await import(pathToFileURL(`${REPO}scripts/rstest/rstest.config.mjs`).href)).default;
+const config = (await import(pathToFileURL(`${REPO}scripts/rstest/rstest.config.ts`).href)).default;
 const TRIGGERS: string[] = config.forceRerunTriggers;
 
 /** What the stand-in matcher is trusted for: literal segments, `*` inside a segment, and `**` as a whole trailing or middle segment. */

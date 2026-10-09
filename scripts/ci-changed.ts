@@ -44,7 +44,7 @@ import { changedPackages } from "../packages/guards/src/changed-packages.ts";
 // REUSED FOR REAL THIS TIME. The comment on `packedFiles` below has claimed this reuse since #132 while
 // the function beneath it carried its own, second `npm pack --dry-run --json` call -- two derivations of
 // "what does a package actually ship" guarding the identical promise, the exact fact-stated-twice shape
-// this file's own header opens with. `isolation-gate.mjs` is this repo's other, older answer to the same
+// this file's own header opens with. `isolation-gate.ts` is this repo's other, older answer to the same
 // question (does a consumer's install actually work), so it is the one authority now.
 import { packedFiles as packedFilesForDir } from "../packages/guards/src/isolation-gate.ts";
 
@@ -59,7 +59,7 @@ export function knownPackages(repoRoot: string) {
   // `ci-changed.test.ts` asserts that shape holds against the real package.json, so a future second
   // workspace glob fails a unit test rather than silently only ever seeing the first entry.
   if (patterns.length !== 1 || patterns[0] !== "packages/*") {
-    throw new Error(`ci-changed.mjs assumes a single "packages/*" workspace glob; package.json now says `
+    throw new Error(`ci-changed.ts assumes a single "packages/*" workspace glob; package.json now says `
       + `${JSON.stringify(patterns)} — update knownPackages() before trusting this script's output`);
   }
   return execFileSync("git", ["ls-files", "packages"], { cwd: repoRoot, env: sandboxGitEnv(), encoding: "utf8" })
@@ -390,26 +390,23 @@ type ClassifyResult = {
   changeset: boolean; rulesFitness: boolean; packages: string[];
 };
 
+/** `classify`'s injectable reads: `repoRoot` defaults to `process.cwd()`, the rest to the real functions of the same name above. */
+type ClassifyDeps = {
+  repoRoot?: string;
+  getPackedFiles?: (repoRoot: string, pkgName: string) => Set<string>;
+  getTestDependencyMap?: (repoRoot: string) => Map<string, Set<string>>;
+  getDocsReadingTests?: (repoRoot: string) => string[];
+};
+
 /**
  * Classify a list of repo-relative changed paths into which `ci.yml` jobs must run.
  *
- * @param {string[]} files
- * @param {string[]} allPackages every package directory name, for the "a root config file changed" case
- * @param {{ repoRoot?: string, getPackedFiles?: (repoRoot: string, pkgName: string) => Set<string>,
- *   getTestDependencyMap?: (repoRoot: string) => Map<string, Set<string>>,
- *   getDocsReadingTests?: (repoRoot: string) => string[] }} [deps]
- *   `repoRoot` defaults to `process.cwd()`, `getPackedFiles` to the real `packedFiles` above,
- *   `getTestDependencyMap` to the real `testDependencyMap` above, `getDocsReadingTests` to the real
- *   `docsReadingTests` — all injectable so `classify` itself stays testable without touching disk or git.
- * @returns {ClassifyResult}
+ * `allPackages` is every package directory name, for the "a root config file changed" case. The reads in `deps` are all injectable so
+ * `classify` itself stays testable without touching disk or git.
  */
 export function classify(files: string[], allPackages: string[] = knownPackages(process.cwd()),
   { repoRoot = process.cwd(), getPackedFiles = packedFiles, getTestDependencyMap = testDependencyMap,
-    getDocsReadingTests = docsReadingTests }: {
-          repoRoot?: string; getPackedFiles?: (repoRoot: string, pkgName: string) => Set<string>;
-          getTestDependencyMap?: (repoRoot: string) => Map<string, Set<string>>;
-          getDocsReadingTests?: (repoRoot: string) => string[];
-      } = {}): ClassifyResult {
+    getDocsReadingTests = docsReadingTests }: ClassifyDeps = {}): ClassifyResult {
   const rootTsChanged = files.some((f) => ROOT_TS_FILES.has(f));
   // BLUNT ON PURPOSE, matching `changedPackages`'s own stated philosophy: any file under `packages/<name>/`
   // — not only `.ts`/`.mjs`/`.json` under `src`/`bin` — marks that package touched. A second, narrower
@@ -540,7 +537,7 @@ async function main() {
 
   // `--event` stays a required, explicit flag rather than being dropped outright: a caller that types
   // `--event=push` today gets a clear refusal naming why, instead of silently falling through some
-  // default — the same "an ignored flag runs the default and reports success" defect `cli-flags.mjs`
+  // default — the same "an ignored flag runs the default and reports success" defect `cli-flags.ts`
   // exists to prevent, one value along. `merge_group` added for #156; it is refused here when mistyped
   // or reverted rather than silently classifying under the wrong event's assumptions, and (#4440) it is the
   // one value that does NOT take the diff's classification: see `fullRequiredSet`.

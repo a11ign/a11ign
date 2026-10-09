@@ -198,7 +198,7 @@ export function judgeLines(stdin: string): { verdicts: string[]; hazard: boolean
 function runBatchMode(): number {
   const stdin = readFileSync(0, "utf8");
   if (stdin === "") {
-    console.error("usage: piped-exit-status-guard.mjs '<shell command string>'   (or lines on stdin)");
+    console.error("usage: piped-exit-status-guard.ts '<shell command string>'   (or lines on stdin)");
     return EXIT_ERROR;
   }
   const { verdicts, hazard } = judgeLines(stdin);
@@ -218,13 +218,13 @@ if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.arg
     // refused with "unknown flag ---".
     const extraArgs = process.argv.slice(3);
     if (extraArgs.length > 0) {
-      console.error(`piped-exit-status-guard.mjs takes no flags; unexpected argument(s): ${extraArgs.join(", ")}`);
+      console.error(`piped-exit-status-guard.ts takes no flags; unexpected argument(s): ${extraArgs.join(", ")}`);
       process.exit(EXIT_ERROR);
     }
     const cmd = process.argv[2];
     if (cmd === undefined) process.exit(runBatchMode());
     if (!cmd) {
-      console.error("usage: piped-exit-status-guard.mjs '<shell command string>'");
+      console.error("usage: piped-exit-status-guard.ts '<shell command string>'");
       process.exit(EXIT_ERROR);
     }
     // #375's own acceptance shape: a FILE PATH, checked whole-file and function-boundary-aware. Everything
@@ -242,7 +242,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.arg
     // exception must never fall through to node's default exit-1 handling, which this guard's caller reads
     // as a real hazard. "GUARD ERROR" on stderr, and a code neither ALLOW nor HAZARD can produce any other
     // way, so `pre-commit` can tell the two apart without parsing this message's text.
-    console.error(`GUARD ERROR: piped-exit-status-guard.mjs could not examine its input: `
+    console.error(`GUARD ERROR: piped-exit-status-guard.ts could not examine its input: `
       + `${(error as Error).message}`);
     process.exit(EXIT_ERROR);
   }

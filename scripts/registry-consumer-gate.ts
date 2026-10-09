@@ -376,7 +376,7 @@ export function readInstalledTree(dir: string): InstalledPackage[] {
 }
 
 /**
- * Run an `npm`/`npx` invocation from `npmCliInvocation`, which never spawns a `.cmd` (see `npm-cli-executable.mjs`).
+ * Run an `npm`/`npx` invocation from `npmCliInvocation`, which never spawns a `.cmd` (see `npm-cli-executable.ts`).
  * @param {{ command: string, args: string[] }} invocation @param {string} cwd
  * @returns {CliOutput}
  */

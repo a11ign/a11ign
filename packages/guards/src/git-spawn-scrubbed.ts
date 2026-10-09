@@ -28,7 +28,7 @@ import type { Rule } from "eslint";
 import type { CallExpression, Identifier, Literal } from "estree";
 
 /** The helpers a spawn may go through, by basename -- real imports are relative, so the path varies. */
-const CANONICAL_HELPER_BASENAMES = ["git-env.mjs", "git-safe-env.mjs", "git-sandbox.ts"];
+const CANONICAL_HELPER_BASENAMES = ["git-env.ts", "git-safe-env.mjs", "git-sandbox.ts"];
 
 /** Calling one of these is what makes the import USED rather than merely present. */
 const HELPER_CALLS = new Set(["sandboxGitEnv", "withGitSandbox"]);

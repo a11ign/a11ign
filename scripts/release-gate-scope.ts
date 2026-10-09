@@ -27,7 +27,7 @@ export function stagesOf(scripts: Record<string, string>, name: string): string[
   const stages = [...(scripts[name] ?? "").matchAll(STAGE_LINK)].map((m) => m[1]);
   if (stages.length === 0) {
     throw new Error(`${name} parsed to zero stages -- expected links spelled ${STAGE_LINK} `
-      + `(\`npm run x\`, \`pnpm run x\` or \`node scripts/pnpm.mjs run x\`), got: ${scripts[name]}`);
+      + `(\`npm run x\`, \`pnpm run x\` or \`node scripts/pnpm.ts run x\`), got: ${scripts[name]}`);
   }
   return stages;
 }

@@ -176,7 +176,7 @@ test("the report for no results still counts and does not claim any cleanly", ()
 });
 
 test("the CLI refuses an unknown flag before walking or fetching anything", () => {
-  // cwd is the repository: `repo-identity.mjs` resolves the project declaration from the working directory and throws outside one.
+  // cwd is the repository: `repo-identity.ts` resolves the project declaration from the working directory and throws outside one.
   const result = spawnSync(process.execPath, ["--import", TSX, SCRIPT, "--live"], { cwd: REPO_ROOT, encoding: "utf8" });
   assert.equal(result.status, 2);
   assert.match(result.stderr, /unknown flag --live/);

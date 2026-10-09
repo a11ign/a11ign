@@ -12,7 +12,7 @@
 // always one draft away from a false positive.
 //
 // So: a TREE-WIDE GUARD is a test that IMPORTS this module -- a real ES import statement, parsed the same
-// way `local-import-closure.mjs` (#621, B8) derives a test's requirements from its import closure rather
+// way `local-import-closure.ts` (#621, B8) derives a test's requirements from its import closure rather
 // than scanning its text. A guard declares its own membership by importing `declareTreeWideGuard` and
 // calling it; the population is then a fact the tree computes from the import graph, never a keyword a
 // future guard might happen to share or fail to spell the expected way.

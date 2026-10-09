@@ -12,7 +12,7 @@
  *
  * WHAT IS a11ign'S: the repository root, the test glob, the `walk-scope` preload (#1349), and the data files its own tests read by path,
  * which a `--changed` run cannot see (#3572). The eight recorded decisions the config makes travel with the package, in
- * `a11ign/toolchain`'s `src/rstest-config.mjs`.
+ * `a11ign/toolchain`'s `src/rstest-config.ts`.
  *
  * THE BY-PATH HALF IS DERIVED, NOT TRUSTED: `packages/lab/src/packaging/verify-affected-set.test.ts` (in `a11ign/lab` since #3505, run there over this repository's tree) finds every non-source file
  * and every data directory a non-tree-wide test names in a string literal, outside its own import closure, and fails on one that no

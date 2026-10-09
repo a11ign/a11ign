@@ -62,7 +62,7 @@ import { existsSync, mkdtempSync, copyFileSync, readFileSync, rmSync, readdirSyn
 import { tmpdir } from "node:os";
 import { join, resolve, basename, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-// RELATIVE, for `ci-changed.mjs`'s documented reason: this file is in that script's import graph, and
+// RELATIVE, for `ci-changed.ts`'s documented reason: this file is in that script's import graph, and
 // `ci.yml`'s `changed` job runs no `npm ci` — it decides whether anything else installs at all. A package
 // specifier here dies before the workflow starts.
 import { refuseUnknownFlags } from "../../../scripts/cli-flags.ts";
@@ -327,11 +327,11 @@ export function packedFiles(dir: string): Set<string> {
   // `--json` gives the file list without unpacking; `--dry-run` so nothing is written. `sandboxGitEnv()`
   // even though this spawns `pnpm`, not `git` — a pack walks the package looking for a `.git` to
   // decide what "untracked" means for its own purposes, so an inherited `GIT_DIR` is the identical
-  // redirection risk `git-env.mjs`'s own header names, one process removed.
+  // redirection risk `git-env.ts`'s own header names, one process removed.
   //
   // PACKED BY pnpm SINCE #2301, because the release publishes with `pnpm publish`, which packs with the same
   // code: a file list derived by a DIFFERENT tool would answer "what would npm ship" about a tarball
-  // nobody publishes. (Every other place that asks what ships -- `ci-changed.mjs`'s changeset gate -- asks
+  // nobody publishes. (Every other place that asks what ships -- `ci-changed.ts`'s changeset gate -- asks
   // this function, so the move reaches all of them at once.)
   const listing = packJson(runPnpm(["pack", "--dry-run", "--json"], dir, sandboxGitEnv()));
   return new Set((listing.files ?? []).map((f) => f.path));

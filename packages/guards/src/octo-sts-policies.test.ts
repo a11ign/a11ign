@@ -224,7 +224,7 @@ test("#4192 POSITIVE CONTROL for the live read: an unreadable policy is CANNOT_T
 
 test("#4192 LIVE: no policy in a11ign/.github's .github/chainguard/ names or grants on corpus-backups or auth-capture-check", () => {
   if (process.env[LIVE_SWITCH] !== "1") {
-    console.log(`  NOT READ: the ${ORG_POLICY_REPO} population is opt-in -- \`${LIVE_SWITCH}=1 npx rstest run --config scripts/rstest/rstest.config.mjs `
+    console.log(`  NOT READ: the ${ORG_POLICY_REPO} population is opt-in -- \`${LIVE_SWITCH}=1 npx rstest run --config scripts/rstest/rstest.config.ts `
       + "--include packages/guards/src/octo-sts-policies.test.ts --disableConsoleIntercept` asks GitHub. That population was NOT read, which is not the same as empty.");
     return;
   }

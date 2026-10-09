@@ -280,7 +280,7 @@ test("#1149 CONTROL: manifest and disk agree today, so a pin that always refuses
 test("#1135 clause 5: the WHOLE-TREE floor did not move when the product suite narrowed", () => {
   // The guarantee the 300 used to carry is now `test:all`'s, and it must not be quietly softened either:
   // if the product floor drops and this one drops with it, the split has been used to lower both.
-  // THEY ARE 107 AND 12 SINCE #3506, WHICH TOOK `control` OUT OF THE WORKSPACE TOO: `test:all` went from 192 files to 130 and `test:org` from 84 to 21 (counted with `assert-glob-not-empty.mjs --min=9999` over each glob, the moved and the new test included), and the floors keep the share they held (159/192 = 83%, 50/84 = 60%). Again lowered because the POPULATION left.
+  // THEY ARE 107 AND 12 SINCE #3506, WHICH TOOK `control` OUT OF THE WORKSPACE TOO: `test:all` went from 192 files to 130 and `test:org` from 84 to 21 (counted with `assert-glob-not-empty.ts --min=9999` over each glob, the moved and the new test included), and the floors keep the share they held (159/192 = 83%, 50/84 = 60%). Again lowered because the POPULATION left.
   // THEY WERE 159 AND 50 SINCE #3505, WHICH TOOK `lab` OUT OF THE WORKSPACE: `test:all` went from 599 files to 192 and `test:org` from 491 to 84 (each counted with `git ls-files` over
   // its own glob, the moved tests and this row's own included), and the floors keep the share they held (500/599 = 83%, 300/491 = 61%). Lowered because the POPULATION left, not to make room.
   assert.equal(floorOf(PACKAGE_JSON.scripts["test:all"]), 107,

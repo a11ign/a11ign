@@ -145,7 +145,7 @@ const SCOPE_PREFIX = "@a11ign/";
  * that reads ANOTHER checkout whatever it is called, are still asked about, and so is every entry when the tree has no `packages/`
  * (silence never grants the exemption).
  *
- * LIVES HERE, NOT IN `worktree-resolution.mjs`, which `agent-org` carries a declared copy of: the guard stays byte-identical and which
+ * LIVES HERE, NOT IN `worktree-resolution.ts`, which `agent-org` carries a declared copy of: the guard stays byte-identical and which
  * entries to ask it about is this caller's to say.
  *
  * @param {string} worktree

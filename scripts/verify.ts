@@ -7,7 +7,7 @@
 // transitively, and every tree-wide guard. A partial local run is not "passing", and
 // nothing let an author tell the difference. This runs what CI's `gate` waits for.
 //
-// IT REUSES CI'S CODE AND DOES NOT COPY IT. Which jobs apply is `ci-changed.mjs`'s `classify`, imported. The population is `gate`'s own
+// IT REUSES CI'S CODE AND DOES NOT COPY IT. Which jobs apply is `ci-changed.ts`'s `classify`, imported. The population is `gate`'s own
 // `needs` list, read from `ci.yml`: every job in it is a step below or an entry of CI_ONLY with a reason, and
 // `verify-matches-ci.test.ts` fails the day a job is added to CI and to neither.
 //
@@ -345,7 +345,7 @@ export async function runAffectedSet({ base }: { base: string; }, run: (command:
  * worktree here (each `node_modules/.cache` is a symlink to the primary's), keeps a `failed` flag per file for 30 days, and
  * holds failures of scratch fixtures that never existed in this tree, so it says "this file once failed" and never "the last
  * run failed". A record is per worktree, one per top-level run, green ones too, and says `status` for the run as a whole.
- * The directory is `rstest.config.mjs`'s, spelled twice because that file is outside this row's Region; a test pins the pair.
+ * The directory is `rstest.config.ts`'s, spelled twice because that file is outside this row's Region; a test pins the pair.
  * @param {Record<string, string | undefined>} [env]
  */
 export function runRecordDir(env: Record<string, string | undefined> = process.env) {
