@@ -282,7 +282,7 @@ Set it, together with `probe-forms: "true"`, when a button on the page should be
 
 **Already running axe? Feed it in rather than running ours.** `--axe-results ./axe.json` keeps one engine, one version, one set of rule findings — and you still get the layered report.
 
-**Where it fits.** This is not a gate to put in front of every commit — a capture takes real screen-reader time to run, and exact timing is under re-measurement since 2026-09-07 (#311). It earns its keep on the flows that matter (checkout, sign-up, search), before a release, or as the evidence base for an audit. Keep your rule scanner where it is, on every commit, doing the fast mechanical layer.
+**Where it fits.** This is not a gate to put in front of every commit — a capture takes real screen-reader time to run: across 33 fleet captures of 6 pages, one capture occupied a worker for 105 s to 460 s depending on the page (166 worker-minutes in all), and the CLI's own wall-clock is 4-5 s longer. That is worker time per captured page, not the wall-clock of a whole sweep, which the fleet runs ten workers wide. Measured 2026-09-24 at protocol 21 and not refreshed since ([`docs/capture-cost.md`](./docs/capture-cost.md), which names each run and carries the GitHub Actions figures). It earns its keep on the flows that matter (checkout, sign-up, search), before a release, or as the evidence base for an audit. Keep your rule scanner where it is, on every commit, doing the fast mechanical layer.
 
 ## Part 2: getting a real screen reader to run, repeatably
 
