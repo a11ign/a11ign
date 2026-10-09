@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/octo-sts/app/refs/heads/main/pkg/octosts/octosts.TrustPolicy.json
+#
+# THE TOKEN `acceptance-sweep.yml` PUSHES ITS DATED BRANCH AND OPENS ITS PULL REQUEST WITH (ADR 0044 decision 4, #4570). Octo STS v0.11.2
+# syntax; a repository policy reaches only the repository it sits in. Every pattern is matched against the WHOLE claim, so none is anchored.
+#
+# WHY AN INSTALLATION TOKEN AT ALL: `GITHUB_TOKEN` writes fire no workflow, so the sweep pull request would have no `ci.yml` run and never
+# become mergeable (#416).
+#
+# WHAT BINDS IT TO `main`: `subject` is the EXACT `sub` of a run on the `main` ref (`schedule` and `workflow_dispatch` on `main` both present
+# it); a run on any other ref presents that ref and is refused. `job_workflow_ref` pinned to `@refs/heads/main` closes the other door: a
+# branch that edits `acceptance-sweep.yml` cannot mint. No `pull_request*` event is named. `sub` carries IMMUTABLE ids, never names (#4191).
+#
+# WHAT IT HOLDS: `contents: write` (push the one dated branch) and `pull_requests: write` (open the pull request), on THIS repository only. It
+# does NOT hold `workflows`: the sweep never writes under `.github/workflows/`. It is not a merge identity: the pull request needs the
+# approving review `main` requires.
+issuer: https://token.actions.githubusercontent.com
+subject: repo:a11ign@320310787/a11ign@1280353940:ref:refs/heads/main
+claim_pattern:
+  job_workflow_ref: a11ign/a11ign/\.github/workflows/acceptance-sweep\.yml@refs/heads/main
+  event_name: schedule|workflow_dispatch
+permissions:
+  contents: write
+  pull_requests: write

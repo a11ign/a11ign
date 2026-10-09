@@ -1,0 +1,113 @@
+name: acceptance-sweep
+
+# THE `.acceptance/` SWEEP (ADR 0044 decision 4, #4570): ONE pull request a day deletes the files there that are older than 14 days.
+#
+# WHY IT IS SAFE TO DELETE THEM: a file under `.acceptance/` is a record of what CI ran at the head that merged. CI reads only the file a
+# pull request ADDS, so once the pull request has closed nothing reads it, and a file on `main` is inert. The cost the ADR accepted is that
+# `main` carries about 14 days of them (65 a day, measured, so about 900 files); without this sweep it carries every one for ever.
+#
+# WHAT "OLDER THAN 14 DAYS" MEANS: the file's LAST COMMIT is older, read from history (`git log -1 --format=%ct -- <file>`), never from the
+# checkout's mtime, which is the time of the clone. A file touched again within the window stays.
+#
+# IT TOUCHES NO OTHER PATH. The list is built from `git ls-files '.acceptance/*.md'` and every entry is checked against
+# `^\.acceptance/[^/]+\.md$` before it is deleted, so a path that is not one of those files is refused rather than removed.
+#
+# ONE PULL REQUEST AT A TIME. If a sweep pull request is open the run says so and stops: a second would delete the same files twice and
+# conflict with the first. The branch is dated (`automation/acceptance-sweep-YYYY-MM-DD`) so its `.acceptance/` file is a NEW path every
+# run, never a modification of a file already on `main` (CI reads the file the pull request ADDS).
+#
+# THE SWEEP PULL REQUEST CARRIES ITS OWN ACCEPTANCE FILE, like any other: `test ! -e <path>` for each file it deletes, so CI runs the claim
+# that the files are gone. That file is itself swept 14 days after it merges.
+#
+# THE TOKEN: pushes and pull requests made with `GITHUB_TOKEN` fire no workflow, so the sweep pull request would have no `ci.yml` run and
+# never become mergeable (#416). It is written with an Octo STS token (`.github/chainguard/acceptance-sweep.sts.yaml`), bound to this
+# workflow as it is on `main`, with no fallback to `GITHUB_TOKEN`. The job that holds `id-token` runs `git` and `gh` and NO repository code: no
+# install, no node, no pnpm. The pull request still needs the approving review `main` requires (`auto-arm.yml` arms it; it does not merge it).
+on:
+  schedule:
+    # Daily, after nightly's 06:17 and OFF THE HOUR (#965: the :00 starts ran hours late four days running).
+    - cron: "27 6 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: acceptance-sweep
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Mint a token that may push a branch and open a pull request, for this workflow as it is on main (no fallback to GITHUB_TOKEN)
+        id: octo-sts
+        uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05 # v1.1.1
+        with:
+          scope: ${{ github.repository }}
+          identity: acceptance-sweep
+      - name: Check out main with its whole history, because a file's age is the date of its last commit
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Delete the .acceptance/ files whose last commit is older than 14 days, and open one pull request unless one is open
+        env:
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
+          REPO: ${{ github.repository }}
+          MAX_AGE_DAYS: "14"
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1. Nothing was pushed."; exit 1; }
+          [ -n "${GH_TOKEN:-}" ] || fail "the Octo STS token (step octo-sts) is empty"
+          open="$(gh api "repos/${REPO}/pulls?state=open&per_page=100" --jq '[.[] | select(.head.ref | startswith("automation/acceptance-sweep-"))][0].number // empty')"
+          if [ -n "$open" ]; then
+            echo "::notice::sweep pull request #${open} is still open, so this run opens no second one"
+            exit 0
+          fi
+          cutoff="$(date -u -d "${MAX_AGE_DAYS} days ago" +%s)"
+          stale="$(mktemp)"
+          # `git ls-files` names only what is tracked on main; the pattern is checked again below, so this is the list and not the authority.
+          git ls-files -z -- '.acceptance/*.md' | while IFS= read -r -d '' path; do
+            [[ "$path" =~ ^\.acceptance/[^/]+\.md$ ]] || fail "'$path' is not a file directly under .acceptance/"
+            committed="$(git log -1 --format=%ct -- "$path")"
+            [[ "$committed" =~ ^[0-9]+$ ]] || fail "the last commit of '$path' could not be read"
+            if [ "$committed" -lt "$cutoff" ]; then printf '%s\n' "$path" >> "$stale"; fi
+          done
+          count="$(wc -l < "$stale")"
+          if [ "$count" = 0 ]; then
+            echo "::notice::no .acceptance/ file is older than ${MAX_AGE_DAYS} days, so there is nothing to sweep"
+            exit 0
+          fi
+          day="$(date -u +%F)"
+          branch="automation/acceptance-sweep-${day}"
+          acceptance=".acceptance/${branch//\//'~'}.md"
+          git switch -c "$branch"
+          xargs -d '\n' git rm --quiet -- < "$stale"
+          # `git rm` of the last file removes the directory too, and the acceptance file below is written into it.
+          mkdir -p .acceptance
+          {
+            printf '## What\n\nDeletes the %s `.acceptance/` files whose last commit is older than %s days (ADR 0044 decision 4, #4570). Nothing reads one after its pull request closes.\n\n' "$count" "$MAX_AGE_DAYS"
+            printf '## Acceptance\n\n'
+            while IFS= read -r path; do printf 'test ! -e %s\n' "$path"; done < "$stale"
+          } > "$acceptance"
+          git add -- "$acceptance"
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit --quiet -m "Sweep ${count} .acceptance/ files older than ${MAX_AGE_DAYS} days (ADR 0044, #4570)"
+          # Everything this commit changed is under .acceptance/; say so before pushing anything.
+          if git diff --name-only HEAD~1 HEAD | grep -qvE '^\.acceptance/[^/]+\.md$'; then fail "the commit touches a path outside .acceptance/"; fi
+          git -c "http.https://github.com/.extraheader=Authorization: Basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" \
+            push --quiet "https://github.com/${REPO}.git" "$branch"
+          body_file="$(mktemp)"
+          cat > "$body_file" <<EOF
+          Deletes the ${count} \`.acceptance/\` files whose last commit is older than ${MAX_AGE_DAYS} days. Opened by \`acceptance-sweep.yml\` (ADR 0044 decision 4, #4570); it touches no other path.
+
+          Acceptance file: ${acceptance}
+
+          Closes: none -- scheduled sweep of .acceptance/ (ADR 0044 decision 4, #4570)
+          EOF
+          gh api --method POST "repos/${REPO}/pulls" -f title="Sweep ${count} .acceptance/ files older than ${MAX_AGE_DAYS} days" \
+            -f head="$branch" -f base=main -F body=@"$body_file" --jq '"::notice::opened sweep pull request #\(.number)"'
