@@ -150,7 +150,7 @@ test("lay: src/ only, without the layer's tests or its manifest, at the pinned t
     layerRepository(sandbox, "0.4.0");
     const root = mkdtempSync(join(tmpdir(), "lay-layer-root-"));
     try {
-      const plan = (version: string) => ({ remote: pathToFileURL(sandbox.dir).href, tag: `${NAME}@${version}`, path: "packages/worker-fleet", source: ".", lays: ["src"] });
+      const plan = (version: string) => ({ remote: pathToFileURL(sandbox.dir).href, tag: `${NAME}@${version}`, path: "packages/worker-fleet", lays: ["src"] });
       assert.equal(lay(root, plan("0.3.0")), `laid ${NAME}@0.3.0 at packages/worker-fleet`);
       assert.deepEqual(walk(join(root, "packages/worker-fleet")), [REF_FILE, "src/cli-flags.mjs", "src/provisioning/stamp.ps1"],
         "the laid directory holds src/ alone: no manifest (a walker would take it for a package) and no test (test:all would run it)");
