@@ -123,6 +123,79 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # #4413: IS THIS A PR-BODY EDIT THAT TOUCHED NOTHING A CHECK READS? A description edit is a `meta` event, and the checks that read
+  # the body (`acceptance`, `ownedPaths`, the Closes comparison) cannot change their answer on prose, so they are skipped for it and
+  # the person who fixed a typo is not handed a red pull request. It runs on EVERY event and always succeeds with an answer, because
+  # a job whose `needs` was skipped is skipped itself, and `false` is the answer for everything that is not provably prose.
+  #
+  # "PROSE" IS DEFINED BY WHAT IT IS NOT, since the body's real parser lives in the tool and not in this repository, and a second copy
+  # of it here would drift from the first. The GUARDED lines are: anything inside a code fence, a heading and the section under
+  # one named for a thing the checks read, any `Field:` line (`Acceptance:`, `Class:`, `History:`, `Hand-run:`, `New-file:`...), and
+  # any line saying close / fix / resolve (the Closes declaration, and GitHub's own closing keywords). The edit is prose-only iff the
+  # guarded lines are byte-identical before and after. The error runs toward re-running: a prose line that looks like a field is
+  # checked again, and a body edit that FIXES the check is never read as prose (the 2026-09-07 deadlock, from the other side).
+  #
+  # THREE MORE REFUSALS, each a way a skip would hide something:
+  #   * `changes.base` -- a retarget moves the diff `ownedPaths` reads, with no body change at all.
+  #   * AN UNSETTLED PREVIOUS META RUN. The group cancels the previous meta run, so edit A (Acceptance fixed) cancelled by edit B
+  #     (prose) would leave A's change checked by nobody. B is full when the run before it was cancelled or is still going.
+  #   * A FAILED READ of that run list. Not knowing is not prose.
+  # `deliberateRefusals` is NOT skipped for prose: its `merge-guard --ci-gate` is where a `hold:` label is enforced, and a prose edit
+  # landing after a hold would otherwise report green over the red that the label run left.
+  bodyEdit:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    outputs:
+      proseOnly: ${{ steps.classify.outputs.proseOnly }}
+    steps:
+      - id: classify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EVENT: ${{ github.event_name }}
+          ACTION: ${{ github.event.action }}
+          BASE_CHANGED: ${{ github.event.changes.base != null && 'true' || 'false' }}
+          BODY_CHANGED: ${{ github.event.changes.body != null && 'true' || 'false' }}
+          BODY_BEFORE: ${{ github.event.changes.body.from }}
+          BODY_AFTER: ${{ github.event.pull_request.body }}
+        run: |
+          # stdin: a PR body. Prints the lines a check reads, and nothing else (see the job's comment for what that means).
+          guarded_lines() {
+            tr -d '\r' | awk '
+              /^[ \t]*```/ { fence = !fence; print; next }
+              fence { print; next }
+              /^[ \t]*#+[ \t]/ { section = (tolower($0) ~ /(acceptance|refutation|mutation|measured|hand-run|history|class|closes|sign-?off)/); print; next }
+              section { print; next }
+              /^[ \t]*(\*\*|__)?[A-Za-z][A-Za-z -]*:/ { print; next }
+              tolower($0) ~ /(^|[^a-z])(close[sd]?|fix(e[sd])?|resolve[sd]?)([^a-z]|$)/ { print; next }'
+          }
+          # stdin: the listing of this workflow's runs on the head. `yes` if the meta run before this one did not settle as a verdict.
+          previous_meta_run_unsettled() {
+            jq -r --arg self "$GITHUB_RUN_ID" '
+              ([.workflow_runs[] | select((.id | tostring) == $self) | .created_at] | first) as $mine
+              | [.workflow_runs[]
+                  | select((.id | tostring) != $self and ((.display_title // "") | test(" \\[meta event, [a-z]+\\]$")) and .created_at < $mine)]
+              | sort_by(.created_at) | last
+              | if . != null and (.status != "completed" or .conclusion == "cancelled") then "yes" else "no" end'
+          }
+          decide() {
+            [ "$EVENT" = pull_request ] && [ "$ACTION" = edited ] || { echo "not a description edit"; return 1; }
+            [ "$BASE_CHANGED" = false ] || { echo "the base branch changed"; return 1; }
+            [ "$BODY_CHANGED" = true ] || { echo "the body did not change (a title edit)"; return 0; }
+            [ "$(printf '%s' "$BODY_BEFORE" | guarded_lines)" = "$(printf '%s' "$BODY_AFTER" | guarded_lines)" ] \
+              || { echo "the edit touched a line a check reads"; return 1; }
+            runs=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$HEAD_SHA&event=pull_request&per_page=100") \
+              || { echo "could not read the run list, so cannot rule out an unchecked edit"; return 1; }
+            [ "$(printf '%s' "$runs" | previous_meta_run_unsettled)" = no ] \
+              || { echo "the meta run before this one was cancelled or is unsettled, so its edit may be unchecked"; return 1; }
+            echo "prose only"
+          }
+          if reason=$(decide); then proseOnly=true; else proseOnly=false; fi
+          echo "proseOnly=$proseOnly ($reason)"
+          echo "proseOnly=$proseOnly" >> "$GITHUB_OUTPUT"
+
   # THE FIRST JOB, and everything else is conditional on it. Always runs -- cheap, no build, one git diff
   # -- so a skipped downstream job is a real decision rather than an artefact of this job itself having
   # been skipped.
@@ -476,6 +549,7 @@ jobs:
   # `merge_group` event carries none of -- there is no PR body, no PR number, nothing to diff a `Closes:`
   # line against. Not widened to run there: a queue entry has no author-editable body left to re-check.
   deliberateRefusals:
+    needs: bodyEdit
     if: github.event_name == 'pull_request' && github.event.pull_request.state == 'open'
     runs-on: ubuntu-latest
     steps:
@@ -509,6 +583,7 @@ jobs:
       # property (silent on every well-formed PR), so it does not share that hazard and does not belong
       # inside that narrowly-scoped composition.
       - name: The declared Closes matches what GitHub will actually close (#549)
+        if: needs.bodyEdit.outputs.proseOnly != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           PR_BODY: ${{ github.event.pull_request.body }}
@@ -551,7 +626,10 @@ jobs:
   # same reason. This job runs a command out of `github.event.pull_request.body`; a `merge_group` event has
   # no pull request and no body to run. Not widened: there is nothing here left to execute on a queue entry.
   acceptance:
-    if: github.event_name == 'pull_request' && github.event.pull_request.state == 'open'
+    needs: bodyEdit
+    # #4413: NOT FOR A PROSE-ONLY BODY EDIT (`bodyEdit`, above). The verdict is a function of the Acceptance block and its neighbours, none of
+    # which that edit touched, and the code run for this head has already given it.
+    if: github.event_name == 'pull_request' && github.event.pull_request.state == 'open' && needs.bodyEdit.outputs.proseOnly != 'true'
     # A CALLED WORKFLOW CAN ONLY NARROW ITS CALLER'S TOKEN, so `pull-requests: read` is granted here too (#3286): the
     # called job reads the LIVE body with it, in the one step that holds a token. No `with:` -- the body is no longer
     # an input, because the event payload's body is the stale one on a Dependabot `opened` run.
@@ -588,8 +666,9 @@ jobs:
   # step for the two). Not widened to read the other field: a queue entry's own PR already passed this
   # check to be armed, so there is no new declaration here to re-check against.
   ownedPaths:
-    needs: changed
-    if: github.event_name == 'pull_request' && github.event.pull_request.state == 'open'
+    needs: [changed, bodyEdit]
+    # #4413: skipped for a prose-only body edit, as `acceptance` is.
+    if: github.event_name == 'pull_request' && github.event.pull_request.state == 'open' && needs.bodyEdit.outputs.proseOnly != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -648,7 +727,7 @@ jobs:
   # watched the body) from a queue stall into an edit -- the condition that made blocking unsafe then
   # does not hold now.
   gate:
-    needs: [changed, ts, python, ansible, changeset, rulesFitness, guardSweep, deliberateRefusals, acceptance, ownedPaths]
+    needs: [bodyEdit, changed, ts, python, ansible, changeset, rulesFitness, guardSweep, deliberateRefusals, acceptance, ownedPaths]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     # `actions: read` for the one lookup below, and nothing else: this job checks nothing out and writes nothing.
@@ -658,6 +737,7 @@ jobs:
       - name: Every job that ran, ran clean
         run: |
           for result in \
+            "${{ needs.bodyEdit.result }}" \
             "${{ needs.changed.result }}" \
             "${{ needs.ts.result }}" \
             "${{ needs.python.result }}" \
@@ -693,6 +773,19 @@ jobs:
       # The other kind's runs are found by `run-name` (top of this file): meta titles end `[meta event, <action>]`. A PR
       # title that spoofs the marker makes a code run look like a meta run, which hides it, so the step waits and then
       # fails: the safe direction.
+      #
+      # #4413: A RUN THAT CONCURRENCY CANCELLED IS NEVER A VERDICT, ONLY "WAIT FOR ITS REPLACEMENT". `cancel-in-progress` (top of this
+      # file) cancels the previous run of a group when a newer one starts, so a cancelled sibling always has a newer run of its kind and
+      # says nothing about the work. The first version of this step let `cancelled` fall into its catch-all arm and FAILED a green
+      # pull request on one (#4406: a PR-body edit's meta run, cancelled by the next one, turned the code run's `gate` red until someone
+      # re-ran both). So `other_run` never selects a cancelled run (it reads the newest one that is not), `jobs_verdict` reads a cancelled
+      # JOB as pending (the run listing is read again on the next poll and drops that run), and the `case` has no arm in which
+      # `cancelled` fails. DO NOT ADD `cancelled` BACK TO THE FAILURES. A genuine `failure` still fails and `success` still passes
+      # (`ci-agreement-step-cancelled.test.ts` runs this very script on fixture listings, both directions).
+      #
+      # WHEN EVERY SIBLING IS CANCELLED there is nothing to agree with yet: a code run says so and goes on (a meta run that replaced
+      # it is on the list, and a hand cancel is no verdict on the work), a meta run keeps polling for a code run and, if none comes,
+      # names the cancelled runs to re-run. That is a missing verdict, never a failure of the work.
       - name: The other kind of run on this head agrees (#3211)
         if: github.event_name == 'pull_request'
         env:
@@ -704,23 +797,28 @@ jobs:
           POLL_SECONDS: 20
         run: |
           # stdin: the listing of this workflow's runs on the head. Prints the id of the run to read, or `none`.
+          # `other_run` (the default, `live`) never selects a cancelled run; `other_run cancelled` lists the ones it skipped.
           other_run() {
-            jq -r --arg self "$GITHUB_RUN_ID" --arg kind "$KIND" '
+            jq -r --arg self "$GITHUB_RUN_ID" --arg kind "$KIND" --arg which "${1:-live}" '
               def is_meta: (.display_title // "") | test(" \\[meta event, [a-z]+\\]$");
               ([.workflow_runs[] | select((.id | tostring) == $self) | .created_at] | first) as $mine
               | [.workflow_runs[]
                   | select((.id | tostring) != $self)
-                  | select(if $kind == "meta" then (is_meta | not) else (is_meta and .created_at > $mine) end)]
-              | sort_by(.created_at) | last | if . == null then "none" else (.id | tostring) end'
+                  | select(if $kind == "meta" then (is_meta | not) else (is_meta and .created_at > $mine) end)
+                  | select((.conclusion == "cancelled") == ($which == "cancelled"))]
+              | sort_by(.created_at)
+              | if $which == "cancelled" then map(.id | tostring) | join(" ")
+                else (last | if . == null then "none" else (.id | tostring) end) end'
           }
           # stdin: one run object. A meta run is read through its jobs (not `gate`), a code run through its conclusion.
           run_verdict() {
             jq -r 'if .status != "completed" then "pending" else (.conclusion // "none") end'
           }
-          # stdin: a run's jobs. Pending while any non-gate job is unfinished, else the first bad conclusion, else success.
+          # stdin: a run's jobs. Pending while any non-gate job is unfinished or cancelled (a cancelled run is replaced, see above),
+          # else the first bad conclusion, else success.
           jobs_verdict() {
             jq -r '[.jobs[] | select(.name != "gate")] as $jobs
-              | if ($jobs | length) == 0 or any($jobs[]; .status != "completed") then "pending"
+              | if ($jobs | length) == 0 or any($jobs[]; .status != "completed" or .conclusion == "cancelled") then "pending"
                 else ([$jobs[] | .conclusion | select(. != "success" and . != "skipped")] | first // "success") end'
           }
           verdict=none
@@ -729,7 +827,10 @@ jobs:
             other=$(printf '%s' "$runs" | other_run)
             if [ "$other" = none ]; then
               # No meta run after this code run: nothing to agree with. No code run yet for a meta run: pending.
-              if [ "$KIND" = code ]; then echo "no body or label run followed this code run"; exit 0; fi
+              if [ "$KIND" = code ]; then
+                echo "no body or label run followed this code run (cancelled, not counted: '$(printf '%s' "$runs" | other_run cancelled)')"
+                exit 0
+              fi
               verdict=none
             elif [ "$KIND" = meta ]; then
               verdict=$(printf '%s' "$runs" | jq -c --arg id "$other" '.workflow_runs[] | select((.id | tostring) == $id)' | run_verdict)
@@ -742,5 +843,6 @@ jobs:
               *) echo "::error::the other kind of run on $HEAD_SHA ($other) concluded '$verdict', so this run cannot report green"; exit 1 ;;
             esac
           done
-          echo "::error::the other kind of run on $HEAD_SHA has no conclusion ('$verdict') after $ATTEMPTS polls; this run is not green on work it did not see"
+          skipped=$(printf '%s' "$runs" | other_run cancelled)
+          echo "::error::the other kind of run on $HEAD_SHA has no conclusion ('$verdict') after $ATTEMPTS polls; this run is not green on work it did not see${skipped:+ (cancelled by concurrency or by hand, and not a verdict: $skipped; re-run the newest of them)}"
           exit 1
