@@ -13,7 +13,7 @@
 import { spawn, execFileSync } from "node:child_process";
 import { createServer, request, type Server } from "node:http";
 import { createServer as createTcpServer, connect, type AddressInfo } from "node:net";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
 import { createRequire } from "node:module";
@@ -211,7 +211,7 @@ async function q3() {
 
 const QUESTIONS: Record<string, () => Promise<void>> = { q1, q2, q3 };
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
   const question = QUESTIONS[process.argv[2] ?? ""];
   if (!question) { say("usage: node --import tsx attach-spike.ts <q1|q2|q3>"); process.exit(2); }
   await question();

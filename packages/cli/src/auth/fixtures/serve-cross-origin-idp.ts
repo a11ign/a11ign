@@ -18,6 +18,7 @@
  * Nothing here talks to a worker. It prints a command; running it is another session's job.
  */
 import { parseArgs } from "node:util";
+import { realpathSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -146,7 +147,7 @@ async function serve(options: ServeOptions) {
   process.once("SIGINT", () => { fixture.stop().then(() => process.exit(0)); });
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   try {
     await serve(readServeOptions(process.argv.slice(2)));
   } catch (error) {
