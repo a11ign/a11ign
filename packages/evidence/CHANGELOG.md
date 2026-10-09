@@ -1,5 +1,23 @@
 # @a11ign/evidence
 
+## 0.3.2
+
+### Patch Changes
+
+- d2912d5: `CaptureResult.formInputs` and `OracleCounts.formInputs` declare the three optional keys 3.3.7 Redundant Entry reads (#4355, #4362): `form?: number` (the owning `<form>`'s document-order index), `required?: boolean` and `populatedFromEarlier?: boolean`. Absent means not checked on each. A type-only addition; the worker census that fills them is #4361.
+
+## 0.3.1
+
+### Patch Changes
+
+- 38d5ec9: `CaptureResult.formInputs` and `OracleCounts.formInputs` declare an optional `pasteCancelled?: boolean` (#4324): absent means not examined, `false` means a cancelable `paste` event was dispatched and not cancelled. A type-only addition; the worker census that fills it is #4314.
+
+## 0.3.0
+
+### Minor Changes
+
+- f2e2697: `exports` and `bin` now point at `.mjs` (and `.d.ts` for types) where they pointed at `.js`, because the packages are built by Rslib instead of `tsc --build`: a deep import of `<package>/dist/<file>.js` stops resolving, and the CLI's `bin` is `./dist/cli.mjs`, so this is `minor` (a breaking change on a 0.x package) for each of the four. The CLI is also now one bundle that inlines `@a11ign/documents` (and the `pdf-lib` behind it) and `yaml`, so a consumer no longer installs them (#3580, ADR 0043).
+
 ## 0.2.0
 
 ### Minor Changes
