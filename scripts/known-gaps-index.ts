@@ -54,7 +54,7 @@ export function parseHeadings(text: string) {
 }
 
 /** @param {Heading} heading */
-export function isClosed(heading: Heading) {
+export function isClosed(heading: Pick<Heading, "raw">) {
   return CLOSED_PATTERN.test(heading.raw);
 }
 

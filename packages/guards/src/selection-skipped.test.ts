@@ -17,11 +17,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { join } from "node:path";
+import type { Answer, FileReading, Run, Trace } from "../../../scripts/selection-skipped.ts";
 import { withGitSandbox, type GitSandbox } from "../../../scripts/test-support/git-sandbox.ts";
 
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const skipped = await import("../../../scripts/selection-skipped.ts");
 const {
   cleanLine, failingFiles, siblingRunId, skippedByChanged, runAnswer, firstRunReds, windowReading, windowsAround, traceRed,
@@ -34,7 +33,6 @@ const ESC = String.fromCharCode(ESCAPE_CODE);
 const BOM = String.fromCharCode(BOM_CODE);
 const stamp = "2026-10-05T01:02:03.456Z ";
 
-type Run = { id: number; event: string; conclusion: string | null; head_sha: string; head_branch: string; created_at: string; head_repository?: { full_name: string } };
 const SHA = "0123456789abcdef0123456789abcdef01234567";
 let nextId = 1;
 const run = (overrides: Partial<Run> = {}): Run => ({
@@ -83,7 +81,7 @@ test("skippedByChanged: gone first, then no (the set held it), then yes (the set
 });
 
 test("runAnswer: a miss anywhere is a miss, then a held file, then a tree-wide guard, then gone", () => {
-  const read = (...answers: string[]) => answers.map((answer, i) => ({ file: `f${i}`, answer }));
+  const read = (...answers: FileReading["answer"][]) => answers.map((answer, i) => ({ file: `f${i}`, answer }));
   assert.equal(runAnswer(read("no", "yes", "ci-only", "gone")), "yes");
   assert.equal(runAnswer(read("gone", "ci-only", "no")), "no");
   assert.equal(runAnswer(read("gone", "ci-only")), "ci-only");
@@ -238,7 +236,7 @@ test("traceRed: a roll-up that names no run, or names itself, is UNREAD and does
 
 // ---- the report ------------------------------------------------------------------------------------------
 
-const trace = (answer: string, overrides: Record<string, unknown> = {}) =>
+const trace = (answer: Answer, overrides: Partial<Trace> = {}): Trace =>
   ({ runId: nextId++, answer, files: [], jobs: [], why: "", changed: [], ...overrides });
 
 test("countAnswers tallies every one of the seven keys, zero included", () => {
@@ -247,7 +245,7 @@ test("countAnswers tallies every one of the seven keys, zero included", () => {
 });
 
 test("lineFor prints the files that carry the answer plainly and the others with theirs in brackets; else the reason", () => {
-  const files = [{ file: "a.test.ts", answer: "yes" }, { file: "b.test.ts", answer: "ci-only" }];
+  const files: FileReading[] = [{ file: "a.test.ts", answer: "yes" }, { file: "b.test.ts", answer: "ci-only" }];
   assert.equal(lineFor(trace("yes", { files })), "skipped-by-changed: yes -- a.test.ts, b.test.ts (ci-only)");
   assert.equal(lineFor(trace("unread", { why: "jobs unread" })), "skipped-by-changed: unread -- jobs unread");
   assert.equal(lineFor(trace("no")), "skipped-by-changed: no");

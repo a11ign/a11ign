@@ -16,7 +16,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
 import { refreshDecision, pinnedVersion, WRITE, CURRENT, NEWER } from "../../../scripts/outsider/refresh-pin.ts";
 

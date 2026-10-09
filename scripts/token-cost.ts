@@ -29,6 +29,7 @@ import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 import {
   TARGETS_FILE, commentHeading, daySlices, inWindow, parseInclude, targetText, targetsFrom, verdictOf, weeklyWindow,
 } from "./ci-health.ts";
+import type { Run } from "./ci-health.ts";
 import { toolModule } from "./agent-org-newest-tag.mjs";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -48,7 +49,7 @@ const TOP_GROUPS = 5;
 export const MARKER = "<!-- token-cost -->";
 
 /** The closed set a contributor is named from, in the order a tie is broken. */
-export const CATEGORIES = ["review rounds", "CI red", "waits", "re-reads"];
+export const CATEGORIES: Category[] = ["review rounds", "CI red", "waits", "re-reads"];
 
 export type Tokens = { input: number, output: number, cacheRead: number, write5m: number, write1h: number };
 export type Call = { id: string, at: string, model: string, tokens: Tokens, file: string, name: string | null, branch: string | null, firstInSession: boolean, afterCompaction: boolean, reread: boolean, waitTurn: boolean, waitBy: "" | "idle nudge" | "nothing to do" };
@@ -157,8 +158,18 @@ const CONTINUED = "This session is being continued";
 /** Both a human line and a wake order carry their text as a plain string; a tool result is an array, so this skips the bulk of a transcript unparsed. */
 const STRING_USER = /"role":"user","content":"/;
 
-/** @param {any} usage @returns {Tokens} */
-function tokensOf(usage: any): Tokens {
+/** One transcript line's `message.usage`, as Claude Code writes it. */
+export type Usage = {
+  input_tokens?: number, output_tokens?: number, cache_read_input_tokens?: number, cache_creation_input_tokens?: number,
+  cache_creation?: { ephemeral_1h_input_tokens?: number, ephemeral_5m_input_tokens?: number },
+};
+export type ContentBlock = { type: string, text?: string };
+export type Message = { id: string, model: string, usage?: Usage, content?: string | ContentBlock[] };
+/** One parsed transcript line: JSON a live session wrote, so only the fields read here are named. */
+export type TranscriptEntry = { type?: string, timestamp: string, gitBranch?: string, message?: Message };
+
+/** @param {Usage} usage @returns {Tokens} */
+function tokensOf(usage: Usage): Tokens {
   const written = usage.cache_creation_input_tokens ?? 0;
   const w1h = usage.cache_creation?.ephemeral_1h_input_tokens;
   const w5m = usage.cache_creation?.ephemeral_5m_input_tokens;
@@ -188,10 +199,10 @@ function openTurn(state: FileState, text: string) {
   state.name ??= /You are `([^`]+)`/.exec(text)?.[1] ?? null;
 }
 
-/** @param {FileState} state @param {any} entry */
-function addCall(state: FileState, entry: any) {
-  const message = entry.message;
-  const tokens = tokensOf(message.usage);
+/** @param {FileState} state @param {TranscriptEntry} entry one that `readEntry` found carrying a message with usage */
+function addCall(state: FileState, entry: TranscriptEntry) {
+  const message = entry.message as Message;
+  const tokens = tokensOf(message.usage as Usage);
   const seen = state.calls.get(message.id);
   if (seen) {
     if (tokens.output > seen.tokens.output) seen.tokens = tokens; // every line of one request repeats the usage; the last may carry the final output count
@@ -208,11 +219,11 @@ function addCall(state: FileState, entry: any) {
   state.turn.push(call);
 }
 
-/** @param {FileState} state @param {any} entry */
-function readEntry(state: FileState, entry: any) {
+/** @param {FileState} state @param {TranscriptEntry} entry */
+function readEntry(state: FileState, entry: TranscriptEntry) {
   if (entry.type === "assistant" && entry.message?.usage && entry.message.model !== "<synthetic>") {
     addCall(state, entry);
-    const text = (entry.message.content ?? []).filter((/** @type {any} */ b: any) => b.type === "text").map((/** @type {any} */ b: any) => b.text).join("\n");
+    const text = ((entry.message.content ?? []) as ContentBlock[]).filter((b) => b.type === "text").map((b) => b.text).join("\n");
     if (text) state.finalText = text;
     return;
   }
@@ -232,7 +243,7 @@ export function callsFromTranscript({ file, lines }: { file: string; lines: Iter
   for (const line of lines) {
     if (!line.includes('"type":"assistant"') && !STRING_USER.test(line)) continue;
     try {
-      readEntry(state, JSON.parse(line));
+      readEntry(state, JSON.parse(line) as TranscriptEntry);
     } catch (error) {
       state.unparsed += 1; // a line a live session was still writing: counted and reported, not guessed at
       if (!(error instanceof SyntaxError)) throw new Error(`token-cost: ${file}: ${error instanceof Error ? error.message : error}`, { cause: error });
@@ -371,8 +382,8 @@ export function countContributors(attributed: { pull: Pull; calls: Call[]; }[]):
 
 /** The largest of the four, the earlier in CATEGORIES on a tie; null when all four are zero. @param {Record<Category, number>} counts @returns {Category | null} */
 export function biggestContributor(counts: Record<Category, number>): Category | null {
-  const best = CATEGORIES.reduce((a, b) => (counts[/** @type {Category} */ (b)] > counts[/** @type {Category} */ (a)] ? b : a));
-  return counts[/** @type {Category} */ (best)] === 0 ? null : /** @type {Category} */ (best);
+  const best = CATEGORIES.reduce((a, b) => (counts[b] > counts[a] ? b : a));
+  return counts[best] === 0 ? null : best;
 }
 
 // ---- one repository's reading ----------------------------------------------------------------------------
@@ -436,7 +447,7 @@ function row({ measure, target, value, enough, count }: { measure: string; targe
 /** @param {RepositoryReading} r @param {Record<string, import("./ci-health.ts").Target>} targets @param {number} minimum */
 function repositoryLines(r: RepositoryReading, targets: Record<string, import("./ci-health.ts").Target>, minimum: number) {
   const count = `${r.calls} attributed calls over ${r.read} of ${r.merged} merged pull requests (${r.unread.length} UNREAD)`;
-  const shares = CATEGORIES.map((c) => `${c} ${r.counts[/** @type {Category} */ (c)]}`).join(", ");
+  const shares = CATEGORIES.map((c) => `${c} ${r.counts[c]}`).join(", ");
   const n = r.biggest ? r.counts[r.biggest] : 0;
   const biggest = r.biggest
     ? `Biggest contributor: ${r.biggest} (${n} calls, ${pct(n, r.calls)}% of the attributed calls)`
@@ -521,27 +532,31 @@ const gh = (args: string[]): string => {
 };
 
 /** One real call, so the header is read off it (`gh api rate_limit` is a broken gauge, gh-api-budget.md). @param {string} path */
-function ghGet(path: string) {
+function ghGet<Body>(path: string): Body {
   const { headers, body } = parseInclude(gh(["api", "-i", path]));
   rateLimitSeen = `X-Ratelimit-Remaining ${headers.get("x-ratelimit-remaining")} of ${headers.get("x-ratelimit-limit")}, resource ${headers.get("x-ratelimit-resource")}, as of the last read`;
-  return body;
+  return body as Body;
 }
+
+/** The fields of a pull request (`pulls?state=closed`) and of one of its reviews that this script reads. */
+type ApiPull = { number: number, merged_at: string, updated_at: string, head: { ref: string }, user?: { login?: string } | null };
+type ApiReview = { submitted_at: string, state: string, user?: { login?: string } | null };
 
 /** Pages of closed pull requests, newest update first, until one is older than the window: a merged one cannot hide below it. @param {string} repository @param {Window} window */
 function readMerged(repository: string, window: Window) {
-  /** @type {any[]} */ const merged: any[] = [];
+  const merged: ApiPull[] = [];
   for (let page = 1; ; page += 1) {
-    const body = ghGet(`repos/${repository}/pulls?state=closed&sort=updated&direction=desc&per_page=${PER_PAGE}&page=${page}`);
-    merged.push(...body.filter((/** @type {any} */ p: any) => p.merged_at && windowContains(window, p.merged_at)));
-    if (body.length < PER_PAGE || body.at(-1).updated_at < window.since) return merged;
+    const body = ghGet<ApiPull[]>(`repos/${repository}/pulls?state=closed&sort=updated&direction=desc&per_page=${PER_PAGE}&page=${page}`);
+    merged.push(...body.filter((p) => p.merged_at && windowContains(window, p.merged_at)));
+    if (body.length < PER_PAGE || (body.at(-1) as ApiPull).updated_at < window.since) return merged;
   }
 }
 
 /** One day's runs of the workflow, refused when the endpoint's cap would cut it short. @param {string} repository @param {string} workflow @param {string} slice */
 function readSlice(repository: string, workflow: string, slice: string) {
-  /** @type {any[]} */ const runs: any[] = [];
+  const runs: Run[] = [];
   for (let page = 1; ; page += 1) {
-    const body = ghGet(`repos/${repository}/actions/workflows/${workflow}/runs?per_page=${PER_PAGE}&created=${slice}&page=${page}`);
+    const body = ghGet<{ total_count: number, workflow_runs: Run[] }>(`repos/${repository}/actions/workflows/${workflow}/runs?per_page=${PER_PAGE}&created=${slice}&page=${page}`);
     if (body.total_count > SEARCH_CAP) throw new Error(`token-cost: ${repository} ${slice} holds ${body.total_count} runs, over the ${SEARCH_CAP} the endpoint returns; refusing a short list.`);
     runs.push(...body.workflow_runs);
     if (page * PER_PAGE >= body.total_count) return runs;
@@ -556,10 +571,10 @@ function readRuns(repository: string, workflow: string, window: Window) {
   return inWindow([...byId.values()], wide);
 }
 
-/** @param {string} repository @param {any} pr @param {any[]} runs @returns {Pull} one REST call: the pull request's reviews */
-function pullFrom(repository: string, pr: any, runs: any[]): Pull {
-  const reviews = ghGet(`repos/${repository}/pulls/${pr.number}/reviews?per_page=${PER_PAGE}`)
-    .map((/** @type {any} */ r: any) => ({ at: r.submitted_at, state: r.state, login: r.user?.login ?? "" }));
+/** @param {string} repository @param {ApiPull} pr @param {Run[]} runs @returns {Pull} one REST call: the pull request's reviews */
+function pullFrom(repository: string, pr: ApiPull, runs: Run[]): Pull {
+  const reviews = ghGet<ApiReview[]>(`repos/${repository}/pulls/${pr.number}/reviews?per_page=${PER_PAGE}`)
+    .map((r) => ({ at: r.submitted_at, state: r.state, login: r.user?.login ?? "" }));
   const base = { branch: pr.head.ref, mergedAt: pr.merged_at };
   return {
     repository, number: pr.number, ...base, author: pr.user?.login ?? "",
@@ -590,7 +605,7 @@ export function readTargetsFile(file: string): { targets: import("./ci-health.ts
   try {
     return { targets: targetsFrom(JSON.parse(readFileSync(file, "utf8"))) };
   } catch (error) {
-    if (/** @type {NodeJS.ErrnoException} */ (error).code === "ENOENT") return { missing: file };
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { missing: file };
     throw new Error(`token-cost: ${file} could not be read: ${error instanceof Error ? error.message : error}`, { cause: error });
   }
 }
@@ -614,9 +629,9 @@ function windowFromArgv(): Window {
 
 /** The CI-health comment of this week is the door: one comment, one table, one window. @param {string} body @param {{ repository: string, issue: number }} on @param {string} date */
 function appendToCiHealthComment(body: string, on: { repository: string; issue: number; }, date: string) {
-  const comments = ghGet(`repos/${on.repository}/issues/${on.issue}/comments?per_page=${PER_PAGE}&since=${new Date(Date.parse(`${date}T00:00:00Z`)).toISOString()}`);
+  const comments = ghGet<{ id: number, body: string }[]>(`repos/${on.repository}/issues/${on.issue}/comments?per_page=${PER_PAGE}&since=${new Date(Date.parse(`${date}T00:00:00Z`)).toISOString()}`);
   const heading = commentHeading({ date });
-  const target = comments.find((/** @type {{ body: string }} */ c: { body: string; }) => c.body.startsWith(heading));
+  const target = comments.find((c) => c.body.startsWith(heading));
   if (!target) throw new Error(`token-cost: "${heading}" is not on #${on.issue} yet. ci-health posts it (Monday 06:43Z) and this appends to it; posting nothing of its own.`);
   if (target.body.includes(MARKER)) return `token-cost: the comment for week of ${date} already carries this reading; changing nothing.`;
   const text = `${target.body}\n\n${body}\n`;

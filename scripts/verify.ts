@@ -24,7 +24,7 @@
 //
 // WALL TIME is printed beside CI's median as a measurement and not a target (chairman, #3210). If this is slower
 // than CI, that is the next row, not a reason to drop a step.
-import { spawn, spawnSync } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   existsSync, globSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync,
@@ -155,8 +155,8 @@ function minutes(ms: number) {
  * WHAT THIS CANNOT DO: SIGKILL is not delivered to anyone's handler. What survives it is the janitor's work, and a step that blocks the event loop
  * (a `spawnSync`) would hold a signal until it returned, which is why the long steps below run through `shAsync`.
  */
-const liveScratch = new Set(/** @type {string[]} */ ([]));
-const liveChildren = new Set(/** @type {import("node:child_process").ChildProcess[]} */ ([]));
+const liveScratch = new Set<string>();
+const liveChildren = new Set<ChildProcess>();
 let exitHandlersInstalled = false;
 
 /**
@@ -209,7 +209,7 @@ function removeAllScratch() {
 /** The shell's offset for "ended by signal n", which an unhandled one would have exited with. */
 const SIGNAL_EXIT_BASE = 128;
 /** The signals that end a run from outside. */
-const ENDING_SIGNALS = /** @type {const} */ (["SIGINT", "SIGTERM", "SIGHUP"]);
+const ENDING_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
 
 function installExitHandlers() {
   if (exitHandlersInstalled) return;
@@ -428,7 +428,7 @@ export async function runFailuresFirst({ name, files, dropped }: ReturnType<type
  * @param {() => ReturnType<typeof lastRunFailures>} [lastRun]
  */
 export function runTs({ base }: { base: string; }, run: (command: string, args: string[], where: { cwd: string; stdio: import("node:child_process").StdioOptions; env?: Record<string, string>; }) => Promise<{ status: number | null; }> = shAsync, readSummary: (file: string) => ReturnType<typeof readRunSummary> = readRunSummary, lastRun: () => ReturnType<typeof lastRunFailures> = lastRunFailures) {
-  const where = { cwd: REPO, stdio: /** @type {const} */ ("inherit") };
+  const where = { cwd: REPO, stdio: "inherit" as const };
   const pnpmAsync = (/** @type {string[]} */ pnpmArgs: string[]) => {
     const { command, args } = pnpmCliInvocation(pnpmArgs);
     return run(command, args, where);
@@ -622,7 +622,7 @@ async function inOrderAsync(commands: Array<() => { status: number | null; } | P
  */
 export type StepContext = { ciYml: string, base: string, body: string | null, files: string[] };
 function runStep(id: string, ctx: StepContext) {
-  const runners = /** @type {Record<string, () => string | Promise<string>>} */ ({
+  const runners: Record<string, () => string | Promise<string>> = {
     changed: () => "pass",
     ts: () => runTs(ctx),
     python: () => runPython(),
@@ -630,7 +630,7 @@ function runStep(id: string, ctx: StepContext) {
     changeset: () => runChangeset(ctx),
     acceptance: () => runAcceptance(ctx),
     ownedPaths: () => runOwnedPaths(ctx),
-  });
+  };
   return runners[id]();
 }
 

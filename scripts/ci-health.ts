@@ -168,12 +168,12 @@ function formatValue(n: number, unit: Target["unit"]) {
 export function targetText(target: Target) {
   if (target.atLeast !== undefined) return `at least ${formatValue(target.atLeast, target.unit)}`;
   if (target.atMost !== undefined) return `at most ${formatValue(target.atMost, target.unit)}`;
-  return `under ${formatValue(/** @type {number} */ (target.below), target.unit)}`;
+  return `under ${formatValue(target.below as number, target.unit)}`;
 }
 
 /** @param {unknown} parsed @returns {Targets} the file, refused when a target names no bound */
 export function targetsFrom(parsed: unknown): Targets {
-  const targets = /** @type {Targets} */ (parsed);
+  const targets = parsed as Targets;
   for (const target of Object.values(targets.targets)) verdictOf({ value: 0, target, enough: true });
   return targets;
 }
@@ -307,8 +307,11 @@ export const inWindow = (runs: Run[], { since, until }: { since: string; until: 
 /** Already posted when a comment under this week's heading exists, so a dispatch re-run posts nothing. @param {string[]} commentBodies @param {string} heading */
 export const alreadyPosted = (commentBodies: string[], heading: string) => commentBodies.some((body) => body.startsWith(heading));
 
-/** @param {string} text a `gh api -i` response @returns {{ headers: Map<string, string>, body: any }} */
-export function parseInclude(text: string): { headers: Map<string, string>; body: any; } {
+/** The fields of a GitHub API body this script reads: the workflow-runs list and a run's jobs. */
+export type ApiBody = { total_count: number, workflow_runs: Run[], jobs: { conclusion: string | null, name: string }[] };
+
+/** @param {string} text a `gh api -i` response @returns {{ headers: Map<string, string>, body: unknown }} the body is whatever JSON GitHub sent; `ghGet` names its shape */
+export function parseInclude(text: string): { headers: Map<string, string>; body: unknown; } {
   const split = text.search(/\r?\n\r?\n/);
   const head = text.slice(0, split).split(/\r?\n/).slice(1);
   const headers = new Map(head.map((line) => [line.slice(0, line.indexOf(":")).toLowerCase(), line.slice(line.indexOf(":") + 1).trim()]));
@@ -326,11 +329,11 @@ const gh = (args: string[]): string => {
   return execFileSync("gh", args, { encoding: "utf8", cwd: REPO_ROOT, maxBuffer: MAX_GH_OUTPUT_BYTES });
 };
 
-/** One real call, so the rate-limit header is read off it (`gh api rate_limit` is a broken gauge, gh-api-budget.md). @param {string} path */
-function ghGet(path: string) {
+/** One real call, so the rate-limit header is read off it (`gh api rate_limit` is a broken gauge, gh-api-budget.md). The caller names the body's shape. @param {string} path */
+function ghGet<Body = ApiBody>(path: string): Body {
   const { headers, body } = parseInclude(gh(["api", "-i", path]));
   rateLimitSeen = `X-Ratelimit-Remaining ${headers.get("x-ratelimit-remaining")} of ${headers.get("x-ratelimit-limit")}, resource ${headers.get("x-ratelimit-resource")}, as of the last read`;
-  return body;
+  return body as Body;
 }
 
 /** @param {string} repository @param {string} workflow @param {string} slice @returns {Run[]} */
@@ -355,7 +358,7 @@ function readRuns(repository: string, workflow: string, window: { since: string;
 function readFailedJobs(repository: string, id: number) {
   try {
     const body = ghGet(`repos/${repository}/actions/runs/${id}/jobs?per_page=${PER_PAGE}`);
-    return body.jobs.filter((/** @type {any} */ job: any) => job.conclusion === "failure").map((/** @type {any} */ job: any) => job.name);
+    return body.jobs.filter((job) => job.conclusion === "failure").map((job) => job.name);
   } catch (error) {
     process.stderr.write(`ci-health: jobs of run ${id} unread: ${error instanceof Error ? error.message : error}\n`);
     return null;
@@ -407,8 +410,8 @@ function main() {
   process.stdout.write(`${comment}\n`);
   if (!process.argv.includes("--post")) return;
   const { repository, issue } = targets.reportOn;
-  const existing = ghGet(`repos/${repository}/issues/${issue}/comments?per_page=${PER_PAGE}&since=${window.until}`);
-  if (alreadyPosted(existing.map((/** @type {{ body: string }} */ c: { body: string; }) => c.body), commentHeading({ date }))) {
+  const existing = ghGet<{ body: string }[]>(`repos/${repository}/issues/${issue}/comments?per_page=${PER_PAGE}&since=${window.until}`);
+  if (alreadyPosted(existing.map((c) => c.body), commentHeading({ date }))) {
     process.stdout.write(`ci-health: "${commentHeading({ date })}" is already on #${issue}; posting nothing.\n`);
     return;
   }

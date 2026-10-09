@@ -119,7 +119,7 @@ test("diagnoseResolutionFailure resolves the named specifier and appends the not
     const asked: string[] = [];
     const resolver = (specifier: string) => { asked.push(specifier); return dist; };
     const note = diagnoseResolutionFailure(EXPORT_ERROR, resolver);
-    assert.match(note, /^STALE DIST/);
+    assert.match(note as string, /^STALE DIST/);
     assert.deepEqual(asked, ["@a11ign/evidence/conformance"]);
   });
 });

@@ -16,7 +16,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -86,8 +86,8 @@ test("currentWorkspaceScope uses the injected reader and takes the scope part of
   const reads: string[] = [];
   const scope = currentWorkspaceScope({
     repo: "/virtual",
-    readdir: () => entries,
-    readFile: (path: string) => { reads.push(path); return JSON.stringify({ name: "@virtual/deep/er" }); },
+    readdir: (() => entries) as unknown as typeof readdirSync,
+    readFile: ((path: string) => { reads.push(path); return JSON.stringify({ name: "@virtual/deep/er" }); }) as unknown as typeof readFileSync,
   });
   assert.equal(scope, "@virtual");
   assert.deepEqual(reads, [join("/virtual", "packages", "x", "package.json")]);
@@ -111,7 +111,7 @@ test("with no current scope, no node_modules, or an unreadable node_modules ther
     rmSync(join(repo, "packages"), { recursive: true });
     assert.deepEqual(staleWorkspaceScopes({ repo }), [], "no scope can be derived, so nothing is called stale");
     assert.deepEqual(staleWorkspaceScopes({ repo: join(repo, "nowhere") }), []);
-    assert.deepEqual(staleWorkspaceScopes({ repo, currentScope: "@current", realpath: () => { throw new Error("EIO"); } }), [], "an unresolvable node_modules");
+    assert.deepEqual(staleWorkspaceScopes({ repo, currentScope: "@current", realpath: (() => { throw new Error("EIO"); }) as unknown as typeof realpathSync }), [], "an unresolvable node_modules");
   });
 });
 
@@ -125,7 +125,7 @@ test("a scope directory whose members cannot be listed or lstat'd is not a works
       if (calls > 1) throw new Error("EACCES");
       return (readdirSync as (p: string, o: object) => unknown[])(path, options);
     };
-    assert.deepEqual(staleWorkspaceScopes({ repo, readdir: flakyReaddir }), []);
+    assert.deepEqual(staleWorkspaceScopes({ repo, readdir: flakyReaddir as unknown as typeof readdirSync }), []);
   });
 });
 
@@ -216,5 +216,5 @@ test("the real script, asked only to LIST against this checkout, derives a scope
   // Read-only: `staleWorkspaceScopes` and `currentWorkspaceScope` never remove anything. `pruneStaleWorkspaceScopes` is never called on the real tree.
   const scope = currentWorkspaceScope({ repo: REPO_ROOT });
   assert.match(scope ?? "", /^@[^/]+$/);
-  assert.equal(staleWorkspaceScopes({ repo: REPO_ROOT, currentScope: scope }).includes(scope), false, "the current scope is never stale");
+  assert.equal(staleWorkspaceScopes({ repo: REPO_ROOT, currentScope: scope }).includes(scope as string), false, "the current scope is never stale");
 });

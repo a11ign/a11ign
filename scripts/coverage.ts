@@ -55,8 +55,8 @@ const MIN_TEST_FILES = 130;
  * @param {ReturnType<typeof coverageTotals>} totals @param {{ lines: number, statements: number }} c8rc
  * @returns {string[]}
  */
-export function thresholdMissLines(totals: ReturnType<typeof coverageTotals>, c8rc: { lines: number; statements: number; }): string[] {
-  return /** @type {const} */ (["lines", "statements"])
+export function thresholdMissLines(totals: Pick<ReturnType<typeof coverageTotals>, "lines" | "statements">, c8rc: { lines: number; statements: number; }): string[] {
+  return (["lines", "statements"] as const)
     .filter((metric) => totals[metric].pct < c8rc[metric])
     .map((metric) => `ERROR: Coverage for ${metric} (${totals[metric].pct}%) does not meet threshold (${c8rc[metric]}%)`);
 }

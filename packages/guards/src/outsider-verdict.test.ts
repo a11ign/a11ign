@@ -12,9 +12,8 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fileURLToPath, pathToFileURL } from "node:url";
 
-const REPO = fileURLToPath(new URL("../../..", import.meta.url));
+import type { OutsiderRun } from "../../../scripts/outsider/verdict.ts";
 const { outsiderVerdict, outsiderRunTitle, WINDOW_MS } = await import("../../../scripts/outsider/verdict.ts");
 
 const HOUR_MS = 3_600_000;
@@ -26,7 +25,7 @@ const WORST_POLL_GAP_H = 9.3;
 const WINDOW_CEILING_H = 48;
 
 const hoursAfter = (start: string, hours: number) => new Date(Date.parse(start) + hours * HOUR_MS).toISOString();
-const verdictAt = (hours: number, runs: unknown[] = [], latest = "0.3.1") =>
+const verdictAt = (hours: number, runs: OutsiderRun[] = [], latest = "0.3.1") =>
   outsiderVerdict({ latest, tagSha: SHA, publishedAt: PUBLISHED, now: hoursAfter(PUBLISHED, hours), runs });
 
 test("a version published just after a poll is pending, not absent, when the next poll comes 9.3 h later", () => {

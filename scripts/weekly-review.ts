@@ -177,18 +177,24 @@ const numbered = (items: { n: number; text: string; }[]) => items.map(({ n, text
 /** @param {string[]} builders */
 const sessionList = (builders: string[]) => (builders.length > 0 ? builders.map((s) => `\`${s}\``).join(", ") : "none");
 
-/**
- * @property {string} label ISO week, `2026-W40`
- * @property {{ since: string, until: string }} window
- * @property {number} closedCount rows closed in the window
- * @property {string[]} builders
- * @property {number[]} unattributed closed rows whose builder could not be read
- * @property {{ n: number, text: string }[]} requirements read from RELEASE.md
- * @property {{ n: number, text: string }[]} questions read from docs/try-it.md
- * @property {string} commit the commit the two documents were read at
- * @property {boolean} waitsOnOutsiderRepo
- */
-export type BodyInput = object;
+/** What the issue body is built from. */
+export type BodyInput = {
+  /** ISO week, `2026-W40` */
+  label: string,
+  window: { since: string, until: string },
+  /** rows closed in the window */
+  closedCount: number,
+  builders: string[],
+  /** closed rows whose builder could not be read */
+  unattributed: number[],
+  /** read from RELEASE.md */
+  requirements: { n: number, text: string }[],
+  /** read from docs/try-it.md */
+  questions: { n: number, text: string }[],
+  /** the commit the two documents were read at */
+  commit: string,
+  waitsOnOutsiderRepo: boolean,
+};
 
 /** @param {BodyInput} input */
 function windowSection({ window, closedCount, builders, unattributed }: BodyInput) {
@@ -293,37 +299,38 @@ const gh = (args: string[]): string => {
 };
 
 /** @param {string} jq @param {string[]} args */
-const ghJson = (jq: string, args: string[]) => JSON.parse(gh([...args, "--jq", jq]) || "null");
+const ghJson = <Body>(jq: string, args: string[]): Body => JSON.parse(gh([...args, "--jq", jq]) || "null") as Body;
 
 const SESSION_LABEL = /^session:(.+)$/;
 const CLAIMED_BY = /claimed by `([^`]+)`/;
 
 /** @param {string} since @param {string} until @returns {ClosedRow[]} */
 function readClosedRows(since: string, until: string): ClosedRow[] {
-  const rows = JSON.parse(gh(["issue", "list", "--repo", PRODUCT_REPO, "--state", "closed", "--limit", "1000",
+  const rows: { number: number, labels: { name: string }[], comments: { body: string }[] }[] = JSON.parse(gh(["issue", "list", "--repo", PRODUCT_REPO, "--state", "closed", "--limit", "1000",
     "--search", `closed:${since}..${until}`, "--json", "number,labels,comments"]));
-  return rows.map((/** @type {any} */ row: any) => ({
+  const present = (name: string | undefined): name is string => Boolean(name);
+  return rows.map((row) => ({
     number: row.number,
-    sessionLabels: row.labels.map((/** @type {any} */ l: any) => SESSION_LABEL.exec(l.name)?.[1]).filter(Boolean),
+    sessionLabels: row.labels.map((l) => SESSION_LABEL.exec(l.name)?.[1]).filter(present),
     claimedBy: row.comments
-      .filter((/** @type {any} */ c: any) => c.body.includes("row-claim: claim record"))
-      .map((/** @type {any} */ c: any) => CLAIMED_BY.exec(c.body)?.[1]).filter(Boolean),
+      .filter((c) => c.body.includes("row-claim: claim record"))
+      .map((c) => CLAIMED_BY.exec(c.body)?.[1]).filter(present),
   }));
 }
 
 /** @returns {{ number: number, title: string }[]} */
-const readReviewRows = (): { number: number; title: string; }[] => ghJson(".", ["issue", "list", "--repo", PRODUCT_REPO, "--state", "all",
+const readReviewRows = (): { number: number; title: string; }[] => ghJson<{ number: number; title: string; }[]>(".", ["issue", "list", "--repo", PRODUCT_REPO, "--state", "all",
   "--search", `"${TITLE_PREFIX}" in:title`, "--limit", "100", "--json", "number,title"])
-  .filter((/** @type {{ title: string }} */ row: { title: string; }) => row.title.startsWith(TITLE_PREFIX));
+  .filter((row) => row.title.startsWith(TITLE_PREFIX));
 
 /** @param {number} n */
 const issueIsOpen = (n: number) => gh(["issue", "view", String(n), "--repo", PRODUCT_REPO, "--json", "state", "--jq", ".state"]).trim() === "OPEN";
 
 /** Comment on last week's row when its reader was one of its builders. @param {{ number: number, title: string }} last */
 function recheck(last: { number: number; title: string; }) {
-  const row = JSON.parse(gh(["issue", "view", String(last.number), "--repo", PRODUCT_REPO, "--json", "body,state,comments"]));
+  const row: { body: string, state: string, comments: { body: string }[] } = JSON.parse(gh(["issue", "view", String(last.number), "--repo", PRODUCT_REPO, "--json", "body,state,comments"]));
   const verdict = recheckLastWeek({
-    body: row.body, closed: row.state === "CLOSED", comments: row.comments.map((/** @type {any} */ c: any) => c.body),
+    body: row.body, closed: row.state === "CLOSED", comments: row.comments.map((c) => c.body),
   });
   if (verdict.comment === null) return;
   gh(["issue", "comment", String(last.number), "--repo", PRODUCT_REPO, "--body", verdict.comment]);

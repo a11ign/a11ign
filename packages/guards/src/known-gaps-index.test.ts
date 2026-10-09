@@ -87,7 +87,7 @@ test("slugify strips markup, drops punctuation and joins words with single hyphe
 });
 
 test("openSections keeps numbered, unclosed headings only, in document order, with anchors", () => {
-  assert.deepEqual(openSections(DOC).map((h: { number: number, anchor: string }) => [h.number, h.anchor]), [[1, "1-open-one"], [THIRD, "3-open-three-with-bold"]]);
+  assert.deepEqual(openSections(DOC).map((h) => [h.number, h.anchor]), [[1, "1-open-one"], [THIRD, "3-open-three-with-bold"]]);
   assert.deepEqual(openSections("## 1. DONE\n## Meta\n"), []);
 });
 

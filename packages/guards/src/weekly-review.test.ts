@@ -13,10 +13,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
 
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const review = await import("../../../scripts/weekly-review.ts");
 const {
   TITLE_PREFIX, FILING_SESSION, FIRST_REVIEW_WAITS_ON, isoWeek, isoWeekLabel, reviewTitle, filingPlan, reviewWindow,
@@ -171,14 +168,14 @@ test("bodyReadFromSources accepts a body built from the sources and refuses one 
   assert.equal(bodyReadFromSources(buildBody(bodyInput()), SOURCES), null);
 
   const reworded = { ...SOURCES, questions: [{ n: 1, text: "Did the install work on your machine?" }, SOURCES.questions[1]] };
-  const refusal = bodyReadFromSources(buildBody(bodyInput()), reworded);
+  const refusal = bodyReadFromSources(buildBody(bodyInput()), reworded) as string;
   assert.match(refusal, /REFUSING -- 1 item\(s\)/);
   assert.match(refusal, /first: "Did the install work on your machine\?\.\.\."/);
 });
 
 test("bodyReadFromSources truncates the quoted item and counts every missing one", () => {
   const long = "x".repeat(100);
-  const refusal = bodyReadFromSources("a body with nothing", { requirements: [{ n: 1, text: long }], questions: [{ n: 1, text: "q" }] });
+  const refusal = bodyReadFromSources("a body with nothing", { requirements: [{ n: 1, text: long }], questions: [{ n: 1, text: "q" }] }) as string;
   assert.match(refusal, /REFUSING -- 2 item\(s\)/);
   assert.ok(refusal.includes(`"${"x".repeat(60)}..."`));
   assert.ok(!refusal.includes("x".repeat(61)));
@@ -202,7 +199,7 @@ const lastRow = (overrides: Record<string, unknown> = {}) => ({
 });
 
 test("recheckLastWeek comments when the reader was one of the row's own builders", () => {
-  const { comment } = recheckLastWeek(lastRow({ comments: ["Reviewer-session: worker-a"] }));
+  const comment = recheckLastWeek(lastRow({ comments: ["Reviewer-session: worker-a"] })).comment as string;
   assert.match(comment, /^Re-check: the reader `worker-a` is in this row's own ineligible list/);
   assert.match(comment, /\(`worker-a`, `worker-b`\)/);
   assert.match(comment, /does not reopen the row/);
@@ -215,7 +212,7 @@ test("recheckLastWeek stays silent for an eligible reader, and for a comment it 
 
 test("recheckLastWeek says out loud that a CLOSED row stated no reader, and says nothing on an open one", () => {
   const closed = recheckLastWeek(lastRow({ comments: ["findings filed"] }));
-  assert.match(closed.comment, /closed without a `Reviewer-session:` line/);
+  assert.match(closed.comment as string, /closed without a `Reviewer-session:` line/);
   assert.deepEqual(recheckLastWeek(lastRow({ comments: ["findings filed"], closed: false })), { comment: null });
 });
 

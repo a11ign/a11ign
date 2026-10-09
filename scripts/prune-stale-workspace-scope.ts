@@ -15,7 +15,7 @@
 // MUST NEVER FAIL AN INSTALL, the same rule `install-git-hooks.ts` states for itself: every failure here
 // is reported and swallowed, never thrown, because a broken symlink or an unreadable directory is not a
 // reason to break `npm install`.
-import { readFileSync, readdirSync, lstatSync, realpathSync, rmSync } from "node:fs";
+import { readFileSync, readdirSync, lstatSync, realpathSync, rmSync, type Dirent } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 // RELATIVE, NOT `@a11ign/screenreader-fleet/cli-flags`: this is a `prepare`-time script, which npm runs on every
@@ -92,7 +92,7 @@ export function staleWorkspaceScopes({ repo = REPO, readdir = readdirSync, lstat
   let packagesRoot;
   try { packagesRoot = join(realpath(nodeModules), "..", "packages") + "/"; }
   catch { return []; }
-  const isScopeCandidate = (entry) => entry.isDirectory() && entry.name.startsWith("@") && entry.name !== scope;
+  const isScopeCandidate = (entry: Dirent) => entry.isDirectory() && entry.name.startsWith("@") && entry.name !== scope;
   return entries
     .filter(isScopeCandidate)
     .filter((entry) => isWorkspaceScopeDir({
@@ -118,7 +118,7 @@ export function pruneStaleWorkspaceScopes({ repo = REPO, log = console.error, re
       remove(target, { recursive: true, force: true });
       log(`  removed stale workspace scope node_modules/${name} (current scope is ${scope})`);
     } catch (cause) {
-      log(`  could not remove stale workspace scope node_modules/${name}: ${/** @type {Error} */ (cause).message}`
+      log(`  could not remove stale workspace scope node_modules/${name}: ${(cause as Error).message}`
         + ` -- remove it by hand: rm -rf node_modules/${name}`);
     }
   }

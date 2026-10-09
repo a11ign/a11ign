@@ -110,7 +110,7 @@ test("a regression that also had failing tests says how many, and still is a REG
 });
 
 test("the classifier reads the real producer's own threshold-miss line (scripts/coverage.ts)", () => {
-  const produced = thresholdMissLines({ lines: { pct: 50 }, statements: { pct: 60 } }, { lines: 51, statements: 51 });
+  const produced = thresholdMissLines({ lines: { pct: 50, covered: 50, total: 100 }, statements: { pct: 60, covered: 60, total: 100 } }, { lines: 51, statements: 51 });
   assert.deepEqual(produced, ["ERROR: Coverage for lines (50%) does not meet threshold (51%)"]);
   const verdict = classifyCoverageFailure({ ...ok, coverageLog: produced.join("\n") });
   assert.deepEqual(verdict.thresholdMisses, [{ metric: "lines", actual: 50, threshold: 51 }]);

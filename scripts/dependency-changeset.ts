@@ -53,25 +53,31 @@ export type Change = { path: string, package: string, private: boolean, section:
 export type Entry = { package: string, bump: "patch", text: string };
 export type Derivation = { verdict: "entries" | "empty" | "refused", entries: Entry[], privatePackages: string[], reasons: string[] };
 
-/** @param {Record<string, any>} manifest */
-function withoutDependencies(manifest: Record<string, any>) {
+/** A parsed `package.json`: JSON, so its fields are read through `rangesIn` and checked where they are used. */
+export type Manifest = Record<string, unknown>;
+
+/** The `name -> range` map a manifest holds under `section`, empty when it has none. */
+const rangesIn = (manifest: Manifest, section: string) => (manifest[section] ?? {}) as Record<string, string>;
+
+/** @param {Manifest} manifest */
+function withoutDependencies(manifest: Manifest) {
   return Object.fromEntries(Object.entries(manifest).filter(([key]) => !DEPENDENCY_SECTIONS.includes(key)));
 }
 
 /**
  * Every dependency range that differs between two manifests, with the section it sits in.
  * @param {string} path
- * @param {Record<string, any>} before
- * @param {Record<string, any>} after
+ * @param {Manifest} before
+ * @param {Manifest} after
  * @returns {Change[]}
  */
-function rangeChanges(path: string, before: Record<string, any>, after: Record<string, any>): Change[] {
+function rangeChanges(path: string, before: Manifest, after: Manifest): Change[] {
   return DEPENDENCY_SECTIONS.flatMap((section) => {
-    const [was, now] = [before[section] ?? {}, after[section] ?? {}];
+    const [was, now] = [rangesIn(before, section), rangesIn(after, section)];
     return [...new Set([...Object.keys(was), ...Object.keys(now)])]
       .filter((dependency) => was[dependency] !== now[dependency])
       .map((dependency) => ({
-        path, package: after.name, private: after.private === true, section, dependency,
+        path, package: after.name as string, private: after.private === true, section, dependency,
         from: was[dependency] ?? null, to: now[dependency] ?? null,
       }));
   });
@@ -123,10 +129,10 @@ function pathReasons(files: string[], owned: string[]): string[] {
 }
 
 /**
- * @param {Record<string, { before: Record<string, any> | null, after: Record<string, any> | null }>} manifests
+ * @param {Record<string, { before: Manifest | null, after: Manifest | null }>} manifests
  * @returns {{ changes: Change[], reasons: string[] }}
  */
-function readManifests(manifests: Record<string, { before: Record<string, any> | null; after: Record<string, any> | null; }>): { changes: Change[]; reasons: string[]; } {
+function readManifests(manifests: Record<string, { before: Manifest | null; after: Manifest | null; }>): { changes: Change[]; reasons: string[]; } {
   const changes = [];
   const reasons = [];
   for (const [path, { before, after }] of Object.entries(manifests)) {

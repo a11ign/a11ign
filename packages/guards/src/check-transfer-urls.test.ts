@@ -21,6 +21,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
+import type { TransferUrlResult } from "../../../scripts/check-transfer-urls.ts";
 const TSX = pathToFileURL(createRequire(import.meta.url).resolve("tsx")).href;
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -145,7 +146,7 @@ test("checkTransferUrls calls the fetch once per site, in order, with HEAD and r
   assert.deepEqual(await checkTransferUrls([], { fetchImpl }), []);
 });
 
-const reachable = (url: string, status: number) => ({ file: "f.md", line: 1, url, reachable: true, status, ok: status >= HTTP_OK && status < HTTP_OK * 2 });
+const reachable = (url: string, status: number): TransferUrlResult => ({ file: "f.md", line: 1, url, reachable: true, status, ok: status >= HTTP_OK && status < HTTP_OK * 2 });
 
 test("the report for an all-ok run is the count and the ok line, with no failure headings", () => {
   const report = reportTransferUrls([reachable("https://x.invalid/a", HTTP_OK), reachable("https://x.invalid/b", HTTP_OK)]);

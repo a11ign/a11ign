@@ -101,7 +101,7 @@ export function skippedByChanged({ file, affectedSet, existsAtHead }: { file: st
  * guard, then a file the head lacks. @param {FileReading[]} files @returns {Skipped | "ci-only"}
  */
 export function runAnswer(files: FileReading[]): Skipped | "ci-only" {
-  for (const answer of /** @type {const} */ (["yes", "no", "ci-only"])) if (files.some((f) => f.answer === answer)) return answer;
+  for (const answer of ["yes", "no", "ci-only"] as const) if (files.some((f) => f.answer === answer)) return answer;
   return "gone";
 }
 
@@ -247,15 +247,15 @@ export function renderReport({ merged, deleted, before, after, traces, asOf }: {
 /** `GIT_*` is stripped from the environment: git exports `GIT_DIR` into a hook, and a spawn that inherits it works on the wrong repository. @param {string} command @param {string[]} args @param {string} [cwd] @returns {string} */
 const sh = (command: string, args: string[], cwd: string = REPO_ROOT): string => execFileSync(command, args, { encoding: "utf8", cwd, env: sandboxGitEnv(), maxBuffer: MAX_OUTPUT_BYTES, stdio: ["ignore", "pipe", "pipe"] });
 
-/** @param {string} path @returns {any} */
-const ghJson = (path: string): any => JSON.parse(sh("gh", ["api", path]));
+/** @template Body @param {string} path @returns {Body} the caller names the shape of the JSON GitHub sends */
+const ghJson = <Body>(path: string): Body => JSON.parse(sh("gh", ["api", path])) as Body;
 
 /** One UTC day of `ci.yml` runs. A day over the endpoint's cap is REFUSED, never read short. @param {string} repository @param {string} slice @returns {Run[]} */
 function readSlice(repository: string, slice: string): Run[] {
   const base = `repos/${repository}/actions/workflows/ci.yml/runs?per_page=${PER_PAGE}&created=${slice}`;
   /** @type {Run[]} */ const runs: Run[] = [];
   for (let page = 1; ; page += 1) {
-    const body = ghJson(`${base}&page=${page}`);
+    const body = ghJson<{ total_count: number, workflow_runs: Run[] }>(`${base}&page=${page}`);
     if (body.total_count > SEARCH_CAP) throw new Error(`selection-skipped: ${repository} ${slice} holds ${body.total_count} runs, over the ${SEARCH_CAP} the endpoint returns; refusing a short list.`);
     runs.push(...body.workflow_runs);
     if (page * PER_PAGE >= body.total_count) return runs;
@@ -273,8 +273,8 @@ function gitReader({ repository, policy }: { repository: string; policy: string 
   return {
     failedJobs: (runId) => {
       try {
-        const { jobs } = ghJson(`repos/${repository}/actions/runs/${runId}/jobs?per_page=${PER_PAGE}`);
-        return jobs.filter((/** @type {any} */ j: any) => j.conclusion === "failure").map((/** @type {any} */ j: any) => ({ id: j.id, name: j.name }));
+        const { jobs } = ghJson<{ jobs: { id: number, name: string, conclusion: string | null }[] }>(`repos/${repository}/actions/runs/${runId}/jobs?per_page=${PER_PAGE}`);
+        return jobs.filter((j) => j.conclusion === "failure").map((j) => ({ id: j.id, name: j.name }));
       } catch (cause) {
         process.stderr.write(`selection-skipped: jobs of run ${runId} unread: ${cause instanceof Error ? cause.message : cause}\n`);
         return null;
@@ -300,7 +300,7 @@ export function containsCommit({ head, commit, cwd = REPO_ROOT }: { head: string
     sh("git", ["merge-base", "--is-ancestor", commit, head], cwd);
     return true;
   } catch (cause) {
-    if (/** @type {{ status?: number }} */ (cause).status === 1) return false; // exit 1 is "not an ancestor"; anything else is a failure to ask
+    if ((cause as { status?: number }).status === 1) return false; // exit 1 is "not an ancestor"; anything else is a failure to ask
     throw cause;
   }
 }
@@ -331,7 +331,7 @@ function treeWideGuards({ tree }: { tree: string; }): string[] {
  * @param {{ red: Run, list: (where: { tree: string, mergeBase: string }) => string[], treeWide: (where: { tree: string }) => string[], cwd?: string }} what
  * @returns {{ set: string[], changed: string[], treeWide: string[], mergeBase: string } | null}
  */
-export function affectedAt({ red, list, treeWide, cwd = REPO_ROOT }: { red: Run; list: (where: { tree: string; mergeBase: string; }) => string[]; treeWide: (where: { tree: string; }) => string[]; cwd?: string; }): { set: string[]; changed: string[]; treeWide: string[]; mergeBase: string; } | null {
+export function affectedAt({ red, list, treeWide, cwd = REPO_ROOT }: { red: Pick<Run, "head_sha" | "created_at">; list: (where: { tree: string; mergeBase: string; }) => string[]; treeWide: (where: { tree: string; }) => string[]; cwd?: string; }): { set: string[]; changed: string[]; treeWide: string[]; mergeBase: string; } | null {
   const dir = mkdtempSync(join(tmpdir(), "selection-skipped-"));
   const tree = join(dir, "head");
   try {
@@ -354,7 +354,7 @@ export function affectedAt({ red, list, treeWide, cwd = REPO_ROOT }: { red: Run;
 const flagValue = (flag: string): string | undefined => process.argv.slice(2).find((arg) => arg.startsWith(`${flag}=`))?.slice(flag.length + 1);
 
 /** @param {string} repository @param {number} id */
-const readRun = (repository: string, id: number) => ghJson(`repos/${repository}/actions/runs/${id}`);
+const readRun = (repository: string, id: number) => ghJson<Run>(`repos/${repository}/actions/runs/${id}`);
 
 function main() {
   refuseUnknownFlags(["--run=", "--merged=", "--policy=", "--deleted=", "--repo="], { entry: import.meta.url, command: "node --import tsx scripts/selection-skipped.ts" });

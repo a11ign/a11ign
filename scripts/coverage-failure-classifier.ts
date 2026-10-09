@@ -150,7 +150,7 @@ export function classifyCoverageFailure({ ciOutcome, buildOutcome, coverageLog }
 
 /** The comment body coverage.yml posts to #169 -- one function, so the workflow and its own tests agree
  *  on exactly what a reader sees. */
-export function commentBody({ verdict, runUrl }) {
+export function commentBody({ verdict, runUrl }: { verdict: { kind: string; detail: string }; runUrl: string }) {
   const headline = {
     [KIND.INFRA]: "Nightly coverage did not run — INFRASTRUCTURE FAILURE, not a coverage finding",
     [KIND.TEST_FAILURE]: "Nightly coverage run failed a TEST, not a coverage threshold",
