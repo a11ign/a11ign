@@ -236,7 +236,7 @@ test("#4374: repair needs regenerate, takes its artifact by the name it was uplo
 
 test("#4331: the regeneration runs the generator, refuses any change but consumer-gate.yml, and pushes the ONE branch the in-flight reading looks for", () => {
   const text = workflow.jobs.regenerate.steps.map((s) => s.run ?? "").join("\n");
-  assert.match(text, /node --import tsx scripts\/generate-consumer-gate\.ts/);
+  assert.match(text, /node scripts\/generate-consumer-gate\.ts/);
   assert.ok(text.includes('" != " M .github/workflows/consumer-gate.yml" ]'), "the only-consumer-gate.yml guard");
   const pushStep = workflow.jobs.repair.steps.find((s) => s.env?.BRANCH !== undefined);
   assert.equal(pushStep?.env?.BRANCH, REGENERATION_BRANCH, "the workflow and the in-flight reading name different branches");

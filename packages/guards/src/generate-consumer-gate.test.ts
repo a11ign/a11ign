@@ -174,7 +174,7 @@ test("buildConsumerGateWorkflow: the pinned sha appears in the check-pin ancestr
   assert.ok(workflow.includes(`git merge-base --is-ancestor ${SHA} "\${{ github.sha }}"`));
   assert.ok(workflow.includes(`git diff --quiet ${SHA} "\${{ github.sha }}" -- ${ACTION_DEFINITION.join(" ")}`));
   assert.ok(workflow.includes(`git diff --stat ${SHA} "\${{ github.sha }}" -- action.yml`));
-  assert.ok(workflow.includes("run: node --import tsx scripts/generate-consumer-gate.ts --check"));
+  assert.ok(workflow.includes("run: node scripts/generate-consumer-gate.ts --check"));
   assert.ok(workflow.includes('if [ "${{ needs.a11y.result }}" != "success" ]; then'));
   assert.deepEqual(ACTION_DEFINITION, ["action.yml"]);
 });
@@ -291,7 +291,7 @@ test("actionPinVerdict (#4153): a pin that predates action.yml on the BASE is re
     assert.equal(stale.ok, false, "the positive control: the pin is at v1, main has v2");
     assert.match(stale.message, /action\.yml changed between the pin, [0-9a-f]{40}, and the base, [0-9a-f]{40}/);
     assert.match(stale.message, /the a11y job would run the OLD Action/);
-    assert.match(stale.message, /node --import tsx scripts\/generate-consumer-gate\.ts/);
+    assert.match(stale.message, /node scripts\/generate-consumer-gate\.ts/);
     assert.equal(actionPinVerdict({ pin: v2, base: v2, head: v2, cwd: sandbox.dir }).ok, true, "the clean counterpart");
   });
 });
@@ -304,7 +304,7 @@ test("actionPinVerdict (#4153): a pull request that changes action.yml itself is
     const own = actionPinVerdict({ pin: v2, base: v2, head: commitActionYml(sandbox, "v3"), cwd: sandbox.dir });
     assert.equal(own.ok, true, "its own change cannot be in a pin: the commit does not exist until it merges");
     assert.equal(own.ownChange, true);
-    assert.match(own.message, /refuse the next release until `node --import tsx scripts\/generate-consumer-gate\.ts` is run and merged/);
+    assert.match(own.message, /refuse the next release until `node scripts\/generate-consumer-gate\.ts` is run and merged/);
     assert.equal(actionPinVerdict({ pin: v2, base: v2, head: v2, cwd: sandbox.dir }).ownChange, false);
     assert.equal(actionPinVerdict({ pin: v1, base: v2, head: v2, cwd: sandbox.dir }).ownChange, false);
     const staleAndOwn = actionPinVerdict({ pin: v1, base: v2, head: sandbox.run(["rev-parse", "HEAD"]).trim(), cwd: sandbox.dir });
@@ -337,7 +337,7 @@ test("actionPinVerdict (#4153, #4331): the real tree -- the committed pin contai
 });
 
 test("actionPinVerdict (#4153): the refusal says what the release's own check-pin says, so the two cannot drift", () => {
-  const phrases = ["would run the OLD Action", "regenerate (node --import tsx scripts/generate-consumer-gate.ts)"];
+  const phrases = ["would run the OLD Action", "regenerate (node scripts/generate-consumer-gate.ts)"];
   const workflow = generate(readFileSync(README_PATH, "utf8"), SHA) as string;
   withGitSandbox((sandbox) => {
     sandbox.run(["init", "-q", "-b", "main"]);

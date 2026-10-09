@@ -10,7 +10,7 @@ name: consumer-gate-pin
 #
 #   decide      `scripts/consumer-gate-pin-needed.ts` reads the pin AT THIS COMMIT against `action.yml` AT THIS COMMIT (the two refusals of
 #               `check-pin`) and answers `regenerate` or `nothing to do`. It never reads which files the push touched, so a re-run is harmless.
-#   regenerate  runs `node --import tsx scripts/generate-consumer-gate.ts`, REFUSES the run unless `consumer-gate.yml` is the only file that changed, and
+#   regenerate  runs `node scripts/generate-consumer-gate.ts`, REFUSES the run unless `consumer-gate.yml` is the only file that changed, and
 #               uploads that one file. It holds no `id-token`: it is the job that runs repository and third-party code (see below).
 #   repair      mints the token, shape-checks the uploaded file, force-moves ONE branch (`automation/consumer-gate-pin`, so a second `action.yml`
 #               change updates the open repair and never opens a second) to this commit, writes the file onto it and opens the pull request if
@@ -98,14 +98,14 @@ jobs:
           persist-credentials: false
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version: 22, cache: pnpm }
+        with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
         run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       - name: Regenerate the pin at this commit, and refuse anything that changed but consumer-gate.yml
         run: |
           set -euo pipefail
-          node --import tsx scripts/generate-consumer-gate.ts
+          node scripts/generate-consumer-gate.ts
           changed="$(git status --porcelain)"
           if [ "$changed" != " M .github/workflows/consumer-gate.yml" ]; then
             echo "::error::regeneration must change .github/workflows/consumer-gate.yml and nothing else; git status says:"
