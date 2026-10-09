@@ -3,6 +3,7 @@
   // `tsc` only CHECKS this package: Rslib builds it (ADR 0043, Decision 4), and `rootDir` is explicit because TypeScript 6 refuses to guess it.
   "compilerOptions": { "rootDir": "src", "noEmit": true },
   "include": ["src"],
-  // Tests are run from source by rstest, and must not reach a consumer's `node_modules`.
-  "exclude": ["src/**/*.test.ts"]
+  // Tests are run from source by rstest, and must not reach a consumer's `node_modules`. The IdP fixtures and the attach spike are run from a checkout and
+  // import each other by `.ts` path (which the declaration build refuses, TS5097); nothing the package ships imports them, and the root `tsconfig.json` still checks them.
+  "exclude": ["src/**/*.test.ts", "src/auth/fixtures", "src/auth/attach-spike.ts"]
 }

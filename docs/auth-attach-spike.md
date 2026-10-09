@@ -2,7 +2,7 @@
 
 Verdict: attach conflicts: this repository's driver reads a signed-in page through a person's debugging endpoint (measured), but the worker cannot be pointed at that browser, because it owns port 9222, drives whatever answers there with `Page.navigate` (which discards a session held in page memory), and quits or `taskkill`s every browser of its image.
 
-Read at a11ign `a896fb89e`; the worker at `screenreader-worker@291ed35` (its `main`, read through `git show`, never checked out or changed). Part of #4084, outcome 1. ADR 0038 calls this "a spike row first, before any build" (`docs/adr/0038-authenticated-capture.md:186`), and this is that spike. The experiment is `packages/cli/src/auth/attach-spike.mjs`; `packages/cli/src/auth/attach-spike.test.ts` checks the SHAPE of this document and nothing about a browser.
+Read at a11ign `a896fb89e`; the worker at `screenreader-worker@291ed35` (its `main`, read through `git show`, never checked out or changed). Part of #4084, outcome 1. ADR 0038 calls this "a spike row first, before any build" (`docs/adr/0038-authenticated-capture.md:186`), and this is that spike. The experiment is `packages/cli/src/auth/attach-spike.ts`; `packages/cli/src/auth/attach-spike.test.ts` checks the SHAPE of this document and nothing about a browser.
 
 ## What was and was not measured
 
@@ -17,7 +17,7 @@ Read at a11ign `a896fb89e`; the worker at `screenreader-worker@291ed35` (its `ma
 Yes. The attached page's heading is read as `Welcome back, Dana`; a fresh context of the same browser and a separately launched Playwright browser, both at the same URL, read `Sign in`. The session exists ONLY in the person's page. The last line is a finding for question 2: the driver's own `navigate(url)` on the attached page took the signed-in page back to `Sign in`.
 
 ```
-$ LD_LIBRARY_PATH=$HOME/.cache/a11y-spike-libs/root/usr/lib/x86_64-linux-gnu node --import tsx packages/cli/src/auth/attach-spike.mjs q1
+$ LD_LIBRARY_PATH=$HOME/.cache/a11y-spike-libs/root/usr/lib/x86_64-linux-gnu node --import tsx packages/cli/src/auth/attach-spike.ts q1
 person's browser: Chrome/149.0.7827.55   endpoint: http://127.0.0.1:43813   page: http://127.0.0.1:40701/
 attached through the endpoint; pages found in the person's own context: 1
 attached page, heading read by playwright-driver.ts (axNodes):  ["Welcome back, Dana"]
@@ -70,7 +70,7 @@ What each site does to a person's browser, inferred from the lines above:
 The port collision, run on Chromium (the script prints a stderr line only if it is the bind or address-in-use diagnostic, else `(none)`): a second browser with its own profile launched with the same port (what `launchReusable` spawns) logs that it could not bind, keeps running, and every request to the port is still answered by the FIRST browser.
 
 ```
-$ LD_LIBRARY_PATH=$HOME/.cache/a11y-spike-libs/root/usr/lib/x86_64-linux-gnu node --import tsx packages/cli/src/auth/attach-spike.mjs q2
+$ LD_LIBRARY_PATH=$HOME/.cache/a11y-spike-libs/root/usr/lib/x86_64-linux-gnu node --import tsx packages/cli/src/auth/attach-spike.ts q2
 person's browser (profile A) holds port 45315: ws://127.0.0.1:45315/devtools/browser/4c9b7c35-c656-4625-873b-2a72d924f7d5
 a second browser, profile B, launched with the SAME --remote-debugging-port=45315 (what launchReusable spawns):
   second browser still running: true
@@ -86,7 +86,7 @@ a second browser, profile B, launched with the SAME --remote-debugging-port=4531
 Only on the same host, or through a relay the person sets up. The endpoint listens on `127.0.0.1` alone and refuses its own host's LAN address. A plain TCP relay makes it reachable, and the endpoint then accepts a `Host` header that is an IP address or `localhost` and rejects a name. (The script masks the last two octets of this host's LAN address: a committed transcript with a real internal address is a leak.)
 
 ```
-$ LD_LIBRARY_PATH=$HOME/.cache/a11y-spike-libs/root/usr/lib/x86_64-linux-gnu node --import tsx packages/cli/src/auth/attach-spike.mjs q3
+$ LD_LIBRARY_PATH=$HOME/.cache/a11y-spike-libs/root/usr/lib/x86_64-linux-gnu node --import tsx packages/cli/src/auth/attach-spike.ts q3
 this host's non-loopback IPv4: 192.168.x.x
 listening sockets for the debugging port:
 LISTEN 0      10                       127.0.0.1:46789      0.0.0.0:*

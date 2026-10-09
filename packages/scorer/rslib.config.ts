@@ -6,6 +6,10 @@ import { libraryPreset } from "@a11ign/toolchain/rslib-presets";
 const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
 const [library] = libraryPreset(pkg, { dir: fileURLToPath(new URL(".", import.meta.url)) }).lib;
 
+// `a11ign-scorer-fetch-encoder` is the `bin` and is not an `exports` key, so the preset's entries (derived from `exports`) do not name it; a `bin` is built output
+// (ADR 0043, Decision 8), which is why it is an entry here and `dist/fetch-encoder.mjs` is what the manifest names. It sits one level below the package root, as
+// `dist/index.mjs` does, so the root `scorerPaths()` finds from `import.meta.url` is the same from either.
+
 // `src/index.ts` finds the package root with `new URL("../", import.meta.url)`, and Rslib's ESM format reads every `new URL(x, import.meta.url)`
 // as an ASSET to resolve and refuses this one (`Module not found: Can't resolve '../'`). It is a RUNTIME path read, so the parser is told to leave
 // `new URL(...)` alone: `dist/index.mjs` sits one level below the package root exactly as `src/index.ts` does, and the line means the same
@@ -21,5 +25,5 @@ const NO_BUILD_CACHE = { buildCache: false };
 
 export default defineConfig({
   performance: NO_BUILD_CACHE,
-  lib: [{ ...library, tools: { bundlerChain: (chain) => { chain.module.rule(NEW_URL_RULE).parser({ url: false }); } } }],
+  lib: [{ ...library, source: { entry: { ...library.source.entry, "fetch-encoder": "./src/fetch-encoder.ts" } }, tools: { bundlerChain: (chain) => { chain.module.rule(NEW_URL_RULE).parser({ url: false }); } } }],
 });

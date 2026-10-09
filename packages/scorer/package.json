@@ -15,10 +15,9 @@
     }
   },
   "bin": {
-    "a11ign-scorer-fetch-encoder": "./bin/fetch-encoder.mjs"
+    "a11ign-scorer-fetch-encoder": "./dist/fetch-encoder.mjs"
   },
   "files": [
-    "bin",
     "dist",
     "python",
     "models/screenreader-scorer",

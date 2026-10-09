@@ -18,7 +18,7 @@ import { signIn, type AuthDriver, type AuthPlan, type AxNode } from "./interpret
 import { openPlaywrightDriver } from "./playwright-driver.js";
 import { resolveAuthentication } from "./resolve.js";
 import { ruleLayerSignIn } from "./rule-layer.js";
-import { startCrossOriginIdp } from "./fixtures/cross-origin-idp.mjs";
+import { startCrossOriginIdp } from "./fixtures/cross-origin-idp.ts";
 
 const APP = "https://app.example.test";
 const IDP = "https://idp.example.test";

@@ -2,16 +2,12 @@
   "files": [
     "agent-org-newest-tag.mjs",
     "assert-glob-not-empty.mjs",
-    "attach-spike.mjs",
-    "causes.mjs",
     "changed-files.mjs",
     "changed-packages.mjs",
     "ci-changed.mjs",
     "cli-flags.mjs",
     "cli.mjs",
-    "cross-origin-idp.mjs",
     "eslint.config.js",
-    "fetch-encoder.mjs",
     "git-env.mjs",
     "git-spawn-scrubbed.mjs",
     "helper.mjs",
@@ -24,10 +20,6 @@
     "index.mjs",
     "index.mjs",
     "isolation-gate.mjs",
-    "isolation-smoke.mjs",
-    "isolation-smoke.mjs",
-    "isolation-smoke.mjs",
-    "isolation-smoke.mjs",
     "isolation-smoke.mjs",
     "isolation-smoke.mjs",
     "isolation-smoke.mjs",
@@ -47,7 +39,6 @@
     "release-reads-qualification.mjs",
     "repo-identity.mjs",
     "rstest.config.mjs",
-    "serve-cross-origin-idp.mjs",
     "test-memory-cap.mjs",
     "tooling-roots.mjs",
     "tree-wide-guards.mjs",
@@ -61,6 +52,26 @@
     {
       "path": ".pnpmfile.cjs",
       "why": "pnpm reads its hook file only under this exact name, and only as CommonJS, so it cannot be .ts"
+    },
+    {
+      "path": "packages/cli/isolation-smoke.mjs",
+      "why": "run by `packages/guards/src/isolation-gate.mjs` (plain node, from a throwaway directory outside the repository, against the installed tarball); the gate names `isolation-smoke.mjs` as its SMOKE file and the 16 isolation fixtures share that name, so it converts with the gate in #4393"
+    },
+    {
+      "path": "packages/evidence/isolation-smoke.mjs",
+      "why": "run by `packages/guards/src/isolation-gate.mjs` (plain node, from a throwaway directory outside the repository, against the installed tarball); the gate names `isolation-smoke.mjs` as its SMOKE file and the 16 isolation fixtures share that name, so it converts with the gate in #4393"
+    },
+    {
+      "path": "packages/judge/isolation-smoke.mjs",
+      "why": "run by `packages/guards/src/isolation-gate.mjs` (plain node, from a throwaway directory outside the repository, against the installed tarball); the gate names `isolation-smoke.mjs` as its SMOKE file and the 16 isolation fixtures share that name, so it converts with the gate in #4393"
+    },
+    {
+      "path": "packages/scorer/isolation-smoke.mjs",
+      "why": "run by `packages/guards/src/isolation-gate.mjs` (plain node, from a throwaway directory outside the repository, against the installed tarball); the gate names `isolation-smoke.mjs` as its SMOKE file and the 16 isolation fixtures share that name, so it converts with the gate in #4393"
+    },
+    {
+      "path": ".agent-org/plugins/causes.mjs",
+      "why": "agent-org loads it by the path `.agent-org/project.json` names, and agent-org's packaging fixture (`src/packaging/copied-tool-fixture.ts` PROJECT_FILES) copies exactly `.agent-org/plugins/causes.mjs` from this checkout, so renaming it here breaks agent-org's tests until that list moves (a `.ts` plugin itself loads by `require` under /usr/bin/node + tsx, node 24 and node 24 + tsx, measured 2026-10-09); #4393"
     }
   ]
 }

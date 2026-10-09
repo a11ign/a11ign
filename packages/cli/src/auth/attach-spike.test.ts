@@ -1,6 +1,6 @@
 // THE SHAPE OF THE MECHANISM 3 SPIKE (#4087): a verdict, a transcript for each of three questions, and citations that exist.
 //
-// This checks the DOCUMENT, not a browser: the browser run is `attach-spike.mjs`'s, by hand, and its output is what the document
+// This checks the DOCUMENT, not a browser: the browser run is `attach-spike.ts`'s, by hand, and its output is what the document
 // pastes. A test that launched a browser would skip on a host without the libraries, and a skip that fires always is a check that
 // never runs. The controls below are the other half: each deletes one thing from a COPY of the document and must fail on exactly that.
 import { test } from "node:test";
@@ -31,7 +31,7 @@ function lineCountAt(commit: string, path: string): number | undefined {
 
 
 // ---------------------------------------------------------------------------------------------------------------------------------
-// The document's shape. It lives HERE and not in `attach-spike.mjs`: that file is an integration with a real browser and is excluded
+// The document's shape. It lives HERE and not in `attach-spike.ts`: that file is an integration with a real browser and is excluded
 // from coverage (`.c8rc.json`), and a pure function left in it would be excluded with it.
 
 const VERDICT_LINE = /^Verdict: (attach works|attach conflicts: \S.*)$/m;
