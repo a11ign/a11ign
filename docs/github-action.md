@@ -484,6 +484,8 @@ first: the run holds a credential, and this section is only how to use it.**
 
 **Starting from nothing? [`docs/try-it.md`](./try-it.md#behind-a-login-an-authenticated-run-on-a-private-repository) is the path in order, from a login-walled app to a green run; this section is the reference for its mechanism.**
 
+**What sign-in covers and does not, in three lists (supported, not supported, and if your app needs MFA): [`docs/try-it.md`](./try-it.md#what-sign-in-covers).** A redirect login through `idp-origins:` is shown on a fixture only, and MFA and SSO are out of scope.
+
 ```yaml
 # .github/workflows/a11y.yml — the repository MUST be private (see below)
 on: pull_request

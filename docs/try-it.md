@@ -150,6 +150,37 @@ is stated below.
 
 **A run that does not finish looks nothing like a slow one.** Rehearsal 5's run 34799670660 (same commit, page and task as a run that had just succeeded) started its Action step and never completed it: the job ended after 50 m 01 s with GitHub's own annotation, "The hosted runner lost communication with the server" — not a11ign's. It left no log (`gh run view --log` answered "log not found"), no artifact, and a diagnostic step added with `if: always()` never ran either. **This says nothing about why**, or how often — that count is its own row ([#1520](https://github.com/a11ign/a11ign/issues/1520), still being measured: 1 lost of 12 runs so far whose Action step ran past 60 s). **What to do:** re-run the same commit. A single lost run like this one is evidence about GitHub's infrastructure that day, not about your page.
 
+## What sign-in covers
+
+**Read this before you spend an afternoon on a login.** It is the scope in three lists; the sections after it are the how. It is read against the pinned release (`a11ign@0.5.3`) and `docs/known-gaps.md` [§51](./known-gaps.md#51-a-run-cannot-get-past-mfa-sso-or-a-captcha-and-nothing-in-the-tool-detects-the-third-out-of-v1-by-ruling-2275-2262), and where a thing was only run on a fixture it says so.
+
+### Supported
+
+- **A scripted form login.** A test account's username and password typed, by accessible name, into a form on one pinned `origin:`, with the values in GitHub Secrets and the repository private. It has been read once on a page that is not a fixture: one page, one runner, one afternoon (`the-internet.herokuapp.com`, #2561), a target that prints its demo credentials and has no MFA, SSO or CAPTCHA. Your login is not that page.
+- **A redirect login through a declared identity-provider origin (`idp-origins:`), shown on a fixture only.** Your sign-in page sends the browser to a provider's origin, a username and password go into a form there, and the provider sends the browser back to yours. It has been run against a local fixture with a real Chromium and a fake provider (#4086, #4088), with one NVDA reading of the signed-in page on one box (#4107). **It has not been run against a hosted provider.**
+
+### Not supported
+
+- **MFA.** An SMS code, an emailed code or a push approval has no step in the flow vocabulary, and a run waits for no person. TOTP (an authenticator-app code) is deferred.
+- **SSO**, other than a username and password on a form at an origin you can name. Any other origin ends the run with `auth-login-failed`, reason `left-origin`.
+- **A CAPTCHA.** It is never solved: the run ends `auth-challenge-detected`, which names it.
+- **A hosted provider, run end to end: not yet shown.** The redirect login above is a fixture reading, so against your provider (Auth0, Okta, Entra ID or any other) a run is the first reading.
+
+ADR 0038's scope line for MFA and SSO, quoted rather than paraphrased ([Constraint 6](./adr/0038-authenticated-capture.md#constraint-6-mfa-sso-and-captcha-are-out-of-v1)):
+
+> **MFA, SSO and CAPTCHA are OUT of v1, recorded as a known gap** (`docs/known-gaps.md`), with "use a dedicated test
+> account without MFA" as the stated route (the advice BrowserStack and LambdaTest give).
+
+### If your app needs MFA
+
+In the order you can actually take them today:
+
+1. **Make a test account without MFA**, the ADR's stated route: a staging environment with MFA off, a role your admin exempts, or a username and password login beside the SSO button. It needs no person at any point, which a saved state does (the one who saves it, and again when it expires).
+2. **Load a sign-in state you saved by hand, once** (`auth-state:`, [how and its limits](./github-action.md#logging-in-with-a-saved-state-auth-state)). It carries the run's own origin's cookies and `localStorage` only, so a site that keeps its session in `sessionStorage` or IndexedDB cannot be carried, and a state that no longer holds ends `auth-state-expired`. It has been read on one real site, with a state a script made rather than a person.
+3. **Assess the page your own Playwright test has already signed into and reached. This route is not built.** [#4532](https://github.com/a11ign/a11ign/issues/4532) sizes it (#4084 outcome 11) and no document exists yet, so there is nothing to link and nothing to run. When it exists it is the route for an app whose login is not a scripted form, because the suite's own session is reused rather than replayed.
+
+If none of the three reaches your page, this tool cannot examine it today: say so rather than working around it.
+
 ## Behind a login: an authenticated run on a private repository
 
 **Use this if the page you want examined is only reachable after you sign in.** It is the same Action as above
