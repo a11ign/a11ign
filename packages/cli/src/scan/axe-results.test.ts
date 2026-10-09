@@ -17,7 +17,7 @@ import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { tempDir } from "../../../guards/src/test-tmp.mjs";
+import { tempDir } from "../../../guards/src/test-tmp.ts";
 import { loadAxeResults, warnOnUrlMismatch } from "./axe-results.js";
 
 const VIOLATION = {

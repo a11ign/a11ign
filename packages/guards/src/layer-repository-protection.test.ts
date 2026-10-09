@@ -1,5 +1,5 @@
 // no-token: gh -- every test below drives pure functions or reads two committed files; the one `gh api` read
-// (`ghApiRead`, in `gh-api-read.mjs`) is reached only from the live test, which returns before it unless
+// (`ghApiRead`, in `gh-api-read.ts`) is reached only from the live test, which returns before it unless
 // `A11Y_CHECK_MAIN_RULESET=1`, and the acceptance job sets neither that nor a token.
 /**
  * #3123 (ADR 0039 item 5): EVERY CODE REPOSITORY CARRIES THE REVIEW REQUIREMENT AND THE MERGE QUEUE, AND
@@ -41,7 +41,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
-import { ghApiRead } from "./gh-api-read.mjs";
+import { ghApiRead } from "./gh-api-read.ts";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const PROJECT_FILE = ".agent-org/project.json";

@@ -26,7 +26,7 @@ import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { layerFile } from "../../guards/src/layer-file.mjs";
+import { layerFile } from "../../guards/src/layer-file.ts";
 import type { CaptureStructure, CaptureInteraction, CaptureResult } from "./index.js";
 import type { OracleCounts } from "./verify.js";
 

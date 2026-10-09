@@ -7,4 +7,4 @@ jobs:
   run:
     runs-on: ubuntu-latest
     steps:
-      - run: node packages/nvda-worker/src/own.mjs
+      - run: node packages/nvda-worker/src/own.ts

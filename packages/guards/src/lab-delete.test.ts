@@ -66,7 +66,7 @@ const RELOCATED: Record<string, string> = {
   "packages/lab/src/packaging/dora-declaration.test.ts": "packages/guards/src/dora-declaration.test.ts", // #3138
   "packages/lab/src/packaging/lay-layer.test.ts": "packages/guards/src/lay-layer.test.ts", // #3504, the test of the script this row changes
   "packages/lab/src/packaging/nightly-only-path.test.ts": "packages/guards/src/nightly-only-path.test.ts", // #1135, #1149
-  "packages/lab/nightly/tenants.mjs": "packages/guards/nightly/tenants.mjs", // the manifest nightly-only-path.test.ts pins both ways
+  "packages/lab/nightly/tenants.mjs": "packages/guards/nightly/tenants.ts", // the manifest nightly-only-path.test.ts pins both ways
   "packages/lab/nightly/bounded-window-reads.test.ts": "packages/guards/nightly/bounded-window-reads.test.ts", // a nightly tenant: a read of GitHub, not of the lab
   "packages/lab/nightly/isolation-gate-real-consumer.test.ts": "packages/guards/nightly/isolation-gate-real-consumer.test.ts", // a nightly tenant: the product's isolation gate
   // Run BY PATH from a product workflow or hook (claim 6), so they cannot stay in a directory the product does not hold:
@@ -77,8 +77,8 @@ const RELOCATED: Record<string, string> = {
   "packages/lab/src/packaging/board-document-chrome-resolver.test.ts": "packages/guards/src/board-document-chrome-resolver.test.ts", // reusable-board.yml, ci.yml's agentOrg job, verify.mjs
   "packages/lab/src/packaging/tracked-source-leak-guard.test.ts": "packages/guards/src/tracked-source-leak-guard.test.ts", // the pre-push hook's leak scan
   "packages/lab/src/packaging/tracked-prose-leak-guard.test.ts": "packages/guards/src/tracked-prose-leak-guard.test.ts", // the pre-push hook's leak scan
-  "packages/lab/src/packaging/leak-patterns.mjs": "packages/guards/src/leak-patterns.mjs", // the two leak guards' patterns
-  "packages/lab/src/packaging/gh-api-read.mjs": "packages/guards/src/gh-api-read.mjs", // layer-repository-protection's reader
+  "packages/lab/src/packaging/leak-patterns.mjs": "packages/guards/src/leak-patterns.ts", // the two leak guards' patterns
+  "packages/lab/src/packaging/gh-api-read.mjs": "packages/guards/src/gh-api-read.ts", // layer-repository-protection's reader
 };
 
 /** Writes `files` (path -> text) under a fresh directory, runs `body` on it, and removes it however `body` ends. */
@@ -387,6 +387,6 @@ test("POSITIVE CONTROL: a guard selected from the departed directory, a missing 
     ["packages/guards/src/vanished.test.ts is selected and does not exist"]);
   assert.deepEqual(guardRefusals({ selected: STAYING_GUARDS.slice(1), exists }), [`${STAYING_GUARDS[0]} stayed with the product and is no longer found`]);
   // And the discovery itself, over a fixture population that holds a lab guard: `treeWideGuardFiles` is the product's own, so this is the seam it offers.
-  const found = treeWideGuardFiles({ lsFiles: () => "packages/lab/src/packaging/x.test.ts\n", readFile: () => "declareTreeWideGuard();", imports: () => [resolve(REPO_ROOT, "packages/guards/src/tree-wide-guard.mjs")] });
+  const found = treeWideGuardFiles({ lsFiles: () => "packages/lab/src/packaging/x.test.ts\n", readFile: () => "declareTreeWideGuard();", imports: () => [resolve(REPO_ROOT, "packages/guards/src/tree-wide-guard.ts")] });
   assert.deepEqual(guardRefusals({ selected: found, exists: () => true }).slice(0, 1), ["packages/lab/src/packaging/x.test.ts is selected and lives in the directory that left"]);
 });

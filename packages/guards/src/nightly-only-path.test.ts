@@ -16,7 +16,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { globSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
-import { NIGHTLY_TENANTS } from "../nightly/tenants.mjs";
+import { NIGHTLY_TENANTS } from "../nightly/tenants.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -246,7 +246,7 @@ test("#1149: every nightly tenant on disk is NAMED in the manifest", () => {
   assert.ok(onDisk.length > 0, "the walk found nothing, so neither assertion below examines anything");
   const unnamed = onDisk.filter((f) => !NIGHTLY_TENANTS.includes(f));
   assert.deepEqual(unnamed, [],
-    `${unnamed.length} nightly test(s) are on disk and not in packages/guards/nightly/tenants.mjs. Add them `
+    `${unnamed.length} nightly test(s) are on disk and not in packages/guards/nightly/tenants.ts. Add them `
     + "BY NAME: this population has no floor that can see it shrink, so the manifest is what makes a "
     + `tenant's arrival or departure visible:\n${unnamed.map((f) => `  ${f}`).join("\n")}`);
 });

@@ -57,7 +57,7 @@ RULES WORTH KNOWING BEFORE YOU WRITE ONE
     one" and "this one deliberately has none" must stay different states.
 
 `Mutation:` is OPTIONAL, and a missing one no longer fails anything (#3282, decided on #3213). `mutation-comment.yml` runs
-`packages/guards/src/mutate-diff.mjs` on every pull request: it mutates the lines the diff ADDED, in the non-test files a
+`packages/guards/src/mutate-diff.ts` on every pull request: it mutates the lines the diff ADDED, in the non-test files a
 CHANGED test names, runs the changed tests, and CI POSTS THE SURVIVORS as a comment (at most 20; the rest are in the job
 summary). A survivor is a change no changed test pinned, some are equivalent, and none of it is a score or a gate.
 
