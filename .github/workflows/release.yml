@@ -606,10 +606,12 @@ jobs:
   # qualification leave the pin alone; it has no fallback to another token, and a failed mint is red. `refresh-pin.ts` decides: it writes only a file that
   # differs from what `generate.mjs` makes for the release, and never moves the pin to an older release. The write is one commit of ONE file on `main`; the
   # read-back below it is the evidence. The outside repository's own `poll` job then finds a pin for the new version and runs it.
+  # SKIPPED UNTIL THE POLICY IS INSTALLED (product-manager, #4359): the repository variable `OUTSIDER_PIN_REFRESH` is `1` only once the trust policy is in the
+  # outside repository and the Octo STS App is on it, and is set in that same step. Unset, the job is skipped rather than red: a red that is always expected is one nobody reads.
   refresh-outsider-pin:
     name: pin the outside repository's job at the promoted a11ign version
     needs: [promote]
-    if: ${{ !cancelled() && (needs.promote.result == 'success' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.action-tag-version != '')) }}
+    if: ${{ !cancelled() && vars.OUTSIDER_PIN_REFRESH == '1' && (needs.promote.result == 'success' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.action-tag-version != '')) }}
     runs-on: ubuntu-latest
     concurrency:
       group: outsider-pin

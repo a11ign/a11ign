@@ -59,7 +59,7 @@ test("a version that is not x.y.z is refused, not decided", () => {
 });
 
 type Step = { id?: string; uses?: string; with?: Record<string, string>; env?: Record<string, string>; run?: string };
-type Job = { needs?: string[]; permissions?: Record<string, string>; steps?: Step[] };
+type Job = { if?: string; needs?: string[]; permissions?: Record<string, string>; steps?: Step[] };
 const release = parseYaml(read(".github/workflows/release.yml")) as { jobs: Record<string, Job> };
 const refresh = release.jobs["refresh-outsider-pin"];
 const mint = refresh?.steps?.find((step) => step.uses?.startsWith("octo-sts/action@"));
@@ -104,3 +104,15 @@ test("the policy grants exactly contents + workflows, to the same workflow-on-ma
 test("the policy source is NOT in .github/chainguard/, where Octo STS would read it as a policy for this repository", () => {
   assert.equal(existsSync(`${REPO}.github/chainguard/outsider-pin-write.sts.yaml`), false);
 });
+
+test("the job is SKIPPED, not red, until OUTSIDER_PIN_REFRESH is set to 1 at install -- and it keeps its own promotion conditions", () => {
+  const condition = refresh.if ?? "";
+  assert.match(condition, /vars\.OUTSIDER_PIN_REFRESH == '1'/, "without the variable gate the job mints, is refused, and turns every release red");
+  assert.match(condition, /!cancelled\(\)/);
+  assert.match(condition, /needs\.promote\.result == 'success'/, "the gate must narrow the promotion condition, not replace it");
+  assert.doesNotMatch(promoteTagPolicyJobIf(), /OUTSIDER_PIN_REFRESH/, "positive control: the variable gates this job only, not the tag move");
+});
+
+function promoteTagPolicyJobIf(): string {
+  return (release.jobs["promote-action-tag"] as Job).if ?? "";
+}
