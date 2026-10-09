@@ -8,7 +8,7 @@ name: consumer-gate-pin
 # `ts / run` red on every branch cut from `main` afterwards and failed the release at that sha in `consumer-gate / check-pin`, which skipped
 # the release. This workflow is the detector's missing repair: on a push to `main` that touches `action.yml` or `consumer-gate.yml`,
 #
-#   decide      `scripts/consumer-gate-pin-needed.mjs` reads the pin AT THIS COMMIT against `action.yml` AT THIS COMMIT (the two refusals of
+#   decide      `scripts/consumer-gate-pin-needed.ts` reads the pin AT THIS COMMIT against `action.yml` AT THIS COMMIT (the two refusals of
 #               `check-pin`) and answers `regenerate` or `nothing to do`. It never reads which files the push touched, so a re-run is harmless.
 #   regenerate  runs `node scripts/generate-consumer-gate.mjs`, REFUSES the run unless `consumer-gate.yml` is the only file that changed,
 #               force-pushes it to ONE branch (`automation/consumer-gate-pin`, so a second `action.yml` change updates the open repair and
@@ -63,7 +63,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Does the pin at this commit predate action.yml at this commit?
         id: decide
-        run: node scripts/consumer-gate-pin-needed.mjs --commit=HEAD
+        run: pnpm exec tsx scripts/consumer-gate-pin-needed.ts --commit=HEAD
 
   regenerate:
     needs: [decide]
@@ -158,8 +158,11 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      # The decider is TypeScript (the `.mjs` count may only go down, ADR 0043), so this job installs what `tsx` needs.
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version: 22 }
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
       - name: Is a release owed -- did the newest release run on main die in consumer-gate / check-pin?
         id: owed
         env:
@@ -172,7 +175,7 @@ jobs:
             gh run view "$id" --json databaseId,conclusion,jobs \
               --jq '[{id: .databaseId, conclusion, jobs: [.jobs[] | {name, conclusion}]}]' > "$runs"
           fi
-          node scripts/consumer-gate-pin-needed.mjs --release-runs="$runs"
+          pnpm exec tsx scripts/consumer-gate-pin-needed.ts --release-runs="$runs"
       - name: Dispatch the release on main
         if: steps.owed.outputs.release == 'owed'
         env:

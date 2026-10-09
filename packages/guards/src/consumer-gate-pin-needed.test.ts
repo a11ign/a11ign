@@ -2,7 +2,7 @@
 // no-token: gh -- reads the workflow and the policy as text and drives `git` in a temp directory with a bare repository as "origin"; the GH_TOKEN it names is a string asserted on in the workflow, never read, and nothing reaches the network
 /**
  * #4331: THE MERGE THAT STALES `consumer-gate.yml`'S PIN STARTS ITS REPAIR. Eleven rows were filed by hand for one fault, so these tests pin
- * the decision (`scripts/consumer-gate-pin-needed.mjs`) and the two files that act on it (`consumer-gate-pin.yml` and its Octo STS policy).
+ * the decision (`scripts/consumer-gate-pin-needed.ts`) and the two files that act on it (`consumer-gate-pin.yml` and its Octo STS policy).
  *
  * What is pinned, and the wrong answer each guards against:
  *   1. THE POSITIVE CONTROL IS A DERIVED POPULATION, not a list: every first-parent commit of this checkout's history that changed `action.yml`
@@ -20,15 +20,15 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
+import {
+  pinDecision, decideAtCommit, releaseOwed, regenerationInFlight, REGENERATE, NOTHING_TO_DO, REGENERATION_BRANCH, CONSUMER_GATE_PATH,
+} from "../../../scripts/consumer-gate-pin-needed.ts";
 import { sandboxGitEnv, withGitSandbox, type GitSandbox } from "../../../scripts/test-support/git-sandbox.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const needed = await import(pathToFileURL(join(REPO_ROOT, "scripts/consumer-gate-pin-needed.mjs")).href);
-const {
-  pinDecision, decideAtCommit, releaseOwed, regenerationInFlight, REGENERATE, NOTHING_TO_DO, REGENERATION_BRANCH, CONSUMER_GATE_PATH,
-} = needed;
+
 
 const ACTION_YML_COMMITS_FLOOR = 9;
 const WINDOW = 300;

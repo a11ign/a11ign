@@ -1,5 +1,4 @@
-#!/usr/bin/env node
-// @ts-check
+#!/usr/bin/env tsx
 // command: decide whether `consumer-gate.yml`'s pin must be regenerated at a commit, and whether a release run is owed after the repair (#4331)
 //
 // THE QUESTION `.github/workflows/consumer-gate-pin.yml` ASKS ON EVERY PUSH TO `main` THAT TOUCHES `action.yml` OR `consumer-gate.yml`.
@@ -27,12 +26,11 @@ export const REGENERATION_BRANCH = "automation/consumer-gate-pin";
 export const REGENERATE = "regenerate";
 export const NOTHING_TO_DO = "nothing to do";
 
-/** @param {string[]} args @param {{ cwd: string, allowedStatus?: number[] }} where @returns {{ status: number, stdout: string }} */
-function git(args, { cwd, allowedStatus = [0] }) {
+function git(args: string[], { cwd, allowedStatus = [0] }: { cwd: string; allowedStatus?: number[] }): { status: number; stdout: string } {
   try {
     return { status: 0, stdout: execFileSync("git", args, { cwd, env: sandboxGitEnv(), encoding: "utf8", stdio: "pipe" }) };
   } catch (caught) {
-    const error = /** @type {Error & { status?: number, stderr?: Buffer }} */ (caught);
+    const error = caught as Error & { status?: number; stderr?: Buffer };
     if (error.status !== undefined && allowedStatus.includes(error.status)) return { status: error.status, stdout: "" };
     throw new Error(`git ${args.join(" ")} failed: ${error.stderr?.toString().trim() || error.message}`, { cause: caught });
   }
@@ -40,11 +38,8 @@ function git(args, { cwd, allowedStatus = [0] }) {
 
 /**
  * `check-pin`'s two refusals, read at `head`. Throws when git cannot resolve a commit: not being able to ask is never "nothing to do".
- *
- * @param {{ pin: string, head: string, cwd?: string }} refs
- * @returns {{ action: string, reason: string }}
  */
-export function pinDecision({ pin, head, cwd = REPO }) {
+export function pinDecision({ pin, head, cwd = REPO }: { pin: string; head: string; cwd?: string }): { action: string; reason: string } {
   // `merge-base --is-ancestor` exits 1 for "not an ancestor" and 128 for a commit it cannot resolve; only the first is an answer.
   const ancestor = git(["merge-base", "--is-ancestor", pin, head], { cwd, allowedStatus: [0, 1] });
   if (ancestor.status === 1) {
@@ -58,11 +53,8 @@ export function pinDecision({ pin, head, cwd = REPO }) {
 
 /**
  * The decision at `commit`, with the pin read from the `consumer-gate.yml` THAT COMMIT carries.
- *
- * @param {{ commit: string, cwd?: string }} where
- * @returns {{ action: string, reason: string, pin: string }}
  */
-export function decideAtCommit({ commit, cwd = REPO }) {
+export function decideAtCommit({ commit, cwd = REPO }: { commit: string; cwd?: string }): { action: string; reason: string; pin: string } {
   const file = git(["show", `${commit}:${CONSUMER_GATE_PATH}`], { cwd }).stdout;
   const pin = extractPinnedSha(file);
   if (!pin) throw new Error(`${CONSUMER_GATE_PATH} at ${commit} pins no commit, so there is nothing to compare action.yml against`);
@@ -76,11 +68,8 @@ export function decideAtCommit({ commit, cwd = REPO }) {
  *
  * It asks `origin`, not the API, because a checkout already holds the credential for it; a remote it cannot reach THROWS, and the caller's
  * test fails: not being able to ask is not an excuse for a red pin.
- *
- * @param {{ base: string, cwd?: string }} refs
- * @returns {{ inFlight: boolean, reason: string }}
  */
-export function regenerationInFlight({ base, cwd = REPO }) {
+export function regenerationInFlight({ base, cwd = REPO }: { base: string; cwd?: string }): { inFlight: boolean; reason: string } {
   const listed = git(["ls-remote", "origin", `refs/heads/${REGENERATION_BRANCH}`], { cwd }).stdout.trim();
   if (listed === "") return { inFlight: false, reason: `origin has no ${REGENERATION_BRANCH} branch, so no regeneration is open` };
   git(["fetch", "--quiet", "origin", `refs/heads/${REGENERATION_BRANCH}`], { cwd });
@@ -92,16 +81,15 @@ export function regenerationInFlight({ base, cwd = REPO }) {
     : { inFlight: false, reason: `${REGENERATION_BRANCH} pins ${pin}, which is itself stale against ${base}` };
 }
 
+export type ReleaseRun = { id: number; conclusion: string | null; jobs: { name: string; conclusion: string | null }[] };
+
 /**
  * A release run is OWED after the repair merges when the newest release run on `main` failed or was skipped because of the stale pin: the
  * repair carries no changeset, so it starts no release of its own (#4325, #4329), and the changesets that run was to consume wait for the
  * next one. The reading is of the newest run only: an older failure was followed by a later run, which has already had its chance.
- *
- * @param {{ runs: { id: number, conclusion: string | null, jobs: { name: string, conclusion: string | null }[] }[] }} history
- *   release runs on `main`, NEWEST FIRST, each with its jobs
- * @returns {{ owed: boolean, reason: string }}
+ * `runs` are the release runs on `main`, NEWEST FIRST, each with its jobs.
  */
-export function releaseOwed({ runs }) {
+export function releaseOwed({ runs }: { runs: ReleaseRun[] }): { owed: boolean; reason: string } {
   const newest = runs.find((run) => run.conclusion !== null);
   if (!newest) return { owed: false, reason: "no completed release run on main, so none was left behind" };
   if (newest.conclusion === "success") return { owed: false, reason: `release run ${newest.id} succeeded` };
@@ -111,13 +99,12 @@ export function releaseOwed({ runs }) {
     : { owed: false, reason: `release run ${newest.id} ended ${newest.conclusion} but not in consumer-gate / check-pin: a different cause, which a re-dispatch would not fix` };
 }
 
-/** @param {string} name @param {string} value */
-function setOutput(name, value) {
+function setOutput(name: string, value: string): void {
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `${name}=${value}\n`);
 }
 
-/** @param {string} flag `--name=` @returns {string | undefined} */
-function flagValue(flag) {
+/** `flag` is `--name=`. */
+function flagValue(flag: string): string | undefined {
   const argument = process.argv.slice(2).find((a) => a.startsWith(flag));
   return argument === undefined ? undefined : argument.slice(flag.length);
 }
@@ -138,7 +125,7 @@ function main() {
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
   try {
-    refuseUnknownFlags(["--commit=", "--release-runs="], { entry: import.meta.url, command: "node scripts/consumer-gate-pin-needed.mjs" });
+    refuseUnknownFlags(["--commit=", "--release-runs="], { entry: import.meta.url, command: "pnpm exec tsx scripts/consumer-gate-pin-needed.ts" });
     main();
   } catch (cause) {
     console.error(cause instanceof Error ? cause.message : String(cause));
