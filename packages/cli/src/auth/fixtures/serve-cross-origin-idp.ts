@@ -1,10 +1,9 @@
 #!/usr/bin/env node
-// @ts-check
 /**
  * Serve #4086's declared-IdP fixture so a worker on ANOTHER machine can reach it, and print the command that runs an authenticated
  * capture of it, which reaches a worker ONLY OVER LOOPBACK (#4110, #4084 outcome 1; the reading itself is #4107's).
  *
- *   node serve-cross-origin-idp.mjs --out <dir> [--host <address>] [--public-host <name>] [--worker <url>]
+ *   node serve-cross-origin-idp.ts --out <dir> [--host <address>] [--public-host <name>] [--worker <url>]
  *
  * The fixture's two origins are two PORTS on one host, which are two origins, so one LAN address is enough. `--host` is what the
  * servers bind (default loopback, which no other machine can reach); `--public-host` is the name the URLs and redirects carry, and
@@ -34,9 +33,9 @@ const USER_VARIABLE = "IDP_USER";
 const PASSWORD_VARIABLE = "IDP_PASSWORD";
 /** Printed where the worker's address is not known to this script, so the line still parses and shows what is missing. */
 const WORKER_PLACEHOLDER = "<worker-url>";
-export const USAGE = "usage: serve-cross-origin-idp.mjs --out <dir> [--host <address>] [--public-host <name>] [--worker <url>]";
+export const USAGE = "usage: serve-cross-origin-idp.ts --out <dir> [--host <address>] [--public-host <name>] [--worker <url>]";
 
-/** @typedef {{ out: string, host: string | undefined, publicHost: string | undefined, worker: string }} ServeOptions */
+type ServeOptions = { out: string; host: string | undefined; publicHost: string | undefined; worker: string };
 
 /**
  * Read the command line. A sentence a person can act on is thrown for a missing `--out` and for a wildcard bind with no name to

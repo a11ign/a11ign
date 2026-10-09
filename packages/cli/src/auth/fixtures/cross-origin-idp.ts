@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * A single-page app that signs a user in THROUGH A SECOND ORIGIN and keeps the token ONLY in page memory (#4086, #4084 outcome 1).
  *
@@ -18,9 +17,10 @@
  * IMPORTS NOTHING BUT NODE BUILT-INS, so a second repository can copy this one file (the worker's interpreter test does; the copy is
  * named as a copy there). Ephemeral ports, and every credential below is fake and belongs to no account. LOOPBACK IS THE DEFAULT:
  * with no options both origins bind `127.0.0.1`. A LAN bind (`host`, and `publicHost` for the name the URLs carry) is an explicit
- * option, and `serve-cross-origin-idp.mjs` is the one place that offers it, so a worker on another machine can open the fixture.
+ * option, and `serve-cross-origin-idp.ts` is the one place that offers it, so a worker on another machine can open the fixture.
  */
 import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { randomBytes } from "node:crypto";
 
 const LOOPBACK = "127.0.0.1";
@@ -29,9 +29,9 @@ const REDIRECT = 302;
 /**
  * `host` is the address both servers bind (default loopback); `publicHost` is the name written into the URLs and redirects they hand
  * out (default the bind address). They differ because a wildcard bind (`0.0.0.0`) is an address no URL can carry.
- * @typedef {{ storage?: "memory" | "local", email?: string, password?: string, host?: string, publicHost?: string }} IdpOptions
  */
-/** @typedef {{ appUrl: string, idpUrl: string, email: string, password: string, stop: () => Promise<void> }} CrossOriginIdp */
+export type IdpOptions = { storage?: "memory" | "local"; email?: string; password?: string; host?: string; publicHost?: string };
+export type CrossOriginIdp = { appUrl: string; idpUrl: string; email: string; password: string; stop: () => Promise<void> };
 
 /** @param {string} title @param {string} body */
 const page = (title: string, body: string) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${title}</title></head><body><main>${body}</main></body></html>`;
@@ -184,7 +184,7 @@ const hostInUrl = (host: string) => (host.includes(":") && !host.startsWith("[")
 /** @param {import("node:http").Server} server @param {{ host: string, publicHost: string }} where @returns {Promise<string>} the origin it is reached at */
 async function listen(server: import("node:http").Server, { host, publicHost }: { host: string; publicHost: string; }): Promise<string> {
   await new Promise((resolve) => server.listen(0, host, () => resolve(undefined)));
-  const address = /** @type {import("node:net").AddressInfo} */ (server.address());
+  const address = server.address() as AddressInfo;
   return `http://${hostInUrl(publicHost)}:${address.port}`;
 }
 

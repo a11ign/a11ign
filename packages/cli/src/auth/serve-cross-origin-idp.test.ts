@@ -93,7 +93,7 @@ describe("the serve script's refusals", () => {
 
 /** Run the script until it has printed its command line, then stop it. Resolves with everything printed. */
 async function runServeScript(args: string[]): Promise<{ stdout: string; stderr: string; code: number | null }> {
-  const child = spawn(process.execPath, [SERVE_SCRIPT, ...args], { stdio: ["ignore", "pipe", "pipe"] });
+  const child = spawn(process.execPath, ["--import", "tsx", SERVE_SCRIPT, ...args], { stdio: ["ignore", "pipe", "pipe"] });
   let stdout = "";
   let stderr = "";
   child.stderr.on("data", (chunk) => { stderr += chunk; });

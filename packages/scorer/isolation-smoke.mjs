@@ -58,7 +58,7 @@ assert.equal(typeof provenance.releaseEligible, "boolean");
 
 // The bin npm links as `a11ign-scorer-fetch-encoder`. Derived from a path the API already gave us, because the
 // smoke test runs in the CONSUMER's directory and has no relative route into the package.
-const binWrapper = join(paths.scoreScript, "..", "..", "bin", "fetch-encoder.mjs");
+const binWrapper = join(paths.scoreScript, "..", "..", "dist", "fetch-encoder.mjs");
 assert.ok(existsSync(binWrapper), `the bin wrapper is missing from the tarball: ${binWrapper}`);
 
 console.log(

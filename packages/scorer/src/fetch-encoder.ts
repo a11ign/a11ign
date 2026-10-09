@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// @ts-check
 // `a11ign-scorer-fetch-encoder` — download the 87 MB encoder into this package.
 //
 // A thin wrapper rather than a `bin` pointing straight at the `.py`: npm's bin shims assume an executable
@@ -7,7 +6,7 @@
 // no venv). The Python program resolves its own output directory from its file location, so this cannot write
 // the encoder into the wrong place no matter where it is run from.
 import { spawnSync } from "node:child_process";
-import { scorerPaths } from "../dist/index.mjs";
+import { scorerPaths } from "./index.js";
 
 const python = process.env.A11Y_PYTHON ?? "python3";
 const { fetchEncoderScript, requirements } = scorerPaths();
@@ -15,7 +14,7 @@ const result = spawnSync(python, [fetchEncoderScript, ...process.argv.slice(2)],
 
 // `spawnSync` reports a missing interpreter as an Error carrying `code`, which Node's types do not
 // describe -- so the cast is the type catching up with the runtime, not a claim being waved through.
-const spawnFailure = /** @type {NodeJS.ErrnoException | undefined} */ (result.error);
+const spawnFailure = result.error as NodeJS.ErrnoException | undefined;
 if (spawnFailure?.code === "ENOENT") {
   process.stderr.write(`cannot run ${python}. Set A11Y_PYTHON, and install ${requirements} first.\n`);
   process.exit(127);
