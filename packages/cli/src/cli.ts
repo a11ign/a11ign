@@ -40,6 +40,7 @@ import { leaseWorker, isAfterRun, type AfterRun, type WorkerLease } from "@a11ig
 import { CAPTURE_CLIENT_TIMEOUT_MS } from "@a11ign/screenreader-fleet/worker-http";
 import { captureTolerantly } from "@a11ign/screenreader-fleet/capture-client";
 import { refuseIfNothingListening } from "./worker-probe.js";
+import { workerFlagValue } from "./worker-flag.js";
 
 // Re-exported: `docs/try-it.md` quotes its text, and `quoted-cli-output.test.ts` derives the quote from it.
 export { noWorkerMessage } from "./worker-probe.js";
@@ -302,7 +303,7 @@ export function applyArg(args: Args, argv: string[], i: number): number {
   if (setListFlag) { setListFlag(args, argv[++i]); return i; }
   switch (v) {
     case "--task": args.task = taskOrDefault(argv[++i], args.task); return i;
-    case "--worker": args.worker = argv[++i] ?? args.worker; return i;
+    case "--worker": args.worker = workerFlagValue(argv[++i]); return i;
     case "--after": args.after = afterRunArg(argv[++i]); return i;
     case "--axe-results": args.axeResults = argv[++i] ?? args.axeResults; return i;
     case "--forms": args.formsConfig = argv[++i] ?? args.formsConfig; return i;
