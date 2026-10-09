@@ -18,7 +18,7 @@ import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
-import { agentOrgSource, provisionAgentOrg } from "./verify.ts";
+import { agentOrgSource, provisionAgentOrg, suiteSlotsFile } from "./verify.ts";
 
 type Say = { out: string[]; err: string[] };
 
@@ -173,4 +173,26 @@ test("agentOrgSource marks for refresh the cache that already existed, and no ot
   assert.deepEqual(agentOrgSource({ ...where, env: {} }), { dir: "/cache", clone: false, refresh: true });
   checkouts.delete("/cache");
   assert.deepEqual(agentOrgSource({ ...where, env: {} }), { dir: "/cache", clone: true, refresh: false }, "a clone made this run is current, so it is not refreshed");
+});
+
+/** A stand-in checkout under `root` holding exactly the named files under `src/`. */
+function checkoutHolding(root: string, ...names: string[]) {
+  const dir = join(root, "checkout");
+  mkdirSync(join(dir, "src"), { recursive: true });
+  for (const name of names) writeFileSync(join(dir, "src", name), "export {};\n");
+  return dir;
+}
+
+test("the suite-slot module is found under whichever spelling the checkout holds it, and under neither it is undefined (#4404)", () => {
+  const w = world();
+  try {
+    const renamed = checkoutHolding(join(w.root, "ts"), "suite-slots.ts");
+    assert.equal(suiteSlotsFile(renamed), join(renamed, "src/suite-slots.ts"));
+    const original = checkoutHolding(join(w.root, "mjs"), "suite-slots.mjs");
+    assert.equal(suiteSlotsFile(original), join(original, "src/suite-slots.mjs"));
+    const neither = checkoutHolding(join(w.root, "none"), "other.ts");
+    assert.equal(suiteSlotsFile(neither), undefined);
+  } finally {
+    cleanUp(w);
+  }
 });

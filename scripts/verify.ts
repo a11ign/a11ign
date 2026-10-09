@@ -684,13 +684,21 @@ async function outcomeOf(step: { id: string; run: boolean; }, { ctx, started }: 
   return { status: await runStep(step.id, ctx), ms: Date.now() - started, output: "" };
 }
 
+/** The two spellings the tool has held its suite-slot module under: agent-org renames its modules in batches (agent-org#435, #4389), so `verify` must not name just one (#4404). */
+const suiteSlotsPaths = (dir: string): string[] => ["src/suite-slots.mjs", "src/suite-slots.ts"].map((relative) => join(dir, relative));
+
+/** The suite-slot module of the checkout `dir`, whichever spelling it holds, or undefined when it holds neither. */
+export function suiteSlotsFile(dir: string): string | undefined {
+  return suiteSlotsPaths(dir).find((file) => existsSync(file));
+}
+
 /**
  * THE WHOLE RUN TAKES ONE OF THE HOST'S 2 SUITE SLOTS, AT `nice -n 15 ionice -c 3`, AND TAKES IT BEFORE ITS FIRST STEP (#3536, chairman via `ceo`, 2026-10-04). Nothing limited how many full
  * suites ran at once on the agent host: the 1-minute load was over its 16 cores in 26 of 36 samples and one gate tick took 6 min 44 s. `verify` runs ITSELF under the slot, so the one slot
  * covers every step, and the child it starts is `verify` again with `SLOT_ENV` set so it does not queue behind itself.
  *
  * THE IMPLEMENTATION IS THE TOOL'S, ONE COPY AND ONE SLOT COUNT, read from the checkout `provisionAgentOrg` finds, never copied here and never the tool the host runs
- * (a release older than the module would have no `suite-slots.mjs`). A checkout without it is a REFUSAL naming it, and so is a missing `flock`: a limit that silently does not
+ * (a release older than the module would have no `suite-slots`). A checkout without it is a REFUSAL naming it, and so is a missing `flock`: a limit that silently does not
  * apply is worse than none. On a runner (`CI` set) there is no slot and the tool is not even loaded, as CI is not this host.
  *
  * @returns {Promise<number | null>} verify's exit code when it ran (or refused) here, or null when THIS process is the one to do the work
@@ -698,9 +706,9 @@ async function outcomeOf(step: { id: string; run: boolean; }, { ctx, started }: 
 async function underTheHostsSlot(): Promise<number | null> {
   if (process.env.CI) return null;
   const dir = provisionAgentOrg();
-  const file = dir && join(dir, "src/suite-slots.mjs");
-  if (!file || !existsSync(file)) {
-    console.error(`verify: ${file ?? "the agent-org checkout"} is missing, so verify is NOT run: the host-wide limit on concurrent suites (#3536) lives there, and running without it is refused. `
+  const file = dir && suiteSlotsFile(dir);
+  if (!file) {
+    console.error(`verify: ${dir ? `${suiteSlotsPaths(dir).join(" and ")} are both` : "the agent-org checkout is"} missing, so verify is NOT run: the host-wide limit on concurrent suites (#3536) lives there, and running without it is refused. `
       + "Pull the latest `main` into that checkout, or set A11Y_AGENT_ORG_REPO to one that has it.");
     return 2;
   }
