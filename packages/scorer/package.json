@@ -15,7 +15,7 @@
     }
   },
   "bin": {
-    "a11ign-scorer-fetch-encoder": "./bin/fetch-encoder.mjs"
+    "a11ign-scorer-fetch-encoder": "./bin/fetch-encoder.ts"
   },
   "files": [
     "bin",

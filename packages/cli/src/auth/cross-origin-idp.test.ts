@@ -15,7 +15,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { chromium, type Browser, type BrowserContext } from "playwright";
 
-import { startCrossOriginIdp } from "./fixtures/cross-origin-idp.mjs";
+import { startCrossOriginIdp } from "./fixtures/cross-origin-idp.ts";
 
 type Fixture = Awaited<ReturnType<typeof startCrossOriginIdp>>;
 type Seen = { url: string; status: number; setCookie: string[]; body: string };

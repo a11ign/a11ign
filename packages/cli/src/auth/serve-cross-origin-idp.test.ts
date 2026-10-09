@@ -23,11 +23,11 @@ import { fileURLToPath } from "node:url";
 
 import { parseArgs } from "../cli.js";
 import { parseFlowsFile } from "./flows.js";
-import { startCrossOriginIdp } from "./fixtures/cross-origin-idp.mjs";
-import { readServeOptions, remoteWorkerNotice } from "./fixtures/serve-cross-origin-idp.mjs";
+import { startCrossOriginIdp } from "./fixtures/cross-origin-idp.ts";
+import { readServeOptions, remoteWorkerNotice } from "./fixtures/serve-cross-origin-idp.ts";
 import { isRemoteWorker } from "./refusals.js";
 
-const SERVE_SCRIPT = fileURLToPath(new URL("./fixtures/serve-cross-origin-idp.mjs", import.meta.url));
+const SERVE_SCRIPT = fileURLToPath(new URL("./fixtures/serve-cross-origin-idp.ts", import.meta.url));
 const WORKER_URL = "http://worker.example.test:8765";
 const LOGIN_FLOW = "login";
 const COMMAND_PREFIX = "npm run witness -- ";

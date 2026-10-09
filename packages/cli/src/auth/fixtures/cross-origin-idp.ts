@@ -34,17 +34,17 @@ const REDIRECT = 302;
 /** @typedef {{ appUrl: string, idpUrl: string, email: string, password: string, stop: () => Promise<void> }} CrossOriginIdp */
 
 /** @param {string} title @param {string} body */
-const page = (title, body) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${title}</title></head><body><main>${body}</main></body></html>`;
+const page = (title: string, body: string) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${title}</title></head><body><main>${body}</main></body></html>`;
 
 /** @param {string} text */
-const escapeHtml = (text) => text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+const escapeHtml = (text: string) => text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 /**
  * The two places the token can live, as page-script source. The memory variant must not NAME any browser storage at all, since the
  * test scans the served script for those names; the local variant names `localStorage` so that same scan has something to find.
  * @param {"memory" | "local"} storage
  */
-function tokenStoreSource(storage) {
+function tokenStoreSource(storage: "memory" | "local") {
   if (storage === "local") {
     return `const store = { save(t) { localStorage.setItem("token", t); }, load() { return localStorage.getItem("token"); } };`;
   }
@@ -52,7 +52,7 @@ function tokenStoreSource(storage) {
 }
 
 /** The app's one script: every app path serves the same shell, and the script decides what the path shows. @param {"memory" | "local"} storage */
-function appScript(storage) {
+function appScript(storage: "memory" | "local") {
   return `(() => {
   const IDP = document.documentElement.dataset.idp;
   ${tokenStoreSource(storage)}
@@ -80,16 +80,16 @@ function appScript(storage) {
 }
 
 /** @param {{ storage: "memory" | "local", idpOrigin: string }} config */
-const appShell = ({ storage, idpOrigin }) => `<!doctype html><html lang="en" data-idp="${idpOrigin}"><head><meta charset="utf-8"><title>App</title></head><body><main></main><script>${appScript(storage)}</script></body></html>`;
+const appShell = ({ storage, idpOrigin }: { storage: "memory" | "local"; idpOrigin: string; }) => `<!doctype html><html lang="en" data-idp="${idpOrigin}"><head><meta charset="utf-8"><title>App</title></head><body><main></main><script>${appScript(storage)}</script></body></html>`;
 
 /** @param {string} location */
-const redirectTo = (location) => ({ status: REDIRECT, headers: { location }, body: "" });
+const redirectTo = (location: string) => ({ status: REDIRECT, headers: { location }, body: "" });
 /** @param {number} status @param {string} body @param {string} [type] */
-const reply = (status, body, type = "text/html; charset=utf-8") => ({ status, headers: { "content-type": type }, body });
+const reply = (status: number, body: string, type: string = "text/html; charset=utf-8") => ({ status, headers: { "content-type": type }, body });
 const notFound = () => reply(404, page("Not found", "<h1>Not found</h1>"));
 
 /** @param {{ requested: Record<string, string>, error?: string }} form */
-function authorizePage({ requested, error }) {
+function authorizePage({ requested, error }: { requested: Record<string, string>; error?: string; }) {
   const hidden = Object.entries(requested).map(([name, value]) => `<input type="hidden" name="${name}" value="${escapeHtml(value)}">`).join("");
   const message = error ? `<p role="alert">${escapeHtml(error)}</p>` : "";
   return page("Log in", `<h1>Log in to continue</h1>${message}<form method="post" action="/authorize">${hidden}`
@@ -99,7 +99,7 @@ function authorizePage({ requested, error }) {
 }
 
 /** @param {import("node:http").IncomingMessage} req @returns {Promise<string>} */
-function readBody(req) {
+function readBody(req: import("node:http").IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     let raw = "";
     req.on("data", (chunk) => { raw += chunk; });
@@ -109,7 +109,7 @@ function readBody(req) {
 }
 
 /** Run a handler that returns a plain description of the response, and write it. @param {(req: import("node:http").IncomingMessage, url: URL) => Promise<{ status: number, headers: Record<string, string>, body: string }>} handler */
-function serve(handler) {
+function serve(handler: (req: import("node:http").IncomingMessage, url: URL) => Promise<{ status: number; headers: Record<string, string>; body: string; }>) {
   return createServer((req, res) => {
     const url = new URL(req.url ?? "/", `http://${LOOPBACK}`);
     handler(req, url).then(
@@ -120,7 +120,7 @@ function serve(handler) {
 }
 
 /** @param {{ storage: "memory" | "local", origins: { app: string, idp: string } }} config */
-function appServer({ storage, origins }) {
+function appServer({ storage, origins }: { storage: "memory" | "local"; origins: { app: string; idp: string; }; }) {
   return serve(async (_req, url) => {
     if (url.pathname === "/login") return redirectTo(authorizeUrl(origins));
     if (["/", "/account", "/callback"].includes(url.pathname)) return reply(200, appShell({ storage, idpOrigin: origins.idp }));
@@ -129,22 +129,22 @@ function appServer({ storage, origins }) {
 }
 
 /** @param {{ app: string, idp: string }} origins */
-function authorizeUrl(origins) {
+function authorizeUrl(origins: { app: string; idp: string; }) {
   const query = new URLSearchParams({ client_id: "fixture-app", redirect_uri: `${origins.app}/callback`, state: randomBytes(8).toString("hex") });
   return `${origins.idp}/authorize?${query}`;
 }
 
 /** The IdP's own state: one-time codes waiting to be exchanged, and the tokens they were exchanged for. @param {{ origins: { app: string, idp: string }, email: string, password: string }} config */
-function idpServer({ origins, email, password }) {
-  /** @type {Set<string>} */ const codes = new Set();
-  /** @type {Set<string>} */ const tokens = new Set();
+function idpServer({ origins, email, password }: { origins: { app: string; idp: string; }; email: string; password: string; }) {
+  /** @type {Set<string>} */ const codes: Set<string> = new Set();
+  /** @type {Set<string>} */ const tokens: Set<string> = new Set();
   // A function, because the app's origin is not known until it listens, which is after this server is built.
   const cors = () => ({ "access-control-allow-origin": origins.app, "access-control-allow-headers": "authorization, content-type" });
   /** @param {number} status @param {unknown} value */
-  const json = (status, value) => ({ ...reply(status, JSON.stringify(value), "application/json"), headers: { ...cors(), "content-type": "application/json" } });
+  const json = (status: number, value: unknown) => ({ ...reply(status, JSON.stringify(value), "application/json"), headers: { ...cors(), "content-type": "application/json" } });
 
   /** @param {URLSearchParams} form */
-  const submit = (form) => {
+  const submit = (form: URLSearchParams) => {
     const requested = Object.fromEntries(["client_id", "redirect_uri", "state"].map((name) => [name, form.get(name) ?? ""]));
     if (requested.redirect_uri !== `${origins.app}/callback`) return reply(400, page("Error", "<h1>Unknown redirect</h1>"));
     if (form.get("email") !== email || form.get("password") !== password) return reply(401, authorizePage({ requested, error: "Wrong email or password." }));
@@ -153,7 +153,7 @@ function idpServer({ origins, email, password }) {
     return redirectTo(`${requested.redirect_uri}?${new URLSearchParams({ code, state: requested.state })}`);
   };
   /** @param {import("node:http").IncomingMessage} req */
-  const exchange = async (req) => {
+  const exchange = async (req: import("node:http").IncomingMessage) => {
     const code = JSON.parse((await readBody(req)) || "{}").code;
     if (!codes.delete(code)) return json(400, { error: "invalid_grant" });
     const token = randomBytes(16).toString("hex");
@@ -161,7 +161,7 @@ function idpServer({ origins, email, password }) {
     return json(200, { access_token: token, token_type: "Bearer" });
   };
   /** @param {import("node:http").IncomingMessage} req */
-  const userinfo = (req) => {
+  const userinfo = (req: import("node:http").IncomingMessage) => {
     const token = (req.headers.authorization ?? "").replace(/^Bearer /, "");
     return json(tokens.has(token) ? 200 : 401, { email });
   };
@@ -179,17 +179,17 @@ function idpServer({ origins, email, password }) {
 }
 
 /** An IPv6 literal needs brackets to sit in a URL. @param {string} host */
-const hostInUrl = (host) => (host.includes(":") && !host.startsWith("[") ? `[${host}]` : host);
+const hostInUrl = (host: string) => (host.includes(":") && !host.startsWith("[") ? `[${host}]` : host);
 
 /** @param {import("node:http").Server} server @param {{ host: string, publicHost: string }} where @returns {Promise<string>} the origin it is reached at */
-async function listen(server, { host, publicHost }) {
+async function listen(server: import("node:http").Server, { host, publicHost }: { host: string; publicHost: string; }): Promise<string> {
   await new Promise((resolve) => server.listen(0, host, () => resolve(undefined)));
   const address = /** @type {import("node:net").AddressInfo} */ (server.address());
   return `http://${hostInUrl(publicHost)}:${address.port}`;
 }
 
 /** @param {import("node:http").Server} server */
-const close = (server) => new Promise((resolve) => { server.close(() => resolve(undefined)); server.closeAllConnections(); });
+const close = (server: import("node:http").Server) => new Promise((resolve) => { server.close(() => resolve(undefined)); server.closeAllConnections(); });
 
 /**
  * Start the two origins. The servers are created first and given the origins afterwards, because each must name the other's port
@@ -197,7 +197,7 @@ const close = (server) => new Promise((resolve) => { server.close(() => resolve(
  * @param {IdpOptions} [options]
  * @returns {Promise<CrossOriginIdp>}
  */
-export async function startCrossOriginIdp({ storage = "memory", email = "user@example.test", password = "correct horse battery", host = LOOPBACK, publicHost = host } = {}) {
+export async function startCrossOriginIdp({ storage = "memory", email = "user@example.test", password = "correct horse battery", host = LOOPBACK, publicHost = host }: IdpOptions = {}): Promise<CrossOriginIdp> {
   const where = { host, publicHost };
   const origins = { app: "", idp: "" };
   const app = appServer({ storage, origins });

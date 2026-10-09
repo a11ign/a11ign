@@ -22,7 +22,7 @@ import { parseArgs } from "node:util";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { startCrossOriginIdp } from "./cross-origin-idp.mjs";
+import { startCrossOriginIdp } from "./cross-origin-idp.ts";
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "[::1]", "localhost"]);
 const MAPPED_LOOPBACK = /^\[::ffff:7f[0-9a-f]{2}:[0-9a-f]{1,4}\]$/;
@@ -44,7 +44,7 @@ export const USAGE = "usage: serve-cross-origin-idp.mjs --out <dir> [--host <add
  * @param {string[]} argv
  * @returns {ServeOptions}
  */
-export function readServeOptions(argv) {
+export function readServeOptions(argv: string[]): ServeOptions {
   const { values } = parseArgs({
     args: argv,
     options: { out: { type: "string" }, host: { type: "string" }, "public-host": { type: "string" }, worker: { type: "string" } },
@@ -57,17 +57,17 @@ export function readServeOptions(argv) {
 }
 
 /** @param {ServeOptions} options */
-function refuseWildcardWithoutName({ host, publicHost }) {
+function refuseWildcardWithoutName({ host, publicHost }: ServeOptions) {
   if (host !== undefined && WILDCARD_HOSTS.has(host) && !publicHost) {
     throw new Error(`--host ${host} binds every interface, and a URL cannot carry a wildcard address: pass --public-host <name> with the name or address the worker reaches this machine by.`);
   }
 }
 
 /** Whether the bound address is one only this machine can reach. @param {string | undefined} host */
-export const isLoopbackBind = (host) => host === undefined || LOOPBACK_HOSTS.has(host);
+export const isLoopbackBind = (host: string | undefined) => host === undefined || LOOPBACK_HOSTS.has(host);
 
 /** The sentence printed on start for a bind other machines can reach. @param {string | undefined} host */
-export const networkNotice = (host) => isLoopbackBind(host)
+export const networkNotice = (host: string | undefined) => isLoopbackBind(host)
   ? ""
   : `NOTICE: this server is reachable from the network (bound to ${host}). It serves only fake credentials, and belongs to no account; stop it when the reading is taken.`;
 
@@ -76,7 +76,7 @@ export const networkNotice = (host) => isLoopbackBind(host)
  * by plain `node` cannot import it); the test holds the two to the same answer. An unparseable address is remote, as there.
  * @param {string} worker
  */
-const isRemoteWorkerUrl = (worker) => {
+const isRemoteWorkerUrl = (worker: string) => {
   try {
     const { hostname } = new URL(worker);
     return !(hostname === "localhost" || hostname === "[::1]" || MAPPED_LOOPBACK.test(hostname) || IPV4_LOOPBACK.test(hostname));
@@ -89,7 +89,7 @@ const isRemoteWorkerUrl = (worker) => {
  * The sentence printed above the command when its `--worker` is not loopback. Empty for loopback and for the placeholder, which names no
  * worker yet. @param {string} worker
  */
-export const remoteWorkerNotice = (worker) => worker === WORKER_PLACEHOLDER || !isRemoteWorkerUrl(worker)
+export const remoteWorkerNotice = (worker: string) => worker === WORKER_PLACEHOLDER || !isRemoteWorkerUrl(worker)
   ? ""
   : "NOT RUNNABLE AS PRINTED: the --worker below is not loopback, so the CLI exits 2 with auth-refused-remote-worker and sends nothing "
     + "(ADR 0038 Constraint 1: the worker takes plain HTTP with no authentication, and a session is a credential).";
@@ -99,7 +99,7 @@ export const remoteWorkerNotice = (worker) => worker === WORKER_PLACEHOLDER || !
  * and nothing else. The credentials are read from the environment, never written here.
  * @param {{ appUrl: string, idpUrl: string }} fixture
  */
-export const flowsText = ({ appUrl, idpUrl }) => `version: 1
+export const flowsText = ({ appUrl, idpUrl }: { appUrl: string; idpUrl: string; }) => `version: 1
 origin: ${appUrl}
 idp-origins:
   - ${idpUrl}
@@ -114,14 +114,14 @@ flows:
 `;
 
 /** A path with a space would split into two arguments. @param {string} token */
-const shellToken = (token) => (/\s/.test(token) ? `"${token}"` : token);
+const shellToken = (token: string) => (/\s/.test(token) ? `"${token}"` : token);
 
 /** The one line `orchestrator` runs, with the two credentials in the environment. @param {{ appUrl: string, flowsPath: string, worker: string }} run */
-export const witnessCommand = ({ appUrl, flowsPath, worker }) =>
+export const witnessCommand = ({ appUrl, flowsPath, worker }: { appUrl: string; flowsPath: string; worker: string; }) =>
   ["npm run witness --", appUrl, "--flows", shellToken(flowsPath), "--login-flow", LOGIN_FLOW, "--worker", worker].join(" ");
 
 /** @param {{ fixture: { appUrl: string, idpUrl: string, email: string, password: string }, flowsPath: string, worker: string, host: string | undefined }} run */
-export function startupReport({ fixture, flowsPath, worker, host }) {
+export function startupReport({ fixture, flowsPath, worker, host }: { fixture: { appUrl: string; idpUrl: string; email: string; password: string; }; flowsPath: string; worker: string; host: string | undefined; }) {
   const lines = [
     `app URL:    ${fixture.appUrl}`,
     `IdP URL:    ${fixture.idpUrl}`,
@@ -137,7 +137,7 @@ export function startupReport({ fixture, flowsPath, worker, host }) {
 }
 
 /** @param {ServeOptions} options */
-async function serve(options) {
+async function serve(options: ServeOptions) {
   const fixture = await startCrossOriginIdp({ host: options.host, publicHost: options.publicHost });
   const directory = resolve(options.out);
   await mkdir(directory, { recursive: true });
