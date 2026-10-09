@@ -50,18 +50,14 @@ export const MARKER = "<!-- token-cost -->";
 /** The closed set a contributor is named from, in the order a tie is broken. */
 export const CATEGORIES = ["review rounds", "CI red", "waits", "re-reads"];
 
-/**
- * @typedef {{ input: number, output: number, cacheRead: number, write5m: number, write1h: number }} Tokens
- * @typedef {{ id: string, at: string, model: string, tokens: Tokens, file: string, name: string | null, branch: string | null,
- *   firstInSession: boolean, afterCompaction: boolean, reread: boolean, waitTurn: boolean, waitBy: "" | "idle nudge" | "nothing to do" }} Call
- * @typedef {{ input: number, output: number, cacheRead: number, cacheWrite5m: number, cacheWrite1h: number }} Price
- * @typedef {{ readOn: string, source: string, perMillionTokens: Record<string, Price> }} PriceList
- * @typedef {{ since: string, until: string, hours?: { from: number, to: number } }} Window
- * @typedef {{ from: string, to: string }} Interval
- * @typedef {{ repository: string, number: number, branch: string, author: string, mergedAt: string,
- *   rounds: Interval[], failures: Interval[] }} Pull
- * @typedef {"review rounds" | "CI red" | "waits" | "re-reads"} Category
- */
+export type Tokens = { input: number, output: number, cacheRead: number, write5m: number, write1h: number };
+export type Call = { id: string, at: string, model: string, tokens: Tokens, file: string, name: string | null, branch: string | null, firstInSession: boolean, afterCompaction: boolean, reread: boolean, waitTurn: boolean, waitBy: "" | "idle nudge" | "nothing to do" };
+export type Price = { input: number, output: number, cacheRead: number, cacheWrite5m: number, cacheWrite1h: number };
+export type PriceList = { readOn: string, source: string, perMillionTokens: Record<string, Price> };
+export type Window = { since: string, until: string, hours?: { from: number, to: number } };
+export type Interval = { from: string, to: string };
+export type Pull = { repository: string, number: number, branch: string, author: string, mergedAt: string, rounds: Interval[], failures: Interval[] };
+export type Category = "review rounds" | "CI red" | "waits" | "re-reads";
 
 // ---- the price list ------------------------------------------------------------------------------------
 
@@ -172,8 +168,7 @@ function tokensOf(usage: any): Tokens {
   };
 }
 
-/** @typedef {{ file: string, name: string | null, calls: Map<string, Call>, turn: Call[], turnNudge: boolean, finalText: string,
- *   afterCompaction: boolean, unparsed: number }} FileState */
+export type FileState = { file: string, name: string | null, calls: Map<string, Call>, turn: Call[], turnNudge: boolean, finalText: string, afterCompaction: boolean, unparsed: number };
 
 /** The turn that just ended is a wait when its wake was an idle nudge, or when it answered "nothing to do" in few calls. @param {FileState} state */
 function closeTurn(state: FileState) {
@@ -382,11 +377,7 @@ export function biggestContributor(counts: Record<Category, number>): Category |
 
 // ---- one repository's reading ----------------------------------------------------------------------------
 
-/**
- * @typedef {{ repository: string, merged: number, read: number, unread: number[], calls: number, dollars: number, unpriced: number,
- *   callsPerPull: number | null, dollarsPerPull: number | null, enough: boolean,
- *   counts: Record<Category, number>, none: number, biggest: Category | null }} RepositoryReading
- */
+export type RepositoryReading = { repository: string, merged: number, read: number, unread: number[], calls: number, dollars: number, unpriced: number, callsPerPull: number | null, dollarsPerPull: number | null, enough: boolean, counts: Record<Category, number>, none: number, biggest: Category | null };
 
 /**
  * A merged pull request with no attributed call is UNREAD and out of the denominators, never a $0.00 that would pull the average down.

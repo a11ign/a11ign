@@ -37,9 +37,8 @@
 
 /**
  * The fields of a Node spawn error this reads. Everything is optional: the input is whatever was caught.
- * @typedef {{ message?: string, status?: number | null, signal?: string | null, code?: string,
- *             pid?: number, stderr?: string | Buffer | null }} SpawnError
  */
+export type SpawnError = { message?: string, status?: number | null, signal?: string | null, code?: string, pid?: number, stderr?: string | Buffer | null };
 
 /**
  * One line naming the failed command and, when its output was piped, the last thing it said on stderr.

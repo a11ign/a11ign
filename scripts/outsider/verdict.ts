@@ -51,10 +51,8 @@ const RED_CONCLUSIONS = ["failure", "timed_out", "startup_failure", "action_requ
 export const VERSION_SHAPE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 const FULL_SHA_SHAPE = /^[0-9a-f]{40}$/;
 
-/**
- * @typedef {{ displayTitle: string, status: string, conclusion: string | null, createdAt: string }} OutsiderRun
- * @typedef {{ verdict: "green" | "red" | "pending" | "absent", reason: string, run?: OutsiderRun }} OutsiderVerdict
- */
+export type OutsiderRun = { displayTitle: string, status: string, conclusion: string | null, createdAt: string };
+export type OutsiderVerdict = { verdict: "green" | "red" | "pending" | "absent", reason: string, run?: OutsiderRun };
 
 /**
  * The title the workflow's `run-name` gives a run for one release: the only name this reader recognises.

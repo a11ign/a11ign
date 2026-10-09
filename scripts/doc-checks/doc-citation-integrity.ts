@@ -47,10 +47,7 @@ export function allDocs(root: string): string[] {
   return files;
 }
 
-/**
- * @typedef {{ file: string, line: number, target: string, cited: string, ok: boolean | null, context: string }} Citation
- * `ok` is null when the link's own target path could not be read at all.
- */
+export type Citation = { file: string, line: number, target: string, cited: string, ok: boolean | null, context: string };
 
 /**
  * A document's sections, or null when it cannot be read at all.

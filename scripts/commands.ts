@@ -23,9 +23,8 @@
  * here does not move it out of that guard's reach. That mattered: the guard reads `package.json` and
  * nothing else, so the 24 runnable scripts with no npm entry are invisible to it TODAY, 20 of them
  * undocumented. This row does not close that gap -- see the PR body -- but it must not widen it.
- *
- * @typedef {{ argv: string[], internal?: string }} Command
  */
+export type Command = { argv: string[], internal?: string };
 
 /**
  * SEEDED WITH COMMANDS THAT HAVE NO `package.json` ENTRY TODAY, deliberately.

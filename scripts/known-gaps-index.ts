@@ -26,8 +26,8 @@ export const CLOSED_PATTERN = /DONE|CLOSED|STALE|MOVED|WRONG|RESOLVED|REFUTED/;
 export const INDEX_START = "<!-- known-gaps-index:start -->";
 export const INDEX_END = "<!-- known-gaps-index:end -->";
 
-/** @typedef {{ lineNumber: number, raw: string, number: number | null, title: string }} Heading */
-/** @typedef {Heading & { anchor: string }} AnchoredHeading */
+export type Heading = { lineNumber: number, raw: string, number: number | null, title: string };
+export type AnchoredHeading = Heading & { anchor: string };
 
 /**
  * Every `## ` heading in the file, in order. A heading with no leading "N. " is a META section (the

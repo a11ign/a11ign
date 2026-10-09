@@ -140,11 +140,7 @@ export const extractQuestions = (tryItMd: string) =>
 
 // ---- who built the window's work -----------------------------------------------------------------------
 
-/**
- * @typedef {{ number: number, sessionLabels: string[], claimedBy?: string[] }} ClosedRow
- *   `sessionLabels` are the row's `session:<name>` labels with the prefix removed; `claimedBy` are the sessions its
- *   claim-record comments name, which outlive the label (#3166 closed with its label gone).
- */
+export type ClosedRow = { number: number, sessionLabels: string[], claimedBy?: string[] };
 
 /** @param {ClosedRow} row */
 const buildersOf = (row: ClosedRow) => [...new Set([...row.sessionLabels, ...(row.claimedBy ?? [])])];
@@ -182,7 +178,6 @@ const numbered = (items: { n: number; text: string; }[]) => items.map(({ n, text
 const sessionList = (builders: string[]) => (builders.length > 0 ? builders.map((s) => `\`${s}\``).join(", ") : "none");
 
 /**
- * @typedef {object} BodyInput
  * @property {string} label ISO week, `2026-W40`
  * @property {{ since: string, until: string }} window
  * @property {number} closedCount rows closed in the window
@@ -193,6 +188,7 @@ const sessionList = (builders: string[]) => (builders.length > 0 ? builders.map(
  * @property {string} commit the commit the two documents were read at
  * @property {boolean} waitsOnOutsiderRepo
  */
+export type BodyInput = object;
 
 /** @param {BodyInput} input */
 function windowSection({ window, closedCount, builders, unattributed }: BodyInput) {

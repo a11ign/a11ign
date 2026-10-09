@@ -9,11 +9,9 @@
 
 /**
  * One cross-reference that does not resolve: WHERE it was written, WHAT it points at, and WHY it fails.
- * @typedef {{ where: string, reference: string, why: string }} Disagreement
  */
+export type Disagreement = { where: string, reference: string, why: string };
 
-/**
- * @typedef {{ examined: number, unit: string, disagreements: Disagreement[] }} CheckResult
- */
+export type CheckResult = { examined: number, unit: string, disagreements: Disagreement[] };
 
 export {};

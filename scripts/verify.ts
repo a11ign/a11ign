@@ -116,10 +116,7 @@ export function bodyHash(body: string | null) {
   return body === null ? "none" : createHash("sha256").update(body).digest("hex");
 }
 
-/**
- * @typedef {{ head: string, dirty: boolean, bodyHash: string, steps: Record<string, { status: string, ms: number }>,
- *   wallMs: number, base?: string }} Stamp
- */
+export type Stamp = { head: string, dirty: boolean, bodyHash: string, steps: Record<string, { status: string, ms: number }>, wallMs: number, base?: string };
 
 /**
  * IS THIS STAMP GREEN FOR THE HEAD AND BODY IN HAND? A stamp for another head or body is red, so is one made on a
@@ -620,10 +617,10 @@ async function inOrderAsync(commands: Array<() => { status: number | null; } | P
 }
 
 /**
- * @typedef {{ ciYml: string, base: string, body: string | null, files: string[] }} StepContext
  * @param {string} id
  * @param {StepContext} ctx
  */
+export type StepContext = { ciYml: string, base: string, body: string | null, files: string[] };
 function runStep(id: string, ctx: StepContext) {
   const runners = /** @type {Record<string, () => string | Promise<string>>} */ ({
     changed: () => "pass",

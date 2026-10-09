@@ -51,11 +51,8 @@ import { PRODUCT_REPO } from "./repo-identity.mjs";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 
-/**
- * @typedef {{ file: string, line: number, url: string }} TransferUrlSite
- * @typedef {TransferUrlSite & ({ reachable: true, status: number, ok: boolean }
- *   | { reachable: false, status: null, ok: false, error: string })} TransferUrlResult
- */
+export type TransferUrlSite = { file: string, line: number, url: string };
+export type TransferUrlResult = TransferUrlSite & ({ reachable: true, status: number, ok: boolean } | { reachable: false, status: null, ok: false, error: string });
 
 /** Directories the walk never descends into -- build output, dependencies, and generated/historical text. */
 const EXCLUDED_DIRS = new Set([

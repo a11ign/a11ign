@@ -8,10 +8,7 @@ import { resolve, dirname, join } from "node:path";
 
 export const README_PATH = ".agent-org/roles/README.md";
 
-/**
- * @typedef {{ role: string, agent: string, linkText: string, filePath: string, reporter: string | null }} RosterRow
- * `filePath` is repo-relative, resolved from the README's own location; `reporter` is null for "—" (nobody).
- */
+export type RosterRow = { role: string, agent: string, linkText: string, filePath: string, reporter: string | null };
 
 /**
  * Parses the roster table's rows: `| role | \`agent\` | [linkText](./file.md) | reports-to |`. Table-row

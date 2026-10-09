@@ -40,11 +40,9 @@ import * as schemaMigrationCitations from "./doc-checks/schema-migration-citatio
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 const TESTS = "packages/lab/src/packaging";
 
-/**
- * @typedef {import("./doc-checks/check-result.ts").CheckResult} CheckResult
- * @typedef {{ name: string, test: string | null, check: (root: string) => CheckResult | Promise<CheckResult> }} DocCheck
- * @typedef {{ name: string, test: string | null } & ({ result: CheckResult } | { error: string })} Outcome
- */
+export type CheckResult = import("./doc-checks/check-result.ts").CheckResult;
+export type DocCheck = { name: string, test: string | null, check: (root: string) => CheckResult | Promise<CheckResult> };
+export type Outcome = { name: string, test: string | null } & ({ result: CheckResult } | { error: string });
 
 /**
  * The fifteen: #905's fourteen, and #1602's in-page anchors. `test` is the pull-request test that asserts the same thing, so a reader of a disagreement

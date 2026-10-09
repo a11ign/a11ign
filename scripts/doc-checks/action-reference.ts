@@ -12,7 +12,7 @@ import { sandboxGitEnv } from "../../packages/guards/src/git-env.mjs";
 
 export const USES_DOCS = ["README.md", "docs/github-action.md", "examples/workflow.yml"];
 
-/** @typedef {{ file: string, owner: string, ref: string }} UsesLine */
+export type UsesLine = { file: string, owner: string, ref: string };
 
 /**
  * This repository's `owner/repo`, from git rather than from a constant that would be the fourth place to

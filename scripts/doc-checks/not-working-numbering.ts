@@ -12,10 +12,7 @@ import { join } from "node:path";
 
 export const DOC = "docs/not-working.md";
 
-/**
- * @typedef {{ depth: number, number: string, letter: string, title: string, line: number }} Heading
- * `letter` is empty for a bare (current) heading; one lowercase letter for a superseded or collided one.
- */
+export type Heading = { depth: number, number: string, letter: string, title: string, line: number };
 
 /**
  * Every numbered heading on the page, at any depth from 2 to 4 hashes.

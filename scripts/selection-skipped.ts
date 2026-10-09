@@ -49,16 +49,12 @@ const MAX_CHANGED_SHOWN = 20;
 const PERCENT = 100;
 const SHORT_SHA = 12;
 
-/**
- * @typedef {import("./ci-health.ts").Run} Run
- * @typedef {"yes" | "no" | "gone"} Skipped
- * @typedef {Skipped | "predates-policy" | "ci-only" | "no-test-file" | "unread"} Answer
- * @typedef {{ file: string, answer: Skipped | "ci-only" }} FileReading
- * @typedef {{ runId: number, answer: Answer, files: FileReading[], jobs: string[], why: string, changed: string[] }} Trace
- * @typedef {{ failedJobs: (runId: number) => { id: number, name: string }[] | null, log: (jobId: number) => string,
- *   affected: (run: Run) => { set: string[], changed: string[], treeWide: string[] } | null, exists: (run: Run, file: string) => boolean,
- *   hasPolicy: (run: Run) => boolean }} RedReader
- */
+export type Run = import("./ci-health.ts").Run;
+export type Skipped = "yes" | "no" | "gone";
+export type Answer = Skipped | "predates-policy" | "ci-only" | "no-test-file" | "unread";
+export type FileReading = { file: string, answer: Skipped | "ci-only" };
+export type Trace = { runId: number, answer: Answer, files: FileReading[], jobs: string[], why: string, changed: string[] };
+export type RedReader = { failedJobs: (runId: number) => { id: number, name: string }[] | null, log: (jobId: number) => string, affected: (run: Run) => { set: string[], changed: string[], treeWide: string[] } | null, exists: (run: Run, file: string) => boolean, hasPolicy: (run: Run) => boolean };
 
 // ---- the definitions: pure functions over run lists and log text -----------------------------------------
 

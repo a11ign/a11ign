@@ -49,11 +49,9 @@ const ENTRY_PATH = /^\.changeset\/[^/]+\.md$/;
 /** A range this derivation can compare: an exact version, optionally under `^` or `~`. */
 const PLAIN_RANGE = /^[\^~]?(\d+)\.(\d+)\.(\d+)$/;
 
-/**
- * @typedef {{ path: string, package: string, private: boolean, section: string, dependency: string, from: string | null, to: string | null }} Change
- * @typedef {{ package: string, bump: "patch", text: string }} Entry
- * @typedef {{ verdict: "entries" | "empty" | "refused", entries: Entry[], privatePackages: string[], reasons: string[] }} Derivation
- */
+export type Change = { path: string, package: string, private: boolean, section: string, dependency: string, from: string | null, to: string | null };
+export type Entry = { package: string, bump: "patch", text: string };
+export type Derivation = { verdict: "entries" | "empty" | "refused", entries: Entry[], privatePackages: string[], reasons: string[] };
 
 /** @param {Record<string, any>} manifest */
 function withoutDependencies(manifest: Record<string, any>) {

@@ -5,7 +5,7 @@
 // answers 404: that is the interval #524 said nothing tracked, and naming it nightly is this check's job.
 import { checkTransferUrls, findTransferUrls } from "../check-transfer-urls.ts";
 
-/** @typedef {import("../check-transfer-urls.ts").TransferUrlResult} TransferUrlResult */
+export type TransferUrlResult = import("../check-transfer-urls.ts").TransferUrlResult;
 
 /**
  * @param {string} root

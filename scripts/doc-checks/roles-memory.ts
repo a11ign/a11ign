@@ -9,7 +9,7 @@ import { join } from "node:path";
 export const MEMORY_DIR = ".agent-org/roles/memory";
 export const INDEX_PATH = `${MEMORY_DIR}/MEMORY.md`;
 
-/** @typedef {{ title: string, file: string, hook: string }} IndexEntry `file` is resolved relative to MEMORY_DIR */
+export type IndexEntry = { title: string, file: string, hook: string };
 
 /**
  * Parses `- [Title](file.md) — hook` lines, this repo's own established memory-index shape.

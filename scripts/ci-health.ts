@@ -42,15 +42,10 @@ export const AGGREGATE_JOB = "gate";
 export const ROLL_UP_ONLY = "(only the roll-up `gate` failed)";
 export const JOBS_NOT_READ = "(its jobs could not be read)";
 
-/**
- * @typedef {{ id: number, event: string, conclusion: string | null, head_sha: string, head_branch: string,
- *   created_at: string, head_repository?: { full_name?: string } | null }} Run
- * @typedef {{ label: string, unit: "ratio" | "count" | "dollars", atLeast?: number, atMost?: number, below?: number,
- *   readBy?: string }} Target
- * @typedef {{ workflow: string, reportOn: { repository: string, issue: number }, repositories: string[],
- *   minimumPullRequests: number, targets: Record<string, Target> }} Targets
- * @typedef {"MET" | "MISSED" | "UNREAD"} Verdict
- */
+export type Run = { id: number, event: string, conclusion: string | null, head_sha: string, head_branch: string, created_at: string, head_repository?: { full_name?: string } | null };
+export type Target = { label: string, unit: "ratio" | "count" | "dollars", atLeast?: number, atMost?: number, below?: number, readBy?: string };
+export type Targets = { workflow: string, reportOn: { repository: string, issue: number }, repositories: string[], minimumPullRequests: number, targets: Record<string, Target> };
+export type Verdict = "MET" | "MISSED" | "UNREAD";
 
 // ---- the definitions: pure functions over a run list ---------------------------------------------------
 
@@ -185,9 +180,7 @@ export function targetsFrom(parsed: unknown): Targets {
 
 // ---- one repository's reading --------------------------------------------------------------------------
 
-/**
- * @typedef {{ measure: string, target: string, reading: string, count: string, verdict: Verdict }} Row
- */
+export type Row = { measure: string, target: string, reading: string, count: string, verdict: Verdict };
 
 /** @param {Target} target @param {number | null} value @param {boolean} enough @param {string} count @returns {Row} */
 function rowOf(target: Target, value: number | null, enough: boolean, count: string): Row {
