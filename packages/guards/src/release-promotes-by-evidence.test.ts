@@ -57,6 +57,8 @@ const LATEST = { "@a11ign/evidence": "0.2.0", a11ign: "0.2.7", "@a11ign/scorer":
 
 type Status = { state: string; description?: string };
 type History = { sha: string; changedPaths: string[]; statuses: Status[] }[];
+// The description the lab wrote on both refused launches, copied from a11ign#4572's statuses.
+const NO_VERDICT: Status = { state: "failure", description: "NO VERDICT gate:stability (fleet part only) -- no readable verdict, not a pass" };
 const history = (...statuses: Status[]): History => [{ sha: SHA, changedPaths: [], statuses }];
 
 interface Row {
@@ -80,6 +82,13 @@ const TABLE: Row[] = [
   { name: "ONE failure: a candidate, not a proven regression", released: BOTH, history: history({ state: "failure" }), outcome: "rerun", promotes: [], rows: [] },
   { name: "TWO failures since the last success", released: BOTH, history: history({ state: "failure" }, { state: "failure" }), outcome: "regression", promotes: [], rows: ["regression"] },
   { name: "a failure is not softened by an older success", released: BOTH, history: history({ state: "failure" }, { state: "success" }), outcome: "rerun", promotes: [], rows: [] },
+  { name: "TWO NO VERDICT launch refusals are not a failed run: wait, no regression row (#4574)", released: BOTH, history: history(NO_VERDICT, NO_VERDICT), outcome: "wait", promotes: [], rows: [] },
+  { name: "a real failure and then a NO VERDICT counts ONE failure, not two: not a regression (#4574)", released: BOTH, history: history(NO_VERDICT, { state: "failure" }), outcome: "wait", promotes: [], rows: [] },
+  { name: "a NO VERDICT beneath a real failure leaves ONE counted failure: rerun (#4574)", released: BOTH, history: history({ state: "failure" }, NO_VERDICT), outcome: "rerun", promotes: [], rows: [] },
+  { name: "two real failures with a NO VERDICT between them are still a regression (#4574)", released: BOTH, history: history({ state: "failure" }, NO_VERDICT, { state: "failure" }), outcome: "regression", promotes: [], rows: ["regression"] },
+  { name: "an old success beneath a NO VERDICT does not make it a proceed (#4574)", released: BOTH, history: history(NO_VERDICT, { state: "success" }), outcome: "wait", promotes: [], rows: [] },
+  { name: "a NO VERDICT as `error` reads the same as one as `failure` (#4574)", released: BOTH, history: history({ ...NO_VERDICT, state: "error" }, { ...NO_VERDICT, state: "error" }), outcome: "wait", promotes: [], rows: [] },
+  { name: "a NO VERDICT wait past the bound raises the overdue row, not a regression (#4574)", released: BOTH, history: history(NO_VERDICT, NO_VERDICT), waitedMinutes: WAIT_BOUND_MINUTES + 1, outcome: "wait", promotes: [], rows: ["qualification-overdue"] },
   { name: "a wait past the bound raises its row", released: BOTH, history: history({ state: "pending" }), waitedMinutes: WAIT_BOUND_MINUTES + 1, outcome: "wait", promotes: [], rows: ["qualification-overdue"] },
   { name: "GitHub's `error` state reads as a failure", released: BOTH, history: history({ state: "error" }), outcome: "rerun", promotes: [], rows: [] },
   { name: "success on an earlier commit with no read path changed since", released: BOTH,
