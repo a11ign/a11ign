@@ -13,6 +13,8 @@ import { realpathSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { sandboxGitEnv } from "../packages/guards/src/git-env.ts";
 import { refuseUnknownFlags } from "./cli-flags.ts";
+// STAYS npm (`no-npm-spawn.test.ts` pins this file by name): `npm view` reads the registry the consumer's `npm install` reads, so a pnpm
+// here would read a different thing than a user's install.
 import { npmCliInvocation } from "./npm-cli-executable.ts";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
