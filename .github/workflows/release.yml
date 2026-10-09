@@ -172,7 +172,7 @@ jobs:
       # #2301: THE PUBLISH PATH IS pnpm'S, and so is the install. `registry-url` stays: it writes the `.npmrc` npm publishes with.
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version: 22, cache: pnpm, registry-url: https://registry.npmjs.org }
+        with: { node-version: 24, cache: pnpm, registry-url: https://registry.npmjs.org }
 
       - run: pnpm install --frozen-lockfile
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
@@ -250,11 +250,11 @@ jobs:
       # #558: does the committed `consumer-gate.yml` still match what README.md's documented workflow produces, sha aside? The pin's
       # FRESHNESS is guard 7's own concern (its `check-pin` job). Two different things, and neither alone closes the gap.
       - name: consumer-gate.yml matches README.md's documented workflow (sha aside -- guard 7 checks that)
-        run: node --import tsx scripts/generate-consumer-gate.ts --check
+        run: node scripts/generate-consumer-gate.ts --check
 
       # #1397: read from the two chains it describes, so the warning can only ever describe the chain that exists.
       - name: Name what this runner did NOT check
-        run: node --import tsx scripts/release-gate-scope.ts
+        run: node scripts/release-gate-scope.ts
 
       # REHEARSAL ONLY: what the release would do with the changesets pending on this branch. `--verbose` prints `<name> -> <newVersion>`
       # per package; plain `changeset status` prints only a bump level.
@@ -272,7 +272,7 @@ jobs:
       # #1536: EVERY PUBLISHED MANIFEST MUST NAME THE REPOSITORY THIS RUN PUBLISHES FROM, and this asks before the registry does: npm's
       # provenance check refuses the PUT otherwise. NO `if:`, deliberately: this is the only place a rehearsal can see the mismatch.
       - name: Every published manifest names the repository this run publishes from
-        run: node --import tsx scripts/manifest-repository-check.ts
+        run: node scripts/manifest-repository-check.ts
 
       # NOT AN EIGHTH GUARD (#3126): a TEMPORARY HOLD that each move row's last step lifts, one package at a time, until
       # `@a11ign/screenreader-worker`, `-fleet` and `@a11ign/documents` have released from their own repositories (ADR 0040). The
@@ -358,7 +358,7 @@ jobs:
       - name: The pnpm-to-npm publish hand-off, with provenance requested, publishing nothing
         env:
           NPM_CONFIG_PROVENANCE: "true"
-        run: node --import tsx scripts/release-publish-rehearsal.ts
+        run: node scripts/release-publish-rehearsal.ts
 
   # THE RELEASE: one call, and the only job here that can publish. Every job above is a guard it WAITS FOR, so a red one stops the call
   # and nothing is skipped to get a pass. The permissions are what the called workflow's jobs may use (a called workflow can keep or
@@ -650,7 +650,7 @@ jobs:
           persist-credentials: false
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version: 22, cache: pnpm }
+        with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - name: Regenerate the outside job at the promoted tag's commit, and decide whether it differs and is not older
         id: decide
@@ -678,7 +678,7 @@ jobs:
           tag_sha=$(git ls-remote "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" "refs/tags/a11ign@$version" "refs/tags/a11ign@$version^{}" | tail -n1 | cut -f1)
           [[ "$tag_sha" =~ ^[0-9a-f]{40}$ ]] || fail "no tag a11ign@$version to pin the outside job at"
           scratch=$(mktemp -d)
-          node --import tsx scripts/outsider/generate.ts --sha="$tag_sha" --version="$version"
+          node scripts/outsider/generate.ts --sha="$tag_sha" --version="$version"
           cp scripts/outsider/outsider-job.yml "$scratch/generated.yml"
           # The outside repository is public, so this read needs no minted token.
           gh api "repos/$OUTSIDE/contents/$WORKFLOW_PATH" --jq .content | base64 -d > "$scratch/current.yml" || fail "$WORKFLOW_PATH of $OUTSIDE could not be read"
