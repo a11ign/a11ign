@@ -75,6 +75,52 @@ test("the final step takes ACCEPTANCE_ROW_LABELS from the live-body step's outpu
   assert.equal(finalStepFault(THE_TREE), undefined);
 });
 
+const NO_SRC_PATH = /acceptance-commands\.(mjs|ts)/;
+const ACCEPTANCE_BODY_STEPS = ["Deepen the checkout if the PR asks for full history (#497)", "Run the PR's own stated Acceptance command(s)"];
+
+/** Why the workflow still reads the commands from where they used to be, or `undefined` when it does not (ADR 0044, row #4420). */
+function commandsSourceFault({ yaml, steps }: { yaml: string; steps: Step[] }): string | undefined {
+  if (NO_SRC_PATH.test(yaml)) return "the workflow names an `acceptance-commands.mjs`/`.ts` file, a path into the tool's `src/` and not its declared export";
+  const takers = steps.filter((step) => step.name !== undefined && ACCEPTANCE_BODY_STEPS.includes(step.name));
+  if (takers.length !== ACCEPTANCE_BODY_STEPS.length) return `${takers.length} of the ${ACCEPTANCE_BODY_STEPS.length} steps that read the PR text were found`;
+  const wrong = takers.find((step) => step.env?.PR_BODY !== "${{ steps.live-body.outputs.body }}");
+  if (wrong) return `${wrong.name} takes PR_BODY from ${JSON.stringify(wrong.env?.PR_BODY)}, not from the live-body step's narrowed output`;
+  if (!/acceptanceSourceOfThisPullRequest/.test(liveBodyOf(steps)?.run ?? "")) return "the live-body step does not ask the checkout whether the pull request adds an acceptance file, so it hands the whole body on";
+  if (!/acceptanceSourceOfThisPullRequest[\s\S]*sectionsTextOf|sectionsTextOf[\s\S]*acceptanceSourceOfThisPullRequest/.test(steps.find((step) => step.name === ACCEPTANCE_BODY_STEPS[0])?.run ?? "")) {
+    return "the full-history step reads the declaration from the body and not from the acceptance file the commands come from";
+  }
+  return undefined;
+}
+
+const COMMANDS_WIRED = `
+jobs:
+  run:
+    steps:
+      - id: live-body
+        run: node -e "m.acceptanceSourceOfThisPullRequest(body)"
+      - name: ${ACCEPTANCE_BODY_STEPS[0]}
+        env:
+          PR_BODY: "\${{ steps.live-body.outputs.body }}"
+        run: node -e "file.sectionsTextOf(commands.acceptanceSourceOfThisPullRequest(process.env.PR_BODY))"
+      - name: ${ACCEPTANCE_BODY_STEPS[1]}
+        env:
+          PR_BODY: "\${{ steps.live-body.outputs.body }}"
+        run: agent-org acceptance-commands
+`;
+
+test("CONTROL: a workflow that reads its commands from the checkout is not faulted, and each way back to the body is (ADR 0044, #4420)", () => {
+  const read = (yaml: string) => commandsSourceFault({ yaml, steps: stepsOf(yaml) });
+  assert.equal(read(COMMANDS_WIRED), undefined);
+  assert.match(read(`# see acceptance-commands.mjs\n${COMMANDS_WIRED}`) ?? "", /names an `acceptance-commands/);
+  assert.match(read(COMMANDS_WIRED.replace("m.acceptanceSourceOfThisPullRequest(body)", "m.other(body)")) ?? "", /does not ask the checkout/);
+  assert.match(read(COMMANDS_WIRED.replace("file.sectionsTextOf(commands.acceptanceSourceOfThisPullRequest(process.env.PR_BODY))", "process.env.PR_BODY")) ?? "", /full-history step reads the declaration from the body/);
+  assert.match(read(COMMANDS_WIRED.replace("steps.live-body.outputs.body", "github.event.pull_request.body")) ?? "", /not from the live-body step's narrowed output/);
+});
+
+test("the workflow reads the commands from the checkout, through the tool's declared exports, and the last two steps take the live-body step's narrowed text (ADR 0044, #4420)", () => {
+  assert.equal(commandsSourceFault({ yaml: readFileSync(WORKFLOW, "utf8"), steps: THE_TREE }), undefined);
+});
+
 /**
  * A fake `gh api <path> [--jq ...]`: for `pulls/` the PR body, which is `FAKE_STALE_BODY` for the first `FAKE_STALE_READS` reads (the Dependabot body before
  * `dependency-pr-body` rewrites it, #4479) and `FAKE_BODY` after; and for `issues/` the labels in `FAKE_LABELS[path]`, or a failure when it has none.
@@ -96,11 +142,19 @@ const FAKE_SLEEP = `#!/usr/bin/env bash
 echo "$1" >> "$FAKE_DIR/sleeps"
 `;
 
-/** Lists `Closes #N` and `Closes owner/repo#N` the way the tool's `closesReferences` hands rows over (`repo` null for a bare `#N`). */
+/**
+ * Reads the `Closes` line(s) of the text it is handed the way the tool's `extractClosesDeclaration` does in the one respect these tests need: its answer
+ * depends on the declaration and on nothing else in the text (`kind` and the rows), so a body narrowed to its `Closes` lines parses equal to the whole.
+ * `closesReferences` hands rows over as the tool does (`repo` null for a bare `#N`). `acceptanceSourceOfThisPullRequest` is the checkout's read: a file
+ * when `FAKE_ADDS_FILE` is set, else the body, which is all these tests need of it.
+ */
 const STAND_IN_TOOL = `
-export const extractClosesDeclaration = (body) => ({ kind: "closes", body });
-export const closesReferences = ({ body }) =>
-  [...body.matchAll(/Closes:?\\s+(?:([\\w.-]+\\/[\\w.-]+))?#(\\d+)/g)].map(([, repo, number]) => ({ repo: repo ?? null, number: Number(number) }));
+export const extractClosesDeclaration = (text) => {
+  const rows = [...text.matchAll(/Closes:?\\s+(?:([\\w.-]+\\/[\\w.-]+))?#(\\d+)/g)].map(([, repo, number]) => ({ repo: repo ?? null, number: Number(number) }));
+  return /Closes/i.test(text) ? { kind: "closes", rows } : { kind: "missing" };
+};
+export const closesReferences = ({ rows }) => rows;
+export const acceptanceSourceOfThisPullRequest = (body) => ({ kind: process.env.FAKE_ADDS_FILE ? "file" : "body", text: body });
 `;
 
 /**
@@ -115,8 +169,8 @@ function installStandInTool(root: string): void {
   symlinkSync(join(REPO, "node_modules/tsx"), join(root, "node_modules/tsx"));
 }
 
-type StepRun = { rowLabels?: Record<string, string[]>; status: number; reads: number; sleeps: string[] };
-type StepInput = { body: string; labels: Record<string, string[]>; author?: string; stale?: { body: string; reads: number } };
+type StepRun = { rowLabels?: Record<string, string[]>; handedOn?: string; status: number; reads: number; sleeps: string[] };
+type StepInput = { body: string; labels: Record<string, string[]>; author?: string; addsFile?: boolean; stale?: { body: string; reads: number } };
 
 const lines = (file: string): string[] => {
   try {
@@ -127,7 +181,15 @@ const lines = (file: string): string[] => {
   }
 };
 
-/** Runs the live-body step's own script; returns the parsed `row-labels` output, or the failure, with how often the body was read and each wait. */
+/** The step output `body`, as `$GITHUB_OUTPUT` carries it: `body<<DELIMITER`, the value, then the delimiter on a line of its own. */
+function bodyOutputOf(output: string): string | undefined {
+  const start = /^body<<(\S+)\n/m.exec(output);
+  if (!start) return undefined;
+  const from = start.index + start[0].length;
+  return output.slice(from, output.indexOf(`\n${start[1]}\n`, from));
+}
+
+/** Runs the live-body step's own script; returns the parsed `row-labels` output and the `body` it hands on, or the failure, with how often the body was read and each wait. */
 function runLiveBodyStep(input: StepInput): StepRun {
   const dir = mkdtempSync(join(tmpdir(), "row-labels-"));
   try {
@@ -148,11 +210,13 @@ function runLiveBodyStep(input: StepInput): StepRun {
         GH_TOKEN: "not-a-real-token", REPO: "a11ign/a11ign", PR_NUMBER: "7", PR_AUTHOR: input.author ?? "a-person",
         FAKE_BODY: input.body, FAKE_LABELS: JSON.stringify(input.labels),
         FAKE_STALE_BODY: input.stale?.body ?? "", FAKE_STALE_READS: String(input.stale?.reads ?? 0),
+        ...(input.addsFile ? { FAKE_ADDS_FILE: "1" } : {}),
       },
     });
-    const line = readFileSync(output, "utf8").split("\n").find((entry) => entry.startsWith("row-labels="));
+    const written = readFileSync(output, "utf8");
+    const line = written.split("\n").find((entry) => entry.startsWith("row-labels="));
     const rowLabels = line === undefined ? undefined : JSON.parse(line.slice("row-labels=".length));
-    return { status: ran.status ?? -1, rowLabels, reads: Number(lines(join(dir, "reads")).at(-1) ?? 0), sleeps: lines(join(dir, "sleeps")) };
+    return { status: ran.status ?? -1, rowLabels, handedOn: bodyOutputOf(written), reads: Number(lines(join(dir, "reads")).at(-1) ?? 0), sleeps: lines(join(dir, "sleeps")) };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -232,4 +296,31 @@ test("its twin: any other author reads once and never waits, however bare the bo
     const ran = runLiveBodyStep({ body: BARE_BODY, labels: {}, author, stale: { body: BARE_BODY, reads: 3 } });
     assert.deepEqual([author, ran.status, ran.reads, ran.sleeps], [author, 0, 1, []]);
   }
+});
+
+/**
+ * ADR 0044, #4420: A PULL REQUEST THAT ADDS AN ACCEPTANCE FILE HAS ITS COMMANDS READ FROM THE CHECKOUT, so the step hands on the `Closes` declaration and not the
+ * body that carries the commands. Its twin is the deprecated fallback: with no file the whole body is handed on, because a Dependabot pull request's `Acceptance:`
+ * is written into the body by `dependency-pr-body` and would otherwise be MISSING.
+ */
+const PROSE_AND_COMMANDS = "Prose that is anybody's to edit.\n\nAcceptance:\n```bash\nnode -e 0\n```\n\nCloses #4107\n\nMore prose.\n";
+
+test("CONTROL: with no acceptance file the whole body is handed on, so the narrowing below is the file's doing", () => {
+  const ran = runLiveBodyStep({ body: PROSE_AND_COMMANDS, labels: {} });
+  assert.deepEqual([ran.status, ran.handedOn], [0, PROSE_AND_COMMANDS.trimEnd()]);
+});
+
+test("with an acceptance file only the `Closes` declaration is handed on: no command and no prose reaches the next steps (ADR 0044, #4420)", () => {
+  const ran = runLiveBodyStep({ body: PROSE_AND_COMMANDS, labels: {}, addsFile: true });
+  assert.deepEqual([ran.status, ran.handedOn], [0, "Closes #4107"]);
+});
+
+test("its twin: a file with a body that declares no `Closes` hands on nothing, which the tool reports as CLOSES: MISSING", () => {
+  const ran = runLiveBodyStep({ body: "Only prose.\n\nAcceptance:\nnode -e 0\n", labels: {}, addsFile: true });
+  assert.deepEqual([ran.status, ran.handedOn], [0, ""]);
+});
+
+test("the rows are still read from the narrowed text, so the labels are the same with a file as without", () => {
+  const labels = { "repos/a11ign/a11ign/issues/4107": ["defect"] };
+  assert.deepEqual(runLiveBodyStep({ body: PROSE_AND_COMMANDS, labels, addsFile: true }).rowLabels, runLiveBodyStep({ body: PROSE_AND_COMMANDS, labels }).rowLabels);
 });

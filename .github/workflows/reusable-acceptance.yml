@@ -5,8 +5,13 @@ name: reusable-acceptance
 #
 # #353's own reason for existing: NOTHING HAS EVER RUN A ROW'S ACCEPTANCE COMMAND before this job.
 # Every PR body carries an `Acceptance:` line and its own PR argues its case; the only thing that used to
-# execute it was the author, reporting the result in prose. See `packages/agent-org/src/acceptance-commands.mjs`'s own
-# header for the three outcomes (RAN/REFUSED/MISSING) and why they must never collapse into two.
+# execute it was the author, reporting the result in prose. See the tool's `acceptance-commands` export for the three
+# outcomes (RAN/REFUSED/MISSING) and why they must never collapse into two.
+#
+# WHERE THE COMMANDS COME FROM (ADR 0044, row #4420): the file the pull request ADDS under `.acceptance/`, read from THIS CHECKOUT by the
+# tool's declared `acceptance-file` reader, so a review of the head is a review of what runs and a description edit cannot reach the commands.
+# Only a pull request that adds no such file (Dependabot's, written by `dependency-pr-body`) still has them read from the live body, and the
+# tool prints `ACCEPTANCE-SOURCE: body (deprecated)` for it; ADR 0044 row 3 ends that fallback.
 #
 # `pull_request`, NEVER `pull_request_target` -- stated here again deliberately, because after this split
 # that guarantee is visible ONLY at the caller's own trigger, not beside these steps. This job executes
@@ -30,7 +35,7 @@ on:
 # look for the blast radius of "run whatever a stranger's PR body says". This job never writes anything.
 #
 # A job's `permissions` are the TOKEN's, not a step's, so what keeps the author's command from using `pull-requests: read`
-# is that the token is never handed to it: see the two steps below, and `acceptance-reads-the-live-body.test.ts`.
+# is that the token is never handed to it: see the two steps below, and `acceptance-supplies-row-labels.test.ts`.
 permissions:
   contents: read
   pull-requests: read
@@ -63,9 +68,16 @@ jobs:
       # against `dependency-pr-body`'s rewrite is this job's own setup time rather than the seconds after the event.
       # It narrows the race and does not close it -- a read that precedes the rewrite still sees the old body.
       #
-      # THIS IS THE ONLY STEP THAT HOLDS A TOKEN. The body is handed on as a step OUTPUT, which the two steps below
+      # THIS IS THE ONLY STEP THAT HOLDS A TOKEN. What it hands on is the step OUTPUT `body`, which the two steps below
       # take as `PR_BODY` data in `env:` and never as shell text. A failed read, or an empty body, FAILS the job with
       # the reason: falling back to the event payload's body would reintroduce the stale read silently.
+      #
+      # THE OUTPUT IS NARROWED TO THE `Closes` DECLARATION WHEN THE PULL REQUEST ADDS AN ACCEPTANCE FILE (ADR 0044, #4420): the commands are then
+      # in the checkout, which the tool reads itself, and the body keeps only what GitHub acts on at merge, so an edit to the rest of it changes
+      # no input of the verdict. THE NARROWING IS THE TOOL'S OWN PARSE applied line by line, and the job FAILS if the narrowed text does not parse
+      # to the same declaration as the whole body (a declaration split across lines), because a narrowing that changed the verdict silently is
+      # the failure this guards. A pull request that adds NO such file keeps its whole body here: that is the deprecated fallback of ADR 0044
+      # row 3, and it is the only way Dependabot's pull requests (whose `Acceptance:` `dependency-pr-body` writes into the body) still run.
       #
       # THE LABELS OF THE ROWS THE BODY CLOSES ARE READ HERE TOO (#4138), because this is the only step that may ask GitHub and the
       # `Class:` check of #4123 needs them: a PR that closes a `defect` row owes a `Class:` line, and the step below is tracker-less on
@@ -107,15 +119,33 @@ jobs:
             echo "::error::the live body of ${REPO}#${PR_NUMBER} is empty; refusing to fall back to the event payload's body"
             exit 1
           fi
+          # The tool is reached through its DECLARED exports (`agent-org/acceptance-commands`, `agent-org/acceptance-file`, #4407), never an `src/`
+          # path the owner may rename: `createRequire` at the tool's `package.json` resolves the name through its `exports` map, and `--import`
+          # of the tool's own `tsx` lets node load the `.ts` it points at (so this does not depend on the runner's Node stripping types). The
+          # same loader opens the two steps below. A tool that does not declare the name fails here, loudly, which is what a release floor is.
+          handed_on="$(PR_BODY="$body" env -u GH_TOKEN node --import "$AGENT_ORG_TOOL/node_modules/tsx/dist/esm/index.mjs" -e "
+            const load = (name) => import(require('node:url').pathToFileURL(require('node:module').createRequire(process.env.AGENT_ORG_TOOL + '/package.json').resolve('agent-org/' + name)).href);
+            load('acceptance-commands').then((m) => {
+              const body = process.env.PR_BODY;
+              if (m.acceptanceSourceOfThisPullRequest(body).kind === 'body') return process.stdout.write(body);
+              const narrowed = body.split('\n').filter((line) => m.extractClosesDeclaration(line).kind !== 'missing').join('\n');
+              if (JSON.stringify(m.extractClosesDeclaration(narrowed)) !== JSON.stringify(m.extractClosesDeclaration(body))) {
+                console.error('the Closes declaration does not survive being read line by line');
+                process.exit(1);
+              }
+              process.stdout.write(narrowed);
+            });
+          ")" || {
+            echo "::error::could not narrow the body of ${REPO}#${PR_NUMBER} to its Closes declaration"
+            exit 1
+          }
           # A random delimiter, because the body is adversarial and a line equal to a fixed one would end the
           # value early and let the rest write other step outputs.
           delimiter="PR_BODY_$(openssl rand -hex 16)"
-          { echo "body<<${delimiter}"; printf '%s\n' "$body"; echo "${delimiter}"; } >> "$GITHUB_OUTPUT"
-          # The tool is reached through its DECLARED export (`agent-org/acceptance-commands`, #4407), never an `src/` path the owner may
-          # rename: `createRequire` at the tool's `package.json` resolves the name through its `exports` map, and `--import` of the tool's own
-          # `tsx` lets node load the `.ts` it points at. The same one-liner opens the full-history step below.
-          rows="$(PR_BODY="$body" env -u GH_TOKEN node --import "$AGENT_ORG_TOOL/node_modules/tsx/dist/esm/index.mjs" -e "
-            import('node:url').then(({ pathToFileURL }) => import(pathToFileURL(require('node:module').createRequire(process.env.AGENT_ORG_TOOL + '/package.json').resolve('agent-org/acceptance-commands')).href)).then((m) => {
+          { echo "body<<${delimiter}"; printf '%s\n' "$handed_on"; echo "${delimiter}"; } >> "$GITHUB_OUTPUT"
+          rows="$(PR_BODY="$handed_on" env -u GH_TOKEN node --import "$AGENT_ORG_TOOL/node_modules/tsx/dist/esm/index.mjs" -e "
+            const load = (name) => import(require('node:url').pathToFileURL(require('node:module').createRequire(process.env.AGENT_ORG_TOOL + '/package.json').resolve('agent-org/' + name)).href);
+            load('acceptance-commands').then((m) => {
               const declaration = m.extractClosesDeclaration(process.env.PR_BODY);
               if (declaration.kind !== 'closes') return;
               for (const row of m.closesReferences(declaration)) console.log((row.repo ?? process.env.REPO) + '#' + row.number);
@@ -137,10 +167,11 @@ jobs:
             row_labels="$(jq -c --arg row "$row" --argjson labels "$labels" '. + {($row): $labels}' <<<"$row_labels")" || continue
           done <<<"$rows"
           echo "row-labels=${row_labels}" >> "$GITHUB_OUTPUT"
-      # #497: DEEPEN THE CHECKOUT ONLY WHEN THE PR BODY ASKS FOR IT, via the SAME function
-      # `acceptance-commands.mjs` uses to decide what to refuse -- `hasFullHistoryDeclaration`, imported
-      # from the already-built module rather than re-typing the `History: full` regex a second time in
-      # shell. Placed AFTER checkout+build, deliberately: it needs the install and `pnpm run build` to have already
+      # #497: DEEPEN THE CHECKOUT ONLY WHEN THE PR ASKS FOR IT, via the SAME function the tool uses to decide what to
+      # refuse -- `hasFullHistoryDeclaration`, imported from the tool rather than re-typing the `History: full` regex a second time in
+      # shell. IT ASKS THE TEXT THE COMMANDS COME FROM (ADR 0044): the acceptance file this checkout adds (`acceptanceSourceOfThisPullRequest`,
+      # then `sectionsTextOf`), else the body, so the declaration and the commands can never be read from two places. Placed AFTER checkout+build,
+      # deliberately: it needs the install and `pnpm run build` to have already
       # produced a working tree, and it must run BEFORE the final step so a test declaring `requires:
       # history` sees real history rather than this job's default depth-1 clone (#510). `git fetch` needs
       # no more than this job's own `contents: read` -- it never writes anything.
@@ -149,15 +180,18 @@ jobs:
           PR_BODY: ${{ steps.live-body.outputs.body }}
         run: |
           if node --import "$AGENT_ORG_TOOL/node_modules/tsx/dist/esm/index.mjs" -e "
-            import('node:url').then(({ pathToFileURL }) => import(pathToFileURL(require('node:module').createRequire(process.env.AGENT_ORG_TOOL + '/package.json').resolve('agent-org/acceptance-commands')).href)).then((m) => {
-              process.exit(m.hasFullHistoryDeclaration(process.env.PR_BODY) ? 0 : 1);
+            const load = (name) => import(require('node:url').pathToFileURL(require('node:module').createRequire(process.env.AGENT_ORG_TOOL + '/package.json').resolve('agent-org/' + name)).href);
+            Promise.all([load('acceptance-commands'), load('acceptance-file')]).then(([commands, file]) => {
+              const text = file.sectionsTextOf(commands.acceptanceSourceOfThisPullRequest(process.env.PR_BODY));
+              process.exit(text !== null && commands.hasFullHistoryDeclaration(text) ? 0 : 1);
             });
           "; then
             git fetch --unshallow origin main
           fi
       # PR_BODY AS AN ENV VAR, NEVER AS A SHELL ARGUMENT -- a PR body is adversarial input (anyone can open
       # a PR), and GitHub Actions' own `env:` mapping keeps it one opaque string here rather than
-      # re-parsing it as shell. `acceptance-commands.mjs` reads it from `process.env.PR_BODY`, never argv.
+      # re-parsing it as shell. The tool reads it from `process.env.PR_BODY`, never argv. For a pull request that adds an acceptance file it is the
+      # `Closes` declaration alone (the live-body step above), and the commands are read by the tool from the file in this checkout.
       # NO GH_TOKEN AND NO OTHER SECRET IS PASSED TO THIS STEP -- ruled explicitly (#382-adjacent, restated
       # 2026-09-08 on worker-capture's refusal): an author-written command in a PR body runs read-only and
       # tracker-less, always. That constraint moves with the job, not just with the file.
