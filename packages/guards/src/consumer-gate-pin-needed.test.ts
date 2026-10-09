@@ -1,3 +1,4 @@
+// no-token: gh -- reads the workflow and the policy as text and drives `git` in a temp directory with a bare repository as "origin"; the GH_TOKEN it names is a string asserted on in the workflow, never read, and nothing reaches the network
 /**
  * #4331: THE MERGE THAT STALES `consumer-gate.yml`'S PIN STARTS ITS REPAIR. Eleven rows were filed by hand for one fault, so these tests pin
  * the decision (`scripts/consumer-gate-pin-needed.mjs`) and the two files that act on it (`consumer-gate-pin.yml` and its Octo STS policy).
