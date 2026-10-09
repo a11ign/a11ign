@@ -1,5 +1,5 @@
 {
-  "_doc": "The failure-class index (#4122, chairman 2026-10-08). A CLASS is a way the org fails that has happened more than once; the question asked of every defect before it closes is 'where else can this occur, and what stops it everywhere?'. THIS FILE HOLDS DEFINITIONS ONLY: id, name, guard. An INSTANCE is a closed row carrying the label class:<id>, counted by the gate, so a defect PR never edits this file (every PR appending here would hold every other by file overlap). A second closed row under one class:<id> is a REPEAT, and a repeat means the guard failed. `seed` lists the instances named when the file was written, with the BASIS for each: 'chairman-named' (the chairman's direction on #4122; class membership not re-read by ceo), 'title states it' (ceo read the row title, which says so), 'ceo read'. Re-read the row before relying on a seed. `guard` is a detector or rule IN FORCE that stops the class everywhere, or null with a guardNote saying what is missing or still unmerged: a control that is ordered, open or partial is a guardNote, never a guard. A class with a null guard is the first thing to fix. An instance with no row number (a pull request in another repository) is written <owner/name>#<n>.",
+  "_doc": "The failure-class index (#4122, chairman 2026-10-08). A CLASS is a way the org fails that has happened more than once; the question asked of every defect before it closes is 'where else can this occur, and what stops it everywhere?'. THIS FILE HOLDS DEFINITIONS ONLY: id, name, guard. An INSTANCE is a closed row carrying the label class:<id>, counted by the gate, so a defect PR never edits this file (every PR appending here would hold every other by file overlap). A second closed row under one class:<id> is a REPEAT, and a repeat means the guard failed. `seed` lists the instances named when the file was written, with the BASIS for each: 'chairman-named' (the chairman's direction on #4122; class membership not re-read by ceo), 'title states it' (ceo read the row title, which says so), 'ceo read'. Re-read the row before relying on a seed. `guard` is a detector or rule IN FORCE that stops the class everywhere, or null with a guardNote saying what is missing or still unmerged: a control that is ordered, open or partial is a guardNote, never a guard. A class with a null guard is the first thing to fix. An instance with no row number (a pull request in another repository) is written <owner/name>#<n>. EVENT KINDS (#4450, epic #4437 move 1a): the entries from `main-red` on are EVENT kinds, not row defects. They have no `class:<id>` label and no closed rows: an instance is a line of the host's `failure-ledger` (`<kind>\\t<ts ms>\\t<ref>`), and a repeat is one kind with two or more distinct refs (`repeatsIn`).",
   "classes": [
     {
       "id": "unreleased-merge",
@@ -98,6 +98,48 @@
       "name": "Two versions of one tool run at once (an installed copy beside a checkout, a pinned release beside main), so a fix is merged and not in effect.",
       "guard": null,
       "guardNote": "none named. Related rows that mention it but are not seeded as instances: #3316, #3468.",
+      "seed": []
+    },
+    {
+      "id": "main-red",
+      "name": "`main` is red: a trunk run of the code repository failed. Recorded per red RUN by the tick (`readTrunkRed`).",
+      "guard": null,
+      "guardNote": "recorder: the tick, from #4450. No guard in force; the repeat is read from `failure-ledger` (`repeatsIn`).",
+      "seed": []
+    },
+    {
+      "id": "pr-red",
+      "name": "A pull request is red, with the cause of the red recorded beside it.",
+      "guard": null,
+      "guardNote": "seeded key only: its recorder is a later row of #4437. No guard in force.",
+      "seed": []
+    },
+    {
+      "id": "owner-unresolved",
+      "name": "The owner ladder (`ownerOfPr`) named nobody for a pull request, so its order fell to the `ceo` rung.",
+      "guard": null,
+      "guardNote": "recorder: the tick, from #4450, per pull request. #4386 is the resolver defect it first showed.",
+      "seed": []
+    },
+    {
+      "id": "worker-excluded",
+      "name": "A worker was excluded from capture.",
+      "guard": null,
+      "guardNote": "seeded key only: its recorder is a later row of #4437. No guard in force.",
+      "seed": []
+    },
+    {
+      "id": "hand-reroute",
+      "name": "A change a human-side session made that the org should have made itself (`hand-fix-ledger`).",
+      "guard": null,
+      "guardNote": "recorder: the tick, from #4450, once a day, per counted change.",
+      "seed": []
+    },
+    {
+      "id": "chairman-correction",
+      "name": "The chairman corrected the org's course by hand.",
+      "guard": null,
+      "guardNote": "seeded key only: its recorder is a later row of #4437. No guard in force.",
       "seed": []
     }
   ]
