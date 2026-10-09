@@ -29,7 +29,7 @@ import { dirname, join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
 // By path, through the LAID `a11ign/control` (#3506): `@a11ign/control` is on no registry, so no name resolves to it.
-import { layersFrom } from "../../control/src/layer-checkouts.mjs";
+import { layersFrom } from "../../control/src/layer-checkouts.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const CONSUMED = "@a11ign/screenreader-worker";
