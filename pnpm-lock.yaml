@@ -37,8 +37,8 @@ importers:
         version: link:packages/cli
     devDependencies:
       '@a11ign/toolchain':
-        specifier: 0.1.4
-        version: 0.1.4(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))
+        specifier: 0.5.0
+        version: 0.5.0(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)
       '@changesets/cli':
         specifier: 3.0.3
         version: 3.0.3
@@ -108,8 +108,8 @@ importers:
         specifier: ^0.1.1
         version: 0.1.1
       '@a11ign/toolchain':
-        specifier: 0.1.4
-        version: 0.1.4(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))
+        specifier: 0.5.0
+        version: 0.5.0(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)
       axe-core:
         specifier: ^4.14.0
         version: 4.14.0
@@ -139,8 +139,8 @@ importers:
         version: link:../evidence
     devDependencies:
       '@a11ign/toolchain':
-        specifier: 0.1.4
-        version: 0.1.4(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))
+        specifier: 0.5.0
+        version: 0.5.0(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)
 
   packages/scorer:
     dependencies:
@@ -149,8 +149,8 @@ importers:
         version: link:../evidence
     devDependencies:
       '@a11ign/toolchain':
-        specifier: 0.1.4
-        version: 0.1.4(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))
+        specifier: 0.5.0
+        version: 0.5.0(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)
 
 packages:
 
@@ -184,19 +184,6 @@ packages:
     resolution: {integrity: sha512-b9W+zh5H8BF2lVaLe8WhDWTdUxFPZehTaM4tsrzwZkzwODC4hCqshxOe6D3qhmYBGP7lWWReoKzz8xw0DEgYAw==}
     engines: {node: '>=20'}
     hasBin: true
-
-  '@a11ign/toolchain@0.1.4':
-    resolution: {integrity: sha512-t5V4RU3kXf72LdyJLgCHJU+UuKvK1087FX66fOKgsjzUGi0egEF06l8aOve4wMhAzQ5USax03nw+qC3mFPL2EQ==}
-    engines: {node: '>=22.15.0'}
-    peerDependencies:
-      '@rslib/core': ^1.0.3
-      '@rstest/core': ^0.12.3
-      '@rstest/coverage-v8': ^0.12.3
-    peerDependenciesMeta:
-      '@rslib/core':
-        optional: true
-      '@rstest/coverage-v8':
-        optional: true
 
   '@a11ign/toolchain@0.5.0':
     resolution: {integrity: sha512-+6+vTWgfpmi8CQ6uxJ6XZvFFVBVaSrr6eF3nM5S8T4ZwX9yrWEk7ZhiyHIEufAwDLFTb58ShnRtVwXd5TpNuFg==}
@@ -1965,13 +1952,6 @@ snapshots:
   '@a11ign/screenreader-worker@0.9.0':
     dependencies:
       '@guidepup/guidepup': 0.31.0
-
-  '@a11ign/toolchain@0.1.4(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))':
-    dependencies:
-      '@rstest/core': 0.12.3
-    optionalDependencies:
-      '@rslib/core': 1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3)
-      '@rstest/coverage-v8': 0.12.3(@rstest/core@0.12.3)
 
   '@a11ign/toolchain@0.5.0(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)':
     dependencies:

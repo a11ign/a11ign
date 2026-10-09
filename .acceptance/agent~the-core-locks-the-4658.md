@@ -3,7 +3,10 @@ The core locks `@a11ign/screenreader-fleet` 0.7.0, the release that carries #465
 What changed (measured 2026-10-09 against the registry, `npm view` and a tarball diff of 0.6.0 against 0.7.0):
 - the three `@a11ign/screenreader-fleet` declarations move `^0.6.0` to `^0.7.0` (a caret on `0.6.0` does not admit `0.7.0`, so the specifier had to move) and `pnpm-lock.yaml` is regenerated;
 - npm `latest` is 0.7.0, published 22:11Z; there is no 0.6.1, so "the newest 0.6.x or later" is 0.7.0;
-- the tarball differs from 0.6.0 in `worker-code-check.{mjs,d.ts}` (the fix), in `cli-flags.{mjs,d.ts}` (same five exports, now re-exported from `@a11ign/toolchain/lib/cli-flags`), and in `package.json` (`@a11ign/toolchain` 0.3.1 as a devDependency becomes 0.5.0 as a dependency, which is the only new lockfile package).
+- the tarball differs from 0.6.0 in `worker-code-check.{mjs,d.ts}` (the fix), in `cli-flags.{mjs,d.ts}` (same five exports, now re-exported from `@a11ign/toolchain/lib/cli-flags`), and in `package.json` (`@a11ign/toolchain` 0.3.1 as a devDependency becomes 0.5.0 as a dependency);
+- **the fleet's contract change, which the row's tier note anticipated:** the laid `packages/worker-fleet/src/cli-flags.ts` imports `@a11ign/toolchain/lib/cli-flags`, which exists first in toolchain 0.5.0 (measured: `npm view @a11ign/toolchain@<v> exports` for 0.1.5 to 0.4.0 holds none, 0.5.0 to 0.7.0 hold it). With the root still on 0.1.4, `pnpm run typecheck` failed `TS2307` on that import. So the root, `cli`, `judge` and `scorer` move `0.1.4` to `0.5.0` together (`toolchain-package.test.ts` requires one exact version across the four; with only the root and `cli` moved it printed `the importers pin 2 different versions`). 0.5.0's export map is 0.1.4's plus 15 additions and no removal (`diff` of `npm view ... exports --json`).
+
+**Region:** `packages/judge/package.json` and `packages/scorer/package.json` are outside the row's Region (`package.json`, `packages/guards/package.json`, `packages/cli/package.json`, `pnpm-lock.yaml`); one line each, forced by the guard above. Reported on the row for `product-manager`.
 
 The laid tree holds `@a11ign/screenreader-fleet` 0.7.0 (`node -p "require('./node_modules/@a11ign/screenreader-fleet/package.json').version"` printed `0.7.0`), and `dist/worker-code-check.mjs` defines `cloneHasherPath`.
 
