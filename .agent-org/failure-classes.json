@@ -141,6 +141,24 @@
       "guard": null,
       "guardNote": "seeded key only: its recorder is a later row of #4437. No guard in force.",
       "seed": []
+    },
+    {
+      "id": "hold-on-idle-row",
+      "name": "A pull request is held until a row closes, but that row is ready and unclaimed with no open pull request, so the hold never ends.",
+      "guard": null,
+      "seed": [
+        {
+          "ref": "a11ign/agent-org#550",
+          "basis": "chairman-named",
+          "note": "2026-10-09: held --until closed a11ign/a11ign#4524 while #4524 was ready and unclaimed; lifted by the chairman session ~21:25Z and merged 21:29Z"
+        },
+        {
+          "ref": "a11ign/a11ign#4437",
+          "basis": "chairman-named",
+          "note": "comment 6089503125 (2026-10-09 21:24Z): the chairman-verified direction that names the class and orders the guard null with a guardNote"
+        }
+      ],
+      "guardNote": "none in force. Set guard to a11ign/a11ign#4661 (a pr:hold --until closed #N is refused when #N is unclaimed with no open pull request, plus a 15-minute detector) when it merges; its code half is a second pull request in a11ign/agent-org."
     }
   ]
 }
