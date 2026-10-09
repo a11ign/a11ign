@@ -70,6 +70,7 @@ import { draftFormsConfig } from "./forms/draft.js";
 import { MAX_CAPTURE_ATTEMPTS, PageListError, captureCount, loginReport, minimumLogins, multiPageJson, newLoginTally, rejectedScorer, runSingleUrl,
   refuseMalformedUrls, resolveMaxPages, resolvePageList, rollUpLines, runPageList, surfaceFromEnv,
   type LoginReport, type LoginTally, type PageEntry } from "./multi-page.js";
+import { compareWithAxe, comparisonLines, type AxeComparison, type LayerReading } from "./axe-comparison.js";
 import { renderEvidencePack, type EvidencePackInput } from "./evidence-pack.js";
 
 interface Args {
@@ -146,6 +147,8 @@ interface Args {
   emitFormConfig: boolean;
   /** Say what WOULD be submitted, and submit nothing. */
   plan: boolean;
+  /** Run axe and a11ign on this one page and print what a11ign adds and what it repeats (`axe-comparison.ts`, #4528). */
+  compareAxe: boolean;
   /** Path to axe results produced elsewhere, used instead of running our own scan. */
   axeResults: string | null;
   /** #4252: where to write the Markdown evidence pack (`renderEvidencePack`) beside the `--json` result; null writes none. */
@@ -175,7 +178,8 @@ const USAGE =
   + "[--no-probe-navigation] [--no-probe-focus-context] "
   + "[--forms <file>] [--flows <file> --login-flow <name> [--auth-state <file>] [--send-authenticated-transcript-to-judge-vendor]] "
   + "[--emit-form-config] [--plan] "
-  + "[--no-axe] [--axe-results <file>] [--evidence-pack <file.md> (needs --json)] [--no-keep]";
+  + "[--no-axe] [--axe-results <file>] [--evidence-pack <file.md> (needs --json)] [--no-keep] "
+  + "[--compare-axe (one <url>: what a11ign adds to axe, what it repeats)] [--help]";
 
 function defaultArgs(): Args {
   return {
@@ -231,6 +235,7 @@ function defaultArgs(): Args {
     sendAuthenticatedTranscriptToJudgeVendor: false,
     emitFormConfig: false,
     plan: false,
+    compareAxe: false,
     axe: process.env.A11Y_AXE !== "0",
     axeResults: process.env.A11Y_AXE_RESULTS ?? null,
     evidencePack: null,
@@ -261,6 +266,7 @@ const BOOLEAN_FLAGS: Readonly<Record<string, (args: Args) => void>> = Object.fre
   "--no-axe": (a) => { a.axe = false; },
   "--emit-form-config": (a) => { a.emitFormConfig = true; },
   "--plan": (a) => { a.plan = true; },
+  "--compare-axe": (a) => { a.compareAxe = true; },
   "--no-keep": (a) => { a.keep = false; },
   "--send-authenticated-transcript-to-judge-vendor": (a) => { a.sendAuthenticatedTranscriptToJudgeVendor = true; },
 });
@@ -618,8 +624,11 @@ async function formStateCount(args: Args): Promise<number> {
 }
 
 async function main(): Promise<void> {
+  // BEFORE `parseArgs`, which refuses a command line with no page in it: asking what the flags are is not a run.
+  if (process.argv.slice(2).includes("--help")) { console.log(USAGE); return; }
   const args = await withAuthentication(parseArgs());
   if (await planOnly(args)) return;
+  if (args.compareAxe) { await runCompareAxe(args); return; }
   refuseUnusableEvidencePack(args, args.urls.length > 1 ? 0 : await formStateCount(args));
   if (args.urls.length > 1) { await runPages(args); return; }
   if (looksLikePdfUrl(args.url)) { await runPdfLayer(args, resultSink(args.evidencePack)); return; }
@@ -648,6 +657,47 @@ async function main(): Promise<void> {
   } finally {
     await lease.release();
   }
+}
+
+/**
+ * `--compare-axe` (#4528): axe and a11ign on ONE page, and the join of what each found (`axe-comparison.ts`).
+ *
+ * The screen-reader half is optional here and the other flows' is not: a person with axe and no Windows worker is exactly who
+ * asks "what would a11ign add?", so a worker that is not there ends that half as "did not run" rather than the command. A worker
+ * that WAS configured and fails is still an error, since that is a broken run and not an absent layer.
+ */
+async function runCompareAxe(args: Args): Promise<void> {
+  if (args.urls.length !== 1) throw new PageListError(`--compare-axe compares one page; ${args.urls.length} were given.\n${USAGE}`);
+  if (args.auth) throw new PageListError(`--compare-axe does not sign in; drop --flows and --login-flow.\n${USAGE}`);
+  const lease = await leaseWorker(args);
+  try {
+    const absent = lease.source === "default" ? await refuseIfNothingListening(lease.worker).then(() => null, (e: Error) => e.message) : null;
+    const comparison = absent === null
+      ? await compareWithTheCapture(args, lease.worker)
+      : await compareWithoutTheCapture(args, absent);
+    console.log(comparisonLines(comparison).join("\n"));
+  } finally {
+    await lease.release();
+  }
+}
+
+function axeReading(findings: AxeFinding[] | null, axeResults: string | null): LayerReading<AxeFinding> {
+  return findings
+    ? { ran: true, reported: findings }
+    : { ran: false, why: axeResults ? "the results file could not be read" : "its optional dependencies are not installed, or the scan failed (see above)" };
+}
+
+async function compareWithTheCapture(args: Args, worker: string): Promise<AxeComparison> {
+  const { cap, axe } = await captureAndScan({ ...args, worker, wantAxe: true, formState: undefined });
+  const { examined } = examineWithinTheSite(cap);
+  const verdict = await judgeExamined(examined, args.task);
+  return compareWithAxe({ axe: axeReading(axe.findings, args.axeResults), a11ign: { ran: true, reported: verdict.findings } });
+}
+
+async function compareWithoutTheCapture(args: Args, why: string): Promise<AxeComparison> {
+  const layer = await chooseRuleLayer({ wantAxe: true, axeResults: args.axeResults });
+  const axe = await pageContext(args.url, layer, args.axeResults);
+  return compareWithAxe({ axe: axeReading(axe.findings, args.axeResults), a11ign: { ran: false, why } });
 }
 
 /**
@@ -949,6 +999,24 @@ export function reportWitnessArtifact(path: string | null): void {
   console.log(path
     ? `capture written to ${relative(process.cwd(), path)}`
     : "capture not written (--no-keep)");
+}
+
+/**
+ * The judge over a capture already narrowed to the site, for `--compare-axe`. `runWitness` keeps its own literal call: two tests pin its
+ * source shape (`left-site-acceptance.test.ts`, `multi-page.test.ts`), so this repeats it rather than moving it.
+ */
+function judgeExamined(examined: CaptureResponse, task: string): Promise<Judgment> {
+  return judge({
+    url: examined.url,
+    task,
+    screenReader: examined.screenReader,
+    transcript: examined.transcript,
+    structure: examined.structure,
+    interaction: examined.interaction,
+    // The oracle counts, so the rules that assert an ABSENCE can corroborate it. Without these a page
+    // with no headings and a capture that failed to reach them are the same input.
+    ...oracleCounts(examined),
+  }).catch(rejectedScorer);
 }
 
 async function runWitness(
