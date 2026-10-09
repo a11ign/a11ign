@@ -12,6 +12,8 @@
   ],
   "_clones": "Where the clone of each KEYED code repository `project.json` declares lives (#2969), by key. A keyed reviewer's checkout is made by fetching `refs/pull/<n>/head` from THAT clone's `origin`; the tick's own checkout's `origin` is the primary's repository, whose pull request of the same number would be the wrong review. A key with no clone here is refused by name. This is NOT a `projects` entry: a project is one with its own declaration, and a keyed code repository has none.",
   "clones": { "agent-org": "/home/agent/repos/agent-org", "screenreader-worker": "/home/agent/repos/screenreader-worker", "documents": "/home/agent/repos/documents", "screenreader-fleet": "/home/agent/repos/screenreader-fleet", "control": "/home/agent/repos/control", "lab": "/home/agent/repos/lab", "toolchain": "/home/agent/repos/toolchain", "github": "/home/agent/repos/github" },
+  "_triage": "Jev (TypeSafe) as an OPTIONAL reader of wake orders (#4384): `provider` is `jev` or `none`, and an absent block, `none`, or a key file that cannot be read all behave as before. `keyPath` is a path, never the key. It routes nothing yet: the wake path is row B's.",
+  "triage": { "provider": "jev", "keyPath": "/home/agent/.config/typesafe/key", "minConfidence": 0.9 },
   "gh": {
     "workers": "/home/agent/workers",
     "leads": "/home/agent/leads",
