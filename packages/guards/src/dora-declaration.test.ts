@@ -66,7 +66,8 @@ const MOVED_TO_THE_REGISTRY: Record<string, string> = {
   // carries the repository because `documents` declares `src/` too (#4218), so the prefix alone no longer says whose manifest to read.
   "a11ign/screenreader-worker src/": "node_modules/@a11ign/screenreader-worker/package.json",
   "a11ign/screenreader-fleet packages/worker-fleet/": "node_modules/@a11ign/screenreader-fleet/package.json",
-  "a11ign/toolchain packages/toolchain/": "node_modules/@a11ign/toolchain/package.json",
+  // `toolchain` holds its package at the ROOT of its repository since the flatten (a11ign/toolchain#20, published as 0.1.6, #4213), so its prefix is `src/`.
+  "a11ign/toolchain src/": "node_modules/@a11ign/toolchain/package.json",
 };
 
 const workspaceManifest: ReadManifest = (repo, directory) => {
