@@ -24,9 +24,9 @@
 // REFUSES a missing or malformed declaration rather than answering `a11ign/a11ign` (a fallback here would make the tool's
 // "project-agnostic" claim decorative). Nothing that imports this file changed: the value is a11ign's own, and every
 // importer still sees a string. The declaration's `code[0]` is the repository `gh`/git resolve.
-import { toolModule } from "./agent-org-newest-tag.mjs";
+import { toolExport } from "./agent-org-newest-tag.mjs";
 
-const { homeProjectDeclaration } = await toolModule("src/project-config.mjs");
+const { homeProjectDeclaration } = await toolExport("project-config");
 
 const PROJECT = homeProjectDeclaration();
 export const REPO = PROJECT.repo;

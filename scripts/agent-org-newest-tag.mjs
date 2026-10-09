@@ -9,7 +9,7 @@
 // second version impossible is to have nothing to pin. Every consumer therefore asks THIS file, and it answers in one of two ways:
 //
 //   - on the host and in a worktree: `$AGENT_ORG_TOOL`, else the `tool` of `.agent-org/host.json` (the checkout the work-tick unit keeps at the
-//     newest tag). `toolRoot()` and `toolModule()` are for a script or a test that imports a module of the tool.
+//     newest tag). `toolRoot()` and `toolExport()` are for a script or a test that imports a declared export of the tool.
 //   - in CI, where no tool checkout exists: `node scripts/agent-org-newest-tag.mjs --dest=<dir>` reads the tags of the tool's repository NOW,
 //     takes the newest STABLE one, clones it into `<dir>`, installs what it imports, and exports `AGENT_ORG_TOOL` (and an `agent-org` on PATH)
 //     to the steps below it. Nothing is cached between runs, so a release at ANY minor is what the next run executes, with no change here.
@@ -17,7 +17,8 @@
 // A tag list with no stable tag REFUSES; it never falls back to a branch, because `main` is not a release and a run would then execute code
 // nobody had cut.
 import { execFileSync } from "node:child_process";
-import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { appendFileSync, chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
@@ -74,43 +75,52 @@ export function toolRoot({ env = process.env, root = ROOT } = {}) {
     + "In CI, run `node scripts/agent-org-newest-tag.mjs --dest=<dir>` first.");
 }
 
-/** The other spelling of a module path (`src/x.mjs` <-> `src/x.ts`), or undefined for a path that is not one of the two. @param {string} relative @returns {string | undefined} */
-function otherSpelling(relative) {
-  if (relative.endsWith(".mjs")) return `${relative.slice(0, -".mjs".length)}.ts`;
-  if (relative.endsWith(".ts")) return `${relative.slice(0, -".ts".length)}.mjs`;
-  return undefined;
+/** The tool's own `package.json`: what it DECLARES (`exports`, `bin`) is the only contract a consumer may read, and never the layout of its `src/`. @param {string} root @returns {{ exports?: Record<string, unknown>, bin?: unknown }} */
+function manifestOf(root) {
+  return JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 }
 
 /**
- * A file of the tool, by its path under the tool (`src/work-gate.mjs`, `host/gh`), as a path.
+ * The file a DECLARED subpath of the tool's `exports` names (`leak-patterns` -> `<tool>/src/lib/leak-patterns.mjs`), as a path.
  *
- * A module named `.mjs` that the tool holds as `.ts` (or the reverse) resolves to the file the tool HAS: agent-org renames its modules in
- * batches (agent-org#435, then #4389), and a caller naming the old spelling must not break the day the tool it runs against changes
- * (#4394). Neither spelling present REFUSES naming both, rather than handing back a path that fails later as `ERR_MODULE_NOT_FOUND`.
- * @param {string} relative @returns {string}
+ * Resolved through the tool's `package.json` `exports` and not through a path under it, so a rename or a move inside agent-org (`.mjs` -> `.ts`, agent-org#435, #4389)
+ * that keeps the declared name breaks nobody (#4408, a11ign/a11ign#4407). A name the tool does not declare REFUSES, naming what it does: a guess at a `src/` file
+ * would be the reach this exists to end.
+ * @param {string} subpath the part after `agent-org/` in a specifier (`pr-open`, not `src/pr-open.ts`)
+ * @param {string} [root]
+ * @returns {string}
  */
-export function toolPath(relative) {
-  const named = join(toolRoot(), relative);
-  const other = otherSpelling(relative);
-  if (other === undefined || existsSync(named)) return named;
-  const swapped = join(toolRoot(), other);
-  if (existsSync(swapped)) return swapped;
-  throw new Error(`agent-org-newest-tag: the tool holds neither ${named} nor ${swapped}, so \`${relative}\` is not a module of it. `
-    + `The tool is at ${toolRoot()}; a stale checkout or a module the tool dropped both end here.`);
-}
-
-/** The same file as a `URL`, for `readFileSync(url)`. @param {string} relative @returns {URL} */
-export function toolUrl(relative) {
-  return pathToFileURL(toolPath(relative));
+export function toolExportPath(subpath, root = toolRoot()) {
+  try {
+    // The platform's own resolution of a package's `exports` by self-reference (the tool is named `agent-org`), so a condition or a pattern in the map is read as node reads it.
+    return createRequire(join(root, "package.json")).resolve(`agent-org/${subpath}`);
+  } catch (cause) {
+    const declared = Object.keys(manifestOf(root).exports ?? {}).map((key) => key.slice(2));
+    throw new Error(`agent-org-newest-tag: the tool at ${root} does not declare \`agent-org/${subpath}\` in its package.json \`exports\`. `
+      + `It declares: ${declared.join(", ") || "nothing"}. Ask agent-org to declare it; never reach for its \`src/\` by path.`, { cause });
+  }
 }
 
 /**
- * A module of the tool, by its path under the tool (`src/work-gate.mjs`). A computed `import()`, so the caller names the shape it uses.
- * @param {string} relative
+ * A declared export of the tool, imported. A computed `import()`, so the caller names the shape it uses; the target may be `.ts`, so the importer runs under tsx or a
+ * node that strips types, as `bin.mjs` runs its programs.
+ * @param {string} subpath
  * @returns {Promise<any>}
  */
-export function toolModule(relative) {
-  return import(toolUrl(relative).href);
+export function toolExport(subpath) {
+  return import(pathToFileURL(toolExportPath(subpath)).href);
+}
+
+/**
+ * The tool's one executable, from the `bin` its `package.json` declares (`agent-org`), as a path. A string `bin` is the package's own name, an object names it.
+ * @param {string} [root]
+ * @returns {string}
+ */
+export function toolBin(root = toolRoot()) {
+  const { bin } = manifestOf(root);
+  const target = typeof bin === "string" ? bin : (bin && typeof bin === "object" ? /** @type {Record<string, unknown>} */ (bin)["agent-org"] : undefined);
+  if (typeof target === "string") return join(root, target);
+  throw new Error(`agent-org-newest-tag: the tool at ${root} declares no \`agent-org\` in its package.json \`bin\`, so there is no executable to run.`);
 }
 
 /** @param {string} url @returns {string[]} */
@@ -138,7 +148,7 @@ function fetchTool({ url, tag, dest }) {
 function exportTool({ dest, tag, env = process.env }) {
   const bin = join(dest, "..", "agent-org-bin");
   mkdirSync(bin, { recursive: true });
-  writeFileSync(join(bin, "agent-org"), `#!/usr/bin/env bash\nexec node "${join(dest, "src/bin.mjs")}" "$@"\n`);
+  writeFileSync(join(bin, "agent-org"), `#!/usr/bin/env bash\nexec node "${toolBin(dest)}" "$@"\n`);
   chmodSync(join(bin, "agent-org"), EXECUTABLE);
   if (env.GITHUB_ENV) appendFileSync(env.GITHUB_ENV, `${TOOL_ENV}=${dest}\nAGENT_ORG_TAG=${tag}\n`);
   if (env.GITHUB_PATH) appendFileSync(env.GITHUB_PATH, `${bin}\n`);

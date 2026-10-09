@@ -24,12 +24,12 @@ import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-const { assertNoLeakInArgv, leakRefusalReason } = await toolModule("src/lib/leak-patterns.mjs");
+const { assertNoLeakInArgv, leakRefusalReason } = await toolExport("leak-patterns");
 import { refuseUnknownFlags } from "@a11ign/screenreader-fleet/cli-flags";
 import { sandboxGitEnv } from "../../packages/guards/src/git-env.mjs";
 import { pnpmCliInvocation } from "../npm-cli-executable.mjs";
 import { outsiderVerdict } from "./verdict.ts";
-import { toolModule } from "../agent-org-newest-tag.mjs";
+import { toolExport } from "../agent-org-newest-tag.mjs";
 import { promotionTimeFrom } from "../release-promote.mjs";
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));

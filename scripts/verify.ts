@@ -36,12 +36,12 @@ import { changedFiles } from "../packages/guards/src/changed-files.mjs";
 import { underFloor } from "../packages/guards/src/assert-glob-not-empty.mjs";
 import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 import { refuseUnknownFlags, flagValue } from "./cli-flags.mjs";
-const { checkBody } = await toolModule("src/pr-open.mjs");
+const { checkBody } = await toolExport("pr-open");
 import { classify, knownPackages, packedFiles } from "./ci-changed.mjs";
 import { privateRunRoot } from "./private-tmp.mjs";
 // NEVER a bare `pnpm` spawn -- unsafe on Windows (CVE-2024-27980), and this repo's own guard refuses one.
 import { pnpmCliInvocation } from "./npm-cli-executable.mjs";
-import { toolModule, toolPath } from "./agent-org-newest-tag.mjs";
+import { toolBin, toolExport } from "./agent-org-newest-tag.mjs";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 const STAMP_FILE = "verify-stamp.json";
@@ -482,7 +482,7 @@ async function runOwnedPaths({ body, files }: { body: string | null; files: stri
     writeFileSync(join(dir, "changed.txt"), files.join("\n"));
     writeFileSync(join(dir, "body.txt"), body ?? "");
     const diff = `--diff=${join(dir, "changed.txt")}`;
-    const { status } = await shAsync(process.execPath, [toolPath("src/bin.mjs"), "owned-path-signoff", diff, `--body=${join(dir, "body.txt")}`],
+    const { status } = await shAsync(process.execPath, [toolBin(), "owned-path-signoff", diff, `--body=${join(dir, "body.txt")}`],
       { cwd: REPO, stdio: "inherit" });
     return status === 0 ? "pass" : "fail";
   } finally {
