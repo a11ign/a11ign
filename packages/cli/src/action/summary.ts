@@ -723,6 +723,56 @@ function rollUpVerdict(multi: MultiPageResult, failOn: FailOn): string[] {
   ];
 }
 
+/**
+ * #4377 (#4084 outcome 4): A CRITERION REFERRED ON MOST OF A RUN'S PAGES IS SAID ONCE, with its page count.
+ *
+ * A referral is a `cantTell` CRITERION (a reason, no quoted text), so it repeats ACROSS pages and never within one:
+ * on the 46 conformant pages of the calibration sweep 12 criteria carried 427 of the 471 referrals (`docs/referral-load.md`).
+ * The per-page sections keep their own count line, so this ADDS a line and cuts nothing here; what it saves a reader is the
+ * trip to the artifact for the same criterion once per page.
+ *
+ * Both bounds, because a half of two pages is one page, which is no recurrence. Only `checked` pages count toward N: a page
+ * nobody measured has no outcomes to roll up, and it stays in M so the figure never reads as more complete than the run.
+ * `failed` outcomes are never rolled up -- an assertion is about a page, and is read per page.
+ */
+const RECURRING_MIN_PAGES = 3;
+
+/** `1.4.13 Content on Hover or Focus`; the bare number when the list does not know it. */
+const criterionLabel = (num: string): string => {
+  const name = WCAG_22_AA.find((c) => c.num === num)?.name;
+  return name ? `${num} ${name}` : num;
+};
+
+interface RecurringReferral { criterion: string; pages: number; firstReason: string }
+
+function recurringReferrals(multi: MultiPageResult): RecurringReferral[] {
+  const byCriterion = new Map<string, RecurringReferral>();
+  for (const page of multi.pages.filter((p) => pageOutcome(p) === "checked")) {
+    const referred = new Map<string, string>();
+    for (const outcome of page.results.flatMap((result) => result.outcomes ?? [])) {
+      if (outcome.outcome === "cantTell" && !referred.has(outcome.criterion)) referred.set(outcome.criterion, outcome.reason);
+    }
+    for (const [criterion, reason] of referred) {
+      const seen = byCriterion.get(criterion);
+      if (seen) seen.pages += 1;
+      else byCriterion.set(criterion, { criterion, pages: 1, firstReason: reason });
+    }
+  }
+  const floor = Math.max(RECURRING_MIN_PAGES, multi.pages.length / 2);
+  return [...byCriterion.values()].filter((r) => r.pages >= floor).sort((a, b) => b.pages - a.pages || a.criterion.localeCompare(b.criterion, "en", { numeric: true }));
+}
+
+/** The roll-up lines, or none: a run with no recurring referral prints exactly as it did before. */
+function recurringReferralLines(multi: MultiPageResult): string[] {
+  const recurring = recurringReferrals(multi);
+  if (recurring.length === 0) return [];
+  return ["", `**Left to a person on at least half the pages:** each criterion below was referred (worth a person's eyes, the tool cannot `
+    + "decide it on its own) on at least half of this run's pages, so it is said once here with the reason from its first page. "
+    + "Every page's own list is still in the run artifact.", "",
+  ...recurring.map((r) => `- ${cell(criterionLabel(r.criterion))}: left to a person on ${r.pages} of ${multi.pages.length} pages. `
+    + `First page's reason: ${cell(r.firstReason)}`)];
+}
+
 /** A page whose capture failed, in the summary: said plainly, never rendered as an empty findings table. */
 function failedPageSection(page: PageReport): string[] {
   const reason = (page.error ?? "the capture produced no result").split("\n").map((line) => `> ${line}`);
@@ -746,6 +796,7 @@ export function renderMultiSummary(multi: MultiPageResult, options: SummaryOptio
     "| # | Page | Outcome | Findings | Tripped fail-on |", "|---|---|---|---|---|",
     ...multi.pages.map((page, index) => rollUpRow(page, index, failOn)), "",
     ...rollUpVerdict(multi, failOn),
+    ...recurringReferralLines(multi),
   ];
   for (const page of multi.pages) {
     const sections = pageOutcome(page) === "failed" ? [failedPageSection(page).join("\n")]

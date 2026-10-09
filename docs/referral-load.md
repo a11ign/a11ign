@@ -1,6 +1,6 @@
 # Referral load: how much of it is the same referral said again (#4241, #4084 outcome 4)
 
-**Status 2026-10-09: BELOW the 20.0% line on the 49 text-bearing referrals of the sweep's file (0 repeats of 49), and that is NOT a statement about the 395.** The two counts count different things (below): the complaint's ~10 a page are `cantTell` *criteria*, which carry no quoted text and are one per criterion per page, so this measurement cannot see them. No grouping row is filed on this figure, and none is declined on it for the complaint's load.
+**Update 2026-10-09 (#4377): the ~10 a page is now rolled up in a multi-page summary, 471 lines to 56 (see "The ~10 a page, counted by surface").** **Status 2026-10-09: BELOW the 20.0% line on the 49 text-bearing referrals of the sweep's file (0 repeats of 49), and that is NOT a statement about the 395.** The two counts count different things (below): the complaint's ~10 a page are `cantTell` *criteria*, which carry no quoted text and are one per criterion per page, so this measurement cannot see them. No grouping row is filed on this figure, and none is declined on it for the complaint's load.
 
 ## The question and the decision it carries
 
@@ -100,6 +100,59 @@ What follows from that:
 - **On this file's 49 text-bearing referrals, repeat share is 0.0%, BELOW the 20.0% line: grouping by (criterion, quoted text) would not cut this file's load by a fifth**, because none of the 49 repeats. It also barely has any load to cut (about one a page).
 - **The 0.0% is not yet a statement about the 395 (471 here).** Those are `cantTell` criteria with no text, so the measurement does not apply to them. **No grouping row is filed on it, and none is declined on it** for the ~10 a page.
 - **The next lever is a different measurement of the ~10 a page**, not grouping by text: how many of a conformant page's `cantTell` criteria are ones a reader cannot act on, and how many are the same few criteria on every page (above). That needs a definition of "repeat" for criteria with no text (for example the same criterion on N of the pages of a run), which `product-manager` can put in a row if the load is still the complaint. Not a number this row produces.
+
+## The ~10 a page, counted by surface and then rolled up (#4377, #4084 outcome 4)
+
+The "next lever" above was taken: `renderMultiSummary` now says a criterion that is `cantTell` on at least half of a run's pages, and on at least three, **once**, as `<criterion> <name>: left to a person on N of M pages. First page's reason: …`. A criterion below that line, every `failed` outcome and a single-page run print as before; `--json` and the evidence pack are untouched.
+
+**Measured 2026-10-09** on the 46 `conformant` pages of `runs/fetched/candidate.calibration-judgments.json` (`scoredAt` 2026-10-08T23:44:59Z), by running the shipped renderers on a `RunResult` built per page from the file's recorded `cantTell` criteria. The file holds the criterion and not the reason, so each reason is one stand-in line: the counts do not depend on the words, but a real multi-line reason would add lines. The script is below (save it as `packages/cli/src/zz-measure.ts`, run `node_modules/.bin/tsx packages/cli/src/zz-measure.ts <the file>`, delete it); the rows it prints before the `AFTER` lines are BEFORE (origin/main `f4377e7bd`), and the `AFTER` lines are this change.
+
+| surface | BEFORE: lines a reader meets | a page | AFTER |
+|---|---|---|---|
+| Action summary, lines naming a referred criterion | 0 (46 count lines, one a page, pointing at the artifact) | 0.0 | 12 roll-up lines |
+| Action log, lines naming a referred criterion | 0 | 0.0 | 0 |
+| run artifact, per-page `cantTell` entries | 471 | 10.2 | 471 (unchanged, by design) |
+| CLI list mode, `[REFERRED]` lines | 471 | 10.2 | 471 (unchanged: not in this row) |
+
+**Lines a reader must read to cover every referral:** BEFORE 471 (10.2 a page), all in the artifact. AFTER **56 (1.2 a page)**: the 12 roll-up lines, which stand for 427 of the entries, plus the 44 non-recurring ones, which are still read in the artifact. **A drop of 88.1%**, above the third the row set as the line below which this is not called the answer. Two things this figure is not: it counts lines a reader meets, not time or attention, and it is the roll-up's reading of one run (the recurrence is the sweep's: 1.4.13, 3.2.1 and 3.2.2 on all 46 pages), so a run of pages with little in common rolls up less. **The CLI's list mode still prints all 471**; whether to buffer it is a separate row, filed only if the CLI turns out to be where a reader sits.
+
+```ts
+import { readFileSync } from "node:fs";
+import { renderMultiSummary, multiPageLogLines, type MultiPageResult, type RunResult } from "./action/summary.js";
+import { reportLines } from "./report.js";
+
+const file = process.argv[2];
+const j = JSON.parse(readFileSync(file, "utf8"));
+const conf = j.pages.filter((p: any) => p.claim === "conformant");
+// The sweep records the criterion only, not the reason, so every reason is one stand-in line: a line count does not depend on its words.
+const outcomesOf = (p: any) => p.cantTell.map((c: string) => ({ criterion: String(c).split(" ")[0], outcome: "cantTell", reason: "a reason, one line" }));
+const run = (p: any): RunResult => ({
+  url: p.url, task: "Read", screenReader: "NVDA", ruleBased: null, outcomes: outcomesOf(p),
+  verdict: { taskCompletable: true, summary: "s", findings: [], confidence: 0.8 },
+} as RunResult);
+const multi: MultiPageResult = { multiPage: true, pages: conf.map((p: any) => ({ url: p.url, status: "captured", results: [run(p)] })) };
+const count = (lines: string[], re: RegExp) => lines.filter((l) => re.test(l)).length;
+const n = conf.length;
+const summary = renderMultiSummary(multi, { failOn: "never" }).split("\n");
+const log = multiPageLogLines(multi, "never");
+const cli = conf.flatMap((p: any) => reportLines({ url: p.url, task: "Read", screenReader: "NVDA", verdict: run(p).verdict, outcomes: outcomesOf(p), axe: [], announcements: 0 } as any));
+const artifact = multi.pages.reduce((a, p) => a + (p.results[0].outcomes?.filter((o) => o.outcome === "cantTell").length ?? 0), 0);
+const row = (name: string, total: number) => console.log(`${name}\t${total}\t${(total / n).toFixed(1)}/page`);
+console.log("pages", n, "date", new Date().toISOString().slice(0, 10), "scoredAt", j.scoredAt);
+row("summary: lines naming a referred criterion", count(summary, /\b\d\.\d\.\d+\b.*(referred|—)/) );
+row("summary: 'Not determined' count lines", count(summary, /Not determined/));
+row("log: lines naming a referred criterion", count(log, /\b\d\.\d\.\d+\b/));
+row("artifact: per-page cantTell outcome entries", artifact);
+row("CLI list mode: [REFERRED] lines", count(cli, /\[REFERRED/));
+const rollUp = summary.filter((l) => /left to a person on/.test(l));
+const recurringEntries = rollUp.reduce((a, l) => a + Number(/on (\d+) of/.exec(l)![1]), 0);
+console.log("AFTER roll-up lines", rollUp.length, "entries they stand for", recurringEntries);
+console.log("AFTER lines to cover every referral", rollUp.length + (artifact - recurringEntries), ((rollUp.length + artifact - recurringEntries) / n).toFixed(1) + "/page", "BEFORE", artifact, (artifact / n).toFixed(1));
+console.log("drop", (100 * (1 - (rollUp.length + artifact - recurringEntries) / artifact)).toFixed(1) + "%");
+console.log(rollUp.slice(0, 3).join("\n"));
+```
+
+**Still open, as a question and not a claim:** whether the 12 criteria said once, and the 44 that remain, are ones a reader can act on. The evaluator's report is the evidence they are read; nothing here shows what a reader does with them, and this change cuts the lines without answering it.
 
 ## What is left, and who owns it
 
