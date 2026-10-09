@@ -21,8 +21,8 @@ importers:
         specifier: 0.2.1
         version: link:packages/scorer
       '@a11ign/screenreader-fleet':
-        specifier: ^0.6.0
-        version: 0.6.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)
+        specifier: ^0.7.0
+        version: 0.7.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)
       '@a11ign/screenreader-worker':
         specifier: 0.9.0
         version: 0.9.0
@@ -101,8 +101,8 @@ importers:
         specifier: 0.2.1
         version: link:../scorer
       '@a11ign/screenreader-fleet':
-        specifier: ^0.6.0
-        version: 0.6.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)
+        specifier: ^0.7.0
+        version: 0.7.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)
     devDependencies:
       '@a11ign/documents':
         specifier: ^0.1.1
@@ -129,8 +129,8 @@ importers:
   packages/guards:
     dependencies:
       '@a11ign/screenreader-fleet':
-        specifier: ^0.6.0
-        version: 0.6.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)
+        specifier: ^0.7.0
+        version: 0.7.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)
 
   packages/judge:
     dependencies:
@@ -175,8 +175,8 @@ packages:
       '@huggingface/transformers':
         optional: true
 
-  '@a11ign/screenreader-fleet@0.6.0':
-    resolution: {integrity: sha512-h06W2yDT+zRNSg5csmBa2ayz2dLpGcFqFnDKo17nwRUCZASaB9SLyQa5OJ4YU29Bb2LIAA6a6nOKo/s/swd9UQ==}
+  '@a11ign/screenreader-fleet@0.7.0':
+    resolution: {integrity: sha512-3G29wA0AvbjJBO+C99Lenv57T0O+frvWJlqrsdUCNDkHF07yIBoxveB+qE10ri+FwpgYwuhnFTowfwk/cnml4A==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -196,6 +196,23 @@ packages:
       '@rslib/core':
         optional: true
       '@rstest/coverage-v8':
+        optional: true
+
+  '@a11ign/toolchain@0.5.0':
+    resolution: {integrity: sha512-+6+vTWgfpmi8CQ6uxJ6XZvFFVBVaSrr6eF3nM5S8T4ZwX9yrWEk7ZhiyHIEufAwDLFTb58ShnRtVwXd5TpNuFg==}
+    engines: {node: '>=22.15.0'}
+    hasBin: true
+    peerDependencies:
+      '@rslib/core': ^1.0.3
+      '@rstest/core': ^0.12.3
+      '@rstest/coverage-v8': ^0.12.3
+      typescript: ^6.0.3 || ^7.0.0
+    peerDependenciesMeta:
+      '@rslib/core':
+        optional: true
+      '@rstest/coverage-v8':
+        optional: true
+      typescript:
         optional: true
 
   '@anthropic-ai/sdk@0.131.0':
@@ -1931,14 +1948,19 @@ snapshots:
     optionalDependencies:
       '@anthropic-ai/sdk': 0.131.0
 
-  '@a11ign/screenreader-fleet@0.6.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)':
+  '@a11ign/screenreader-fleet@0.7.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)':
     dependencies:
       '@a11ign/judge': 0.1.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)
       '@a11ign/screenreader-worker': 0.9.0
+      '@a11ign/toolchain': 0.5.0(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)
     transitivePeerDependencies:
       - '@a11ign/scorer'
       - '@anthropic-ai/sdk'
       - '@huggingface/transformers'
+      - '@rslib/core'
+      - '@rstest/core'
+      - '@rstest/coverage-v8'
+      - typescript
 
   '@a11ign/screenreader-worker@0.9.0':
     dependencies:
@@ -1950,6 +1972,14 @@ snapshots:
     optionalDependencies:
       '@rslib/core': 1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3)
       '@rstest/coverage-v8': 0.12.3(@rstest/core@0.12.3)
+
+  '@a11ign/toolchain@0.5.0(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)':
+    dependencies:
+      '@rstest/core': 0.12.3
+    optionalDependencies:
+      '@rslib/core': 1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3)
+      '@rstest/coverage-v8': 0.12.3(@rstest/core@0.12.3)
+      typescript: 6.0.3
 
   '@anthropic-ai/sdk@0.131.0':
     dependencies:
