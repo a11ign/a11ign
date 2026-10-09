@@ -38,8 +38,8 @@
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags } from "@a11ign/screenreader-fleet/cli-flags";
-import { toolModule } from "./agent-org-newest-tag.mjs";
-const { REPO, gh } = await toolModule("src/board-data.mjs");
+import { toolExport } from "./agent-org-newest-tag.mjs";
+const { REPO, gh } = await toolExport("board-data");
 
 const ISSUE = "73";
 const ORG = "a11ign";

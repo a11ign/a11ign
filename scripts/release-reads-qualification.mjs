@@ -32,10 +32,10 @@ import { pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
 import { refuseUnknownFlags, flagValue } from "./cli-flags.mjs";
 import { REPO } from "./repo-identity.mjs";
-const { gh } = await toolModule("src/merge-guard/lookups.mjs");
+const { gh } = await toolExport("merge-guard-lookups");
 import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 import { changedFiles } from "../packages/guards/src/changed-files.mjs";
-import { toolModule } from "./agent-org-newest-tag.mjs";
+import { toolExport } from "./agent-org-newest-tag.mjs";
 
 /** @typedef {{ state: string, description?: string }} Status */
 /** @typedef {{ sha: string, changedPaths: string[], statuses: Status[] }} HistoryEntry */
