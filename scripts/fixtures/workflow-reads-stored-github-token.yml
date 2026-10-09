@@ -1,0 +1,17 @@
+# POSITIVE CONTROL for packages/guards/src/no-stored-github-token-readers.test.ts (#4203): a workflow that reads BOTH stored organisation secrets,
+# the dot form and the bracket form, so a detector gone blind (or one that matched only a name it was shown) fails there and not by passing
+# quietly over the real tree. It lives under scripts/fixtures/, outside .github/workflows/, so it is never run and never counted as a reader.
+name: fixture-reads-stored-github-token
+on: workflow_dispatch
+jobs:
+  reads-both:
+    runs-on: ubuntu-latest
+    steps:
+      - name: reads the bot token into the environment
+        env:
+          GH_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
+        run: gh api user
+      - name: reads the org-secrets token as an input, in bracket form
+        uses: actions/checkout@v7
+        with:
+          token: ${{ secrets['ORG_SECRETS_READ_TOKEN'] }}
