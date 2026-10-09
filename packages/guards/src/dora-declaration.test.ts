@@ -276,6 +276,28 @@ test("control: lab's old prefix put back, or no src/, is REFUSED, naming it", ()
   assert.match(staleLabPathRefusal([]) ?? "", /declares \[\]/);
 });
 
+/** #4227: `control` holds its package at the ROOT of its repository since the flatten (a11ign/control#23, released as v0.1.14, #4217), so `src/` is its prefix and `packages/control/` is a directory it no longer has. A `tag` repository reads no manifest (claim 3), so nothing else would notice the old prefix counting no pull request as releasable. */
+const STALE_CONTROL_PREFIX = "packages/control/";
+const CONTROL = "a11ign/control";
+
+/** Why control's declared paths do not name its own layout (`src/`), or null when they do. */
+function staleControlPathRefusal(declared: unknown): string | null {
+  const paths = releasablePathsOf(CONTROL, declared);
+  if (paths.includes(STALE_CONTROL_PREFIX)) return `${CONTROL} still declares ${STALE_CONTROL_PREFIX}, which that repository does not have`;
+  return paths.includes("src/") ? null : `${CONTROL} declares ${JSON.stringify(paths)}, and its code is under src/`;
+}
+
+test("control's releasable paths name its own layout (src/), not the directory the flatten removed (#4227)", () => {
+  assert.equal(staleControlPathRefusal(realDeclared), null);
+});
+
+test("control: control's old prefix put back, or no src/, is REFUSED, naming it", () => {
+  const withPaths = (releasablePaths: string[]) => (realDeclared as Declared[]).map((entry) => (entry.repo === CONTROL ? { ...entry, releasablePaths } : entry));
+  assert.match(staleControlPathRefusal(withPaths([STALE_CONTROL_PREFIX])) ?? "", /still declares packages\/control\//);
+  assert.match(staleControlPathRefusal(withPaths(["packages/other/"])) ?? "", /its code is under src\//);
+  assert.match(staleControlPathRefusal([]) ?? "", /declares \[\]/);
+});
+
 const realCode = project.code;
 const FIXTURE_CODE: CodeRepository[] = [{ key: "", repo: "a11ign/one" }, { key: "two", repo: "a11ign/two" }];
 const FIXTURE_DORA: Declared[] = [{ repo: "a11ign/one" }, { repo: "a11ign/two" }];
