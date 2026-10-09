@@ -65,7 +65,7 @@ const MOVED_TO_THE_REGISTRY: Record<string, string> = {
   // `src/` is the worker repository's own layout (#4092: the old key, `packages/nvda-worker/`, named a directory it never had there). The key
   // carries the repository because `documents` declares `src/` too (#4218), so the prefix alone no longer says whose manifest to read.
   "a11ign/screenreader-worker src/": "node_modules/@a11ign/screenreader-worker/package.json",
-  "a11ign/screenreader-fleet packages/worker-fleet/": "node_modules/@a11ign/screenreader-fleet/package.json",
+  "a11ign/screenreader-fleet src/": "node_modules/@a11ign/screenreader-fleet/package.json",
   // `toolchain` holds its package at the ROOT of its repository since the flatten (a11ign/toolchain#20, published as 0.1.6, #4213), so its prefix is `src/`.
   "a11ign/toolchain src/": "node_modules/@a11ign/toolchain/package.json",
 };

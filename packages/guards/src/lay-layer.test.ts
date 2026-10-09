@@ -36,7 +36,7 @@ test("the real lockfile pins a registry release, and the plan names its tag", ()
   const pinned = pinnedVersion(lockfile, NAME);
   assert.ok("version" in pinned, JSON.stringify(pinned));
   const plan = layingPlan(JSON.parse(readFileSync(join(REPO_ROOT, "layers.json"), "utf8")), lockfile, "screenreader-fleet");
-  assert.deepEqual(plan, { remote: "https://github.com/a11ign/screenreader-fleet.git", tag: `${NAME}@${pinned.version}`, path: "packages/worker-fleet", lays: ["src"] });
+  assert.deepEqual(plan, { remote: "https://github.com/a11ign/screenreader-fleet.git", tag: `v${pinned.version}`, path: "packages/worker-fleet", source: ".", lays: ["src"] });
 });
 
 test("POSITIVE CONTROL: the version is read past the peers pnpm appends, and a link, a missing entry and an undeclared layer are REFUSED", () => {
@@ -68,7 +68,7 @@ test("#3939: a layer's DECLARED package names the tag, not its key; no declarati
   assert.match(plan.tag, /^v\d+\.\d+\.\d+$/);
 });
 
-test("#4119: the worker lays `<package>@<version>` below 0.3.0 and `v<version>` from it; the fleet, which still tags the scoped form, is untouched", () => {
+test("#4119: the worker lays `<package>@<version>` below 0.3.0 and `v<version>` from it; the fleet does the same from 0.5.3 (the flat release, #4224)", () => {
   const worker = { path: "packages/nvda-worker", package: "screenreader-worker", remote: "https://example.invalid/screenreader-worker.git" };
   const manifest = { layers: { "nvda-worker": worker, "screenreader-fleet": MANIFEST.layers["screenreader-fleet"] } };
   const lockfile = (name: string, version: string) => `importers:\n\n  .:\n    dependencies:\n      '${name}':\n        specifier: ${version}\n        version: ${version}\n`;
@@ -78,7 +78,9 @@ test("#4119: the worker lays `<package>@<version>` below 0.3.0 and `v<version>` 
   assert.equal(workerTag("0.4.0"), "v0.4.0");
   assert.equal(workerTag("1.0.0"), "v1.0.0");
   assert.equal(workerTag("0.10.0"), "v0.10.0");
-  assert.equal(layingPlan(manifest, lockfile(NAME, "0.5.1"), "screenreader-fleet").tag, `${NAME}@0.5.1`);
+  const fleetTag = (version: string) => layingPlan(manifest, lockfile(NAME, version), "screenreader-fleet").tag;
+  assert.equal(fleetTag("0.5.2"), `${NAME}@0.5.2`);
+  assert.equal(fleetTag("0.5.3"), "v0.5.3");
 });
 
 test("#4119: `source` is where the layer is in ITS repository and `path` stays where it is laid; without it the two are one; the real worker declares the root", () => {
@@ -148,7 +150,7 @@ test("lay: src/ only, without the layer's tests or its manifest, at the pinned t
     layerRepository(sandbox, "0.4.0");
     const root = mkdtempSync(join(tmpdir(), "lay-layer-root-"));
     try {
-      const plan = (version: string) => ({ remote: pathToFileURL(sandbox.dir).href, tag: `${NAME}@${version}`, path: "packages/worker-fleet", lays: ["src"] });
+      const plan = (version: string) => ({ remote: pathToFileURL(sandbox.dir).href, tag: `${NAME}@${version}`, path: "packages/worker-fleet", source: ".", lays: ["src"] });
       assert.equal(lay(root, plan("0.3.0")), `laid ${NAME}@0.3.0 at packages/worker-fleet`);
       assert.deepEqual(walk(join(root, "packages/worker-fleet")), [REF_FILE, "src/cli-flags.mjs", "src/provisioning/stamp.ps1"],
         "the laid directory holds src/ alone: no manifest (a walker would take it for a package) and no test (test:all would run it)");

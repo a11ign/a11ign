@@ -75,9 +75,9 @@ const DEFAULT_LAYS = ["src"];
 /**
  * The first version whose repository tags a release `v<semver>` rather than `<package>@<version>`, by package (#4119). The tag form is the
  * REPOSITORY's, not the version's: `screenreader-worker` moved to `v<semver>` at 0.3.0 (its tags are `@a11ign/screenreader-worker@0.2.0`, `v0.3.0`,
- * `v0.4.0`), while `screenreader-fleet` is still `@a11ign/screenreader-fleet@0.5.1`, so a rule on the version alone would break the fleet.
+ * `v0.4.0`), and `screenreader-fleet` moved to it at 0.5.3, the flat release (#4224; its tags up to 0.5.2 are `@a11ign/screenreader-fleet@0.5.2`), so a rule on the version alone would break one of them.
  */
-const BARE_TAGS_FROM = { "@a11ign/screenreader-worker": [0, 3, 0] };
+const BARE_TAGS_FROM = { "@a11ign/screenreader-worker": [0, 3, 0], "@a11ign/screenreader-fleet": [0, 5, 3] };
 
 /** @param {string} version @returns {number[]} major, minor, patch */
 const semverParts = (version) => version.split(".").slice(0, 3).map(Number);

@@ -21,8 +21,8 @@ importers:
         specifier: 0.2.1
         version: link:packages/scorer
       '@a11ign/screenreader-fleet':
-        specifier: ^0.5.1
-        version: 0.5.1(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)
+        specifier: ^0.5.3
+        version: 0.5.3(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)
       '@a11ign/screenreader-worker':
         specifier: 0.5.0
         version: 0.5.0
@@ -101,8 +101,8 @@ importers:
         specifier: 0.2.1
         version: link:../scorer
       '@a11ign/screenreader-fleet':
-        specifier: ^0.5.1
-        version: 0.5.1(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)
+        specifier: ^0.5.3
+        version: 0.5.3(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)
     devDependencies:
       '@a11ign/documents':
         specifier: ^0.1.0
@@ -129,8 +129,8 @@ importers:
   packages/guards:
     dependencies:
       '@a11ign/screenreader-fleet':
-        specifier: ^0.5.1
-        version: 0.5.1(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)
+        specifier: ^0.5.3
+        version: 0.5.3(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)
 
   packages/judge:
     dependencies:
@@ -175,8 +175,8 @@ packages:
       '@huggingface/transformers':
         optional: true
 
-  '@a11ign/screenreader-fleet@0.5.1':
-    resolution: {integrity: sha512-/BXS10nGbNQCZ70fftcvbLrbO0y4nq7akOrOD9KO+NTVrggwl/Pb7yJ6Y/99A74J0jbCOq2GqOCZrVYk0lJyfQ==}
+  '@a11ign/screenreader-fleet@0.5.3':
+    resolution: {integrity: sha512-MVKRbQ46LHSSwG/cTQ29A5farrdmNXEsAa4cT0+5Ue15cLVuqlv3tNfYaigAKIfukqfyEREYW4ZW9hSk8eEl/A==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -1927,7 +1927,7 @@ snapshots:
     optionalDependencies:
       '@anthropic-ai/sdk': 0.131.0
 
-  '@a11ign/screenreader-fleet@0.5.1(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)':
+  '@a11ign/screenreader-fleet@0.5.3(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)':
     dependencies:
       '@a11ign/judge': 0.1.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)
       '@a11ign/screenreader-worker': 0.5.0
