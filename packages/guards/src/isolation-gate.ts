@@ -464,6 +464,12 @@ function packAndInstall(dir: string, consumer: string, manifest: { name?: string
       detail: `packs, but ${rangeProblems.length} internal range(s) in the tarballs are wrong: ${rangeProblems.join("; ")}` } };
   }
   runNpm(["init", "-y"], consumer);
+  // THE SMOKE IS `isolation-smoke.ts`, ES-module syntax, copied into THIS directory and run by `node` (#4393 renamed
+  // the `.mjs` smokes). A `.mjs` did not care what the nearest package.json said; a `.ts` takes its module type from
+  // it, and npm 11.19.0's `init -y` writes `"type": "commonjs"` (measured; the npm 9.2.0 on this host's PATH writes
+  // none), so every package failed `SyntaxError: Cannot use import statement outside a module` (#4654). Set it
+  // explicitly rather than lean on Node's syntax detection, which an explicit `commonjs` switches off.
+  runNpm(["pkg", "set", "type=module"], consumer);
   // `--no-workspaces` and absolute tarball paths: without them npm can walk UP from the temp directory
   // and re-attach to a workspace root, which would reintroduce exactly the symlink resolution the gate
   // exists to avoid.
