@@ -53,7 +53,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: a11ign/a11ign@890cd490276d16102b3f371007951a24942950da   # the commit of the release tagged a11ign@0.3.0
+      - uses: a11ign/a11ign@15881c7c59bee7cb49b464932f9732cb51e088f9   # the commit of the release tagged a11ign@0.5.3
         id: witness
         with:
           # REPLACE these with your own pages. A list you write, not a crawl: nothing follows a link, so
