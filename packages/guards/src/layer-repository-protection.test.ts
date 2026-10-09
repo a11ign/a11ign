@@ -37,9 +37,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, mkdtempSync, writeFileSync, chmodSync } from "node:fs";
-import { spawnSync } from "node:child_process";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
@@ -53,12 +51,7 @@ const GUARD = "packages/guards/src/branch-protection.test.ts";
 /** The one repository whose literal the guard used to carry. */
 const FORMER_LITERAL = "a11ign/a11ign";
 
-/**
- * `tokenProbe`: the workflow file that carries the `token-reach` job (#3710); absent reads the `token` cell CANNOT_TELL.
- * `tokenUnused`: INSTEAD of a probe, why the repository uses `A11IGN_BOT_TOKEN` nowhere. The live read checks it against the
- * repository's workflows, so the claim is read at each run and cannot go stale: a workflow that starts reading the token is DRIFT.
- */
-type Entry = { repo: string; defaultBranch: string; requiredCheck: string; publishes: boolean; tokenProbe?: string; tokenUnused?: string };
+type Entry = { repo: string; defaultBranch: string; requiredCheck: string; publishes: boolean };
 type ProtectionFile = { repositories: Entry[] };
 type ProjectFile = { code: { key: string; repo: string }[]; tracker: { repo: string }[] };
 
@@ -66,7 +59,6 @@ const readJson = <T>(path: string): T => JSON.parse(readFileSync(join(REPO_ROOT,
 
 // --- the declaration: every listed repository has an entry ------------------------------------------------
 
-const WORKFLOW_FILE = /^[A-Za-z0-9_.-]+\.ya?ml$/;
 const OWNER_NAME = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 
 /** What is wrong with the entries themselves, one sentence each; empty means every entry is usable. */
@@ -85,17 +77,7 @@ function entryProblems(entries: Entry[]): string[] {
       if (typeof value !== "string" || value.trim() === "") problems.push(`${entry.repo} has no \`${field}\``);
     }
     if (typeof entry.publishes !== "boolean") problems.push(`${entry.repo} says nowhere whether it publishes: \`publishes\` must be true or false`);
-    problems.push(...tokenFieldProblems(entry));
   }
-  return problems;
-}
-
-/** What is wrong with an entry's two token fields: a probe file that is no file name, an unused claim with no reason, or both at once. */
-function tokenFieldProblems(entry: Entry): string[] {
-  const problems: string[] = [];
-  if (entry.tokenProbe !== undefined && !WORKFLOW_FILE.test(entry.tokenProbe)) problems.push(`${entry.repo}'s \`tokenProbe\` is not a workflow file name: ${JSON.stringify(entry.tokenProbe)}`);
-  if (entry.tokenUnused !== undefined && (typeof entry.tokenUnused !== "string" || entry.tokenUnused.trim() === "")) problems.push(`${entry.repo}'s \`tokenUnused\` must say why the token is unused here`);
-  if (entry.tokenUnused !== undefined && entry.tokenProbe !== undefined) problems.push(`${entry.repo} declares both \`tokenProbe\` and \`tokenUnused\`: a repository either uses the token (and probes it) or does not`);
   return problems;
 }
 
@@ -418,12 +400,6 @@ test("#3123 LIVE: every code repository carries the review requirement and the m
  * died on exactly that, after two settings had been found wrong by hand one at a time. So this is ONE reading
  * of every declared repository against `docs/new-code-repository.md`, each cell `OK`, `DRIFT <read vs the
  * page>` or `CANNOT_TELL <why>`, and a cell that is not `OK` fails. A repository with no row fails too.
- *
- * THE TOKEN'S REACH IS READ FROM A PROBE THAT RAN, NEVER FROM THE TOKEN'S SCOPE (#3710). The org secret and the PAT's
- * scope need an org admin (403 as `a11ign-ai-leads`, read 2026-10-05), and the first reading built on what is
- * visible (a pull request the token's identity once opened or armed) was evidence of a past act and never of
- * current reach. Each repository's `token-reach` job asks the token itself, on the WRITE side, and the cell reads
- * that job's latest run on the default branch. A ref read is no instrument: every code repository is public.
  */
 type CellState = "OK" | "DRIFT" | "CANNOT_TELL";
 type Cell = { state: CellState; detail: string };
@@ -512,56 +488,6 @@ function botsCell(repo: string, read: Read<TeamRepo[]>): Cell {
   const level = found.role_name ?? "unknown";
   return level === "write" && found.permissions?.admin === false
     ? ok("bots at write, admin false") : drift(`bots is at ${level}, admin ${String(found.permissions?.admin)}; the page says write, admin false`);
-}
-
-/** The job every code repository's token probe is named, in the workflow `tokenProbe` names (#3710). */
-const TOKEN_JOB = "token-reach";
-/** Recent default-branch runs walked for one that ran the job: a run that skipped it, or is still going, is no reading. */
-const PROBE_RUNS_WINDOW = 10;
-type ProbeRun = { runId: number; at: string; conclusion: "success" | "failure"; annotations: string[] };
-/** `null`: no run in the window ran the job, which is "not probed yet" or "the workflow lacks the probe", never a pass. */
-type ProbeRead = Read<ProbeRun | null>;
-const TOKEN_LINE = /^TOKEN-REACH (\S+): (.+)$/;
-
-/** A failed probe is DRIFT only when it says why in a `TOKEN-REACH <this repo>: <cause>` line; anything else is not a reading of the token. */
-function failedProbeCell(repo: string, run: ProbeRun): Cell {
-  const named = run.annotations.map((m) => TOKEN_LINE.exec(m)).find((m) => m !== null);
-  const at = `run ${run.runId} (${run.at})`;
-  if (!named) return cannotTell(`${at}: \`${TOKEN_JOB}\` failed with no TOKEN-REACH line, so the failure is not a reading of the token`);
-  const [, namedRepo, cause = ""] = named;
-  if (namedRepo !== repo) return cannotTell(`${at}: the TOKEN-REACH line names ${namedRepo ?? "?"}, not ${repo}: a copied probe asked about another repository`);
-  return cause.startsWith("CANNOT_TELL") ? cannotTell(`${at}: ${cause}`) : drift(`${at}: ${cause}`);
-}
-
-/** The names of the workflow files whose live lines (not comments) read `secrets.A11IGN_BOT_TOKEN`; `secrets: inherit` is NOT counted, which the page says. */
-type TokenUse = Read<string[]>;
-const TOKEN_READ = /secrets\s*(\.|\[\s*['"])A11IGN_BOT_TOKEN\b/;
-
-function workflowsReadingToken(files: { name: string; text: string }[]): string[] {
-  return files.filter((f) => f.text.split("\n").some((line) => !line.trimStart().startsWith("#") && TOKEN_READ.test(line))).map((f) => f.name);
-}
-
-/** A repository that declares the token unused: OK only while no workflow in it reads the secret. Not a probe, so it names no run. */
-function unusedTokenCell(entry: Entry, use: TokenUse | null): Cell {
-  if (use === null || use.kind !== "ok") return cannotTell(`the workflows of ${entry.repo}: ${use === null ? "not asked" : unreadWhy(use)}`);
-  if (use.value.length > 0) return drift(`${PROTECTION_FILE} says ${entry.repo} uses the token nowhere, but ${use.value.join(", ")} reads secrets.A11IGN_BOT_TOKEN: give it a \`tokenProbe\` instead`);
-  return ok(`not applicable: ${entry.tokenUnused ?? ""} (no workflow of ${entry.repo} reads secrets.A11IGN_BOT_TOKEN, read now)`);
-}
-
-/**
- * Step 8: does the token reach THIS repository on the write side, as of the latest probe run. A reading at a
- * moment, per run, never a standing certificate: the cell says which run and when.
- */
-function tokenCell(entry: Entry, probe: ProbeRead, use: TokenUse | null = null): Cell {
-  if (entry.tokenUnused !== undefined) return unusedTokenCell(entry, use);
-  const { tokenProbe } = entry;
-  if (tokenProbe === undefined) return cannotTell(`no \`tokenProbe\` for ${entry.repo} in ${PROTECTION_FILE}: nothing probes the token's reach here`);
-  if (probe.kind !== "ok") return cannotTell(`${tokenProbe}: ${unreadWhy(probe)}`);
-  if (probe.value === null) {
-    return cannotTell(`no run of a \`${TOKEN_JOB}\` job in the last ${PROBE_RUNS_WINDOW} ${entry.defaultBranch} runs of ${tokenProbe}: not probed yet, or the workflow lacks the probe`);
-  }
-  if (probe.value.conclusion === "failure") return failedProbeCell(entry.repo, probe.value);
-  return ok(`run ${probe.value.runId} (${probe.value.at}): \`${TOKEN_JOB}\` passed`);
 }
 
 // --- #3718: the release shape, read from the workflow's STRUCTURE ---------------------------------------------
@@ -937,12 +863,12 @@ function standardCells(entry: Entry, reads: RepoReads): Record<string, Cell> {
 }
 
 /** Every column of a row. `tableProblems` fails a row that lacks one, so a new cell cannot be dropped silently. */
-const TABLE_COLUMNS = [...SETTING_COLUMNS.map((s) => s.column), "issues", "protection", PUBLISH_ENV, "bots", "token", RELEASE_COLUMN,
+const TABLE_COLUMNS = [...SETTING_COLUMNS.map((s) => s.column), "issues", "protection", PUBLISH_ENV, "bots", RELEASE_COLUMN,
   TEST_RUNNER_COLUMN, RELEASE_STANDARD_COLUMN, TYPECHECK_COLUMN, BUILD_COLUMN];
 
 type RepoReads = {
   settings: Read<RepoSettings>; protection: RepoRead; envs: Read<EnvironmentList>;
-  policies: Read<PolicyList> | null; probe: ProbeRead; tokenUse: TokenUse | null;
+  policies: Read<PolicyList> | null;
   workflow: Read<ContentsAnswer>; standard: StandardReads;
 };
 type OrgReads = { bots: Read<TeamRepo[]>; trackers: string[] };
@@ -955,7 +881,6 @@ function tableRow(entry: Entry, reads: RepoReads, org: OrgReads): Row {
       protection: protectionCell(reads.protection, entry),
       [PUBLISH_ENV]: publishCell(entry, reads.envs, reads.policies),
       bots: botsCell(entry.repo, org.bots),
-      token: tokenCell(entry, reads.probe, reads.tokenUse),
       [RELEASE_COLUMN]: releaseShapeCell(reads.workflow),
       ...standardCells(entry, reads),
     },
@@ -985,13 +910,12 @@ function renderTable(rows: Row[]): string[] {
 
 // --- fixtures: a repository that satisfies the page, and the same one drifting --------------------------------
 
-const PUBLISHER: Entry = { repo: "a11ign/fixture-publisher", defaultBranch: "main", requiredCheck: "gate", publishes: true, tokenProbe: "auto-arm.yml" };
+const PUBLISHER: Entry = { repo: "a11ign/fixture-publisher", defaultBranch: "main", requiredCheck: "gate", publishes: true };
 const NO_ORG: OrgReads = { bots: { kind: "ok", value: [{ name: "fixture-publisher", role_name: "write", permissions: { admin: false } }] }, trackers: [] };
 const GOOD_SETTINGS: RepoSettings = { allow_auto_merge: true, allow_merge_commit: true, allow_squash_merge: false,
   allow_rebase_merge: false, delete_branch_on_merge: true, has_issues: false };
 const RESTRICTED_ENV: Read<EnvironmentList> = { kind: "ok", value: { environments: [{ name: PUBLISH_ENV, deployment_branch_policy: { custom_branch_policies: true } }] } };
 const MAIN_ONLY: Read<PolicyList> = { kind: "ok", value: { branch_policies: [{ name: "main", type: "branch" }] } };
-const PASSED: ProbeRead = { kind: "ok", value: { runId: 11, at: "2026-10-05T23:00:00Z", conclusion: "success", annotations: [] } };
 /** A `release.yml` as the contents endpoint returns it: base64, wrapped at 60 columns. */
 const releaseFile = (yaml: string): Read<ContentsAnswer> =>
   ({ kind: "ok", value: { encoding: "base64", content: Buffer.from(yaml).toString("base64").replace(/(.{60})/g, "$1\n") } });
@@ -1031,7 +955,7 @@ const GOOD_STANDARD: StandardReads = { manifest: manifestFile(ON_STANDARD), tree
   ci: gateWith("pnpm run typecheck", "pnpm test"), called: [] };
 
 const GOOD_READS: RepoReads = { settings: { kind: "ok", value: GOOD_SETTINGS }, protection: withClassic({ kind: "ok", value: FULL_CLASSIC }),
-  envs: RESTRICTED_ENV, policies: MAIN_ONLY, probe: PASSED, tokenUse: null, workflow: STANDARD_CALLER, standard: GOOD_STANDARD };
+  envs: RESTRICTED_ENV, policies: MAIN_ONLY, workflow: STANDARD_CALLER, standard: GOOD_STANDARD };
 const columnsNotOk = (row: Row, state: CellState): string[] => Object.entries(row.cells).filter(([, c]) => c.state === state).map(([k]) => k);
 
 test("#3705: a repository that satisfies the page reads OK in every cell -- the table can be green", () => {
@@ -1112,129 +1036,6 @@ test("#3705: `bots` -- write with admin false is OK; absent, admin or read is DR
   assert.equal(botsCell(PUBLISHER.repo, full).state, "CANNOT_TELL", "a full page may hide the repository");
 });
 
-const probeFailed = (...annotations: string[]): ProbeRead =>
-  ({ kind: "ok", value: { runId: 12, at: "2026-10-05T23:30:00Z", conclusion: "failure", annotations } });
-const NOT_PUSHABLE = `TOKEN-REACH ${PUBLISHER.repo}: the token cannot push here: the push service answered HTTP 403`;
-
-test("#3710: the token cell reads OK from a passed probe run, and says which run and when", () => {
-  const cell = tokenCell(PUBLISHER, PASSED);
-  assert.equal(cell.state, "OK");
-  assert.match(cell.detail, /run 11 \(2026-10-05T23:00:00Z\)/, "a reading at a moment names the moment");
-});
-
-test("#3710 POSITIVE CONTROL: a failed probe run with a cause prints DRIFT for exactly the token cell, and no run prints CANNOT_TELL", () => {
-  // The drift list being empty proves nothing (it is also empty for a table that read nothing), so each state
-  // names the one column it must land in, over a row where every other cell is OK.
-  const drifting = tableRow(PUBLISHER, { ...GOOD_READS, probe: probeFailed("Process completed with exit code 1.", NOT_PUSHABLE) }, NO_ORG);
-  assert.deepEqual(columnsNotOk(drifting, "DRIFT"), ["token"]);
-  assert.deepEqual(columnsNotOk(drifting, "CANNOT_TELL"), []);
-  assert.match(drifting.cells.token?.detail ?? "", /cannot push here: the push service answered HTTP 403/, "the cause is carried verbatim");
-  const unprobed = tableRow(PUBLISHER, { ...GOOD_READS, probe: { kind: "ok", value: null } }, NO_ORG);
-  assert.deepEqual(columnsNotOk(unprobed, "CANNOT_TELL"), ["token"]);
-  assert.match(unprobed.cells.token?.detail ?? "", /not probed yet, or the workflow lacks the probe/);
-  assert.deepEqual(tableProblems([drifting], [PUBLISHER.repo]).map((p) => p.split(":")[0]), [`${PUBLISHER.repo} token`], "either state fails the table");
-});
-
-const UNUSED: Entry = { repo: "a11ign/fixture-publisher", defaultBranch: "main", requiredCheck: "gate", publishes: true, tokenUnused: "no workflow of it uses the token" };
-const workflowFile = (name: string, text: string) => ({ name, text });
-/** What `documents`'s own `release.yml` says today: the token named only in a comment that says it has none. */
-const COMMENT_ONLY = "# This repository has no secrets.A11IGN_BOT_TOKEN: the release hands none over.\njobs:\n  release:\n    uses: a11ign/toolchain/.github/workflows/release-per-merge.yml@v1\n    secrets: inherit\n";
-const READS_IT = "jobs:\n  arm:\n    steps:\n      - run: gh pr merge --auto\n        env:\n          GH_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}\n";
-
-test("#3710: a repository declaring the token unused reads not-applicable, and DRIFT the day a workflow starts reading it", () => {
-  const unusedRow = (files: { name: string; text: string }[]) =>
-    tableRow(UNUSED, { ...GOOD_READS, tokenUse: { kind: "ok", value: workflowsReadingToken(files) } }, NO_ORG);
-  const none = unusedRow([workflowFile("release.yml", COMMENT_ONLY), workflowFile("ci.yml", "jobs: {}\n")]);
-  assert.equal(none.cells.token?.state, "OK", "a comment naming the token, and `secrets: inherit`, are not a read of it");
-  assert.match(none.cells.token?.detail ?? "", /^not applicable: no workflow of it uses the token/);
-  assert.deepEqual(columnsNotOk(none, "DRIFT"), []);
-  // POSITIVE CONTROL for the emptiness above: the same scan DOES find a live read, in exactly the token cell.
-  const used = unusedRow([workflowFile("release.yml", COMMENT_ONLY), workflowFile("auto-arm.yml", READS_IT)]);
-  assert.deepEqual(columnsNotOk(used, "DRIFT"), ["token"]);
-  assert.deepEqual(columnsNotOk(used, "CANNOT_TELL"), []);
-  assert.match(used.cells.token?.detail ?? "", /auto-arm\.yml reads secrets\.A11IGN_BOT_TOKEN: give it a `tokenProbe`/);
-  assert.deepEqual(workflowsReadingToken([workflowFile("a.yml", "x: ${{ secrets['A11IGN_BOT_TOKEN'] }}\n")]), ["a.yml"], "the bracket spelling reads it too");
-  assert.deepEqual(workflowsReadingToken([workflowFile("a.yml", "x: ${{ secrets.A11IGN_BOT_TOKEN_OLD }}\n")]), [], "a longer name is another secret");
-});
-
-test("#3710: a token-unused claim that could not be checked is CANNOT_TELL, and an entry cannot be both unused and probed", () => {
-  for (const [why, use] of [["not asked", null], ["refused", { kind: "refused" }], ["unreadable", { kind: "unreadable", why: "ENOBUFS" }]] as [string, TokenUse | null][]) {
-    assert.equal(tokenCell(UNUSED, PASSED, use).state, "CANNOT_TELL", why);
-  }
-  assert.deepEqual(entryProblems([UNUSED]), []);
-  assert.match(entryProblems([{ ...UNUSED, tokenProbe: "auto-arm.yml" }]).join("\n"), /declares both `tokenProbe` and `tokenUnused`/);
-  assert.match(entryProblems([{ ...UNUSED, tokenUnused: " " }]).join("\n"), /must say why the token is unused/);
-});
-
-test("#3710: everything that is not a TOKEN-REACH reading is CANNOT_TELL, never a pass and never a drift", () => {
-  const cases: [string, Entry, ProbeRead, RegExp][] = [
-    ["no tokenProbe declared", { ...PUBLISHER, tokenProbe: undefined }, PASSED, /no `tokenProbe` for a11ign\/fixture-publisher/],
-    ["the runs could not be read", PUBLISHER, { kind: "unreadable", why: "ENOBUFS" }, /auto-arm\.yml: ENOBUFS/],
-    ["a refusal", PUBLISHER, { kind: "refused" }, /absent OR forbidden/],
-    ["the job failed for another reason", PUBLISHER, probeFailed("Process completed with exit code 1."), /failed with no TOKEN-REACH line/],
-    ["a copied probe names another repository", PUBLISHER, probeFailed("TOKEN-REACH a11ign/other: the token cannot push here"), /names a11ign\/other, not a11ign\/fixture-publisher/],
-    ["the probe could not ask", PUBLISHER, probeFailed(`TOKEN-REACH ${PUBLISHER.repo}: CANNOT_TELL the probe could not ask (push 000, pulls 000)`), /CANNOT_TELL the probe could not ask/],
-  ];
-  for (const [why, entry, probe, detail] of cases) {
-    const cell = tokenCell(entry, probe);
-    assert.equal(cell.state, "CANNOT_TELL", why);
-    assert.match(cell.detail, detail, why);
-  }
-});
-
-// --- #3710: the probe itself, run as the workflow runs it, against a `curl` that answers with chosen statuses ---
-
-type ProbeWorkflow = { jobs?: Record<string, { needs?: string | string[]; steps?: { run?: string }[] }> };
-/** #3717: the probe left `release.yml` with the last read of the bot token there, and lives in a file of its own. */
-const TOKEN_REACH_WORKFLOW = ".github/workflows/token-reach.yml";
-const probeWorkflow = (): ProbeWorkflow => parseYaml(readFileSync(join(REPO_ROOT, TOKEN_REACH_WORKFLOW), "utf8")) as ProbeWorkflow;
-const PROBE_SECRET = "ghp_probe-secret-must-never-be-printed";
-
-/** The step's script, run under `bash -e` like Actions does, with a `curl` that answers the push probe and the pulls probe separately. */
-function runProbe(answers: { push: string; pulls: string }, token = PROBE_SECRET): { code: number | null; out: string } {
-  const script = probeWorkflow().jobs?.[TOKEN_JOB]?.steps?.find((step) => step.run !== undefined)?.run ?? "";
-  assert.notEqual(script, "", `${TOKEN_REACH_WORKFLOW} has no ${TOKEN_JOB} job with a script: the probe does not exist`);
-  const dir = mkdtempSync(join(tmpdir(), "token-reach-"));
-  const curl = join(dir, "curl");
-  writeFileSync(curl, '#!/bin/sh\nfor a in "$@"; do case "$a" in *git-receive-pack*) printf %s "$STUB_PUSH"; exit 0;; esac; done\nprintf %s "$STUB_PULLS"\n');
-  chmodSync(curl, 0o755);
-  const run = spawnSync("bash", ["-e", "-c", script], { encoding: "utf8", env: {
-    PATH: `${dir}:${process.env.PATH ?? ""}`, A11IGN_BOT_TOKEN: token, GITHUB_REPOSITORY: PUBLISHER.repo,
-    STUB_PUSH: answers.push, STUB_PULLS: answers.pulls } });
-  return { code: run.status, out: `${run.stdout}${run.stderr}` };
-}
-
-/** The `::error::` line the probe printed, as the annotation GitHub would hold: the cell reads these. */
-const annotationOf = (out: string): string => out.split("\n").find((l) => l.startsWith("::error::"))?.slice("::error::".length) ?? "";
-
-test("#3710: the probe passes only on push 200 and pull-request create 422, and each failure names its cause", () => {
-  const passed = runProbe({ push: "200", pulls: "422" });
-  assert.equal(passed.code, 0);
-  assert.match(passed.out, /TOKEN-REACH a11ign\/fixture-publisher: ok/);
-  const failures: [string, { push: string; pulls: string }, RegExp, CellState][] = [
-    ["rejected", { push: "401", pulls: "401" }, /cannot push here.*HTTP 401/, "DRIFT"],
-    ["read-only or not reached", { push: "403", pulls: "403" }, /cannot push here.*HTTP 403/, "DRIFT"],
-    ["no pull-request write", { push: "200", pulls: "403" }, /cannot open or arm pull requests here.*HTTP 403/, "DRIFT"],
-    ["could not ask", { push: "000", pulls: "000" }, /CANNOT_TELL the probe could not ask/, "CANNOT_TELL"],
-    ["GitHub erred", { push: "200", pulls: "502" }, /CANNOT_TELL the probe could not ask/, "CANNOT_TELL"],
-  ];
-  for (const [why, answers, cause, state] of failures) {
-    const result = runProbe(answers);
-    assert.equal(result.code, 1, why);
-    assert.match(annotationOf(result.out), cause, why);
-    assert.equal(tokenCell(PUBLISHER, probeFailed(annotationOf(result.out))).state, state, `${why}: the cell reads the line the probe wrote`);
-  }
-});
-
-test("#3710: an unset secret fails with its own cause, and no run ever prints the token", () => {
-  const unset = runProbe({ push: "200", pulls: "422" }, "");
-  assert.equal(unset.code, 1);
-  assert.match(annotationOf(unset.out), /^TOKEN-REACH a11ign\/fixture-publisher: A11IGN_BOT_TOKEN is not set/);
-  for (const answers of [{ push: "200", pulls: "422" }, { push: "403", pulls: "403" }]) {
-    assert.ok(!runProbe(answers).out.includes(PROBE_SECRET), "the secret must reach no log line");
-  }
-});
-
 /**
  * #4194 (`ceo`, replacing #4154's pin that `promote-action-tag` alone reads `A11IGN_BOT_TOKEN`): NO job of `release.yml` reads a stored GitHub
  * token. `promote-action-tag` alone mints an Octo STS token (`octo-sts/action`), in a job holding `contents: read` and `id-token: write` and nothing
@@ -1280,13 +1081,7 @@ function assertTagMovePolicyBindsToMain(): void {
   assert.match(policy.claim_pattern?.job_workflow_ref ?? "", /release\\\.yml@refs\/heads\/main$/, "the workflow claim names release.yml as ON main, so a branch's copy of it cannot mint");
 }
 
-test("#3710/#3717: the probe is a separate job named for the cell, in a file of its own that no release job reads the token from, and nothing waits on it", () => {
-  const jobs = probeWorkflow().jobs ?? {};
-  assert.ok(jobs[TOKEN_JOB], `${TOKEN_REACH_WORKFLOW} has no \`${TOKEN_JOB}\` job`);
-  assert.equal(jobs[TOKEN_JOB]?.needs, undefined, "the probe waits on nothing");
-  const waiting = Object.entries(jobs).filter(([, job]) => [job.needs ?? []].flat().includes(TOKEN_JOB)).map(([name]) => name);
-  assert.deepEqual(waiting, [], "no job may need the probe: the arm step keeps its GITHUB_TOKEN fallback");
-  assert.equal(protectionEntries().find((e) => e.repo === FORMER_LITERAL)?.tokenProbe, "token-reach.yml", "the declaration points where the job lives");
+test("#4194/#4200: release.yml reads no stored token, and its one Octo STS mint is the tag move, bound to the workflow as on main", () => {
   assertTagMoveMintsItsToken();
   assertTagMovePolicyBindsToMain();
 });
@@ -1469,7 +1264,7 @@ test("#3718: a declared repository with no release-shape cell is a failure, and 
     assert.equal(tableProblems([failing], [PUBLISHER.repo]).length, 2);
   }
   const [header] = renderTable([row]);
-  assert.match(header ?? "", /token +release-shape +test-runner/, "the header is as wide as its longest name, so the columns stay aligned");
+  assert.match(header ?? "", /bots +release-shape +test-runner/, "the header is as wide as its longest name, so the columns stay aligned");
 });
 
 // --- #3962: the four columns of the toolchain standard --------------------------------------------------------------
@@ -1724,52 +1519,6 @@ test("#3962: the table fails a row with no cell for any of the four columns, pri
 
 // --- the live table, over every declared repository -------------------------------------------------------
 
-type WorkflowRuns = { workflow_runs?: { id: number; created_at?: string }[] };
-type RunJobs = { jobs?: { id: number; name: string; conclusion: string | null }[] };
-type Annotations = { message?: string }[];
-
-/** One run's probe job, or `ok(null)` when this run did not conclude it (skipped, still going, or absent). */
-function probeOfRun(repo: string, run: { id: number; created_at?: string }): ProbeRead {
-  const jobs = ghRead<RunJobs>(`repos/${repo}/actions/runs/${run.id}/jobs?per_page=100`);
-  if (jobs.kind !== "ok") return jobs;
-  const job = (jobs.value.jobs ?? []).find((j) => j.name === TOKEN_JOB && (j.conclusion === "success" || j.conclusion === "failure"));
-  if (job === undefined) return { kind: "ok", value: null };
-  const at = run.created_at ?? "unknown time";
-  if (job.conclusion === "success") return { kind: "ok", value: { runId: run.id, at, conclusion: "success", annotations: [] } };
-  const notes = ghRead<Annotations>(`repos/${repo}/check-runs/${job.id}/annotations`);
-  if (notes.kind !== "ok") return notes;
-  return { kind: "ok", value: { runId: run.id, at, conclusion: "failure", annotations: notes.value.map((n) => n.message ?? "") } };
-}
-
-/** The latest default-branch run that concluded the probe job, newest first (a `workflow_dispatch` on the branch counts). */
-function readProbe(entry: Entry): ProbeRead {
-  if (entry.tokenProbe === undefined) return { kind: "ok", value: null };
-  const runs = ghRead<WorkflowRuns>(`repos/${entry.repo}/actions/workflows/${entry.tokenProbe}/runs?branch=${entry.defaultBranch}&per_page=${PROBE_RUNS_WINDOW}`);
-  if (runs.kind !== "ok") return runs;
-  for (const run of runs.value.workflow_runs ?? []) {
-    const found = probeOfRun(entry.repo, run);
-    if (found.kind !== "ok" || found.value !== null) return found;
-  }
-  return { kind: "ok", value: null };
-}
-
-type DirEntry = { name?: string; type?: string }[];
-
-/** Every workflow file of the repository that reads the secret, or why that could not be told. Asked only of a repository declaring the token unused. */
-function readTokenUse(entry: Entry): TokenUse | null {
-  if (entry.tokenUnused === undefined) return null;
-  const dir = ghRead<DirEntry>(`repos/${entry.repo}/contents/.github/workflows?ref=${entry.defaultBranch}`);
-  if (dir.kind !== "ok") return dir;
-  const files: { name: string; text: string }[] = [];
-  for (const f of dir.value.filter((d) => d.type === "file" && WORKFLOW_FILE.test(d.name ?? ""))) {
-    const body = ghRead<ContentsAnswer>(`repos/${entry.repo}/contents/.github/workflows/${f.name}?ref=${entry.defaultBranch}`);
-    if (body.kind !== "ok") return body;
-    if (typeof body.value.content !== "string" || body.value.encoding !== "base64") return { kind: "unreadable", why: `${f.name} came back without base64 content` };
-    files.push({ name: f.name ?? "", text: Buffer.from(body.value.content, "base64").toString("utf8") });
-  }
-  return { kind: "ok", value: workflowsReadingToken(files) };
-}
-
 const contentsPath = (entry: Entry, path: string): string => `repos/${entry.repo}/contents/${path}?ref=${entry.defaultBranch}`;
 
 /** The tree of the default branch, one call; a listing GitHub cut short is unreadable, because a file may be missing from it. */
@@ -1796,8 +1545,6 @@ function readRepo(entry: Entry): RepoReads {
     protection: liveRead(entry),
     envs,
     policies: hasEnv ? ghRead(`repos/${entry.repo}/environments/${PUBLISH_ENV}/deployment-branch-policies`) : null,
-    probe: readProbe(entry),
-    tokenUse: readTokenUse(entry),
     workflow: ghRead(contentsPath(entry, RELEASE_WORKFLOW)),
     standard: readStandard(entry),
   };

@@ -317,7 +317,17 @@ export interface CaptureResult {
    * run (NOT an empty page), and `autocomplete: null` on an entry means that control has no attribute. The
    * attribute as written, never the browser's normalised property, which reads a malformed token as `""`.
    */
-  formInputs?: { tag: string; type: string | null; autocomplete: string | null }[] | null;
+  formInputs?: {
+    tag: string;
+    type: string | null;
+    autocomplete: string | null;
+    /**
+     * 3.3.8 Accessible Authentication (#4259, #4324): did a cancelable `paste` event dispatched at this control
+     * come back default-prevented? Absent = not examined (NOT "paste is allowed"), `false` = dispatched and not
+     * cancelled. Filled by the worker census (#4314).
+     */
+    pasteCancelled?: boolean;
+  }[] | null;
   /**
    * What this capture ASKED about each optional channel, beside what it heard — "the probe is opt-in and
    * this case did not request it" and "the page had no control to activate" are different facts, and a

@@ -361,7 +361,17 @@ export interface OracleCounts {
    * means the probe never ran, never "no form inputs", matching `media`'s own contract. #869: no worker
    * census populates this yet; see `RuleInput.formInputs`'s own comment (`packages/judge/src/rules.ts`).
    */
-  formInputs?: { tag: string; type: string | null; autocomplete: string | null }[];
+  formInputs?: {
+    tag: string;
+    type: string | null;
+    autocomplete: string | null;
+    /**
+     * 3.3.8 Accessible Authentication (#4259, #4324): did a cancelable `paste` event dispatched at this control
+     * come back default-prevented? Absent = not examined (NOT "paste is allowed"), `false` = dispatched and not
+     * cancelled. Filled by the worker census (#4314).
+     */
+    pasteCancelled?: boolean;
+  }[];
   /** Per-type: whether the sweep announced everything the page exposes. `unknown` is a real answer. */
   completeness?: Record<string, Completeness>;
   census?: PageCensus;
