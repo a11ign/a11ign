@@ -93,8 +93,11 @@ jobs:
           # value early and let the rest write other step outputs.
           delimiter="PR_BODY_$(openssl rand -hex 16)"
           { echo "body<<${delimiter}"; printf '%s\n' "$body"; echo "${delimiter}"; } >> "$GITHUB_OUTPUT"
-          rows="$(PR_BODY="$body" env -u GH_TOKEN node -e "
-            import('file://' + process.env.AGENT_ORG_TOOL + '/src/acceptance-commands.ts').then((m) => {
+          # The tool is reached through its DECLARED export (`agent-org/acceptance-commands`, #4407), never an `src/` path the owner may
+          # rename: `createRequire` at the tool's `package.json` resolves the name through its `exports` map, and `--import` of the tool's own
+          # `tsx` lets node load the `.ts` it points at. The same one-liner opens the full-history step below.
+          rows="$(PR_BODY="$body" env -u GH_TOKEN node --import "$AGENT_ORG_TOOL/node_modules/tsx/dist/esm/index.mjs" -e "
+            import('node:url').then(({ pathToFileURL }) => import(pathToFileURL(require('node:module').createRequire(process.env.AGENT_ORG_TOOL + '/package.json').resolve('agent-org/acceptance-commands')).href)).then((m) => {
               const declaration = m.extractClosesDeclaration(process.env.PR_BODY);
               if (declaration.kind !== 'closes') return;
               for (const row of m.closesReferences(declaration)) console.log((row.repo ?? process.env.REPO) + '#' + row.number);
@@ -127,8 +130,8 @@ jobs:
         env:
           PR_BODY: ${{ steps.live-body.outputs.body }}
         run: |
-          if node -e "
-            import('file://' + process.env.AGENT_ORG_TOOL + '/src/acceptance-commands.ts').then((m) => {
+          if node --import "$AGENT_ORG_TOOL/node_modules/tsx/dist/esm/index.mjs" -e "
+            import('node:url').then(({ pathToFileURL }) => import(pathToFileURL(require('node:module').createRequire(process.env.AGENT_ORG_TOOL + '/package.json').resolve('agent-org/acceptance-commands')).href)).then((m) => {
               process.exit(m.hasFullHistoryDeclaration(process.env.PR_BODY) ? 0 : 1);
             });
           "; then

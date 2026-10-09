@@ -17,7 +17,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -92,6 +92,18 @@ export const closesReferences = ({ body }) =>
   [...body.matchAll(/Closes:?\\s+(?:([\\w.-]+\\/[\\w.-]+))?#(\\d+)/g)].map(([, repo, number]) => ({ repo: repo ?? null, number: Number(number) }));
 `;
 
+/**
+ * The stand-in is reached the way the real tool is (#4411): by the `agent-org/acceptance-commands` name its `package.json` DECLARES in `exports`, under
+ * the tool's own `tsx`, so a step that went back to an `src/` path would not find `src/acceptance-commands.ts` named anywhere it reads.
+ */
+function installStandInTool(root: string): void {
+  mkdirSync(join(root, "src"), { recursive: true });
+  mkdirSync(join(root, "node_modules"), { recursive: true });
+  writeFileSync(join(root, "package.json"), JSON.stringify({ name: "agent-org", type: "module", exports: { "./acceptance-commands": "./src/stand-in.ts" } }));
+  writeFileSync(join(root, "src/stand-in.ts"), STAND_IN_TOOL);
+  symlinkSync(join(REPO, "node_modules/tsx"), join(root, "node_modules/tsx"));
+}
+
 /** Runs the live-body step's own script; returns the parsed `row-labels` output, or the failure. */
 function runLiveBodyStep(input: { body: string; labels: Record<string, string[]> }): { rowLabels?: Record<string, string[]>; status: number } {
   const dir = mkdtempSync(join(tmpdir(), "row-labels-"));
@@ -100,8 +112,7 @@ function runLiveBodyStep(input: { body: string; labels: Record<string, string[]>
     mkdirSync(bin);
     writeFileSync(join(bin, "gh"), FAKE_GH);
     chmodSync(join(bin, "gh"), EXECUTABLE);
-    mkdirSync(join(dir, "tool/src"), { recursive: true });
-    writeFileSync(join(dir, "tool/src/acceptance-commands.ts"), STAND_IN_TOOL);
+    installStandInTool(join(dir, "tool"));
     const output = join(dir, "output");
     writeFileSync(output, "");
     const script = liveBodyOf(THE_TREE)?.run ?? "";
