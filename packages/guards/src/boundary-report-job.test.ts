@@ -7,7 +7,8 @@
  *   1. the job RUNS `boundary-check` with `--baseline=<the baseline>` and UPLOADS `boundary-report.json`;
  *   2. it is `continue-on-error` and ABSENT from `gate`'s `needs` (a report that gate waits on is a required check by another name);
  *   3. the baseline file the job names is a file that EXISTS in the tree (a typo would make the report read no baseline and call everything new).
- * The toolchain version is pinned in `package.json` and the job reads it from there, so that pin is asserted to carry the bin's release.
+ * The toolchain release is pinned in `package.json`'s `config.boundaryCheckToolchain` (NOT the devDependency, which `toolchain-package.test.ts` holds to one version
+ * across four importers) and the job reads it from there, so that pin is asserted to carry the bin's release.
  *
  * POSITIVE CONTROLS: the checker is run on fixtures, each broken one way (no baseline flag, no upload, no `continue-on-error`, `gate` needing the
  * job, a baseline path that does not exist), and each must be refused for its own reason while the intact fixture passes.
@@ -77,8 +78,8 @@ test("the baseline the job names exists, and is a non-empty list (the control fo
 });
 
 test("package.json pins a toolchain release that carries the boundary-check bin", () => {
-  const pkg = JSON.parse(readFileSync(join(REPO, "package.json"), "utf8")) as { devDependencies: Record<string, string> };
-  const pinned = pkg.devDependencies["@a11ign/toolchain"];
+  const pkg = JSON.parse(readFileSync(join(REPO, "package.json"), "utf8")) as { config?: Record<string, string> };
+  const pinned = pkg.config?.boundaryCheckToolchain ?? "";
   assert.match(pinned, /^\d+\.\d+\.\d+$/, `the pin must be an exact version, got ${pinned}`);
   const parts = pinned.split(".").map(Number);
   const atLeast = parts.findIndex((part, i) => part !== FIRST_RELEASE_WITH_BIN[i]);

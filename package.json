@@ -6,6 +6,9 @@
   "type": "module",
   "license": "AGPL-3.0-or-later",
   "packageManager": "pnpm@10.34.5",
+  "config": {
+    "boundaryCheckToolchain": "0.4.0"
+  },
   "engines": {
     "npm": "use pnpm instead: run pnpm install"
   },
@@ -172,7 +175,7 @@
     "a11ign": "0.2.7"
   },
   "devDependencies": {
-    "@a11ign/toolchain": "0.4.0",
+    "@a11ign/toolchain": "0.1.4",
     "@changesets/cli": "3.0.3",
     "@eslint/js": "^10.0.1",
     "@guidepup/setup": "0.29.1",

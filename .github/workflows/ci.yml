@@ -351,7 +351,9 @@ jobs:
   # ACCEPTED as they stand (the epic's item 7: baselined, not removed), the NEW ones a pull request adds, and the STALE baseline lines
   # that no longer match anything (delete them: the baseline only shrinks). It is a report, never a red: `continue-on-error` here, and
   # the job is deliberately NOT in `gate`'s `needs` (`boundary-report-job.test.ts` refuses it there), so it can never hold a merge.
-  # The toolchain version is read from `package.json`, the one place it is pinned.
+  # The toolchain release is read from `package.json`'s `config.boundaryCheckToolchain` (0.4.0 is the first carrying the bin). It is NOT the
+  # `@a11ign/toolchain` devDependency: `toolchain-package.test.ts` pins that to one version across the root, cli, judge and scorer, and they build
+  # with the presets at 0.1.4. Moving all four is its own row.
   boundary:
     if: ${{ !contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action) }}
     runs-on: ubuntu-latest
@@ -362,7 +364,7 @@ jobs:
         with: { node-version: 22 }
       - name: boundary-check against the committed baseline
         run: |
-          version="$(node -p "require('./package.json').devDependencies['@a11ign/toolchain']")"
+          version="$(node -p "require('./package.json').config.boundaryCheckToolchain")"
           npx --yes --package "@a11ign/toolchain@${version}" boundary-check --root=. --baseline=packages/guards/layer-edges.baseline.json --out=boundary-report.json
       - name: The accepted, new and stale counts, in the job summary
         if: always()
