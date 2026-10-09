@@ -117,8 +117,8 @@
     {
       "id": "owner-unresolved",
       "name": "The owner ladder (`ownerOfPr`) named nobody for a pull request, so its order fell to the `ceo` rung.",
-      "guard": null,
-      "guardNote": "recorder: the tick, from #4450, per pull request. #4386 is the resolver defect it first showed.",
+      "guard": "Two rungs of `ownerOfPr` now name an owner where none was named: `isDependencyBotPr` (a11ign/agent-org#542) names the owner of a bot pull request, and `owner-gone` (a11ign/agent-org#548, row #4644) names `product-manager` for a pull request whose owner session ended and whose closing rows are all closed. `src/packaging/pr-owner-gone.test.ts` in agent-org pins the second.",
+      "guardNote": "Not covered: a pull request with no label whose branch names no row still falls to the `ceo` rung and is recorded by `unresolvedOwnerEvents` (recorder: the tick, from #4450). #4386 is the resolver defect it first showed.",
       "seed": []
     },
     {
