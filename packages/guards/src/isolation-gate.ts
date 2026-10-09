@@ -70,7 +70,7 @@ import { refuseUnknownFlags } from "../../../scripts/cli-flags.ts";
 // the tarballs are installed as `npm install a11ign` would, outside any workspace.
 import { npmCliInvocation, pnpmCliInvocation } from "../../../scripts/npm-cli-executable.ts";
 
-export const SMOKE = "isolation-smoke.mjs";
+export const SMOKE = "isolation-smoke.ts";
 
 /** Somewhere that is definitively not inside the repo, so nothing can resolve by accident. */
 const consumerDir = () => mkdtempSync(join(tmpdir(), "a11y-isolation-"));
@@ -122,10 +122,8 @@ function packJson(output: string): { name: string; version: string; filename: st
   return JSON.parse(output.slice(start));
 }
 
-/**
- * @typedef {{ name: string, version: string, dependencies?: Record<string, string>,
- *   peerDependencies?: Record<string, string>, optionalDependencies?: Record<string, string> }} PackedManifest
- */
+type PackedManifest = { name: string; version: string; dependencies?: Record<string, string>;
+  peerDependencies?: Record<string, string>; optionalDependencies?: Record<string, string> };
 
 /**
  * `[major, minor, patch]` of a plain `x.y.z` version, or `null` for anything else (a prerelease, a range).
@@ -180,7 +178,6 @@ export function satisfies(version: string, range: string): boolean | null {
  * - the `workspace:` protocol, which installs for nobody;
  * - a range that is not one of the forms `satisfies` can read, which nobody can check;
  * - a range the sibling packed BESIDE it does not satisfy, which npm answers from the registry without a word.
- * @param {PackedManifest[]} manifests
  * @returns {string[]}
  */
 export function packedRangeProblems(manifests: PackedManifest[]): string[] {
@@ -206,7 +203,6 @@ export function packedRangeProblems(manifests: PackedManifest[]): string[] {
 /**
  * The internal ranges one tarball declares, as `@a11ign/x@range`, for the PASS line: "the ranges are fine" is
  * a claim, and the line that carries it should carry what was read, so a reader can see it was not vacuous.
- * @param {PackedManifest} manifest
  * @returns {string}
  */
 function internalRangesNote(manifest: PackedManifest): string {
@@ -216,10 +212,6 @@ function internalRangesNote(manifest: PackedManifest): string {
   return internal.length ? `; tarball ranges: ${internal.join(", ")}` : "; no internal dependencies";
 }
 
-/**
- * @param {string} tarball
- * @returns {PackedManifest}
- */
 function tarballManifest(tarball: string): PackedManifest {
   return JSON.parse(run("tar", ["-xOf", tarball, "package/package.json"], dirname(tarball)));
 }
@@ -310,7 +302,7 @@ export function declaredBins(manifest: { name?: string; bin?: string | Record<st
  * **This says the bin is REACHABLE, not that it WORKS.** Running them is not available to this gate as a
  * blanket rule: `a11ign-nvda-worker` starts a server and `a11ign-worker-ctl` drives a VM, so a gate that
  * executed every declared bin would be a gate nobody could run offline. A package that wants its bin
- * EXECUTED says so in its own `isolation-smoke.mjs`, which `packages/cli`'s already does — through the
+ * EXECUTED says so in its own `isolation-smoke.ts`, which `packages/cli`'s already does — through the
  * `.bin` shim, for the documented reason that a realpath'd path misses the symlink case.
  *
  * @param {string} consumer the throwaway install directory
@@ -465,7 +457,7 @@ function packAndInstall(dir: string, consumer: string, manifest: { name?: string
     join(consumer, basename(packJson(runPnpm(["pack", "--pack-destination", consumer, "--json"], source)).filename)));
   // BETWEEN THE TWO HALVES: what pnpm packed is read back before npm is asked to install any of it.
   const packed = tarballs.map(tarballManifest);
-  const note = internalRangesNote(/** @type {PackedManifest} */ (packed[0]));
+  const note = internalRangesNote(packed[0] as PackedManifest);
   const rangeProblems = packedRangeProblems(packed);
   if (rangeProblems.length) {
     return { note, refused: { ok: false, stage: "ranges", name: manifest.name,
@@ -533,7 +525,7 @@ export function checkIsolation(packageDir: string) {
     return { ok: true, stage: "smoke", name,
       detail: (output.trim().split("\n").slice(-1)[0] ?? "") + binNote(manifest) + note };
   } catch (error) {
-    const e = /** @type {{ stderr?: string, stdout?: string, message?: string, status?: number }} */ (error);
+    const e = error as { stderr?: string; stdout?: string; message?: string; status?: number };
     const stderr = String(e.stderr ?? e.stdout ?? e.message);
     // Exit 3 is the smoke test DECLINING a check this machine cannot make: guidepup refusing to import where
     // there is no screen reader, a macOS-only host-capacity read on Linux. That is a platform limit, not a

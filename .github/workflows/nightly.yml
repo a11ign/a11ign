@@ -225,7 +225,7 @@ jobs:
   # this comment names rstest's config DIRECTORY and not the file.
   # Guarding the config module would be the wrong fix -- `reusable-board.yml` already ruled that, in its own
   # comment, and chose the same answer this step does: keep the path OUT of the workflow. `RSTEST_CONFIG` is
-  # exported by `assert-glob-not-empty.mjs` for precisely this ("resolved from this file so the caller's cwd
+  # exported by `assert-glob-not-empty.ts` for precisely this ("resolved from this file so the caller's cwd
   # cannot change it"), so reading it here is the intended use and the two cannot drift apart.
   mainRulesetBinds:
     if: github.event.schedule != '37 * * * *'
@@ -243,7 +243,7 @@ jobs:
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
         run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       # The guard itself imports nothing built, but the step below reads `RSTEST_CONFIG` out of
-      # `assert-glob-not-empty.mjs`, which imports `@a11ign/screenreader-fleet/cli-flags` -- a package export
+      # `assert-glob-not-empty.ts`, which imports `@a11ign/screenreader-fleet/cli-flags` -- a package export
       # resolving to `dist/`, which `--ignore-scripts` does not produce and which this repo does not track.
       # Every other nightly job that runs tests (`coverage`, `nightly-only`, `doc-report`) builds for the
       # same reason.
@@ -285,7 +285,7 @@ jobs:
           # cause nor this job. So the reader exits non-zero when the export is missing, and `|| …=""`
           # converts that into the empty string the refusal below is written for -- without it the runner's
           # own `bash -e` aborts the step before the refusal can print.
-          RSTEST_CONFIG="$(node -e 'import("./packages/guards/src/assert-glob-not-empty.mjs").then((m) => { if (m.RSTEST_CONFIG) console.log(m.RSTEST_CONFIG); else process.exit(1); })')" || RSTEST_CONFIG=""
+          RSTEST_CONFIG="$(node -e 'import("./packages/guards/src/assert-glob-not-empty.ts").then((m) => { if (m.RSTEST_CONFIG) console.log(m.RSTEST_CONFIG); else process.exit(1); })')" || RSTEST_CONFIG=""
           if [ -z "$RSTEST_CONFIG" ]; then
             echo '::error::CANNOT_TELL: could not read RSTEST_CONFIG from packages/guards/src/assert-glob-not-empty.ts, so the runner was never started and NOTHING WAS READ. The export was renamed, or the build did not run. This is not a pass. See #2120.'
             exit 1

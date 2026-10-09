@@ -63,7 +63,7 @@ and passed once `prepack` existed. **No package carries a `prepare`.** The root 
 `pnpm install`, `pnpm -r run build`, which pnpm orders by the packages' declared dependencies, so the root
 `typecheck` resolves each package's `.d.ts` without a separate step (#168: five unordered builds raced).
 
-Each package under `packages/` owns an `isolation-smoke.mjs` that imports itself **by package name** and
+Each package under `packages/` owns an `isolation-smoke.ts` that imports itself **by package name** and
 exercises the first example in its README. The gate copies it into a throwaway consumer directory next to
 the installed tarball and runs it there. Importing by name rather than by path is the whole point: a
 relative import would resolve inside the repo and prove nothing.

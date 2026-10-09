@@ -102,7 +102,7 @@ function removeTree(path: string, failures: string[]) {
     entries.closeSync();
     rmdirSync(path);
   } catch (error) {
-    const code = /** @type {NodeJS.ErrnoException} */ (error).code;
+    const code = (error as NodeJS.ErrnoException).code;
     if (code !== "ENOENT") failures.push(`${path}: ${code ?? String(error)}`);
   }
 }
@@ -159,7 +159,7 @@ export function privateRunRoot({ home = homedir(), env = process.env }: { home?:
     accessSync(preferred, constants.W_OK);
     return preferred;
   } catch (cause) {
-    const code = /** @type {NodeJS.ErrnoException} */ (cause).code;
+    const code = (cause as NodeJS.ErrnoException).code;
     if (!NOT_WRITABLE.includes(code ?? "")) throw cause;
     return callersWritableTmpdir({ preferred, env, cause });
   }
@@ -170,7 +170,7 @@ function callersWritableTmpdir({ preferred, env, cause }: { preferred: string; e
   const callers = env.TMPDIR;
   const refusal = `private-tmp: no place to make a run directory: ${preferred} cannot be made or written, and TMPDIR is ${isShared(callers) ? `${callers ? `the shared ${callers}` : "unset"}, which is not a private choice` : `${callers}, which is not a writable directory either`}. Set TMPDIR to a writable directory of your own, e.g. TMPDIR=/tmp/<dir>`;
   if (isShared(callers)) throw new Error(refusal, { cause });
-  const root = /** @type {string} */ (callers);
+  const root = callers as string;
   try {
     // A writable FILE passes `W_OK` and fails later in `mkdtemp` with ENOTDIR, so the caller's path must be a directory as well.
     if (!statSync(root).isDirectory()) throw new Error(`${root} is not a directory`);
@@ -227,13 +227,13 @@ export function adoptFileDirectory({ env = process.env, testPath = currentTestPa
 export function adoptAndWatch() {
   const testPath = currentTestPath();
   const dir = adoptFileDirectory({ testPath });
-  const afterAll = /** @type {any} */ (globalThis).afterAll;
+  const afterAll = (globalThis as { afterAll?: unknown }).afterAll;
   if (dir && testPath && typeof afterAll === "function") afterAll(() => reportLeftovers({ dir, testPath }));
 }
 
 /** @returns {string | undefined} the test file this worker is running, or undefined outside a runner */
 function currentTestPath(): string | undefined {
-  const runner = /** @type {any} */ (globalThis).expect;
+  const runner = (globalThis as { expect?: { getState?: () => { testPath?: string } } }).expect;
   return typeof runner?.getState === "function" ? runner.getState().testPath : undefined;
 }
 
@@ -309,13 +309,12 @@ const VIRTUAL_SETUP = `import { adoptAndWatch } from ${JSON.stringify(SELF)};\na
 /**
  * What the repository's config adds to the toolchain's: this module as `globalSetup`, and the virtual per-file setup. Keys the toolchain already sets are
  * kept; a config of its own that names `globalSetup` or `setupFiles` is not merged, it is refused, because dropping one silently is how a run stops being private.
- * @template {Record<string, any>} T
  * @param {T} config
  * @returns {T & { globalSetup: string[], setupFiles: string[] }}
  */
-export function withPrivateTmp<T>(config: T): T & { globalSetup: string[]; setupFiles: string[]; } {
+export function withPrivateTmp<T extends object>(config: T): T & { globalSetup: string[]; setupFiles: string[]; } {
   for (const key of ["globalSetup", "setupFiles"]) {
-    if (config[key] !== undefined) throw new Error(`withPrivateTmp: the config already sets ${key}; merge it by hand so neither is dropped`);
+    if ((config as Record<string, unknown>)[key] !== undefined) throw new Error(`withPrivateTmp: the config already sets ${key}; merge it by hand so neither is dropped`);
   }
   const virtualSetup = `data:text/javascript;base64,${Buffer.from(VIRTUAL_SETUP).toString("base64")}`;
   return { ...config, globalSetup: [SELF], setupFiles: [virtualSetup] };

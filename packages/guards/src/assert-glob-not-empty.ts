@@ -165,14 +165,13 @@ export function memberScopeLister(worktree: string, { exists = existsSync, list 
   const isCopyInOwnModules = (path: string) => {
     try { return realpath(path).startsWith(ownModules); } catch { return false; }
   };
-  /** @type {(dir: string) => string[]} */
-  const askedAbout: (dir: string) => string[] = (dir): string[] => {
-    const entries = /** @type {string[]} */ (list(dir));
+  const askedAbout = (dir: string): string[] => {
+    const entries = list(dir) as string[];
     if (!exists(packagesDir)) return entries;
-    const members = new Set(/** @type {string[]} */ (list(packagesDir)).flatMap((name) => [name, declaredName(join(packagesDir, name, "package.json"))]));
+    const members = new Set((list(packagesDir) as string[]).flatMap((name) => [name, declaredName(join(packagesDir, name, "package.json"))]));
     return entries.filter((name) => members.has(name) || !isCopyInOwnModules(join(dir, name)));
   };
-  return /** @type {typeof readdirSync} */ (/** @type {unknown} */ (askedAbout));
+  return askedAbout as unknown as typeof readdirSync;
 }
 
 /**

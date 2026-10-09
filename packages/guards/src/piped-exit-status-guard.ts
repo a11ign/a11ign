@@ -243,7 +243,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.arg
     // as a real hazard. "GUARD ERROR" on stderr, and a code neither ALLOW nor HAZARD can produce any other
     // way, so `pre-commit` can tell the two apart without parsing this message's text.
     console.error(`GUARD ERROR: piped-exit-status-guard.mjs could not examine its input: `
-      + `${/** @type {Error} */ (error).message}`);
+      + `${(error as Error).message}`);
     process.exit(EXIT_ERROR);
   }
 }

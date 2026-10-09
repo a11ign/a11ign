@@ -73,7 +73,7 @@ export const RULES = [
   "version-mismatch", "cli-unrunnable", "import-failed",
 ];
 
-const DEPENDENCY_FIELDS = /** @type {const} */ (["dependencies", "optionalDependencies", "peerDependencies"]);
+const DEPENDENCY_FIELDS = ["dependencies", "optionalDependencies", "peerDependencies"] as const;
 
 /**
  * `npm install` resolves a `0.0.0` pin from the registry or not at all: it is the placeholder a source manifest
@@ -96,22 +96,22 @@ export function isLoaderFailure({ code, errorName }: { code: string | null; erro
 }
 
 /**
- * @typedef {{
- *   name: string, version: string, path: string, entry: boolean,
- *   dependencies?: Record<string, string>, optionalDependencies?: Record<string, string>,
- *   peerDependencies?: Record<string, string>,
- * }} InstalledPackage
- *   `path` is relative to the install root, `/`-separated (`node_modules/@a11ign/judge`), so a NESTED copy
- *   (`node_modules/x/node_modules/@a11ign/evidence`) is distinguishable from the hoisted one. `entry` is whether
- *   the manifest declares something to import (`exports["."]` or `main`).
- * @typedef {{ exitCode: number | null, stdout: string, stderr: string }} CliOutput
- * @typedef {{ name: string, ok: true } | { name: string, ok: false, code: string | null, errorName: string, message: string }} ImportOutcome
- * @typedef {{ name: string, registry: { published: true, version: string } | { published: false } | { published: null, why: string } }} Layer
- * @typedef {{ packages: InstalledPackage[], version: CliOutput, imports: ImportOutcome[], layers: Layer[] }} Reading
- * @typedef {{ rule: string, package: string, detail: string }} Refusal
- * @typedef {{ what: string, reason: string }} Unchecked
- * @typedef {{ refused: Refusal[], unchecked: Unchecked[], checked: string[] }} Decision
+ * `path` is relative to the install root, `/`-separated (`node_modules/@a11ign/judge`), so a NESTED copy
+ * (`node_modules/x/node_modules/@a11ign/evidence`) is distinguishable from the hoisted one. `entry` is whether
+ * the manifest declares something to import (`exports["."]` or `main`).
  */
+export type InstalledPackage = {
+  name: string, version: string, path: string, entry: boolean,
+  dependencies?: Record<string, string>, optionalDependencies?: Record<string, string>,
+  peerDependencies?: Record<string, string>,
+};
+export type CliOutput = { exitCode: number | null, stdout: string, stderr: string };
+export type ImportOutcome = { name: string, ok: true } | { name: string, ok: false, code: string | null, errorName: string, message: string };
+export type Layer = { name: string, registry: { published: true, version: string } | { published: false } | { published: null, why: string } };
+export type Reading = { packages: InstalledPackage[], version: CliOutput, imports: ImportOutcome[], layers: Layer[] };
+export type Refusal = { rule: string, package: string, detail: string };
+export type Unchecked = { what: string, reason: string };
+export type Decision = { refused: Refusal[], unchecked: Unchecked[], checked: string[] };
 
 /**
  * The internal dependencies a package declares, across the three fields npm resolves, as `[field, name, range]`.
@@ -475,9 +475,7 @@ export function installFromRegistry(dir: string, spec: string): void {
 // --self-check: the same decisions over the shipped fixtures.
 // ---------------------------------------------------------------------------------------------------------
 
-/**
- * @typedef {{ description: string, requireImports?: boolean, expect: { refused: Array<{ rule: string, package: string }>, unchecked?: string[] }, reading: Reading }} Fixture
- */
+export type Fixture = { description: string, requireImports?: boolean, expect: { refused: Array<{ rule: string, package: string }>, unchecked?: string[] }, reading: Reading };
 
 /** @returns {Array<{ file: string, fixture: Fixture }>} */
 export function loadFixtures(): Array<{ file: string; fixture: Fixture; }> {

@@ -53,7 +53,7 @@ test("the callers are DISCOVERED rather than trusted from a list", () => {
   // nothing, which this repo records as a rule: a test must not derive its expectations from source TEXT
   // without first proving the text was found.
   // Was 8 over a tree that tracked the lab's scripts, which called it too (and two of them were exempt above); they left for a11ign/lab (#3505), so
-  // `git grep` here finds the four modules this package and `cli` hold: `cli.ts`, `judge.ts`, `rules.ts` and `isolation-smoke.mjs`.
+  // `git grep` here finds the four modules this package and `cli` hold: `cli.ts`, `judge.ts`, `rules.ts` and `isolation-smoke.ts`.
   assert.ok(callers.length >= 4, `discovered only ${callers.length} rule callers: ${callers.join(", ")}`);
   assert.ok(callers.includes("packages/cli/src/cli.ts"), "the product path must be among them");
 });

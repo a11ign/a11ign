@@ -104,7 +104,7 @@ function run(command: string) {
     const out = execSync(command, { encoding: "utf8", stdio: "pipe", env: sandboxGitEnv() });
     return { ok: true, out };
   } catch (error) {
-    const e = /** @type {{ stdout?: string, stderr?: string }} */ (error);
+    const e = error as { stdout?: string; stderr?: string };
     return { ok: false, out: `${e.stdout ?? ""}${e.stderr ?? ""}` };
   }
 }

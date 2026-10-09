@@ -40,17 +40,13 @@ import { inScope, parseWalkScope } from "./walk-scope-declaration.ts";
 export { inScope, parseWalkScope };
 
 const require = createRequire(import.meta.url);
-// Indexed by NAME below to wrap each function in turn, so typed as a record rather than as the module.
-/** @type {Record<string, any>} */
-const fs: Record<string, any> = require("node:fs");
-/** @type {Record<string, any>} */
-const childProcess: Record<string, any> = require("node:child_process");
-/** @type {Record<string, any>} */
-const workerThreads: Record<string, any> = require("node:worker_threads");
-/** @type {Record<string, any>} */
-const nodeTest: Record<string, any> = require("node:test");
-/** @type {Record<string, any>} */
-const moduleApi: Record<string, any> = require("node:module");
+// `require`, not `import`, so these are the mutable CommonJS exports objects: `wrap` replaces functions on them
+// by NAME, and an ES module namespace cannot be assigned to.
+const fs: typeof import("node:fs") = require("node:fs");
+const childProcess: typeof import("node:child_process") = require("node:child_process");
+const workerThreads: { Worker: typeof import("node:worker_threads").Worker } = require("node:worker_threads");
+const nodeTest: typeof import("node:test") = require("node:test");
+const moduleApi: typeof import("node:module") = require("node:module");
 
 // REAL, because every comparison below is against a real path: on macOS `/tmp` is a link to `/private/tmp`.
 export const REPO_ROOT = fs.realpathSync.native(resolve(fileURLToPath(new URL("../../../", import.meta.url))));
@@ -106,9 +102,11 @@ export const WHOLE_REPOSITORY = "(the whole repository)";
  * `spawnSync` or `fs/promises` `readFile` was unseen otherwise, while `readFileSync` was seen. So both copies
  * share this state, only the first installs, and the second reuses the first's UNWRAPPED `fs` functions: its
  * own lookups would otherwise be recorded as the guard's reads.
- * @type {{ observedReads: Set<string>, installed: boolean, originals?: Record<string, any> }}
  */
-const STATE: { observedReads: Set<string>; installed: boolean; originals?: Record<string, any>; } = /** @type {any} */ (globalThis)[Symbol.for("a11y-witness.walk-scope")] ??= {
+const STATE: {
+  observedReads: Set<string>; installed: boolean;
+  originals?: { realpath: typeof fs.realpathSync.native; exists: typeof fs.existsSync; stat: typeof fs.statSync; readFile: typeof fs.readFileSync };
+} = (globalThis as unknown as Record<symbol, typeof STATE>)[Symbol.for("a11y-witness.walk-scope")] ??= {
   observedReads: new Set(), installed: false };
 
 /** @param {string} how */
@@ -281,7 +279,7 @@ const BOUNDED_OPTIONS = {
       "--no-empty-directory", "--resolve-undo"]),
     short: "zcstvfomduk",
     inline: ["--format=", "--abbrev"],
-    valued: new Set(),
+    valued: new Set<string>(),
   },
   grep: {
     flags: new Set(["--cached", "--name-only", "--files-with-matches", "--files-without-match", "--count",
@@ -357,8 +355,8 @@ function recordCommandLine(command: unknown, options: { cwd?: unknown; env?: unk
 /** @param {unknown} file @param {unknown[]} rest the arguments after `file`, in whichever overload was used */
 function recordSpawn(file: unknown, rest: unknown[]) {
   const args = Array.isArray(rest[0]) ? rest[0] : [];
-  const options = /** @type {{ cwd?: unknown, env?: unknown, shell?: unknown } | undefined} */ (
-    rest.find((r) => r !== null && typeof r === "object" && !Array.isArray(r)));
+  const options = rest.find((r) => r !== null && typeof r === "object" && !Array.isArray(r)) as
+    { cwd?: unknown; env?: unknown; shell?: unknown } | undefined;
   if (options?.shell) recordCommandLine([file, ...args].join(" "), options);
   else if (basename(String(file)) === "git") recordGit(args, options);
   else STATE.observedReads.add(unbounded(`a child process, \`${basename(String(file))}\`, whose reads are not visible here`));
@@ -369,7 +367,7 @@ const OBSERVED = Symbol.for("a11y-witness.walk-scope: this function records befo
 
 /** Is `fn` one of this module's wrappers? The exhaustiveness test asks this of every function it finds. */
 export function isObserved(/** @type {unknown} */ fn: unknown) {
-  return typeof fn === "function" && /** @type {any} */ (fn)[OBSERVED] === true;
+  return typeof fn === "function" && (fn as unknown as Record<symbol, unknown>)[OBSERVED] === true;
 }
 
 /**
@@ -377,11 +375,12 @@ export function isObserved(/** @type {unknown} */ fn: unknown) {
  * returned or thrown, for the calls whose answer is what was read (`_resolveFilename`, `findPackageJSON`).
  * A throw is recorded and RETHROWN, never swallowed. Own properties are carried across: `realpathSync.native`
  * is called directly, and `exists` keeps a `util.promisify.custom`.
- * @param {Record<string, any>} owner @param {string} name @param {(args: unknown[]) => void} record
+ * @param {object} owner @param {string} name @param {(args: unknown[]) => void} record
  * @param {(args: unknown[], result: unknown) => void} [after] `result` is undefined when the call threw
  */
-function wrap(owner: Record<string, any>, name: string, record: (args: unknown[]) => void, after?: (args: unknown[], result: unknown) => void) {
-  const original = owner[name];
+function wrap(owner: object, name: string, record: (args: unknown[]) => void, after?: (args: unknown[], result: unknown) => void) {
+  const members = owner as Record<string, unknown>;
+  const original = members[name];
   if (typeof original !== "function") return;
   const observed = function observed(/** @type {unknown[]} */ ...args: unknown[]) {
     record(args);
@@ -402,10 +401,10 @@ function wrap(owner: Record<string, any>, name: string, record: (args: unknown[]
   };
   for (const key of Reflect.ownKeys(original)) {
     if (key === "length" || key === "name" || key === "prototype") continue;
-    Object.defineProperty(observed, key, /** @type {PropertyDescriptor} */ (Object.getOwnPropertyDescriptor(original, key)));
+    Object.defineProperty(observed, key, Object.getOwnPropertyDescriptor(original, key) as PropertyDescriptor);
   }
   Object.defineProperty(observed, OBSERVED, { value: true });
-  owner[name] = observed;
+  members[name] = observed;
 }
 
 // Each takes the path it reads first; `cp` walks its source, so it LISTS.
@@ -522,7 +521,7 @@ function recordPackageLookup(/** @type {unknown} */ found: unknown) {
 /** What a CommonJS `require`/`require.resolve` resolved to -- or, for a relative request that failed, where it looked. */
 function recordResolution(/** @type {unknown[]} */ [request, parent]: unknown[], /** @type {unknown} */ resolved: unknown) {
   if (typeof resolved === "string" && isAbsolute(resolved)) { recordRead(resolved); return; }
-  const from = /** @type {{ filename?: unknown } | undefined} */ (parent)?.filename;
+  const from = (parent as { filename?: unknown } | undefined)?.filename;
   if (resolved === undefined && /^\.{0,2}\//.test(String(request))) {
     recordRead(String(request), typeof from === "string" ? dirname(from) : process.cwd());
   }
@@ -550,7 +549,7 @@ function installBeyondFs() {
 function install() {
   const read = (/** @type {unknown[]} */ [target]: unknown[]) => recordRead(target);
   const list = (/** @type {unknown[]} */ [target]: unknown[]) => recordListing(target);
-  const glob = (/** @type {unknown[]} */ [pattern, options]: unknown[]) => recordGlob(pattern, /** @type {any} */ (options));
+  const glob = (/** @type {unknown[]} */ [pattern, options]: unknown[]) => recordGlob(pattern, options as { cwd?: unknown } | undefined);
   for (const owner of [fs, fs.promises]) {
     for (const name of LISTS) { wrap(owner, name, list); wrap(owner, `${name}Sync`, list); }
     for (const name of READS) { wrap(owner, name, read); wrap(owner, `${name}Sync`, read); }
@@ -562,11 +561,11 @@ function install() {
     wrap(childProcess, name, ([file, ...rest]) => (name === "fork" ? recordSpawn(process.execPath, rest) : recordSpawn(file, rest)));
   }
   for (const name of ["exec", "execSync"]) {
-    wrap(childProcess, name, ([command, options]) => recordCommandLine(command, /** @type {any} */ (options)));
+    wrap(childProcess, name, ([command, options]) => recordCommandLine(command, options as { cwd?: unknown; env?: unknown } | undefined));
   }
   const { Worker } = workerThreads;
   workerThreads.Worker = class ObservedWorker extends Worker {
-    constructor(/** @type {any[]} */ ...args: any[]) {
+    constructor(...args: ConstructorParameters<typeof Worker>) {
       STATE.observedReads.add(unbounded("a worker thread, whose reads are not visible here"));
       super(...args);
     }

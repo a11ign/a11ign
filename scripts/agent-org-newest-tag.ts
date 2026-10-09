@@ -118,7 +118,7 @@ export function toolExport(subpath: string): Promise<any> {
  */
 export function toolBin(root: string = toolRoot()): string {
   const { bin } = manifestOf(root);
-  const target = typeof bin === "string" ? bin : (bin && typeof bin === "object" ? /** @type {Record<string, unknown>} */ (bin)["agent-org"] : undefined);
+  const target = typeof bin === "string" ? bin : (bin && typeof bin === "object" ? (bin as Record<string, unknown>)["agent-org"] : undefined);
   if (typeof target === "string") return join(root, target);
   throw new Error(`agent-org-newest-tag: the tool at ${root} declares no \`agent-org\` in its package.json \`bin\`, so there is no executable to run.`);
 }

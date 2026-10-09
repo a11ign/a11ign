@@ -37,9 +37,9 @@ import { sandboxGitEnv } from "../packages/guards/src/git-env.ts";
 import { changedFiles } from "../packages/guards/src/changed-files.ts";
 import { toolExport } from "./agent-org-newest-tag.ts";
 
-/** @typedef {{ state: string, description?: string }} Status */
-/** @typedef {{ sha: string, changedPaths: string[], statuses: Status[] }} HistoryEntry */
-/** @typedef {"proceed" | "wait" | "rerun" | "regression"} Outcome */
+export type Status = { state: string, description?: string };
+export type HistoryEntry = { sha: string, changedPaths: string[], statuses: Status[] };
+export type Outcome = "proceed" | "wait" | "rerun" | "regression";
 
 export const QUALIFICATION_CONTEXT = "qualification";
 

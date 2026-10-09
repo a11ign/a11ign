@@ -37,7 +37,7 @@ name: dependency-pr-body
 #
 # The `Acceptance:` command spells `--config=<path>`, not `--config <path>`, on purpose: `entry-points.test.ts` reads every
 # workflow for a whitespace-preceded `scripts/*.mjs` and demands an entry guard of whatever it finds, and
-# `rstest.config.mjs` is a config file, not an entry point.
+# `rstest.config.ts` is a config file, not an entry point.
 #
 # ## The edit has to be seen by `ci.yml`
 #

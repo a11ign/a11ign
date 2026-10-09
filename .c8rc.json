@@ -56,7 +56,7 @@
   "exclude": [
     "**/*.test.ts",
     "**/dist/**",
-    "**/isolation-smoke.mjs",
+    "**/isolation-smoke.ts",
     "scripts/isolation-fixtures/**",
     "packages/cli/src/cli.ts",
     "packages/scorer/src/fetch-encoder.ts",

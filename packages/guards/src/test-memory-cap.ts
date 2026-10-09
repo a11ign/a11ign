@@ -48,7 +48,7 @@ export const CAP_KILL_STATUS = 137;
 const MEMORY_MAX_PATTERN = /^[1-9]\d*[KMGT]?$/;
 
 /** The signals a supervisor passes on, because it is the process a `kill` aimed at the scope reaches first. */
-const FORWARDED_SIGNALS = /** @type {const} */ (["SIGINT", "SIGTERM", "SIGHUP"]);
+const FORWARDED_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
 
 /** A process killed by signal N exits 128 + N by the shell's convention, which is what `137` is. */
 const SIGNAL_EXIT_BASE = 128;
@@ -81,7 +81,7 @@ export function systemdRunArgs(memoryMax: string) {
 export function probeCap({ memoryMax, env = process.env, spawner = spawnSync }: { memoryMax: string; env?: NodeJS.ProcessEnv; spawner?: typeof spawnSync; }): { capped: true; memoryMax: string; } | { capped: false; reason: string; } {
   const probe = spawner("systemd-run", [...systemdRunArgs(memoryMax), process.execPath, "-e", ""], { stdio: "ignore", env });
   if (probe.error) {
-    const code = /** @type {NodeJS.ErrnoException} */ (probe.error).code;
+    const code = (probe.error as NodeJS.ErrnoException).code;
     return { capped: false, reason: code === "ENOENT" ? "systemd-run absent" : `systemd-run unusable (${code})` };
   }
   if (probe.status !== 0) return { capped: false, reason: "no user manager answered" };
@@ -106,9 +106,9 @@ export function cappedCommand({ plan, name, command, args }: { plan: { capped: b
   };
 }
 
-/** @param {string | null} signal */
-function signalStatus(signal: string | null) {
-  return signal ? SIGNAL_EXIT_BASE + (osConstants.signals[/** @type {keyof typeof osConstants.signals} */ (signal)] ?? 0) : 1;
+/** @param {NodeJS.Signals | null} signal */
+function signalStatus(signal: NodeJS.Signals | null) {
+  return signal ? SIGNAL_EXIT_BASE + (osConstants.signals[signal] ?? 0) : 1;
 }
 
 /**
@@ -179,7 +179,7 @@ export function readScope(directory: string | null): { oomKills: number | null; 
     const peak = Number(readFileSync(`${directory}/memory.peak`, "utf8"));
     return { oomKills, peakBytes: Number.isFinite(peak) ? peak : null };
   } catch (error) {
-    return { oomKills: null, peakBytes: null, unreadable: /** @type {Error} */ (error).message };
+    return { oomKills: null, peakBytes: null, unreadable: (error as Error).message };
   }
 }
 
@@ -212,13 +212,11 @@ export async function supervise({ name, memoryMax, command, args, directory, std
         stderr?: { write: (text: string) => unknown; };
     }): Promise<number> {
   const child = spawn(command, args, { stdio: "inherit" });
-  /** @type {Record<string, () => void>} */
-  const handlers: Record<string, () => void> = {};
+  const handlers = {} as Record<(typeof FORWARDED_SIGNALS)[number], () => void>;
   for (const signal of FORWARDED_SIGNALS) {
     handlers[signal] = () => child.kill(signal);
     process.on(signal, handlers[signal]);
   }
-  /** @type {{ status: number | null, signal: NodeJS.Signals | null }} */
   const exit: { status: number | null; signal: NodeJS.Signals | null; } = await new Promise((resolve) => {
     child.on("error", (error) => {
       stderr.write(`memory cap: could not start ${name}: ${error.message}\n`);

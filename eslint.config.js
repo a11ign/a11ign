@@ -14,7 +14,7 @@ import globals from "globals";
 import { builtinRules } from "eslint/use-at-your-own-risk";
 // #1155: the rule lives in its own module rather than inline -- this config already carries two rules and
 // their headers, and the third's reasoning is longer than the rule. Imported by RELATIVE path for the
-// reason `isolation-gate.mjs` states: a package specifier here dies before any install has run.
+// reason `isolation-gate.ts` states: a package specifier here dies before any install has run.
 import { derivedLocalRule } from "./packages/guards/src/uncontrolled-emptiness.ts";
 import { gitSpawnScrubbed } from "./packages/guards/src/git-spawn-scrubbed.ts";
 

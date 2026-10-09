@@ -1,77 +1,53 @@
 {
-  "files": [
-    "agent-org-newest-tag.mjs",
-    "assert-glob-not-empty.mjs",
-    "changed-files.mjs",
-    "changed-packages.mjs",
-    "ci-changed.mjs",
-    "cli-flags.mjs",
-    "cli.mjs",
-    "eslint.config.js",
-    "git-env.mjs",
-    "git-spawn-scrubbed.mjs",
-    "helper.mjs",
-    "helper.mjs",
-    "helper.mjs",
-    "index.mjs",
-    "index.mjs",
-    "index.mjs",
-    "index.mjs",
-    "index.mjs",
-    "index.mjs",
-    "isolation-gate.mjs",
-    "isolation-smoke.mjs",
-    "isolation-smoke.mjs",
-    "isolation-smoke.mjs",
-    "isolation-smoke.mjs",
-    "isolation-smoke.mjs",
-    "isolation-smoke.mjs",
-    "lay-layer.mjs",
-    "local-import-closure.mjs",
-    "mutation-check.mjs",
-    "npm-cli-executable.mjs",
-    "piped-exit-status-guard.mjs",
-    "pnpm.mjs",
-    "private-tmp.mjs",
-    "refuse-other-installers.mjs",
-    "registry-consumer-gate.mjs",
-    "release-promote.mjs",
-    "release-reads-qualification.mjs",
-    "repo-identity.mjs",
-    "rstest.config.mjs",
-    "test-memory-cap.mjs",
-    "tooling-roots.mjs",
-    "tree-wide-guards.mjs",
-    "uncontrolled-emptiness.mjs",
-    "walk-scope-declaration.mjs",
-    "walk-scope-discovery.mjs",
-    "walk-scope.mjs",
-    "worktree-resolution.mjs"
-  ],
+  "files": [],
   "exceptions": [
     {
       "path": ".pnpmfile.cjs",
       "why": "pnpm reads its hook file only under this exact name, and only as CommonJS, so it cannot be .ts"
     },
     {
-      "path": "packages/cli/isolation-smoke.ts",
-      "why": "run by `packages/guards/src/isolation-gate.ts` (plain node, from a throwaway directory outside the repository, against the installed tarball); the gate names `isolation-smoke.mjs` as its SMOKE file and the 16 isolation fixtures share that name, so it converts with the gate in #4393"
+      "path": "eslint.config.js",
+      "why": "ESLint reads a TypeScript config only through `jiti`, which this repository does not install, so the flat config stays `.js` (#4274)"
     },
     {
-      "path": "packages/evidence/isolation-smoke.ts",
-      "why": "run by `packages/guards/src/isolation-gate.ts` (plain node, from a throwaway directory outside the repository, against the installed tarball); the gate names `isolation-smoke.mjs` as its SMOKE file and the 16 isolation fixtures share that name, so it converts with the gate in #4393"
+      "path": "scripts/isolation-fixtures/dangling-bin/index.mjs",
+      "why": "a PACKAGE FILE of an isolation fixture: `packages/guards/src/isolation-gate.ts` packs the fixture and installs the tarball into a throwaway consumer, so this file runs from that consumer's `node_modules/`. Node refuses it: `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING` (\"Stripping types is currently unsupported for files under node_modules\"), measured 2026-10-09 on Node 24.21.0 with a `.ts` package entry installed under a consumer's `node_modules/`; #4393"
     },
     {
-      "path": "packages/judge/isolation-smoke.ts",
-      "why": "run by `packages/guards/src/isolation-gate.ts` (plain node, from a throwaway directory outside the repository, against the installed tarball); the gate names `isolation-smoke.mjs` as its SMOKE file and the 16 isolation fixtures share that name, so it converts with the gate in #4393"
+      "path": "scripts/isolation-fixtures/linked-bin/cli.mjs",
+      "why": "a PACKAGE FILE of an isolation fixture: `packages/guards/src/isolation-gate.ts` packs the fixture and installs the tarball into a throwaway consumer, so this file runs from that consumer's `node_modules/`. Node refuses it: `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING` (\"Stripping types is currently unsupported for files under node_modules\"), measured 2026-10-09 on Node 24.21.0 with a `.ts` package entry installed under a consumer's `node_modules/`; #4393"
     },
     {
-      "path": "packages/scorer/isolation-smoke.ts",
-      "why": "run by `packages/guards/src/isolation-gate.ts` (plain node, from a throwaway directory outside the repository, against the installed tarball); the gate names `isolation-smoke.mjs` as its SMOKE file and the 16 isolation fixtures share that name, so it converts with the gate in #4393"
+      "path": "scripts/isolation-fixtures/linked-bin/index.mjs",
+      "why": "a PACKAGE FILE of an isolation fixture: `packages/guards/src/isolation-gate.ts` packs the fixture and installs the tarball into a throwaway consumer, so this file runs from that consumer's `node_modules/`. Node refuses it: `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING` (\"Stripping types is currently unsupported for files under node_modules\"), measured 2026-10-09 on Node 24.21.0 with a `.ts` package entry installed under a consumer's `node_modules/`; #4393"
     },
     {
-      "path": ".agent-org/plugins/causes.mjs",
-      "why": "agent-org loads it by the path `.agent-org/project.json` names, and agent-org's packaging fixture (`src/packaging/copied-tool-fixture.ts` PROJECT_FILES) copies exactly `.agent-org/plugins/causes.mjs` from this checkout, so renaming it here breaks agent-org's tests until that list moves (a `.ts` plugin itself loads by `require` under /usr/bin/node + tsx, node 24 and node 24 + tsx, measured 2026-10-09); #4393"
+      "path": "scripts/isolation-fixtures/omitted-dependency/index.mjs",
+      "why": "a PACKAGE FILE of an isolation fixture: `packages/guards/src/isolation-gate.ts` packs the fixture and installs the tarball into a throwaway consumer, so this file runs from that consumer's `node_modules/`. Node refuses it: `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING` (\"Stripping types is currently unsupported for files under node_modules\"), measured 2026-10-09 on Node 24.21.0 with a `.ts` package entry installed under a consumer's `node_modules/`; #4393"
+    },
+    {
+      "path": "scripts/isolation-fixtures/platform-declined/helper.mjs",
+      "why": "a PACKAGE FILE of an isolation fixture: `packages/guards/src/isolation-gate.ts` packs the fixture and installs the tarball into a throwaway consumer, so this file runs from that consumer's `node_modules/`. Node refuses it: `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING` (\"Stripping types is currently unsupported for files under node_modules\"), measured 2026-10-09 on Node 24.21.0 with a `.ts` package entry installed under a consumer's `node_modules/`; #4393"
+    },
+    {
+      "path": "scripts/isolation-fixtures/platform-declined/index.mjs",
+      "why": "a PACKAGE FILE of an isolation fixture: `packages/guards/src/isolation-gate.ts` packs the fixture and installs the tarball into a throwaway consumer, so this file runs from that consumer's `node_modules/`. Node refuses it: `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING` (\"Stripping types is currently unsupported for files under node_modules\"), measured 2026-10-09 on Node 24.21.0 with a `.ts` package entry installed under a consumer's `node_modules/`; #4393"
+    },
+    {
+      "path": "scripts/isolation-fixtures/sound/helper.mjs",
+      "why": "a PACKAGE FILE of an isolation fixture: `packages/guards/src/isolation-gate.ts` packs the fixture and installs the tarball into a throwaway consumer, so this file runs from that consumer's `node_modules/`. Node refuses it: `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING` (\"Stripping types is currently unsupported for files under node_modules\"), measured 2026-10-09 on Node 24.21.0 with a `.ts` package entry installed under a consumer's `node_modules/`; #4393"
+    },
+    {
+      "path": "scripts/isolation-fixtures/sound/index.mjs",
+      "why": "a PACKAGE FILE of an isolation fixture: `packages/guards/src/isolation-gate.ts` packs the fixture and installs the tarball into a throwaway consumer, so this file runs from that consumer's `node_modules/`. Node refuses it: `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING` (\"Stripping types is currently unsupported for files under node_modules\"), measured 2026-10-09 on Node 24.21.0 with a `.ts` package entry installed under a consumer's `node_modules/`; #4393"
+    },
+    {
+      "path": "scripts/isolation-fixtures/truncated-files/helper.mjs",
+      "why": "a PACKAGE FILE of an isolation fixture: `packages/guards/src/isolation-gate.ts` packs the fixture and installs the tarball into a throwaway consumer, so this file runs from that consumer's `node_modules/`. Node refuses it: `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING` (\"Stripping types is currently unsupported for files under node_modules\"), measured 2026-10-09 on Node 24.21.0 with a `.ts` package entry installed under a consumer's `node_modules/`; #4393"
+    },
+    {
+      "path": "scripts/isolation-fixtures/truncated-files/index.mjs",
+      "why": "a PACKAGE FILE of an isolation fixture: `packages/guards/src/isolation-gate.ts` packs the fixture and installs the tarball into a throwaway consumer, so this file runs from that consumer's `node_modules/`. Node refuses it: `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING` (\"Stripping types is currently unsupported for files under node_modules\"), measured 2026-10-09 on Node 24.21.0 with a `.ts` package entry installed under a consumer's `node_modules/`; #4393"
     }
   ]
 }

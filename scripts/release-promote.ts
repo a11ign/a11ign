@@ -33,9 +33,9 @@ import { refuseUnknownFlags } from "./cli-flags.ts";
 import { sandboxGitEnv } from "../packages/guards/src/git-env.ts";
 import { qualificationDecision, gatherHistory, WAIT_BOUND_MINUTES, QUALIFICATION_CONTEXT } from "./release-reads-qualification.ts";
 
-/** @typedef {{ name: string, version: string, directory: string }} Released */
-/** @typedef {{ outcome: "proceed" | "wait" | "rerun" | "regression", reason: string, overdue: boolean }} Decision */
-/** @typedef {{ title: string, labels: string[], body: string }} Row */
+type Released = { name: string, version: string, directory: string };
+type Decision = { outcome: "proceed" | "wait" | "rerun" | "regression", reason: string, overdue: boolean };
+type Row = { title: string, labels: string[], body: string };
 
 const REGISTRY = "https://registry.npmjs.org";
 const PLAIN_VERSION = /^(\d+)\.(\d+)\.(\d+)$/;
@@ -208,7 +208,7 @@ function tagExists(tag: string, run: (args: string[]) => string) {
     run(["rev-parse", "--verify", "--quiet", `refs/tags/${tag}`]);
     return true;
   } catch (cause) {
-    if (/** @type {{ status?: number }} */ (cause).status === 1) return false;
+    if ((cause as { status?: number }).status === 1) return false;
     throw new Error(`CANNOT_TELL: git could not say whether tag ${tag} exists`, { cause });
   }
 }
@@ -231,8 +231,8 @@ function writeOutputs(values: Record<string, string>) {
   else console.log(text);
 }
 
-/** @typedef {{ name: string, directory: string, version: string, latest: string }} Candidate */
-/** @typedef {{ sha: string, released: Released[], latest: Record<string, string | undefined> }} Group */
+type Candidate = { name: string, directory: string, version: string, latest: string };
+type Group = { sha: string, released: Released[], latest: Record<string, string | undefined> };
 
 /**
  * The candidates grouped by the sha they were released on, and the ones that WAIT because their tag is not cut yet (`shaOf` says null).

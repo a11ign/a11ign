@@ -57,8 +57,8 @@ export function packageIndex(repoRoot: string, packageDirs: string[]): Map<strin
  */
 function exportTarget(value: unknown): string | null {
   if (typeof value === "string") return value;
-  if (value && typeof value === "object" && typeof (/** @type {any} */ (value)).default === "string") {
-    return /** @type {any} */ (value).default;
+  if (value && typeof value === "object" && "default" in value && typeof value.default === "string") {
+    return value.default;
   }
   return null;
 }
@@ -137,10 +137,10 @@ function resolveWorkspacePackage(spec: string, repoRoot: string, packages: Map<s
  * @returns {Set<string>} absolute paths, entry included
  */
 export function sourceClosure(entryFile: string, repoRoot: string, packages: Map<string, { dir: string; exportsMap: Record<string, unknown>; }>): Set<string> {
-  const seen = new Set();
+  const seen = new Set<string>();
   const queue = [entryFile];
   while (queue.length > 0) {
-    const file = /** @type {string} */ (queue.pop());
+    const file = queue.pop() as string;
     if (seen.has(file) || !existsSync(file)) continue;
     seen.add(file);
     for (const spec of specifiersOf(readFileSync(file, "utf8"))) {

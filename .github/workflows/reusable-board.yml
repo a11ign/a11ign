@@ -49,10 +49,10 @@ jobs:
       # path here, even in a comment, is exactly what `entry-points.test.ts` reads (over this whole file's
       # text, unstripped) as an unguarded npm/workflow entry point -- the config module is meant to be
       # imported, not run, so guarding it the way an entry point is guarded would be the wrong fix. Keeping
-      # its path OUT of this file entirely is the real one: `assert-glob-not-empty.mjs` computes that path
+      # its path OUT of this file entirely is the real one: `assert-glob-not-empty.ts` computes that path
       # internally, and is already a guarded, already-discovered entry point everywhere else this row touches.
       - env:
           GH_TOKEN: ${{ github.token }}
       # `public-claim.test.ts` is NOT named here: #2975 (90ff5f081) deleted it from this repo, and a glob that
-      # matches 0 files refuses the whole job (`assert-glob-not-empty.mjs` refuses it before any runner starts).
+      # matches 0 files refuses the whole job (`assert-glob-not-empty.ts` refuses it before any runner starts).
         run: node packages/guards/src/assert-glob-not-empty.ts "packages/guards/src/board-*.test.ts" --min=1 --run --runner=rstest

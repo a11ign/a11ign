@@ -81,7 +81,7 @@ packages/worker-fleet/tailscale-acl.hujson
 packages/control/ansible/*.local.yml
 
 # `a11ign/control`'s source and playbooks, LAID the same way (#3506), at the tag `layers.json` declares. It holds the operator's untracked `ansible/inventory.yml` and `ansible/*.local.yml`
-# too (`lay-layer.mjs` carries them across a re-lay). The two lines that ignored those files by name stay beside it: leaking the real fleet's addresses (#54) must take two mistakes, not one.
+# too (`lay-layer.ts` carries them across a re-lay). The two lines that ignored those files by name stay beside it: leaking the real fleet's addresses (#54) must take two mistakes, not one.
 /packages/control
 
 # Whatever agent tooling the person at the keyboard happens to use.

@@ -137,7 +137,7 @@ difference between a gate and an obstacle. `weights.pkl` in the output is part o
 ### 4a. Assert WHERE the refusal comes from, not just that one happened
 
 A mutation can be caught by accident. Deleting `gate:isolation`'s smoke-test precondition does not make it
-pass — it fails later trying to copy the missing file, with a raw `ENOENT ... isolation-smoke.mjs`. A test
+pass — it fails later trying to copy the missing file, with a raw `ENOENT ... isolation-smoke.ts`. A test
 matching `/smoke/i` against the failure detail was satisfied by that ENOENT, so it caught the mutation for
 the wrong reason and would have stopped working the day the error text changed.
 

@@ -28,7 +28,7 @@ recommendation.
 ## `.agent-org`
 
 **What it is.** The org tool's per-project directory: `project.json` (which repositories and board, the `dora` list, the unit list, the roles
-directory), `host.json` (the machine's facts), `failure-classes.json`, `chairman-milestones.json`, `plugins/causes.mjs`, `roles/` (the briefs,
+directory), `host.json` (the machine's facts), `failure-classes.json`, `chairman-milestones.json`, `plugins/causes.ts`, `roles/` (the briefs,
 `sessions.json`, `memory/`) and `units/` (the 14 systemd units this project owns). **What the standard says about a file like it:** nothing; the
 standard is about where a package lives. It is the same kind of thing as `agent-org`'s own root, which the standard calls the model and which
 holds no such directory because it IS the tool.
@@ -55,7 +55,7 @@ holds no such directory because it IS the tool.
 **What a move would break, and how I know.** The tick and the gate: with the file absent at the git top level `installedProject` throws
 `ProjectDeclarationRefusal` (`project-config.mjs:332-334`), which is the `agent-org-gate-reads-project-main` hazard in the row. **Read, not run:** I
 did not run a tick against a checkout without the file, since that would touch the shared org. Also broken by the same move: `beforeTick`, the 14
-host units (`PROJECT_UNITS_DIR`), `nightly.yml:280`, three guard tests and two doc checks; and, silently, `release-reads-qualification.mjs:83`,
+host units (`PROJECT_UNITS_DIR`), `nightly.yml:280`, three guard tests and two doc checks; and, silently, `release-reads-qualification.ts:83`,
 which would start counting edits to the moved files as releasable. The tool's path is a constant, so a move is a tool release plus a pin here,
 not an edit here.
 
@@ -128,7 +128,7 @@ It does bear on the check, below.
 - *Code that opens it:* `scripts/lay-layer.ts:261` (`main`, the one writer of laid trees), `:220` and `:249` (the copy it writes into `control`
   as `declares`); `packages/guards/src/isolation-gate.ts:560-577` (`LAYERS_JSON`: which directories the isolation gate leaves out, and it throws
   on an unreadable file); `scripts/test-support/stamp-files.ts:18`; `scripts/ci-changed.ts:429` (a change to this file runs the `ansible` job).
-- *Callers of `lay-layer.mjs`, so indirect readers:* `package.json:30` (`build`) and `:32` (`prepare`), which run it for `control`, `nvda-worker`,
+- *Callers of `lay-layer.ts`, so indirect readers:* `package.json:30` (`build`) and `:32` (`prepare`), which run it for `control`, `nvda-worker`,
   `screenreader-fleet` and `lab`; `.github/workflows/ci.yml:225` and `action-smoke.yml:38`.
 - *Workspace:* `pnpm-workspace.yaml:6-10` excludes each declared layer path from `packages/*`, and `packages/guards/src/pnpm-workspace.test.ts:118-125`
   derives that list from this file.
@@ -139,7 +139,7 @@ It does bear on the check, below.
   `packages/guards/layer-edges.baseline.json:14-17`.
 - *Config:* `.c8rc.json:21-22`, `.gitignore:75,83`, `scripts/rstest/rstest.config.ts:144`.
 
-**What a move would break.** `lay-layer.mjs` (so `pnpm install`'s `prepare` and `pnpm run build`, on every checkout, host and CI job), the
+**What a move would break.** `lay-layer.ts` (so `pnpm install`'s `prepare` and `pnpm run build`, on every checkout, host and CI job), the
 isolation gate, `control`'s copy and with it `fleet:deploy` and the Ansible plays, and four to six guard tests. A move out of the root re-opens
 the reason in its own comment (#3506). **Read, not run.**
 

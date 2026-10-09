@@ -33,14 +33,14 @@ GitHub's documentation**, and unit 1d works whether or not it is true. See #298.
 
 It used to run only what a diff reaches (A1b and A1c). Chairman, verbatim, 2026-09: *"the trunk guard is running all of the
 unit tests. this takes just as long as the pr one. so we should change the pr unit tests to only run on the files changed for
-pr efficiency and ci efficiency."* A hand-built selector (`select-changed-tests.mjs`, with `ci-changed.mjs`'s package-level
+pr efficiency and ci efficiency."* A hand-built selector (`select-changed-tests.mjs`, with `ci-changed.ts`'s package-level
 `testPackages` underneath it) did that for a month, and **chairman, via `ceo`, 2026-10-04, deleted it** once `rstest run
 --changed` covered the same question: a selector this repository wrote and maintained is a second place to be wrong about which
 tests a change reaches, and its failure shape (a selector that picks too few tests reads green) is the one this repository
 names most often.
 
 Now `ci.yml`'s `ts` job calls `reusable-build-test.yml` with `run-ts-tests: true` and nothing else about scope, so it runs
-`pnpm run test:all`, the same command `trunk-guard` runs on every merge. **`ci-changed.mjs` still decides WHICH JOBS run**
+`pnpm run test:all`, the same command `trunk-guard` runs on every merge. **`ci-changed.ts` still decides WHICH JOBS run**
 (`ts`, `python`, `ansible`, `docs`, `board`, `changeset`, `rulesFitness`): that is job gating, it runs before `npm ci`, and it
 is unrelated to which tests a job runs. The one selector left is rstest's own, locally: `pnpm run verify` runs `rstest run
 --changed=<base>` and stamps "the affected set passed at this head", which is a claim about the affected set and never about
@@ -275,7 +275,7 @@ a bare identifier (`GH_TOKEN`, `RUNS_ROOT`) or a bare substring (`--is-shallow-r
 mechanism derived requirements from `acceptance-commands.mjs`'s own prose describing the patterns, and
 separately from the patterns' own regex-literal SOURCE TEXT (comment-stripping fixes the first; it cannot
 fix the second, because that text is real code). Both are pinned regression tests now
-(`acceptance-commands.test.ts`'s `#621 SELF-REFERENCE REGRESSION` and its `local-import-closure.mjs`
+(`acceptance-commands.test.ts`'s `#621 SELF-REFERENCE REGRESSION` and its `local-import-closure.ts`
 sibling) — the file that defines what counts as a real read must derive nothing from its own closure.
 
 ### Two traps inside the job itself

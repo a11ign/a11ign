@@ -67,8 +67,8 @@ export function pinnedVersion(lockfile: string, name: string): { version: string
 
 /** What a declared tag looks like: `v` and a semver. A branch or a bare sha is not a pin. */
 const DECLARED_TAG = /^v\d+\.\d+\.\d+$/;
-/** @typedef {{ path: string, source?: string, package?: string, remote?: string, tag?: string, lays?: string[], declares?: string, keeps?: string[] }} Declaration */
-/** @typedef {{ remote: string, tag: string, path: string, source?: string, lays: string[], declares?: string, keeps?: string[] }} LayingPlan */
+type Declaration = { path: string; source?: string; package?: string; remote?: string; tag?: string; lays?: string[]; declares?: string; keeps?: string[] };
+export type LayingPlan = { remote: string; tag: string; path: string; source?: string; lays: string[]; declares?: string; keeps?: string[] };
 /** What `lay` puts down when a declaration names nothing else. */
 const DEFAULT_LAYS = ["src"];
 
@@ -90,7 +90,7 @@ const semverParts = (version: string): number[] => version.split(".").slice(0, 3
  * @returns {string}
  */
 export function releaseTag(name: string, version: string): string {
-  const from = BARE_TAGS_FROM[/** @type {keyof typeof BARE_TAGS_FROM} */ (name)];
+  const from = BARE_TAGS_FROM[name as keyof typeof BARE_TAGS_FROM];
   if (from === undefined) return `${name}@${version}`;
   const [major, minor, patch] = semverParts(version);
   const atOrAfter = major !== from[0] ? major > from[0] : minor !== from[1] ? minor > from[1] : patch >= from[2];
@@ -200,7 +200,7 @@ function keptFiles(target: string, keeps: string[]): [string, Buffer][] {
     if (!existsSync(join(target, directory))) return [];
     const wanted = new RegExp(`^${pattern.slice(directory.length + 1).split("*").map((piece) => piece.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join("[^/]*")}$`);
     return readdirSync(join(target, directory)).filter((name) => wanted.test(name))
-      .map((name) => /** @type {[string, Buffer]} */ ([join(directory, name), readFileSync(join(target, directory, name))]));
+      .map((name): [string, Buffer] => [join(directory, name), readFileSync(join(target, directory, name))]);
   });
 }
 

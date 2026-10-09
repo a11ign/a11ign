@@ -152,7 +152,7 @@ function withSiblingPair(range: string, run: (user: string) => void): void {
       writeFileSync(join(root, dir, "package.json"), JSON.stringify(manifest));
       writeFileSync(join(root, dir, "index.js"), "module.exports = 1;\n");
     }
-    writeFileSync(join(root, "range-user", "isolation-smoke.mjs"), "console.log('unreached when the ranges are wrong');\n");
+    writeFileSync(join(root, "range-user", "isolation-smoke.ts"), "console.log('unreached when the ranges are wrong');\n");
     run(join(root, "range-user"));
   } finally {
     rmSync(root, { recursive: true, force: true });

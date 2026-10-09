@@ -287,7 +287,7 @@ jobs:
           set -o pipefail
           # The runner's config path is read from its one owner, never spelled here: `entry-points.test.ts` treats any
           # script path a workflow names as an entry point that must be inert on import, and the config is not one.
-          RSTEST_CONFIG="$(node -e 'import("./packages/guards/src/assert-glob-not-empty.mjs").then((m) => { if (m.RSTEST_CONFIG) console.log(m.RSTEST_CONFIG); else process.exit(1); })')" || RSTEST_CONFIG=""
+          RSTEST_CONFIG="$(node -e 'import("./packages/guards/src/assert-glob-not-empty.ts").then((m) => { if (m.RSTEST_CONFIG) console.log(m.RSTEST_CONFIG); else process.exit(1); })')" || RSTEST_CONFIG=""
           if [ -z "$RSTEST_CONFIG" ]; then
             echo '::error::CANNOT_TELL: could not read RSTEST_CONFIG, so the hold never ran. Nothing published.'
             exit 1
@@ -383,7 +383,7 @@ jobs:
       dist-tag: next
 
   # THE PROMOTION, IN TWO JOBS (#3947, split by #3969): the job that can mint an npm token runs no code from another repository.
-  # `decide` clones the newest `agent-org` tag and runs `release-promote.mjs` (which imports that tool), so it holds NO `id-token` and
+  # `decide` clones the newest `agent-org` tag and runs `release-promote.ts` (which imports that tool), so it holds NO `id-token` and
   # no environment: it reads the registry, the tags and the lab's statuses, and its only product is a list of `name@x.y.z`. `promote`
   # holds `id-token: write` for npm's OIDC dist-tag (the `npm-publish` environment, limited to `main`; "Allow npm dist-tag" is ticked on
   # `a11ign`, `@a11ign/evidence`, `@a11ign/judge` and `@a11ign/scorer`), has NO checkout and clones nothing, and runs `npm dist-tag add`
@@ -478,7 +478,7 @@ jobs:
             exit 1
           }
 
-      # EVERY spec is checked before ANY is moved, with the same shape `release-promote.mjs` checks (`SPEC`): `name@x.y.z`, scoped or not.
+      # EVERY spec is checked before ANY is moved, with the same shape `release-promote.ts` checks (`SPEC`): `name@x.y.z`, scoped or not.
       # What does not match moves nothing at all, so a list that was tampered with in transit costs a red run and no tag.
       - name: Move latest to the versions the decision promoted
         id: move

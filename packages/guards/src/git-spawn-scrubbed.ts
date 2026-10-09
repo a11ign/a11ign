@@ -24,6 +24,9 @@
  * call sites rather than a rescue, and this rule is what keeps the number at 79 until someone does it.
  */
 
+import type { Rule } from "eslint";
+import type { CallExpression, Identifier, Literal } from "estree";
+
 /** The helpers a spawn may go through, by basename -- real imports are relative, so the path varies. */
 const CANONICAL_HELPER_BASENAMES = ["git-env.mjs", "git-safe-env.mjs", "git-sandbox.ts"];
 
@@ -33,13 +36,16 @@ const HELPER_CALLS = new Set(["sandboxGitEnv", "withGitSandbox"]);
 /** The child_process spawners, by the name at the call site -- bare or as a member. */
 const SPAWNERS = new Set(["execFileSync", "spawnSync", "execFile", "spawn"]);
 
-const calleeName = (node) =>
+/** An import specifier's `imported` side is an identifier, or a string literal for `import { "a-b" as c }`. */
+const importedName = (imported: Identifier | Literal): string =>
+  imported.type === "Identifier" ? imported.name : String(imported.value);
+
+const calleeName = (node: CallExpression): string | null =>
   node.callee?.type === "Identifier" ? node.callee.name
     : node.callee?.type === "MemberExpression" && node.callee.property?.type === "Identifier"
       ? node.callee.property.name : null;
 
-/** @type {import("eslint").Rule.RuleModule} */
-export const gitSpawnScrubbed: import("eslint").Rule.RuleModule = {
+export const gitSpawnScrubbed: Rule.RuleModule = {
   meta: {
     type: "problem",
     schema: [{ type: "object", properties: { dataNotASpawn: { type: "array", items: { type: "string" } } },
@@ -66,20 +72,20 @@ export const gitSpawnScrubbed: import("eslint").Rule.RuleModule = {
     // collides with any local helper: this rule's own fixture builder in `lint-rules.test.ts` is named
     // `spawn` and takes `"git"` as its first argument, and the rule reported it six times. A name is a
     // rendering; the import is the rule. Found by the rule firing on the tests written for it.
-    const fromChildProcess = new Set();
+    const fromChildProcess = new Set<string>();
     for (const n of source.ast.body) {
       if (n.type !== "ImportDeclaration" || !/^(node:)?child_process$/.test(String(n.source.value))) continue;
       for (const spec of n.specifiers) {
-        if (spec.type === "ImportSpecifier" && SPAWNERS.has(spec.imported.name)) fromChildProcess.add(spec.local.name);
+        if (spec.type === "ImportSpecifier" && SPAWNERS.has(importedName(spec.imported))) fromChildProcess.add(spec.local.name);
         if (spec.type === "ImportDefaultSpecifier" || spec.type === "ImportNamespaceSpecifier") {
           fromChildProcess.add(spec.local.name);
         }
       }
     }
     let called = false;
-    const spawns = [];
+    const spawns: CallExpression[] = [];
     return {
-      CallExpression(node) {
+      CallExpression(node: CallExpression) {
         const name = calleeName(node);
         if (name && HELPER_CALLS.has(name)) called = true;
         const viaNamespace = node.callee?.type === "MemberExpression"

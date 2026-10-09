@@ -23,8 +23,8 @@ name: consumer-gate-pin
 #
 # ## Every job resolves the tool first (#4373)
 #
-# `scripts/consumer-gate-pin-needed.ts` and `scripts/generate-consumer-gate.ts` import `repo-identity.mjs`, which does `await toolModule(...)` at import.
-# On the host `.agent-org/host.json` names the checkout; on a runner no tool exists until `agent-org-newest-tag.mjs --dest` has cloned one, so each job
+# `scripts/consumer-gate-pin-needed.ts` and `scripts/generate-consumer-gate.ts` import `repo-identity.ts`, which does `await toolModule(...)` at import.
+# On the host `.agent-org/host.json` names the checkout; on a runner no tool exists until `agent-org-newest-tag.ts --dest` has cloned one, so each job
 # that runs either script carries that step BEFORE it. The first real run (37881883814) died in `decide` without it, because the tests read this file as text.
 #
 # ## Authority: Octo STS, no stored token (chairman direction (a)), and the job that holds it runs no repository code (ceo, #4374)

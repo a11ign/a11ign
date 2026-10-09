@@ -252,7 +252,7 @@ function isPublished(repoRoot: string, pkgName: string) {
  */
 function everythingIsPacked(repoRoot: string, pkgName: string): Set<string> {
   void repoRoot; void pkgName;
-  return /** @type {Set<string>} */ (/** @type {unknown} */ ({ has: () => true }));
+  return { has: () => true } as unknown as Set<string>;
 }
 
 /**
@@ -381,10 +381,14 @@ function docsReadersMustRun({ docs, getDocsReadingTests, repoRoot }: { docs: boo
  */
 export function jobsFor(files: string[], repoRoot: string = process.cwd()): string[] {
   const result = classify(files, knownPackages(repoRoot), { repoRoot });
-  /** @type {(keyof ClassifyResult)[]} */
-  const jobs: (keyof ClassifyResult)[] = ["ts", "python", "ansible", "docs", "board", "changeset", "rulesFitness"];
+  const jobs: Exclude<keyof ClassifyResult, "packages">[] = ["ts", "python", "ansible", "docs", "board", "changeset", "rulesFitness"];
   return jobs.filter((job) => result[job]);
 }
+
+type ClassifyResult = {
+  ts: boolean; python: boolean; ansible: boolean; docs: boolean; board: boolean;
+  changeset: boolean; rulesFitness: boolean; packages: string[];
+};
 
 /**
  * Classify a list of repo-relative changed paths into which `ci.yml` jobs must run.
@@ -397,8 +401,6 @@ export function jobsFor(files: string[], repoRoot: string = process.cwd()): stri
  *   `repoRoot` defaults to `process.cwd()`, `getPackedFiles` to the real `packedFiles` above,
  *   `getTestDependencyMap` to the real `testDependencyMap` above, `getDocsReadingTests` to the real
  *   `docsReadingTests` — all injectable so `classify` itself stays testable without touching disk or git.
- * @typedef {{ ts: boolean, python: boolean, ansible: boolean, docs: boolean, board: boolean,
- *   changeset: boolean, rulesFitness: boolean, packages: string[] }} ClassifyResult
  * @returns {ClassifyResult}
  */
 export function classify(files: string[], allPackages: string[] = knownPackages(process.cwd()),
@@ -413,7 +415,7 @@ export function classify(files: string[], allPackages: string[] = knownPackages(
   // — not only `.ts`/`.mjs`/`.json` under `src`/`bin` — marks that package touched. A second, narrower
   // definition of "touched" living beside the pre-push hook's is exactly the shape that drifts; the hook's
   // own tests already exercise renames, deletions and the no-subdirectory edge case for this function.
-  const tsPackages = new Set(changedPackages(files.join("\n")));
+  const tsPackages = new Set(changedPackages(files.join("\n")) as string[]);
   const rootScriptsChanged = files.some((f) => /^scripts\/.*\.mjs$/.test(f));
   // A root config file (tsconfig, eslint config, the workspace's own package.json) OR a `scripts/*.mjs`
   // file can change what EVERY package lints, typechecks or tests as — dozens of packaging tests import

@@ -12,7 +12,7 @@
  * It is a PORT of `packages/nvda-worker/src/auth-flow.mjs`'s interpreter, function for function and in the same
  * order, and the two are held equal by `interpreter.test.ts`, which drives one table of scenarios through both
  * over one fake browser. They are two copies because they cannot be one: the worker is plain `.mjs` with no build step
- * (ADR 0031) and is not a dependency of this package, and this package must not import it (`isolation-smoke.mjs`).
+ * (ADR 0031) and is not a dependency of this package, and this package must not import it (`isolation-smoke.ts`).
  * The ADR calls the seam the DRIVER — two implementations of a small interface — and says the interpreter is written
  * once over it; the dependency graph makes "once per package" the honest reading, so the parity test is the lock.
  *
