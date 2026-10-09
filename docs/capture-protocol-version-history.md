@@ -308,3 +308,21 @@ that open on a bare `focusout` beside v22 captures of the same kind of page that
 `--allow-protocol-change`. **The `i === 0` carve-out in `rules.ts` stays** until `orchestrator`'s reading at
 protocol 22 (`npm run corpus:focus-log-first-event`) shows `focusout`-first at 0 with the `initial: true`
 count beside it.
+
+## 22 → 23 (2026-10-09): password fields report whether paste is cancelled
+
+`RuleInput.formInputs[].pasteCancelled` is read by `addPasteCancelledPassword` (3.3.8, #4259) and no capture
+populated it, so on a real page the criterion read `untested`; the rule was built against hand-made evidence
+shaped like the corpus pair `paste-allowed-good.html` / `paste-blocked-bad.html`. **#4314 changes what a
+capture *records*:** `FORM_INPUT_CENSUS_EXPRESSION` (`src/browser-session.mjs`, now in
+`a11ign/screenreader-worker`) dispatches a cancelable `paste` event at each `input[type=password]` and records
+`!dispatchEvent(...)` as `pasteCancelled`. The dispatch reads the OUTCOME of `onpaste="return false"` and of
+`addEventListener("paste", …)` alike, where a markup scan sees only the first. No clipboard data is sent and no
+text is inserted. Other controls carry no key: absent means not examined, never `false`.
+
+**Why it is a bump and not an additive field**, #170's and 16 → 17's reason: a v22 capture lacks the field and a
+reader treats that as "not asked", which is correct, but the cache would keep serving v22 captures, so a page
+captured before reads blind while any page captured later reads the field.
+
+**The cost is a recapture, and it is `orchestrator`'s window:** it rides any other pending bump (none was open on
+2026-10-09), and the PR (`a11ign/screenreader-worker#36`) deploys nothing.
