@@ -1,12 +1,13 @@
 {
   "_what": "a11ign's per-project declaration: the ONE file `agent-org` reads to learn which repository and which board it serves (ADR 0040, decisions 1 and 2; #2616). Keys starting with an underscore are prose and are not read.",
   "_key": "The EMPTY key belongs to the host's primary project's first code repository and first tracker, so every existing name, ledger line and label keeps its meaning. A key is [a-z0-9-], unique within its list, and never ends in -<digits>.",
-  "_layers": "`tracker` holds ONE entry until #2612's layer repositories exist. `code` holds a second, `agent-org` (#2969), a third, `screenreader-worker` (#2701, move 1 of #69), a fourth, `documents` (#2705, move 5 of #69), a fifth, `screenreader-fleet` (#2702, move 2 of #69), a sixth, `control` (#2704, move 4 of #69), a seventh, `lab` (#2703, move 3 of #69), and an eighth, `toolchain` (#3578, the package ADR 0043 extracts, built and published from its own repository), and a ninth, `github` (#4190, `a11ign/.github`, where the org-wide Octo STS policies live and which releases nothing): a repository the org opens pull requests in has to be DECLARED or no pull-request cause (review, red, conflict, stall) ever reads it, and the keyed reviewer `reviewer-agent-org-<n>` reviews from the clone `host.json` names under `clones`.",
+  "_layers": "`tracker` holds ONE entry until #2612's layer repositories exist, and a second, `agent-org` (#4082, row 3 of #4056: the machinery rows get their own tracker and board 2). `code` holds a second, `agent-org` (#2969), a third, `screenreader-worker` (#2701, move 1 of #69), a fourth, `documents` (#2705, move 5 of #69), a fifth, `screenreader-fleet` (#2702, move 2 of #69), a sixth, `control` (#2704, move 4 of #69), a seventh, `lab` (#2703, move 3 of #69), and an eighth, `toolchain` (#3578, the package ADR 0043 extracts, built and published from its own repository), and a ninth, `github` (#4190, `a11ign/.github`, where the org-wide Octo STS policies live and which releases nothing): a repository the org opens pull requests in has to be DECLARED or no pull-request cause (review, red, conflict, stall) ever reads it, and the keyed reviewer `reviewer-agent-org-<n>` reviews from the clone `host.json` names under `clones`.",
   "schema": 1,
   "_beforeTick": "The command the host runs in THIS checkout before each tick, now the tool no longer lives in it (ADR 0040, decision 3; #2623 done-when 4; cut-over 3 of 6, #2974): it keeps this checkout at origin/main. The tool form, `agent-org primary:update` (a11ign/agent-org#179): the work-tick unit renders a first word of `agent-org` through the tool itself, so it no longer resolves the project's pinned copy (#3503).",
   "beforeTick": "agent-org primary:update",
   "tracker": [
-    { "key": "", "repo": "a11ign/a11ign", "board": { "owner": "a11ign", "number": 1 } }
+    { "key": "", "repo": "a11ign/a11ign", "board": { "owner": "a11ign", "number": 1 } },
+    { "key": "agent-org", "repo": "a11ign/agent-org", "board": { "owner": "a11ign", "number": 2 } }
   ],
   "code": [
     { "key": "", "repo": "a11ign/a11ign" },
