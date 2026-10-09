@@ -1,5 +1,5 @@
 /**
- * #2612, child 1 of #69: `packages/guards/src/layer-edges.mjs`, the guard that makes the boundary of `nvda-worker` and
+ * #2612, child 1 of #69: `packages/guards/src/layer-edges.ts`, the guard that makes the boundary of `nvda-worker` and
  * `nvda-speech` a thing a machine can read, and refuses a reach across it that the baseline does not name.
  *
  * EVERY FIXTURE IS A REPOSITORY OF ITS OWN under `fixtures/layer-edges/<case>/`, holding a real `packages/other/src/x.mjs`.
@@ -22,11 +22,11 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { declareTreeWideGuard } from "./tree-wide-guard.mjs";
+import { declareTreeWideGuard } from "./tree-wide-guard.ts";
 import {
   BASELINE_PATH, LAYER_PACKAGES, countByDisposition, describeVerdict, findEdges, isScanned, judgeEdges, packageOf,
   readBaseline, trackedFiles,
-} from "./layer-edges.mjs";
+} from "./layer-edges.ts";
 
 // #3610: "the real tree agrees with the committed baseline" walks `trackedFiles()`, so this file's population is the whole
 // tracked tree and no import graph from a changed file reaches it -- the edge a new file adds is in the new file.
@@ -34,7 +34,7 @@ import {
 declareTreeWideGuard();
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
-const GUARD = join(ROOT, "packages/guards/src/layer-edges.mjs");
+const GUARD = join(ROOT, "packages/guards/src/layer-edges.ts");
 const FIXTURES = join(ROOT, "packages/guards/src/fixtures/layer-edges");
 
 const fixture = (name: string) => join(FIXTURES, name);

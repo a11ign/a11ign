@@ -9,7 +9,7 @@
  * **WHY NIGHTLY, AND WHY NO SWITCH (`ceo`, #3758).** A layer checkout on every pull request would spend a clone
  * to guard three lines, and with no sha in `layers.json` it would tie a core PR to the layer's `main`: a layer
  * change would red a PR that touched neither. This directory is outside the PR glob, so it is nightly by
- * construction; it is a named tenant of `packages/guards/nightly/tenants.mjs`.
+ * construction; it is a named tenant of `packages/guards/nightly/tenants.ts`.
  *
  * **WHAT IT READS.** `https://raw.githubusercontent.com/a11ign/screenreader-worker/main/src/launcher-reach.cmd`,
  * unauthenticated (the layer is public; no token, no `secrets.*`). Not the contents API: that is limited to 60

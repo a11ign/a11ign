@@ -11,7 +11,7 @@
  */
 
 /** @type {Array<{ name: string; pattern: RegExp }>} */
-export const LEAK_PATTERNS = [
+export const LEAK_PATTERNS: Array<{ name: string; pattern: RegExp; }> = [
   // A REAL IPv4 address has FOUR octets. This used to read `(?:10|192\.168|172\...)\.\d{1,3}\.\d{1,3}`,
   // which requires only THREE for the bare-`10` branch — `10` plus two more groups is `10.x.y`, one
   // octet short of an address, and `\b` after the second `\d{1,3}` is satisfied by any non-word
@@ -40,7 +40,7 @@ export const LEAK_PATTERNS = [
  *   line is not missed.
  * @returns {Array<{ name: string; value: string }>}
  */
-export function allLeaksIn(text) {
+export function allLeaksIn(text: string): Array<{ name: string; value: string; }> {
   const found = [];
   for (const { name, pattern } of LEAK_PATTERNS) {
     const global = new RegExp(pattern.source, "g");
@@ -73,7 +73,7 @@ const TRACKER_EXEMPT_IPV4_PREFIX = "192.168.64.";
  * @param {string} value
  * @returns {boolean}
  */
-function isTrackerExemptAddress(value) {
+function isTrackerExemptAddress(value: string): boolean {
   return value.startsWith(TRACKER_EXEMPT_IPV4_PREFIX);
 }
 
@@ -95,9 +95,9 @@ function isTrackerExemptAddress(value) {
  * @param {string} body
  * @returns {string | null}
  */
-export function leakRefusalReason(body) {
+export function leakRefusalReason(body: string): string | null {
   /** @type {Array<{ line: string; leak: { name: string; value: string } }>} */
-  const offenders = [];
+  const offenders: Array<{ line: string; leak: { name: string; value: string; }; }> = [];
   for (const line of body.split("\n")) {
     for (const leak of allLeaksIn(line.replace(/\s+/g, " "))) {
       if (leak.name === "private LAN IPv4 address" && isTrackerExemptAddress(leak.value)) continue;
@@ -129,7 +129,7 @@ export function leakRefusalReason(body) {
  * @param {string[]} args
  * @returns {string | null}
  */
-export function bodyFromArgv(args) {
+export function bodyFromArgv(args: string[]): string | null {
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
     if (arg === "--body" && i + 1 < args.length) return args[i + 1];
@@ -164,7 +164,7 @@ export function bodyFromArgv(args) {
  * @param {string[]} args
  * @returns {void}
  */
-export function assertNoLeakInArgv(cmd, args) {
+export function assertNoLeakInArgv(cmd: string, args: string[]): void {
   if (cmd !== "gh") return;
   const body = bodyFromArgv(args);
   if (body === null) return;
@@ -199,7 +199,7 @@ export function assertNoLeakInArgv(cmd, args) {
  * invocation is right to be shallow and wrong to be obeyed literally. (worker-judge, on #1066.)
  * @type {Readonly<string[]>}
  */
-export const TRACKER_WRITERS = Object.freeze([
+export const TRACKER_WRITERS: Readonly<string[]> = Object.freeze([
   // #2975 PR 3: the other ten declared writers went with the tool (`board-report`, `carry-branch`, `pr-open`, `row-claim`, `wake` and the rest),
   // so the registry names the one that stayed: it guards the publish token rather than the tracker.
   "npm-token-liveness.mjs",
@@ -228,6 +228,6 @@ export const TRACKER_WRITER_DIRS = Object.freeze(["scripts/"]);
  * @param {string} text
  * @returns {boolean}
  */
-export function sendsABody(text) {
+export function sendsABody(text: string): boolean {
   return /"--body"|"--body-file"|["\x27]-f["\x27],\s*[`"\x27]body=|--body-file=/.test(text);
 }

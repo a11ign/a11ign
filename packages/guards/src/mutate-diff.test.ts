@@ -25,9 +25,9 @@ import { parse as parseYaml } from "yaml";
 import {
   LISTED_SURVIVORS, affordable, chooseSubjects, codeSpan, editsOf, hunt, kindOf, mutantsOfSubject, mutateDiff,
   mutatedText, parses, positive, renderComment, renderSummary, runChangedTests, sampleByStride, scopeOf,
-} from "./mutate-diff.mjs";
+} from "./mutate-diff.ts";
 import { sandboxGitEnv } from "./git-env.mjs";
-import { tempDir } from "./test-tmp.mjs";
+import { tempDir } from "./test-tmp.ts";
 
 const REPO = resolve(import.meta.dirname, "../../..");
 
@@ -349,7 +349,7 @@ const BREAKS: [string, (w: Workflow) => boolean][] = [
   ["`comment` runs a program that is not gh/grep/sed", (w) => stepsOf(jobsOf(w).comment).some((s) => /\b(pnpm|npm|node|npx|tsx)\b/.test(s.run ?? ""))],
   ["`mutate`'s checkout must set persist-credentials: false",
     (w) => !JSON.stringify(stepsOf(jobsOf(w).mutate).find((s) => /actions\/checkout/.test(s.uses ?? ""))).includes("\"persist-credentials\":false")],
-  ["`mutate` must run mutate-diff.mjs", (w) => !runs(jobsOf(w).mutate, "packages/guards/src/mutate-diff.mjs")],
+  ["`mutate` must run mutate-diff.mjs", (w) => !runs(jobsOf(w).mutate, "packages/guards/src/mutate-diff.ts")],
   ["`mutate` must write the job summary, the surface that needs no token", (w) => !runs(jobsOf(w).mutate, "GITHUB_STEP_SUMMARY")],
   ["`comment` needs `mutate`", (w) => jobsOf(w).comment?.needs !== "mutate"],
   ["`mutate` must upload the comment as the artifact `comment` downloads",

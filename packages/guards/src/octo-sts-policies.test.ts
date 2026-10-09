@@ -32,7 +32,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
-import { ghApiRead } from "./gh-api-read.mjs";
+import { ghApiRead } from "./gh-api-read.ts";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const FIXTURES = "scripts/fixtures";

@@ -21,7 +21,7 @@ is counted as not found, in the `Found:` line of each section (`yes`, `half`, `n
 
 ## What was replayed, and how
 
-- **The generator** is `packages/guards/src/mutant-survivors.mjs`, run as `node packages/guards/src/mutant-survivors.mjs run
+- **The generator** is `packages/guards/src/mutant-survivors.ts`, run as `node packages/guards/src/mutant-survivors.ts run
   --base=<merge base> --test='<the Acceptance commands the reviewer ran>' --budget=300 --cap=10`, which is the
   budget and cap this row proposed for `pr:open` (its defaults), run by hand. It chooses mutants on the lines the diff **added**, in
   source files (never tests, comments or docs), with six line-local operators; it applies each through
@@ -115,7 +115,7 @@ author had not, and the author had written the operators.
 ## What ships
 
 **Nothing into `pr-open.mjs`**, and no `## Survivors` section, `A11Y_SURVIVORS_BUDGET` or `survivors` dependency there. The
-generator and its test stay as a script run by hand (`node packages/guards/src/mutant-survivors.mjs run ...`, the command in
+generator and its test stay as a script run by hand (`node packages/guards/src/mutant-survivors.ts run ...`, the command in
 the first section) so this record can be reproduced; it is not an npm script and nothing calls it. **The row closes on this
 record, and a null result is a finished row.**
 

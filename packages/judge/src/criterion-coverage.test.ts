@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 // #2171: the walk lives in `packages/guards` because FOUR copies of it descended a directory symlink and
 // threw ELOOP -- including this one, whose failure was the first symptom anybody saw. A relative path,
 // which is how every package in this tree reaches `packages/guards`.
-import { filesUnder } from "../../guards/src/files-under.mjs";
+import { filesUnder } from "../../guards/src/files-under.ts";
 
 import { WCAG_22_AA } from "@a11ign/evidence/wcag";
 

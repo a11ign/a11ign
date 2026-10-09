@@ -25,7 +25,7 @@
 // reason while this file was being written). In CI the tree is the runner's own; locally, use a worktree of your own.
 //
 // Usage:
-//   node packages/guards/src/mutate-diff.mjs <base> <head> [--max-mutants=<n>] [--budget=<seconds>]
+//   node packages/guards/src/mutate-diff.ts <base> <head> [--max-mutants=<n>] [--budget=<seconds>]
 //        [--comment=<file>] [--summary=<file>]
 //
 // The working tree must BE <head>: mutants are written into it and put back from a copy held in memory.
@@ -37,7 +37,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { changedFiles } from "./changed-files.mjs";
 import { sandboxGitEnv } from "./git-env.mjs";
-import { changedLines } from "./mutant-survivors.mjs";
+import { changedLines } from "./mutant-survivors.ts";
 import { flagValue, refuseUnknownFlags } from "@a11ign/screenreader-fleet/cli-flags";
 
 export const DEFAULT_MAX_MUTANTS = 100;
@@ -61,7 +61,7 @@ const require = createRequire(import.meta.url);
  * @param {string} name
  * @returns {any}
  */
-const lazy = (name) => require(name);
+const lazy = (name: string): any => require(name);
 
 /**
  * @typedef {{ op: string, from: number, len: number, to: string | null }} Edit
@@ -76,7 +76,7 @@ const lazy = (name) => require(name);
  * @param {string} op @param {Record<string, string>} pairs @param {RegExp} re
  * @returns {(line: string) => Edit[]}
  */
-const swaps = (op, pairs, re) => (line) =>
+const swaps = (op: string, pairs: Record<string, string>, re: RegExp): (line: string) => Edit[] => (line) =>
   [...line.matchAll(re)].map((m) => ({ op, from: m.index, len: m[0].length, to: pairs[m[0]] }));
 
 const BOOL = swaps("BOOL", { true: "false", false: "true" }, /\b(true|false)\b/g);
@@ -87,17 +87,17 @@ const REL = swaps("REL", { " <= ": " < ", " < ": " <= ", " >= ": " > ", " > ": "
 const ARITH = swaps("ARITH", { " + ": " - ", " - ": " + ", " * ": " / ", " / ": " * " }, / [+\-*/] /g);
 
 /** @type {(line: string) => Edit[]} */
-const STR = (line) => [...line.matchAll(new RegExp(`(["'])([^"'\\\\\\n]{1,${STRING_LITERAL_MAX}})\\1`, "g"))]
+const STR: (line: string) => Edit[] = (line): Edit[] => [...line.matchAll(new RegExp(`(["'])([^"'\\\\\\n]{1,${STRING_LITERAL_MAX}})\\1`, "g"))]
   .map((m) => ({ op: "STR", from: m.index, len: m[0].length, to: `${m[1]}${m[1]}` }));
 
 /** `return <expr>;` becomes `return undefined;`. An identity (the line already says so) is dropped by `editsOf`. */
-const RET = (/** @type {string} */ line) => {
+const RET = (/** @type {string} */ line: string) => {
   const at = line.indexOf("return");
   return /^\s*return [^;]+;\s*$/.test(line) ? [{ op: "RET", from: at, len: line.trimEnd().length - at, to: "return undefined;" }] : [];
 };
 
 /** `if (<cond>)` forced to true and to false: a branch no test takes, and one no test needs. */
-const IF = (/** @type {string} */ line) => {
+const IF = (/** @type {string} */ line: string) => {
   const i = line.search(/\bif \(/);
   if (i < 0) return [];
   let depth = 0;
@@ -116,24 +116,24 @@ const IF = (/** @type {string} */ line) => {
 const REGEX_LITERAL = /(?<=^\s*|[=(,:!&|?[{;]\s*|\breturn\s+)\/(?![/*])((?:\\.|\[(?:\\.|[^\]\\])*\]|[^/\\\n[])+)\/[dgimsuvy]*/g;
 
 /** A regex's leading `^` and trailing `$` dropped, one mutant each. */
-const ANCHOR = (/** @type {string} */ line) => [...line.matchAll(REGEX_LITERAL)].flatMap((m) => {
+const ANCHOR = (/** @type {string} */ line: string) => [...line.matchAll(REGEX_LITERAL)].flatMap((m) => {
   const body = m[1];
   const bodyAt = m.index + 1;
   /** @type {Edit[]} */
-  const edits = [];
+  const edits: Edit[] = [];
   if (body.startsWith("^")) edits.push({ op: "ANCHOR", from: bodyAt, len: 1, to: "" });
   if (body.endsWith("$") && !body.endsWith("\\$")) edits.push({ op: "ANCHOR", from: bodyAt + body.length - 1, len: 1, to: "" });
   return edits;
 });
 
-const NUM = (/** @type {string} */ line) => [...line.matchAll(/(?<=[:=] )(\d+)\s*$/g)]
+const NUM = (/** @type {string} */ line: string) => [...line.matchAll(/(?<=[:=] )(\d+)\s*$/g)]
   .map((m) => ({ op: "NUM", from: m.index, len: m[1].length, to: String(Number(m[1]) + 1) }));
-const JSON_STRING = (/** @type {string} */ line) => [...line.matchAll(/(?<=: )"([^"\\]+)"/g)]
+const JSON_STRING = (/** @type {string} */ line: string) => [...line.matchAll(/(?<=: )"([^"\\]+)"/g)]
   .map((m) => ({ op: "STR", from: m.index, len: m[0].length, to: '""' }));
 const DELETE = () => [{ op: "DELETE", from: 0, len: Infinity, to: null }];
 
 /** @type {Record<Kind, ((line: string) => Edit[])[]>} */
-export const OPERATORS_BY_KIND = {
+export const OPERATORS_BY_KIND: Record<Kind, ((line: string) => Edit[])[]> = {
   js: [BOOL, EQ, LOGIC, REL, ARITH, STR, RET, IF, ANCHOR, DELETE],
   yml: [BOOL, EQ, LOGIC, NUM, DELETE],
   json: [BOOL, NUM, JSON_STRING, DELETE],
@@ -141,14 +141,14 @@ export const OPERATORS_BY_KIND = {
 };
 
 /** @param {string} file @returns {Kind} */
-export function kindOf(file) {
+export function kindOf(file: string): Kind {
   if (/\.(mjs|js|ts|cjs|mts)$/.test(file)) return "js";
   if (/\.ya?ml$/.test(file)) return "yml";
   return file.endsWith(".json") ? "json" : "md";
 }
 
 /** Blank lines, comments and imports are not behaviour: a mutant there only measures the parser. */
-function skipLine(/** @type {string} */ line, /** @type {Kind} */ kind) {
+function skipLine(/** @type {string} */ line: string, /** @type {Kind} */ kind: Kind) {
   if (!line.trim()) return true;
   if (kind === "js") return /^\s*(\/\/|\*|\/\*|import\b|export .* from )/.test(line);
   return kind === "yml" && /^\s*#/.test(line);
@@ -160,13 +160,13 @@ function skipLine(/** @type {string} */ line, /** @type {Kind} */ kind) {
  * @param {Kind} kind @param {string} line
  * @returns {Edit[]}
  */
-export function editsOf(kind, line) {
+export function editsOf(kind: Kind, line: string): Edit[] {
   return OPERATORS_BY_KIND[kind].flatMap((operator) => operator(line))
     .filter((edit) => applyEdit(line, edit) !== line);
 }
 
 /** @param {string} line @param {Edit} edit @returns {string | null} the mutated line, or null when the line is deleted */
-function applyEdit(line, edit) {
+function applyEdit(line: string, edit: Edit): string | null {
   return edit.to === null ? null : line.slice(0, edit.from) + edit.to + line.slice(edit.from + edit.len);
 }
 
@@ -176,7 +176,7 @@ function applyEdit(line, edit) {
  * @param {Kind} kind @param {string} file @param {string} text
  * @returns {boolean}
  */
-export function parses(kind, file, text) {
+export function parses(kind: Kind, file: string, text: string): boolean {
   if (kind === "json") return jsonParses(text);
   if (kind === "yml") return lazy("yaml").parseDocument(text).errors.length === 0;
   if (kind === "md") return true;
@@ -186,7 +186,7 @@ export function parses(kind, file, text) {
 }
 
 /** `JSON.parse` throws a SyntaxError for text that is not JSON; anything else it throws is not this question's answer. */
-function jsonParses(/** @type {string} */ text) {
+function jsonParses(/** @type {string} */ text: string) {
   try {
     JSON.parse(text);
     return true;
@@ -197,7 +197,7 @@ function jsonParses(/** @type {string} */ text) {
 }
 
 /** @param {string} text @param {Mutant} mutant @returns {string} the whole file with the one mutant applied */
-export function mutatedText(text, mutant) {
+export function mutatedText(text: string, mutant: Mutant): string {
   const lines = text.split("\n");
   const mutated = applyEdit(lines[mutant.line - 1], mutant.edit);
   if (mutated === null) lines.splice(mutant.line - 1, 1);
@@ -216,12 +216,12 @@ const NOT_SUBJECT = /(^|\/)(fixtures|node_modules|dist)\/|\.d\.ts$|\.test\.[a-z]
  * @param {{ changed: string[], tests: string[], read: (file: string) => string }} args
  * @returns {string[]}
  */
-export function chooseSubjects({ changed, tests, read }) {
+export function chooseSubjects({ changed, tests, read }: { changed: string[]; tests: string[]; read: (file: string) => string; }): string[] {
   const candidates = changed.filter((f) => SUPPORTED.test(f) && !NOT_SUBJECT.test(f));
   const testTexts = tests.map(read);
-  const named = (/** @type {string} */ f) => testTexts.some((text) => text.includes(path.basename(f)));
+  const named = (/** @type {string} */ f: string) => testTexts.some((text) => text.includes(path.basename(f)));
   const direct = candidates.filter(named);
-  const reachedThrough = (/** @type {string} */ f) => direct.some((d) => kindOf(d) === "js" && read(d).includes(path.basename(f)));
+  const reachedThrough = (/** @type {string} */ f: string) => direct.some((d) => kindOf(d) === "js" && read(d).includes(path.basename(f)));
   return [...direct, ...candidates.filter((f) => !direct.includes(f) && reachedThrough(f))].sort();
 }
 
@@ -230,12 +230,12 @@ export function chooseSubjects({ changed, tests, read }) {
  * @param {{ base: string, head: string, cwd: string }} args
  * @returns {{ tests: string[], subjects: { file: string, lines: Set<number> }[] }}
  */
-export function scopeOf({ base, head, cwd }) {
+export function scopeOf({ base, head, cwd }: { base: string; head: string; cwd: string; }): { tests: string[]; subjects: { file: string; lines: Set<number>; }[]; } {
   const range = `${base}...${head}`;
   const diff = execFileSync("git", ["diff", "-U0", "--no-renames", range], {
     cwd, env: sandboxGitEnv(), encoding: "utf8", maxBuffer: MAX_DIFF_BYTES });
   const added = changedLines(diff);
-  const read = (/** @type {string} */ file) => readFileSync(path.join(cwd, file), "utf8");
+  const read = (/** @type {string} */ file: string) => readFileSync(path.join(cwd, file), "utf8");
   const present = changedFiles([range], { repoRoot: cwd }).filter((f) => existsSync(path.join(cwd, f)));
   const tests = present.filter((f) => TEST_FILE.test(f));
   const subjects = chooseSubjects({ changed: present.filter((f) => added.has(f)), tests, read })
@@ -250,11 +250,11 @@ export function scopeOf({ base, head, cwd }) {
  * @param {{ file: string, text: string, lines: Set<number> }} subject
  * @returns {{ mutants: Mutant[], discarded: number }}
  */
-export function mutantsOfSubject({ file, text, lines }) {
+export function mutantsOfSubject({ file, text, lines }: { file: string; text: string; lines: Set<number>; }): { mutants: Mutant[]; discarded: number; } {
   const kind = kindOf(file);
   const source = text.split("\n");
   /** @type {Mutant[]} */
-  const mutants = [];
+  const mutants: Mutant[] = [];
   let discarded = 0;
   for (const n of [...lines].sort((a, b) => a - b)) {
     const line = source[n - 1];
@@ -277,7 +277,7 @@ export function mutantsOfSubject({ file, text, lines }) {
  * @param {T[]} items @param {number} max
  * @returns {T[]}
  */
-export function sampleByStride(items, max) {
+export function sampleByStride<T>(items: T[], max: number): T[] {
   if (items.length <= max) return items;
   return Array.from({ length: max }, (_unused, i) => items[Math.floor((i * items.length) / max)]);
 }
@@ -291,14 +291,14 @@ export function sampleByStride(items, max) {
  * @param {{ cwd: string, tests: string[], argv?: string[], timeoutMs?: number }} args
  * @returns {Promise<{ code: number | null, timedOut: boolean, ms: number, tail: string }>}
  */
-export function runChangedTests({ cwd, tests, argv = [ASSERT_GLOB, ...tests, "--min=1", "--run", "--runner=rstest"], timeoutMs = MUTANT_TIMEOUT_MS }) {
+export function runChangedTests({ cwd, tests, argv = [ASSERT_GLOB, ...tests, "--min=1", "--run", "--runner=rstest"], timeoutMs = MUTANT_TIMEOUT_MS }: { cwd: string; tests: string[]; argv?: string[]; timeoutMs?: number; }): Promise<{ code: number | null; timedOut: boolean; ms: number; tail: string; }> {
   return new Promise((resolve) => {
     const started = Date.now();
     const child = spawn(process.execPath, argv,
       { cwd, detached: true, env: sandboxGitEnv(), stdio: ["ignore", "pipe", "pipe"] });
     let timedOut = false;
     let tail = "";
-    const keep = (/** @type {Buffer} */ chunk) => { tail = (tail + chunk).slice(-TAIL_CHARS); };
+    const keep = (/** @type {Buffer} */ chunk: Buffer) => { tail = (tail + chunk).slice(-TAIL_CHARS); };
     child.stdout.on("data", keep);
     child.stderr.on("data", keep);
     const timer = setTimeout(() => {
@@ -314,11 +314,11 @@ export function runChangedTests({ cwd, tests, argv = [ASSERT_GLOB, ...tests, "--
  * @param {{ cwd: string, mutant: Mutant, original: string, run: () => Promise<{ code: number | null, timedOut: boolean }> }} args
  * @returns {Promise<"killed" | "survived" | "timeout">}
  */
-async function runOneMutant({ cwd, mutant, original, run }) {
+async function runOneMutant({ cwd, mutant, original, run }: { cwd: string; mutant: Mutant; original: string; run: () => Promise<{ code: number | null; timedOut: boolean; }>; }): Promise<"killed" | "survived" | "timeout"> {
   const target = path.join(cwd, mutant.file);
   writeFileSync(target, mutatedText(original, mutant));
   /** @type {"killed" | "survived" | "timeout"} */
-  let verdict = "killed";
+  let verdict: "killed" | "survived" | "timeout" = "killed";
   try {
     const result = await run();
     if (result.timedOut) verdict = "timeout";
@@ -341,12 +341,15 @@ async function runOneMutant({ cwd, mutant, original, run }) {
  *   budgetSeconds: number, now?: () => number }} args
  * @returns {Promise<Hunt>}
  */
-export async function hunt({ mutants, cwd, run, budgetSeconds, now = Date.now }) {
+export async function hunt({ mutants, cwd, run, budgetSeconds, now = Date.now }: {
+        mutants: Mutant[]; cwd: string; run: () => Promise<{ code: number | null; timedOut: boolean; }>;
+        budgetSeconds: number; now?: () => number;
+    }): Promise<Hunt> {
   const started = now();
   /** @type {Hunt} */
-  const result = { ran: 0, killed: 0, timedOut: 0, survivors: [], cutByBudget: 0 };
+  const result: Hunt = { ran: 0, killed: 0, timedOut: 0, survivors: [], cutByBudget: 0 };
   /** @type {Map<string, string>} */
-  const originals = new Map();
+  const originals: Map<string, string> = new Map();
   for (const mutant of mutants) {
     if (now() - started >= budgetSeconds * MS) { result.cutByBudget = mutants.length - result.ran; break; }
     if (!originals.has(mutant.file)) originals.set(mutant.file, readFileSync(path.join(cwd, mutant.file), "utf8"));
@@ -368,7 +371,7 @@ export async function hunt({ mutants, cwd, run, budgetSeconds, now = Date.now })
  */
 
 /** @returns {Hunt} */
-const nothingRan = () => ({ ran: 0, killed: 0, timedOut: 0, survivors: [], cutByBudget: 0 });
+const nothingRan = (): Hunt => ({ ran: 0, killed: 0, timedOut: 0, survivors: [], cutByBudget: 0 });
 
 /**
  * How many mutants the budget can afford, from what one run of the tests actually cost: a cap that ignores the
@@ -376,7 +379,7 @@ const nothingRan = () => ({ ran: 0, killed: 0, timedOut: 0, survivors: [], cutBy
  * @param {{ maxMutants: number, budgetSeconds: number, baselineSeconds: number }} args
  * @returns {number}
  */
-export function affordable({ maxMutants, budgetSeconds, baselineSeconds }) {
+export function affordable({ maxMutants, budgetSeconds, baselineSeconds }: { maxMutants: number; budgetSeconds: number; baselineSeconds: number; }): number {
   return Math.max(1, Math.min(maxMutants, Math.floor(budgetSeconds / Math.max(baselineSeconds, 1))));
 }
 
@@ -387,7 +390,10 @@ export function affordable({ maxMutants, budgetSeconds, baselineSeconds }) {
  *   maxMutants: number, budgetSeconds: number, now?: () => number }} args
  * @returns {Promise<Report>}
  */
-export async function mutateDiff({ cwd, scope, run, maxMutants, budgetSeconds, now }) {
+export async function mutateDiff({ cwd, scope, run, maxMutants, budgetSeconds, now }: {
+        cwd: string; scope: ReturnType<typeof scopeOf>; run: () => Promise<{ code: number | null; timedOut: boolean; ms: number; tail?: string; }>;
+        maxMutants: number; budgetSeconds: number; now?: () => number;
+    }): Promise<Report> {
   const found = scope.subjects.map(({ file, lines }) =>
     mutantsOfSubject({ file, text: readFileSync(path.join(cwd, file), "utf8"), lines }));
   const eligible = found.flatMap((f) => f.mutants);
@@ -416,16 +422,16 @@ export async function mutateDiff({ cwd, scope, run, maxMutants, budgetSeconds, n
  * @param {string} text
  * @returns {string}
  */
-export function codeSpan(text) {
+export function codeSpan(text: string): string {
   const runs = text.match(/`+/g) ?? [];
   const fence = "`".repeat(Math.max(0, ...runs.map((r) => r.length)) + 1);
   return `${fence} ${text.replace(/\s+/g, " ")} ${fence}`;
 }
 
 /** @param {Mutant[]} survivors @returns {string[]} survivors grouped by file, then line, each with both lines */
-function survivorLines(survivors) {
+function survivorLines(survivors: Mutant[]): string[] {
   /** @type {Map<string, Mutant[]>} */
-  const byFile = new Map();
+  const byFile: Map<string, Mutant[]> = new Map();
   for (const s of survivors) byFile.set(s.file, [...(byFile.get(s.file) ?? []), s]);
   return [...byFile].sort(([a], [b]) => a.localeCompare(b)).flatMap(([file, list]) => [
     `- ${codeSpan(file)}`,
@@ -437,7 +443,7 @@ function survivorLines(survivors) {
 }
 
 /** @param {Report} report @returns {string} the sentence that says how much was looked at */
-function ranSentence(report) {
+function ranSentence(report: Report): string {
   const { hunt: h } = report;
   const cut = h.cutByBudget > 0 ? ` The ${report.budgetSeconds} s wall budget ended the run: ${h.cutByBudget} planned mutants never ran.` : "";
   const stride = report.eligible > report.planned
@@ -456,7 +462,7 @@ const WHAT_A_SURVIVOR_IS = "A survivor is a change no changed test pinned; some 
  * @param {Report} report
  * @returns {string}
  */
-export function renderComment(report) {
+export function renderComment(report: Report): string {
   if (report.baselineRed) {
     return [COMMENT_MARKER, "**Mutation (non-blocking): not run.** The changed tests were already RED on the unmutated "
       + "head, so every mutant would have read as caught for the wrong reason. Fix the tests; this comment updates on the next push."].join("\n");
@@ -480,7 +486,7 @@ export function renderComment(report) {
  * @param {Report} report
  * @returns {string}
  */
-export function renderSummary(report) {
+export function renderSummary(report: Report): string {
   const head = ["## Mutation (non-blocking)", "", report.baselineRed
     ? "The changed tests were already red on the unmutated head, so no mutant was run."
     : report.hunt.ran === 0 ? "Nothing to mutate: no changed test names a non-test file this pull request added lines to."
@@ -496,7 +502,7 @@ export function renderSummary(report) {
 // ---- command line ------------------------------------------------------------------------------------------------
 
 /** @param {string | undefined} value @param {number} fallback @returns {number} */
-export function positive(value, fallback) {
+export function positive(value: string | undefined, fallback: number): number {
   if (value === undefined) return fallback;
   const n = Number(value);
   if (!Number.isInteger(n) || n < 1) throw new Error(`expected a positive integer, got ${JSON.stringify(value)}`);
@@ -508,18 +514,18 @@ export function positive(value, fallback) {
  * with the tests of another reports survivors of nothing.
  * @param {string} cwd @param {string} head
  */
-function assertTreeIsHead(cwd, head) {
-  const rev = (/** @type {string} */ r) => execFileSync("git", ["rev-parse", `${r}^{commit}`], { cwd, env: sandboxGitEnv(), encoding: "utf8" }).trim();
+function assertTreeIsHead(cwd: string, head: string) {
+  const rev = (/** @type {string} */ r: string) => execFileSync("git", ["rev-parse", `${r}^{commit}`], { cwd, env: sandboxGitEnv(), encoding: "utf8" }).trim();
   if (rev(head) !== rev("HEAD")) throw new Error(`the working tree is at ${rev("HEAD")}, not ${head} (${rev(head)}): check out the head first`);
 }
 
 async function main() {
   const argv = process.argv.slice(2);
   refuseUnknownFlags(["--max-mutants", "--budget", "--comment", "--summary"], {
-    entry: import.meta.url, argv, command: "node packages/guards/src/mutate-diff.mjs" });
+    entry: import.meta.url, argv, command: "node packages/guards/src/mutate-diff.ts" });
   const [base, head] = argv.filter((a) => !a.startsWith("--"));
   if (!base || !head) {
-    console.error("usage: node packages/guards/src/mutate-diff.mjs <base> <head> [--max-mutants=<n>] [--budget=<seconds>] [--comment=<file>] [--summary=<file>]");
+    console.error("usage: node packages/guards/src/mutate-diff.ts <base> <head> [--max-mutants=<n>] [--budget=<seconds>] [--comment=<file>] [--summary=<file>]");
     process.exit(2);
   }
   const cwd = process.cwd();

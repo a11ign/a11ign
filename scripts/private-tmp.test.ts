@@ -18,7 +18,7 @@ import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, symlinkSyn
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { tempDir } from "../packages/guards/src/test-tmp.mjs";
+import { tempDir } from "../packages/guards/src/test-tmp.ts";
 import { adoptFileDirectory, endRun, fileDirectoryName, formatLeftovers, PRIVATE_TMP_ROOT, privateRunRoot, privateRunTmp, removeInSmallCalls, reportLeftovers, requirePrivateRunDir, withPrivateTmp } from "./private-tmp.mjs";
 import config from "./rstest/rstest.config.mjs";
 

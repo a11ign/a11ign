@@ -16,7 +16,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { globSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
-import { NIGHTLY_TENANTS } from "../nightly/tenants.mjs";
+import { NIGHTLY_TENANTS } from "../nightly/tenants.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";

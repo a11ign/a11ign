@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // @ts-check
 // command: every tracked *.test.ts file that DECLARES ITSELF a TREE-WIDE GUARD by importing and calling
-// `packages/guards/src/tree-wide-guard.mjs`'s marker -- a guard whose population is the whole repository rather than
+// `packages/guards/src/tree-wide-guard.ts`'s marker -- a guard whose population is the whole repository rather than
 // one file, so its own green run on a PR's diff is not a prediction: #704. #716 measured 21 such files at
 // 141.3s together and made five of them (138 of the 141) fast, so the pre-push hook can run every one of
 // them with no exclusion list.

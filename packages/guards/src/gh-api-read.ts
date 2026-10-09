@@ -17,7 +17,7 @@ const REFUSED_STATUSES = new Set(["403", "404"]);
  * @param {string} path a REST path, e.g. `repos/<owner>/<name>/rules/branches/main`
  * @returns {GhRead}
  */
-export function ghApiRead(path) {
+export function ghApiRead(path: string): GhRead {
   try {
     const out = execFileSync("gh", ["api", path], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
     return { kind: "ok", value: JSON.parse(out) };

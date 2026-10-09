@@ -54,9 +54,9 @@ import { join } from "node:path";
  * @param {WalkChoices} [choices]
  * @returns {string[]}
  */
-export function filesUnder(root, choices = {}) {
+export function filesUnder(root: string, choices: WalkChoices = {}): string[] {
   /** @type {string[]} */
-  const found = [];
+  const found: string[] = [];
   collectInto(found, root, readdirSync(root, { withFileTypes: true }), choices);
   return found;
 }
@@ -68,7 +68,7 @@ export function filesUnder(root, choices = {}) {
  * @param {string[]} found @param {string} dir @param {import("node:fs").Dirent[]} entries
  * @param {WalkChoices} choices
  */
-function collectInto(found, dir, entries, choices) {
+function collectInto(found: string[], dir: string, entries: import("node:fs").Dirent[], choices: WalkChoices) {
   const { skipDirectory = () => false, keepFile = () => true } = choices;
   for (const entry of entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
     if (entry.isSymbolicLink()) continue;
@@ -89,7 +89,7 @@ function collectInto(found, dir, entries, choices) {
  * @param {string} dir @param {WalkChoices} choices
  * @returns {import("node:fs").Dirent[] | null}
  */
-function childEntries(dir, { skipVanishedDirectories = false }) {
+function childEntries(dir: string, { skipVanishedDirectories = false }: WalkChoices): import("node:fs").Dirent[] | null {
   try {
     return readdirSync(dir, { withFileTypes: true });
   } catch (cause) {

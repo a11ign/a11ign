@@ -2,7 +2,7 @@ name: Mutation comment
 
 # THE SURVIVORS OF A PULL REQUEST'S OWN CHANGED LINES, AS A COMMENT, NEVER AS A GATE (#3282, decided on #3213 by the rule
 # `ceo` wrote before the result). `MUTATION: MISSING` used to fail a pull request on paperwork; this is what replaced it:
-# `packages/guards/src/mutate-diff.mjs` mutates the lines the pull request ADDED, runs the tests it CHANGED, and says
+# `packages/guards/src/mutate-diff.ts` mutates the lines the pull request ADDED, runs the tests it CHANGED, and says
 # which changes no changed test pinned. Its header says what a survivor is (not a score) and why the budget is printed.
 #
 # TWO JOBS, AND THE SPLIT IS THE POINT (done-when 5). `mutate` RUNS THE PULL REQUEST'S CODE (the build, the tests, the
@@ -63,7 +63,7 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
         run: >
-          node packages/guards/src/mutate-diff.mjs "origin/$BASE_REF" HEAD
+          node packages/guards/src/mutate-diff.ts "origin/$BASE_REF" HEAD
           --comment="$RUNNER_TEMP/mutation-comment.md" --summary="$RUNNER_TEMP/mutation-summary.md"
 
       - name: Job summary (no token needed)

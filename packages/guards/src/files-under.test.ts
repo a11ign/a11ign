@@ -14,7 +14,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 
-import { filesUnder } from "./files-under.mjs";
+import { filesUnder } from "./files-under.ts";
 
 /**
  * Build a throwaway tree, hand it to `body`, and remove it however `body` ends.

@@ -30,14 +30,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 /** @type {Set<string>} */
-const owned = new Set();
+const owned: Set<string> = new Set();
 
 /**
  * A new directory under `os.tmpdir()`, removed when this file's tests are done.
  * @param {string} prefix the leading part of the directory's name, exactly as `mkdtempSync` takes it (`"promote-"`)
  * @returns {string} the directory's path
  */
-export function tempDir(prefix) {
+export function tempDir(prefix: string): string {
   const dir = mkdtempSync(join(tmpdir(), prefix));
   owned.add(dir);
   return dir;
@@ -57,7 +57,7 @@ export function removeTempDirs() {
  * while it is collected is ended by `SIGTERM`, and `exit` never fires in that worker.
  * @param {NodeJS.Signals} signal
  */
-function removeThenDieOf(signal) {
+function removeThenDieOf(signal: NodeJS.Signals) {
   process.once(signal, () => {
     removeTempDirs();
     process.kill(process.pid, signal);

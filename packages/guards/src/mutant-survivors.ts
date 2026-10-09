@@ -28,8 +28,8 @@
 //      refusals were read, so the replay is in-sample; the record says so and reads NULL RESULT.
 //
 // Usage:
-//   node packages/guards/src/mutant-survivors.mjs run --base=<rev> --test='<shell>' [--budget=<seconds>] [--cap=<n>] [--json]
-//   node packages/guards/src/mutant-survivors.mjs apply --file=<path> --line=<n> --operator=<id> --occurrence=<k>
+//   node packages/guards/src/mutant-survivors.ts run --base=<rev> --test='<shell>' [--budget=<seconds>] [--cap=<n>] [--json]
+//   node packages/guards/src/mutant-survivors.ts apply --file=<path> --line=<n> --operator=<id> --occurrence=<k>
 //
 // `apply` is what `mutation-check.mjs` is handed as its `--mutate` command; it exits 2 when the mutant does not exist.
 import { spawnSync } from "node:child_process";
@@ -42,7 +42,7 @@ export const DEFAULT_CAP = 10;
 export const DEFAULT_BUDGET_SECONDS = 300;
 const MS = 1000;
 const MAX_DIFF_BYTES = 256 * 1024 * 1024;
-const MUTATE = fileURLToPath(new URL("./mutation-check.mjs", import.meta.url));
+const MUTATE = fileURLToPath(new URL("./mutation-check.ts", import.meta.url));
 const SELF = fileURLToPath(import.meta.url);
 // `mutation-check.mjs`'s own exit codes, named because every branch below reads them.
 const EXIT = { KILLED: 0, SURVIVED: 1, REFUSED: 2, RESTORE_FAILED: 3 };
@@ -58,7 +58,7 @@ const EXIT = { KILLED: 0, SURVIVED: 1, REFUSED: 2, RESTORE_FAILED: 3 };
  * @param {number} open
  * @returns {{ close: number, args: { start: number, end: number }[] } | null}
  */
-function balanced(text, open) {
+function balanced(text: string, open: number): { close: number; args: { start: number; end: number; }[]; } | null {
   const args = [];
   let depth = 0;
   let quote = "";
@@ -89,9 +89,9 @@ const A_LITERAL = new Set(["undefined", "null", "true", "false", "this"]);
  * @param {string} line
  * @returns {Site[]}
  */
-function argumentSites(line) {
+function argumentSites(line: string): Site[] {
   /** @type {Site[]} */
-  const sites = [];
+  const sites: Site[] = [];
   for (const m of line.matchAll(CALLEE)) {
     const open = m.index + m[0].length - 1;
     const parsed = balanced(line, open);
@@ -116,9 +116,9 @@ function argumentSites(line) {
  * @param {string} line
  * @returns {Site[]}
  */
-function conditionSites(line) {
+function conditionSites(line: string): Site[] {
   /** @type {Site[]} */
-  const sites = [];
+  const sites: Site[] = [];
   for (const m of line.matchAll(/\bif\s*\(/g)) {
     const open = m.index + m[0].length - 1;
     const parsed = balanced(line, open);
@@ -136,7 +136,7 @@ function conditionSites(line) {
  * @param {string} line
  * @returns {Site[]}
  */
-function returnSites(line) {
+function returnSites(line: string): Site[] {
   const m = /^(\s*return\s+)(.+?);\s*$/.exec(line);
   if (!m || /^(null|undefined)$/.test(m[2])) return [];
   return [{ start: m[1].length, end: m[1].length + m[2].length, replacement: "null" }];
@@ -151,9 +151,9 @@ const FLIPS = [["===", "!=="], ["!==", "==="], ["&&", "||"], ["||", "&&"], ["??"
  * @param {string} line
  * @returns {Site[]}
  */
-function flipSites(line) {
+function flipSites(line: string): Site[] {
   /** @type {Site[]} */
-  const sites = [];
+  const sites: Site[] = [];
   for (const [from, to] of FLIPS) {
     for (let at = line.indexOf(from); at !== -1; at = line.indexOf(from, at + from.length)) {
       sites.push({ start: at, end: at + from.length, replacement: to });
@@ -168,7 +168,7 @@ function flipSites(line) {
  * @param {string} line
  * @returns {Site[]}
  */
-function sortSites(line) {
+function sortSites(line: string): Site[] {
   const sites = [];
   for (const m of line.matchAll(/\.sort\(/g)) {
     const parsed = balanced(line, m.index + m[0].length - 1);
@@ -183,7 +183,7 @@ function sortSites(line) {
  * @param {string} line
  * @returns {Site[]}
  */
-function spreadSites(line) {
+function spreadSites(line: string): Site[] {
   const sites = [];
   for (const m of line.matchAll(/\.\.\.(\(|[A-Za-z_$][\w$.]*\(?)/g)) {
     const from = m.index + 3;
@@ -200,7 +200,7 @@ function spreadSites(line) {
  * "this value never reaches anything a test reads" run first and the arithmetic-style ones last.
  * @type {Operator[]}
  */
-export const OPERATORS = [
+export const OPERATORS: Operator[] = [
   { id: "arg-empty", why: "an argument replaced with [] -- a value no test makes non-empty", sites: argumentSites },
   { id: "cond-false", why: "a condition forced false -- a branch no test takes", sites: conditionSites },
   { id: "return-null", why: "a returned value replaced with null -- a result no test reads", sites: returnSites },
@@ -219,9 +219,9 @@ const NOT_CODE = /^\s*(\/\/|\*|\/\*|import\s|export\s+\{)/;
  * @param {string} diff
  * @returns {Map<string, Set<number>>}
  */
-export function changedLines(diff) {
+export function changedLines(diff: string): Map<string, Set<number>> {
   /** @type {Map<string, Set<number>>} */
-  const changed = new Map();
+  const changed: Map<string, Set<number>> = new Map();
   let file = null;
   for (const row of diff.split("\n")) {
     const header = /^\+\+\+ b\/(.+)$/.exec(row);
@@ -243,10 +243,10 @@ export function changedLines(diff) {
  * @param {Set<number>} lines
  * @returns {Mutant[]}
  */
-function mutantsOfFile(file, text, lines) {
+function mutantsOfFile(file: string, text: string, lines: Set<number>): Mutant[] {
   const source = text.split("\n");
   /** @type {Mutant[]} */
-  const found = [];
+  const found: Mutant[] = [];
   for (const operator of OPERATORS) {
     for (const n of [...lines].sort((a, b) => a - b)) {
       const line = source[n - 1];
@@ -267,14 +267,14 @@ function mutantsOfFile(file, text, lines) {
  * @param {(file: string) => string | null} read the file's current text, or null when it is not there
  * @returns {Mutant[]}
  */
-export function chooseMutants(changed, read) {
+export function chooseMutants(changed: Map<string, Set<number>>, read: (file: string) => string | null): Mutant[] {
   const perFile = [...changed.keys()].sort()
     .filter((file) => SOURCE_FILE.test(file) && !NOT_SOURCE.test(file))
     .map((file) => ({ file, text: read(file) }))
     .filter((f) => f.text !== null)
     .map((f) => mutantsOfFile(f.file, /** @type {string} */ (f.text), /** @type {Set<number>} */ (changed.get(f.file))));
   /** @type {Mutant[]} */
-  const ordered = [];
+  const ordered: Mutant[] = [];
   for (let round = 0; perFile.some((list) => round < list.length); round++) {
     for (const list of perFile) if (round < list.length) ordered.push(list[round]);
   }
@@ -288,7 +288,7 @@ export function chooseMutants(changed, read) {
  * @param {{ line: number, operator: string, occurrence: number }} at
  * @returns {string | null}
  */
-export function applyMutant(text, { line, operator, occurrence }) {
+export function applyMutant(text: string, { line, operator, occurrence }: { line: number; operator: string; occurrence: number; }): string | null {
   const source = text.split("\n");
   const original = source[line - 1];
   const site = OPERATORS.find((o) => o.id === operator)?.sites(original ?? "")[occurrence];
@@ -313,10 +313,13 @@ export function applyMutant(text, { line, operator, occurrence }) {
  *   now?: () => number }} args
  * @returns {Hunt}
  */
-export function hunt({ mutants, runMutant, budgetSeconds, now = Date.now }) {
+export function hunt({ mutants, runMutant, budgetSeconds, now = Date.now }: {
+        mutants: Mutant[]; runMutant: (mutant: Mutant) => number; budgetSeconds: number;
+        now?: () => number;
+    }): Hunt {
   const started = now();
   /** @type {Hunt} */
-  const result = { total: mutants.length, ran: 0, killed: 0, unknown: 0, budgetSeconds, survivors: [],
+  const result: Hunt = { total: mutants.length, ran: 0, killed: 0, unknown: 0, budgetSeconds, survivors: [],
     finished: true, restoreFailed: null };
   for (const mutant of mutants) {
     if (now() - started >= budgetSeconds * MS) { result.finished = false; break; }
@@ -337,7 +340,7 @@ export function hunt({ mutants, runMutant, budgetSeconds, now = Date.now }) {
  * @param {{ cap?: number }} [options]
  * @returns {string[]}
  */
-export function renderSurvivors(result, { cap = DEFAULT_CAP } = {}) {
+export function renderSurvivors(result: Hunt, { cap = DEFAULT_CAP }: { cap?: number; } = {}): string[] {
   const shown = result.survivors.slice(0, cap);
   const cut = result.survivors.length - shown.length;
   const lines = [`Survivors: ${result.survivors.length} of ${result.ran} mutants run survived the named tests `
@@ -362,7 +365,7 @@ export function renderSurvivors(result, { cap = DEFAULT_CAP } = {}) {
  * @param {{ cwd: string, test: string, spawn?: typeof spawnSync }} where `spawn` is the seam a test replaces
  * @returns {(mutant: Mutant) => number}
  */
-export function mutateRunner({ cwd, test, spawn = spawnSync }) {
+export function mutateRunner({ cwd, test, spawn = spawnSync }: { cwd: string; test: string; spawn?: typeof spawnSync; }): (mutant: Mutant) => number {
   return (mutant) => {
     const target = path.join(cwd, mutant.file);
     const aside = readFileSync(target);
@@ -383,7 +386,7 @@ export function mutateRunner({ cwd, test, spawn = spawnSync }) {
  * @param {{ status: number | null, stdout?: string | null, stderr?: string | null }} done
  * @returns {number}
  */
-function verdictOf({ status, stdout, stderr }) {
+function verdictOf({ status, stdout, stderr }: { status: number | null; stdout?: string | null; stderr?: string | null; }): number {
   const said = `${stdout ?? ""}${stderr ?? ""}`;
   if (status === EXIT.KILLED) return said.includes("THE GUARD BITES.") ? EXIT.KILLED : EXIT.REFUSED;
   if (status === EXIT.SURVIVED) return said.includes("THE GUARD DID NOT BITE.") ? EXIT.SURVIVED : EXIT.REFUSED;
@@ -398,7 +401,10 @@ function verdictOf({ status, stdout, stderr }) {
  *   budgetSeconds?: number, cap?: number, now?: () => number }} args
  * @returns {{ lines: string[], hunt: Hunt, exitCode: number }}
  */
-export function survivorsFor({ diff, read, runMutant, budgetSeconds = DEFAULT_BUDGET_SECONDS, cap = DEFAULT_CAP, now }) {
+export function survivorsFor({ diff, read, runMutant, budgetSeconds = DEFAULT_BUDGET_SECONDS, cap = DEFAULT_CAP, now }: {
+        diff: string; read: (file: string) => string | null; runMutant: (mutant: Mutant) => number;
+        budgetSeconds?: number; cap?: number; now?: () => number;
+    }): { lines: string[]; hunt: Hunt; exitCode: number; } {
   const mutants = chooseMutants(changedLines(diff), read);
   const result = hunt({ mutants, runMutant, budgetSeconds, now });
   return { lines: renderSurvivors(result, { cap }), hunt: result,
@@ -406,10 +412,10 @@ export function survivorsFor({ diff, read, runMutant, budgetSeconds = DEFAULT_BU
 }
 
 /** @param {string[]} argv @param {string} name */
-const flag = (argv, name) => argv.find((a) => a.startsWith(`${name}=`))?.split("=").slice(1).join("=");
+const flag = (argv: string[], name: string) => argv.find((a) => a.startsWith(`${name}=`))?.split("=").slice(1).join("=");
 
 /** @param {string[]} argv */
-function applyCommand(argv) {
+function applyCommand(argv: string[]) {
   const file = flag(argv, "--file");
   const at = { line: Number(flag(argv, "--line")), operator: flag(argv, "--operator") ?? "",
     occurrence: Number(flag(argv, "--occurrence") ?? 0) };
@@ -420,7 +426,7 @@ function applyCommand(argv) {
 }
 
 /** @param {string[]} argv */
-function runCommand(argv) {
+function runCommand(argv: string[]) {
   const base = flag(argv, "--base");
   const test = flag(argv, "--test");
   if (!base || !test) { console.error("mutant-survivors run: needs --base=<rev> and --test='<shell>'."); return EXIT.REFUSED; }
@@ -439,7 +445,7 @@ async function main() {
   // checkout with no build can still import this file's functions.
   const { refuseUnknownFlags } = await import("@a11ign/screenreader-fleet/cli-flags");
   refuseUnknownFlags(["--file", "--line", "--operator", "--occurrence", "--base", "--test", "--budget", "--cap", "--json"],
-    { entry: import.meta.url, command: "node packages/guards/src/mutant-survivors.mjs" });
+    { entry: import.meta.url, command: "node packages/guards/src/mutant-survivors.ts" });
   const [verb, ...rest] = process.argv.slice(2);
   process.exit(verb === "apply" ? applyCommand(rest) : verb === "run" ? runCommand(rest) : EXIT.REFUSED);
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
-// command: `node packages/guards/src/layer-edges.mjs --check` -- every reach across a LAYER package's boundary, by path, against a baseline (#2612)
+// command: `node packages/guards/src/layer-edges.ts --check` -- every reach across a LAYER package's boundary, by path, against a baseline (#2612)
 //
 // THE BOUNDARY OF A LAYER WAS NOT A THING A MACHINE COULD READ (#69, child 1). The workspace resolves
 // `../../<pkg>/src/x.mjs` without any declaration, so `nvda-worker`'s package.json says "no in-repo runtime
@@ -100,7 +100,7 @@ const DISPOSITION = /^(?:cut|by-name|checkout-path|moves-with:([\w-]+)|owned-by:
  * @param {string} path
  * @returns {string | null}
  */
-export function packageOf(path) {
+export function packageOf(path: string): string | null {
   const m = /^packages\/([^/]+)(?:\/|$)/.exec(path);
   return m ? m[1] : null;
 }
@@ -110,7 +110,7 @@ export function packageOf(path) {
  * @param {string} path
  * @param {number} [size]
  */
-export function isScanned(path, size = 0) {
+export function isScanned(path: string, size: number = 0) {
   if (SELF.test(path) || size > MAX_SCANNED_BYTES) return false;
   if (/\.md$|(?:^|\/)(?:docs|\.changeset|runs|node_modules|dist)\/|\/fixtures\/|(?:pnpm|package)-lock\./.test(path)) return false;
   return [CODE_FILE, LAUNCHER_FILE, WORKFLOW_FILE, CONFIG_FILE].some((re) => re.test(path));
@@ -121,12 +121,12 @@ export function isScanned(path, size = 0) {
  * not from the disk, so the answer is the same in a checkout that has built `dist` and one that has not.
  * @param {string[]} tracked
  */
-function pathIndex(tracked) {
+function pathIndex(tracked: string[]) {
   const known = new Set(tracked);
   for (const file of tracked) {
     for (let dir = posix.dirname(file); dir !== "." && !known.has(dir); dir = posix.dirname(dir)) known.add(dir);
   }
-  return { has: (/** @type {string} */ path) => known.has(path) };
+  return { has: (/** @type {string} */ path: string) => known.has(path) };
 }
 
 /**
@@ -135,7 +135,7 @@ function pathIndex(tracked) {
  * whatever `name` is, and reading it as the repository's own `package.json` is a false edge.
  * @param {string} literal
  */
-function knownPathOf(literal) {
+function knownPathOf(literal: string) {
   const slashed = literal.replaceAll("\\", "/").replace(/^[\w~^.-]+:(?=packages\/)/, "").replace(/\/+$/, "");
   if (!slashed.includes(PLACEHOLDER)) return slashed;
   const tail = slashed.startsWith(PLACEHOLDER) ? slashed.slice(PLACEHOLDER.length).replace(/^\/+/, "") : "";
@@ -151,7 +151,7 @@ function knownPathOf(literal) {
  * @param {PathIndex} index
  * @returns {string | null}
  */
-function resolveLiteral(literal, fromFile, index) {
+function resolveLiteral(literal: string, fromFile: string, index: PathIndex): string | null {
   const cleaned = knownPathOf(literal);
   if (cleaned === "" || /\s/.test(cleaned)) return null;
   const candidates = cleaned.startsWith(".")
@@ -165,7 +165,7 @@ function resolveLiteral(literal, fromFile, index) {
  * @param {string} src
  * @returns {string[]}
  */
-function relativeSpecifiers(src) {
+function relativeSpecifiers(src: string): string[] {
   return [...src.matchAll(/(?:\bfrom|\bimport|\brequire)\s*\(?\s*(['"])(\.[^'"\n]*)\1/g)].map((m) => m[2]);
 }
 
@@ -176,7 +176,7 @@ function relativeSpecifiers(src) {
  * @param {string} fromFile
  * @param {PathIndex} index
  */
-function resolveSpecifier(spec, fromFile, index) {
+function resolveSpecifier(spec: string, fromFile: string, index: PathIndex) {
   const raw = posix.join(posix.dirname(fromFile), spec);
   const swapped = raw.replace(/\.js$/, ".ts");
   const tries = [raw, swapped, `${raw}.ts`, `${raw}.mjs`, `${raw}.js`, `${raw}/index.ts`, `${raw}/index.mjs`];
@@ -193,9 +193,9 @@ function resolveSpecifier(spec, fromFile, index) {
  * @param {Lookup} lookup
  * @returns {Argument[]}
  */
-function argumentsOfCall(src, open, lookup) {
+function argumentsOfCall(src: string, open: number, lookup: Lookup): Argument[] {
   /** @type {Argument[]} */
-  const args = [];
+  const args: Argument[] = [];
   let depth = 0;
   const stop = Math.min(src.length, open + MAX_CALL_CHARS);
   for (let i = open; i < stop; i++) {
@@ -220,15 +220,15 @@ function argumentsOfCall(src, open, lookup) {
 /** @typedef {{ options: string[], declaredAt?: number }} Argument one direct argument: the paths it can hold, and where a `const` that supplied them was written */
 
 /** @param {string} src @param {number} i */
-const startsIdentifier = (src, i) =>
+const startsIdentifier = (src: string, i: number) =>
   /[A-Za-z_$]/.test(src[i]) && !/[\w$.]/.test(src[i - 1] ?? "");
 
 /** @param {string} src @param {number} i */
-const identifierAt = (src, i) =>
+const identifierAt = (src: string, i: number) =>
   /^[\w$]+/.exec(src.slice(i, i + MAX_IDENTIFIER_CHARS))?.[0] ?? src[i];
 
 /** The `prop` of a `.prop` starting at `i`, or `undefined`. @param {string} src @param {number} i */
-const propertyAfter = (src, i) => (src[i] === "." ? /^[\w$]+/.exec(src.slice(i + 1, i + 1 + MAX_IDENTIFIER_CHARS))?.[0] : undefined);
+const propertyAfter = (src: string, i: number) => (src[i] === "." ? /^[\w$]+/.exec(src.slice(i + 1, i + 1 + MAX_IDENTIFIER_CHARS))?.[0] : undefined);
 
 /**
  * What a binding hands a sink: all of it, or, for `name.prop` over a list of objects, only that property's strings.
@@ -236,7 +236,7 @@ const propertyAfter = (src, i) => (src[i] === "." ? /^[\w$]+/.exec(src.slice(i +
  * @param {string | undefined} prop
  * @returns {string[]}
  */
-function optionsOf(binding, prop) {
+function optionsOf(binding: Binding | undefined, prop: string | undefined): string[] {
   if (binding === undefined) return [];
   return prop !== undefined && binding.value.container ? binding.value.byProp.get(prop) ?? [] : binding.value.values;
 }
@@ -248,7 +248,7 @@ function optionsOf(binding, prop) {
 /** @typedef {{ values: string[], byProp: Map<string, string[]>, container: boolean, declaredAt?: number }} Bound `declaredAt`: the offset of the declaration (or list literal) the strings were written in */
 /** @typedef {{ name: string, from: number, to: number, value: Bound }} Binding */
 /** The 1-based line of offset `at`; comments are blanked in place, so it is the line in the file. @param {string} src @param {number} at */
-const lineAt = (src, at) => src.slice(0, at).split("\n").length;
+const lineAt = (src: string, at: number) => src.slice(0, at).split("\n").length;
 
 /** @typedef {{ close: Map<number, number>, open: Map<number, number> }} Pairs */
 /** @typedef {(name: string, at: number) => Binding | undefined} Lookup */
@@ -264,11 +264,11 @@ const ARRAY_METHODS = "map|forEach|filter|flatMap|some|every|find|findIndex";
  * @param {string} src
  * @returns {Pairs}
  */
-function bracketPairs(src) {
+function bracketPairs(src: string): Pairs {
   /** @type {Pairs} */
-  const pairs = { close: new Map(), open: new Map() };
+  const pairs: Pairs = { close: new Map(), open: new Map() };
   /** @type {number[]} */
-  const stack = [];
+  const stack: number[] = [];
   for (let i = 0; i < src.length; i++) {
     const c = src[i];
     if (c === '"' || c === "'" || c === "`") i = readQuoted(src, i, src.length).end;
@@ -284,9 +284,9 @@ function bracketPairs(src) {
 }
 
 /** Every string literal between `from` and `to`, however deep. @param {string} src @param {number} from @param {number} to */
-function stringsBetween(src, from, to) {
+function stringsBetween(src: string, from: number, to: number) {
   /** @type {string[]} */
-  const found = [];
+  const found: string[] = [];
   for (let i = from; i < to; i++) {
     if (src[i] !== '"' && src[i] !== "'" && src[i] !== "`") continue;
     const { text, end } = readQuoted(src, i, to);
@@ -304,13 +304,13 @@ function stringsBetween(src, from, to) {
  * @param {number} to
  * @returns {Bound}
  */
-function containerBetween({ src, pairs, lookup }, from, to) {
+function containerBetween({ src, pairs, lookup }: Scope, from: number, to: number): Bound {
   const values = stringsBetween(src, from, to);
   /** @type {Map<string, string[]>} */
-  const byProp = new Map();
+  const byProp: Map<string, string[]> = new Map();
   const text = src.slice(from, to);
   /** @type {number | undefined} */
-  let spreadDeclaredAt;
+  let spreadDeclaredAt: number | undefined;
   for (const m of text.matchAll(/([\w$]+)\s*:\s*(?=["'`[])/g)) {
     const at = from + m.index + m[0].length;
     const held = src[at] === "[" ? stringsBetween(src, at, pairs.close.get(at) ?? to) : [readQuoted(src, at, to).text];
@@ -327,7 +327,7 @@ function containerBetween({ src, pairs, lookup }, from, to) {
 }
 
 /** What follows `=`: a literal, a list or object literal (behind `Object.freeze(`/`new Set(`), or something opaque. */
-function valueAt(/** @type {Scope} */ scope, /** @type {number} */ from) {
+function valueAt(/** @type {Scope} */ scope: Scope, /** @type {number} */ from: number) {
   const wrapped = /^(?:Object\.freeze|new\s+(?:Set|Map))\s*\(\s*/.exec(scope.src.slice(from, from + MAX_IDENTIFIER_CHARS));
   const at = from + (wrapped?.[0].length ?? 0);
   const c = scope.src[at];
@@ -344,7 +344,7 @@ function valueAt(/** @type {Scope} */ scope, /** @type {number} */ from) {
  * @param {number} from
  * @param {Pairs} pairs
  */
-function expressionEnd(src, from, pairs) {
+function expressionEnd(src: string, from: number, pairs: Pairs) {
   for (let i = from; i < src.length; i++) {
     const c = src[i];
     if (c === '"' || c === "'" || c === "`") i = readQuoted(src, i, src.length).end;
@@ -355,15 +355,15 @@ function expressionEnd(src, from, pairs) {
 }
 
 /** The span of a block or single statement whose body starts at the first non-space at or after `from`. */
-function bodyEnd(/** @type {string} */ src, /** @type {number} */ from, /** @type {Pairs} */ pairs) {
+function bodyEnd(/** @type {string} */ src: string, /** @type {number} */ from: number, /** @type {Pairs} */ pairs: Pairs) {
   const at = from + (/^\s*/.exec(src.slice(from, from + MAX_CALL_CHARS))?.[0].length ?? 0);
   return src[at] === "{" ? pairs.close.get(at) ?? src.length : expressionEnd(src, at, pairs);
 }
 
 /** `text` split at the commas that are not inside a bracket or a generic. @param {string} text */
-function splitTopLevel(text) {
+function splitTopLevel(text: string) {
   /** @type {string[]} */
-  const parts = [];
+  const parts: string[] = [];
   let depth = 0;
   let last = 0;
   for (let i = 0; i < text.length; i++) {
@@ -380,7 +380,7 @@ function splitTopLevel(text) {
  * @param {string} pattern
  * @returns {{ name: string, key: string | null }[]}
  */
-function namesOfPattern(pattern) {
+function namesOfPattern(pattern: string): { name: string; key: string | null; }[] {
   const first = splitTopLevel(pattern.trim())[0].trim();
   if (first.startsWith("{")) {
     return first.slice(1).replace(/\}.*$/s, "").split(",").map((p) => p.split("=")[0].trim()).filter(Boolean)
@@ -392,15 +392,15 @@ function namesOfPattern(pattern) {
 }
 
 /** Every parameter name of a parameter list, for the shadowing they do and none of the value. @param {string} params */
-const parameterNames = (params) => splitTopLevel(params).flatMap((p) => {
+const parameterNames = (params: string) => splitTopLevel(params).flatMap((p) => {
   const declared = p.trim().replace(/^\.\.\./, "").split(/[=:](?![^{[]*[}\]])/)[0];
   return /^[{[]/.test(declared) ? [...declared.matchAll(/[\w$]+/g)].map((m) => m[0]) : declared.replace(/\?$/, "").trim().match(/^[\w$]+$/) ?? [];
 });
 
 /** @returns {{ from: number, params: string, body: number }[]} the functions of a file: where their parameters start and where their bodies end */
-function functionSpans(/** @type {string} */ src, /** @type {Pairs} */ pairs) {
+function functionSpans(/** @type {string} */ src: string, /** @type {Pairs} */ pairs: Pairs): { from: number; params: string; body: number; }[] {
   /** @type {{ from: number, params: string, body: number }[]} */
-  const spans = [];
+  const spans: { from: number; params: string; body: number; }[] = [];
   for (const m of src.matchAll(/\bfunction\s*[\w$]*\s*\(/g)) {
     const open = m.index + m[0].length - 1;
     const close = pairs.close.get(open);
@@ -423,15 +423,15 @@ function functionSpans(/** @type {string} */ src, /** @type {Pairs} */ pairs) {
  * @param {string} src comment-stripped
  * @returns {Lookup}
  */
-function makeLookup(src) {
+function makeLookup(src: string): Lookup {
   const pairs = bracketPairs(src);
   /** @type {Map<string, Binding[]>} */
-  const byName = new Map();
+  const byName: Map<string, Binding[]> = new Map();
   /** @type {Lookup} */
-  const lookup = (name, at) => (byName.get(name) ?? []).filter((b) => b.from <= at && at <= b.to).at(-1);
+  const lookup: Lookup = (name, at) => (byName.get(name) ?? []).filter((b) => b.from <= at && at <= b.to).at(-1);
   const scope = { src, pairs, lookup };
   /** @type {(binding: Binding) => void} */
-  const add = (binding) => {
+  const add: (binding: Binding) => void = (binding): void => {
     const list = byName.get(binding.name) ?? [];
     list.push(binding);
     list.sort((a, b) => a.from - b.from);
@@ -448,17 +448,17 @@ function makeLookup(src) {
 }
 
 /** A value keeps the origin of the list it was spread from, and is otherwise written where it is. @param {Bound} value @param {number} at */
-const withOrigin = (value, at) => ({ ...value, declaredAt: value.declaredAt ?? at });
+const withOrigin = (value: Bound, at: number) => ({ ...value, declaredAt: value.declaredAt ?? at });
 
 /** @param {Bound} over @param {string | null} key */
-const valueFor = (over, key) => (key === null ? over : { values: over.byProp.get(key) ?? [], byProp: new Map(), container: false, declaredAt: over.declaredAt });
+const valueFor = (over: Bound, key: string | null) => (key === null ? over : { values: over.byProp.get(key) ?? [], byProp: new Map(), container: false, declaredAt: over.declaredAt });
 
 /**
  * `const|let|var NAME = ...` over the whole file, each visible to the end of the block it is written in.
  * @param {Scope} scope
  * @param {(binding: Binding) => void} add
  */
-function addDeclarations(scope, add) {
+function addDeclarations(scope: Scope, add: (binding: Binding) => void) {
   const { src, pairs } = scope;
   const blocks = [...pairs.close].filter(([open]) => src[open] === "{");
   for (const m of src.matchAll(/\b(?:const|let|var)\s+([\w$]+)\s*(?::[^=\n]+)?=(?![=>])\s*/g)) {
@@ -474,10 +474,10 @@ function addDeclarations(scope, add) {
  * @param {Scope} scope
  * @returns {Iteration[]}
  */
-function iterationsOf(scope) {
+function iterationsOf(scope: Scope): Iteration[] {
   const { src, pairs } = scope;
   /** @type {Iteration[]} */
-  const found = [];
+  const found: Iteration[] = [];
   for (const m of src.matchAll(/\bfor\s*\(\s*(?:const|let|var)\s+(\{[^}]*\}|\[[^\]]*\]|[\w$]+)\s+of\s+/g)) {
     const open = m.index + m[0].indexOf("(");
     const close = pairs.close.get(open);
@@ -496,7 +496,7 @@ function iterationsOf(scope) {
 }
 
 /** What a `for ... of <expr>` walks: a list literal, or the first name in the expression (through `Object.entries(`/`.filter(`). */
-function walkedBy(/** @type {Scope} */ scope, /** @type {number} */ from, /** @type {number} */ close) {
+function walkedBy(/** @type {Scope} */ scope: Scope, /** @type {number} */ from: number, /** @type {number} */ close: number) {
   const { src, pairs, lookup } = scope;
   if (src[from] === "[") return withOrigin(containerBetween(scope, from, pairs.close.get(from) ?? close), from);
   const named = /^(?:Object\.(?:entries|values)\(\s*)?([\w$]+)/.exec(src.slice(from, close));
@@ -504,7 +504,7 @@ function walkedBy(/** @type {Scope} */ scope, /** @type {number} */ from, /** @t
 }
 
 /** What an array method's receiver is: a list literal ending at the `.`, or a name. */
-function receiverBefore(/** @type {Scope} */ scope, /** @type {number} */ dot) {
+function receiverBefore(/** @type {Scope} */ scope: Scope, /** @type {number} */ dot: number) {
   const { src, pairs, lookup } = scope;
   const end = src.slice(0, dot).trimEnd().length; // a chain may break the line before its `.map(`
   const open = src[end - 1] === "]" ? pairs.open.get(end - 1) : undefined;
@@ -519,7 +519,7 @@ function receiverBefore(/** @type {Scope} */ scope, /** @type {number} */ dot) {
  * @param {number} start
  * @param {number} stop
  */
-function readQuoted(src, start, stop) {
+function readQuoted(src: string, start: number, stop: number) {
   const quote = src[start];
   let text = "";
   let i = start + 1;
@@ -538,7 +538,7 @@ function readQuoted(src, start, stop) {
  * @param {number} open
  * @param {number} stop
  */
-function skipInterpolation(src, open, stop) {
+function skipInterpolation(src: string, open: number, stop: number) {
   let depth = 0;
   for (let i = open; i < stop; i++) {
     if (src[i] === "{") depth++;
@@ -558,10 +558,10 @@ const MAX_CANDIDATES = 256;
  * @param {Argument[]} args
  * @returns {{ literal: string, declaredAt?: number }[]}
  */
-function candidatesOfCall(name, args) {
+function candidatesOfCall(name: string, args: Argument[]): { literal: string; declaredAt?: number; }[] {
   if (name !== "join" && name !== "resolve") return args.flatMap(({ options, declaredAt }) => options.map((literal) => ({ literal, declaredAt })));
   const declaredAt = args.find((a) => a.declaredAt !== undefined)?.declaredAt;
-  const joined = args.reduce((/** @type {string[]} */ paths, { options }) =>
+  const joined = args.reduce((/** @type {string[]} */ paths: string[], { options }) =>
     (paths.length === 0 ? options : paths.flatMap((p) => options.map((o) => `${p}/${o}`))).slice(0, MAX_CANDIDATES), []);
   return joined.map((literal) => ({ literal, declaredAt }));
 }
@@ -571,9 +571,9 @@ function candidatesOfCall(name, args) {
  * @param {string} src comment-stripped
  * @returns {Reach[]}
  */
-function flowingLiterals(src) {
+function flowingLiterals(src: string): Reach[] {
   /** @type {Reach[]} */
-  const flows = relativeSpecifiers(src).map((literal) => ({ literal, kind: "import" }));
+  const flows: Reach[] = relativeSpecifiers(src).map((literal) => ({ literal, kind: "import" }));
   const lookup = makeLookup(src);
   for (const m of src.matchAll(SINK_CALL)) {
     const open = m.index + m[0].length - 1;
@@ -591,9 +591,9 @@ function flowingLiterals(src) {
  * @param {string} text comment-stripped
  * @returns {string[]}
  */
-function tokenReaches(text) {
+function tokenReaches(text: string): string[] {
   /** @type {string[]} */
-  const reaches = [];
+  const reaches: string[] = [];
   for (const m of text.matchAll(/(?<![\w.@-])packages[\\/]+([\w-]+)((?:[\\/]+[\w.@-]+)*)/g)) {
     reaches.push(`packages/${m[1]}${m[2]}`.replace(/[\\/]+/g, "/"));
   }
@@ -605,7 +605,7 @@ function tokenReaches(text) {
  * @param {string} path
  * @param {string} text
  */
-function stripTextComments(path, text) {
+function stripTextComments(path: string, text: string) {
   if (path.endsWith(".json")) return text;
   const line = /\.(?:cmd|bat)$/.test(path) ? /^\s*(?:@?rem\b|::).*$/gim : /(?:^|(?<=\s))#.*$/gm;
   return text.replace(line, (m) => " ".repeat(m.length));
@@ -619,7 +619,7 @@ const KIND_BY_FILE = /** @type {const} */ ([[LAUNCHER_FILE, "launcher"], [WORKFL
  * @param {string} text
  * @returns {Reach[]}
  */
-function reachesOf(path, text) {
+function reachesOf(path: string, text: string): Reach[] {
   if (CODE_FILE.test(path)) return flowingLiterals(stripComments(text));
   const kind = KIND_BY_FILE.find(([re]) => re.test(path))?.[1] ?? "config";
   return tokenReaches(stripTextComments(path, text)).map((literal) => ({ literal, kind }));
@@ -636,7 +636,7 @@ function reachesOf(path, text) {
  * @param {readonly string[]} layers
  * @returns {string | null}
  */
-function longestExisting(literal, index, layers) {
+function longestExisting(literal: string, index: PathIndex, layers: readonly string[]): string | null {
   const parts = literal.split("/");
   while (parts.length > 2 && !index.has(parts.join("/"))) parts.pop();
   return index.has(parts.slice(0, 2).join("/")) || layers.includes(parts[1] ?? "") ? parts.join("/") : null;
@@ -650,7 +650,7 @@ function longestExisting(literal, index, layers) {
  * @param {readonly string[]} layers
  * @returns {string | null}
  */
-function targetOf({ literal, kind }, path, index, layers) {
+function targetOf({ literal, kind }: Reach, path: string, index: PathIndex, layers: readonly string[]): string | null {
   if (kind === "import") return resolveSpecifier(literal, path, index);
   return kind === "path-literal" ? resolveLiteral(literal, path, index) : longestExisting(literal, index, layers);
 }
@@ -663,10 +663,10 @@ function targetOf({ literal, kind }, path, index, layers) {
  * @param {readonly string[]} layers
  * @returns {Edge[]}
  */
-function edgesOfFile(path, text, index, layers) {
+function edgesOfFile(path: string, text: string, index: PathIndex, layers: readonly string[]): Edge[] {
   const fromPkg = packageOf(path);
   /** @type {Edge[]} */
-  const edges = [];
+  const edges: Edge[] = [];
   for (const { literal, kind, via } of reachesOf(path, text)) {
     const to = targetOf({ literal, kind }, path, index, layers);
     if (to === null) continue;
@@ -679,17 +679,17 @@ function edgesOfFile(path, text, index, layers) {
 }
 
 /** @param {Edge | undefined} e a baseline entry may be anything; `judgeEdges` reports it as malformed rather than throwing */
-const keyOf = (e) => `${e?.direction} ${e?.kind} ${e?.from} -> ${e?.to}`;
+const keyOf = (e: Edge | undefined) => `${e?.direction} ${e?.kind} ${e?.from} -> ${e?.to}`;
 
 /**
  * Every edge across a layer boundary in `tracked`, both directions, one per (from, to, kind, direction).
  * @param {{ root: string, tracked: string[], layers?: readonly string[] }} options
  * @returns {Edge[]}
  */
-export function findEdges({ root, tracked, layers = LAYER_PACKAGES }) {
+export function findEdges({ root, tracked, layers = LAYER_PACKAGES }: { root: string; tracked: string[]; layers?: readonly string[]; }): Edge[] {
   const index = pathIndex(tracked);
   /** @type {Map<string, Edge>} */
-  const byKey = new Map();
+  const byKey: Map<string, Edge> = new Map();
   for (const path of tracked) {
     const abs = join(root, path);
     if (!existsSync(abs)) continue;
@@ -709,7 +709,7 @@ export function findEdges({ root, tracked, layers = LAYER_PACKAGES }) {
  * @param {unknown} baseline
  * @returns {{ unlisted: Edge[], stale: BaselineEntry[], malformed: string[] }}
  */
-export function judgeEdges(edges, baseline) {
+export function judgeEdges(edges: Edge[], baseline: unknown): { unlisted: Edge[]; stale: BaselineEntry[]; malformed: string[]; } {
   if (!Array.isArray(baseline)) return { unlisted: edges, stale: [], malformed: ["the baseline is not a JSON array"] };
   const malformed = baseline.flatMap((entry, i) => malformedReasons(entry).map((why) => `entry ${i} (${entry?.from ?? "?"}): ${why}`));
   const listed = new Set(baseline.map((e) => keyOf(e)));
@@ -726,7 +726,7 @@ export function judgeEdges(edges, baseline) {
  * @param {any} entry
  * @returns {string[]}
  */
-function malformedReasons(entry) {
+function malformedReasons(entry: any): string[] {
   const missing = ["from", "to", "kind", "direction", "disposition", "reason"]
     .filter((f) => typeof entry?.[f] !== "string" || entry[f].trim() === "");
   if (missing.length > 0) return [`missing ${missing.join(", ")}`];
@@ -746,7 +746,7 @@ function malformedReasons(entry) {
  * @param {{ unlisted: Edge[], stale: BaselineEntry[], malformed: string[] }} verdict
  * @returns {string[]}
  */
-export function describeVerdict({ unlisted, stale, malformed }) {
+export function describeVerdict({ unlisted, stale, malformed }: { unlisted: Edge[]; stale: BaselineEntry[]; malformed: string[]; }): string[] {
   return [
     ...unlisted.map((e) => `NEW EDGE ${e.direction}: ${e.from} -> ${e.to} (${e.kind}${carriedBy(e)}). Cut it, or add it to ${BASELINE_PATH} with a disposition and a reason.`),
     ...stale.map((e) => `STALE ENTRY: ${e.from} -> ${e.to} (${e.kind}, ${e.direction}) no longer exists. Remove it from ${BASELINE_PATH}.`),
@@ -755,12 +755,12 @@ export function describeVerdict({ unlisted, stale, malformed }) {
 }
 
 /** Where a `const`-carried path was written and where it is read, as the words a person needs to find both. @param {Edge} edge */
-const carriedBy = ({ via }) => (via === undefined ? "" : `, through a const declared at line ${via.declaredLine} and read at line ${via.readLine}`);
+const carriedBy = ({ via }: Edge) => (via === undefined ? "" : `, through a const declared at line ${via.declaredLine} and read at line ${via.readLine}`);
 
 /** Counts by disposition, for the closing comment on the row that cuts edges: how many the move still has to cut. */
-export function countByDisposition(/** @type {BaselineEntry[]} */ baseline) {
+export function countByDisposition(/** @type {BaselineEntry[]} */ baseline: BaselineEntry[]) {
   /** @type {Record<string, number>} */
-  const counts = {};
+  const counts: Record<string, number> = {};
   for (const e of baseline) {
     const key = `${e.direction}:${e.disposition.replace(/:#\d+$/, "")}`;
     counts[key] = (counts[key] ?? 0) + 1;
@@ -774,7 +774,7 @@ export function countByDisposition(/** @type {BaselineEntry[]} */ baseline) {
  * of a repository, git lists only that subtree, which is how a committed fixture is a root of its own.
  * @param {string} root
  */
-export function trackedFiles(root) {
+export function trackedFiles(root: string) {
   return execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], { cwd: root, env: sandboxGitEnv(), encoding: "utf8", maxBuffer: 1 << 28 })
     .split("\0").filter(Boolean);
 }
@@ -784,7 +784,7 @@ export function trackedFiles(root) {
  * @param {string} root
  * @returns {BaselineEntry[]}
  */
-export function readBaseline(root) {
+export function readBaseline(root: string): BaselineEntry[] {
   const file = join(root, BASELINE_PATH);
   return existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : [];
 }
@@ -793,7 +793,7 @@ export function readBaseline(root) {
 // mistyped flag is ignored (#237).
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
   const argv = process.argv.slice(2);
-  refuseUnknownFlags(["--check", "--list", "--root"], { entry: import.meta.url, argv, command: "node packages/guards/src/layer-edges.mjs" });
+  refuseUnknownFlags(["--check", "--list", "--root"], { entry: import.meta.url, argv, command: "node packages/guards/src/layer-edges.ts" });
   // `--root=<dir>` points the guard at another tree (a committed fixture is one); the default is this checkout.
   const root = flagValue(argv, "root") ?? join(dirname(new URL(import.meta.url).pathname), "..", "..", "..");
   const edges = findEdges({ root, tracked: trackedFiles(root) });
@@ -806,7 +806,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.arg
     console.log(`layer-edges: ${edges.length} edges across ${LAYER_PACKAGES.join(", ")}; ${lines.length === 0 ? "baseline agrees" : `${lines.length} problem(s)`}.`);
     process.exit(lines.length === 0 ? 0 : 1);
   } else {
-    console.error("usage: node packages/guards/src/layer-edges.mjs --check | --list [--root=<dir>]");
+    console.error("usage: node packages/guards/src/layer-edges.ts --check | --list [--root=<dir>]");
     process.exit(2);
   }
 }

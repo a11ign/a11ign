@@ -33,9 +33,9 @@ import { sandboxGitEnv } from "./git-env.mjs";
 // first time a `kind !== "all"` call actually needs it, never for a text-only guard).
 const require = createRequire(import.meta.url);
 /** @type {typeof import("typescript") | null} */
-let tsModule = null;
+let tsModule: typeof import("typescript") | null = null;
 /** @returns {typeof import("typescript")} */
-function typescriptModule() {
+function typescriptModule(): typeof import("typescript") {
   if (tsModule === null) tsModule = require("typescript");
   return /** @type {typeof import("typescript")} */ (tsModule);
 }
@@ -55,7 +55,7 @@ export function _typescriptLoadedForTests() {
  * `git-spawn-classification.test.ts`'s own `usesCanonicalHelper` already draws for the identical reason.
  * @returns {true}
  */
-export function declareTreeWideGuard() {
+export function declareTreeWideGuard(): true {
   return true;
 }
 
@@ -67,12 +67,12 @@ export function declareTreeWideGuard() {
 // asks for the same kind+root pair from two different tests), and every one of those repeats is a real,
 // avoidable spawn this closes.
 /** @type {Map<string, string>} */
-const lsFilesCache = new Map();
+const lsFilesCache: Map<string, string> = new Map();
 /** A `Map.set` on an EXISTING key does not grow `.size` whether or not the cache actually short-circuited
  *  -- so `.size` alone cannot prove a repeat call skipped the spawn. This counts the spawns themselves. */
 let realSpawnCount = 0;
 /** @type {(args: string[]) => string} */
-const defaultGitLsFiles = (args) => {
+const defaultGitLsFiles: (args: string[]) => string = (args): string => {
   const key = JSON.stringify(args);
   const cached = lsFilesCache.get(key);
   if (cached !== undefined) return cached;
@@ -128,14 +128,14 @@ export function _lsFilesSpawnCountForTests() {
  * @param {{ gitLsFiles?: typeof defaultGitLsFiles }} [deps]
  * @returns {WalkedFile[]}
  */
-export function walkTree({ kind, roots = [], selfPath }, { gitLsFiles = defaultGitLsFiles } = {}) {
+export function walkTree({ kind, roots = [], selfPath }: { kind: "ts" | "mjs" | "both" | "all"; roots?: string[]; selfPath?: string; }, { gitLsFiles = defaultGitLsFiles }: { gitLsFiles?: typeof defaultGitLsFiles; } = {}): WalkedFile[] {
   if (!["ts", "mjs", "both", "all"].includes(kind)) {
     throw new Error(`walkTree: unknown kind "${kind}" -- expected "ts", "mjs", "both", or "all"`);
   }
   // Lazy, and only for a kind that means something has a ScriptKind at all -- a `kind: "all"` caller must
   // never pay for loading `typescript`, since it never reads this field.
   /** @type {(path: string) => import("typescript").ScriptKind | undefined} */
-  const scriptKindOf = kind === "all"
+  const scriptKindOf: (path: string) => import("typescript").ScriptKind | undefined = kind === "all"
     ? () => undefined
     : (path) => (extname(path) === ".ts" ? typescriptModule().ScriptKind.TS : typescriptModule().ScriptKind.JS);
   const raw = gitLsFiles(roots).split("\n").filter(Boolean);

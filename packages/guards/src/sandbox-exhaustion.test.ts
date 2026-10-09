@@ -26,7 +26,7 @@ import {
   exhaustionCause,
   sandboxExhaustionError,
   withSandbox,
-} from "./sandbox-exhaustion.mjs";
+} from "./sandbox-exhaustion.ts";
 
 const KIB = 1024;
 const MIB = KIB * KIB;

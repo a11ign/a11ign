@@ -1281,7 +1281,7 @@ No.
 ## Region
 
 ```
-packages/guards/src/layer-edges.mjs
+packages/guards/src/layer-edges.ts
 packages/guards/layer-edges.baseline.json
 packages/lab/src/packaging/layer-edges-movable.test.ts (new)
 ```
@@ -1298,7 +1298,7 @@ The test must show, one fixture baseline each: an `out` entry with `by-name` to 
 
 ## Done-when
 
-1. `node packages/guards/src/layer-edges.mjs --check-movable` prints one line per violating entry with the owning row, and exits non-zero on the real tree today (the deploy path is recorded there); pasted on the row with its count.
+1. `node packages/guards/src/layer-edges.ts --check-movable` prints one line per violating entry with the owning row, and exits non-zero on the real tree today (the deploy path is recorded there); pasted on the row with its count.
 2. The verdict reads each target package's `private` flag from its `package.json`, not from a list in the guard.
 3. The row states whether the guard runs in the required `ts` job or the always-run set, and how many seconds it adds.
 4. The row lists which `owned-by` rows must close before the chairman's move claim: at least item 6's four rows and item 8's CI row.

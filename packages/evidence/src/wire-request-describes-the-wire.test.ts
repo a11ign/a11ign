@@ -23,7 +23,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 
-import { layerFile } from "../../guards/src/layer-file.mjs";
+import { layerFile } from "../../guards/src/layer-file.ts";
 import { stripComments } from "./source-text.js";
 import type { CaptureRequest, CaptureFormState } from "./index.js";
 

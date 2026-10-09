@@ -28,13 +28,13 @@
       "default": "./src/local-import-closure.mjs"
     },
     "./mutation-check": {
-      "default": "./src/mutation-check.mjs"
+      "default": "./src/mutation-check.ts"
     },
     "./piped-exit-status-guard": {
       "default": "./src/piped-exit-status-guard.mjs"
     },
     "./tree-wide-guard": {
-      "default": "./src/tree-wide-guard.mjs"
+      "default": "./src/tree-wide-guard.ts"
     },
     "./tree-wide-guards": {
       "default": "./src/tree-wide-guards.mjs"

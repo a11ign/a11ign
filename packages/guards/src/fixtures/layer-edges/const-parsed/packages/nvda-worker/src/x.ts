@@ -1,5 +1,5 @@
 const PATH = "packages/other/src/x.mjs";
-const LIST = ["packages/other/src/x.mjs", "../../other/src/x.mjs"];
+const LIST = ["packages/other/src/x.mjs", "../../other/src/x.ts"];
 
 /** Compares a document against a path. It names the path and never opens it. */
 function mentions(doc, path) {

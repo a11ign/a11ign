@@ -30,7 +30,7 @@ const ALWAYS_PUBLISHED = /^(?:package\.json|(?:README|LICENSE|LICENCE|CHANGELOG)
  * @param {string} from
  * @returns {string | undefined}
  */
-export function installedPackageDir(name, from) {
+export function installedPackageDir(name: string, from: string): string | undefined {
   for (let dir = from; ; dir = dirname(dir)) {
     const candidate = join(dir, "node_modules", ...name.split("/"));
     if (existsSync(join(candidate, "package.json"))) return realpathSync(candidate);
@@ -42,7 +42,7 @@ export function installedPackageDir(name, from) {
  * A `files` entry as a matcher over a posix-relative path: a directory names everything under it, `*` stays in a segment.
  * @param {string} entry
  */
-function matcherFor(entry) {
+function matcherFor(entry: string) {
   const pattern = posix.normalize(entry.replace(/^\.\//, "")).replace(/\/$/, "");
   const source = pattern
     .replace(/[.+^${}()|[\]\\]/g, "\\$&")
@@ -56,7 +56,7 @@ function matcherFor(entry) {
  * @param {{ files?: string[] }} manifest
  * @param {string} rel posix path relative to the package root
  */
-export function isPublished(manifest, rel) {
+export function isPublished(manifest: { files?: string[]; }, rel: string) {
   if (ALWAYS_PUBLISHED.test(rel)) return true;
   if (!Array.isArray(manifest.files)) return true;
   const included = manifest.files.filter((f) => !f.startsWith("!")).some((f) => matcherFor(f).test(rel));
@@ -71,7 +71,7 @@ export function isPublished(manifest, rel) {
  * @param {{ from?: string }} [options] where to start looking; the caller's cwd by default
  * @returns {string}
  */
-export function layerFile(name, rel, { from = process.cwd() } = {}) {
+export function layerFile(name: string, rel: string, { from = process.cwd() }: { from?: string; } = {}): string {
   if (isAbsolute(rel) || posix.normalize(rel).startsWith("..")) {
     throw new Error(`layerFile: "${rel}" is not a path inside ${name} -- name it relative to the package root`);
   }

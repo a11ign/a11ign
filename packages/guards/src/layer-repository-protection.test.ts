@@ -41,7 +41,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
-import { ghApiRead } from "./gh-api-read.mjs";
+import { ghApiRead } from "./gh-api-read.ts";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const PROJECT_FILE = ".agent-org/project.json";

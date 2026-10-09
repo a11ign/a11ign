@@ -90,7 +90,7 @@ import { sandboxGitEnv } from "./git-env.mjs";
 const EXIT = { BITES: 0, DID_NOT_BITE: 1, REFUSED: 2, RESTORE_FAILED: 3 };
 
 /** @type {(file: string) => string} */
-const digest = (file) => createHash("sha256").update(readFileSync(file)).digest("hex");
+const digest: (file: string) => string = (file): string => createHash("sha256").update(readFileSync(file)).digest("hex");
 
 /**
  * Run a shell command, returning whether it succeeded and its combined output.
@@ -99,7 +99,7 @@ const digest = (file) => createHash("sha256").update(readFileSync(file)).digest(
  * `GIT_DIR` makes any git the command reaches operate on a different repository.
  * @param {string} command
  */
-function run(command) {
+function run(command: string) {
   try {
     const out = execSync(command, { encoding: "utf8", stdio: "pipe", env: sandboxGitEnv() });
     return { ok: true, out };
@@ -114,7 +114,7 @@ function run(command) {
  * @param {string} out
  * @returns {string | undefined}
  */
-function verdictOf(out) {
+function verdictOf(out: string): string | undefined {
   return out.split("\n").reverse().find((line) => line.startsWith("VERDICT "))?.replace(/ -- full report:.*$/, "");
 }
 
@@ -123,7 +123,7 @@ function verdictOf(out) {
  * @param {string} out
  * @returns {string[]}
  */
-function failedTestsOf(out) {
+function failedTestsOf(out: string): string[] {
   return [...out.matchAll(/^### \[F\d+\] (.+)$/gm)].map((match) => match[1]).slice(0, FAILED_NAMED);
 }
 
@@ -131,7 +131,7 @@ function failedTestsOf(out) {
 const FAILED_NAMED = 5;
 
 /** @param {string} message @returns {never} */
-function refuse(message) {
+function refuse(message: string): never {
   console.error(`REFUSING: ${message}`);
   process.exit(EXIT.REFUSED);
 }
@@ -140,10 +140,10 @@ const KNOWN_FLAGS = ["--file", "--mutate", "--test", "--keep", "--per-mutant", "
   "--prove-restored"];
 
 /** @returns {{ file?: string, mutate?: string, test?: string, perMutant: boolean, baselinePassed: boolean, proveRestored: boolean }} */
-function readArgs() {
+function readArgs(): { file?: string; mutate?: string; test?: string; perMutant: boolean; baselinePassed: boolean; proveRestored: boolean; } {
   const argv = process.argv.slice(2);
   /** @type {(name: string) => string | undefined} */
-  const flag = (name) => argv.find((a) => a.startsWith(`${name}=`))?.split("=").slice(1).join("=");
+  const flag: (name: string) => string | undefined = (name): string | undefined => argv.find((a) => a.startsWith(`${name}=`))?.split("=").slice(1).join("=");
   return { file: flag("--file"), mutate: flag("--mutate"), test: flag("--test"),
     perMutant: argv.includes("--per-mutant"), baselinePassed: argv.includes("--baseline-passed"),
     proveRestored: argv.includes("--prove-restored") };
@@ -165,7 +165,7 @@ const USAGE = "this needs --file=<path> --mutate='<shell that edits it>' --test=
  * without the mode would read as having asked for something it did not get (#2448).
  * @param {ReturnType<typeof readArgs>} args
  */
-function refuseBadBatchFlags({ perMutant, baselinePassed, proveRestored, mutate }) {
+function refuseBadBatchFlags({ perMutant, baselinePassed, proveRestored, mutate }: ReturnType<typeof readArgs>) {
   if (proveRestored && (perMutant || baselinePassed || mutate)) {
     refuse("--prove-restored runs the test once, on a file nobody is mutating: it takes --file and --test "
       + "only, not --mutate, --per-mutant or --baseline-passed.");
@@ -187,7 +187,7 @@ function refuseBadBatchFlags({ perMutant, baselinePassed, proveRestored, mutate 
  * (a build output or a cache the mutation command touched) is reachable only here.
  * @param {string} file @param {string} test
  */
-function proveRestored(file, test) {
+function proveRestored(file: string, test: string) {
   const after = run(test);
   if (!after.ok) {
     console.error(`\nTHE TEST FAILS ON ${file} AFTER THE BATCH. Every mutant restored the file byte for byte, `
@@ -206,7 +206,7 @@ function proveRestored(file, test) {
  * @param {string} test @param {boolean} baselinePassed
  * @returns {string | undefined} the clean run's verdict line, when it printed one
  */
-function requireCleanBaseline(test, baselinePassed) {
+function requireCleanBaseline(test: string, baselinePassed: boolean): string | undefined {
   if (baselinePassed) return undefined;
   const before = run(test);
   if (!before.ok) {
@@ -225,7 +225,7 @@ function requireCleanBaseline(test, baselinePassed) {
  * 3 and 4: the mutation must have landed, and then the test must fail.
  * @param {{ file: string, test: string, applied: { ok: boolean, out: string }, changed: boolean }} mutation
  */
-function judgeMutation({ file, test, applied, changed }) {
+function judgeMutation({ file, test, applied, changed }: { file: string; test: string; applied: { ok: boolean; out: string; }; changed: boolean; }) {
   if (!changed) {
     console.error(`\nREFUSING: the mutation command changed nothing -- ${file} is byte-identical.\n`
       + "A no-op edit makes the test pass for the wrong reason, and that passing test reads as "
@@ -251,7 +251,7 @@ function judgeMutation({ file, test, applied, changed }) {
  * @param {string} out
  * @returns {string}
  */
-function whyItFailed(out) {
+function whyItFailed(out: string): string {
   const verdict = verdictOf(out);
   const failed = failedTestsOf(out);
   if (verdict === undefined && failed.length === 0) {
@@ -265,7 +265,7 @@ function whyItFailed(out) {
  * only copy of the original, which is why the script copies aside rather than `git checkout --`.
  * @param {string} stash
  */
-function discardStash(stash) {
+function discardStash(stash: string) {
   rmSync(path.dirname(stash), { recursive: true, force: true });
 }
 
@@ -274,7 +274,7 @@ function discardStash(stash) {
  * that proof to the end of the batch (`--prove-restored`).
  * @param {{ file: string, stash: string, original: string, test: string, perMutant: boolean }} restore
  */
-function restoreAndProve({ file, stash, original, test, perMutant }) {
+function restoreAndProve({ file, stash, original, test, perMutant }: { file: string; stash: string; original: string; test: string; perMutant: boolean; }) {
   copyFileSync(stash, file);
   if (digest(file) !== original) {
     console.error(`\nTHE RESTORE FAILED. ${file} is not what it was. The copy is at ${stash} and has `

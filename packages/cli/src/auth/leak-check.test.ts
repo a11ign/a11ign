@@ -9,7 +9,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 
-import { layerFile } from "../../../guards/src/layer-file.mjs";
+import { layerFile } from "../../../guards/src/layer-file.ts";
 import { LEAK_EXIT } from "./leak-detector.js";
 import {
   LeakCheckUsageError, credentialsFrom, examine, examineRaw, examineWritten, parseLeakCheckArgs, redactionCountIn,
