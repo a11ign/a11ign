@@ -1045,6 +1045,8 @@ test("#3705: `bots` -- write with admin false is OK; absent, admin or read is DR
  * cannot pass for one that found the right job.
  */
 const TAG_MOVE_JOB = "promote-action-tag";
+/** #4359: the second mint, for ANOTHER repository (`a11ign-labs/a11ign-consumer-check`); its scope, identity and grant are pinned in `outsider-pin-refresh.test.ts`. */
+const OUTSIDER_PIN_JOB = "refresh-outsider-pin";
 const TAG_MOVE_POLICY = ".github/chainguard/promote-action-tag.sts.yaml";
 const STORED_TOKEN = "A11IGN_BOT_TOKEN";
 type ReleaseStep = { id?: string; uses?: string; with?: Record<string, string>; env?: unknown; run?: string };
@@ -1057,7 +1059,7 @@ function assertTagMoveMintsItsToken(): void {
   const control = { reader: { steps: [{ env: { GH_TOKEN: "${{ secrets.A11IGN_BOT_TOKEN }}" } }] } };
   assert.deepEqual(jobsContaining(control, STORED_TOKEN), ["reader"], "POSITIVE CONTROL: the scan finds a job that reads the stored token");
   assert.deepEqual(jobsContaining(jobs, STORED_TOKEN), [], "no job of release.yml reads the stored bot token (#4194)");
-  assert.deepEqual(jobsContaining(jobs, "octo-sts/action"), [TAG_MOVE_JOB], "exactly one job mints an Octo STS token: the Action's major-tag move, and not the release job");
+  assert.deepEqual(jobsContaining(jobs, "octo-sts/action"), [TAG_MOVE_JOB, OUTSIDER_PIN_JOB], "exactly two jobs mint an Octo STS token: the Action's major-tag move and the outside repository's pin (#4359), and never the release job");
   const move = jobs[TAG_MOVE_JOB];
   assert.deepEqual(move.permissions, { contents: "read", "id-token": "write" }, "the job holds contents: read and id-token: write, and nothing more");
   assert.ok(!JSON.stringify(move.env ?? {}).includes("octo-sts"), "the minted token is read in a step's env, never the job's");
@@ -1081,7 +1083,7 @@ function assertTagMovePolicyBindsToMain(): void {
   assert.match(policy.claim_pattern?.job_workflow_ref ?? "", /release\\\.yml@refs\/heads\/main$/, "the workflow claim names release.yml as ON main, so a branch's copy of it cannot mint");
 }
 
-test("#4194/#4200: release.yml reads no stored token, and its one Octo STS mint is the tag move, bound to the workflow as on main", () => {
+test("#4194/#4200: release.yml reads no stored token, and its Octo STS mints are the tag move and the outside pin (#4359), bound to the workflow as on main", () => {
   assertTagMoveMintsItsToken();
   assertTagMovePolicyBindsToMain();
 });

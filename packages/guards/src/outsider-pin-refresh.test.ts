@@ -18,11 +18,11 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parse as parseYaml } from "yaml";
+import { refreshDecision, pinnedVersion, WRITE, CURRENT, NEWER } from "../../../scripts/outsider/refresh-pin.ts";
 
 const REPO = fileURLToPath(new URL("../../..", import.meta.url));
 const read = (path: string) => readFileSync(`${REPO}${path}`, "utf8");
 
-const { refreshDecision, pinnedVersion, WRITE, CURRENT, NEWER } = await import(pathToFileURL(`${REPO}scripts/outsider/refresh-pin.ts`).href);
 const { generateOutsiderJob } = await import(pathToFileURL(`${REPO}scripts/outsider/generate.mjs`).href);
 
 const readme = read("README.md");
