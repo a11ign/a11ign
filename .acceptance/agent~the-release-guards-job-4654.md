@@ -23,6 +23,8 @@ pnpm run gate:isolation 2>&1 | tee /dev/stderr | grep -Eq '(^|[^0-9])([0-9]+)/\2
 npx rstest run --config=scripts/rstest/rstest.config.ts packages/guards/src/pnpm-publish-path.test.ts
 ```
 
+Mutation: removed the `npm pkg set type=module` line in `isolation-gate.ts`; `pnpm-publish-path.test.ts` went red, 1 of 20, `SyntaxError: Cannot use import statement outside a module`, and no other test; restored byte-identical (`diff` clean).
+
 Closes #4654
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
