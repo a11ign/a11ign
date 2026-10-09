@@ -75,6 +75,14 @@
       "a11ign-ai-workers": "write",
       "a11ign-ai-leads": "write",
       "a11ign-ci": "write"
+    },
+    "a11ign/.github": {
+      "DanBeckDev": "admin",
+      "Cemmaw": "none",
+      "a11ign-bot": "read",
+      "a11ign-ai-workers": "write",
+      "a11ign-ai-leads": "write",
+      "a11ign-ci": "read"
     }
   }
 }

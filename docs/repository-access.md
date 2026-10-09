@@ -17,6 +17,12 @@ and who may change GitHub to match it.
 - **The code repositories** are every `repo` of `.agent-org/project.json`'s `code` array, plus
   `a11ign/screenreader-worker`, which exists before it is declared there (#2701). A test pins the declaration's
   key set equal to that union.
+- **`a11ign/.github` is the exception to "each agent holds `write`" (#4417).** Read live 2026-10-09 with
+  `gh api repos/a11ign/.github/collaborators --jq '.[]|[.login,.role_name]|@tsv'`: `a11ign-ai-workers` and
+  `a11ign-ai-leads` hold `write`, and `a11ign-bot` and `a11ign-ci` hold `read` (with `DanBeckDev` at `admin`).
+  `Cemmaw` has no collaborator entry, so `none`; the per-user `permission` endpoint reports `read` for the account
+  because the repository is public, which is not a grant. Read as `a11ign-ai-workers`, so this is the list as
+  that account sees it, a reading and not a decision that `read` is the level the two accounts should hold.
 
 ## The `bots` team
 
