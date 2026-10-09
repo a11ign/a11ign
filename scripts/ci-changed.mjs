@@ -532,9 +532,9 @@ async function main() {
   // `--event` stays a required, explicit flag rather than being dropped outright: a caller that types
   // `--event=push` today gets a clear refusal naming why, instead of silently falling through some
   // default — the same "an ignored flag runs the default and reports success" defect `cli-flags.mjs`
-  // exists to prevent, one value along. `merge_group` added for #156; the value itself is not otherwise
-  // read below -- it exists only so a mistyped or reverted trigger is refused here rather than silently
-  // classifying under the wrong event's assumptions.
+  // exists to prevent, one value along. `merge_group` added for #156; it is refused here when mistyped
+  // or reverted rather than silently classifying under the wrong event's assumptions, and (#4440) it is the
+  // one value that does NOT take the diff's classification: see `fullRequiredSet`.
   const event = flagValue(process.argv, "event");
   if (event !== "pull_request" && event !== "merge_group") {
     console.error(`ci-changed: --event must be "pull_request" or "merge_group", got ${JSON.stringify(event)}. `
@@ -574,8 +574,28 @@ async function main() {
   }
 
   const precise = process.argv.includes("--precise");
-  writeOutputs(classify(files, packages,
-    { repoRoot, getPackedFiles: precise ? packedFiles : everythingIsPacked }));
+  const classified = classify(files, packages,
+    { repoRoot, getPackedFiles: precise ? packedFiles : everythingIsPacked });
+  writeOutputs(event === "merge_group" ? fullRequiredSet(classified, packages) : classified);
+}
+
+/**
+ * #4440: the merge queue is the last check before `main`, so it never skips a job the diff did not seem to need. #4406 changed only
+ * `reusable-acceptance.yml`, the classifier said `ts=false`, and the merge turned `main` red on a test that reads that file (#4428).
+ * Path-skipping may speed up a PR run; it has no place here. `changeset` is the one output that stays the diff's answer under
+ * `--precise`: it decides whether a refusal is ENFORCED, and a queue entry owing no release would be ejected for it. Without
+ * `--precise` it is the over-approximation `everythingIsPacked` already makes, so `true` here only means "run the job".
+ * @param {ClassifyResult} classified
+ * @param {string[]} allPackages
+ * @returns {ClassifyResult}
+ */
+function fullRequiredSet(classified, allPackages) {
+  const enforcing = process.argv.includes("--precise");
+  return {
+    ts: true, python: true, ansible: true, docs: true, board: true, rulesFitness: true,
+    changeset: enforcing ? classified.changeset : true,
+    packages: [...allPackages].sort(),
+  };
 }
 
 // Only when invoked directly — importing `classify` for a test must not trigger a git subprocess.
