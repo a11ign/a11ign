@@ -105,8 +105,8 @@ importers:
         version: 0.5.3(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)
     devDependencies:
       '@a11ign/documents':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.1.1
+        version: 0.1.1
       '@a11ign/toolchain':
         specifier: 0.1.4
         version: 0.1.4(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))
@@ -154,8 +154,8 @@ importers:
 
 packages:
 
-  '@a11ign/documents@0.1.0':
-    resolution: {integrity: sha512-LeL53lM09iXFMKBPtEgevHGM0VMTv+c9HtWwMnCNtJ14f2sSswGFXMO/1i5Q5tKkk0EgVj+Tq5tqeAJN25izSw==}
+  '@a11ign/documents@0.1.1':
+    resolution: {integrity: sha512-iY829ehXBaWyyL2IeOqwKtGvaamHFnhCIupQWf0TPJ2pb7t+yMxkcEFC6hxm/mZdan0XSpdc5h+oHCbQvbydpA==}
     engines: {node: '>=20'}
 
   '@a11ign/evidence@0.1.0':
@@ -1918,7 +1918,7 @@ packages:
 
 snapshots:
 
-  '@a11ign/documents@0.1.0':
+  '@a11ign/documents@0.1.1':
     dependencies:
       pdf-lib: 1.17.1
 
