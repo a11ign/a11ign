@@ -102,7 +102,7 @@ unknown and the read-only count above is a half-hour of `orchestrator`'s time; i
 more than a handful of the 85 real pages (say 5 or more, an arbitrary line to be set by `orchestrator`, not by this
 document), (1) gets its own sizing row, and until then §57 stands as written.
 
-**Row: a checkbox-plus-`polite` fixture, outside the case matrix, so (2) can be given a rate on a page in the tree.**
+**Row (filed as a11ign#4567): a checkbox-plus-`polite` fixture, outside the case matrix, so (2) can be given a rate on a page in the tree.**
 
 - **Region:** `src/eval/pages/books/filter-status-checkbox-polite.html` and `src/eval/filter-status-checkbox-polite.test.ts`, in `a11ign/lab`.
 - **Change:** add one page, a single `<input type="checkbox">` whose `change` handler synchronously rewrites a
@@ -111,14 +111,15 @@ document), (1) gets its own sizing row, and until then §57 stands as written.
   is why its two predecessors were withdrawn. Add a test that reads the file and asserts the three properties that define the
   condition (a checkbox input, `role="status"` on the region, no `setTimeout` in the handler), so a later edit cannot quietly
   turn it into the button condition.
-- **Acceptance:**
+- **Acceptance** (as filed in #4567; `a11ign/lab` has no `tsx`, so it runs on the host's Node 24):
 
   ```bash
-  pnpm exec tsx --test src/eval/filter-status-checkbox-polite.test.ts
-  git grep -L 'filter-status-checkbox-polite' -- src/training/case-matrix.mjs
+  bash -c 'node --test src/eval/filter-status-checkbox-polite.test.ts'
+  bash -c '! git grep -q "filter-status-checkbox-polite" -- src/training/case-matrix.mjs'
   ```
 
-  The second command must print the path (the matrix does not name the page).
+  The second command fails if the matrix names the page. The test also carries a positive control: the same assertions run
+  on `filter-status-good.html` and must find the button condition there.
 - **Next, not in this row:** `orchestrator` runs `training:repeat --times=20` on it and on `filter-status-good`, and writes the
   two counts into §31 beside the n=6 figures. That capture is the fleet's and is the second row, filed after this merges.
 - **What would change "build only the fixture":** if `orchestrator`'s count for (1) is large, (1) outranks this.

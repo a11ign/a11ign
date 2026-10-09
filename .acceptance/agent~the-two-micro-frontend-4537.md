@@ -10,4 +10,6 @@ Acceptance: `bash -c 'test -s docs/outcomes/outcome-15-spa-reliability.md && gre
 
 Closes #4537
 
+First row filed: a11ign#4567 (product-manager, 2026-10-09).
+
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
