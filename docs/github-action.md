@@ -18,9 +18,9 @@ jobs:
       pull-requests: write       # for the PR comment below; omit it and the report still runs, only quieter
     steps:
       - uses: actions/checkout@v7
-      - uses: a11ign/a11ign@890cd490276d16102b3f371007951a24942950da   # the commit of the release tagged a11ign@0.3.0
-        # Pinned to the full 40-character commit of release 0.3.0 (`npm view a11ign dist-tags` read 0.3.0
-        # on both channels, 2026-10-07), so your CI does not move when a newer one is published -- GitHub
+      - uses: a11ign/a11ign@15881c7c59bee7cb49b464932f9732cb51e088f9   # the commit of the release tagged a11ign@0.5.3
+        # Pinned to the full 40-character commit of release 0.5.3 (`npm view a11ign dist-tags` read `latest`
+        # 0.5.3 and `next` 0.5.4, 2026-10-09), so your CI does not move when a newer one is published -- GitHub
         # refuses an abbreviated SHA outright, it does not just discourage it.
         id: a11ign
         with:
@@ -45,13 +45,13 @@ no log and no artifact, and any diagnostic step you add with `if: always()` does
 [the account of one, and what to do about it](./try-it.md#the-fastest-route-a-github-actions-run) in
 `docs/try-it.md`.
 
-> **This pins release `0.3.0`, by its commit.** The release is tagged `a11ign@0.3.0` and the commit is the one the tag
+> **This pins release `0.5.3`, by its commit.** The release is tagged `a11ign@0.5.3` and the commit is the one the tag
 > names; every `0.x` release is a deliberate step ADR 0007 commits this project to until `1.0.0` (a breaking change
 > costs a minor bump, not a major-version apology). The full 40-character commit is the pin because it cannot move,
 > and GitHub refuses an abbreviated one outright rather than merely discouraging it
 > (`uses: a11ign/a11ign@<sha>`); it is what GitHub itself recommends for third-party actions. **Do not write
-> `a11ign/a11ign@v0`:** the major tag does not exist yet (`git ls-remote --tags https://github.com/a11ign/a11ign refs/tags/v0`
-> printed nothing on 2026-10-07). To take a newer release, read its number from `npm view a11ign dist-tags` and its
+> `a11ign/a11ign@v0`:** that tag exists (`git ls-remote --tags https://github.com/a11ign/a11ign refs/tags/v0`
+> printed the `0.5.3` commit on 2026-10-09) but it moves, so a workflow on it takes a newer release unasked. To take a newer release, read its number from `npm view a11ign dist-tags` and its
 > commit from `git ls-remote https://github.com/a11ign/a11ign 'refs/tags/a11ign@*'`. See
 > [ADR 0007](./adr/0007-versioning-and-release.md).
 
@@ -110,7 +110,7 @@ new ignore rule with a negation under it.
 so a busy PR gets one comment that changes rather than one per push. The comment step runs `always()`, so
 the report still arrives when the check is failing — which is precisely when someone wants to read it.
 
-**Not on a pull request, no comment.** A run started by hand or by a push has nothing to comment on: the log's last line is the count (`a11ign: N finding(s)`), with a line before it for anything that bounds that count (an examination that ended early, a capture spanning more than one document, criteria resting on an examination known to be partial), and another for the criteria axe-core FAILED (`a11ign: N criteria FAILED by the rule layer (axe-core)`), which sit beside the count rather than in it, and the full result, transcript included, is in the `a11ign-result` artifact the upload step saves above (`result-json`). The rendered report is in the pull-request comment and the run's job summary; release `0.3.0` puts it in the artifact too, through its `summary-md` output (see the Outputs table), which the `v0.1.0` tag lacks.
+**Not on a pull request, no comment.** A run started by hand or by a push has nothing to comment on: the log's last line is the count (`a11ign: N finding(s)`), with a line before it for anything that bounds that count (an examination that ended early, a capture spanning more than one document, criteria resting on an examination known to be partial), and another for the criteria axe-core FAILED (`a11ign: N criteria FAILED by the rule layer (axe-core)`), which sit beside the count rather than in it, and the full result, transcript included, is in the `a11ign-result` artifact the upload step saves above (`result-json`). The rendered report is in the pull-request comment and the run's job summary; the pinned release puts it in the artifact too, through its `summary-md` output (see the Outputs table), which the `v0.1.0` tag lacks.
 
 **The same rendered report is also written to the run's job summary, but a CI-only consumer — no browser,
 nothing rendered — cannot reach that.** GitHub exposes Actions job summaries (`$GITHUB_STEP_SUMMARY`,
@@ -138,7 +138,7 @@ gh api "repos/<owner>/<repo>/actions/artifacts/$artifact_id/zip" > result.zip
 ```
 
 Either way what comes back is a directory holding the file
-`result-json` names (and, from release `0.3.0`, which has the `summary-md` output, `a11ign-summary.md`, the exact rendered
+`result-json` names (and, where the pinned release has the `summary-md` output, as `0.5.3` does, `a11ign-summary.md`, the exact rendered
 report the job summary carries, once the upload step lists it), the schema below (`verdict.findings`, `verdict.taskCompletable`,
 `captureVerified`, ...) — the transcript behind every finding. Neither needs a browser or
 `pull-requests: write` permission.
@@ -352,8 +352,8 @@ error handling most needs reviewing. On such a page 3.3.1, 3.3.3 and 4.1.3 are n
 `forms` names a config that says how to operate it (ADR 0024):
 
 ```yaml
-- uses: a11ign/a11ign@890cd490276d16102b3f371007951a24942950da   # the commit of the release tagged a11ign@0.3.0
-  # Pinned to the full 40-character commit of release 0.3.0, so your CI does not move when a newer one
+- uses: a11ign/a11ign@15881c7c59bee7cb49b464932f9732cb51e088f9   # the commit of the release tagged a11ign@0.5.3
+  # Pinned to the full 40-character commit of release 0.5.3, so your CI does not move when a newer one
   # is published -- GitHub refuses an abbreviated SHA outright, it does not just discourage it.
   with:
     url: https://staging.example.com/signup
@@ -409,7 +409,7 @@ Give `urls` instead of `url` to test more than one page in one run. **Exactly on
 refused before any setup is billed.
 
 ```yaml
-      - uses: a11ign/a11ign@890cd490276d16102b3f371007951a24942950da   # the commit of the release tagged a11ign@0.3.0
+      - uses: a11ign/a11ign@15881c7c59bee7cb49b464932f9732cb51e088f9   # the commit of the release tagged a11ign@0.5.3
         with:
           urls: |
             https://example.com/
@@ -492,7 +492,7 @@ jobs:
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v7
-      - uses: a11ign/a11ign@890cd490276d16102b3f371007951a24942950da   # a full commit SHA: the commit of release a11ign@0.3.0; v0.1.0 predates the login flow
+      - uses: a11ign/a11ign@15881c7c59bee7cb49b464932f9732cb51e088f9   # a full commit SHA: the commit of release a11ign@0.5.3; v0.1.0 predates the login flow
         env:                                   # the credential enters HERE, from GitHub Secrets, and nowhere else
           APP_TEST_USER: ${{ secrets.APP_TEST_USER }}
           APP_TEST_PASSWORD: ${{ secrets.APP_TEST_PASSWORD }}
@@ -621,7 +621,7 @@ browsers. [The reading, with run ids →](adr/0038-authenticated-capture.md)
 | `findings` | Count of lived-experience findings (summed over the captured pages, for `urls`). |
 | `task-completable` | Whether the judge thinks a screen-reader user could finish the stated task. On the default `local` backend this only means nothing scored as a blocker, a coarse proxy. |
 | `result-json` | Path to the full result, including the transcript. Worth uploading as an artifact — the transcript is the evidence behind every finding. |
-| `summary-md` | Path to the rendered report — the same markdown written to the job summary. **Not in `v0.1.0`**: a workflow pinned to that tag reads it as an empty string, and an artifact upload that lists it silently drops it. Release `0.3.0` has it (#1369), and so does any SHA pin from `main` since. Where the pinned ref has it, upload it alongside `result-json`: it is the route a CI-only consumer, with no access to the job summary, has to the human-readable report. |
+| `summary-md` | Path to the rendered report — the same markdown written to the job summary. **Not in `v0.1.0`**: a workflow pinned to that tag reads it as an empty string, and an artifact upload that lists it silently drops it. Release `0.3.0` has it (#1369), and so does the `0.5.3` pin here. Where the pinned ref has it, upload it alongside `result-json`: it is the route a CI-only consumer, with no access to the job summary, has to the human-readable report. |
 | `evidence-pack` | Path to the [evidence pack](./evidence-pack.md): the per-criterion outcomes with the NVDA announcements behind them, as one Markdown file for an assessor to attach to a conformance report. It is evidence and not a VPAT or ACR, and states no conformance. **Empty** for a run of a `urls` list, a `forms` config or a PDF, which write none, so guard an upload on it. Upload it alongside `result-json`: `path: ${{ steps.a11ign.outputs.evidence-pack }}`. Not in any release before the one that carries this row. |
 
 `findings` counts every lived-experience finding, referred ones included; `fail-on` counts only the asserted ones. The log's count line splits them:

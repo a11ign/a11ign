@@ -31,7 +31,7 @@ the words NVDA spoke.
   trained component only ever says *this is worth a person's look*. A referral on a page you believe is
   fine is expected behaviour, not a bug.
 - **It needs Windows**, because NVDA is Windows-only. That is the real cost of the two hours.
-- **It is published to npm, and it still needs a Windows machine.** `a11ign@0.3.0` was both the registry's `latest` and its `next` when this was last checked (2026-10-07, `npm view a11ign dist-tags`: a reading at a moment, so check it again). `npx a11ign <url>` saves the clone and the build, not the machine: it needs the same capture worker as a clone does. [The commands are below](#the-other-route-run-it-from-the-repository).
+- **It is published to npm, and it still needs a Windows machine.** `a11ign@0.5.3` was the registry's `latest` and `a11ign@0.5.4` its `next` when this was last checked (2026-10-09, `npm view a11ign dist-tags` printed `{ next: '0.5.4', latest: '0.5.3' }`: a reading at a moment, so check it again). This guide pins `latest`, by its commit, in every workflow below. `npx a11ign <url>` saves the clone and the build, not the machine: it needs the same capture worker as a clone does. [The commands are below](#the-other-route-run-it-from-the-repository).
 
 ## The fastest route: a GitHub Actions run
 
@@ -53,8 +53,8 @@ jobs:
       pull-requests: write       # for the PR comment below; omit it and the report still runs, only quieter
     steps:
       - uses: actions/checkout@v7
-      - uses: a11ign/a11ign@890cd490276d16102b3f371007951a24942950da   # the commit of the release tagged a11ign@0.3.0
-        # Pinned to the full 40-character commit of release 0.3.0, so your CI does not move when a newer
+      - uses: a11ign/a11ign@15881c7c59bee7cb49b464932f9732cb51e088f9   # the commit of the release tagged a11ign@0.5.3
+        # Pinned to the full 40-character commit of release 0.5.3, so your CI does not move when a newer
         # one is published -- GitHub refuses an abbreviated SHA outright, it does not just discourage it.
         # To take a newer release, read `npm view a11ign dist-tags` for its number and
         # `git ls-remote https://github.com/a11ign/a11ign 'refs/tags/a11ign@*'` for its commit.
@@ -76,7 +76,7 @@ jobs:
 
 Save it as `.github/workflows/a11ign.yml`. It runs on every pull request, and `workflow_dispatch` also lets you start it by hand from the repository's Actions tab (or `gh workflow run a11ign.yml`) — `workflow_dispatch` resolves the workflow from the default branch as GitHub sees it at dispatch time, so trigger it only after the push that changed the workflow has landed, not in the same breath as the push.
 
-**Not on a pull request, no comment.** A run started by hand or by a push has nothing to comment on: the log's last line is the count (`a11ign: N finding(s)`), with a line before it for anything that bounds that count (an examination that ended early, a capture spanning more than one document, criteria resting on an examination known to be partial), and another for the criteria axe-core FAILED (`a11ign: N criteria FAILED by the rule layer (axe-core)`), which sit beside the count rather than in it, and the full result, transcript included, is in the `a11ign-result` artifact the upload step saves above. The rendered report is in the pull-request comment and the run's job summary, and a CLI-only reader has no route to the job summary; release `0.3.0` has the `summary-md` output, so the upload step above puts the same report in the artifact beside the result, and the artifact is the one that works headlessly ([`docs/github-action.md`](./github-action.md#why-it-looks-like-this) has the reason and the `gh` commands).
+**Not on a pull request, no comment.** A run started by hand or by a push has nothing to comment on: the log's last line is the count (`a11ign: N finding(s)`), with a line before it for anything that bounds that count (an examination that ended early, a capture spanning more than one document, criteria resting on an examination known to be partial), and another for the criteria axe-core FAILED (`a11ign: N criteria FAILED by the rule layer (axe-core)`), which sit beside the count rather than in it, and the full result, transcript included, is in the `a11ign-result` artifact the upload step saves above. The rendered report is in the pull-request comment and the run's job summary, and a CLI-only reader has no route to the job summary; the pinned release has the `summary-md` output, so the upload step above puts the same report in the artifact beside the result, and the artifact is the one that works headlessly ([`docs/github-action.md`](./github-action.md#why-it-looks-like-this) has the reason and the `gh` commands).
 
 **`task` is load-bearing, but the word match it enables is not the guard on what gets operated.** It is
 what a user is trying to *do*, in plain words. On this shipped default (`probe-forms` on), a run always
@@ -161,7 +161,7 @@ this section is the order to do them in. Read [SECURITY.md](../SECURITY.md#it-ca
 
 Decide this before you spend anything, because each of these ends the path rather than slowing it:
 
-- **A site whose only sign-in is SSO, MFA, SMS or an emailed code, or that puts a CAPTCHA in front of the login, is out of scope.** SMS codes, emailed codes and push approvals are a documented gap, and TOTP (an authenticator-app code) is deferred. **If the site has a way to make a test account without them** (a staging environment with MFA off, a role your admin exempts, a separate username and password login next to the SSO button), use that. If it has none, this path cannot reach your page today: say so rather than working around it.
+- **A site whose only sign-in is MFA, SMS or an emailed code, or that puts a CAPTCHA in front of the login, is out of scope; so is an SSO that is not a username and password on a form at an origin you can name** (one that is, see [`idp-origins:`](#a-login-through-a-separate-identity-provider-origin-idp-origins)). SMS codes, emailed codes and push approvals are a documented gap, and TOTP (an authenticator-app code) is deferred. **If the site has a way to make a test account without them** (a staging environment with MFA off, a role your admin exempts, a separate username and password login next to the SSO button), use that. If it has none, this path cannot reach your page today: say so rather than working around it.
 - **A CAPTCHA is never solved.** A login step that fails on a page showing a reCAPTCHA, hCaptcha or Turnstile widget ends the run with `auth-challenge-detected`, which names the challenge and stops.
 - **Attaching to your own signed-in browser is not built.** What exists instead is loading a sign-in state you saved by hand (`auth-state:`, [#2566](https://github.com/a11ign/a11ign/issues/2566), merged): it is the route for a site behind SSO or MFA, and it is **not walked in this section**, which is the plain username-and-password path. It has its own steps, the limits of the file and one measured reading in [`docs/github-action.md`](./github-action.md#logging-in-with-a-saved-state-auth-state): read that if a form login cannot reach your page.
 - **Only what your flows file names is pressed.** `probe-forms` and `probe-navigation` are switched off for a run that logs in, whatever you set.
@@ -210,6 +210,44 @@ flows:
 - **A control is named by what a screen reader announces, and never by selector.** The match is exact: it is case-sensitive, and runs of spaces count as one, with none at either end. A text field's name is normally its label's words (`Email address`), or its placeholder when it has no label (measured on one site, `www.saucedemo.com`: `Username` and `Password` were placeholders and bound); a button's is its text. Where you are unsure, copy the name from your browser's accessibility inspector (in Chrome or Edge, developer tools, Accessibility, the *Name* of the field or button), not from the visible text (**this route is not verified**: no session has followed it through a browser's developer tools; every cold run of this path worked without one): **a button drawn as an icon plus a word can have a name that begins with a character you cannot see**, and a flow that says only the word will not find it. Write such a character as a YAML escape inside double quotes. On `the-internet.herokuapp.com/login` the button is `"\uF090 Login"`, where `\uF090` is an icon-font glyph. **If you have no browser**, the labels in the page's HTML are the best guess, and they are right for a plain labelled field; they are wrong for a control named by an icon or an `aria-label`. An icon in the HTML (`<i class="fa fa-sign-in">` beside the word) is a hint that the name may begin with a glyph and never proof either way: on `the-internet.herokuapp.com` the login button's name began with one and the `Secure Area` heading beside an `<i class="icon-lock">` did not. **A page built by JavaScript (a single-page app) has no labels in the HTML you can fetch:** `curl` returns an empty `<div id="root">`, so the labels fallback above does not apply to it. Without a browser, take the guess from what the page's own script names its fields, or from the field's placeholder or button text as you see them on screen. Take the guess, run it, and if the run ends in `unbindable-field` its log names the name it looked for: correct that one and run again. That costs a run (section 5) for each miss, which is the price of not looking in a browser. **A control the flow cannot find by name ends the run with `auth-login-failed` (`unbindable-field`), and that is also a real 4.1.2 failure of your login form:** a screen-reader user cannot address it either.
 - **The last step must be an `expect:`, and it decides whether the login worked.** Choose something **only the signed-in page shows**: the heading of the page you land on after signing in, or the *Sign out* button. **If the landing page has no heading and its *Sign out* sits inside a closed menu** (a shop's product list, for one: its title is a plain `<span>`), choose a button or link every signed-in page carries and the login page does not, with `control:` (the menu button's own name, for one), or `text:` for words only the signed-in page announces. **A weak one passes for the wrong reason.** To choose it, sign in once yourself in a browser and read the landing page's heading or a button on it. If you cannot sign in by hand, read the landing page's HTML: its heading's visible words are the best guess, and a heading that starts with an icon glyph will not match until the glyph is in the name, so a run ending in `expect-not-met` (`no heading "…" appeared`) means correct it. Then open the login page signed out and confirm what you chose is not on it, nor in the error it shows for a wrong password, nor in a header every page carries. `heading:` and `control:` match a heading or control of exactly that name; `text:` matches any announced text that *contains* yours, which makes it the easiest to get wrong.
 
+### A login through a separate identity-provider origin: `idp-origins:`
+
+**Use this if your sign-in page sends the browser to another origin, a hosted identity provider such as `https://login.example.com`, and signs in with a username and password on a form there.** Without it the run ends `auth-login-failed`, reason `left-origin`, the first time the page leaves your `origin:`. Add the provider's origin to the flows file, beside `origin:`:
+
+```yaml
+version: 1
+origin: https://staging.example.com
+idp-origins: [https://login.example.com]       # EXACT origins, nothing wider; the provider's, never your own
+flows:
+  login:
+    steps:
+      - goto: /login                           # your app redirects to the provider from here
+      - fill: { field: "Email",    from-env: APP_TEST_USER }
+      - fill: { field: "Password", from-env: APP_TEST_PASSWORD }
+      - press: "Sign in"                       # the provider sends the browser back to your origin
+      - expect: { heading: "Dashboard" }       # on YOUR origin, as before
+```
+
+What the pinned release (`a11ign@0.5.3`) does with it, read off `packages/cli/src/auth/flows.ts` and `docs/known-gaps.md` §51 at that tag:
+
+- **Each entry must be an exact `http` or `https` origin.** The file is refused when it loads if an entry "holds a wildcard; list each origin exactly", "carries a path, query or fragment", "carries a username or password", or "is the app's own origin, which needs no allowance". The key is optional, and a file without it behaves as before.
+- **The declared origins are allowed only between the login's steps.** "The last step, the `expect:`, and the requested page must be on the app's origin, so a run that ends parked on the provider is still `left-origin`", and "nothing is typed into an origin that is not declared".
+- **`left-origin` is what any other origin ends in.** An origin the flow does not name, a third site the provider redirects on to, or a login that finishes parked on the provider is `auth-login-failed` with reason `left-origin`, and the message names the step and the page it was on. It is also what you get when the declaration is missing or misspelt.
+- **The in-memory-token case is what this is for.** A hosted provider whose token lives only in the page's memory (an SPA SDK's `cacheLocation: 'memory'`) leaves nothing in cookies or `localStorage` for a saved state to carry. The login therefore round-trips through the provider in the same browser as the capture, and **the flow must finish on the product origin, on the page you asked to examine**: a login that already ended on the requested page is not loaded a second time, because a load discards a token held only in memory.
+- **It works for a test account without MFA, unattended.** It does not answer MFA, a CAPTCHA or a person present.
+
+**What is not shown:** `docs/known-gaps.md` [§51](./known-gaps.md#51-a-run-cannot-get-past-mfa-sso-or-a-captcha-and-nothing-in-the-tool-detects-the-third-out-of-v1-by-ruling-2275-2262) records that this was read on a local fixture (a real Chromium, a fake provider), **not on a hosted provider**, with one NVDA reading on the same fixture, and that MFA is not covered. Your provider is untested, so a run against it is the first reading.
+
+### What a v3 run shows you
+
+Each line names where the pinned release shows it:
+
+- **Probing is off by default.** The Action's `probe-forms` input defaults to `false` (`action.yml`, `probe-forms:`; `packages/cli/CHANGELOG.md`, 0.4.0): the run does not press your forms' buttons with no valid input, and its log says criteria 3.3.1 and 4.1.3 were not assessed. Set `probe-forms: "true"` on a staging app to turn it on ([SECURITY.md](../SECURITY.md) says why not on production).
+- **An evidence pack is written.** The `evidence-pack` output (`action.yml`) is a Markdown file of per-criterion outcomes and the NVDA announcements behind them, for an assessor; it is not a VPAT or ACR. It exists for a run of one URL, and is empty for a `urls` list, a `forms` config or a PDF. Upload it beside `result-json`.
+- **A criterion referred on most pages is listed once.** On a multi-page run the summary prints `<criterion> <name>: left to a person on N of M pages` once, when it was referred on at least half the pages and at least three (`CHANGELOG.md`, 0.5.3). A single-page run prints as before, and `--json` and the evidence pack are unchanged.
+- **WCAG 2.2 criteria it did not cover are named.** The summary and terminal report list them (2.4.11, 2.5.7, 3.2.6, 3.3.7, 3.3.8 on the recorded run) and say their absence from the findings is not a pass (`CHANGELOG.md`, 0.4.0).
+- **A multi-line `urls:` scans every page** on a Windows runner (`CHANGELOG.md`, 0.4.1).
+
 ### 4. The workflow
 
 Save it as `.github/workflows/a11ign-authenticated.yml`:
@@ -226,7 +264,7 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v7
-      - uses: a11ign/a11ign@890cd490276d16102b3f371007951a24942950da   # the commit of the release tagged a11ign@0.3.0
+      - uses: a11ign/a11ign@15881c7c59bee7cb49b464932f9732cb51e088f9   # the commit of the release tagged a11ign@0.5.3
         id: a11ign
         env:                                     # the credential enters HERE, on the step that calls the Action
           APP_TEST_USER: ${{ secrets.APP_TEST_USER }}
@@ -245,7 +283,7 @@ jobs:
             ${{ steps.a11ign.outputs.summary-md }}
 ```
 
-- **Pin the Action to the full 40-character commit SHA of a release that has the login flow, as above.** Release `0.3.0` (tag `a11ign@0.3.0`) is the first that does; the `v0.1.0` tag predates the login flow, so a workflow pinned to it would ignore `flows` and `login-flow` and examine your login page as though it were the product. Both npm channels read `0.3.0` on 2026-10-07 (`npm view a11ign dist-tags`: `latest` and `next` alike; a reading at a moment, so look again). The Action runs the code at the SHA you give it, not a registry version, so the SHA is what decides what you get. **Do not write `a11ign/a11ign@v0`:** the Action's major tag does not exist yet (`git ls-remote --tags https://github.com/a11ign/a11ign refs/tags/v0` printed nothing on 2026-10-07), so that line ends in a resolution error. The cold runs behind this section used a commit earlier than the `0.3.0` release (an ancestor of it, with the same login flow); the release's own commit was checked by one run afterwards, not by a fresh reader.
+- **Pin the Action to the full 40-character commit SHA of a release that has the login flow, as above.** The pin above is release `0.5.3` (tag `a11ign@0.5.3`, commit `15881c7c59bee7cb49b464932f9732cb51e088f9`), which has it; the `v0.1.0` tag predates the login flow, so a workflow pinned to it would ignore `flows` and `login-flow` and examine your login page as though it were the product. On 2026-10-09 `npm view a11ign dist-tags` read `latest` `0.5.3` and `next` `0.5.4`, and `git ls-remote --tags https://github.com/a11ign/a11ign refs/tags/a11ign@0.5.3` printed `15881c7c59bee7cb49b464932f9732cb51e088f9` (readings at a moment, so look again). **Pin `latest`, not `next`.** To find the newest `latest`, run `npm view a11ign dist-tags`, then `git ls-remote --tags https://github.com/a11ign/a11ign refs/tags/a11ign@<version>` for that version's commit. The Action runs the code at the SHA you give it, not a registry version, so the SHA is what decides what you get. **Do not write `a11ign/a11ign@v0`:** that tag exists (`git ls-remote --tags https://github.com/a11ign/a11ign refs/tags/v0` printed the `0.5.3` commit on 2026-10-09) but it is a moving tag, so your CI would take a newer release without a change on your side. **What this does not claim:** the cold runs behind this section used a commit earlier than the `0.3.0` release, and the `0.5.3` commit pinned here has not been walked by a fresh reader.
 - **The secrets go in `env:` on the step that calls the Action**, never in `with:`: an input is interpolated into shell text, and an environment variable is not. Give `flows` and `login-flow` together or neither.
 - **A pull request from a fork gets no secrets**, so it ends in `auth-credential-missing`. Run it from a branch of the repository itself.
 - **`task` is a label for the report and a hint about what a visitor is doing.** For a run that logs in it does not choose what is pressed; your flows file does.
@@ -281,7 +319,7 @@ Each fault is a sentence in the log's last lines with `(fault: <code>)` after it
 | `auth-literal-secret` | a `fill:` in a flow carries `value:` for a password | use `from-env:` |
 | `auth-login-failed`, reason `unbindable-field` | the flow names a control the page does not expose by that accessible name | copy the name from the accessibility inspector, glyphs included; if the control truly has no name, that is a finding about your login form |
 | `auth-login-failed`, reason `expect-not-met` | the login ran and the page after it was not the one your `expect:` names | wrong password, an account that needs MFA or a password change, or an `expect:` that is not what the signed-in page shows |
-| `auth-login-failed`, reason `left-origin` | the login went to another site | an identity provider: SSO, which this path does not cover |
+| `auth-login-failed`, reason `left-origin` | the login went to another site | an identity provider you did not declare: see [`idp-origins:`](#a-login-through-a-separate-identity-provider-origin-idp-origins) for a provider that signs in with a form; SSO beyond that is not covered |
 | `auth-login-failed`, reason `expect-not-met`, at `login step 1 (goto)`, with `could not be loaded (CDP: no Page.loadEventFired within 30000 ms)` | the browser on the runner never finished loading your login page. The log names the reason `expect-not-met` although no `expect:` has run yet (the wording is the tool's, not yours) | **not your flows file or your secrets.** Add a step that fetches the page from the runner (`curl -sS -o /dev/null -w '%{http_code}' https://your-site/login`): if that answers 200 and the run still fails, the page is waiting on something the runner cannot reach, usually a third-party analytics or A/B-testing script. Re-running does not help then (measured 2026-10-07: the same failure on four consecutive runs the same day, on `the-internet.herokuapp.com`, a page that had been green on 2026-09-26 and 2026-09-30); use a staging page without it |
 | `auth-session-lost` | the login worked and the page then asked for showed the login form again | run again; then check the account may hold a session and the URL is reachable when signed in |
 | `auth-challenge-detected` | a step failed on a page with a CAPTCHA widget | an account or environment your site exempts from the challenge |
