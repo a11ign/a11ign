@@ -259,20 +259,16 @@ jobs:
       #   `main` (37863640022) showed an installation token DOES return `current_user_can_bypass` (`"never"`, no `bypass_actors` field). So
       #   `BINDS_ME` here reads "the requirement exists and THE APP cannot walk past it", and it does NOT say nobody else is exempt
       #   (`main-review-requirement.md`: CANNOT_TELL stands for that). The former PAT's owner is no longer the subject.
-      #   THE SETTINGS TABLE BELOW STAYS ON THE STORED TOKEN, A NAMED GAP. It reads `contents/`, `git/trees`, `environments`,
-      #   `deployment-branch-policies` and `orgs/a11ign/teams/bots/repos`, which a `metadata: read` token does not carry (INFERRED from the
-      #   endpoints' documented permissions, not measured: only a run on `main` can mint, and the first one after this lands is the
-      #   measurement). Widening the org policy is `ceo`'s crossing, not this row's, so the table keeps its token and says so here.
+      #   THE SETTINGS TABLE IS NOT READ BY THIS JOB (#4486): a `metadata: read` token cannot reach what it reads, and the stored token is gone.
       - name: Exchange this run's identity for a token that reads the nine repositories' rulesets (Octo STS, organisation policy)
         id: octo
         uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05   # v1.1.1
         with:
           scope: a11ign
           identity: nightly-ruleset-read-org
-      - name: Ask GitHub, once per code repository, whether the default branch's `pull_request` rule binds the Octo STS app, then read the settings table
+      - name: Ask GitHub, once per code repository, whether the default branch's `pull_request` rule binds the Octo STS app
         env:
           OCTO_TOKEN: ${{ steps.octo.outputs.token }}
-          A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
         run: |
           set -o pipefail
           if [ -z "$OCTO_TOKEN" ]; then
@@ -330,47 +326,10 @@ jobs:
               FAILED="$FAILED $repo"
             }
           done
-          # THE SETTINGS TABLE (#3708, the schedule #3705 asked for), read in the SAME step on purpose. The test
-          # reads every declared repository against the creation runbook -- merge settings, the publish
-          # environment, the bots team, the token probe, the release shape -- and until now nothing ran it
-          # unattended, so a repository that drifted was found by the release that failed on it. It reads ALL of
-          # them in one run, so it follows the loop rather than sitting inside it. It is not a step of its own
-          # because it shares the config derivation and the repository list above, and `FAILED` below still names
-          # it, so a drifting setting never hides a protection failure or the other way round.
-          #
-          # A GREEN EXIT IS NOT A PASS HERE EITHER, and the table test prints no pass line of its own. What it
-          # prints only on the far side of the live gate is the table: one `release-shape` line per declared
-          # repository, which its `NOT RUN` return never reaches. Requiring each repository's own line, at `OK`
-          # because a cell that is not `OK` already failed the run, is what makes a skip red.
-          TABLE_LOG="settings-table.log"
-          # The table is read with the stored token (the named gap above), and an absent one is CANNOT_TELL for the table alone: the
-          # protection loop has already been read as the app, and its result must not be lost to a missing secret.
-          if [ -z "$A11IGN_BOT_TOKEN" ]; then
-            echo '::error::CANNOT_TELL: A11IGN_BOT_TOKEN is not set, so the settings table could not be read and NOTHING WAS READ. This is not a pass. See #3705.'
-            FAILED="$FAILED <the-settings-table>"
-          else
-            export GH_TOKEN="$A11IGN_BOT_TOKEN"
-            set +e
-            A11Y_CHECK_MAIN_RULESET=1 pnpm exec rstest run --config "$RSTEST_CONFIG" \
-              --include packages/guards/src/layer-repository-protection.test.ts \
-              --disableConsoleIntercept 2>&1 | tee "$TABLE_LOG"
-            STATUS=$?
-            set -e
-            if [ "$STATUS" -ne 0 ]; then
-              echo "::error::CANNOT_TELL: the settings table FAILED (exit $STATUS): a repository drifts from the creation runbook, or a setting could not be read. The table above names the cell. This is not a pass. See #3705."
-              FAILED="$FAILED <the-settings-table>"
-            else
-              TABLE_MISSING=""
-              grep -qF "LIVE PASS (per-repository) over" "$TABLE_LOG" || TABLE_MISSING="$TABLE_MISSING <the-protection-read>"
-              for repo in $REPOS; do
-                grep -qF "release-shape ${repo}: OK" "$TABLE_LOG" || TABLE_MISSING="$TABLE_MISSING $repo"
-              done
-              if [ -n "$TABLE_MISSING" ]; then
-                echo "::error::CANNOT_TELL: the settings table exited green but never printed its output for:$TABLE_MISSING, so the live read did not happen and nothing was certified. Look for a \"NOT RUN\" line in the log. This is not a pass. See #3708."
-                FAILED="$FAILED <the-settings-table>"
-              fi
-            fi
-          fi
+          # THE SETTINGS TABLE IS NOT READ HERE (#4486, `ceo`'s ruling B). It was read in this step with the stored token because a
+          # `metadata: read` organisation token does not carry contents, trees, environments, deployment-branch policies or the bots
+          # team's repositories, and widening the Octo STS app was refused as a grant bought to keep a drift check. It is a HAND-RUN read now,
+          # `docs/known-gaps.md` §60 names the gap and the command, and `layer-repository-protection.test.ts` is unchanged in what it asserts.
           if [ -n "$FAILED" ]; then
             echo "::error::CANNOT_TELL: the live ruleset read did not certify:$FAILED. Every listed repository was read before this job failed. This is not a pass. See #3123."
             exit 1
