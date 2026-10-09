@@ -393,7 +393,7 @@ $ node outward.mjs
 3	packages/guards/src/local-import-closure.mjs
 1	packages/guards/src/worktree-resolution.mjs
 1	scripts/npm-cli-executable.mjs
-1	scripts/product-home.mjs
+1	scripts/product-home.ts
 -- distinct targets by top: {"packages/worker-fleet":1,"packages/guards":4,"scripts":3,"packages/lab":1}
 -- distinct targets: 9  files with an outward import: 69
 ```
@@ -408,7 +408,7 @@ packages/guards/src/changed-files.mjs                      74 lines   2 commits 
 packages/guards/src/local-import-closure.mjs              146 lines   3 commits  13 importers-outside-agent-org
 packages/guards/src/worktree-resolution.mjs               218 lines   2 commits   3 importers-outside-agent-org
 scripts/npm-cli-executable.mjs                            182 lines   4 commits  34 importers-outside-agent-org
-scripts/product-home.mjs                                   49 lines   2 commits   1 importers-outside-agent-org
+scripts/product-home.ts                                   49 lines   2 commits   1 importers-outside-agent-org
 -- leak patterns
 7
 name: "private LAN IPv4 address"
@@ -1340,7 +1340,7 @@ packages/agent-org/src/lib/changed-files.mjs
 packages/agent-org/src/lib/local-import-closure.mjs
 packages/agent-org/src/lib/worktree-resolution.mjs
 packages/agent-org/src/lib/npm-cli-executable.mjs
-packages/agent-org/src/lib/product-home.mjs
+packages/agent-org/src/lib/product-home.ts
 packages/agent-org/src/lib/leak-patterns.mjs
 packages/lab/src/packaging/agent-org-outward-edges.test.ts
 packages/agent-org/src/acceptance-commands.mjs
@@ -1717,9 +1717,9 @@ packages/lab/src/packaging/wake-spare-family.test.ts
 packages/lab/src/packaging/wake.test.ts
 packages/lab/src/packaging/work-gate.test.ts
 packages/worker-fleet/src/entry-points.test.ts
-scripts/check-transfer-urls.mjs
-scripts/doc-checks/roles-memory.mjs
-scripts/doc-checks/roles-readme.mjs
+scripts/check-transfer-urls.ts
+scripts/doc-checks/roles-memory.ts
+scripts/doc-checks/roles-readme.ts
 ```
 
 `.agent-org/roles/` is where the 33 role files land (`git mv`, history kept); the last lines are the union of the 33 files that move and the 37
@@ -2294,7 +2294,7 @@ done
 #!/usr/bin/env bash
 export LC_ALL=C
 cd "$(git rev-parse --show-toplevel)"
-for f in packages/worker-fleet/src/cli-flags.mjs packages/guards/src/git-env.mjs scripts/repo-identity.mjs packages/lab/src/packaging/leak-patterns.mjs packages/guards/src/changed-files.mjs packages/guards/src/local-import-closure.mjs packages/guards/src/worktree-resolution.mjs scripts/npm-cli-executable.mjs scripts/product-home.mjs; do
+for f in packages/worker-fleet/src/cli-flags.mjs packages/guards/src/git-env.mjs scripts/repo-identity.mjs packages/lab/src/packaging/leak-patterns.mjs packages/guards/src/changed-files.mjs packages/guards/src/local-import-closure.mjs packages/guards/src/worktree-resolution.mjs scripts/npm-cli-executable.mjs scripts/product-home.ts; do
   printf "%-56s %4s lines %3s commits %3s importers-outside-agent-org\n" "$f" "$(wc -l < $f)" "$(git log --no-merges --oneline -- $f | wc -l)" "$(git grep -lE "$(basename $f .mjs)(\\.mjs)?[\"']" -- . ':!packages/agent-org' ':!*.md' ':!docs' | wc -l)"
 done
 echo "-- leak patterns"; grep -c 'name:' packages/lab/src/packaging/leak-patterns.mjs; grep -oE 'name: "[^"]+"' packages/lab/src/packaging/leak-patterns.mjs

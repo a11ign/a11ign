@@ -1,7 +1,7 @@
 /**
  * The decisions of `npm run auth:leak-check` — ADR 0038, Constraint 4's COMMAND, with its positive controls.
  *
- * The script (`scripts/auth-leak-check.mjs`) is the I/O: it serves a fixture, drives a real capture through a worker on
+ * The script (`scripts/auth-leak-check.ts`) is the I/O: it serves a fixture, drives a real capture through a worker on
  * this machine, and hands the response here. Everything it DECIDES is here so it has tests that need no worker:
  *
  * - **`raw`** examines the worker's response BEFORE the scrub. It is the positive control: against the fixture whose

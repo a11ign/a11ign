@@ -1,5 +1,5 @@
 /**
- * `scripts/generate-consumer-gate.mjs` turns README.md's own Quickstart fence into `consumer-gate.yml`. These are the pure steps of that
+ * `scripts/generate-consumer-gate.ts` turns README.md's own Quickstart fence into `consumer-gate.yml`. These are the pure steps of that
  * transformation, pinned over small fixture documents so no checkout, `git` history or runner is needed.
  *
  * What is pinned, and the wrong answer each guards against:
@@ -19,12 +19,12 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { regenerationInFlight } from "../../../scripts/consumer-gate-pin-needed.ts";
 import { sandboxGitEnv, withGitSandbox, type GitSandbox } from "../../../scripts/test-support/git-sandbox.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const gen = await import(pathToFileURL(join(REPO_ROOT, "scripts/generate-consumer-gate.mjs")).href);
+const gen = await import("../../../scripts/generate-consumer-gate.ts");
 const {
   README_PATH, OUT, ACTION_DEFINITION, extractDocumentedJobsBlock, pinActionRef, substituteTarget, extractJobName, extractPinnedSha,
   buildConsumerGateWorkflow, generate, refuseDirtyGenerationInputs, currentHeadSha, actionPinVerdict, PIN_COMMENT, restatePinComment,
@@ -174,7 +174,7 @@ test("buildConsumerGateWorkflow: the pinned sha appears in the check-pin ancestr
   assert.ok(workflow.includes(`git merge-base --is-ancestor ${SHA} "\${{ github.sha }}"`));
   assert.ok(workflow.includes(`git diff --quiet ${SHA} "\${{ github.sha }}" -- ${ACTION_DEFINITION.join(" ")}`));
   assert.ok(workflow.includes(`git diff --stat ${SHA} "\${{ github.sha }}" -- action.yml`));
-  assert.ok(workflow.includes("run: node scripts/generate-consumer-gate.mjs --check"));
+  assert.ok(workflow.includes("run: node --import tsx scripts/generate-consumer-gate.ts --check"));
   assert.ok(workflow.includes('if [ "${{ needs.a11y.result }}" != "success" ]; then'));
   assert.deepEqual(ACTION_DEFINITION, ["action.yml"]);
 });
@@ -241,23 +241,23 @@ test("generate: a README whose fence is malformed fails at generation, not later
 });
 
 test("refuseDirtyGenerationInputs: a modified, staged or untracked generation input is refused, naming the file", () => {
-  for (const status of [" M README.md", "M  README.md", "?? README.md", "MM scripts/generate-consumer-gate.mjs", " M /abs/path/README.md"]) {
+  for (const status of [" M README.md", "M  README.md", "?? README.md", "MM scripts/generate-consumer-gate.ts", " M /abs/path/README.md"]) {
     assert.throws(() => refuseDirtyGenerationInputs(`${status}\n`), (e: Error) => /has an uncommitted or staged change/.test(e.message) && /\(#1721\)/.test(e.message), status);
   }
   assert.throws(() => refuseDirtyGenerationInputs(" M README.md\n"), /README\.md has an uncommitted/);
-  assert.throws(() => refuseDirtyGenerationInputs("M  scripts/generate-consumer-gate.mjs"), /scripts\/generate-consumer-gate\.mjs has an uncommitted/);
+  assert.throws(() => refuseDirtyGenerationInputs("M  scripts/generate-consumer-gate.ts"), /scripts\/generate-consumer-gate\.ts has an uncommitted/);
 });
 
 test("refuseDirtyGenerationInputs: a rename or copy IN or OUT of an input is refused on either side", () => {
   assert.throws(() => refuseDirtyGenerationInputs("R  README.md -> docs/old-readme.md\n"), /README\.md has an uncommitted/);
   assert.throws(() => refuseDirtyGenerationInputs("R  docs/draft.md -> README.md\n"), /README\.md has an uncommitted/);
-  assert.throws(() => refuseDirtyGenerationInputs("C  a.txt -> scripts/generate-consumer-gate.mjs\n"), /generate-consumer-gate\.mjs has an uncommitted/);
+  assert.throws(() => refuseDirtyGenerationInputs("C  a.txt -> scripts/generate-consumer-gate.ts\n"), /generate-consumer-gate\.ts has an uncommitted/);
 });
 
 test("refuseDirtyGenerationInputs: a clean tree, blank lines and other dirty files are not refused", () => {
   assert.equal(refuseDirtyGenerationInputs(""), undefined);
   assert.equal(refuseDirtyGenerationInputs("\n  \n"), undefined);
-  assert.equal(refuseDirtyGenerationInputs(" M docs/guide.md\n?? scripts/generate-consumer-gate.mjs.bak\nR  a.md -> b.md\n"), undefined);
+  assert.equal(refuseDirtyGenerationInputs(" M docs/guide.md\n?? scripts/generate-consumer-gate.ts.bak\nR  a.md -> b.md\n"), undefined);
   // Positive control: the same list plus one input line is refused.
   assert.throws(() => refuseDirtyGenerationInputs(" M docs/guide.md\n M README.md\n"), /README\.md has an uncommitted/);
 });
@@ -291,7 +291,7 @@ test("actionPinVerdict (#4153): a pin that predates action.yml on the BASE is re
     assert.equal(stale.ok, false, "the positive control: the pin is at v1, main has v2");
     assert.match(stale.message, /action\.yml changed between the pin, [0-9a-f]{40}, and the base, [0-9a-f]{40}/);
     assert.match(stale.message, /the a11y job would run the OLD Action/);
-    assert.match(stale.message, /node scripts\/generate-consumer-gate\.mjs/);
+    assert.match(stale.message, /node --import tsx scripts\/generate-consumer-gate\.ts/);
     assert.equal(actionPinVerdict({ pin: v2, base: v2, head: v2, cwd: sandbox.dir }).ok, true, "the clean counterpart");
   });
 });
@@ -304,7 +304,7 @@ test("actionPinVerdict (#4153): a pull request that changes action.yml itself is
     const own = actionPinVerdict({ pin: v2, base: v2, head: commitActionYml(sandbox, "v3"), cwd: sandbox.dir });
     assert.equal(own.ok, true, "its own change cannot be in a pin: the commit does not exist until it merges");
     assert.equal(own.ownChange, true);
-    assert.match(own.message, /refuse the next release until `node scripts\/generate-consumer-gate\.mjs` is run and merged/);
+    assert.match(own.message, /refuse the next release until `node --import tsx scripts\/generate-consumer-gate\.ts` is run and merged/);
     assert.equal(actionPinVerdict({ pin: v2, base: v2, head: v2, cwd: sandbox.dir }).ownChange, false);
     assert.equal(actionPinVerdict({ pin: v1, base: v2, head: v2, cwd: sandbox.dir }).ownChange, false);
     const staleAndOwn = actionPinVerdict({ pin: v1, base: v2, head: sandbox.run(["rev-parse", "HEAD"]).trim(), cwd: sandbox.dir });
@@ -337,7 +337,7 @@ test("actionPinVerdict (#4153, #4331): the real tree -- the committed pin contai
 });
 
 test("actionPinVerdict (#4153): the refusal says what the release's own check-pin says, so the two cannot drift", () => {
-  const phrases = ["would run the OLD Action", "regenerate (node scripts/generate-consumer-gate.mjs)"];
+  const phrases = ["would run the OLD Action", "regenerate (node --import tsx scripts/generate-consumer-gate.ts)"];
   const workflow = generate(readFileSync(README_PATH, "utf8"), SHA) as string;
   withGitSandbox((sandbox) => {
     sandbox.run(["init", "-q", "-b", "main"]);

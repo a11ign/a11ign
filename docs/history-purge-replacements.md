@@ -23,7 +23,7 @@ regex:\b(?:192\.168|10\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}\b==
 ```
 
 **One pattern: RFC 1918 private addresses** — the measured defect, 2,268 matches across 715 (blob, path)
-pairs on the pre-purge history, verified by `scripts/history-secret-scan.mjs`. Add a further
+pairs on the pre-purge history, verified by `scripts/history-secret-scan.ts`. Add a further
 `regex:PATTERN==>REPLACEMENT` line here, never a second file: one file the invocation reads is one file
 that can go stale, and a second would be the fact-stated-twice shape this project keeps finding in its own
 tooling.
@@ -34,7 +34,7 @@ verify the purge worked could never read zero — it would just be checking its 
 
 ## Why the secret scan could not catch the damage
 
-`history-secret-scan.mjs` looks for **secret patterns**. A rewrite that mangles every `#` still scores
+`history-secret-scan.ts` looks for **secret patterns**. A rewrite that mangles every `#` still scores
 zero findings, because `#` is not a secret. `CLEAN: 0 findings` meant "the target pattern is gone", never
 "nothing else changed" — and it was read as the latter.
 

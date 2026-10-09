@@ -22,7 +22,7 @@
 # `except`, so the two cannot drift the way #939 found nine independent spellings of "what changed" could.
 #
 # `.github/workflows/consumer-gate.yml` is carved out below with NO owner: lane-ownership.json's own
-# `except` says it is generated from README.md by scripts/generate-consumer-gate.mjs, so it is not the
+# `except` says it is generated from README.md by scripts/generate-consumer-gate.ts, so it is not the
 # pipeline's to own even though it lives in the pipeline's directory. CODEOWNERS applies the LAST matching
 # pattern for a given path, so the narrower line below overrides the directory line above it.
 /.github/workflows/ @a11ign-ai-leads

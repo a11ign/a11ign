@@ -18,7 +18,7 @@ import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
-import { agentOrgSource, provisionAgentOrg } from "./verify.mjs";
+import { agentOrgSource, provisionAgentOrg } from "./verify.ts";
 
 type Say = { out: string[]; err: string[] };
 

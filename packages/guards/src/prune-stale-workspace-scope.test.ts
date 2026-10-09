@@ -1,5 +1,5 @@
 /**
- * `scripts/prune-stale-workspace-scope.mjs` (#376): after a workspace scope rename `npm install` ADDS the new scope's `node_modules` symlinks and never removes the
+ * `scripts/prune-stale-workspace-scope.ts` (#376): after a workspace scope rename `npm install` ADDS the new scope's `node_modules` symlinks and never removes the
  * old one, so a leftover `@old/*` import keeps working on that machine and fails only on a fresh clone. This removes the old scope, and must NEVER fail an install.
  *
  * What is pinned, against fixture trees (the script's repo root is a parameter, and its CLI derives it from its own location, so the CLI runs as a COPY inside a fixture):
@@ -16,15 +16,17 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
+const TSX = pathToFileURL(createRequire(import.meta.url).resolve("tsx")).href;
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const SCRIPT = join(REPO_ROOT, "scripts/prune-stale-workspace-scope.mjs");
-const { currentWorkspaceScope, staleWorkspaceScopes, pruneStaleWorkspaceScopes } = await import(pathToFileURL(SCRIPT).href);
+const SCRIPT = join(REPO_ROOT, "scripts/prune-stale-workspace-scope.ts");
+const { currentWorkspaceScope, staleWorkspaceScopes, pruneStaleWorkspaceScopes } = await import("../../../scripts/prune-stale-workspace-scope.ts");
 
 function writeManifest(repo: string, dir: string, manifest: object | string): void {
   mkdirSync(join(repo, "packages", dir), { recursive: true });
@@ -84,8 +86,8 @@ test("currentWorkspaceScope uses the injected reader and takes the scope part of
   const reads: string[] = [];
   const scope = currentWorkspaceScope({
     repo: "/virtual",
-    readdir: () => entries,
-    readFile: (path: string) => { reads.push(path); return JSON.stringify({ name: "@virtual/deep/er" }); },
+    readdir: (() => entries) as unknown as typeof readdirSync,
+    readFile: ((path: string) => { reads.push(path); return JSON.stringify({ name: "@virtual/deep/er" }); }) as unknown as typeof readFileSync,
   });
   assert.equal(scope, "@virtual");
   assert.deepEqual(reads, [join("/virtual", "packages", "x", "package.json")]);
@@ -109,7 +111,7 @@ test("with no current scope, no node_modules, or an unreadable node_modules ther
     rmSync(join(repo, "packages"), { recursive: true });
     assert.deepEqual(staleWorkspaceScopes({ repo }), [], "no scope can be derived, so nothing is called stale");
     assert.deepEqual(staleWorkspaceScopes({ repo: join(repo, "nowhere") }), []);
-    assert.deepEqual(staleWorkspaceScopes({ repo, currentScope: "@current", realpath: () => { throw new Error("EIO"); } }), [], "an unresolvable node_modules");
+    assert.deepEqual(staleWorkspaceScopes({ repo, currentScope: "@current", realpath: (() => { throw new Error("EIO"); }) as unknown as typeof realpathSync }), [], "an unresolvable node_modules");
   });
 });
 
@@ -123,7 +125,7 @@ test("a scope directory whose members cannot be listed or lstat'd is not a works
       if (calls > 1) throw new Error("EACCES");
       return (readdirSync as (p: string, o: object) => unknown[])(path, options);
     };
-    assert.deepEqual(staleWorkspaceScopes({ repo, readdir: flakyReaddir }), []);
+    assert.deepEqual(staleWorkspaceScopes({ repo, readdir: flakyReaddir as unknown as typeof readdirSync }), []);
   });
 });
 
@@ -193,16 +195,16 @@ test("a removal that fails is reported with the by-hand command, does not throw,
 test("CLI (a copy inside a fixture, never the real node_modules): prunes the stale scope and prints what it removed; an unknown flag is refused", () => {
   withRepo((repo) => {
     mkdirSync(join(repo, "scripts"));
-    copyFileSync(SCRIPT, join(repo, "scripts/prune-stale-workspace-scope.mjs"));
+    copyFileSync(SCRIPT, join(repo, "scripts/prune-stale-workspace-scope.ts"));
     copyFileSync(join(REPO_ROOT, "scripts/cli-flags.mjs"), join(repo, "scripts/cli-flags.mjs"));
-    const copy = join(repo, "scripts/prune-stale-workspace-scope.mjs");
+    const copy = join(repo, "scripts/prune-stale-workspace-scope.ts");
 
-    const refused = spawnSync(process.execPath, [copy, "--force"], { cwd: repo, encoding: "utf8" });
+    const refused = spawnSync(process.execPath, ["--import", TSX, copy, "--force"], { cwd: repo, encoding: "utf8" });
     assert.notEqual(refused.status, 0);
     assert.match(refused.stderr, /unknown flag --force/);
     assert.equal(existsSync(join(repo, "node_modules/@old")), true, "a refused run removes nothing");
 
-    const result = spawnSync(process.execPath, [copy], { cwd: repo, encoding: "utf8" });
+    const result = spawnSync(process.execPath, ["--import", TSX, copy], { cwd: repo, encoding: "utf8" });
     assert.equal(result.status, 0);
     assert.equal(result.stderr, "  removed stale workspace scope node_modules/@old (current scope is @current)\n");
     assert.equal(existsSync(join(repo, "node_modules/@old")), false);
@@ -214,5 +216,5 @@ test("the real script, asked only to LIST against this checkout, derives a scope
   // Read-only: `staleWorkspaceScopes` and `currentWorkspaceScope` never remove anything. `pruneStaleWorkspaceScopes` is never called on the real tree.
   const scope = currentWorkspaceScope({ repo: REPO_ROOT });
   assert.match(scope ?? "", /^@[^/]+$/);
-  assert.equal(staleWorkspaceScopes({ repo: REPO_ROOT, currentScope: scope }).includes(scope), false, "the current scope is never stale");
+  assert.equal(staleWorkspaceScopes({ repo: REPO_ROOT, currentScope: scope }).includes(scope as string), false, "the current scope is never stale");
 });

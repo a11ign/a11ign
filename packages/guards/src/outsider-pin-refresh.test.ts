@@ -16,14 +16,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
 import { refreshDecision, pinnedVersion, WRITE, CURRENT, NEWER } from "../../../scripts/outsider/refresh-pin.ts";
 
 const REPO = fileURLToPath(new URL("../../..", import.meta.url));
 const read = (path: string) => readFileSync(`${REPO}${path}`, "utf8");
 
-const { generateOutsiderJob } = await import(pathToFileURL(`${REPO}scripts/outsider/generate.mjs`).href);
+const { generateOutsiderJob } = await import("../../../scripts/outsider/generate.ts");
 
 const readme = read("README.md");
 const SHA_OLD = "bc2103de99d8f6aa5ab1f505ef3482143bb5c194";
@@ -112,7 +112,7 @@ test("the write step refuses an empty token, shape-checks what the deciding job 
   assert.match(script, /\[0-9a-f\]\{40\}/, "the sha handed over is shape-checked");
   assert.match(script, /grep -qx -- " {6}- uses: a11ign\/a11ign@\$TAG_SHA # v\$VERSION"/, "the file is checked to pin what it was told");
   assert.match(script, /cmp - "\$scratch\/generated\.yml"/);
-  const generate = decide.steps?.find((step) => step.run?.includes("generate.mjs"))?.run ?? "";
+  const generate = decide.steps?.find((step) => step.run?.includes("generate.ts"))?.run ?? "";
   assert.match(generate, /--sha="\$tag_sha" --version="\$version"/);
   assert.deepEqual(Object.keys(decide.outputs ?? {}).sort(), ["action", "generated", "tag_sha", "version"]);
 });

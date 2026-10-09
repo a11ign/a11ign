@@ -1,5 +1,5 @@
 /**
- * `scripts/ci-health.mjs` reads CI health per repository against `docs/ci-targets.json`. Its definitions are pure functions over a run list, so
+ * `scripts/ci-health.ts` reads CI health per repository against `docs/ci-targets.json`. Its definitions are pure functions over a run list, so
  * this pins them without a network or a clock (every date is passed in).
  *
  * What has to hold or the weekly table quietly says something false:
@@ -15,16 +15,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
 
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const ci = await import(pathToFileURL(join(REPO_ROOT, "scripts/ci-health.mjs")).href);
+import type { Target, Targets } from "../../../scripts/ci-health.ts";
+const ci = await import("../../../scripts/ci-health.ts");
 
 const MINIMUM = 2;
-const RATIO_TARGET = { label: "Pass", unit: "ratio", atLeast: 0.8 };
-const COUNT_TARGET = { label: "Runs", unit: "count", atMost: 2 };
-const DOLLAR_TARGET = { label: "Cost", unit: "dollars", below: 2.5 };
+const RATIO_TARGET: Target = { label: "Pass", unit: "ratio", atLeast: 0.8 };
+const COUNT_TARGET: Target = { label: "Runs", unit: "count", atMost: 2 };
+const DOLLAR_TARGET: Target = { label: "Cost", unit: "dollars", below: 2.5 };
 
 interface RunInput { id: number; event?: string; conclusion?: string | null; branch?: string; sha?: string; at?: string; repo?: string }
 
@@ -33,7 +31,7 @@ function run({ id, event = "pull_request", conclusion = "success", branch = "fea
   return { id, event, conclusion, head_sha: sha, head_branch: branch, created_at: at, head_repository: { full_name: repo } };
 }
 
-const TARGETS = {
+const TARGETS: Targets = {
   workflow: "ci.yml",
   reportOn: { repository: "a11ign/a11ign", issue: 928 },
   repositories: ["a11ign/a11ign"],
@@ -170,7 +168,7 @@ test("failedJobBreakdown: no failed runs is an empty breakdown (control: one fai
 });
 
 test("verdictOf: each bound reads at its edge, and the strictness differs", () => {
-  const verdict = (target: object, value: number | null, enough = true) => ci.verdictOf({ value, target, enough });
+  const verdict = (target: Target, value: number | null, enough = true) => ci.verdictOf({ value, target, enough });
   assert.equal(verdict({ label: "x", unit: "ratio", atLeast: 0.8 }, 0.8), "MET");
   assert.equal(verdict({ label: "x", unit: "ratio", atLeast: 0.8 }, 0.79), "MISSED");
   assert.equal(verdict({ label: "x", unit: "count", atMost: 2 }, 2), "MET");
@@ -239,7 +237,7 @@ test("readRepository: an empty week reads as no reading and UNREAD, never 0% MIS
 });
 
 test("readRepository: a notReadHere target without readBy falls back to another row", () => {
-  const targets = { ...TARGETS, targets: { ...TARGETS.targets, callsPerMergedPullRequest: { label: "Calls", unit: "count", atMost: 70 } } };
+  const targets: Targets = { ...TARGETS, targets: { ...TARGETS.targets, callsPerMergedPullRequest: { label: "Calls", unit: "count", atMost: 70 } } };
   const reading = ci.readRepository({ repository: "r", runs: [], failedRuns: [], targets });
   assert.equal(reading.rows[3].count, "read by another row");
 });
@@ -262,7 +260,7 @@ test("renderComment: names the window, commit and rate limit, then each reposito
   const lines = text.split("\n");
   assert.equal(lines[0], "## CI health, week of 2026-09-30");
   assert.match(text, /created from 2026-09-30T00:00:00Z to 2026-10-07T00:00:00Z \(UTC, end exclusive\)/);
-  assert.match(text, /`scripts\/ci-health\.mjs` at `abc123`\. Rate limit seen: 4999 of 5000\./);
+  assert.match(text, /`scripts\/ci-health\.ts` at `abc123`\. Rate limit seen: 4999 of 5000\./);
   assert.match(text, /### a11ign\/a11ign/);
   assert.match(text, /\| Pass \| at least 80\.0% \| 50\.0% \| 1 of 2 pull requests/);
   assert.match(text, /\*\*MISSED\*\*/);

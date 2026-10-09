@@ -31,7 +31,7 @@ import { stripComments } from "@a11ign/evidence/source-text";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { checkIsolation, packedRangeProblems, satisfies } from "./isolation-gate.mjs";
 import { pnpmCliInvocation } from "../../../scripts/npm-cli-executable.mjs";
-import { refusal } from "../../../scripts/release-publish-rehearsal.mjs";
+import { refusal } from "../../../scripts/release-publish-rehearsal.ts";
 
 const REPO = fileURLToPath(new URL("../../../", import.meta.url));
 const read = (path: string) => readFileSync(join(REPO, path), "utf8");
@@ -86,7 +86,7 @@ test("#2301/#3717: no step in release.yml publishes -- the publish is the called
 
 test("#2301: the provenance request REHEARSES the pnpm-to-npm hand-off, after the pack that hands the set on", () => {
   const rehearsal = stepNamed("pnpm-to-npm publish hand-off");
-  assert.equal(rehearsal.run, "node scripts/release-publish-rehearsal.mjs");
+  assert.equal(rehearsal.run, "node --import tsx scripts/release-publish-rehearsal.ts");
   const names = releaseSteps().map((step) => step.name ?? "");
   assert.ok(names.indexOf(rehearsal.name as string) > names.findIndex((n) => n.startsWith("Pack every package")),
     "the rehearsal comes after the pack: it hands the packed set on");

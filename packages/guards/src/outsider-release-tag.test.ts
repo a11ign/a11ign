@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 const REPO = fileURLToPath(new URL("../../..", import.meta.url));
 const read = (path: string) => readFileSync(`${REPO}${path}`, "utf8");
 
-const LOOKUP_FILES = ["scripts/outsider/generate.mjs", "scripts/outsider/outsider-job.yml", "scripts/outsider/verdict-job.mjs"];
+const LOOKUP_FILES = ["scripts/outsider/generate.ts", "scripts/outsider/outsider-job.yml", "scripts/outsider/verdict-job.ts"];
 
 /** The prefix `promote-action-tag` strips from a promoted tag to get the version: `a11ign@`. */
 function releaseTagPrefix(releaseYml: string): string {

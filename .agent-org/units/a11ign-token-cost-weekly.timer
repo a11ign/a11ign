@@ -1,5 +1,5 @@
 [Unit]
-# THE CLOCK BEHIND `token-cost.mjs --post` -- #3690, the host half of #3217. See a11ign-token-cost-weekly.service, which
+# THE CLOCK BEHIND `token-cost.ts --post` -- #3690, the host half of #3217. See a11ign-token-cost-weekly.service, which
 # holds the retry and the late-start evidence this hour rests on.
 Description=Weekly (Monday) append of the calls-and-dollars reading to the CI-health comment (#3690)
 

@@ -1,5 +1,5 @@
 /**
- * `scripts/check-transfer-urls.mjs` (#524): on transfer day, find every URL naming PRODUCT_REPO in the tree and fetch it, so the interval during which the docs
+ * `scripts/check-transfer-urls.ts` (#524): on transfer day, find every URL naming PRODUCT_REPO in the tree and fetch it, so the interval during which the docs
  * point at a 404 is PROVEN closed rather than assumed.
  *
  * What is pinned, with no network and no read of the real tree (`findTransferUrls` takes the root, `checkTransferUrls` takes the fetch):
@@ -20,10 +20,13 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
+import type { TransferUrlResult } from "../../../scripts/check-transfer-urls.ts";
+const TSX = pathToFileURL(createRequire(import.meta.url).resolve("tsx")).href;
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const SCRIPT = join(REPO_ROOT, "scripts/check-transfer-urls.mjs");
-const { findTransferUrls, checkTransferUrls, reportTransferUrls } = await import(pathToFileURL(SCRIPT).href);
+const SCRIPT = join(REPO_ROOT, "scripts/check-transfer-urls.ts");
+const { findTransferUrls, checkTransferUrls, reportTransferUrls } = await import("../../../scripts/check-transfer-urls.ts");
 const { PRODUCT_REPO } = await import(pathToFileURL(join(REPO_ROOT, "scripts/repo-identity.mjs")).href);
 
 const GITHUB = `https://github.com/${PRODUCT_REPO}`;
@@ -143,7 +146,7 @@ test("checkTransferUrls calls the fetch once per site, in order, with HEAD and r
   assert.deepEqual(await checkTransferUrls([], { fetchImpl }), []);
 });
 
-const reachable = (url: string, status: number) => ({ file: "f.md", line: 1, url, reachable: true, status, ok: status >= HTTP_OK && status < HTTP_OK * 2 });
+const reachable = (url: string, status: number): TransferUrlResult => ({ file: "f.md", line: 1, url, reachable: true, status, ok: status >= HTTP_OK && status < HTTP_OK * 2 });
 
 test("the report for an all-ok run is the count and the ok line, with no failure headings", () => {
   const report = reportTransferUrls([reachable("https://x.invalid/a", HTTP_OK), reachable("https://x.invalid/b", HTTP_OK)]);
@@ -174,7 +177,7 @@ test("the report for no results still counts and does not claim any cleanly", ()
 
 test("the CLI refuses an unknown flag before walking or fetching anything", () => {
   // cwd is the repository: `repo-identity.mjs` resolves the project declaration from the working directory and throws outside one.
-  const result = spawnSync(process.execPath, [SCRIPT, "--live"], { cwd: REPO_ROOT, encoding: "utf8" });
+  const result = spawnSync(process.execPath, ["--import", TSX, SCRIPT, "--live"], { cwd: REPO_ROOT, encoding: "utf8" });
   assert.equal(result.status, 2);
   assert.match(result.stderr, /unknown flag --live/);
   assert.equal(result.stdout, "");

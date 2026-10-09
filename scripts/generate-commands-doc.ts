@@ -1,0 +1,141 @@
+#!/usr/bin/env node
+// @ts-check
+// command: regenerate docs/commands.md from every script's own `// command:` header
+//
+// A COMMAND NOBODY CAN FIND IS A COMMAND NOBODY RUNS -- A6b, #478. `commands-documented.test.ts` used to
+// answer "is this command documented?" by grepping CLAUDE.md/README/docs/ for the NAME, which cannot see
+// the 24 scripts under `scripts/` that have no `package.json` entry at all (A3, #454) -- 20 of them were
+// undocumented and invisible to that check by construction, because nothing forced a script to declare
+// anything before it could be run.
+//
+// So the check now reads a page instead of prose, and the page is BUILT FROM the scripts rather than
+// written about them: every script that is a real command (see `isCommandScript` below) must carry a
+// `// command: <description>` header, and a script with none fails `commands-documented.test.ts` outright
+// rather than being silently excluded. The list nobody maintains is the list that cannot go stale --
+// CLAUDE.md's own rule for registries, applied to documentation.
+//
+// WHICH SCRIPTS NEED A HEADER IS DERIVED, NOT A HAND LIST. `scripts/commands.ts`'s own header (A3) says
+// "only a person can say which [.mjs files are commands]" and hand-lists four modules
+// (`board-data.mjs`, `board-markdown.mjs`, `git-env.mjs`, `repo-identity.mjs`) that are imported and never
+// run. That list did not need writing: every one of those four -- and only those four, plus this file's
+// own sibling `commands.ts` -- is missing the entry-point guard every real CLI in this repo already
+// carries (`if (import.meta.url === pathToFileURL(...).href) main();`, `entry-points.test.ts`'s own
+// population). A module meant to be imported has no reason to guard a `main()` nothing calls directly; a
+// command does. Verified against the hand list it replaces: identical five files, zero drift, computed
+// rather than remembered.
+import { readFileSync, readdirSync, writeFileSync, existsSync } from "node:fs";
+import { pathToFileURL, fileURLToPath } from "node:url";
+import { realpathSync } from "node:fs";
+import { resolve, join } from "node:path";
+import { refuseUnknownFlags } from "@a11ign/screenreader-fleet/cli-flags";
+import { TOOLING_ROOTS } from "../packages/guards/src/tooling-roots.mjs";
+
+const REPO = fileURLToPath(new URL("..", import.meta.url));
+export const OUT = resolve(REPO, "docs/commands.md");
+
+/** How many leading lines a `// command:` header may appear within -- generous enough for a shebang plus
+ *  `// @ts-check` plus the header itself, tight enough that a mention deep in a doc comment cannot count. */
+const HEADER_LINES = 6;
+
+const COMMAND_HEADER = /^\/\/\s*command:\s*(.+)$/m;
+
+/** The same signal `entry-points.test.ts` already discovers and pins: a file declaring this guard is run
+ *  directly, never only imported. See this file's own header for why that makes it the right population. */
+const ENTRY_POINT_GUARD = /import\.meta\.url\s*===/;
+
+/**
+ * Every `scripts/*.mjs` file that is a real, directly-runnable command -- excludes `.test.mjs` (not a
+ * command at all) and any file with no entry-point guard (a module, imported and never run). EXPORTED so
+ * the test and a mutation check can drive the exact same population the generator uses -- and `root` so the
+ * nightly doc cross-reference report (#905) can run the same population against a fixture tree.
+ * @param {string} [root] the repository whose `scripts/` is read; this checkout by default
+ * @returns {string[]}
+ */
+export function commandScripts(root: string = REPO): string[] {
+  // EVERY TOOLING ROOT, not just `scripts/`. The org moved to @a11ign/agent-org and the guards to
+  // @a11ign/guards; a discovery still pointing at scripts/ alone found 21 commands against a census of
+  // ~51 and reported that as a clean run. Returns REPO-RELATIVE paths now, because a bare basename
+  // cannot say which root it came from.
+  return TOOLING_ROOTS.flatMap((rel) => {
+    const dir = resolve(root, rel);
+    if (!existsSync(dir)) return [];
+    return readdirSync(dir)
+      .filter((f) => f.endsWith(".mjs") && !f.endsWith(".test.mjs"))
+      .filter((f) => ENTRY_POINT_GUARD.test(readFileSync(join(dir, f), "utf8")))
+      .map((f) => `${rel}/${f}`);
+  }).sort();
+}
+
+/**
+ * The declared header for one script's source text, or `null` if it is missing or too weak to count as a
+ * description. `// command: runs the thing` documents nothing and would pass a bare presence check --
+ * #478's own acceptance names this as the real difficulty, so this refuses anything under 15 characters
+ * or with no space in it (a single word is a label, not a sentence).
+ * @param {string} text
+ * @returns {string | null}
+ */
+export function commandHeader(text: string): string | null {
+  const header = text.split("\n", HEADER_LINES).join("\n");
+  const match = COMMAND_HEADER.exec(header);
+  if (!match) return null;
+  const description = match[1].trim();
+  if (description.length < 15 || !/\s/.test(description)) return null;
+  return description;
+}
+
+/**
+ * The generated page's exact text. Pure, so `--check` and a test can compare against it without touching
+ * disk, and the write path and the check path can never disagree about what "current" means.
+ *
+ * CARRIES THE REAL `<!-- GENERATED by ... -->` MARKER (#459's own convention), on purpose, rather than
+ * escaping that guard by omission. This file IS a generated file that stays tracked -- #478's own
+ * acceptance: "committed and checked... since a reader wants to browse it on GitHub" -- and the first
+ * draft of this function left the marker off specifically so `generated-paths.test.ts` would never see it,
+ * which is a guard narrowed by silence rather than by a stated exception: exactly the shape this repo has
+ * paid for four times, arriving in the guard I had just built. Fixed per ceo/dispatcher's review: the
+ * marker is written for real, and `docs/commands.md` is named explicitly in `generated-paths.test.ts`'s
+ * own `TRACKED_EXEMPT` map with the reason, so the guard KNOWS this file is tracked deliberately rather
+ * than not seeing it at all.
+ * @param {string[]} scripts
+ * @param {string} [root] the repository those scripts live in; this checkout by default
+ * @returns {string}
+ */
+export function buildPage(scripts: string[], root: string = REPO): string {
+  const lines = [
+    "# Commands",
+    "",
+    "<!-- GENERATED by `node --import tsx scripts/run.ts docs-commands` from every script's own `// command:` header. "
+      + "Do not edit. Tracked deliberately -- see generated-paths.test.ts's TRACKED_EXEMPT. -->",
+    "",
+    "Regenerate with `node --import tsx scripts/run.ts docs-commands`. Checked by `commands-documented.test.ts` "
+      + "against every script's own header; do not hand-edit.",
+    "",
+  ];
+  for (const file of scripts) {
+    // `file` is repo-relative: commandScripts() spans every tooling root, so the path is the whole name.
+    const text = readFileSync(resolve(root, file), "utf8");
+    const description = commandHeader(text);
+    lines.push(`- \`node ${file}\` — ${description ?? "**MISSING `// command:` HEADER**"}`);
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+function main() {
+  refuseUnknownFlags(["--check"], { entry: import.meta.url, command: "node --import tsx scripts/generate-commands-doc.ts" });
+  const scripts = commandScripts();
+  const page = buildPage(scripts);
+  if (process.argv.includes("--check")) {
+    const current = existsSync(OUT) ? readFileSync(OUT, "utf8") : "";
+    if (current !== page) {
+      console.error(`STALE  ${OUT} does not match the tree. Run: node scripts/run.ts docs-commands`);
+      process.exitCode = 1;
+      return;
+    }
+    console.log(`OK  docs/commands.md matches ${scripts.length} script(s).`);
+    return;
+  }
+  writeFileSync(OUT, page);
+  console.log(`WROTE  docs/commands.md, ${scripts.length} command(s).`);
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) main();

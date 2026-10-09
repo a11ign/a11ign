@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { migrationVerdict, MIGRATION_FILE } from "../../../scripts/check-schema-migration.mjs";
+import { migrationVerdict, MIGRATION_FILE } from "../../../scripts/check-schema-migration.ts";
 
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
 

@@ -371,7 +371,7 @@ function departedTestRefusals(files: Record<string, string>): string[] {
 
 /** The files that run tests by path, read from `root`. */
 function runners(root: string): Record<string, string> {
-  const names = [...readdirSync(join(root, ".github/workflows")).filter((file) => /\.ya?ml$/.test(file)).map((file) => join(".github/workflows", file)), "scripts/git-hooks/pre-push", "scripts/verify.mjs"];
+  const names = [...readdirSync(join(root, ".github/workflows")).filter((file) => /\.ya?ml$/.test(file)).map((file) => join(".github/workflows", file)), "scripts/git-hooks/pre-push", "scripts/verify.ts"];
   return Object.fromEntries(names.map((path) => [path, read(root, path)]));
 }
 
@@ -385,7 +385,7 @@ test("POSITIVE CONTROL: a workflow, a hook or a script that runs a deleted contr
   assert.deepEqual(departedTestRefusals({
     ".github/workflows/a.yml": "run: pnpm exec rstest run --include packages/control/src/gone.test.ts\n",
     "scripts/git-hooks/pre-push": "run x tsx --test \\\n  packages/control/src/fleet-layer/a.test.ts \\\n  packages/control/src/fleet-layer/a.test.ts\n",
-    "scripts/verify.mjs": 'const t = "packages/guards/src/layer-edges.test.ts";\n',
+    "scripts/verify.ts": 'const t = "packages/guards/src/layer-edges.test.ts";\n',
   }), [
     ".github/workflows/a.yml names packages/control/src/gone.test.ts, a test of the directory that left",
     "scripts/git-hooks/pre-push names packages/control/src/fleet-layer/a.test.ts, a test of the directory that left",

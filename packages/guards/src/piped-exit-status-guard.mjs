@@ -20,7 +20,7 @@
  * in EVERY worktree, including one created before `node_modules` is symlinked in, and there the import
  * throws `ERR_MODULE_NOT_FOUND` -- which pre-commit's `>/dev/null 2>&1` swallowed and misread as a hazard
  * on every single staged line (`fi`, `else`, `run: |`, prose comments -- none of them pipe anything).
- * `scripts/check-schema-migration.mjs` is this repo's own precedent for the identical bind (it is copied
+ * `scripts/check-schema-migration.ts` is this repo's own precedent for the identical bind (it is copied
  * into a throwaway directory with no `node_modules` by its own gate test) -- its one flag is checked with
  * a bare `process.argv.includes(...)`, no workspace import, and this file now does the same.
  *

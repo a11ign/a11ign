@@ -202,19 +202,19 @@ export function assertNoLeakInArgv(cmd: string, args: string[]): void {
 export const TRACKER_WRITERS: Readonly<string[]> = Object.freeze([
   // #2975 PR 3: the other ten declared writers went with the tool (`board-report`, `carry-branch`, `pr-open`, `row-claim`, `wake` and the rest),
   // so the registry names the one that stayed: it guards the publish token rather than the tracker.
-  "npm-token-liveness.mjs",
+  "npm-token-liveness.ts",
   // #3183: the weekly outsider review files a row and comments on last week's; both bodies are checked before they leave.
-  "weekly-review.mjs",
+  "weekly-review.ts",
   // #3212: the weekly CI-health reading comments its table on #928; the body is checked before it leaves.
-  "ci-health.mjs",
+  "ci-health.ts",
   // #3184: the outsider verdict job files a `regression` row; its body is checked before it leaves. In a subdirectory, so the name
   // carries it (the walk prefixes `scripts/`).
-  "outsider/verdict-job.mjs",
+  "outsider/verdict-job.ts",
 ]);
 
 /** Where a declared writer may live. The prefixes are here so the registry above holds no path-shaped
  * string -- the reason stated above, unchanged. TWO roots since the org tooling moved to
- * `@a11ign/agent-org`: ten of the eleven writers went with it and `npm-token-liveness.mjs` did not,
+ * `@a11ign/agent-org`: ten of the eleven writers went with it and `npm-token-liveness.ts` did not,
  * because it guards the publish token rather than the tracker. A single prefix would have silently
  * stopped finding whichever one it did not name. */
 export const TRACKER_WRITER_DIRS = Object.freeze(["scripts/"]);

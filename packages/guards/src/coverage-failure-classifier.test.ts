@@ -1,5 +1,5 @@
 /**
- * `scripts/coverage-failure-classifier.mjs` (#169): says WHICH of three unrelated things made the nightly coverage job fail, because "coverage failed" is not a finding.
+ * `scripts/coverage-failure-classifier.ts` (#169): says WHICH of three unrelated things made the nightly coverage job fail, because "coverage failed" is not a finding.
  *
  *   INFRA         `npm ci` or the build failed: nothing was measured, so nothing about coverage can be said.
  *   TEST_FAILURE  a test failed: a regression in a test, NOT in coverage, and reporting it as the latter reads #169 backwards.
@@ -11,7 +11,7 @@
  *      (and says how many tests ALSO failed); a test failure is named when its names can be read.
  *   2. BOTH TEST REPORTERS (#1089). CI prints TAP (`# fail N`, `not ok N - name`), a terminal prints spec (`ℹ fail N`, `✖ name (1.2ms)`). `testFailuresIn` reads both and
  *      returns `null`, not zero, for a log carrying NEITHER summary, because a log it cannot parse and a log with nothing wrong are different facts.
- *   3. THE THRESHOLD WORDING is `scripts/coverage.mjs`'s `thresholdMissLines`, the real producer; this test feeds the classifier that producer's own output.
+ *   3. THE THRESHOLD WORDING is `scripts/coverage.ts`'s `thresholdMissLines`, the real producer; this test feeds the classifier that producer's own output.
  *   4. THE CLI takes its facts as flags, refuses an unknown one, exits 2 on a missing required one, and treats an unreadable log as UNKNOWN rather than as an error.
  *
  * THE POSITIVE CONTROLS: every UNKNOWN case differs from a classified one by the one line the classifier looks for, and `testFailuresIn`'s null sits beside a TAP and a spec log that parse.
@@ -23,11 +23,13 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
+const TSX = pathToFileURL(createRequire(import.meta.url).resolve("tsx")).href;
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const SCRIPT = join(REPO_ROOT, "scripts/coverage-failure-classifier.mjs");
-const { KIND, testFailuresIn, classifyCoverageFailure, commentBody } = await import(pathToFileURL(SCRIPT).href);
-const { thresholdMissLines } = await import(pathToFileURL(join(REPO_ROOT, "scripts/coverage.mjs")).href);
+const SCRIPT = join(REPO_ROOT, "scripts/coverage-failure-classifier.ts");
+const { KIND, testFailuresIn, classifyCoverageFailure, commentBody } = await import("../../../scripts/coverage-failure-classifier.ts");
+const { thresholdMissLines } = await import("../../../scripts/coverage.ts");
 
 const TAP_LOG = "TAP version 13\nok 1 - fine\nnot ok 2 - fails on purpose\nnot ok 3 - also fails\n# tests 3\n# fail 2\n";
 const SPEC_LOG = "✔ fine (0.2ms)\n✖ fails on purpose (0.36ms)\n✖ no timing\nℹ tests 3\nℹ fail 2\n";
@@ -107,8 +109,8 @@ test("a regression that also had failing tests says how many, and still is a REG
   assert.equal(verdict.detail, "**lines**: 76.2% (threshold 78%) — and 2 test(s) also failed");
 });
 
-test("the classifier reads the real producer's own threshold-miss line (scripts/coverage.mjs)", () => {
-  const produced = thresholdMissLines({ lines: { pct: 50 }, statements: { pct: 60 } }, { lines: 51, statements: 51 });
+test("the classifier reads the real producer's own threshold-miss line (scripts/coverage.ts)", () => {
+  const produced = thresholdMissLines({ lines: { pct: 50, covered: 50, total: 100 }, statements: { pct: 60, covered: 60, total: 100 } }, { lines: 51, statements: 51 });
   assert.deepEqual(produced, ["ERROR: Coverage for lines (50%) does not meet threshold (51%)"]);
   const verdict = classifyCoverageFailure({ ...ok, coverageLog: produced.join("\n") });
   assert.deepEqual(verdict.thresholdMisses, [{ metric: "lines", actual: 50, threshold: 51 }]);
@@ -158,7 +160,7 @@ test("commentBody has a distinct headline per kind, then the detail, then the ru
 });
 
 function runCli(args: string[]) {
-  return spawnSync(process.execPath, [SCRIPT, ...args], { encoding: "utf8" });
+  return spawnSync(process.execPath, ["--import", TSX, SCRIPT, ...args], { encoding: "utf8" });
 }
 
 function withLog(text: string, body: (logPath: string) => void): void {
@@ -200,7 +202,7 @@ test("CLI: a missing required flag prints usage and exits 2, and an unknown flag
   for (const args of [[], ["--ci-outcome=success", "--build-outcome=success"], ["--build-outcome=success", "--log=x"], ["--ci-outcome=success", "--log=x"]]) {
     const result = runCli(args);
     assert.equal(result.status, 2, JSON.stringify(args));
-    assert.match(result.stderr, /^Usage: node scripts\/coverage-failure-classifier\.mjs --ci-outcome=/);
+    assert.match(result.stderr, /^Usage: node --import tsx scripts\/coverage-failure-classifier\.ts --ci-outcome=/);
     assert.equal(result.stdout, "");
   }
   const unknown = runCli(["--ci-outcome=success", "--build-outcome=success", "--log=x", "--bogus"]);

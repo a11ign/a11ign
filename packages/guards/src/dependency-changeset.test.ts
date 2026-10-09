@@ -1,5 +1,5 @@
 /**
- * `scripts/dependency-changeset.mjs` derives what a dependency pull request owes the changelog FROM ITS MANIFESTS' DIFF (#3159). Four
+ * `scripts/dependency-changeset.ts` derives what a dependency pull request owes the changelog FROM ITS MANIFESTS' DIFF (#3159). Four
  * things have to hold or a consumer-visible change ships with no entry, or a human-visible one is waved through:
  *   1. A BUMP OF A RUNTIME RANGE OF A PUBLISHED PACKAGE IS A `patch` ENTRY naming the dependency and both ranges; `devDependencies`
  *      and private packages are EMPTY, recorded as such rather than inferred from silence.
@@ -15,12 +15,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { join } from "node:path";
+import type { Derivation } from "../../../scripts/dependency-changeset.ts";
 import { withGitSandbox } from "../../../scripts/test-support/git-sandbox.ts";
 
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const changeset = await import(pathToFileURL(join(REPO_ROOT, "scripts/dependency-changeset.mjs")).href);
+const changeset = await import("../../../scripts/dependency-changeset.ts");
 const { RUNTIME_SECTIONS, refusalFor, entriesFor, deriveDependencyChangeset, renderEntry, parseEntry, checkEntries, compile } = changeset;
 
 type Change = {
@@ -32,6 +31,8 @@ const change = (overrides: Partial<Change> = {}): Change => ({
   from: "2.9.0", to: "2.9.1", ...overrides,
 });
 const bump = (from: string | null, to: string | null) => change({ from, to });
+/** `refusalFor`'s reason where the test expects one: a null here fails the `match` that follows. */
+const refusalText = (input: Change) => refusalFor(input) as string;
 
 test("RUNTIME_SECTIONS is exactly what a consumer's install is built from, and excludes devDependencies", () => {
   assert.deepEqual(RUNTIME_SECTIONS, ["dependencies", "peerDependencies", "optionalDependencies"]);
@@ -58,24 +59,24 @@ test("refusalFor refuses a range a machine cannot compare", () => {
       unplain,
     );
   }
-  assert.match(refusalFor(bump("npm:foo@1", "1.0.0")), /npm:foo@1 -> 1\.0\.0 is not a plain version/);
+  assert.match(refusalText(bump("npm:foo@1", "1.0.0")), /npm:foo@1 -> 1\.0\.0 is not a plain version/);
 });
 
 test("refusalFor refuses a major bump, up or down, but not a minor", () => {
-  assert.match(refusalFor(bump("^1.9.0", "^2.0.0")), /\^1\.9\.0 -> \^2\.0\.0 is a MAJOR bump/);
-  assert.match(refusalFor(bump("^2.0.0", "^1.0.0")), /is a MAJOR bump/);
+  assert.match(refusalText(bump("^1.9.0", "^2.0.0")), /\^1\.9\.0 -> \^2\.0\.0 is a MAJOR bump/);
+  assert.match(refusalText(bump("^2.0.0", "^1.0.0")), /is a MAJOR bump/);
   assert.equal(refusalFor(bump("^1.9.0", "^1.10.0")), null);
 });
 
 test("refusalFor refuses a 0.x minor bump (breaking before 1.0) and a 0.0.x bump", () => {
-  assert.match(refusalFor(bump("^0.3.0", "^0.4.0")), /is a 0\.x MINOR bump, which before 1\.0 is semver's breaking release/);
-  assert.match(refusalFor(bump("^0.0.3", "^0.0.4")), /is a 0\.0\.x bump, breaking under a caret range/);
+  assert.match(refusalText(bump("^0.3.0", "^0.4.0")), /is a 0\.x MINOR bump, which before 1\.0 is semver's breaking release/);
+  assert.match(refusalText(bump("^0.0.3", "^0.0.4")), /is a 0\.0\.x bump, breaking under a caret range/);
   assert.equal(refusalFor(bump("^0.0.3", "^0.0.3")), null);
 });
 
 test("refusalFor refuses a downgrade at any position, and accepts the same move upward", () => {
-  assert.match(refusalFor(bump("2.9.1", "2.9.0")), /is a downgrade/);
-  assert.match(refusalFor(bump("2.10.0", "2.9.5")), /is a downgrade/);
+  assert.match(refusalText(bump("2.9.1", "2.9.0")), /is a downgrade/);
+  assert.match(refusalText(bump("2.10.0", "2.9.5")), /is a downgrade/);
   assert.equal(refusalFor(bump("2.9.0", "2.9.1")), null);
   assert.equal(refusalFor(bump("2.9.5", "2.10.0")), null);
 });
@@ -115,7 +116,7 @@ test("deriveDependencyChangeset: a runtime range bump of a published package yie
   assert.deepEqual(derived.reasons, []);
   assert.deepEqual(derived.privatePackages, []);
   assert.deepEqual(derived.entries, [
-    { package: "@a11ign/lab", bump: "patch", text: "Updates the `yaml` dependency range from `^2.9.0` to `^2.9.1`." },
+    { package: "@a11ign/lab", bump: "patch" as const, text: "Updates the `yaml` dependency range from `^2.9.0` to `^2.9.1`." },
   ]);
 });
 
@@ -191,7 +192,7 @@ test("deriveDependencyChangeset refuses an added dependency", () => {
 });
 
 test("renderEntry writes the changeset front matter and the text; parseEntry reads it back", () => {
-  const entry = { package: "@a11ign/lab", bump: "patch", text: "Updates the `yaml` dependency range from `2.9.0` to `2.9.1`." };
+  const entry = { package: "@a11ign/lab", bump: "patch" as const, text: "Updates the `yaml` dependency range from `2.9.0` to `2.9.1`." };
   const markdown = renderEntry(entry);
   assert.equal(markdown, '---\n"@a11ign/lab": patch\n---\n\nUpdates the `yaml` dependency range from `2.9.0` to `2.9.1`.\n');
   assert.deepEqual(parseEntry(markdown), entry);
@@ -203,7 +204,7 @@ test("parseEntry: an empty changeset has no package; an unquoted name parses; te
   assert.deepEqual(parseEntry("no front matter at all"), { package: null, bump: "", text: "" });
 });
 
-const derivedFor = (...changes: Change[]) => ({
+const derivedFor = (...changes: Change[]): Derivation => ({
   verdict: "entries", reasons: [], entries: entriesFor(changes),
   privatePackages: [...new Set(changes.filter((c) => c.private).map((c) => c.package))],
 });
@@ -303,7 +304,7 @@ test("compile writes the rendered entry file when it is not a dry run", () => {
     releaseThenBump(git.dir, git);
     compileIn(git.dir, { dryRun: false });
     const written = readFileSync(join(git.dir, ".changeset/dependency-ranges-a11ign-lab.md"), "utf8");
-    assert.equal(written, renderEntry({ package: "@a11ign/lab", bump: "patch", text: "Updates the `yaml` dependency range from `^2.9.0` to `^2.9.1`." }));
+    assert.equal(written, renderEntry({ package: "@a11ign/lab", bump: "patch" as const, text: "Updates the `yaml` dependency range from `^2.9.0` to `^2.9.1`." }));
   });
 });
 

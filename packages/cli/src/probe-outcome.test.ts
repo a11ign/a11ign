@@ -3,7 +3,7 @@
  * LONG ENOUGH FOR THE SLOWEST HEALTHY BOX (#2683, split from #2655).
  *
  * Three entries reach a worker without being able to wake it (ADR 0012): `witness` (`worker-probe.ts`),
- * `auth:leak-check` (`scripts/auth-leak-worker-probe.mjs`) and `worker:compare` (`measure-guard.mjs`: its busy guard
+ * `auth:leak-check` (`scripts/auth-leak-worker-probe.ts`) and `worker:compare` (`measure-guard.mjs`: its busy guard
  * and its vitals read). Each is tested THROUGH ITS OWN DEFAULT TIMEOUT, so putting an old number back in any one of
  * them fails that entry's test and no other's. Offline: every probe is a stub that models a worker as "answers after D
  * ms, but only if the caller waited that long".
@@ -16,7 +16,7 @@ import assert from "node:assert/strict";
 
 import { WAKE_HINT, WORKER_PROBE_TIMEOUT_MS, describeProbe, probeHealth } from "@a11ign/screenreader-fleet/probe-outcome";
 import { refuseIfNothingListening } from "./worker-probe.js";
-import { workerProblem } from "../../../scripts/auth-leak-worker-probe.mjs";
+import { workerProblem } from "../../../scripts/auth-leak-worker-probe.ts";
 import { refuseIfBusy, sampleVitals } from "../../worker-fleet/src/measure-guard.mjs";
 
 /** The slowest healthy first-after-idle answer on the real fleet (a11y-worker-13/-14/-16, read by `orchestrator`, #2671). */

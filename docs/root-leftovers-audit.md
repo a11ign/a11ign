@@ -40,11 +40,11 @@ holds no such directory because it IS the tool.
   `src/class-repeat.mjs:15` (`failure-classes.json`); `src/cause-declaration.mjs:41` and `:98` (the plugin); `src/ci-health-liveness.mjs:301`;
   `src/host-units.mjs:73` (`PROJECT_UNITS_DIR`) and `:136`; `src/messaging/config.mjs:23`. The project root is the git top level that contains the
   file (`project-config.mjs:329-334`), so the tick, the gate and every `agent-org` command find the project by this directory.
-- *The host.* `.agent-org/host.json` is the host declaration `scripts/agent-org-newest-tag.mjs:69` and `scripts/verify.mjs:501` read for the tool's
+- *The host.* `.agent-org/host.json` is the host declaration `scripts/agent-org-newest-tag.mjs:69` and `scripts/verify.ts:501` read for the tool's
   checkout; `beforeTick` (`project.json`) runs in this checkout before each tick.
 - *CI.* `.github/workflows/nightly.yml:280` reads `.agent-org/project.json` for the repository list and `:282` fails with `CANNOT_TELL` without it.
 - *Guard tests.* `packages/guards/src/dora-declaration.test.ts:27`, `layer-repository-protection.test.ts:49`, `branch-protection.test.ts:439`
-  (all `project.json`); `role-files-no-standing-cron.test.ts:18` (`roles/`); `scripts/doc-checks/roles-readme.mjs:9` and `roles-memory.mjs:9`.
+  (all `project.json`); `role-files-no-standing-cron.test.ts:18` (`roles/`); `scripts/doc-checks/roles-readme.ts:9` and `roles-memory.ts:9`.
 - *The test selector.* `scripts/rstest/rstest.config.mjs:41-42` (`.agent-org/roles/**`, `.agent-org/units/**`) and about 20 further file triggers
   (21 hits in the file), so a change here runs the tests that read it.
 - *The release rule.* `scripts/release-reads-qualification.mjs:83` lists `^\.agent-org\/` and `^\.claude\/` among the paths that do NOT make a
@@ -97,7 +97,7 @@ READMEs; a root document is outside them, in the company of `README.md`, `CONTRI
 **Who reads it** (`git grep -c 'PLAN\.md'`: 29 tracked files, 50 hits, most of them prose in `docs/`):
 
 - *Code and config that name it:* `scripts/ci-changed.mjs:92` (`DOC_ROOT_FILES` decides which diffs are documentation-only), pinned by
-  `packages/guards/src/ci-changed.test.ts:93` (the exact five names, sorted); `scripts/doc-checks/doc-references.mjs:15` (`DOCS`, the documents
+  `packages/guards/src/ci-changed.test.ts:93` (the exact five names, sorted); `scripts/doc-checks/doc-references.ts:15` (`DOCS`, the documents
   whose cited paths are checked); `scripts/rstest/rstest.config.mjs:107` (a file trigger).
 - *Documents that link or cite it:* `CLAUDE.md:27`, `README.md:535`, `packages/README.md:3`, `.gitignore:40`, `.github/workflows/release.yml:4`, and
   about 15 files under `docs/` (for example `docs/outsider-runs.md:3`, `docs/reliability-plan.md:435`, `docs/not-working.md:533`); five source
@@ -105,7 +105,7 @@ READMEs; a root document is outside them, in the company of `README.md`, `CONTRI
 - *A person:* the chairman's records point at its "UPDATE" entries (`docs/outsider-runs.md:47`).
 
 **What a move would break.** Not a gate: `ci-changed.test.ts:93` pins the five-name list and would fail on a rename of the entry, and
-`doc-references.mjs` would report each stale `./PLAN.md` link in the nightly cross-reference report (that check no longer runs on a pull request,
+`doc-references.ts` would report each stale `./PLAN.md` link in the nightly cross-reference report (that check no longer runs on a pull request,
 #954). The rest is stale prose in about 29 files. **Read from the grep, not tried.** A trial move in a scratch copy was not run: a worktree has no
 `node_modules`, and the readers are in the greps above.
 
@@ -158,7 +158,7 @@ or CI job that has run `pnpm install`; they are untracked, laid, and not members
 
 **Who reads it.** *Claude Code, by location*: it loads a nested `CLAUDE.md` when a session works under that directory. **No tracked file names it**:
 `git grep -nE 'packages/judge/CLAUDE\.md|judge/CLAUDE'` prints nothing. No guard enumerates nested `CLAUDE.md` files either (the `CLAUDE.md`
-walkers I found, `scripts/doc-checks/claude-md-links.mjs` and `doc-citation-integrity.mjs:41`, read the root one and `docs/*.md`). The root
+walkers I found, `scripts/doc-checks/claude-md-links.ts` and `doc-citation-integrity.ts:41`, read the root one and `docs/*.md`). The root
 `CLAUDE.md` table "Where else to look" lists the nested files of `control`, the worker, `lab` and `.github`, and **not this one**.
 
 **What a move would break.** Nothing red, and the rules would stop loading for judge edits unless the file stays under `packages/judge/`. It names
@@ -201,7 +201,7 @@ predicate. The workspace's other four paths (`!packages/nvda-worker`, `!packages
 
 **What renaming `packages/cli` to `packages/a11ign` would cost** (measured by `git grep -c 'packages/cli'` at `bbedfa8b4`): 37 tracked files and 71
 hits outside `packages/cli/` and `docs/`, 21 files and 70 hits under `docs/`, and 16 files and 26 hits inside it. The non-prose users include
-`action.yml`, `package.json`, `.github/ISSUE_TEMPLATE/backlog-row.yml`, `scripts/ci-changed.mjs`, `scripts/product-home.mjs`,
+`action.yml`, `package.json`, `.github/ISSUE_TEMPLATE/backlog-row.yml`, `scripts/ci-changed.mjs`, `scripts/product-home.ts`,
 `scripts/rstest/rstest.config.mjs`, the auth-leak scripts, the layer-edges baseline and a dozen guard tests. `.agent-org/project.json`'s `dora`
 `releasablePaths` also names `packages/cli/`, and `agent-org`'s DORA reader reads that. The cost is one row, large, and it touches `action.yml`,
 which the published action pins.

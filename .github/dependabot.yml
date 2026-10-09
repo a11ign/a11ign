@@ -45,7 +45,7 @@ updates:
     # No `groups:`, for the reason the `npm` entry gives.
     commit-message:
       prefix: deps
-    # #3804: `consumer-gate.yml` is GENERATED (`node scripts/run.mjs consumer-gate`) and calls `a11ign/a11ign` at a sha it
+    # #3804: `consumer-gate.yml` is GENERATED (`node --import tsx scripts/run.ts consumer-gate`) and calls `a11ign/a11ign` at a sha it
     # holds at four sites, which its own `check-pin` job and `consumer-gate.test.ts` compare. Dependabot rewrites ONE of the
     # four, so the pull request cannot merge correct, and it would open another for each new head of `main` (#3797).
     # The generator owns that pin, so Dependabot is told not to touch it. `a11ign/toolchain` and the `actions/*` pins are

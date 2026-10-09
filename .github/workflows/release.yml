@@ -243,18 +243,18 @@ jobs:
       # to prevent. `release:gate:ci` is the part a runner CAN prove: the artefact is safetensors, the weights have a changelog
       # entry accounting for them, no schema migration is open, and every package is usable when installed from a tarball. The rest
       # must have passed ON THE LAB, and is not wired here (#3131): the step after the consumer-gate check names, on EVERY run,
-      # which stages this runner did not run (`release-gate-scope.mjs`).
+      # which stages this runner did not run (`release-gate-scope.ts`).
       - name: The release gate — the part a runner can prove
         run: pnpm run release:gate:ci
 
       # #558: does the committed `consumer-gate.yml` still match what README.md's documented workflow produces, sha aside? The pin's
       # FRESHNESS is guard 7's own concern (its `check-pin` job). Two different things, and neither alone closes the gap.
       - name: consumer-gate.yml matches README.md's documented workflow (sha aside -- guard 7 checks that)
-        run: node scripts/generate-consumer-gate.mjs --check
+        run: node --import tsx scripts/generate-consumer-gate.ts --check
 
       # #1397: read from the two chains it describes, so the warning can only ever describe the chain that exists.
       - name: Name what this runner did NOT check
-        run: node scripts/release-gate-scope.mjs
+        run: node --import tsx scripts/release-gate-scope.ts
 
       # REHEARSAL ONLY: what the release would do with the changesets pending on this branch. `--verbose` prints `<name> -> <newVersion>`
       # per package; plain `changeset status` prints only a bump level.
@@ -272,7 +272,7 @@ jobs:
       # #1536: EVERY PUBLISHED MANIFEST MUST NAME THE REPOSITORY THIS RUN PUBLISHES FROM, and this asks before the registry does: npm's
       # provenance check refuses the PUT otherwise. NO `if:`, deliberately: this is the only place a rehearsal can see the mismatch.
       - name: Every published manifest names the repository this run publishes from
-        run: node scripts/manifest-repository-check.mjs
+        run: node --import tsx scripts/manifest-repository-check.ts
 
       # NOT AN EIGHTH GUARD (#3126): a TEMPORARY HOLD that each move row's last step lifts, one package at a time, until
       # `@a11ign/screenreader-worker`, `-fleet` and `@a11ign/documents` have released from their own repositories (ADR 0040). The
@@ -358,7 +358,7 @@ jobs:
       - name: The pnpm-to-npm publish hand-off, with provenance requested, publishing nothing
         env:
           NPM_CONFIG_PROVENANCE: "true"
-        run: node scripts/release-publish-rehearsal.mjs
+        run: node --import tsx scripts/release-publish-rehearsal.ts
 
   # THE RELEASE: one call, and the only job here that can publish. Every job above is a guard it WAITS FOR, so a red one stops the call
   # and nothing is skipped to get a pass. The permissions are what the called workflow's jobs may use (a called workflow can keep or
@@ -607,12 +607,12 @@ jobs:
   # TWO JOBS, AND THE ONE HOLDING `id-token` RUNS NO REPOSITORY CODE (`ceo`'s ruling and the review of #4365; the shape of #3969 and `promote-action-tag`).
   # `id-token: write` puts the OIDC request URL in the environment of EVERY step of its job, so a dependency lifecycle script run by `pnpm install` could
   # ask for the audience Octo STS accepts and get `contents` + `workflows` write on a repository outside the organisation. So `decide-outsider-pin`
-  # (`contents: read`, NO `id-token`) checks out, installs, runs `generate.mjs` and `refresh-pin.ts` against a read of the public outside file, and hands on
+  # (`contents: read`, NO `id-token`) checks out, installs, runs `generate.ts` and `refresh-pin.ts` against a read of the public outside file, and hands on
   # three strings and the generated file; `refresh-outsider-pin` (`id-token: write`, NO checkout, no install) mints, writes and reads back with `gh`,
   # `jq`, `base64` and `cmp` only, and checks that the file it was handed pins the commit it was told.
   #
   # Like `promote-action-tag` both `need` the promotion's SUCCESS, so a `next` publish and a red qualification leave the pin alone; there is no fallback to
-  # another token, and a failed mint is red. `refresh-pin.ts` writes only a file that differs from what `generate.mjs` makes for the release, and never moves
+  # another token, and a failed mint is red. `refresh-pin.ts` writes only a file that differs from what `generate.ts` makes for the release, and never moves
   # the pin to an older release. The write is one commit of ONE file on `main`, compare-and-set on that file's blob sha, and the read-back is the evidence.
   # The outside repository's own `poll` job then finds a pin for the new version and runs it.
   #
@@ -665,7 +665,7 @@ jobs:
           tag_sha=$(git ls-remote "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" "refs/tags/a11ign@$version" "refs/tags/a11ign@$version^{}" | tail -n1 | cut -f1)
           [[ "$tag_sha" =~ ^[0-9a-f]{40}$ ]] || fail "no tag a11ign@$version to pin the outside job at"
           scratch=$(mktemp -d)
-          node scripts/outsider/generate.mjs --sha="$tag_sha" --version="$version"
+          node --import tsx scripts/outsider/generate.ts --sha="$tag_sha" --version="$version"
           cp scripts/outsider/outsider-job.yml "$scratch/generated.yml"
           # The outside repository is public, so this read needs no minted token.
           gh api "repos/$OUTSIDE/contents/$WORKFLOW_PATH" --jq .content | base64 -d > "$scratch/current.yml" || fail "$WORKFLOW_PATH of $OUTSIDE could not be read"

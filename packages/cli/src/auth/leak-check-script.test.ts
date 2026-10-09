@@ -58,7 +58,7 @@ interface Ran { code: number | null; out: string; err: string }
 
 function runScript(args: string[], env: Record<string, string | undefined> = { FAKE_USER, FAKE_SECRET }): Promise<Ran> {
   return new Promise((done) => {
-    const child = spawn(process.execPath, ["--import", "tsx", "scripts/auth-leak-check.mjs", ...args], {
+    const child = spawn(process.execPath, ["--import", "tsx", "scripts/auth-leak-check.ts", ...args], {
       cwd: ROOT, env: { ...process.env, FAKE_USER: undefined, FAKE_SECRET: undefined, ...env } as NodeJS.ProcessEnv,
     });
     let out = ""; let err = "";
@@ -110,7 +110,7 @@ test("COMMAND 3: the echoing fixture, --stage written: exit 0 and a printed reda
 test("the quiet fixture QUIET and the echo fixture ECHO: the fake worker's own view of the two pages differs by the username", async () => {
   // Not the script: the FIXTURES, through the fake worker. If `login-quiet` ever started showing the username, or
   // `login-echo` stopped, the exit codes above would move for the wrong reason.
-  const { startFixtureSite } = await import("../../../../scripts/auth-leak-fixtures.mjs");
+  const { startFixtureSite } = await import("../../../../scripts/auth-leak-fixtures.ts");
   for (const [fixture, expected] of [["login-quiet", false], ["login-echo", true]] as const) {
     const site = await startFixtureSite({ fixture, user: FAKE_USER, secret: FAKE_SECRET });
     try {

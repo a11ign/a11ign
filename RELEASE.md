@@ -142,7 +142,7 @@ cannot reach is a red step at the point of use.
 
 **What nobody reads on a publish: the fleet part of the gate.** The runner proves 5 of `release:gate`'s 13
 stages (`release:gate:ci`); the other eight need the Python venv or the corpus. **No person asserts them now, and no
-machine does yet**: `scripts/release-gate-scope.mjs` says so in the publishing run's log, every time, and
+machine does yet**: `scripts/release-gate-scope.ts` says so in the publishing run's log, every time, and
 the row that reads the fleet part's verdict by commit sha is #3136. Until it lands, "the release published"
 does not imply "the lab's stages passed"; run `pnpm run lab:job -e job=release-gate` and read it if you need
 that claim.
@@ -161,7 +161,7 @@ one, and the other four were judgements about the report's content, which is wha
 gates (`gate:isolation`, the consumer gate, the registry gate) are untouched and still precede a publish.
 
 **The weekly review is a row, filed by a schedule, never a gate** ([`docs/weekly-review.md`](docs/weekly-review.md);
-[`scripts/weekly-review.mjs`](scripts/weekly-review.mjs) builds the row, and reads the requirements below out of this file, so a
+[`scripts/weekly-review.ts`](scripts/weekly-review.ts) builds the row, and reads the requirements below out of this file, so a
 rewording here is a rewording there). A session that built none of the recent work takes it; the row's `Ineligible:` line names
 the sessions that built the window's work. Its findings arrive up to seven days after a release, which is the price of not
 blocking one (ADR 0042, "THE COST").

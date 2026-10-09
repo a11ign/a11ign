@@ -2,7 +2,7 @@
 // command: decide whether the outside repository's `outsider-job.yml` must be rewritten for a promoted release (#4359)
 //
 // THE QUESTION `release.yml`'s `refresh-outsider-pin` JOB ASKS after `latest` moves. Three releases in a row (0.3.2, 0.4.0, 0.5.0) left the
-// outsider run red until somebody ran `generate.mjs --sha=<tag sha> --version=<v>` by hand (#4041, #4349), and #4349 measured that Dependabot
+// outsider run red until somebody ran `generate.ts --sha=<tag sha> --version=<v>` by hand (#4041, #4349), and #4349 measured that Dependabot
 // had never opened a pin pull request on the outside repository: its log said `No update needed for a11ign/a11ign 0.1.0`.
 //
 // The pin is a literal that a workflow cannot commit under `.github/workflows` with `GITHUB_TOKEN`, so the release run writes it with a token
@@ -24,7 +24,7 @@ export const WRITE = "write";
 export const CURRENT = "current";
 export const NEWER = "newer";
 
-/** The comment `generate.mjs --version` writes and Dependabot reads: `uses: a11ign/a11ign@<sha> # v1.2.3`. */
+/** The comment `generate.ts --version` writes and Dependabot reads: `uses: a11ign/a11ign@<sha> # v1.2.3`. */
 const PIN_VERSION_COMMENT = /^\s*(?:- )?uses:\s*a11ign\/a11ign@[0-9a-f]{40} # v(\d+\.\d+\.\d+)$/m;
 const PLAIN_VERSION = /^\d+\.\d+\.\d+$/;
 

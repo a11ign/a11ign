@@ -1,7 +1,7 @@
 # Why each schema migration was opened, and how it closed
 
 `packages/scorer/models/schema-migration.json` is the live TOGGLE: its presence blocks a release
-(`scripts/check-schema-migration.mjs`), and closing a migration means promoting weights stamped the
+(`scripts/check-schema-migration.ts`), and closing a migration means promoting weights stamped the
 pending schema and **deleting the file in the same commit** — that deletion is how `check-schema-migration`
 reads "no migration open". So the file cannot be where the reasoning lives; the moment it does its job it
 is gone.

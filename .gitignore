@@ -143,7 +143,7 @@ packages/control/ansible/inventory.yml
 # IGNORED RATHER THAN TRACKED, deliberately. A tracked `.metadata_never_index` would appear in every
 # worktree automatically, which sounds better and is worse: it would also sit in the PRIMARY checkout and
 # in every consumer's clone, making a decision about somebody else's machine that is not ours to make.
-# Ignored means `scripts/spotlight-exclude.mjs` places them locally and nobody's `git status` shows one --
+# Ignored means `scripts/spotlight-exclude.ts` places them locally and nobody's `git status` shows one --
 # which is the whole reason this line comes first: without it, 67 untracked files appear across nine
 # sessions' working directories, and `git add -A` sweeping another agent's files is the incident the
 # pre-commit hook exists to catch.
