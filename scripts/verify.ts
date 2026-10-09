@@ -685,6 +685,14 @@ async function outcomeOf(step: { id: string; run: boolean; }, { ctx, started }: 
 }
 
 /**
+ * The tool's suite-slot module in `dir`, or undefined. Either spelling: agent-org renames its modules (agent-org#435, #4389) and `verify` must not
+ * refuse the day a checkout moves from `.mjs` to `.ts` (#4404).
+ */
+export function suiteSlotsFile(dir: string): string | undefined {
+  return ["src/suite-slots.mjs", "src/suite-slots.ts"].map((relative) => join(dir, relative)).find((file) => existsSync(file));
+}
+
+/**
  * THE WHOLE RUN TAKES ONE OF THE HOST'S 2 SUITE SLOTS, AT `nice -n 15 ionice -c 3`, AND TAKES IT BEFORE ITS FIRST STEP (#3536, chairman via `ceo`, 2026-10-04). Nothing limited how many full
  * suites ran at once on the agent host: the 1-minute load was over its 16 cores in 26 of 36 samples and one gate tick took 6 min 44 s. `verify` runs ITSELF under the slot, so the one slot
  * covers every step, and the child it starts is `verify` again with `SLOT_ENV` set so it does not queue behind itself.
@@ -698,9 +706,9 @@ async function outcomeOf(step: { id: string; run: boolean; }, { ctx, started }: 
 async function underTheHostsSlot(): Promise<number | null> {
   if (process.env.CI) return null;
   const dir = provisionAgentOrg();
-  const file = dir && join(dir, "src/suite-slots.mjs");
-  if (!file || !existsSync(file)) {
-    console.error(`verify: ${file ?? "the agent-org checkout"} is missing, so verify is NOT run: the host-wide limit on concurrent suites (#3536) lives there, and running without it is refused. `
+  const file = dir && suiteSlotsFile(dir);
+  if (!file) {
+    console.error(`verify: ${dir ? join(dir, "src/suite-slots.{mjs,ts}") : "the agent-org checkout"} is missing, so verify is NOT run: the host-wide limit on concurrent suites (#3536) lives there, and running without it is refused. `
       + "Pull the latest `main` into that checkout, or set A11Y_AGENT_ORG_REPO to one that has it.");
     return 2;
   }
