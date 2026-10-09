@@ -236,3 +236,12 @@ test("criteriaAssessableFrom has no production caller -- dead-by-design, not dea
     + "warning above the function) or it is a stray caller nobody decided on (revert it).");
 });
 
+
+test("#4355: 3.3.7 is partial, and its note no longer says W3C shows an email-and-confirm form", () => {
+  const entry = CRITERION_COVERAGE["3.3.7"];
+  assert.equal(entry.status, "partial", "one failure case is in code (`addRedundantEntry`); the exceptions are not");
+  assert.doesNotMatch(entry.note, /W3C puts a process inside one page explicitly/,
+    "the Understanding page and G221 contain no email-and-confirm form: the example is a reading, not a quotation");
+  assert.match(entry.note, /DOES NOT SHOW THIS FORM/, "the note says what W3C does not show, so the next reader does not re-derive it");
+  assert.match(entry.note, /a11ign\/lab#43/, "the note names the corpus trio that pins the reading");
+});

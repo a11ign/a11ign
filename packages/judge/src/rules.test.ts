@@ -421,6 +421,71 @@ test("#4259: a cancelled paste on a non-password field is not this rule's claim"
 });
 
 /**
+ * 3.3.7 Redundant Entry — #4355 (#4084 outcome 2). Hand-built evidence shaped like the corpus trio in
+ * a11ign/lab#43 (`src/eval/pages/redundant-entry/`). `email-confirm-bad.html` and `email-once-good.html` differ
+ * ONLY in the second field, and `password-confirm-exception.html` pairs up by label exactly as the bad page
+ * does (so a label rule trips on it) while its fields are `type="password"`.
+ */
+const EMAIL_FIRST = { tag: "input", type: "email", autocomplete: null, form: 0, required: false };
+const emailSecond = { tag: "input", type: "email", autocomplete: null, form: 0, required: true, populatedFromEarlier: false };
+const PASSWORD_PAIR = [
+  { tag: "input", type: "password", autocomplete: "new-password", form: 0, required: true },
+  { tag: "input", type: "password", autocomplete: "new-password", form: 0, required: true, populatedFromEarlier: false },
+];
+const redundantEvidence = (formInputs: object[]) => ({ transcript: [], formInputs }) as never;
+const on337 = (formInputs: object[]) =>
+  ruleFindings(redundantEvidence(formInputs)).filter((f) => f.wcag.startsWith("3.3.7"));
+
+test("#4355: a second required email field that stayed empty is a REFERRED 3.3.7 finding (email-confirm-bad)", () => {
+  const findings = on337([EMAIL_FIRST, emailSecond]);
+  assert.equal(findings.length, 1);
+  assert.match(findings[0].evidence, /<input type="email" required> stayed empty after an earlier type="email" control in form 0 was filled/);
+  assert.equal(findings[0].mapping, "secondary",
+    "ESSENTIAL, NO-LONGER-VALID and 'available to select' are judgements this evidence cannot make");
+});
+
+test("#4355: the same form asking for the email once makes no 3.3.7 finding (email-once-good)", () => {
+  assert.equal(on337([EMAIL_FIRST]).length, 0);
+});
+
+test("#4355: NEGATIVE CONTROL -- a password and its confirmation make no finding though the labels pair up (password-confirm-exception)", () => {
+  assert.equal(on337(PASSWORD_PAIR).length, 0,
+    "the SECURITY exception names password re-validation; the rule reads the type, not the label");
+});
+
+test("#4355: the bad page's evidence differs from the exception page's in the type, which is what the rule reads", () => {
+  // Positive control for the negative above: give the password pair the email type and the SAME flags, and the
+  // rule fires. Without this the negative would pass for any reason at all, including a rule that never fires.
+  const asEmail = PASSWORD_PAIR.map((field) => ({ ...field, type: "email" }));
+  assert.equal(on337(asEmail).length, 1);
+});
+
+test("#4355: a second email field that WAS populated is auto-populated, so no finding", () => {
+  assert.equal(on337([EMAIL_FIRST, { ...emailSecond, populatedFromEarlier: true }]).length, 0);
+});
+
+test("#4355: an OPTIONAL second email field is not 'required to be entered again'", () => {
+  assert.equal(on337([EMAIL_FIRST, { ...emailSecond, required: false }]).length, 0);
+});
+
+test("#4355: two email fields in DIFFERENT forms are two questions", () => {
+  assert.equal(on337([EMAIL_FIRST, { ...emailSecond, form: 1 }]).length, 0);
+});
+
+test("#4355: not checked is not a finding -- no formInputs, no form, no auto-population outcome", () => {
+  assert.equal(ruleFindings({ transcript: [] } as never).filter((f) => f.wcag.startsWith("3.3.7")).length, 0);
+  const without = (key: string) => Object.fromEntries(Object.entries(emailSecond).filter(([name]) => name !== key));
+  assert.equal(on337([EMAIL_FIRST, without("form")]).length, 0, "an unknown form pairs nothing");
+  assert.equal(on337([EMAIL_FIRST, without("populatedFromEarlier")]).length, 0,
+    "absence of an outcome must not read as 'stayed empty'");
+});
+
+test("#4355: a generic text field is not claimed, whatever it is labelled", () => {
+  const text = { ...EMAIL_FIRST, type: "text" };
+  assert.equal(on337([text, { ...emailSecond, type: "text" }]).length, 0, "type=text names no kind of information");
+});
+
+/**
  * 2.1.2 No Keyboard Trap — a non-interference criterion, and the only failure here that is TOTAL: a
  * keyboard user who cannot leave a control cannot use the rest of the page at all.
  *
