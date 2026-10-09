@@ -117,7 +117,18 @@ jobs:
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
             commit -m "consumer-gate.yml: regenerate the pin at ${PIN} (#4331)"
           # The branch belongs to this workflow alone, so a newer repair replaces an older one rather than queueing behind it.
-          git push --force "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "HEAD:refs/heads/${BRANCH}"
+          # A push that changes anything under `.github/workflows/` needs the `workflows` permission, which this policy does not grant and must
+          # not (the grant stays `contents` + `pull_requests`). GitHub refuses it with a message naming `workflows`; say so, rather than leave a
+          # bare "remote rejected" for a person to decode.
+          if ! push_log="$(git push --force "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "HEAD:refs/heads/${BRANCH}" 2>&1)"; then
+            printf '%s\n' "$push_log"
+            if printf '%s' "$push_log" | grep -qi 'workflows'; then
+              echo "::error::the push was refused for the 'workflows' permission: the minted token may not change .github/workflows/consumer-gate.yml, and the policy is not widened for it. The repair has to be pushed another way (node scripts/generate-consumer-gate.mjs, by a person, on a branch)."
+            else
+              echo "::error::the push of ${BRANCH} was refused; the output above says why."
+            fi
+            exit 1
+          fi
           open="$(gh api "repos/${REPO}/pulls?state=open&head=${REPO%%/*}:${BRANCH}" --jq '.[0].number // empty')"
           if [ -n "$open" ]; then
             echo "::notice::updated the open repair pull request #${open}"

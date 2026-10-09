@@ -202,6 +202,15 @@ test("#4331: the regeneration runs the generator, refuses any change but consume
   assert.match(pushStep?.run ?? "", /^\s*Acceptance:$/m, "and an Acceptance section");
 });
 
+test("#4331: a push refused for the 'workflows' permission says so and says the repair goes another way; the policy is NOT widened to avoid it", () => {
+  const pushStep = workflow.jobs.regenerate.steps.find((s) => s.env?.BRANCH !== undefined);
+  const text = pushStep?.run ?? "";
+  assert.match(text, /if ! push_log="\$\(git push --force .*2>&1\)"; then/, "the push's stderr is captured, not left to a bare 'remote rejected'");
+  assert.match(text, /grep -qi 'workflows'/, "the refusal is classified by the message GitHub gives");
+  assert.match(text, /::error::the push was refused for the 'workflows' permission.*pushed another way/, "and the error names the permission and the way out");
+  assert.equal("workflows" in policy.permissions, false, "the answer to a workflows refusal is not to grant it");
+});
+
 test("#4331: the policy binds the token to this workflow as it is on main, and to a subject of main", () => {
   const ref = policy.claim_pattern.job_workflow_ref;
   const onMain = "a11ign/a11ign/.github/workflows/consumer-gate-pin.yml@refs/heads/main";
