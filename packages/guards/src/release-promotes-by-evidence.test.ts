@@ -762,7 +762,7 @@ function runRowFiling(opts: { labels: string[]; failLookupWith?: string; script?
     const rows = JSON.stringify([{ title: "promotion f4377e7b: qualification wait overdue", body: "b", labels: opts.labels }]);
     const step = realWorkflow().jobs!["promotion-row"].steps![0];
     const done = spawnSync("bash", ["-c", opts.script ?? step.run!], { cwd: dir, encoding: "utf8",
-      env: { PATH: `${bin}:${process.env.PATH}`, ROWS: rows, GH_REPO: "a11ign/a11ign", GH_TOKEN: "x" } });
+      env: { PATH: `${bin}:${process.env.PATH}`, ROWS: rows, GH_REPO: "a11ign/a11ign" } });
     const calls = (() => { try { return readFileSync(log, "utf8").split("\n").filter(Boolean); } catch { return []; } })();
     return { status: done.status, calls, output: `${done.stdout}${done.stderr}` };
   } finally { rmSync(dir, { recursive: true, force: true }); }
