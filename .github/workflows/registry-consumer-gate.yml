@@ -8,7 +8,7 @@
 # guarantee is exactly what a split of the repository removes.
 #
 # THE TWO JOBS ARE TWO QUESTIONS, and the cheap one gates the dear one.
-#   `install`      (ubuntu, seconds)  `scripts/registry-consumer-gate.mjs`: what the install contains. Refuses a
+#   `install`      (ubuntu, seconds)  `scripts/registry-consumer-gate.ts`: what the install contains. Refuses a
 #                  `workspace:` or `0.0.0` dependency, a second copy of `@a11ign/evidence`, an `@a11ign/*` range the
 #                  installed sibling does not satisfy, a `--version` that disagrees, an entry point that will not
 #                  import. Says which layers it did NOT check. The decisions are pure and tested without a network.
@@ -81,7 +81,7 @@ jobs:
       # presence would put a monorepo `node_modules` on a resolution path the gate must keep clean. The script imports
       # nothing outside the checkout's own files and Node.
       - name: Install the published package into an empty directory and read it
-        run: node scripts/registry-consumer-gate.mjs --spec="$SPEC"
+        run: node scripts/registry-consumer-gate.ts --spec="$SPEC"
 
   outsider:
     # The same condition as `install`: a publish that failed published nothing new, so `latest` is what the daily run already read.
@@ -107,7 +107,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       - name: Read the outsider job's verdict
         env:
           GH_TOKEN: ${{ github.token }}
@@ -123,7 +123,7 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 30
     steps:
-      # The checkout is for `scripts/registry-consumer-gate.mjs` ONLY. The a11ign that runs below is the registry's,
+      # The checkout is for `scripts/registry-consumer-gate.ts` ONLY. The a11ign that runs below is the registry's,
       # installed into `$RUNNER_TEMP/clean`, a directory with nothing else in it and no repository above it.
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -133,7 +133,7 @@ jobs:
       # refusal here and only "unchecked" on the ubuntu job above.
       - name: Install into a clean directory, and refuse what a consumer could not run
         shell: bash
-        run: node scripts/registry-consumer-gate.mjs --into="$RUNNER_TEMP/clean" --require-imports --spec="$SPEC"
+        run: node scripts/registry-consumer-gate.ts --into="$RUNNER_TEMP/clean" --require-imports --spec="$SPEC"
 
       # STAYS `npx` (#2891, pinned by name in `workflows-run-pnpm.test.ts`): this job installs NOTHING from the repository, so
       # there is no pnpm project here for `pnpm exec` to resolve against, and `pnpm dlx` is the run-time fetch the move to pnpm

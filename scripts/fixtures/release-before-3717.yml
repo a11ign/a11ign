@@ -258,7 +258,7 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       # #3170 (#3159 follow-up): a dependency pull request is ACCEPTED from its diff by ci's `changeset` job, and the entry it
       # owes is WRITTEN here, so `changeset version` below consumes it with every other pending entry. It must come BEFORE
       # `release:version`: after it the changesets are already spent. Not folded into `release:version` itself, whose exact
@@ -458,7 +458,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       - run: pnpm run build
 
       # #3136 (ADR 0041, decision 3): THE RELEASE READS THE FLEET PART'S VERDICT, by commit sha, instead of ignoring it.
@@ -485,7 +485,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           READINGS: ${{ needs.plan.outputs.readings }}
-        run: node scripts/release-reads-qualification.mjs --sha=${{ github.sha }} --readings="$READINGS"
+        run: node scripts/release-reads-qualification.ts --sha=${{ github.sha }} --readings="$READINGS"
 
       # THE WHOLE-REPO COVERAGE THRESHOLD, HERE AND ON A NIGHTLY SCHEDULE (`nightly.yml`'s `coverage`
       # job -- moved there from the now-deleted `coverage.yml`, #901) -- chairman's direction, 2026-09-06,

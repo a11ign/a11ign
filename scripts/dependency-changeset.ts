@@ -35,9 +35,9 @@ import { appendFileSync, existsSync, readFileSync, readdirSync, realpathSync, wr
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { changedFiles } from "../packages/guards/src/changed-files.mjs";
-import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
-import { refuseUnknownFlags, flagValue } from "./cli-flags.mjs";
+import { changedFiles } from "../packages/guards/src/changed-files.ts";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.ts";
+import { refuseUnknownFlags, flagValue } from "./cli-flags.ts";
 
 /** The sections a consumer's install is built from. `devDependencies` is the one that is not. */
 export const RUNTIME_SECTIONS = ["dependencies", "peerDependencies", "optionalDependencies"];

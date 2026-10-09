@@ -9,7 +9,7 @@
 node_modules
 # THE OTHER MANAGER'S LOCKFILES (#2897, row 10 of 10 of "Finish the move to pnpm"). This repository is pnpm's, so
 # `pnpm-lock.yaml` is the only lock and these two are never wanted. An untracked `package-lock.json` sat in the primary
-# checkout after the move because someone ran `npm install`; `scripts/refuse-other-installers.mjs` (the root `preinstall`)
+# checkout after the move because someone ran `npm install`; `scripts/refuse-other-installers.ts` (the root `preinstall`)
 # now refuses that, and these lines are the second half: a stray one is ignored rather than left for a person to decide
 # about, and `one-package-manager.test.ts` fails if either is ever TRACKED, which an ignore alone does not prevent.
 package-lock.json
@@ -66,13 +66,13 @@ tsconfig.tsbuildinfo
 # the POLICY is what is specific, not the mechanism.
 packages/worker-fleet/tailscale-acl.hujson
 
-# A LAYER CHECKOUT, laid by `scripts/lay-layer.mjs` (#3504): `a11ign/screenreader-fleet`'s code at the path `control` imports it from. Never a commit here.
+# A LAYER CHECKOUT, laid by `scripts/lay-layer.ts` (#3504): `a11ign/screenreader-fleet`'s code at the path `control` imports it from. Never a commit here.
 /packages/worker-fleet
 
-# A LAYER CHECKOUT, laid by `scripts/lay-layer.mjs` (#3939): `a11ign/screenreader-worker`'s `src/` at the path the core reads the worker's files from, at the tag the lockfile pins. Never a commit here.
+# A LAYER CHECKOUT, laid by `scripts/lay-layer.ts` (#3939): `a11ign/screenreader-worker`'s `src/` at the path the core reads the worker's files from, at the tag the lockfile pins. Never a commit here.
 /packages/nvda-worker
 
-# A LAYER CHECKOUT, laid by `scripts/lay-layer.mjs` (#3505): `a11ign/lab`'s scripts, source, baselines and rule table at the path the product's scripts and tests read them from, at the tag `layers.json` declares. Never a commit here.
+# A LAYER CHECKOUT, laid by `scripts/lay-layer.ts` (#3505): `a11ign/lab`'s scripts, source, baselines and rule table at the path the product's scripts and tests read them from, at the tag `layers.json` declares. Never a commit here.
 /packages/lab
 
 # Hosts that are ours and are not capture infrastructure. `tailscale.yml` merges this with the inventory

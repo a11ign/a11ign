@@ -1,5 +1,5 @@
 /**
- * `scripts/registry-consumer-gate.mjs` decides, over an install read as DATA, what a consumer of the PUBLISHED a11ign could not run.
+ * `scripts/registry-consumer-gate.ts` decides, over an install read as DATA, what a consumer of the PUBLISHED a11ign could not run.
  *
  * What is pinned here, and why each is a way the gate could answer wrongly:
  *   1. EVERY REFUSAL HAS A TRIGGER AND A CLEAN COUNTERPART. `protocolFindings`, `duplicateFindings`, `rangeFindings`, `versionFindings`
@@ -23,7 +23,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const gate = await import(pathToFileURL(join(REPO_ROOT, "scripts/registry-consumer-gate.mjs")).href);
+const gate = await import(pathToFileURL(join(REPO_ROOT, "scripts/registry-consumer-gate.ts")).href);
 const {
   ENTRY_PACKAGE, RULES, FIXTURES_DIR, isOurs, isLoaderFailure, protocolFindings, duplicateFindings, lookupPaths, rangeFindings,
   versionFindings, importFindings, layerFindings, decide, formatDecision, readInstalledTree, repositoryLayers, readInstall,

@@ -19,7 +19,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { checkPipedExitStatus, checkPipedExitStatusInText, judgeLines, splitIntoBlocks } from "./piped-exit-status-guard.mjs";
+import { checkPipedExitStatus, checkPipedExitStatusInText, judgeLines, splitIntoBlocks } from "./piped-exit-status-guard.ts";
 
 const SCRIPT = join(resolve(dirname(fileURLToPath(import.meta.url))), "piped-exit-status-guard.mjs");
 const EXIT = { ALLOW: 0, HAZARD: 1, ERROR: 2 };

@@ -35,8 +35,8 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, join, posix } from "node:path";
 import { pathToFileURL } from "node:url";
-import { sandboxGitEnv } from "./git-env.mjs";
-import { stripComments } from "./local-import-closure.mjs";
+import { sandboxGitEnv } from "./git-env.ts";
+import { stripComments } from "./local-import-closure.ts";
 // RELATIVE, for the reason `changed-files.mjs` records above its own identical import.
 import { flagValue, refuseUnknownFlags } from "@a11ign/screenreader-fleet/cli-flags";
 

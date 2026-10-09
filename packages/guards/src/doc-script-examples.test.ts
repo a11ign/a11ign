@@ -18,7 +18,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { sandboxGitEnv } from "./git-env.mjs";
+import { sandboxGitEnv } from "./git-env.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const RECORD = new Set(["docs/backlog.md"]);

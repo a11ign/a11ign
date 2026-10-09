@@ -22,7 +22,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
-import { npmCliInvocation } from "../../../scripts/npm-cli-executable.mjs";
+import { npmCliInvocation } from "../../../scripts/npm-cli-executable.ts";
 
 const REPO = resolve(import.meta.dirname, "../../..");
 const PAGE = resolve(REPO, "docs/coverage.md");

@@ -55,7 +55,7 @@ is counted as not found, in the `Found:` line of each section (`yes`, `half`, `n
 - Refused: 2026-09-24T15:34:57Z, reviewer-2, "not convinced": *the interpreter parity test does not exercise its twelfth scenario through both implementations, leaving the claimed parity lock incomplete.*
 - Reviewer's path:
 > `packages/cli/src/auth/interpreter.test.ts:213-225` is the twelfth test and only calls the CLI's `controlsNamed`, `expectationMet`, and `requiredEnvNames`; it never calls the worker counterparts or compares results. The first 11 tests call `both(...)`, so the 12-test count is real but the “each through BOTH” claim is not.
-- Tests run: `npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/cli/src/auth/interpreter.test.ts && npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/cli/src/auth/rule-layer.test.ts`
+- Tests run: `npx rstest run --config scripts/rstest/rstest.config.ts --include packages/cli/src/auth/interpreter.test.ts && npx rstest run --config scripts/rstest/rstest.config.ts --include packages/cli/src/auth/rule-layer.test.ts`
 - Found: no
 - Operators that found it: none
 - Survivor covering it: none
@@ -66,7 +66,7 @@ is counted as not found, in the `Found:` line of each section (`yes`, `half`, `n
 - Refused: 2026-09-24T17:40:58Z, reviewer-2, "not convinced": *the required page-shape variation is not pinned by the acceptance tests.*
 - Reviewer's path:
 > The new test checks the population floor, announced strings, status roles, and well-formedness, but never checks those shape distributions. I changed both builders to discard `element` and `field`, making every new page a `<p>` with no named field; the acceptance suite remained green.
-- Tests run: `A11Y_ALLOW_FOREIGN_RESOLUTION=1 node packages/guards/src/assert-glob-not-empty.mjs "packages/lab/src/training/case-matrix.test.ts" --min=1 --run` and the same for `held-out-is-disjoint-from-training.test.ts`
+- Tests run: `A11Y_ALLOW_FOREIGN_RESOLUTION=1 node packages/guards/src/assert-glob-not-empty.ts "packages/lab/src/training/case-matrix.test.ts" --min=1 --run` and the same for `held-out-is-disjoint-from-training.test.ts`
 - Found: half
 - Operators that found it: arg-empty, cond-false
 - Survivor covering it: the `field` half only, `packages/lab/src/training/case-matrix.mjs:1409` (`label ? <label>...: ""` -> `false ? ...`, so `statusPageField` always returns `""`: the reviewer's `statusPageField("")` mutant in behaviour), and `:1435` and `:1456`, one in each of the two builders the reviewer edited (`statusPageField(field)` -> `statusPageField([])`, the field discarded).

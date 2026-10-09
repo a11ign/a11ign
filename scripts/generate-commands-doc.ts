@@ -28,7 +28,7 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 import { realpathSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { refuseUnknownFlags } from "@a11ign/screenreader-fleet/cli-flags";
-import { TOOLING_ROOTS } from "../packages/guards/src/tooling-roots.mjs";
+import { TOOLING_ROOTS } from "../packages/guards/src/tooling-roots.ts";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 export const OUT = resolve(REPO, "docs/commands.md");

@@ -25,12 +25,12 @@ import { join } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { refuseUnknownFlags } from "@a11ign/screenreader-fleet/cli-flags";
 const { assertNoLeakInArgv, leakRefusalReason } = await toolExport("leak-patterns");
-import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.ts";
 import {
   TARGETS_FILE, commentHeading, daySlices, inWindow, parseInclude, targetText, targetsFrom, verdictOf, weeklyWindow,
 } from "./ci-health.ts";
 import type { Run } from "./ci-health.ts";
-import { toolExport } from "./agent-org-newest-tag.mjs";
+import { toolExport } from "./agent-org-newest-tag.ts";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const MS_PER_HOUR = 3_600_000;

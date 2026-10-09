@@ -4,25 +4,25 @@
 
 Regenerate with `node --import tsx scripts/run.ts docs-commands`. Checked by `commands-documented.test.ts` against every script's own header; do not hand-edit.
 
-- `node packages/guards/src/assert-glob-not-empty.mjs` — refuse a test glob that resolves to zero files instead of passing silently
-- `node packages/guards/src/changed-files.mjs` — list the paths a range changed, BOTH SIDES OF A RENAME
-- `node packages/guards/src/changed-packages.mjs` — list which packages/<name> directories a branch touched against origin/main
-- `node packages/guards/src/isolation-gate.mjs` — prove a published package installs and works standalone, by actually installing and running it
+- `node packages/guards/src/assert-glob-not-empty.ts` — refuse a test glob that resolves to zero files instead of passing silently
+- `node packages/guards/src/changed-files.ts` — list the paths a range changed, BOTH SIDES OF A RENAME
+- `node packages/guards/src/changed-packages.ts` — list which packages/<name> directories a branch touched against origin/main
+- `node packages/guards/src/isolation-gate.ts` — prove a published package installs and works standalone, by actually installing and running it
 - `node --import tsx packages/guards/src/layer-edges.ts` — `node packages/guards/src/layer-edges.ts --check` -- every reach across a LAYER package's boundary, by path, against a baseline (#2612)
 - `node --import tsx packages/guards/src/mutant-survivors.ts` — choose mutants on a diff's changed lines by machine, run the named tests against each, and list the survivors
 - `node --import tsx packages/guards/src/mutate-diff.ts` — mutate the lines a pull request ADDED, run the tests it CHANGED, and report the survivors (#3282, decided on #3213)
-- `node packages/guards/src/mutation-check.mjs` — prove a guard actually bites: mutate a file, confirm its test fails, restore, confirm it passes
-- `node packages/guards/src/piped-exit-status-guard.mjs` — detect a piped command whose exit status was read from the wrong side of the pipe
-- `node packages/guards/src/test-memory-cap.mjs` — run a test runner under a per-process memory cap (systemd-run MemoryMax) and say what the cap did
-- `node packages/guards/src/tree-wide-guards.mjs` — every tracked *.test.ts file that DECLARES ITSELF a TREE-WIDE GUARD by importing and calling
-- `node scripts/agent-org-newest-tag.mjs` — resolve the newest stable release tag of agent-org and put that checkout where the CI steps below can run it
+- `node packages/guards/src/mutation-check.ts` — prove a guard actually bites: mutate a file, confirm its test fails, restore, confirm it passes
+- `node packages/guards/src/piped-exit-status-guard.ts` — detect a piped command whose exit status was read from the wrong side of the pipe
+- `node packages/guards/src/test-memory-cap.ts` — run a test runner under a per-process memory cap (systemd-run MemoryMax) and say what the cap did
+- `node packages/guards/src/tree-wide-guards.ts` — every tracked *.test.ts file that DECLARES ITSELF a TREE-WIDE GUARD by importing and calling
+- `node scripts/agent-org-newest-tag.ts` — resolve the newest stable release tag of agent-org and put that checkout where the CI steps below can run it
 - `node --import tsx scripts/auth-artifact-scan.ts` — prove no credential is in what a REAL run produced -- scans every text file under a path (markdown, comment, log, JSON, whatever the extension) for the values of two environment variables. Exit 0 clean, 1 a leak, 2 could not examine.
 - `node --import tsx scripts/auth-leak-check.ts` — prove a login's credential never reaches what a run writes (ADR 0038) -- drives a real capture on THIS machine's worker with a fake credential, then searches for it. Exit 0 clean, 1 a leak, 2 could not examine.
 - `node --import tsx scripts/changeset-untracked-check.ts` — refuse with the RIGHT message when the tree carries an untracked changeset
 - `node --import tsx scripts/check-retired-heads.ts` — refuse a candidate whose scorer head set shrank without declaring what it retired
 - `node --import tsx scripts/check-schema-migration.ts` — refuse a release while a declared schema migration is still open
 - `node --import tsx scripts/check-transfer-urls.ts` — check-transfer-urls -- walk the tree for every URL naming PRODUCT_REPO (a11ign/a11ign) and
-- `node scripts/ci-changed.mjs` — classify what a PR's diff touches, so CI's conditional jobs know whether to run
+- `node scripts/ci-changed.ts` — classify what a PR's diff touches, so CI's conditional jobs know whether to run
 - `node --import tsx scripts/ci-health.ts` — read CI health per repository against docs/ci-targets.json and, with --post, comment the table on #928
 - `node --import tsx scripts/consumer-gate-pin-needed.ts` — decide whether `consumer-gate.yml`'s pin must be regenerated at a commit, and whether a release run is owed after the repair (#4331)
 - `node --import tsx scripts/coverage-failure-classifier.ts` — turn a nightly coverage.yml failure comment into an actual finding, not just 'it failed'
@@ -35,18 +35,18 @@ Regenerate with `node --import tsx scripts/run.ts docs-commands`. Checked by `co
 - `node --import tsx scripts/history-secret-scan.ts` — scan every blob reachable from every ref for internal addresses and secret-shaped strings
 - `node --import tsx scripts/install-git-hooks.ts` — point git at this repo's tracked hooks; run automatically by npm install via prepare
 - `node --import tsx scripts/known-gaps-index.ts` — regenerate docs/known-gaps.md's own index of open sections from its headings
-- `node scripts/lay-layer.mjs` — lay a layer's code at the path this repository's readers expect, from the release the lockfile pins (#3504)
+- `node scripts/lay-layer.ts` — lay a layer's code at the path this repository's readers expect, from the release the lockfile pins (#3504)
 - `node --import tsx scripts/manifest-repository-check.ts` — refuse a publish whose manifests name a different repository than the run publishing them
 - `node --import tsx scripts/npm-token-liveness.ts` — say whether the first-publish npm token is still present after it should have been revoked
-- `node scripts/pnpm.mjs` — run pnpm with the arguments given, for a package script's chain on a box with no `pnpm` on PATH
+- `node scripts/pnpm.ts` — run pnpm with the arguments given, for a package script's chain on a box with no `pnpm` on PATH
 - `node --import tsx scripts/prune-stale-workspace-scope.ts` — remove a stale workspace-scope's node_modules symlinks a rename left behind
-- `node scripts/refuse-other-installers.mjs` — the root `preinstall`: refuses any installer that is not pnpm (#2897, row 10 of 10 of "Finish the move to pnpm")
-- `node scripts/registry-consumer-gate.mjs` — install what is PUBLISHED (a11ign from the registry) into an empty directory and refuse what a consumer could not run
+- `node scripts/refuse-other-installers.ts` — the root `preinstall`: refuses any installer that is not pnpm (#2897, row 10 of 10 of "Finish the move to pnpm")
+- `node scripts/registry-consumer-gate.ts` — install what is PUBLISHED (a11ign from the registry) into an empty directory and refuse what a consumer could not run
 - `node --import tsx scripts/release-gate-scope.ts` — warn which release:gate stages release:gate:ci does not run, and how many
 - `node --import tsx scripts/release-print-versions.ts` — print the version each published package's manifest now holds
-- `node scripts/release-promote.mjs` — decide which versions published to `next` become `latest`, and print the plan release.yml's `promote` job carries out
+- `node scripts/release-promote.ts` — decide which versions published to `next` become `latest`, and print the plan release.yml's `promote` job carries out
 - `node --import tsx scripts/release-publish-rehearsal.ts` — rehearse the release's pnpm-to-npm publish hand-off for every published package, publishing nothing
-- `node scripts/release-reads-qualification.mjs` — read the fleet part's `qualification` commit status for the release's sha, and say proceed, wait, rerun or regression
+- `node scripts/release-reads-qualification.ts` — read the fleet part's `qualification` commit status for the release's sha, and say proceed, wait, rerun or regression
 - `node --import tsx scripts/run.ts` — the one-line dispatcher: run a named command from commands.ts, or --list every command declared
 - `node --import tsx scripts/selection-skipped.ts` — for a CI run id, whether `rstest --changed` skipped the test that failed it; for a merge time, the first-run pass rate 14 days either side
 - `node --import tsx scripts/spotlight-exclude.ts` — stop Spotlight indexing every git worktree on this machine

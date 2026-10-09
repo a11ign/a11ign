@@ -1,0 +1,267 @@
+#!/usr/bin/env node
+// @ts-check
+// command: lay a layer's code at the path this repository's readers expect, from the release the lockfile pins (#3504)
+//
+// WHY THIS EXISTS. `packages/worker-fleet/` left the workspace for `a11ign/screenreader-fleet` (#3504), and `control` imports its source by
+// relative path and CANNOT import it by name: it runs from a raw checkout with no `node_modules` (ADR 0012, `control-has-no-dependencies.test.ts`).
+// ADR 0039 item 6 answers that with a declared second checkout at the path the monorepo used, `layers.json` at the root. A host gets it
+// from `fleet:deploy`; a CI runner and an agent's worktree get it from THIS, so `control`'s imports, and the tests that read the fleet's files,
+// resolve in the tree they run in. It is untracked (`.gitignore`) and outside the workspace (`pnpm-workspace.yaml`), so it never reaches a commit
+// or the lockfile.
+//
+// THE PIN IS THE LOCKFILE'S, NOT A SECOND ONE. The release the root imports from the registry names the tag to lay, `<package>@<version>`: what
+// `control` reads and what `a11ign` installs cannot name two builds. A lockfile that holds no registry entry for the package is REFUSED, never
+// answered with `main`.
+//
+// A LAYER THAT IS NOT ON THE REGISTRY DECLARES ITS OWN TAG (#3505). `lab` is `private: true` and never published, so the lockfile has no entry
+// to read and the pin is the `tag` field of its own declaration in `layers.json`: still ONE place, and still a tag, never a branch. It is declared
+// under `pinned`, not `layers`: `layers` are the ones a guest and a lab job must hold a pinned checkout of, and nothing on a worker runs the lab. A declaration
+// with a `tag` is never answered from the lockfile, and a declaration whose tag is not a `v<semver>` is REFUSED (a branch name moves under a
+// checkout that did not touch it). `lays` names what to lay when it is more than `src/`: `lab`'s root scripts, its baselines, `rule-ownership.json` and `CLAUDE.md`
+// are read by path from the rest of the tree.
+//
+// `control` IS LAID THE SAME WAY, AND READS THE DECLARATION THAT LAYS IT (#3506). `layers.json` moved from `packages/control/` to the root, because
+// a file inside a directory that is laid and untracked cannot say which tag to lay it at. `control`'s own readers still open `../layers.json` from
+// their `src/`, so `declares` names that file and `lay` WRITES this repository's copy there, over whatever the tag holds: one declaration, never two.
+// `keeps` names the files an operator holds INSIDE the laid directory (the untracked `inventory.yml`, `*.local.yml`): a re-lay wipes the directory,
+// so it carries those across, and a layer that declares none is wiped whole as before.
+//
+// THE SOURCE IS LAID, NOT THE PACKAGE: `src/` (less its own tests) and nothing that names it a package (`package.json`, `tsconfig.json`, the build config). Every walker
+// here that finds packages (`allPackages`, the build, the start guard's member scope, `ci-changed`) asks for a manifest first, so a laid directory
+// without one is invisible to them, and what `control` imports and the tests read is all under `src/`. The registry copy in `node_modules` is the package.
+//
+// NOT A SUBMODULE (ADR 0039 item 6 rejected it) and NOT A COPY OF THE TARBALL: the registry package ships `dist/`, not the `src/*.mjs` that
+// `control` imports.
+import { execFileSync } from "node:child_process";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.ts";
+import { refuseUnknownFlags } from "./cli-flags.ts";
+
+const REPO_ROOT = resolve(fileURLToPath(new URL("../", import.meta.url)));
+/** Written beside the laid code, so a second run can tell "already at this tag" from "something else is here". */
+export const REF_FILE = ".layer-ref";
+/** The layer's own tests run in its own repository; laid here they would join `test:all` and fail on what that repository gives them. */
+const TESTS = /\.test\.(?:ts|mts|mjs)$/;
+
+/**
+ * The version the root's registry entry for `name` holds in `pnpm-lock.yaml`, or the reason there is none.
+ * Read from the text so this file imports no YAML reader: the root importer's block is the one line after the name.
+ * Line breaks are `\r?\n`: a Windows runner checks the lockfile out with CRLF (git's `core.autocrlf` default there, and the repository carries no
+ * `.gitattributes`), and a reader spelling `\n` alone refused it at install (#3787).
+ * @param {string} lockfile
+ * @param {string} name
+ * @returns {{ version: string } | { refusal: string }}
+ */
+export function pinnedVersion(lockfile: string, name: string): { version: string; } | { refusal: string; } {
+  const block = lockfile.match(new RegExp(`^ {6}'${name.replace(/[/.]/g, "\\$&")}':\\r?\\n {8}specifier: [^\\r\\n]+\\r?\\n {8}version: ([^\\r\\n]+)$`, "m"));
+  if (!block) return { refusal: `pnpm-lock.yaml has no importer entry for ${name}` };
+  const version = block[1].replace(/\(.*$/, "");
+  if (!/^\d+\.\d+\.\d+/.test(version)) {
+    return { refusal: `${name} is "${version}" in pnpm-lock.yaml, not a registry release: there is no tag to lay (a link: means the package is still in the workspace)` };
+  }
+  return { version };
+}
+
+/** What a declared tag looks like: `v` and a semver. A branch or a bare sha is not a pin. */
+const DECLARED_TAG = /^v\d+\.\d+\.\d+$/;
+/** @typedef {{ path: string, source?: string, package?: string, remote?: string, tag?: string, lays?: string[], declares?: string, keeps?: string[] }} Declaration */
+/** @typedef {{ remote: string, tag: string, path: string, source?: string, lays: string[], declares?: string, keeps?: string[] }} LayingPlan */
+/** What `lay` puts down when a declaration names nothing else. */
+const DEFAULT_LAYS = ["src"];
+
+/**
+ * The first version whose repository tags a release `v<semver>` rather than `<package>@<version>`, by package (#4119). The tag form is the
+ * REPOSITORY's, not the version's: `screenreader-worker` moved to `v<semver>` at 0.3.0 (its tags are `@a11ign/screenreader-worker@0.2.0`, `v0.3.0`,
+ * `v0.4.0`), and `screenreader-fleet` moved to it at 0.5.3, the flat release (#4224; its tags up to 0.5.2 are `@a11ign/screenreader-fleet@0.5.2`), so a rule on the version alone would break one of them.
+ */
+const BARE_TAGS_FROM = { "@a11ign/screenreader-worker": [0, 3, 0], "@a11ign/screenreader-fleet": [0, 5, 3] };
+
+/** @param {string} version @returns {number[]} major, minor, patch */
+const semverParts = (version: string): number[] => version.split(".").slice(0, 3).map(Number);
+
+/**
+ * The tag a registry release is laid at: `v<version>` once its package's repository tags that way, `<package>@<version>` otherwise.
+ *
+ * @param {string} name the registry name, `@a11ign/<package>`
+ * @param {string} version
+ * @returns {string}
+ */
+export function releaseTag(name: string, version: string): string {
+  const from = BARE_TAGS_FROM[/** @type {keyof typeof BARE_TAGS_FROM} */ (name)];
+  if (from === undefined) return `${name}@${version}`;
+  const [major, minor, patch] = semverParts(version);
+  const atOrAfter = major !== from[0] ? major > from[0] : minor !== from[1] ? minor > from[1] : patch >= from[2];
+  return atOrAfter ? `v${version}` : `${name}@${version}`;
+}
+
+/**
+ * The tag to lay: the declaration's own when it has one (a layer that is not on the registry), else the release the lockfile pins.
+ * The registry package is the declaration's `package` (#3939), because a layer's key is not always its package (`nvda-worker` is `@a11ign/screenreader-worker`);
+ * a declaration without one means `@a11ign/<key>`. It is declared, never inferred from the repository name: `layers.json` is the one place that says.
+ * @param {{ tag?: string, package?: string }} entry
+ * @param {string} lockfile
+ * @param {string} layer
+ * @returns {{ tag: string } | { refusal: string }}
+ */
+function tagToLay(entry: { tag?: string; package?: string; }, lockfile: string, layer: string): { tag: string; } | { refusal: string; } {
+  if (entry.tag !== undefined) {
+    if (!DECLARED_TAG.test(entry.tag)) return { refusal: `layer "${layer}" declares tag "${entry.tag}", which is not a v<semver> tag: a branch or a sha is not a pin` };
+    return { tag: entry.tag };
+  }
+  const name = `@a11ign/${entry.package ?? layer}`;
+  const pinned = pinnedVersion(lockfile, name);
+  if ("refusal" in pinned) return pinned;
+  return { tag: releaseTag(name, pinned.version) };
+}
+
+/**
+ * What to lay, from the manifest and the lockfile: the repository, the tag, the path inside the repository, what of it to lay, and the path here.
+ * The layer's repository kept the directory at the same path it had in the monorepo (ADR 0040), so `path` named both ends; a release that moved the
+ * package (the worker's root, from v0.3.0, #4119) declares `source`, where the layer is in ITS repository, and `path` stays where it is laid HERE.
+ * @param {{ layers: Record<string, Declaration>, pinned?: Record<string, Declaration> }} manifest
+ * @param {string} lockfile
+ * @param {string} layer
+ * @returns {LayingPlan | { refusal: string }}
+ */
+export function layingPlan(manifest: { layers: Record<string, Declaration>; pinned?: Record<string, Declaration>; }, lockfile: string, layer: string): LayingPlan | { refusal: string; } {
+  const declared = [manifest.layers, manifest.pinned ?? {}].find((section) => Object.hasOwn(section, layer));
+  const entry = declared?.[layer];
+  if (!entry?.remote) return { refusal: `layer "${layer}" is not declared with a remote in layers.json` };
+  const pinned = tagToLay(entry, lockfile, layer);
+  if ("refusal" in pinned) return pinned;
+  return { remote: entry.remote, tag: pinned.tag, path: entry.path, lays: entry.lays ?? DEFAULT_LAYS,
+    ...(entry.source === undefined ? {} : { source: entry.source }), ...(entry.declares === undefined ? {} : { declares: entry.declares }), ...(entry.keeps === undefined ? {} : { keeps: entry.keeps }) };
+}
+
+/** @param {string[]} args @param {string} cwd */
+const git = (args: string[], cwd: string) => execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"], env: sandboxGitEnv() }).trim();
+
+/** Untracked files that `tsc --build` writes and a build rewrites from source: not work. Everything else untracked IS (an operator's `notes.txt`, #3836). */
+const BUILD_OUTPUT = /(^|\/)[^/]+\.tsbuildinfo$/;
+
+/** Whether `git status --porcelain -z` says the tree differs from its commit, an untracked build file (`BUILD_OUTPUT`) aside. @param {string} target */
+function hasUncommittedWork(target: string) {
+  const untracked = "?? ";
+  const entries = git(["status", "--porcelain", "-z", "--untracked-files=all"], target).split("\0").filter(Boolean);
+  return entries.some((entry) => !(entry.startsWith(untracked) && BUILD_OUTPUT.test(entry.slice(untracked.length))));
+}
+
+/**
+ * Whether a commit on a local ref is held by no remote ref AND by no tag that ORIGIN holds. A release is tagged, not always merged, so the commit a host's
+ * clone sits at can be on no branch of origin and still be pushed. The tags are read from ORIGIN (`ls-remote`), never from the clone's own list: a tag made
+ * here over a local-only commit is not evidence, and a local tag moved onto a name origin holds is read at origin's commit. Origin is asked only when the
+ * remote refs leave a commit over, and a failed ask throws, which the caller reports as "cannot tell". `--ignore-missing` drops a tag whose commit this
+ * clone never fetched: it cannot be an ancestor of anything here.
+ * @param {string} target
+ */
+function hasUnpushedCommits(target: string) {
+  const onNoRemoteRef = ["rev-list", "--max-count=1", "HEAD", "--branches", "--not", "--remotes"];
+  if (!git(onNoRemoteRef, target)) return false;
+  const heldByOrigin = git(["ls-remote", "--tags", "origin"], target).split("\n").filter(Boolean).map((line) => line.split("\t")[0]);
+  return Boolean(git([...onNoRemoteRef, "--ignore-missing", ...heldByOrigin], target));
+}
+
+/**
+ * Why a directory that holds a `.git` is NOT disposable, or null when it is: `bootstrap-control-plane.sh` and `deploy.yml` once made the layer's path a
+ * clone, and a host that still has one must migrate to the laid copy once (#3826 item 4), which is only safe when nothing in it exists nowhere else.
+ * Two things are work, and each has one thing that is not (#3973):
+ *   1. a tree that differs from its commit (untracked files included) is work, except an untracked BUILD file, which rebuilds from source (`BUILD_OUTPUT`);
+ *   2. a commit on a local ref that no remote ref holds is work, unless a tag that ORIGIN holds reaches it (`hasUnpushedCommits`).
+ * A git that cannot answer is "cannot tell", never "disposable": a `.git` it does not open would make it read the repository ABOVE, which is this one, and
+ * an origin that cannot be asked for its tags leaves a commit no branch holds unproven.
+ * @param {string} target
+ * @returns {string | null}
+ */
+function whyNotDisposable(target: string): string | null {
+  try {
+    if (realpathSync(git(["rev-parse", "--show-toplevel"], target)) !== realpathSync(target)) return "git does not open it as a repository of its own, so nothing says it is disposable";
+    const reasons = [];
+    if (hasUncommittedWork(target)) reasons.push("it has uncommitted changes");
+    if (hasUnpushedCommits(target)) reasons.push("it has unpushed commits (on no remote ref and under no tag origin holds)");
+    return reasons.length ? reasons.join(" and ") : null;
+  } catch (cause) {
+    throw new Error(`NOT LAID: ${target} holds a .git and git could not say whether it is disposable`, { cause });
+  }
+}
+
+/**
+ * The files of `target` that `keeps` names, as `[path under target, bytes]`. A `*` stands for part of ONE file name and never for a directory, so a
+ * pattern cannot reach further than the line that wrote it.
+ * @param {string} target
+ * @param {string[]} keeps
+ * @returns {[string, Buffer][]}
+ */
+function keptFiles(target: string, keeps: string[]): [string, Buffer][] {
+  return keeps.flatMap((pattern) => {
+    const directory = dirname(pattern);
+    if (!existsSync(join(target, directory))) return [];
+    const wanted = new RegExp(`^${pattern.slice(directory.length + 1).split("*").map((piece) => piece.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join("[^/]*")}$`);
+    return readdirSync(join(target, directory)).filter((name) => wanted.test(name))
+      .map((name) => /** @type {[string, Buffer]} */ ([join(directory, name), readFileSync(join(target, directory, name))]));
+  });
+}
+
+/**
+ * Whether `target` already holds exactly what `plan` would put there. The ref file alone is not "laid": a `git rebase` over the commit that deleted
+ * the tracked fleet removed `src/` and left `.layer-ref`, and a second run that trusted the file said "already at" over an empty directory (#3504,
+ * found at that rebase). Every part the declaration names, not `src/` alone: a declaration that gained a part at the same tag must lay it, not say
+ * "already at". And the declaration's own copy (#3506): a root `layers.json` that changed at the SAME tag must reach the copy `control` reads.
+ * @param {string} root
+ * @param {string} target
+ * @param {LayingPlan} plan
+ */
+function alreadyLaid(root: string, target: string, plan: LayingPlan) {
+  const refFile = join(target, REF_FILE);
+  if (!existsSync(refFile) || readFileSync(refFile, "utf8").trim() !== plan.tag) return false;
+  if (!plan.lays.every((part) => existsSync(join(target, part)))) return false;
+  return plan.declares === undefined || (existsSync(join(target, plan.declares)) && readFileSync(join(target, plan.declares), "utf8") === readFileSync(join(root, "layers.json"), "utf8"));
+}
+
+/**
+ * Put the layer's directory at `plan.path` under `root`, at `plan.tag`. Idempotent: a directory laid at the same tag is left alone; one laid at
+ * another is replaced, since it is a copy and not work (what `plan.keeps` names is carried across, the one thing in it that is). A git clone is
+ * replaced only when it is disposable (#3836), and otherwise REFUSED, naming the path and why: `pnpm install` runs this, and a clone with work in it
+ * is not a copy.
+ * @param {string} root
+ * @param {LayingPlan} plan
+ */
+export function lay(root: string, plan: LayingPlan) {
+  const target = join(root, plan.path);
+  const source = plan.source ?? plan.path;
+  if (alreadyLaid(root, target, plan)) return `already at ${plan.tag}`;
+  const unsafe = existsSync(join(target, ".git")) ? whyNotDisposable(target) : null;
+  if (unsafe) throw new Error(`NOT LAID: ${target} is a git clone and ${unsafe}; push or discard that work, or remove the directory, and run this again`);
+  const scratch = mkdtempSync(join(tmpdir(), "lay-layer-"));
+  try {
+    git(["-c", "advice.detachedHead=false", "clone", "--quiet", "--depth", "1", "--branch", plan.tag, plan.remote, scratch], root);
+    // A name the tag does not hold is a wrong declaration, never an empty layer, and it is read BEFORE the old copy goes.
+    for (const part of plan.lays) {
+      if (!existsSync(join(scratch, source, part))) throw new Error(`NOT LAID: ${plan.tag} of ${plan.remote} holds no ${source}/${part}`);
+    }
+    const kept = keptFiles(target, plan.keeps ?? []);
+    rmSync(target, { recursive: true, force: true });
+    mkdirSync(target, { recursive: true });
+    for (const part of plan.lays) cpSync(join(scratch, source, part), join(target, part), { recursive: true, filter: (path) => !TESTS.test(path) });
+    for (const [path, bytes] of kept) writeFileSync(join(target, path), bytes);
+    if (plan.declares) cpSync(join(root, "layers.json"), join(target, plan.declares));
+    writeFileSync(join(target, REF_FILE), `${plan.tag}\n`);
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+  return `laid ${plan.tag} at ${plan.path}`;
+}
+
+function main() {
+  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/lay-layer.ts <layer>" });
+  const layer = process.argv[2];
+  if (!layer) throw new Error("usage: node scripts/lay-layer.ts <layer>   (a key of layers.json)");
+  const manifest = JSON.parse(readFileSync(join(REPO_ROOT, "layers.json"), "utf8"));
+  const plan = layingPlan(manifest, readFileSync(join(REPO_ROOT, "pnpm-lock.yaml"), "utf8"), layer);
+  if ("refusal" in plan) throw new Error(`NOT LAID: ${plan.refusal}`);
+  console.log(lay(REPO_ROOT, plan));
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) main();

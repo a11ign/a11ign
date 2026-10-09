@@ -13,7 +13,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { inScope, parseWalkScope } from "./walk-scope-declaration.mjs";
+import { inScope, parseWalkScope } from "./walk-scope-declaration.ts";
 
 test("a file with no WALK_SCOPE declares nothing (null), which is not an empty scope", () => {
   assert.equal(parseWalkScope("import { test } from 'node:test';\ntest('x', () => {});\n"), null);

@@ -4,7 +4,7 @@
  *
  * ## Two halves, and why the first calls the shipped function
  *
- * 1. THE DECISION, over a table, by calling `decidePromotion` from `scripts/release-promote.mjs`, never a copy of its rules. The
+ * 1. THE DECISION, over a table, by calling `decidePromotion` from `scripts/release-promote.ts`, never a copy of its rules. The
  *    outcome comes from the decider that already exists (`qualificationDecision`), so each row says what the real history of
  *    statuses must yield: `proceed` promotes every released package, `wait`, `rerun` and `regression` promote none, `regression`
  *    (and an overdue `wait`) raise ONE row, a version older than the registry's latest is refused, and a status that is missing or
@@ -35,14 +35,14 @@ import {
   promotionTimeFrom,
   readDistTags,
   releaseShaOf,
-} from "../../../scripts/release-promote.mjs";
+} from "../../../scripts/release-promote.ts";
 import {
   QUALIFICATION_WRITER,
   qualificationDecision,
   qualificationStatusesFrom,
   WAIT_BOUND_MINUTES,
-} from "../../../scripts/release-reads-qualification.mjs";
-import { sandboxGitEnv } from "./git-env.mjs";
+} from "../../../scripts/release-reads-qualification.ts";
+import { sandboxGitEnv } from "./git-env.ts";
 
 const REPO = fileURLToPath(new URL("../../..", import.meta.url));
 const WORKFLOW = join(REPO, ".github/workflows/release.yml");
@@ -436,7 +436,7 @@ function termAdmits(term: string, event: string): boolean {
 }
 
 const NO_MOVE = "no job moves a dist-tag by OIDC in `npm-publish`";
-const NO_DECIDE = "no job runs `scripts/release-promote.mjs`";
+const NO_DECIDE = "no job runs `scripts/release-promote.ts`";
 
 function refusals(text: string): string[] {
   const workflow = parse(text) as Workflow;
@@ -594,7 +594,7 @@ test("a move job whose only mention of the words is an echo is not found", () =>
 test("a deciding job whose only mention of the script is an echo is not found", () => {
   const text = brokenAs((w) => {
     delete w.jobs![decideJobName(w)!];
-    w.jobs!.guards.steps!.push({ run: "echo 'node scripts/release-promote.mjs'" });
+    w.jobs!.guards.steps!.push({ run: "echo 'node scripts/release-promote.ts'" });
   });
   assert.deepEqual(refusals(text), [NO_DECIDE]);
 });
@@ -627,8 +627,8 @@ const BREAKS: { name: string; edit: (w: Workflow) => void; says: RegExp }[] = [
   { name: "the move stops re-checking the specs", edit: (w) => { for (const s of moveOf(w).steps!) if (/dist-tag add/.test(s.run ?? "")) s.run = s.run!.replace(/=~/g, "=="); }, says: /check each spec's shape again/ },
   // THE ROW'S POINT (#3969): nothing from another repository runs beside the OIDC token.
   { name: "the job holding id-token checks out the repository", edit: (w) => { moveOf(w).steps!.unshift({ uses: "actions/checkout@v7" }); }, says: /uses actions\/checkout/ },
-  { name: "the job holding id-token clones the tool again", edit: (w) => { moveOf(w).steps!.unshift({ run: 'node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"' }); }, says: /runs foreign code/ },
-  { name: "the job holding id-token runs the decider again", edit: (w) => { moveOf(w).steps!.unshift({ run: "node scripts/release-promote.mjs" }); }, says: /runs foreign code/ },
+  { name: "the job holding id-token clones the tool again", edit: (w) => { moveOf(w).steps!.unshift({ run: 'node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"' }); }, says: /runs foreign code/ },
+  { name: "the job holding id-token runs the decider again", edit: (w) => { moveOf(w).steps!.unshift({ run: "node scripts/release-promote.ts" }); }, says: /runs foreign code/ },
   { name: "the job holding id-token installs and runs a package of this repository", edit: (w) => { moveOf(w).steps!.unshift({ run: "pnpm install && pnpm run something" }); }, says: /runs foreign code/ },
   { name: "the job holding id-token uses some other action", edit: (w) => { moveOf(w).steps!.unshift({ uses: "someone-else/action@v1" }); }, says: /uses someone-else\/action/ },
   // `blocked` and `${{ }}` (item 4).
@@ -699,7 +699,7 @@ test("the move step, run: a second line smuggled into the list is checked like t
 });
 
 test("the move step re-applies the SAME shape `release-promote.mjs` checks: one regex, two places", () => {
-  const source = readFileSync(join(REPO, "scripts/release-promote.mjs"), "utf8");
+  const source = readFileSync(join(REPO, "scripts/release-promote.ts"), "utf8");
   const script = /const SPEC = \/(.+)\/;/.exec(source)![1];
   const step = moveOf(realWorkflow()).steps!.find((s) => /dist-tag add/.test(s.run ?? ""))!.run!;
   const shape = /spec_shape='([^']+)'/.exec(step)![1];

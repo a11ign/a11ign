@@ -63,7 +63,7 @@ jobs:
       - id: ci
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       - id: build
         run: pnpm run build
       # GH_TOKEN: `board-style.test.ts` and `row-claim.test.ts`'s live `fetchLabels` shell out to real `gh`
@@ -124,7 +124,7 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       - run: pnpm run build
       # CAPTURED TO A FILE, NOT JUST THE ACTIONS LOG (#2576) -- the step below reads it to name the failing
       # test files. `set -o pipefail`, because `| tee` on its own reports the PIPELINE's exit status as
@@ -241,7 +241,7 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       # The guard itself imports nothing built, but the step below reads `RSTEST_CONFIG` out of
       # `assert-glob-not-empty.mjs`, which imports `@a11ign/screenreader-fleet/cli-flags` -- a package export
       # resolving to `dist/`, which `--ignore-scripts` does not produce and which this repo does not track.
@@ -287,7 +287,7 @@ jobs:
           # own `bash -e` aborts the step before the refusal can print.
           RSTEST_CONFIG="$(node -e 'import("./packages/guards/src/assert-glob-not-empty.mjs").then((m) => { if (m.RSTEST_CONFIG) console.log(m.RSTEST_CONFIG); else process.exit(1); })')" || RSTEST_CONFIG=""
           if [ -z "$RSTEST_CONFIG" ]; then
-            echo '::error::CANNOT_TELL: could not read RSTEST_CONFIG from packages/guards/src/assert-glob-not-empty.mjs, so the runner was never started and NOTHING WAS READ. The export was renamed, or the build did not run. This is not a pass. See #2120.'
+            echo '::error::CANNOT_TELL: could not read RSTEST_CONFIG from packages/guards/src/assert-glob-not-empty.ts, so the runner was never started and NOTHING WAS READ. The export was renamed, or the build did not run. This is not a pass. See #2120.'
             exit 1
           fi
           # The repositories to read, out of the file the `agent-org` tool owns, so this list and the tool's cannot
@@ -349,7 +349,7 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       # #4195: the tracker and the board are read with an Octo STS token (policy `nightly-board-read`, which carries the claims it
       # binds to and why), not a stored PAT. A failed exchange fails the job: there is deliberately NO fallback to `github.token`,
       # which cannot resolve the organisation's ProjectV2 and would turn the board-membership check into a warning nobody reads.
@@ -387,7 +387,7 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       - run: pnpm run build
       - name: Write the doc cross-reference report and post it as one comment
         env:
@@ -419,7 +419,7 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 22 }
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       - name: If main's tip has zero check runs, trigger a real gate run against it
         env:
           GH_TOKEN: ${{ github.token }}
@@ -438,7 +438,7 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 22 }
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       - name: Close any row a merged PR declared that the push-time job missed
         env:
           GH_TOKEN: ${{ github.token }}
@@ -462,7 +462,7 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       - name: Read the org and post only if something needs attention
         env:
           GH_TOKEN: ${{ github.token }}

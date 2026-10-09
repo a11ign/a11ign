@@ -386,13 +386,13 @@ checkout again, which is what the ruling forbids.
 ```
 $ node outward.mjs
 51	packages/worker-fleet/src/cli-flags.mjs
-32	packages/guards/src/git-env.mjs
-30	scripts/repo-identity.mjs
+32	packages/guards/src/git-env.ts
+30	scripts/repo-identity.ts
 10	packages/lab/src/packaging/leak-patterns.mjs
-3	packages/guards/src/changed-files.mjs
-3	packages/guards/src/local-import-closure.mjs
-1	packages/guards/src/worktree-resolution.mjs
-1	scripts/npm-cli-executable.mjs
+3	packages/guards/src/changed-files.ts
+3	packages/guards/src/local-import-closure.ts
+1	packages/guards/src/worktree-resolution.ts
+1	scripts/npm-cli-executable.ts
 1	scripts/product-home.ts
 -- distinct targets by top: {"packages/worker-fleet":1,"packages/guards":4,"scripts":3,"packages/lab":1}
 -- distinct targets: 9  files with an outward import: 69
@@ -401,13 +401,13 @@ $ node outward.mjs
 ```
 $ bash nine.sh
 packages/worker-fleet/src/cli-flags.mjs                   211 lines   9 commits 116 importers-outside-agent-org
-packages/guards/src/git-env.mjs                            56 lines   1 commits  84 importers-outside-agent-org
-scripts/repo-identity.mjs                                  58 lines   7 commits  10 importers-outside-agent-org
+packages/guards/src/git-env.ts                            56 lines   1 commits  84 importers-outside-agent-org
+scripts/repo-identity.ts                                  58 lines   7 commits  10 importers-outside-agent-org
 packages/lab/src/packaging/leak-patterns.mjs              249 lines  15 commits   5 importers-outside-agent-org
-packages/guards/src/changed-files.mjs                      74 lines   2 commits   9 importers-outside-agent-org
-packages/guards/src/local-import-closure.mjs              146 lines   3 commits  13 importers-outside-agent-org
-packages/guards/src/worktree-resolution.mjs               218 lines   2 commits   3 importers-outside-agent-org
-scripts/npm-cli-executable.mjs                            182 lines   4 commits  34 importers-outside-agent-org
+packages/guards/src/changed-files.ts                      74 lines   2 commits   9 importers-outside-agent-org
+packages/guards/src/local-import-closure.ts              146 lines   3 commits  13 importers-outside-agent-org
+packages/guards/src/worktree-resolution.ts               218 lines   2 commits   3 importers-outside-agent-org
+scripts/npm-cli-executable.ts                            182 lines   4 commits  34 importers-outside-agent-org
 scripts/product-home.ts                                   49 lines   2 commits   1 importers-outside-agent-org
 -- leak patterns
 7
@@ -445,7 +445,7 @@ worktree-resolution            218         1      0
 
 ```
 $ git grep -nE 'agent-org' -- packages/guards/src ':!*.test.*' | grep -vE ':[0-9]+:\s*(//|\*|/\*)' | cut -c1-150; git grep -lE 'agent-org' -- packages/guards/src ':!*.test.*' | wc -l
-packages/guards/src/tooling-roots.mjs:23:export const TOOLING_ROOTS = Object.freeze(["scripts", "packages/agent-org/src", "packages/guards/src"]);
+packages/guards/src/tooling-roots.ts:23:export const TOOLING_ROOTS = Object.freeze(["scripts", "packages/agent-org/src", "packages/guards/src"]);
 6
 ```
 
@@ -1267,7 +1267,7 @@ that changed it), and then holds the row's `## Region`, `## Acceptance` and `## 
 a fenced block `product-manager` can paste. A Region names files that exist or are reserved by the row; where a list is long it is
 the output of the command in the row, taken at `46b59abf0`, and **the claimant re-runs the command at claim time** (a Region is a
 reading at a moment). Every Acceptance command below is the shape the filed rows use (`npx rstest run --config
-scripts/rstest/rstest.config.mjs --include <file>`); a NEW test file is named and is created by its row. **The order is 3a, 3g, then
+scripts/rstest/rstest.config.ts --include <file>`); a NEW test file is named and is created by its row. **The order is 3a, 3g, then
 3b, 3c and 3f in parallel, then 3d, then 3e, then 4, then 5; W is independent.** Native `blocked-by` edges to add:
 3g on 3a; 3b, 3c and 3f on 3g; 3d on 3b, 3c and 3f; 3e on 3d; 4 on 3e; 5 on 4. **The MOVE rows follow 5** (each names its own blockers and its **Chairman step**, or says none, which `product-manager` copies into the row's first paragraph and `needs:chairman` where a step is the chairman's): R1 and R2 (the npm renames) then M1 and M2 (the two layers), M5 then M6 (`documents`, then `cli`), M3 and M4 (`lab`, `control`), M0 (the removal). Every move row is filed under "Road to version one" and blocked by a native edge, so the milestone's open count is the distance to version one (decision 10).
 
@@ -1283,7 +1283,7 @@ gains the declaration and the reader must refuse the key rules; nothing about it
 .agent-org/project.json
 packages/agent-org/src/project-config.mjs
 packages/lab/src/packaging/project-config.test.ts
-scripts/repo-identity.mjs
+scripts/repo-identity.ts
 packages/agent-org/src/board-snapshot-scope.mjs
 ```
 
@@ -1293,8 +1293,8 @@ packages/agent-org/src/board-snapshot-scope.mjs
 ## Acceptance
 
 ```bash
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/project-config.test.ts
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/repo-identity-consolidated.test.ts --include packages/lab/src/packaging/board-snapshot-scope.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/project-config.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/repo-identity-consolidated.test.ts --include packages/lab/src/packaging/board-snapshot-scope.test.ts
 ```
 
 **The new test must show:** the a11ign declaration, read through the reader, gives exactly today's values (`a11ign/a11ign`, owner
@@ -1420,7 +1420,7 @@ claim time. **Commit in slices of at most 12 files** (the pre-commit cap); one p
 ## Acceptance
 
 ```bash
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/agent-org-outward-edges.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/agent-org-outward-edges.test.ts
 npm run test:org
 ```
 
@@ -1476,8 +1476,8 @@ Ten files, under the 12 a commit may stage. `acceptance-commands.mjs` is large a
 ## Acceptance
 
 ```bash
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/multi-board-claim.test.ts
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/row-claim-file-overlap-rule.test.ts --include packages/lab/src/packaging/row-claim.test.ts --include packages/lab/src/packaging/pr-open.test.ts --include packages/lab/src/packaging/region-paths.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/multi-board-claim.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/row-claim-file-overlap-rule.test.ts --include packages/lab/src/packaging/row-claim.test.ts --include packages/lab/src/packaging/pr-open.test.ts --include packages/lab/src/packaging/region-paths.test.ts
 ```
 
 **The new test must show, one fixture each:** with a declaration listing two code repositories, a claim whose Region overlaps a file
@@ -1522,8 +1522,8 @@ test double accepts any argument list.
 ## Acceptance
 
 ```bash
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/multi-board-gate.test.ts
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/work-gate.test.ts --include packages/lab/src/packaging/wake.test.ts --include packages/lab/src/packaging/work-gate-split-b4.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/multi-board-gate.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/work-gate.test.ts --include packages/lab/src/packaging/wake.test.ts --include packages/lab/src/packaging/work-gate-split-b4.test.ts
 ```
 
 **The new test must show:** with two projects, one open pull request in each with the SAME number yields two distinct reviewer seat names
@@ -1612,8 +1612,8 @@ neither moves nor changes: the declaration points at it.
 ## Acceptance
 
 ```bash
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/project-vocabulary.test.ts
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/row-claim-runner-rule.test.ts --include packages/lab/src/packaging/repo-identity-consolidated.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/project-vocabulary.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/row-claim-runner-rule.test.ts --include packages/lab/src/packaging/repo-identity-consolidated.test.ts
 ```
 
 **The new test must show:** every label, milestone title, template field name and shared-resource pattern the machinery reads equals the
@@ -1729,8 +1729,8 @@ files that reference `agent-org/docs/roles` at `46b59abf0`, and the claimant re-
 ## Acceptance
 
 ```bash
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/project-roles.test.ts
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/roles-readme.test.ts --include packages/lab/src/packaging/wake-engineer-brief.test.ts --include packages/lab/src/packaging/work-gate.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/project-roles.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/roles-readme.test.ts --include packages/lab/src/packaging/wake-engineer-brief.test.ts --include packages/lab/src/packaging/work-gate.test.ts
 ```
 
 **The new test must show:** a cause is ONE declaration `{cause, group, profile}` and the four exported lists equal today's when computed from
@@ -1780,8 +1780,8 @@ this row follows it and 3g by native edges.
 ## Acceptance
 
 ```bash
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/host-project-paths.test.ts
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/host-units.test.ts --include packages/lab/src/packaging/board-snapshot-scope.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/host-project-paths.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/host-units.test.ts --include packages/lab/src/packaging/board-snapshot-scope.test.ts
 ```
 
 **The new test must show:** no home-directory literal remains in the tool's sources or its own unit and script files (each is read from `host.json` or
@@ -1816,7 +1816,7 @@ The real shadow WINDOW (48 hours of live ticks) is the extraction row's precondi
 ## Acceptance
 
 ```bash
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/shadow-gate.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/shadow-gate.test.ts
 ```
 
 **The test must show, one fixture each:** two gates fed identical reads for a recorded run of ticks produce an EMPTY diff; one perturbed order is reported
@@ -1857,7 +1857,7 @@ and `host.json`'s data are NOT imported (they stayed with a11ign in 3e and 3f). 
 ## Acceptance
 
 ```bash
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/agent-org-extraction.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/agent-org-extraction.test.ts
 ```
 
 **The test must show:** no import in the extracted tree resolves outside it (decision 4's walk, 0 edges); nothing in `a11ign/a11ign` imports the package by a
@@ -1905,7 +1905,7 @@ Plus a `.changeset` (a published package changes).
 ## Acceptance
 
 ```bash
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/evidence/src/conformance.test.ts --include packages/cli/src/report.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/evidence/src/conformance.test.ts --include packages/cli/src/report.test.ts
 ```
 
 **The tests must show:** the rendered report for a run with each of the six stop codes contains the same gloss as today (six assertions, one per code, so a gloss moved
@@ -1944,7 +1944,7 @@ Plus every non-document file that names `@a11ign/nvda-worker`: **61 files at `46
 ## Acceptance
 
 ```bash
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/package-rename-nvda-worker.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/package-rename-nvda-worker.test.ts
 ```
 
 **The test must show:** the package's `name` is `@a11ign/screenreader-worker`; no file outside a deprecation note and the changeset names `@a11ign/nvda-worker`; every workspace importer resolves the new name. **Positive control:** the test's walk finds the old name in a fixture file and REFUSES it.
@@ -1977,7 +1977,7 @@ Plus the 168 non-document files that name `@a11ign/worker-fleet` at `46b59abf0`,
 ## Acceptance
 
 ```bash
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/package-rename-worker-fleet.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/package-rename-worker-fleet.test.ts
 ```
 
 **The test must show:** the package's `name` is `@a11ign/screenreader-fleet`; no file outside a deprecation note and the changeset names the old name; every importer resolves the new one. **Positive control:** a fixture file naming the old name is REFUSED.
@@ -2006,7 +2006,7 @@ packages/lab/src/packaging/agent-org-monorepo-copy-removed.test.ts
 ## Acceptance
 
 ```bash
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/agent-org-monorepo-copy-removed.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/agent-org-monorepo-copy-removed.test.ts
 ```
 
 **The test must show:** no tracked path under `packages/agent-org/`; no unit file of the tool's own in this repository; the a11ign declaration and `host.json` point at the installed tool. **Positive control:** a fixture tree still holding one file under the old path is REFUSED naming it.
@@ -2038,7 +2038,7 @@ PROVISIONAL: the tests that leave with the layer are #2613's set; `product-manag
 ## Acceptance
 
 ```bash
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/screenreader-worker-extraction.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/screenreader-worker-extraction.test.ts
 ```
 
 **The test must show:** the layer-edge guard (#2612) finds no edge in either direction; the licence test divides three ways as ADR 0039 finding 1 says; the new repository's first commit carries its `LICENSE`, the leak scan is clean at it, and its ruleset and protection are read back behaviourally in decision 6's order. **Positive control:** a fixture package with one relative import across the boundary is REFUSED naming both ends.
@@ -2069,7 +2069,7 @@ PROVISIONAL, as M1.
 ## Acceptance
 
 ```bash
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/screenreader-fleet-extraction.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/screenreader-fleet-extraction.test.ts
 ```
 
 **The test must show:** no edge in either direction across the boundary (its 12 `guards` imports and its dependency on the worker are by name); the first commit's licence and leak scan; protection read back. **Positive control:** a fixture with one relative import across the boundary is REFUSED.
@@ -2099,7 +2099,7 @@ PROVISIONAL and the widest after 5: what stays is the guards the product needs (
 ## Acceptance
 
 ```bash
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/lab-extraction.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/lab-extraction.test.ts
 ```
 
 **The test must show:** no edge in either direction; the tree-wide guards still run on the product's tree and select nothing outside it; protection read back. **Positive control:** a fixture with one edge across the boundary is REFUSED.
@@ -2129,7 +2129,7 @@ PROVISIONAL, as M3.
 ## Acceptance
 
 ```bash
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/control-extraction.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/control-extraction.test.ts
 ```
 
 **The test must show:** no edge across the boundary other than by package name; protection read back. **Positive control:** a fixture with one relative import across the boundary is REFUSED.
@@ -2159,7 +2159,7 @@ Plus the 26 files that name `@a11ign/pdf` by name at `46b59abf0` (`r-names`), pa
 ## Acceptance
 
 ```bash
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/documents-extraction.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/documents-extraction.test.ts
 ```
 
 **The test must show:** the package is named `@a11ign/documents`; nothing in `a11ign/a11ign` other than `cli` names `@a11ign/pdf`; no edge across the boundary (its only dependency is `pdf-lib`); the first commit's licence and leak scan. **Positive control:** a fixture naming the old name is REFUSED.
@@ -2189,7 +2189,7 @@ packages/lab/src/packaging/cli-documents-dependency.test.ts
 ## Acceptance
 
 ```bash
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/cli-documents-dependency.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/cli-documents-dependency.test.ts
 ```
 
 **The test must show:** `cli` declares `@a11ign/documents` by a semver RANGE and not `0.0.0`; the two imports of `looksLikePdfUrl` and `scanPdfTagTree` resolve to it. **Positive control:** a fixture declaring the workspace `0.0.0` is REFUSED.
@@ -2294,7 +2294,7 @@ done
 #!/usr/bin/env bash
 export LC_ALL=C
 cd "$(git rev-parse --show-toplevel)"
-for f in packages/worker-fleet/src/cli-flags.mjs packages/guards/src/git-env.mjs scripts/repo-identity.mjs packages/lab/src/packaging/leak-patterns.mjs packages/guards/src/changed-files.mjs packages/guards/src/local-import-closure.mjs packages/guards/src/worktree-resolution.mjs scripts/npm-cli-executable.mjs scripts/product-home.ts; do
+for f in packages/worker-fleet/src/cli-flags.mjs packages/guards/src/git-env.ts scripts/repo-identity.ts packages/lab/src/packaging/leak-patterns.mjs packages/guards/src/changed-files.ts packages/guards/src/local-import-closure.ts packages/guards/src/worktree-resolution.ts scripts/npm-cli-executable.ts scripts/product-home.ts; do
   printf "%-56s %4s lines %3s commits %3s importers-outside-agent-org\n" "$f" "$(wc -l < $f)" "$(git log --no-merges --oneline -- $f | wc -l)" "$(git grep -lE "$(basename $f .mjs)(\\.mjs)?[\"']" -- . ':!packages/agent-org' ':!*.md' ':!docs' | wc -l)"
 done
 echo "-- leak patterns"; grep -c 'name:' packages/lab/src/packaging/leak-patterns.mjs; grep -oE 'name: "[^"]+"' packages/lab/src/packaging/leak-patterns.mjs

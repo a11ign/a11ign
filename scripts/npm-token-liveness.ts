@@ -38,7 +38,7 @@
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags } from "@a11ign/screenreader-fleet/cli-flags";
-import { toolExport } from "./agent-org-newest-tag.mjs";
+import { toolExport } from "./agent-org-newest-tag.ts";
 const { REPO, gh } = await toolExport("board-data");
 
 const ISSUE = "73";

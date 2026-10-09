@@ -18,7 +18,7 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
-import { refuseUnknownFlags } from "./cli-flags.mjs";
+import { refuseUnknownFlags } from "./cli-flags.ts";
 
 const require = createRequire(import.meta.url);
 

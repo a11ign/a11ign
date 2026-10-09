@@ -54,20 +54,20 @@
       "why": "pnpm reads its hook file only under this exact name, and only as CommonJS, so it cannot be .ts"
     },
     {
-      "path": "packages/cli/isolation-smoke.mjs",
-      "why": "run by `packages/guards/src/isolation-gate.mjs` (plain node, from a throwaway directory outside the repository, against the installed tarball); the gate names `isolation-smoke.mjs` as its SMOKE file and the 16 isolation fixtures share that name, so it converts with the gate in #4393"
+      "path": "packages/cli/isolation-smoke.ts",
+      "why": "run by `packages/guards/src/isolation-gate.ts` (plain node, from a throwaway directory outside the repository, against the installed tarball); the gate names `isolation-smoke.mjs` as its SMOKE file and the 16 isolation fixtures share that name, so it converts with the gate in #4393"
     },
     {
-      "path": "packages/evidence/isolation-smoke.mjs",
-      "why": "run by `packages/guards/src/isolation-gate.mjs` (plain node, from a throwaway directory outside the repository, against the installed tarball); the gate names `isolation-smoke.mjs` as its SMOKE file and the 16 isolation fixtures share that name, so it converts with the gate in #4393"
+      "path": "packages/evidence/isolation-smoke.ts",
+      "why": "run by `packages/guards/src/isolation-gate.ts` (plain node, from a throwaway directory outside the repository, against the installed tarball); the gate names `isolation-smoke.mjs` as its SMOKE file and the 16 isolation fixtures share that name, so it converts with the gate in #4393"
     },
     {
-      "path": "packages/judge/isolation-smoke.mjs",
-      "why": "run by `packages/guards/src/isolation-gate.mjs` (plain node, from a throwaway directory outside the repository, against the installed tarball); the gate names `isolation-smoke.mjs` as its SMOKE file and the 16 isolation fixtures share that name, so it converts with the gate in #4393"
+      "path": "packages/judge/isolation-smoke.ts",
+      "why": "run by `packages/guards/src/isolation-gate.ts` (plain node, from a throwaway directory outside the repository, against the installed tarball); the gate names `isolation-smoke.mjs` as its SMOKE file and the 16 isolation fixtures share that name, so it converts with the gate in #4393"
     },
     {
-      "path": "packages/scorer/isolation-smoke.mjs",
-      "why": "run by `packages/guards/src/isolation-gate.mjs` (plain node, from a throwaway directory outside the repository, against the installed tarball); the gate names `isolation-smoke.mjs` as its SMOKE file and the 16 isolation fixtures share that name, so it converts with the gate in #4393"
+      "path": "packages/scorer/isolation-smoke.ts",
+      "why": "run by `packages/guards/src/isolation-gate.ts` (plain node, from a throwaway directory outside the repository, against the installed tarball); the gate names `isolation-smoke.mjs` as its SMOKE file and the 16 isolation fixtures share that name, so it converts with the gate in #4393"
     },
     {
       "path": ".agent-org/plugins/causes.mjs",

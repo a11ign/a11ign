@@ -56,12 +56,12 @@ Re-derive that list before trusting it — merges since `8def5595e` may add rows
 edited a line the migration edited: resolve toward the pre-migration text for that hunk, and say so in the PR.
 
 **1. Restore what the revert takes with it and is not migration.** #2301 also carried
-`packages/cli/isolation-smoke.mjs` changing its expected no-page exit from 1 to 2 (the fix for #2272).
+`packages/cli/isolation-smoke.ts` changing its expected no-page exit from 1 to 2 (the fix for #2272).
 A plain revert puts the wrong `1` back, and **`gate:isolation` then fails on `a11ign` with
 `got status 2`** — measured in the rehearsal, and it looks exactly like the trigger above and is not:
 
 ```bash
-git checkout f3fe9281d -- packages/cli/isolation-smoke.mjs
+git checkout f3fe9281d -- packages/cli/isolation-smoke.ts
 ```
 
 If more merges have touched files the migration touched, read `git diff --cached` for anything that is not
@@ -189,7 +189,7 @@ skipping 5 private package(s): never published, so nothing installs them
   SKIP  @a11ign/worker-fleet  cannot verify the host-capacity read on linux: it is macOS-specific by design ...
 5/7 package(s) usable when installed, 1 declined on linux — run the gate on macOS for those
 
-$ git checkout f3fe9281d -- packages/cli/isolation-smoke.mjs   # step 1 above
+$ git checkout f3fe9281d -- packages/cli/isolation-smoke.ts   # step 1 above
 $ npm run gate:isolation                                    # SECOND RUN: EXIT 0
   ok    a11ign  a11ign works when installed: bin RUNS (exit 2, usage printed), 80 report lines, layers ordered; 1 bin(s) on PATH
   ok    @a11ign/evidence ... ok @a11ign/judge ... ok @a11ign/nvda-worker ... ok @a11ign/pdf ... ok @a11ign/scorer

@@ -32,16 +32,16 @@ import {
 import { constants as osConstants, homedir, tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { changedFiles } from "../packages/guards/src/changed-files.mjs";
-import { underFloor } from "../packages/guards/src/assert-glob-not-empty.mjs";
-import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
-import { refuseUnknownFlags, flagValue } from "./cli-flags.mjs";
+import { changedFiles } from "../packages/guards/src/changed-files.ts";
+import { underFloor } from "../packages/guards/src/assert-glob-not-empty.ts";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.ts";
+import { refuseUnknownFlags, flagValue } from "./cli-flags.ts";
 const { checkBody } = await toolExport("pr-open");
-import { classify, knownPackages, packedFiles } from "./ci-changed.mjs";
-import { privateRunRoot } from "./private-tmp.mjs";
+import { classify, knownPackages, packedFiles } from "./ci-changed.ts";
+import { privateRunRoot } from "./private-tmp.ts";
 // NEVER a bare `pnpm` spawn -- unsafe on Windows (CVE-2024-27980), and this repo's own guard refuses one.
-import { pnpmCliInvocation } from "./npm-cli-executable.mjs";
-import { toolBin, toolExport } from "./agent-org-newest-tag.mjs";
+import { pnpmCliInvocation } from "./npm-cli-executable.ts";
+import { toolBin, toolExport } from "./agent-org-newest-tag.ts";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 const STAMP_FILE = "verify-stamp.json";
@@ -250,7 +250,7 @@ function pnpm(pnpmArgs: string[], { stdio = "inherit" }: { stdio?: import("node:
  */
 export const AFFECTED_INCLUDE = "packages/*/src/**/*.test.ts";
 export const AFFECTED_MIN_FILES = 107;
-const RSTEST_CONFIG = "scripts/rstest/rstest.config.mjs";
+const RSTEST_CONFIG = "scripts/rstest/rstest.config.ts";
 
 /**
  * The words the stamp says, in ONE place: the verify output and `--check` both print it, and a test pins that it carries

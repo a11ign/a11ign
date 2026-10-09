@@ -9,7 +9,7 @@ name: ci
 #   - `ansible-check.yml` carried a THIRD, independent "did the fleet's Ansible layer change" `paths:` block.
 #
 # Three copies of "what changed", proven capable of drifting the moment a fourth question (docs) needed
-# asking too -- this repo's own most-repeated defect, aimed at its own CI. `scripts/ci-changed.mjs` is now
+# asking too -- this repo's own most-repeated defect, aimed at its own CI. `scripts/ci-changed.ts` is now
 # the one place that question is answered, and every job below is conditional on its output rather than
 # carrying its own `paths:` filter. `ci-changed.test.ts` pins the classification AND this file's own
 # trigger table, so a future "just add the tests to lint" (or the equivalent here) fails a unit test rather
@@ -256,7 +256,7 @@ jobs:
           fi
           echo "ref=origin/$base" >> "$GITHUB_OUTPUT"
       - id: classify
-        run: node scripts/ci-changed.mjs --event=${{ github.event_name }} --base=${{ steps.base.outputs.ref }}
+        run: node scripts/ci-changed.ts --event=${{ github.event_name }} --base=${{ steps.base.outputs.ref }}
 
   # A1 (#452): CALLS `reusable-build-test.yml` rather than carrying its own steps -- see that file's own
   # header for why (its `trunkGate` sibling in trunk.yml used to duplicate most of this job's steps
@@ -295,7 +295,7 @@ jobs:
         with: { python-version: "3.12" }
       # The playbooks left this repository for `a11ign/control` (#3506): they are LAID at the tag `layers.json` pins, which needs git and node and nothing installed.
       - name: Lay a11ign/control's playbooks where the checks read them
-        run: node scripts/lay-layer.mjs control
+        run: node scripts/lay-layer.ts control
       # `ansible-core`, not the full `ansible` metapackage -- the metapackage bundles hundreds of
       # collections this fleet does not use.
       - run: pip install ansible-core pyyaml
@@ -342,7 +342,7 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       - run: pnpm run build
       - run: pnpm run rules-check
 
@@ -408,13 +408,13 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       # PRECISE, now that the install has made `npm pack` safe to call. `orchestrator` reproduced the crash
       # this avoids: `classify()` calling the real `packedFiles` inside `changed` (no install at all) fails
       # on every PR touching a published package. This re-derives the real answer -- does npm actually
       # SHIP this file -- and it is what decides whether the enforcement step below runs anything at all.
       - id: precise
-        run: node scripts/ci-changed.mjs --event=${{ github.event_name }} --base=${{ needs.changed.outputs.base }} --precise
+        run: node scripts/ci-changed.ts --event=${{ github.event_name }} --base=${{ needs.changed.outputs.base }} --precise
       # #3159 (sibling of #3137, ADR 0041 decision 4): A DEPENDENCY PULL REQUEST IS READ FROM ITS DIFF. This job runs
       # `changeset status`, which reads files, so #3137's body fragment cannot clear it (#3155 failed here). The entry a
       # consumer reads is DERIVED from the manifests, never typed and never taken from the title, and it is written when
@@ -454,7 +454,7 @@ jobs:
           echo "settled=true" >> "$GITHUB_OUTPUT"
       # #4136: `no-release: <reason>` IN THE BODY SETTLES A REFUSAL HERE AS IT DOES IN THE SHARED CHECK (a11ign/toolchain
       # `changeset-required.yml`, #4127), because two vocabularies are two rules: this job's `npm pack` answer decides WHICH pull
-      # requests owe a changeset, and the line says why one that does owes none. `scripts/ci-changed.mjs --no-release` is the parser
+      # requests owe a changeset, and the line says why one that does owes none. `scripts/ci-changed.ts --no-release` is the parser
       # (the shared script's, case for case). THE BODY IS READ LIVE, never from the event payload: that copy is stale on a rerun, which is
       # how a body corrected after the refusal clears it (edit the body, then rerun this run's failed jobs; a `meta` run skips this job).
       # A queue entry has no body, so the pull request it carries is found by the number on its merge commit's first line, as the title is
@@ -470,7 +470,7 @@ jobs:
         run: |
           number="${PULL_NUMBER:-$(printf '%s\n' "$QUEUE_MESSAGE" | sed -nE '1s/^Merge pull request #([0-9]+) from .*/\1/p')}"
           if [ -z "$number" ]; then echo "no pull request number to read a body from: the changeset check decides"; exit 0; fi
-          PR_BODY=$(gh api "repos/$REPO/pulls/$number" --jq '.body // ""') node scripts/ci-changed.mjs --no-release
+          PR_BODY=$(gh api "repos/$REPO/pulls/$number" --jq '.body // ""') node scripts/ci-changed.ts --no-release
       # #3584: A QUEUE ENTRY IS DIFFED AGAINST ITS OWN PARENT, as the `deps:` step above does. Up to 5 entries are built and
       # entry 2 contains entry 1, while `needs.changed.outputs.base` is `origin/main`, which does not yet hold the entry
       # ahead: behind the version-packages entry, its consumed bumps of `package.json` and `CHANGELOG.md` read as this
@@ -520,7 +520,7 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       - run: pnpm run build
       # `GH_TOKEN` because the packaging guards in the population shell out to `gh`, as `ts`'s own test step does.
       - name: Every tree-wide guard, on this tree
@@ -609,7 +609,7 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       - run: pnpm run build
       - name: This head matches what GitHub recorded (#294)
         env:
@@ -718,7 +718,7 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 22 }
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       - name: Which paths did this PR change, and does its body sign them off?
         env:
           BODY: ${{ github.event.pull_request.body }}

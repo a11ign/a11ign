@@ -15,8 +15,8 @@
 import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync, realpathSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
-import { refuseUnknownFlags } from "./cli-flags.mjs";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.ts";
+import { refuseUnknownFlags } from "./cli-flags.ts";
 import { actionPinVerdict, extractPinnedSha } from "./generate-consumer-gate.ts";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));

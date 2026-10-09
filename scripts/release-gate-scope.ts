@@ -9,15 +9,15 @@
 // two chains every run means the count can only ever describe the chain that is actually there.
 import { readFileSync, realpathSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { refuseUnknownFlags } from "./cli-flags.mjs";
+import { refuseUnknownFlags } from "./cli-flags.ts";
 
 const REPO = fileURLToPath(new URL("../", import.meta.url));
 
-/** The stage links a chained script invokes: `npm run x`, `pnpm run x` or `node scripts/pnpm.mjs run x`. */
+/** The stage links a chained script invokes: `npm run x`, `pnpm run x` or `node scripts/pnpm.ts run x`. */
 const STAGE_LINK = /(?:npm|pnpm|pnpm\.mjs) run ([\w:.-]+)/g;
 
 /** The stages a chained script invokes, in order. Refuses a chain that parses to none: the spelling of a link
- * changed once (`pnpm run` to `node scripts/pnpm.mjs run`, #3277) and the pattern read zero stages, which the
+ * changed once (`pnpm run` to `node scripts/pnpm.ts run`, #3277) and the pattern read zero stages, which the
  * subset check below passed as `0 + 0 === 0` and the warning printed as "0 of 0".
  * @param {Record<string, string>} scripts
  * @param {string} name

@@ -26,7 +26,7 @@ import { execFileSync, type ExecFileSyncOptionsWithStringEncoding } from "node:c
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { sandboxGitEnv } from "../../../guards/src/git-env.mjs";
+import { sandboxGitEnv } from "../../../guards/src/git-env.ts";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
 const ACTION = fileURLToPath(new URL("../../../../action.yml", import.meta.url));

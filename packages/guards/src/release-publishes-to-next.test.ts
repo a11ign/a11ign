@@ -159,7 +159,7 @@ function brokenAs(edit: (workflow: Workflow) => void): string {
 const VERDICT_STEP: Step = {
   id: "qualification",
   name: "Read the fleet part's verdict for this sha",
-  run: "node scripts/release-reads-qualification.mjs --sha=${{ github.sha }}",
+  run: "node scripts/release-reads-qualification.ts --sha=${{ github.sha }}",
 };
 
 test("the real release.yml publishes to `next`, with the fleet verdict off the path and every guard still there", () => {

@@ -1,6 +1,6 @@
 /**
  * #3505 (move 3 of #69, the delete step): THE DELETE'S OWN TEST. `packages/lab` left the workspace for `a11ign/lab` (ADR 0040, M3), and this repository
- * takes it as a PINNED TAG: `layers.json` declares the tag, and `scripts/lay-layer.mjs` lays the lab's scripts, source, baselines and
+ * takes it as a PINNED TAG: `layers.json` declares the tag, and `scripts/lay-layer.ts` lays the lab's scripts, source, baselines and
  * rule table at `packages/lab` (untracked, never a workspace member) for the scripts, tests and workflows that read them by path. It lives in
  * `packages/guards`, not in the directory it proves gone: that directory cannot hold the test that says it is not there.
  *
@@ -36,8 +36,8 @@ import { tmpdir } from "node:os";
 import { dirname, join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
-import { sandboxGitEnv } from "./git-env.mjs";
-import { treeWideGuardFiles } from "./tree-wide-guards.mjs";
+import { sandboxGitEnv } from "./git-env.ts";
+import { treeWideGuardFiles } from "./tree-wide-guards.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const DEPARTED_DIRECTORY = "lab";
@@ -296,13 +296,13 @@ test("lab is taken as a pinned tag of a11ign/lab, laid by build and prepare, and
 test("POSITIVE CONTROL: a branch for a tag, a missing layer, a layer a deploy would demand a pin for, a build that does not lay it and an unignored laid copy are each REFUSED", () => {
   const lab = { path: DEPARTED_PATH, remote: "https://github.com/a11ign/lab.git", tag: "v0.1.2", lays: ["src"] };
   const good = { manifest: { layers: {}, pinned: { lab } },
-    scripts: { build: "node scripts/lay-layer.mjs lab", prepare: "node scripts/lay-layer.mjs lab && x" }, gitignore: `/${DEPARTED_PATH}\n` };
+    scripts: { build: "node scripts/lay-layer.ts lab", prepare: "node scripts/lay-layer.ts lab && x" }, gitignore: `/${DEPARTED_PATH}\n` };
   assert.deepEqual(pinRefusals(good), []);
   assert.match(pinRefusals({ ...good, manifest: { layers: {}, pinned: { lab: { ...lab, tag: "main" } } } })[0], /a pin is a v<semver> tag, never a branch or a sha/);
   assert.match(pinRefusals({ ...good, manifest: { layers: {}, pinned: { lab: { ...lab, tag: undefined } } } })[0], /a pin is a v<semver> tag/);
   assert.deepEqual(pinRefusals({ ...good, manifest: { layers: {}, pinned: {} } }), ["layers.json declares no `lab` layer under `pinned`"]);
   assert.deepEqual(pinRefusals({ ...good, manifest: { layers: { lab }, pinned: { lab } } }), ["`lab` is declared under `layers`, which makes fleet:deploy and every lab job demand a pin for it"]);
-  assert.deepEqual(pinRefusals({ ...good, scripts: { build: "node scripts/lay-layer.mjs lab", prepare: "x" } }), ["`prepare` does not lay lab"]);
+  assert.deepEqual(pinRefusals({ ...good, scripts: { build: "node scripts/lay-layer.ts lab", prepare: "x" } }), ["`prepare` does not lay lab"]);
   assert.deepEqual(pinRefusals({ ...good, gitignore: "node_modules\n" }), [`.gitignore does not ignore /${DEPARTED_PATH}`]);
 });
 

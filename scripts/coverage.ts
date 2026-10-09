@@ -35,11 +35,11 @@ import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { CoverageProvider } from "@rstest/coverage-v8";
-import { refuseUnknownFlags } from "./cli-flags.mjs";
-// The toolchain's SOURCE by relative path, for the reason `scripts/rstest/rstest.config.mjs` gives: a tree with no `dist` must run this.
+import { refuseUnknownFlags } from "./cli-flags.ts";
+// The toolchain's SOURCE by relative path, for the reason `scripts/rstest/rstest.config.ts` gives: a tree with no `dist` must run this.
 import { coverageOptionsFromC8rc, coverageTotals, runChildCoverage } from "@a11ign/toolchain/merge-child-coverage";
 // #492: a bare "pnpm" spawn is ENOENT on windows-2022; `npm-cli-windows-spawn.test.ts` refuses one.
-import { pnpmCliInvocation } from "./npm-cli-executable.mjs";
+import { pnpmCliInvocation } from "./npm-cli-executable.ts";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const REPORTS_DIRECTORY = join(ROOT, "coverage", "rstest");
@@ -113,14 +113,14 @@ export function coverageVerdict({ mergedReport, mergeStatus, providerExitCode, t
 
 async function main() {
   refuseUnknownFlags([], { entry: import.meta.url, command: "node --import tsx scripts/coverage.ts" });
-  const floor = step([join(ROOT, "packages/guards/src/assert-glob-not-empty.mjs"), TEST_GLOB, `--min=${MIN_TEST_FILES}`]);
+  const floor = step([join(ROOT, "packages/guards/src/assert-glob-not-empty.ts"), TEST_GLOB, `--min=${MIN_TEST_FILES}`]);
   if (floor.status !== 0) {
     process.stderr.write(`coverage: the vacuity floor failed (${TEST_GLOB} matched fewer than ${MIN_TEST_FILES} files) -- not measuring.\n`);
     process.exit(floor.status ?? 1);
   }
 
   const c8rc = JSON.parse(readFileSync(join(ROOT, ".c8rc.json"), "utf8"));
-  const rstest = pnpmCliInvocation(["exec", "rstest", "run", "--config", "scripts/rstest/rstest.config.mjs"]);
+  const rstest = pnpmCliInvocation(["exec", "rstest", "run", "--config", "scripts/rstest/rstest.config.ts"]);
   const mergeStatus = await runChildCoverage({ root: ROOT, population: c8rc, rstest: { command: rstest.command, args: rstest.args } });
   const mergedReport = existsSync(MERGED_REPORT);
   let totals = null;

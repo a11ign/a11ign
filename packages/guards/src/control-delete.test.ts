@@ -1,7 +1,7 @@
 /**
  * #3506 (move 4 of #69, the delete step): THE DELETE'S OWN TEST. `packages/control` left the workspace for `a11ign/control` (ADR 0040, M4), and this
  * repository takes it as a PINNED TAG: `layers.json` (at the ROOT since this row, because a file inside a directory that is laid and untracked cannot say
- * which tag to lay it at) declares the tag, and `scripts/lay-layer.mjs` lays control's `src/` and `ansible/` at `packages/control` (untracked, never a
+ * which tag to lay it at) declares the tag, and `scripts/lay-layer.ts` lays control's `src/` and `ansible/` at `packages/control` (untracked, never a
  * workspace member) for the root scripts, the workflows and the hosts that run them by path. It lives in `packages/guards`, not in the directory it proves
  * gone: that directory cannot hold the test that says it is not there. `lab-delete.test.ts` is the same test for the lab, and this one differs where control does:
  *
@@ -36,7 +36,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
-import { sandboxGitEnv } from "./git-env.mjs";
+import { sandboxGitEnv } from "./git-env.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const DEPARTED_DIRECTORY = "control";
@@ -276,14 +276,14 @@ test("control is taken as a pinned tag of a11ign/control, laid by build and prep
 test("POSITIVE CONTROL: a branch for a tag, a missing layer, a layer a deploy would demand a pin for, no declaration copy, a build that does not lay it and an unignored laid copy are each REFUSED", () => {
   const control = { path: DEPARTED_PATH, remote: "https://github.com/a11ign/control.git", tag: "v0.1.2", lays: ["src", "ansible"], declares: "layers.json" };
   const good = { manifest: { layers: {}, pinned: { control } },
-    scripts: { build: "node scripts/lay-layer.mjs control", prepare: "node scripts/lay-layer.mjs control && x" }, gitignore: `/${DEPARTED_PATH}\n` };
+    scripts: { build: "node scripts/lay-layer.ts control", prepare: "node scripts/lay-layer.ts control && x" }, gitignore: `/${DEPARTED_PATH}\n` };
   assert.deepEqual(pinRefusals(good), []);
   assert.match(pinRefusals({ ...good, manifest: { layers: {}, pinned: { control: { ...control, tag: "main" } } } })[0], /a pin is a v<semver> tag, never a branch or a sha/);
   assert.match(pinRefusals({ ...good, manifest: { layers: {}, pinned: { control: { ...control, tag: undefined } } } })[0], /a pin is a v<semver> tag/);
   assert.deepEqual(pinRefusals({ ...good, manifest: { layers: {}, pinned: {} } }), ["layers.json declares no `control` layer under `pinned`"]);
   assert.deepEqual(pinRefusals({ ...good, manifest: { layers: { control }, pinned: { control } } }), ["`control` is declared under `layers`, which makes fleet:deploy and every lab job demand a pin for it"]);
   assert.match(pinRefusals({ ...good, manifest: { layers: {}, pinned: { control: { ...control, declares: undefined } } } })[0], /does not declare the copy of layers\.json it reads/);
-  assert.deepEqual(pinRefusals({ ...good, scripts: { build: "node scripts/lay-layer.mjs control", prepare: "x" } }), ["`prepare` does not lay control"]);
+  assert.deepEqual(pinRefusals({ ...good, scripts: { build: "node scripts/lay-layer.ts control", prepare: "x" } }), ["`prepare` does not lay control"]);
   assert.deepEqual(pinRefusals({ ...good, gitignore: "node_modules\n" }), [`.gitignore does not ignore /${DEPARTED_PATH}`]);
 });
 

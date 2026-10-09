@@ -18,7 +18,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { packageIndex, sourceClosure } from "./walk-scope-discovery.mjs";
+import { packageIndex, sourceClosure } from "./walk-scope-discovery.ts";
 
 type Files = Record<string, string | object>;
 

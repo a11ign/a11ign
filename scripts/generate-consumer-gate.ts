@@ -70,8 +70,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { refuseUnknownFlags } from "@a11ign/screenreader-fleet/cli-flags";
-import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
-import { REPO as ACTION_REPO, PRODUCT_REPO } from "./repo-identity.mjs";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.ts";
+import { REPO as ACTION_REPO, PRODUCT_REPO } from "./repo-identity.ts";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 export const README_PATH = `${REPO}README.md`;
@@ -474,7 +474,7 @@ function buildCheckPinJob(pinnedSha: string): string {
     // `$AGENT_ORG_TOOL`. On a runner nothing sets it but this step (the other workflows run it for the same reason), so
     // without it the import died with ERR_MODULE_NOT_FOUND on a host path, in the last two release runs.
     "      - name: The tool at the newest release tag, cloned for this run, so `--check` can read the project declaration",
-    '        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"',
+    '        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"',
     // #3828: NO `if ! ... ; then echo "does not match"` AROUND `--check`. That wrapper turned every non-zero exit, a
     // crash at import included, into a claim about the file that nothing had measured, and sent the reader to
     // regenerate, which cannot help. `--check` prints its own `STALE` line when it HAS measured a mismatch.

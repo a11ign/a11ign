@@ -66,7 +66,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { toolRoot } from "../../../scripts/agent-org-newest-tag.mjs";
+import { toolRoot } from "../../../scripts/agent-org-newest-tag.ts";
 // A declared export of the tool (`agent-org/newest-check-run`, its `package.json` `exports`), never a path under its `src/` (#4407).
 const { newestPerName, newestConclusionOf } = await import(
   pathToFileURL(createRequire(join(toolRoot(), "package.json")).resolve("agent-org/newest-check-run")).href);

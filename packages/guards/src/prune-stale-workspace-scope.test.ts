@@ -196,7 +196,7 @@ test("CLI (a copy inside a fixture, never the real node_modules): prunes the sta
   withRepo((repo) => {
     mkdirSync(join(repo, "scripts"));
     copyFileSync(SCRIPT, join(repo, "scripts/prune-stale-workspace-scope.ts"));
-    copyFileSync(join(REPO_ROOT, "scripts/cli-flags.mjs"), join(repo, "scripts/cli-flags.mjs"));
+    copyFileSync(join(REPO_ROOT, "scripts/cli-flags.ts"), join(repo, "scripts/cli-flags.ts"));
     const copy = join(repo, "scripts/prune-stale-workspace-scope.ts");
 
     const refused = spawnSync(process.execPath, ["--import", TSX, copy, "--force"], { cwd: repo, encoding: "utf8" });

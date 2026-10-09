@@ -28,7 +28,7 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       # A BUILD IS STILL NEEDED, though the first version of this job shipped without one on the strength
       # of a grep that checked only these test files' own top-level imports: `board-liveness.test.ts`,
       # `board-markdown.test.ts`, `board-style.test.ts` and `board-summary-origin.test.ts` all drive a real
@@ -55,4 +55,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
       # `public-claim.test.ts` is NOT named here: #2975 (90ff5f081) deleted it from this repo, and a glob that
       # matches 0 files refuses the whole job (`assert-glob-not-empty.mjs` refuses it before any runner starts).
-        run: node packages/guards/src/assert-glob-not-empty.mjs "packages/guards/src/board-*.test.ts" --min=1 --run --runner=rstest
+        run: node packages/guards/src/assert-glob-not-empty.ts "packages/guards/src/board-*.test.ts" --min=1 --run --runner=rstest

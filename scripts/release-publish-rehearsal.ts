@@ -26,9 +26,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 // STAYS npm for the `npm` calls (`no-npm-spawn.test.ts` pins this file by name): trusted publishing is bound to npm's OIDC, and
 // `pnpm publish` shells out to `npm publish`, so the rehearsal must read the npm the publish would use.
-import { npmCliInvocation, pnpmCliInvocation } from "./npm-cli-executable.mjs";
+import { npmCliInvocation, pnpmCliInvocation } from "./npm-cli-executable.ts";
 import { publishedManifests } from "./manifest-repository-check.ts";
-import { refuseUnknownFlags } from "./cli-flags.mjs";
+import { refuseUnknownFlags } from "./cli-flags.ts";
 
 const REPO = fileURLToPath(new URL("../", import.meta.url));
 

@@ -17,7 +17,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.ts";
 import { agentOrgSource, provisionAgentOrg } from "./verify.ts";
 
 type Say = { out: string[]; err: string[] };

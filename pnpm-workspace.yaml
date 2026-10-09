@@ -9,13 +9,13 @@ packages:
   # ERR_PNPM_OUTDATED_LOCKFILE (the lockfile records the core's projects only). pnpm reads this file as static YAML, so the entry is
   # written here and `pnpm-workspace.test.ts` derives the list from layers.json: a layer added there without its line turns it red.
   - "!packages/nvda-worker"
-  # `packages/worker-fleet` is the same kind of clone (`scripts/lay-layer.mjs`, #3504): the root takes `@a11ign/screenreader-fleet` from the registry,
+  # `packages/worker-fleet` is the same kind of clone (`scripts/lay-layer.ts`, #3504): the root takes `@a11ign/screenreader-fleet` from the registry,
   # and a laid copy joining the workspace would turn that into a `link:`.
   - "!packages/worker-fleet"
-  # `packages/lab` is the same kind of clone (`scripts/lay-layer.mjs`, #3505): the directory left the workspace for `a11ign/lab`, and a laid copy
+  # `packages/lab` is the same kind of clone (`scripts/lay-layer.ts`, #3505): the directory left the workspace for `a11ign/lab`, and a laid copy
   # holds no manifest, but a worktree that still has the old directory's `package.json` would otherwise be an importer the lockfile no longer records.
   - "!packages/lab"
-  # `packages/control` is the same kind of clone (`scripts/lay-layer.mjs`, #3506): the directory left the workspace for `a11ign/control`, and a laid copy holds no manifest,
+  # `packages/control` is the same kind of clone (`scripts/lay-layer.ts`, #3506): the directory left the workspace for `a11ign/control`, and a laid copy holds no manifest,
   # but a worktree that still has the old directory's `package.json` would otherwise be an importer the lockfile no longer records.
   - "!packages/control"
 

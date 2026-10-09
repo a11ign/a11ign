@@ -72,7 +72,7 @@ import {
   currentHeadSha, README_PATH,
 } from "../generate-consumer-gate.ts";
 import { refuseUnknownFlags } from "@a11ign/screenreader-fleet/cli-flags";
-import { sandboxGitEnv } from "../../packages/guards/src/git-env.mjs";
+import { sandboxGitEnv } from "../../packages/guards/src/git-env.ts";
 
 const REPO = fileURLToPath(new URL("../..", import.meta.url));
 export const OUT = `${REPO}scripts/outsider/outsider-job.yml`;

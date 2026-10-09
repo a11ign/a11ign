@@ -26,11 +26,11 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 const { assertNoLeakInArgv, leakRefusalReason } = await toolExport("leak-patterns");
 import { refuseUnknownFlags } from "@a11ign/screenreader-fleet/cli-flags";
-import { sandboxGitEnv } from "../../packages/guards/src/git-env.mjs";
-import { pnpmCliInvocation } from "../npm-cli-executable.mjs";
+import { sandboxGitEnv } from "../../packages/guards/src/git-env.ts";
+import { pnpmCliInvocation } from "../npm-cli-executable.ts";
 import { outsiderVerdict } from "./verdict.ts";
-import { toolExport } from "../agent-org-newest-tag.mjs";
-import { promotionTimeFrom } from "../release-promote.mjs";
+import { toolExport } from "../agent-org-newest-tag.ts";
+import { promotionTimeFrom } from "../release-promote.ts";
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));
 const REPO_ROOT = join(HERE, "../..");

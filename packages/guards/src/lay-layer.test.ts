@@ -1,5 +1,5 @@
 /**
- * #3504: `scripts/lay-layer.mjs` puts a layer's `src/` where `control` imports it from, at the tag the lockfile pins.
+ * #3504: `scripts/lay-layer.ts` puts a layer's `src/` where `control` imports it from, at the tag the lockfile pins.
  *
  * Three things have to hold or it answers a question it should refuse:
  *   1. THE PIN IS THE LOCKFILE'S. The version the root imports from the registry is the tag laid; a `link:` (the package still in the workspace)
@@ -22,7 +22,7 @@ import { sandboxGitEnv } from "../../../scripts/test-support/git-sandbox.ts";
 import { withGitSandbox } from "../../../scripts/test-support/git-sandbox.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const { pinnedVersion, layingPlan, lay, REF_FILE } = await import(pathToFileURL(join(REPO_ROOT, "scripts/lay-layer.mjs")).href);
+const { pinnedVersion, layingPlan, lay, REF_FILE } = await import(pathToFileURL(join(REPO_ROOT, "scripts/lay-layer.ts")).href);
 const NAME = "@a11ign/screenreader-fleet";
 
 /** A root importer block as pnpm writes it, with `version` as the lockfile would hold it. */

@@ -48,7 +48,7 @@ RULES WORTH KNOWING BEFORE YOU WRITE ONE
     is a second full run of tests that are already running, and it pays for itself twice. Measured
     2026-09-19 across four runs: `ts` 154-176 s and `acceptance` 186-193 s, side by side, for one change.
     Name the file, the guard, or the command whose output IS the row's claim:
-        node packages/guards/src/assert-glob-not-empty.mjs "packages/guards/src/lab-delete.test.ts" \
+        node packages/guards/src/assert-glob-not-empty.ts "packages/guards/src/lab-delete.test.ts" \
           --min=1 --run --runner=rstest
     A whole-suite command is right only when the row's claim genuinely IS "the whole suite still passes"
     -- a runner upgrade, a dependency bump, a config change with no single owner. That is rare, and when

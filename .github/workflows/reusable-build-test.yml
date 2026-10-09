@@ -81,7 +81,7 @@ jobs:
       # would never have invalidated when pnpm-lock.yaml changed.
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       - run: pnpm run build
       # #168: WHAT THE BUILD ACTUALLY PRODUCED, kept only when something after it fails. See the ORIGINAL
       # comment in ci.yml's history for the full incident (an intermittent cross-package dist race) --
@@ -105,7 +105,7 @@ jobs:
       - if: inputs.run-lint-typecheck
         run: pnpm run typecheck
       # #1319: RSTEST'S BUILD CACHE, PERSISTED -- the chairman's requirement for the runner switch, per rstest's CI guide.
-      # `scripts/rstest/rstest.config.mjs` turns `performance.buildCache` on only when `CI` is set, and rstest writes it
+      # `scripts/rstest/rstest.config.ts` turns `performance.buildCache` on only when `CI` is set, and rstest writes it
       # under node_modules/.cache/rstest-<project-name>. Keyed on the two inputs the row names, the lockfile and the rstest
       # config; rstest's own invalidation handles a changed source file inside a hit. HIT or MISS is printed so a run
       # log can be quoted, and the step after the tests fails the job if the cache is empty.
@@ -114,7 +114,7 @@ jobs:
         id: rstest-build-cache
         with:
           path: node_modules/.cache/rstest-*
-          key: rstest-build-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'scripts/rstest/rstest.config.mjs') }}
+          key: rstest-build-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'scripts/rstest/rstest.config.ts') }}
       - name: "#1319: rstest build cache HIT or MISS, printed so the run log can be quoted"
         if: inputs.run-ts-tests
         run: |

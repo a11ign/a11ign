@@ -193,7 +193,7 @@ if [ "${A11Y_ALLOW_PIPED_EXIT_STATUS:-0}" != "1" ]; then
     echo "pre-commit: refusing — the piped-exit-status guard could not examine a staged line" >&2
     echo "(this is a GUARD FAILURE, not a hazard finding):" >&2
     printf '%s' "$guard_errors" >&2
-    echo "Fix the guard (packages/guards/src/piped-exit-status-guard.mjs), or set" >&2
+    echo "Fix the guard (packages/guards/src/piped-exit-status-guard.ts), or set" >&2
     echo "A11Y_ALLOW_PIPED_EXIT_STATUS=1 if you must commit before it is fixed." >&2
     exit 1
   fi

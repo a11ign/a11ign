@@ -27,7 +27,7 @@ const TSX = pathToFileURL(createRequire(import.meta.url).resolve("tsx")).href;
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const SCRIPT = join(REPO_ROOT, "scripts/check-transfer-urls.ts");
 const { findTransferUrls, checkTransferUrls, reportTransferUrls } = await import("../../../scripts/check-transfer-urls.ts");
-const { PRODUCT_REPO } = await import(pathToFileURL(join(REPO_ROOT, "scripts/repo-identity.mjs")).href);
+const { PRODUCT_REPO } = await import(pathToFileURL(join(REPO_ROOT, "scripts/repo-identity.ts")).href);
 
 const GITHUB = `https://github.com/${PRODUCT_REPO}`;
 const RAW = `https://raw.githubusercontent.com/${PRODUCT_REPO}`;

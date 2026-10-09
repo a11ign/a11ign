@@ -40,14 +40,14 @@ holds no such directory because it IS the tool.
   `src/class-repeat.mjs:15` (`failure-classes.json`); `src/cause-declaration.mjs:41` and `:98` (the plugin); `src/ci-health-liveness.mjs:301`;
   `src/host-units.mjs:73` (`PROJECT_UNITS_DIR`) and `:136`; `src/messaging/config.mjs:23`. The project root is the git top level that contains the
   file (`project-config.mjs:329-334`), so the tick, the gate and every `agent-org` command find the project by this directory.
-- *The host.* `.agent-org/host.json` is the host declaration `scripts/agent-org-newest-tag.mjs:69` and `scripts/verify.ts:501` read for the tool's
+- *The host.* `.agent-org/host.json` is the host declaration `scripts/agent-org-newest-tag.ts:69` and `scripts/verify.ts:501` read for the tool's
   checkout; `beforeTick` (`project.json`) runs in this checkout before each tick.
 - *CI.* `.github/workflows/nightly.yml:280` reads `.agent-org/project.json` for the repository list and `:282` fails with `CANNOT_TELL` without it.
 - *Guard tests.* `packages/guards/src/dora-declaration.test.ts:27`, `layer-repository-protection.test.ts:49`, `branch-protection.test.ts:439`
   (all `project.json`); `role-files-no-standing-cron.test.ts:18` (`roles/`); `scripts/doc-checks/roles-readme.ts:9` and `roles-memory.ts:9`.
-- *The test selector.* `scripts/rstest/rstest.config.mjs:41-42` (`.agent-org/roles/**`, `.agent-org/units/**`) and about 20 further file triggers
+- *The test selector.* `scripts/rstest/rstest.config.ts:41-42` (`.agent-org/roles/**`, `.agent-org/units/**`) and about 20 further file triggers
   (21 hits in the file), so a change here runs the tests that read it.
-- *The release rule.* `scripts/release-reads-qualification.mjs:83` lists `^\.agent-org\/` and `^\.claude\/` among the paths that do NOT make a
+- *The release rule.* `scripts/release-reads-qualification.ts:83` lists `^\.agent-org\/` and `^\.claude\/` among the paths that do NOT make a
   release.
 - *The layer-edges baseline.* `packages/guards/layer-edges.baseline.json:3` records `.agent-org/project.json` naming `packages/control`.
 - *People:* every engineer is sent to `.agent-org/roles/engineer.md` by `wake.mjs`.
@@ -73,9 +73,9 @@ them sit three untracked entries that are ignored on purpose: `settings.local.js
 
 - *Claude Code, by location.* It loads `.claude/rules/` and `.claude/skills/` from the project root by itself; that location is the platform's
   and is not a path any file here declares. This is the reader that matters, and it is the one `git grep` cannot find.
-- *Tests and scripts that read it by path:* `packages/judge/src/criterion-audit.test.ts:34` (the skill), `scripts/rstest/rstest.config.mjs:43` and
+- *Tests and scripts that read it by path:* `packages/judge/src/criterion-audit.test.ts:34` (the skill), `scripts/rstest/rstest.config.ts:43` and
   `:81-82` (the rule files, as test triggers), `packages/guards/src/layer-repository-protection.test.ts:32` and `role-files-no-standing-cron.test.ts:4`
-  (cite the rules), `scripts/release-reads-qualification.mjs:83` (non-releasable path).
+  (cite the rules), `scripts/release-reads-qualification.ts:83` (non-releasable path).
 - *Prose:* 23 tracked files cite `.claude/`, among them `CLAUDE.md` and several `.agent-org/roles/*.md` briefs, which send readers to the rules by name.
 - *Agent-org's own code names the rules in comments and in `src/packaging/rules-files.ts:19` (`RULES_DIR = join(HOME_CHECKOUT, ".claude/rules")`),*
   which is a reader in code: that test module reads this directory.
@@ -96,12 +96,12 @@ READMEs; a root document is outside them, in the company of `README.md`, `CONTRI
 
 **Who reads it** (`git grep -c 'PLAN\.md'`: 29 tracked files, 50 hits, most of them prose in `docs/`):
 
-- *Code and config that name it:* `scripts/ci-changed.mjs:92` (`DOC_ROOT_FILES` decides which diffs are documentation-only), pinned by
+- *Code and config that name it:* `scripts/ci-changed.ts:92` (`DOC_ROOT_FILES` decides which diffs are documentation-only), pinned by
   `packages/guards/src/ci-changed.test.ts:93` (the exact five names, sorted); `scripts/doc-checks/doc-references.ts:15` (`DOCS`, the documents
-  whose cited paths are checked); `scripts/rstest/rstest.config.mjs:107` (a file trigger).
+  whose cited paths are checked); `scripts/rstest/rstest.config.ts:107` (a file trigger).
 - *Documents that link or cite it:* `CLAUDE.md:27`, `README.md:535`, `packages/README.md:3`, `.gitignore:40`, `.github/workflows/release.yml:4`, and
   about 15 files under `docs/` (for example `docs/outsider-runs.md:3`, `docs/reliability-plan.md:435`, `docs/not-working.md:533`); five source
-  comments (`packages/guards/src/isolation-gate.mjs:662`, `packages/judge/src/act-rules.ts:201`, among them) cite it by section name.
+  comments (`packages/guards/src/isolation-gate.ts:662`, `packages/judge/src/act-rules.ts:201`, among them) cite it by section name.
 - *A person:* the chairman's records point at its "UPDATE" entries (`docs/outsider-runs.md:47`).
 
 **What a move would break.** Not a gate: `ci-changed.test.ts:93` pins the five-name list and would fail on a rename of the entry, and
@@ -125,9 +125,9 @@ It does bear on the check, below.
 
 **Who reads it** (`git grep -c 'layers\.json'`, outside `docs/`: 22 files):
 
-- *Code that opens it:* `scripts/lay-layer.mjs:261` (`main`, the one writer of laid trees), `:220` and `:249` (the copy it writes into `control`
-  as `declares`); `packages/guards/src/isolation-gate.mjs:560-577` (`LAYERS_JSON`: which directories the isolation gate leaves out, and it throws
-  on an unreadable file); `scripts/test-support/stamp-files.ts:18`; `scripts/ci-changed.mjs:429` (a change to this file runs the `ansible` job).
+- *Code that opens it:* `scripts/lay-layer.ts:261` (`main`, the one writer of laid trees), `:220` and `:249` (the copy it writes into `control`
+  as `declares`); `packages/guards/src/isolation-gate.ts:560-577` (`LAYERS_JSON`: which directories the isolation gate leaves out, and it throws
+  on an unreadable file); `scripts/test-support/stamp-files.ts:18`; `scripts/ci-changed.ts:429` (a change to this file runs the `ansible` job).
 - *Callers of `lay-layer.mjs`, so indirect readers:* `package.json:30` (`build`) and `:32` (`prepare`), which run it for `control`, `nvda-worker`,
   `screenreader-fleet` and `lab`; `.github/workflows/ci.yml:225` and `action-smoke.yml:38`.
 - *Workspace:* `pnpm-workspace.yaml:6-10` excludes each declared layer path from `packages/*`, and `packages/guards/src/pnpm-workspace.test.ts:118-125`
@@ -137,7 +137,7 @@ It does bear on the check, below.
 - *Guard tests:* `control-delete.test.ts` (18 hits), `lay-layer.test.ts` (11), `isolation-gate-layers.test.ts` (6), `lab-delete.test.ts` (5),
   `ci-changed.test.ts:165,410,496`, `worker-fleet-delete.test.ts`, `screenreader-worker-extraction.test.ts`, and 19 lines mentioning it in
   `packages/guards/layer-edges.baseline.json:14-17`.
-- *Config:* `.c8rc.json:21-22`, `.gitignore:75,83`, `scripts/rstest/rstest.config.mjs:144`.
+- *Config:* `.c8rc.json:21-22`, `.gitignore:75,83`, `scripts/rstest/rstest.config.ts:144`.
 
 **What a move would break.** `lay-layer.mjs` (so `pnpm install`'s `prepare` and `pnpm run build`, on every checkout, host and CI job), the
 isolation gate, `control`'s copy and with it `fleet:deploy` and the Ansible plays, and four to six guard tests. A move out of the root re-opens
@@ -201,8 +201,8 @@ predicate. The workspace's other four paths (`!packages/nvda-worker`, `!packages
 
 **What renaming `packages/cli` to `packages/a11ign` would cost** (measured by `git grep -c 'packages/cli'` at `bbedfa8b4`): 37 tracked files and 71
 hits outside `packages/cli/` and `docs/`, 21 files and 70 hits under `docs/`, and 16 files and 26 hits inside it. The non-prose users include
-`action.yml`, `package.json`, `.github/ISSUE_TEMPLATE/backlog-row.yml`, `scripts/ci-changed.mjs`, `scripts/product-home.ts`,
-`scripts/rstest/rstest.config.mjs`, the auth-leak scripts, the layer-edges baseline and a dozen guard tests. `.agent-org/project.json`'s `dora`
+`action.yml`, `package.json`, `.github/ISSUE_TEMPLATE/backlog-row.yml`, `scripts/ci-changed.ts`, `scripts/product-home.ts`,
+`scripts/rstest/rstest.config.ts`, the auth-leak scripts, the layer-edges baseline and a dozen guard tests. `.agent-org/project.json`'s `dora`
 `releasablePaths` also names `packages/cli/`, and `agent-org`'s DORA reader reads that. The cost is one row, large, and it touches `action.yml`,
 which the published action pins.
 

@@ -6,7 +6,7 @@
  * What is left to prove is that the delete is COMPLETE, in five claims, each with a fixture beside it:
  *
  *   1. No tracked file is under `packages/worker-fleet/`, and `pnpm-workspace.yaml`'s globs match no directory of that name or manifest
- *      carrying the package's name. A LAYER CHECKOUT may sit at that path (`scripts/lay-layer.mjs`, untracked, `src/` only): the workspace
+ *      carrying the package's name. A LAYER CHECKOUT may sit at that path (`scripts/lay-layer.ts`, untracked, `src/` only): the workspace
  *      EXCLUDES it, and that exclusion is what the second half of the claim reads, so a laid copy is not a member.
  *   2. `pnpm-lock.yaml` holds no `link:` to the old path and no importer under it.
  *   3. The `@a11ign/screenreader-fleet` entry is a REGISTRY entry: one version under every importer that declares it, and a `packages:` entry
@@ -15,7 +15,7 @@
  *      frontmatter may not, because `changeset version` would then try to version a package this workspace does not have.
  *   5. Who reaches it, and how. Code in `lab`, `guards`, `cli` and `scripts/` never imports it by a relative path into `packages/worker-fleet`:
  *      it names it BY PACKAGE NAME, or (the root's scripts and the guards that run before `node_modules` exists, which cannot import a package
- *      at all) reads `scripts/cli-flags.mjs`, the one file of the fleet those need, kept as a copy in this repository. `control` CANNOT (ADR 0012, `control-has-no-dependencies.test.ts`: it runs from a raw checkout with no `node_modules`),
+ *      at all) reads `scripts/cli-flags.ts`, the one file of the fleet those need, kept as a copy in this repository. `control` CANNOT (ADR 0012, `control-has-no-dependencies.test.ts`: it runs from a raw checkout with no `node_modules`),
  *      so it reaches the fleet by relative path through the layer `layers.json` declares at that very path, which is the only
  *      place a relative path into the directory is allowed to land. The scan of control's modules for that left with them (#3506); the declaration stays pinned here.
  *
@@ -31,7 +31,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
-import { sandboxGitEnv } from "./git-env.mjs";
+import { sandboxGitEnv } from "./git-env.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const DEPARTED_DIRECTORY = "worker-fleet";

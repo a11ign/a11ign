@@ -103,7 +103,7 @@ jobs:
 
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
         if: steps.hour.outputs.london == '08' || (github.event_name == 'workflow_dispatch' && inputs.republish)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       # REPUBLISH: THE ONE WAY PAST THE HOUR GATE, AND IT CANNOT CREATE AN EDITION.
       #
       # The hour gate treats two different acts identically: replacing today's already-published document,

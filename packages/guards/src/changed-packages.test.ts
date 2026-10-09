@@ -21,11 +21,11 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { execFileSync, spawnSync } from "node:child_process";
 import { sandboxGitEnv } from "../../../scripts/test-support/git-sandbox.ts";
-import { changedPackages, changedPackagesAgainstOrigin, filesChangedAgainstOrigin } from "./changed-packages.mjs";
+import { changedPackages, changedPackagesAgainstOrigin, filesChangedAgainstOrigin } from "./changed-packages.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const RENAME_BODY_LINES = 5;
-const COPIED = ["packages/guards/src/changed-packages.mjs", "packages/guards/src/git-env.mjs", "packages/guards/src/changed-files.mjs", "scripts/cli-flags.mjs"];
+const COPIED = ["packages/guards/src/changed-packages.ts", "packages/guards/src/git-env.ts", "packages/guards/src/changed-files.ts", "scripts/cli-flags.ts"];
 
 test("changedPackages names each package once, sorted", () => {
   const diff = ["packages/judge/src/a.ts", "packages/cli/src/b.ts", "packages/judge/src/c.ts", "packages/cli/package.json"].join("\n");
@@ -43,7 +43,7 @@ test("changedPackages of an empty diff is empty (the positive control is the pop
   assert.deepEqual(changedPackages("packages/a/x"), ["a"]);
 });
 
-interface Tree { dir: string; git: (...args: string[]) => string; load: () => Promise<typeof import("./changed-packages.mjs")>; cli: (args?: string[]) => ReturnType<typeof spawnSync> }
+interface Tree { dir: string; git: (...args: string[]) => string; load: () => Promise<typeof import("./changed-packages.ts")>; cli: (args?: string[]) => ReturnType<typeof spawnSync> }
 
 /** A throwaway repository holding copies of the module and what it imports, committed, with `origin/main` at that commit. */
 async function withTree(body: (tree: Tree) => Promise<void>): Promise<void> {

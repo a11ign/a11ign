@@ -37,13 +37,13 @@ import { existsSync, readFileSync, writeFileSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import path from "node:path";
-import { sandboxGitEnv } from "./git-env.mjs";
+import { sandboxGitEnv } from "./git-env.ts";
 
 export const DEFAULT_CAP = 10;
 export const DEFAULT_BUDGET_SECONDS = 300;
 const MS = 1000;
 const MAX_DIFF_BYTES = 256 * 1024 * 1024;
-const MUTATE = fileURLToPath(new URL("./mutation-check.mjs", import.meta.url));
+const MUTATE = fileURLToPath(new URL("./mutation-check.ts", import.meta.url));
 const SELF = fileURLToPath(import.meta.url);
 // #4273: `apply` (this file) is TypeScript now, and a bare `node` cannot run one (ADR 0043 Decision 8: `node --import tsx`). The loader is
 // handed by ABSOLUTE URL because the mutant runs with the mutated repo as its cwd, where a bare `tsx` need not resolve.

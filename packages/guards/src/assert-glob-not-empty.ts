@@ -1,0 +1,254 @@
+#!/usr/bin/env node
+// @ts-check
+// command: refuse a test glob that resolves to zero files instead of passing silently
+// `npm test` PASSES, exit 0, if the glob it hands to `tsx --test` resolves to zero files (#355) --
+//
+//   $ pnpm exec tsx --test "packages/lab/src/packaging/nothing-matches-*.test.ts"; echo "EXIT=$?"
+//   EXIT=0    ℹ tests 0  ℹ pass 0  ℹ fail 0
+//
+// A LITERAL missing path fails correctly (`tsx --test` errors "Could not find ..."); a QUOTED GLOB that
+// matches nothing is globbed by the runner itself and reported as a clean, empty pass -- which is exactly
+// the form `test:ts` and `pre-push` both use, because an unquoted glob would otherwise be expanded by the
+// shell before either script sees it, and `zsh` errors on no match while `bash` (CI's shell) passes the
+// literal pattern straight through unexpanded.
+//
+// EVERY VACUITY GUARD THIS REPO HAS IS INSIDE A FILE THE GLOB WOULD HAVE LOADED. A guard cannot fire from
+// inside the thing that failed to load -- the same shape as a diagnostic that cannot report itself. So
+// this floor has to live OUTSIDE the suite: a plain script, run BEFORE `tsx --test` is ever invoked,
+// never another `*.test.ts` (that is the defect this row exists to end, one level further in).
+//
+//   node packages/guards/src/assert-glob-not-empty.ts <glob...> [--min=N]                 -- check only
+//   node packages/guards/src/assert-glob-not-empty.ts <glob...> [--min=N] [--drop-empty] --run [--runner=tsx|rstest] [--test-concurrency=N]
+//
+// Each glob given is resolved independently and must match at least `--min` files (default 1 -- "not
+// vacuous", never "exactly this many"). A directory rename, a package restructure, or #66's tree-wide
+// rename to `a11ign` breaking a path glob is exactly the ordinary change this is built to catch, on the
+// day it happens rather than as a silent, green no-op.
+//
+// `--run` EXECUTES `tsx --test` on the SAME `<glob...>` ARGV THIS PROCESS PARSED, rather than checking one
+// copy of the pattern and leaving the caller to write a second copy for the real invocation. A `--run`-less
+// version of this shipped first and looked complete: `test:ts` read
+// `pnpm run test:glob-check && tsx --test "<pattern>"`, the SAME literal typed twice in one JSON string.
+// Mutating ONLY the second copy -- exactly the shape of an ordinary future edit, someone widening the real
+// glob and not noticing the separate check line -- passed `test:glob-check` (which still validated the
+// FIRST, unmutated copy) and then silently zero-test-passed the actual suite, reproducing #355 through the
+// fix meant to close it. "A fact stated twice" (this file's own CLAUDE.md section) applies to a shell
+// command's own argv, not only to prose. `--run` makes the two uses of the pattern the same JS array.
+import { existsSync, globSync, readdirSync, readFileSync, realpathSync } from "node:fs";
+import { join, sep } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { refuseUnknownFlags, flagValue } from "@a11ign/screenreader-fleet/cli-flags";
+import { pnpmCliInvocation } from "../../../scripts/npm-cli-executable.ts";
+import { suiteStartVerdict } from "./worktree-resolution.ts";
+import { runUnderCap } from "./test-memory-cap.ts";
+
+/**
+ * Pure: which of the given globs resolved to fewer than `min` files, and how many each actually matched.
+ * @param {string[]} patterns
+ * @param {number} min
+ * @param {(pattern: string) => string[]} [glob]
+ * @returns {{ pattern: string, matched: number }[]}
+ */
+export function underFloor(patterns: string[], min: number, glob: (pattern: string) => string[] = globSync): { pattern: string; matched: number; }[] {
+  return patterns
+    .map((pattern) => ({ pattern, matched: glob(pattern).length }))
+    .filter(({ matched }) => matched < min);
+}
+
+/**
+ * #1319: SPLIT PATTERNS INTO THOSE THAT MATCH SOMETHING AND THOSE THAT MATCH NOTHING, with `underFloor`'s own
+ * predicate, so `--drop-empty` is not a second copy of the floor.
+ *
+ * For a caller whose patterns come from a list of PACKAGES rather than from typing: CI's broad branch passes one glob per
+ * implicated package, and a package can legitimately have no tests. `nvda-speech` has no `src` at all, and #1469's
+ * first two CI runs were refused on exactly that glob, where `tsx --test` had passed it silently.
+ * @param {string[]} patterns
+ * @param {(pattern: string) => string[]} [glob]
+ * @returns {{ kept: string[], dropped: string[] }}
+ */
+export function partitionEmpty(patterns: string[], glob: (pattern: string) => string[] = globSync): { kept: string[]; dropped: string[]; } {
+  const dropped = underFloor(patterns, 1, glob).map(({ pattern }) => pattern);
+  return { kept: patterns.filter((pattern) => !dropped.includes(pattern)), dropped };
+}
+
+/**
+ * #1319: `--drop-empty`. NAMES every dropped pattern, never skips one silently, and REFUSES when every pattern is empty:
+ * dropping all of them would run nothing and pass. Returns the patterns to check and run, or null after refusing.
+ * @param {string[]} patterns
+ * @returns {string[] | null}
+ */
+function dropEmptyPatterns(patterns: string[]): string[] | null {
+  const { kept, dropped } = partitionEmpty(patterns);
+  for (const pattern of dropped) {
+    process.stderr.write(`assert-glob-not-empty: ${pattern}  matched 0 -- dropped (--drop-empty), nothing to run for it\n`);
+  }
+  if (kept.length === 0) {
+    process.stderr.write("REFUSING: every glob matched nothing -- --drop-empty drops an empty glob, never all of them, "
+      + "because running nothing would pass.\n");
+    process.exitCode = 1;
+    return null;
+  }
+  return kept;
+}
+
+/** #1319: the runners `--run` can execute. `tsx` is the default, so a caller that names none is unchanged. */
+export const RUNNERS = Object.freeze(["tsx", "rstest"]);
+
+/** #1319: the rstest config every rstest run uses, resolved from this file so the caller's cwd cannot change it. */
+export const RSTEST_CONFIG = fileURLToPath(new URL("../../../scripts/rstest/rstest.config.ts", import.meta.url));
+
+/**
+ * #1319: THE COMMAND `--run` EXECUTES, PURE, so the runner switch is pinned by a test rather than read off a spawn.
+ *
+ * `tsx` stays the default: `test:nightly` still runs node:test through it. `coverage` moved off this floor's
+ * `--run` entirely in step 4 of the rstest adoption (#1320) -- `scripts/coverage.ts` now drives rstest with
+ * coverage directly, and only checks its population against this floor first. `test:ts` and CI's scoped step
+ * ask for `rstest`.
+ *
+ * EACH PATTERN GOES TO RSTEST AS ITS OWN `--include`, NEVER AS A POSITIONAL ARGUMENT. A positional argument is a
+ * filter matched inside the config's include: measured at `9c12a0f5`, the bare word `region-paths` selected
+ * `region-paths.test.ts`. `--include` replaces the include with exactly these patterns, which is what a list of
+ * selected files needs, and a pattern outside the config's include still runs (measured on `packages/*` + `/nightly`).
+ * `--test-concurrency` maps to rstest's worker count, the nearest equivalent of node:test's file concurrency.
+ * @param {{ runner: string, patterns: string[], concurrency?: string }} request
+ * @returns {string[]} the arguments for `pnpm exec`
+ */
+export function runnerInvocation({ runner, patterns, concurrency }: { runner: string; patterns: string[]; concurrency?: string; }): string[] {
+  // AN EMPTY PATTERN LIST NEVER REACHES A RUNNER. `rstest run` with no `--include` falls back to the config's include,
+  // and `tsx --test` with no file uses its default glob: either way, the WHOLE suite. Measured 2026-09-13 22:49Z, when a
+  // mutation of `--drop-empty` let an empty list through and 92 rstest workers loaded the shared host to 64.
+  if (patterns.length === 0) {
+    throw new Error("assert-glob-not-empty: no pattern to run -- refusing, because a runner given no pattern runs the "
+      + "whole suite rather than nothing.");
+  }
+  if (runner === "tsx") {
+    return ["tsx", "--test", ...(concurrency ? [`--test-concurrency=${concurrency}`] : []), ...patterns];
+  }
+  if (runner === "rstest") {
+    return ["rstest", "run", "--config", RSTEST_CONFIG, ...(concurrency ? [`--pool.maxWorkers=${concurrency}`] : []),
+      ...patterns.flatMap((pattern) => ["--include", pattern])];
+  }
+  throw new Error(`assert-glob-not-empty: --runner=${runner} is not a runner this script knows `
+    + `(${RUNNERS.join(", ")}) -- refusing to guess which one to run.`);
+}
+
+/** The scope every workspace package is published under, and so the one a manifest `name` is stripped of. */
+const SCOPE_PREFIX = "@a11ign/";
+
+/**
+ * #3447: THE `@a11ign/*` ENTRIES A TREE'S START GUARD SHOULD ASK ABOUT. A package that LEFT for its own repository (`screenreader-worker`)
+ * is consumed from the registry, so its copy under this tree's own `node_modules/` is the intended source and not a frozen copy of anything
+ * under `packages/`; asked about it, the guard would refuse every suite start in the tree that just did what the split asked.
+ *
+ * ONLY THAT ENTRY IS LEFT OUT: one that is not a workspace member (by directory, or by manifest `name`: `worker-fleet` is
+ * `@a11ign/screenreader-fleet`) AND resolves to a real copy inside this tree's own `node_modules/`. A member's stale copy, and any entry
+ * that reads ANOTHER checkout whatever it is called, are still asked about, and so is every entry when the tree has no `packages/`
+ * (silence never grants the exemption).
+ *
+ * LIVES HERE, NOT IN `worktree-resolution.mjs`, which `agent-org` carries a declared copy of: the guard stays byte-identical and which
+ * entries to ask it about is this caller's to say.
+ *
+ * @param {string} worktree
+ * @param {{ exists?: typeof existsSync, list?: typeof readdirSync, read?: typeof readFileSync, realpath?: typeof realpathSync }} [deps]
+ * @returns {typeof readdirSync} a `readdirSync` for `suiteStartVerdict`'s `list`, narrowed as above
+ */
+export function memberScopeLister(worktree: string, { exists = existsSync, list = readdirSync, read = readFileSync, realpath = realpathSync }: { exists?: typeof existsSync; list?: typeof readdirSync; read?: typeof readFileSync; realpath?: typeof realpathSync; } = {}): typeof readdirSync {
+  const packagesDir = join(worktree, "packages");
+  const ownModules = `${realpath(worktree)}${sep}node_modules${sep}`;
+  /** @param {string} manifest */
+  const declaredName = (manifest: string) => {
+    if (!exists(manifest)) return null;
+    const { name } = JSON.parse(String(read(manifest, "utf8")));
+    return typeof name === "string" ? name.replace(SCOPE_PREFIX, "") : null;
+  };
+  /** A copy of its own: resolving into this tree's `node_modules/`. A dangling entry resolves nowhere, so the guard is left to classify it. @param {string} path */
+  const isCopyInOwnModules = (path: string) => {
+    try { return realpath(path).startsWith(ownModules); } catch { return false; }
+  };
+  /** @type {(dir: string) => string[]} */
+  const askedAbout: (dir: string) => string[] = (dir): string[] => {
+    const entries = /** @type {string[]} */ (list(dir));
+    if (!exists(packagesDir)) return entries;
+    const members = new Set(/** @type {string[]} */ (list(packagesDir)).flatMap((name) => [name, declaredName(join(packagesDir, name, "package.json"))]));
+    return entries.filter((name) => members.has(name) || !isCopyInOwnModules(join(dir, name)));
+  };
+  return /** @type {typeof readdirSync} */ (/** @type {unknown} */ (askedAbout));
+}
+
+/**
+ * #2218: THE POINT A SUITE STARTS, and so the point a tree that reads another checkout is refused -- before a
+ * runner spends minutes measuring the wrong branch and reports it green. The tree asked about is the one THIS
+ * FILE lives in, resolved the way `RSTEST_CONFIG` is, so the caller's cwd cannot change the answer.
+ * @returns {boolean} false after refusing
+ */
+function checkResolutionBeforeRun(): boolean {
+  const worktree = fileURLToPath(new URL("../../../", import.meta.url));
+  const verdict = suiteStartVerdict(worktree, { list: memberScopeLister(worktree) });
+  if (verdict.action === "proceed") return true;
+  process.stderr.write(`${verdict.action === "refuse" ? "REFUSING: this tree does not measure itself. " : "WARNING: "}${verdict.line}\n`);
+  if (verdict.action === "refuse") process.exitCode = 1;
+  return verdict.action === "warn";
+}
+
+function main() {
+  refuseUnknownFlags(["--min", "--drop-empty", "--run", "--runner", "--test-concurrency"],
+    { entry: import.meta.url, command: "node packages/guards/src/assert-glob-not-empty.ts" });
+  const given = process.argv.slice(2).filter((arg) => !arg.startsWith("--"));
+  if (!given.length) {
+    process.stderr.write("assert-glob-not-empty: no glob pattern given -- nothing to check.\n");
+    process.exitCode = 2;
+    return;
+  }
+  const runner = flagValue(process.argv, "runner") ?? "tsx";
+  if (!RUNNERS.includes(runner)) {
+    process.stderr.write(`assert-glob-not-empty: --runner=${runner} is not a runner this script knows `
+      + `(${RUNNERS.join(", ")}) -- refusing to guess which one to run.\n`);
+    process.exitCode = 2;
+    return;
+  }
+  const patterns = process.argv.includes("--drop-empty") ? dropEmptyPatterns(given) : given;
+  if (patterns === null) return;
+  const min = Number(flagValue(process.argv, "min") ?? "1");
+  const offenders = underFloor(patterns, min);
+  if (offenders.length) {
+    // #2165: THIS SENTENCE USED TO SAY `tsx --test` REPORTS A ZERO-MATCH AS A CLEAN PASS AND THAT THIS IS THE ONLY
+    // PLACE THE FAILURE CAN BE CAUGHT. True while `tsx --test` was the runner; the repo moved to rstest in
+    // #1317-#1320, and under rstest it is wrong in the half that tells a reader where to look. Measured 2026-09-23 on
+    // @rstest/core@0.11.12: rstest DOES exit non-zero, so a run under an exit-code check -- CI's `ts` and `acceptance`
+    // jobs -- catches it without this floor. What it does NOT do is say so in its report, which prints
+    // `"status": "pass"` with every failure field at zero, above an `error No test files found` line that a `| tail`
+    // never reaches. So the floor is no longer the only catcher; it is the one that refuses BEFORE any runner starts,
+    // which is what a hand-run with no exit-code check has instead of a verdict.
+    process.stderr.write("REFUSING: a test glob matched too few files, which is indistinguishable from a "
+      + "typo'd or moved path. This refusal comes BEFORE any runner starts, which is the point: rstest exits "
+      + "non-zero on a zero-match but REPORTS it as `\"status\": \"pass\"` with every failure field at zero "
+      + "(#2165), and `tsx --test` reports one as a clean, empty PASS with no error at all:\n");
+    for (const { pattern, matched } of offenders) {
+      process.stderr.write(`  ${pattern}  matched ${matched}, need at least ${min}\n`);
+    }
+    process.exitCode = 1;
+    return;
+  }
+  if (!process.argv.includes("--run")) return;
+  if (!checkResolutionBeforeRun()) return;
+  // The SAME `patterns` array just proven non-vacuous -- not a second copy re-typed by the caller.
+  const concurrency = flagValue(process.argv, "test-concurrency");
+  const args = runnerInvocation({ runner, patterns, concurrency });
+  // `NODE_TEST_CONTEXT=child-v8` is how Node's OWN test runner marks a process as a subtest reporting to a
+  // parent harness, and it is set in THIS process's env whenever something here is itself invoked from
+  // inside `node --test` (this script's own test suite does exactly that, exercising `--run` end to end).
+  // Inherited by a plain env-passthrough spawn, it makes the CHILD `tsx --test` believe it too is a
+  // subtest -- it changes its TAP behaviour and stops setting its own exit code on failure, so a real
+  // test failure underneath `--run` silently reported exit 0. Stripped here so `--run`'s child is always a
+  // normal, top-level test run regardless of what process happened to launch this script.
+  const env = { ...process.env };
+  delete env.NODE_TEST_CONTEXT;
+  const pnpm = pnpmCliInvocation(["exec", ...args]);
+  // #2507: THE CHOKE POINT. `test:ts`, `test:org`, `test:all`, `test:changed` and `coverage`'s floor all reach a runner
+  // from this one line, so this is where a runaway `node` is capped to its own scope. It prints which path it took.
+  process.exitCode = runUnderCap({ name: args[0], command: pnpm.command, args: pnpm.args, env });
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
+  main();
+}

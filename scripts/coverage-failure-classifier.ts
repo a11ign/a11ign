@@ -35,7 +35,7 @@ import { pathToFileURL } from "node:url";
 // failure cleanly -- and if `npm ci` never succeeded, the workspace symlink the package specifier resolves
 // through was never created. A relative import to plain `.mjs` source costs nothing and cannot fail this
 // way.
-import { refuseUnknownFlags, flagValue } from "./cli-flags.mjs";
+import { refuseUnknownFlags, flagValue } from "./cli-flags.ts";
 
 export const KIND = {
   INFRA: "INFRA",             // setup failed; coverage was never measured
