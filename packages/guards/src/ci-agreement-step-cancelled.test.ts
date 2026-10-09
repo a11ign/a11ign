@@ -88,7 +88,7 @@ function runScript(script: string, dir: string, env: Record<string, string>): { 
 // 1. The agreement step
 
 const T = (n: number) => `2026-10-09T07:${String(n).padStart(2, "0")}:00Z`;
-const AGREEMENT_ENV = { GH_TOKEN: "x", ATTEMPTS: "1", POLL_SECONDS: "0" };
+const AGREEMENT_ENV = { ATTEMPTS: "1", POLL_SECONDS: "0" };
 const JOBS_OK: Job[] = [{ name: "acceptance" }, { name: "gate", status: "in_progress", conclusion: null }];
 
 function agree(kind: "code" | "meta", self: number, fixtures: Fixtures) {
@@ -178,7 +178,7 @@ const BODY = [
 
 const edit = (from: string, after: string) => from.length > 0 && after.length > 0 ? { from, after } : assert.fail("empty body");
 const SETTLED: Run[] = [{ id: 300, at: T(0) }, { id: 301, at: T(1), meta: true }, { id: 302, at: T(5), meta: true, status: "in_progress", conclusion: null }];
-const CLASSIFY_ENV = { GH_TOKEN: "x", EVENT: "pull_request", ACTION: "edited", BASE_CHANGED: "false", BODY_CHANGED: "true", GITHUB_RUN_ID: "302" };
+const CLASSIFY_ENV = { EVENT: "pull_request", ACTION: "edited", BASE_CHANGED: "false", BODY_CHANGED: "true", GITHUB_RUN_ID: "302" };
 
 function classify(change: { from: string; after: string }, overrides: Record<string, string> = {}, fixtures: Fixtures = { runs: SETTLED }) {
   const result = runScript(CLASSIFY, fixtureDir(fixtures), { ...CLASSIFY_ENV, BODY_BEFORE: change.from, BODY_AFTER: change.after, ...overrides });
