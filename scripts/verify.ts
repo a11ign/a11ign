@@ -80,6 +80,9 @@ export const CI_ONLY = {
   deliberateRefusals: "needs the pull request's number and a GitHub token: it compares the head with what GitHub "
     + "recorded (#294) and the body's Closes with what GitHub will close (#549), and no pull request exists before "
     + "pr:open (the body's own shape is checked by the `acceptance` step)",
+  bodyEdit: "classifies a pull request-body edit as prose-only by comparing the body GitHub holds now with the one it held "
+    + "before (`changes.body`), and the event that carried the edit; both exist only on a pull request that is already open, "
+    + "and a local verify has neither the body nor the event to read (#4413)",
 };
 
 /**
