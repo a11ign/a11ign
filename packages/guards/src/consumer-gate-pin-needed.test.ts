@@ -156,8 +156,14 @@ test("#4331: the live tree -- the committed pin is current where this branch lef
   // Read at the BRANCH POINT, not at HEAD: a pull request that changes action.yml cannot carry a pin containing its own change (the header of
   // consumer-gate-pin-needed.ts, #558), so at HEAD it would answer REGENERATE and every such pull request would be red for the property it
   // exists to hand to the merge. On `main` itself the branch point is HEAD, so the reading there is unchanged.
+  //
+  // The other way round (#4373): when `main`'s own pin is stale, the branch point reads REGENERATE and the pull request that carries the repair
+  // could never be green, which is the fault being repaired. So a branch whose HEAD reads current also passes. Stale at BOTH is still the failure:
+  // a branch that does not repair a stale `main`, or one that repairs it and then changes action.yml again, is red.
   const branchPoint = gitIn(REPO_ROOT, ["merge-base", "HEAD", "origin/main"]).trim();
-  assert.equal(decideAtCommit({ commit: branchPoint, cwd: REPO_ROOT }).action, NOTHING_TO_DO);
+  const at = (commit: string) => decideAtCommit({ commit, cwd: REPO_ROOT }).action;
+  assert.ok(at(branchPoint) === NOTHING_TO_DO || at("HEAD") === NOTHING_TO_DO,
+    `stale at the branch point (${at(branchPoint)}) and at HEAD (${at("HEAD")}): regenerate consumer-gate.yml with node scripts/generate-consumer-gate.mjs`);
 });
 
 // --- 3. the workflow and its policy --------------------------------------------------------------------------------------------------
@@ -204,6 +210,23 @@ test("#4331: the regeneration runs the generator, refuses any change but consume
   assert.equal(pushStep?.env?.BRANCH, REGENERATION_BRANCH, "the workflow and the in-flight reading name different branches");
   assert.match(pushStep?.run ?? "", /Closes: none -- /, "the pull request it opens declares Closes");
   assert.match(pushStep?.run ?? "", /^\s*Acceptance:$/m, "and an Acceptance section");
+});
+
+const RESOLVES_THE_TOOL = /agent-org-newest-tag\.mjs --dest=/;
+const REACHES_REPO_IDENTITY = /scripts\/(consumer-gate-pin-needed\.ts|generate-consumer-gate\.mjs)/;
+
+test("#4373: every job that runs a script reaching repo-identity.mjs resolves the tool BEFORE it, under the same condition", () => {
+  // Both scripts import repo-identity.mjs, which awaits `toolModule(...)` at import: on a runner no tool exists until the resolver has cloned
+  // one. The first real run died in `decide` for want of it, because the tests above read this file as text and nothing ran it.
+  const jobs = Object.entries(workflow.jobs).filter(([, job]) => job.steps.some((s) => REACHES_REPO_IDENTITY.test(s.run ?? "")));
+  assert.deepEqual(jobs.map(([name]) => name).sort(), ["decide", "regenerate", "release"], "positive control: the population is the three jobs, not empty");
+  for (const [name, job] of jobs) {
+    const resolver = job.steps.findIndex((s) => RESOLVES_THE_TOOL.test(s.run ?? ""));
+    const firstUse = job.steps.findIndex((s) => REACHES_REPO_IDENTITY.test(s.run ?? ""));
+    assert.ok(resolver >= 0, `${name}: no step resolves the tool`);
+    assert.ok(resolver < firstUse, `${name}: the tool is resolved at step ${resolver}, after the script at step ${firstUse}`);
+    assert.equal(job.steps[resolver].if, job.steps[firstUse].if, `${name}: the resolver is skipped under a condition the script is not`);
+  }
 });
 
 test("#4331: a push refused for the 'workflows' permission says so and says the repair goes another way; the policy is NOT widened to avoid it", () => {

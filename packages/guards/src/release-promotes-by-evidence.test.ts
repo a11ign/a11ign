@@ -711,7 +711,7 @@ test("the row-filing job holds issues: write and nothing else, the record job co
   const workflow = realWorkflow();
   const move = moveJobName(workflow)!;
   const others = Object.entries(workflow.jobs ?? {}).filter(([k]) => !PUBLISH_PATH.includes(k) && k !== move);
-  assert.deepEqual(others.map(([k]) => k).sort(), ["decide", "promote-action-tag", "promotion-record", "promotion-row"]);
+  assert.deepEqual(others.map(([k]) => k).sort(), ["decide", "decide-outsider-pin", "promote-action-tag", "promotion-record", "promotion-row", "refresh-outsider-pin"]);
   assert.deepEqual(workflow.jobs!["promotion-row"].permissions, { contents: "read", issues: "write" });
   assert.deepEqual(workflow.jobs!["promotion-record"].permissions, { contents: "write" });
   assert.ok(!/actions\/checkout|pnpm|node /.test(stepsText(workflow.jobs!["promotion-record"])), "the job that writes contents runs no repository code");
