@@ -122,7 +122,7 @@ function layerRepository(sandbox: { dir: string; run(args: string[]): string; co
     writeFileSync(join(sandbox.dir, path), text);
   };
   write("packages/worker-fleet/package.json", `{ "name": "${NAME}", "version": "${version}" }`);
-  write("packages/worker-fleet/src/cli-flags.mjs", `export const VERSION = "${version}";\n`);
+  write("packages/worker-fleet/src/cli-flags.ts", `export const VERSION = "${version}";\n`);
   write("packages/worker-fleet/src/provisioning/stamp.ps1", `# ${version}\n`);
   write("packages/worker-fleet/src/cli-flags.test.ts", "// the layer's own test\n");
   sandbox.run(["add", "-A"]);
@@ -154,18 +154,18 @@ test("lay: src/ only, without the layer's tests or its manifest, at the pinned t
       assert.equal(lay(root, plan("0.3.0")), `laid ${NAME}@0.3.0 at packages/worker-fleet`);
       assert.deepEqual(walk(join(root, "packages/worker-fleet")), [REF_FILE, "src/cli-flags.mjs", "src/provisioning/stamp.ps1"],
         "the laid directory holds src/ alone: no manifest (a walker would take it for a package) and no test (test:all would run it)");
-      assert.match(readFileSync(join(root, "packages/worker-fleet/src/cli-flags.mjs"), "utf8"), /0\.3\.0/);
+      assert.match(readFileSync(join(root, "packages/worker-fleet/src/cli-flags.ts"), "utf8"), /0\.3\.0/);
       // IDEMPOTENT: an unreachable remote is not asked for a directory already at the tag.
       assert.equal(lay(root, { ...plan("0.3.0"), remote: "https://example.invalid/gone.git" }), `already at ${NAME}@0.3.0`);
       // A REF FILE WITH NO CODE BESIDE IT IS NOT LAID: the rebase over the delete left exactly this, and "already at" over it served an empty directory.
       rmSync(join(root, "packages/worker-fleet/src"), { recursive: true });
       assert.equal(lay(root, plan("0.3.0")), `laid ${NAME}@0.3.0 at packages/worker-fleet`);
-      assert.ok(existsSync(join(root, "packages/worker-fleet/src/cli-flags.mjs")));
+      assert.ok(existsSync(join(root, "packages/worker-fleet/src/cli-flags.ts")));
       // REPLACES: another tag lays the other release over it and leaves nothing of the first.
-      writeFileSync(join(root, "packages/worker-fleet/src/stale.mjs"), "stale\n");
+      writeFileSync(join(root, "packages/worker-fleet/src/stale.ts"), "stale\n");
       assert.equal(lay(root, plan("0.4.0")), `laid ${NAME}@0.4.0 at packages/worker-fleet`);
-      assert.ok(!existsSync(join(root, "packages/worker-fleet/src/stale.mjs")));
-      assert.match(readFileSync(join(root, "packages/worker-fleet/src/cli-flags.mjs"), "utf8"), /0\.4\.0/);
+      assert.ok(!existsSync(join(root, "packages/worker-fleet/src/stale.ts")));
+      assert.match(readFileSync(join(root, "packages/worker-fleet/src/cli-flags.ts"), "utf8"), /0\.4\.0/);
       // A TAG THAT DOES NOT EXIST is a refusal, and it does not leave a half-laid directory to be mistaken for a laid one.
       assert.throws(() => lay(root, plan("9.9.9")));
       assert.match(readFileSync(join(root, "packages/worker-fleet", REF_FILE), "utf8"), /0\.4\.0/);
@@ -288,7 +288,7 @@ test("#3836: a git clone is replaced when it is disposable, and REFUSED naming t
         assert.ok(existsSync(join(target, ".git")), "the refusal came before the clone was removed");
       };
       // DIRTY: an edit to a tracked file, then an untracked one.
-      writeFileSync(join(target, "packages/worker-fleet/src/cli-flags.mjs"), "// mine\n");
+      writeFileSync(join(target, "packages/worker-fleet/src/cli-flags.ts"), "// mine\n");
       refused(/uncommitted/);
       clone.run(["checkout", "--", "."]);
       writeFileSync(join(target, "notes.txt"), "mine\n");
@@ -328,7 +328,7 @@ function cloneAtReleaseTag(sandbox: { dir: string; run(args: string[]): string; 
   layerRepository(sandbox, "0.3.0");
   const branch = sandbox.run(["rev-parse", "--abbrev-ref", "HEAD"]).trim();
   sandbox.run(["checkout", "--quiet", "--detach"]);
-  writeFileSync(join(sandbox.dir, "packages/worker-fleet/src/cli-flags.mjs"), `export const VERSION = "0.4.0";\n`);
+  writeFileSync(join(sandbox.dir, "packages/worker-fleet/src/cli-flags.ts"), `export const VERSION = "0.4.0";\n`);
   sandbox.run(["add", "-A"]);
   sandbox.commit("release 0.4.0");
   sandbox.run(["tag", `${NAME}@0.4.0`]);
@@ -357,7 +357,7 @@ test("#3973: a clone detached at a release tag that origin holds, with only buil
       refused(/uncommitted/);
       rmSync(join(target, "notes.txt"));
       // A modified TRACKED file is work whatever it is named, and so is a staged one.
-      writeFileSync(join(target, "packages/worker-fleet/src/cli-flags.mjs"), "// mine\n");
+      writeFileSync(join(target, "packages/worker-fleet/src/cli-flags.ts"), "// mine\n");
       refused(/uncommitted/);
       clone.run(["checkout", "--", "."]);
       // A commit on no remote ref and under no tag origin holds.

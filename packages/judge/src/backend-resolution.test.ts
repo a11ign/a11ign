@@ -76,7 +76,7 @@ function sources(): [string, string][] {
  * so `doctor` told operators to run `codex login` for something the product cannot use.
  */
 const EXEMPT = new Map([[
-  "packages/worker-fleet/src/doctor.mjs",
+  "packages/worker-fleet/src/doctor.ts",
   "worker-fleet must not depend on the judge package; behaviour is pinned by the test below",
 ]]);
 

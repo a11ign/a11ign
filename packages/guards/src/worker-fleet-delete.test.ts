@@ -263,12 +263,12 @@ test("lab, guards, cli and the root scripts import the fleet by package name, ne
 
 test("POSITIVE CONTROL: a relative import of the fleet is REFUSED naming the file; the by-name form, a test and a control import are not", () => {
   assert.deepEqual(relativeImportRefusals({
-    "packages/lab/src/training/a.mjs": 'import { x } from "../../../worker-fleet/src/worker-http.mjs";\n',
-    "packages/guards/src/b.mjs": 'import { y } from "../../worker-fleet/src/cli-flags.mjs";\n',
-    "scripts/c.mjs": 'import { z } from "../packages/worker-fleet/src/cli-flags.mjs";\n',
+    "packages/lab/src/training/a.mjs": 'import { x } from "../../../worker-fleet/src/worker-http.ts";\n',
+    "packages/guards/src/b.mjs": 'import { y } from "../../worker-fleet/src/cli-flags.ts";\n',
+    "scripts/c.mjs": 'import { z } from "../packages/worker-fleet/src/cli-flags.ts";\n',
     "packages/lab/src/d.mjs": `import { w } from "${CONSUMED}/cli-flags";\n`,
-    "packages/lab/src/e.test.ts": 'import { v } from "../../worker-fleet/src/doctor.mjs";\n',
-    "packages/control/src/f.mjs": 'import { u } from "../../worker-fleet/src/cli-flags.mjs";\n',
+    "packages/lab/src/e.test.ts": 'import { v } from "../../worker-fleet/src/doctor.ts";\n',
+    "packages/control/src/f.mjs": 'import { u } from "../../worker-fleet/src/cli-flags.ts";\n',
   }), [
     `packages/lab/src/training/a.mjs imports packages/worker-fleet by a relative path: name ${CONSUMED}`,
     `packages/guards/src/b.mjs imports packages/worker-fleet by a relative path: name ${CONSUMED}`,
