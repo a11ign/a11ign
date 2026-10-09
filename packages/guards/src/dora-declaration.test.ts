@@ -254,6 +254,28 @@ test("control: the old prefix put back, or no src/, is REFUSED, naming it", () =
   assert.match(staleWorkerPathRefusal([]) ?? "", /declares \[\]/);
 });
 
+/** #4222: `lab` holds its package at the ROOT of its repository since the flatten (a11ign/lab#38, released as v0.1.13, #4215), so `src/` is its prefix and `packages/lab/` is a directory it no longer has. A `tag` repository reads no manifest (claim 3), so nothing above could see a stale prefix. */
+const STALE_LAB_PREFIX = "packages/lab/";
+const LAB = "a11ign/lab";
+
+/** Why lab's declared paths do not name its own layout (`src/`), or null when they do. */
+function staleLabPathRefusal(declared: unknown): string | null {
+  const paths = releasablePathsOf(LAB, declared);
+  if (paths.includes(STALE_LAB_PREFIX)) return `${LAB} still declares ${STALE_LAB_PREFIX}, which that repository does not have`;
+  return paths.includes("src/") ? null : `${LAB} declares ${JSON.stringify(paths)}, and its code is under src/`;
+}
+
+test("lab's releasable paths name its own layout (src/), not the directory the flatten removed (#4222)", () => {
+  assert.equal(staleLabPathRefusal(realDeclared), null);
+});
+
+test("control: lab's old prefix put back, or no src/, is REFUSED, naming it", () => {
+  const withPaths = (releasablePaths: string[]) => (realDeclared as Declared[]).map((entry) => (entry.repo === LAB ? { ...entry, releasablePaths } : entry));
+  assert.match(staleLabPathRefusal(withPaths([STALE_LAB_PREFIX])) ?? "", /still declares packages\/lab\//);
+  assert.match(staleLabPathRefusal(withPaths(["packages/other/"])) ?? "", /its code is under src\//);
+  assert.match(staleLabPathRefusal([]) ?? "", /declares \[\]/);
+});
+
 const realCode = project.code;
 const FIXTURE_CODE: CodeRepository[] = [{ key: "", repo: "a11ign/one" }, { key: "two", repo: "a11ign/two" }];
 const FIXTURE_DORA: Declared[] = [{ repo: "a11ign/one" }, { repo: "a11ign/two" }];
