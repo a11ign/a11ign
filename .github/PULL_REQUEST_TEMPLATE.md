@@ -1,4 +1,15 @@
 <!--
+WHERE THE ACCEPTANCE LIVES (ADR 0044, row #4422): IN A FILE THE PULL REQUEST ADDS UNDER `.acceptance/`, NOT IN THIS BODY.
+  - Write the `Acceptance:` block, and the `Mutation:`, `Refutation` and hand-run sections, to ONE file the PR adds, named for the
+    branch with each `/` replaced by `~`: branch `agent/foo-4415` is `.acceptance/agent~foo-4415.md`. CI reads the file the PR ADDS
+    (found by diffing against the merge base), so editing this description after the review cannot change the verdict.
+  - The body keeps `Closes` and ONE pointer line naming the file (below). The pointer is for humans; nothing parses it.
+  - The file uses the SAME grammar as the rules below, header for header, so everything under "HOW THE BLOCK IS READ" applies to the
+    file unchanged.
+  - An `Acceptance:` block written in this body is the DEPRECATED FALLBACK: it is read only when the PR adds no file (CI prints
+    `ACCEPTANCE-SOURCE: body (deprecated)`), and it ends when no open PR still uses it. Do not write a new one.
+-->
+<!--
 THE `Acceptance:` BLOCK BELOW IS RUN BY CI, AND SINCE 2026-09-17 IT BLOCKS THE MERGE. `ci.yml`'s
 `acceptance` job (#353) hands each line to bash and its EXIT CODE is the verdict; a PR with no acceptance
 block reports `ACCEPTANCE: MISSING`, and so does this template left unfilled. That is deliberate -- a check
@@ -98,9 +109,7 @@ performs the merge, so `trunk.yml`'s `closeRows` job does it explicitly (#298, #
 
 Closes #
 
-Acceptance:
-
-Mutation:
+Acceptance file: <!-- .acceptance/<branch with / as ~>.md -->
 
 ## What changes, and why
 

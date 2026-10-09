@@ -122,7 +122,10 @@ for a defect in the diff that a reader can reproduce**: a command, a failing tes
 For each PR, in order:
 
 1. **Read the row it closes** (`Closes #N` in the body): its Region and Acceptance are the contract.
-2. **Run the acceptance command from the body in your worktree.** If it does not run, that is the finding.
+2. **Run the acceptance command from the file the PR adds under `.acceptance/`, in your worktree** (ADR 0044: the branch with each `/`
+   as `~`, `.acceptance/agent~foo-4415.md`). **Read the file in the diff, not the body**: CI runs the file, and the body's pointer line
+   is for humans. A body `Acceptance:` block is the deprecated fallback and counts only when the PR adds no file. If it does not run,
+   that is the finding.
 3. **Re-derive every load-bearing number in the PR body yourself** (counts, populations, "N of M").
    Do not inherit a figure from the body or from a comment.
 4. **Mutate the subject, not the test:** put the defect back, or change the code the new test claims to
