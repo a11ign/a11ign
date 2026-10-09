@@ -12,14 +12,14 @@
 // edited here. A scope named `@a11y-witness` literally would answer only this rename and go quiet on the
 // one after it.
 //
-// MUST NEVER FAIL AN INSTALL, the same rule `install-git-hooks.mjs` states for itself: every failure here
+// MUST NEVER FAIL AN INSTALL, the same rule `install-git-hooks.ts` states for itself: every failure here
 // is reported and swallowed, never thrown, because a broken symlink or an unreadable directory is not a
 // reason to break `npm install`.
 import { readFileSync, readdirSync, lstatSync, realpathSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 // RELATIVE, NOT `@a11ign/screenreader-fleet/cli-flags`: this is a `prepare`-time script, which npm runs on every
-// plain `npm install` before any package's `dist/` exists -- the same reason `install-git-hooks.mjs`
+// plain `npm install` before any package's `dist/` exists -- the same reason `install-git-hooks.ts`
 // imports the same file the same way. `pre-install-import-graph.test.ts` derives this file from
 // `package.json`'s `prepare` and enforces it.
 import { refuseUnknownFlags } from "./cli-flags.mjs";

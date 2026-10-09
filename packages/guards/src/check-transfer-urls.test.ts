@@ -20,10 +20,12 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
+const TSX = pathToFileURL(createRequire(import.meta.url).resolve("tsx")).href;
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const SCRIPT = join(REPO_ROOT, "scripts/check-transfer-urls.ts");
-const { findTransferUrls, checkTransferUrls, reportTransferUrls } = await import(pathToFileURL(SCRIPT).href);
+const { findTransferUrls, checkTransferUrls, reportTransferUrls } = await import("../../../scripts/check-transfer-urls.ts");
 const { PRODUCT_REPO } = await import(pathToFileURL(join(REPO_ROOT, "scripts/repo-identity.mjs")).href);
 
 const GITHUB = `https://github.com/${PRODUCT_REPO}`;
@@ -174,7 +176,7 @@ test("the report for no results still counts and does not claim any cleanly", ()
 
 test("the CLI refuses an unknown flag before walking or fetching anything", () => {
   // cwd is the repository: `repo-identity.mjs` resolves the project declaration from the working directory and throws outside one.
-  const result = spawnSync(process.execPath, [SCRIPT, "--live"], { cwd: REPO_ROOT, encoding: "utf8" });
+  const result = spawnSync(process.execPath, ["--import", TSX, SCRIPT, "--live"], { cwd: REPO_ROOT, encoding: "utf8" });
   assert.equal(result.status, 2);
   assert.match(result.stderr, /unknown flag --live/);
   assert.equal(result.stdout, "");

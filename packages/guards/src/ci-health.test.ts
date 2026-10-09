@@ -19,7 +19,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const ci = await import(pathToFileURL(join(REPO_ROOT, "scripts/ci-health.ts")).href);
+const ci = await import("../../../scripts/ci-health.ts");
 
 const MINIMUM = 2;
 const RATIO_TARGET = { label: "Pass", unit: "ratio", atLeast: 0.8 };
@@ -262,7 +262,7 @@ test("renderComment: names the window, commit and rate limit, then each reposito
   const lines = text.split("\n");
   assert.equal(lines[0], "## CI health, week of 2026-09-30");
   assert.match(text, /created from 2026-09-30T00:00:00Z to 2026-10-07T00:00:00Z \(UTC, end exclusive\)/);
-  assert.match(text, /`scripts\/ci-health\.mjs` at `abc123`\. Rate limit seen: 4999 of 5000\./);
+  assert.match(text, /`scripts\/ci-health\.ts` at `abc123`\. Rate limit seen: 4999 of 5000\./);
   assert.match(text, /### a11ign\/a11ign/);
   assert.match(text, /\| Pass \| at least 80\.0% \| 50\.0% \| 1 of 2 pull requests/);
   assert.match(text, /\*\*MISSED\*\*/);

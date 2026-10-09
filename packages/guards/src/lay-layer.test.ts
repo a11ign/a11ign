@@ -200,7 +200,7 @@ test("#3505: lay puts down every part the declaration names, without tests, and 
     write("packages/lab/package.json", "{}");
     write("packages/lab/src/a.mjs", "export const a = 1;\n");
     write("packages/lab/src/a.test.ts", "// a test\n");
-    write("packages/lab/scripts/run.mjs", "export const run = 1;\n");
+    write("packages/lab/scripts/run.ts", "export const run = 1;\n");
     write("packages/lab/rule-ownership.json", "{}\n");
     sandbox.run(["add", "-A"]);
     sandbox.commit("release 0.1.2");
@@ -213,7 +213,7 @@ test("#3505: lay puts down every part the declaration names, without tests, and 
         "src, scripts and the file named, no test and no manifest");
       // A part the tag lacks: refused (a declaration that gained a part is not "already at" the tag), and the copy already there is still there.
       assert.throws(() => lay(root, { ...plan, lays: ["src", "baselines"] }), /holds no packages\/lab\/baselines/);
-      assert.ok(existsSync(join(root, "packages/lab/scripts/run.mjs")), "the refusal came before the old copy was removed");
+      assert.ok(existsSync(join(root, "packages/lab/scripts/run.ts")), "the refusal came before the old copy was removed");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

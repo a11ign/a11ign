@@ -14,7 +14,7 @@
 // guessed would be the reader that says `green` on a bad day.
 //
 // THE NAME CARRIES THE SHA, not just the version. The run is named `outsider v<version> <tag sha>` (`run-name` in
-// generate.mjs), so a run for a tag that was later moved is not this release's answer, and `v0.1.1` never matches
+// generate.ts), so a run for a tag that was later moved is not this release's answer, and `v0.1.1` never matches
 // `v0.1.10`: the name is compared token by token, never searched.
 
 const HOUR_MS = 3_600_000;
@@ -29,14 +29,14 @@ const HOUR_MS = 3_600_000;
  * itself (#4059, found by #3224): `gh run list --repo a11ign-labs/a11ign-consumer-check --workflow outsider-job.yml --event schedule
  * --limit 100 --json createdAt` returned 21 scheduled runs since 2026-10-03T16:32Z, so 20 gaps: minimum 2.8 h, median 6.1 h,
  * MAXIMUM 9.3 h (GitHub ran about one hourly tick in six). A publish just after a poll waits that whole gap for the next one, and
- * the windows-2022 job on a green run took 6:07 at most (generate.mjs's header), so a publish is run-complete within about
+ * the windows-2022 job on a green run took 6:07 at most (generate.ts's header), so a publish is run-complete within about
  * 9.3 h + 0.1 h = 9.4 h at the worst gap seen; this is that plus roughly a quarter, rounded up.
  * SUPERSEDED: the first window, 9 h, was built on a 7.2 h worst gap over 100 runs of the organisation's own repository (INFERRED:
  * the outside repository did not exist yet). The sample of 20 is small and its maximum moved by 2.1 h between the two
  * repositories, so the margin is the point: widen it again if a gap longer than this window is read.
  *
  * A VERSION SUPERSEDED AS `latest` BEFORE ANY POLL SAW IT IS NEVER `absent`, because it is never asked about. This reader judges
- * only the release `latest` points at (`verdict-job.mjs` passes the registry's `latest`), and a version that stopped being
+ * only the release `latest` points at (`verdict-job.ts` passes the registry's `latest`), and a version that stopped being
  * `latest` no longer has a verdict to give: not `absent` ("the rehearsal did not run"), not anything else. Measured:
  * a11ign@0.3.0 was promoted at 2026-10-07T20:41:30Z, 51 s after a poll, and superseded by 0.3.1 (22:51:23Z) before the next one:
  * it never got a run and that is not a failure of the job. The outsider test pins this.

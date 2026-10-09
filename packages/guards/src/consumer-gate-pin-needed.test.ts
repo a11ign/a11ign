@@ -165,7 +165,7 @@ test("#4331: the live tree -- the committed pin is current where this branch lef
   const branchPoint = gitIn(REPO_ROOT, ["merge-base", "HEAD", "origin/main"]).trim();
   const at = (commit: string) => decideAtCommit({ commit, cwd: REPO_ROOT }).action;
   assert.ok(at(branchPoint) === NOTHING_TO_DO || at("HEAD") === NOTHING_TO_DO,
-    `stale at the branch point (${at(branchPoint)}) and at HEAD (${at("HEAD")}): regenerate consumer-gate.yml with node scripts/generate-consumer-gate.mjs`);
+    `stale at the branch point (${at(branchPoint)}) and at HEAD (${at("HEAD")}): regenerate consumer-gate.yml with node --import tsx scripts/generate-consumer-gate.ts`);
 });
 
 // --- 3. the workflow and its policy --------------------------------------------------------------------------------------------------
@@ -216,7 +216,7 @@ test("#4374: THE JOB HOLDING id-token RUNS NO REPOSITORY CODE: no checkout, no i
   const regenerateText = JSON.stringify(workflow.jobs.regenerate.steps);
   assert.match(regenerateText, /actions\/checkout/);
   assert.match(regenerateText, /pnpm install/);
-  assert.match(regenerateText, /generate-consumer-gate\.mjs/);
+  assert.match(regenerateText, /generate-consumer-gate\.ts/);
   assert.match(regenerateText, /actions\/upload-artifact/);
 });
 
@@ -236,7 +236,7 @@ test("#4374: repair needs regenerate, takes its artifact by the name it was uplo
 
 test("#4331: the regeneration runs the generator, refuses any change but consumer-gate.yml, and pushes the ONE branch the in-flight reading looks for", () => {
   const text = workflow.jobs.regenerate.steps.map((s) => s.run ?? "").join("\n");
-  assert.match(text, /node scripts\/generate-consumer-gate\.mjs/);
+  assert.match(text, /node --import tsx scripts\/generate-consumer-gate\.ts/);
   assert.ok(text.includes('" != " M .github/workflows/consumer-gate.yml" ]'), "the only-consumer-gate.yml guard");
   const pushStep = workflow.jobs.repair.steps.find((s) => s.env?.BRANCH !== undefined);
   assert.equal(pushStep?.env?.BRANCH, REGENERATION_BRANCH, "the workflow and the in-flight reading name different branches");
@@ -256,7 +256,7 @@ test("#4374: what the minting job was handed is shape-checked before it is writt
 });
 
 const RESOLVES_THE_TOOL = /agent-org-newest-tag\.mjs --dest=/;
-const REACHES_REPO_IDENTITY = /scripts\/(consumer-gate-pin-needed\.ts|generate-consumer-gate\.mjs)/;
+const REACHES_REPO_IDENTITY = /scripts\/(consumer-gate-pin-needed\.ts|generate-consumer-gate\.ts)/;
 
 test("#4373: every job that runs a script reaching repo-identity.mjs resolves the tool BEFORE it, under the same condition", () => {
   // Both scripts import repo-identity.mjs, which awaits `toolModule(...)` at import: on a runner no tool exists until the resolver has cloned

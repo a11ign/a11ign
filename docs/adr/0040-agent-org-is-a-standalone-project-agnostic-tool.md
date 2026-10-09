@@ -1340,7 +1340,7 @@ packages/agent-org/src/lib/changed-files.mjs
 packages/agent-org/src/lib/local-import-closure.mjs
 packages/agent-org/src/lib/worktree-resolution.mjs
 packages/agent-org/src/lib/npm-cli-executable.mjs
-packages/agent-org/src/lib/product-home.mjs
+packages/agent-org/src/lib/product-home.ts
 packages/agent-org/src/lib/leak-patterns.mjs
 packages/lab/src/packaging/agent-org-outward-edges.test.ts
 packages/agent-org/src/acceptance-commands.mjs

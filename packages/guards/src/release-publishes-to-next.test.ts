@@ -57,14 +57,14 @@ const needsOf = (workflow: Workflow): string[] => [workflow.jobs?.release?.needs
 /** A guard that stays (item 3 of the row): its name, and how the PARSED `guards` job shows it is still there. */
 const GUARDS_THAT_STAY: readonly { name: string; present: (workflow: Workflow) => boolean }[] = [
   { name: "release:gate:ci", present: (w) => runsOf(w, "guards").some((r) => /pnpm run release:gate:ci\b/.test(r)) },
-  { name: "the consumer-gate currency check", present: (w) => runsOf(w, "guards").some((r) => /generate-consumer-gate\.mjs --check/.test(r)) },
+  { name: "the consumer-gate currency check", present: (w) => runsOf(w, "guards").some((r) => /generate-consumer-gate\.ts --check/.test(r)) },
   { name: "the packed-install check", present: (w) => runsOf(w, "guards").some((r) => /pnpm run gate:isolation\b/.test(r)) },
-  { name: "the manifest-repository check", present: (w) => runsOf(w, "guards").some((r) => /manifest-repository-check\.mjs/.test(r)) },
+  { name: "the manifest-repository check", present: (w) => runsOf(w, "guards").some((r) => /manifest-repository-check\.ts/.test(r)) },
   { name: "the #3126 hold", present: (w) => stepsOf(w, "guards").some((s) => s.env?.A11Y_CHECK_RELEASE_HOLD === "1") },
   { name: "the access read-back", present: (w) => runsOf(w, "guards").some((r) => /\.changeset\/config\.json/.test(r) && /public/.test(r)) },
   { name: "the refusal to publish older than the registry", present: (w) => runsOf(w, "guards").some((r) => /Behind the registry/.test(r)) },
   { name: "the npm floor", present: (w) => runsOf(w, "guards").some((r) => /11\.5\.1/.test(r) && /sort -V/.test(r)) },
-  { name: "the provenance request", present: (w) => stepsOf(w, "guards").some((s) => s.env?.NPM_CONFIG_PROVENANCE === "true" && /release-publish-rehearsal\.mjs/.test(s.run ?? "")) },
+  { name: "the provenance request", present: (w) => stepsOf(w, "guards").some((s) => s.env?.NPM_CONFIG_PROVENANCE === "true" && /release-publish-rehearsal\.ts/.test(s.run ?? "")) },
 ];
 
 /**

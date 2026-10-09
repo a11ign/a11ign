@@ -18,7 +18,7 @@
 // "only a person can say which [.mjs files are commands]" and hand-lists four modules
 // (`board-data.mjs`, `board-markdown.mjs`, `git-env.mjs`, `repo-identity.mjs`) that are imported and never
 // run. That list did not need writing: every one of those four -- and only those four, plus this file's
-// own sibling `commands.mjs` -- is missing the entry-point guard every real CLI in this repo already
+// own sibling `commands.ts` -- is missing the entry-point guard every real CLI in this repo already
 // carries (`if (import.meta.url === pathToFileURL(...).href) main();`, `entry-points.test.ts`'s own
 // population). A module meant to be imported has no reason to guard a `main()` nothing calls directly; a
 // command does. Verified against the hand list it replaces: identical five files, zero drift, computed
@@ -127,7 +127,7 @@ function main() {
   if (process.argv.includes("--check")) {
     const current = existsSync(OUT) ? readFileSync(OUT, "utf8") : "";
     if (current !== page) {
-      console.error(`STALE  ${OUT} does not match the tree. Run: node scripts/run.mjs docs-commands`);
+      console.error(`STALE  ${OUT} does not match the tree. Run: node scripts/run.ts docs-commands`);
       process.exitCode = 1;
       return;
     }

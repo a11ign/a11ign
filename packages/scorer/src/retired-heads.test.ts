@@ -4,7 +4,7 @@
  * This is the gate `#84` names: a candidate whose head set shrinks must say what it retired, why, and
  * where the reasoning lives — never just that it shrank. `3.3.2:unnamed-form-field` almost shipped absent
  * with nothing accounting for it; two sessions spent an evening resolving the ambiguity by ASSUMPTION,
- * each landing on the opposite wrong answer. See `check-retired-heads.mjs`'s own header for the full story.
+ * each landing on the opposite wrong answer. See `check-retired-heads.ts`'s own header for the full story.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";

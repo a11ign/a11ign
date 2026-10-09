@@ -500,7 +500,7 @@ what it says, not a tidy-up** — the same reason the original item 3 was a deci
 
 **Before a real publish, run the full gate on the lab** — `pnpm run lab:job -e job=release-gate`. The
 workflow can only prove 5 of its 13 stages, and since #3131 nobody asserts the other eight on a publish
-(`release-gate-scope.mjs` says so in the log; #3136 reads them by commit sha): they pass somewhere a corpus and
+(`release-gate-scope.ts` says so in the log; #3136 reads them by commit sha): they pass somewhere a corpus and
 a venv exist, or nobody has looked.
 
 ---
@@ -539,7 +539,7 @@ what is live now.
 
 **Before a real publish, run the full gate on the lab** — `pnpm run lab:job -e job=release-gate`. The
 workflow can only prove 5 of its 13 stages; since #3131 nobody asserts the other eight on a publish
-(`release-gate-scope.mjs` says so in the log; #3136 reads them by commit sha), so they pass somewhere a corpus
+(`release-gate-scope.ts` says so in the log; #3136 reads them by commit sha), so they pass somewhere a corpus
 and a venv exist, or nobody has looked.
 
 ---

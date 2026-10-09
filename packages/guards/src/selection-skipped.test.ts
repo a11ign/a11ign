@@ -22,7 +22,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { withGitSandbox, type GitSandbox } from "../../../scripts/test-support/git-sandbox.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const skipped = await import(pathToFileURL(join(REPO_ROOT, "scripts/selection-skipped.ts")).href);
+const skipped = await import("../../../scripts/selection-skipped.ts");
 const {
   cleanLine, failingFiles, siblingRunId, skippedByChanged, runAnswer, firstRunReds, windowReading, windowsAround, traceRed,
   countAnswers, lineFor, renderReport, containsCommit, affectedAt,

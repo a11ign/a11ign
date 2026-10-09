@@ -2,7 +2,7 @@
 // @ts-check
 // command: read the outside repository's verdict on the release `latest` points at, fail on red or on absent-past-the-window, and file ONE `regression` row per version
 //
-// THE DRIVER OF #3181's READER, AND THE PLACE THE SWAP LANDS (#3184, ADR 0042 decisions 4 and 6). `verdict.mjs` is a pure decision
+// THE DRIVER OF #3181's READER, AND THE PLACE THE SWAP LANDS (#3184, ADR 0042 decisions 4 and 6). `verdict.ts` is a pure decision
 // over four facts and fetches nothing; this gathers them (the registry, the release tag, the outside repository's PUBLIC run list),
 // turns the verdict into a pass or a fail, and files the row. `registry-consumer-gate.yml`'s `outsider` job runs it.
 //

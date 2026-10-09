@@ -4,7 +4,7 @@
 //
 // #3136 (child of #928, ADR 0041 decision 3). The release job proves what a RUNNER can prove; the stability gate
 // and the NVDA layer need a Windows worker and cannot run on one (nine of release:gate's fourteen stages,
-// `release-gate-scope.mjs`). This reads the lab's verdict on the commit instead of ignoring it, in the way
+// `release-gate-scope.ts`). This reads the lab's verdict on the commit instead of ignoring it, in the way
 // `release-reuses-verdict.mjs` reads another workflow's job: BY THE EXACT SHA, never "the latest".
 //
 // THE CONTRACT (`ceo`): the lab posts a COMMIT STATUS on the sha, context `qualification`, state `success`,

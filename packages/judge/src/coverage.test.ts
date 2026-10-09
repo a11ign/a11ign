@@ -15,7 +15,7 @@
  * NOTHING, identically whether the removal was correct or an accident. `3.3.2:unnamed-form-field` almost
  * shipped exactly that way: a legitimate retirement, fully reasoned in `case-matrix.mjs`, that still cost
  * an evening because nothing connected a head vanishing from a training report to the comment explaining
- * why. See `check-retired-heads.mjs`'s own header for the full incident.
+ * why. See `check-retired-heads.ts`'s own header for the full incident.
  *
  * So growth and shrink now ask different questions, reusing that file's `headSet`/`retiredHeadsVerdict`
  * rather than a third copy of the comparison: a criterion the report gained still requires updating
@@ -45,7 +45,7 @@ test("a criterion the report GAINED still needs SCORED_CRITERIA updated -- the c
 
 test("a criterion the report LOST is a REFUSAL unless retired-heads.json declares it", () => {
   // `retiredHeadsVerdict` is generic over "any set of string ids" -- CRITERION numbers here (what
-  // SCORED_CRITERIA and the printed coverage count operate on), SUBTYPE ids in `check-retired-heads.mjs`'s
+  // SCORED_CRITERIA and the printed coverage count operate on), SUBTYPE ids in `check-retired-heads.ts`'s
   // own `candidate:gate` use (a finer grain, for the pre-promotion question). Same function, two
   // granularities, because the comparison -- "did anything disappear, and was it declared" -- is
   // identical at both; `headSet()` itself is not needed here, since these sets are already flat.

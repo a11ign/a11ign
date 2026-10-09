@@ -274,7 +274,7 @@ export function renderComment({ date, window, commit, rateLimit, readings }: {
     }) {
   return [
     commentHeading({ date }), "",
-    `Window: runs of \`ci.yml\` created from ${window.since} to ${window.until} (UTC, end exclusive). Script: \`scripts/ci-health.mjs\` at \`${commit}\`. Rate limit seen: ${rateLimit}.`,
+    `Window: runs of \`ci.yml\` created from ${window.since} to ${window.until} (UTC, end exclusive). Script: \`scripts/ci-health.ts\` at \`${commit}\`. Rate limit seen: ${rateLimit}.`,
     "Definitions and targets: `docs/ci-targets.json`. A reading is a moment, and every figure is beside the count it came from.", "",
     ...readings.map(repositorySection),
   ].join("\n");

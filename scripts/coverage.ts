@@ -29,7 +29,7 @@
 // reason `scripts/build-packages.mjs` is: it spawns the test runner, so measuring the measurer is circular.
 //
 // RELATIVE IMPORTS, NOT `@a11ign/screenreader-fleet/cli-flags` -- a root script, the same rule `build-packages.mjs`
-// and `coverage-failure-classifier.mjs` give for their own identical choice.
+// and `coverage-failure-classifier.ts` give for their own identical choice.
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";

@@ -304,7 +304,7 @@ jobs:
       # #3159 (sibling of #3137, ADR 0041 decision 4): A DEPENDENCY PULL REQUEST IS READ FROM ITS DIFF. This job runs
       # `changeset status`, which reads files, so #3137's body fragment cannot clear it (#3155 failed here). The entry a
       # consumer reads is DERIVED from the manifests, never typed and never taken from the title, and it is written when
-      # the version is made (`dependency-changeset.mjs compile`), so nothing is pushed to Dependabot's branch. A bump
+      # the version is made (`dependency-changeset.ts compile`), so nothing is pushed to Dependabot's branch. A bump
       # of a published package's runtime range is accepted as a `patch`; a diff that moves only devDependencies is
       # accepted as empty; a major, a 0.x minor, an owned path or anything outside the manifests is REFUSED here, and
       # the log names which, so that pull request waits for a human who looks. Recognised by the `deps:` prefix

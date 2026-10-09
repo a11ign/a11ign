@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 // @ts-check
-// command: the one-line dispatcher: run a named command from commands.mjs, or --list every command declared
+// command: the one-line dispatcher: run a named command from commands.ts, or --list every command declared
 /**
  * THE ONE-LINE DISPATCHER — A3.
  *
  *   node --import tsx scripts/run.ts --list             every command this repository declares, by name
  *   node --import tsx scripts/run.ts <name> [args...]   run one, passing everything after the name through
  *
- * A command in `commands.mjs` needs no `package.json` entry, which is the whole point: 19 PRs edited
+ * A command in `commands.ts` needs no `package.json` entry, which is the whole point: 19 PRs edited
  * `package.json` for unrelated reasons, so a changeset, a dependency bump and a new script collided in one
  * file for no reason connected to any of them.
  *
@@ -45,7 +45,7 @@ export function decide(argv: string[], commands: Record<string, { argv: string[]
   const [name, ...rest] = argv;
   if (!name || name === "--list") {
     return name === "--list" ? { action: "list" } : { action: "refuse",
-      message: `node scripts/run.mjs <command> [args...]\n  --list  names every command\n\n`
+      message: `node scripts/run.ts <command> [args...]\n  --list  names every command\n\n`
         + `${names.length} command(s): ${names.join(", ")}` };
   }
   const command = commands[name];

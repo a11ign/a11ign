@@ -21,10 +21,12 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
+const TSX = pathToFileURL(createRequire(import.meta.url).resolve("tsx")).href;
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const SCRIPT = join(REPO_ROOT, "scripts/prune-stale-workspace-scope.ts");
-const { currentWorkspaceScope, staleWorkspaceScopes, pruneStaleWorkspaceScopes } = await import(pathToFileURL(SCRIPT).href);
+const { currentWorkspaceScope, staleWorkspaceScopes, pruneStaleWorkspaceScopes } = await import("../../../scripts/prune-stale-workspace-scope.ts");
 
 function writeManifest(repo: string, dir: string, manifest: object | string): void {
   mkdirSync(join(repo, "packages", dir), { recursive: true });
@@ -197,12 +199,12 @@ test("CLI (a copy inside a fixture, never the real node_modules): prunes the sta
     copyFileSync(join(REPO_ROOT, "scripts/cli-flags.mjs"), join(repo, "scripts/cli-flags.mjs"));
     const copy = join(repo, "scripts/prune-stale-workspace-scope.ts");
 
-    const refused = spawnSync(process.execPath, [copy, "--force"], { cwd: repo, encoding: "utf8" });
+    const refused = spawnSync(process.execPath, ["--import", TSX, copy, "--force"], { cwd: repo, encoding: "utf8" });
     assert.notEqual(refused.status, 0);
     assert.match(refused.stderr, /unknown flag --force/);
     assert.equal(existsSync(join(repo, "node_modules/@old")), true, "a refused run removes nothing");
 
-    const result = spawnSync(process.execPath, [copy], { cwd: repo, encoding: "utf8" });
+    const result = spawnSync(process.execPath, ["--import", TSX, copy], { cwd: repo, encoding: "utf8" });
     assert.equal(result.status, 0);
     assert.equal(result.stderr, "  removed stale workspace scope node_modules/@old (current scope is @current)\n");
     assert.equal(existsSync(join(repo, "node_modules/@old")), false);

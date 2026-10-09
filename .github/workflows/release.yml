@@ -243,7 +243,7 @@ jobs:
       # to prevent. `release:gate:ci` is the part a runner CAN prove: the artefact is safetensors, the weights have a changelog
       # entry accounting for them, no schema migration is open, and every package is usable when installed from a tarball. The rest
       # must have passed ON THE LAB, and is not wired here (#3131): the step after the consumer-gate check names, on EVERY run,
-      # which stages this runner did not run (`release-gate-scope.mjs`).
+      # which stages this runner did not run (`release-gate-scope.ts`).
       - name: The release gate — the part a runner can prove
         run: pnpm run release:gate:ci
 
@@ -607,12 +607,12 @@ jobs:
   # TWO JOBS, AND THE ONE HOLDING `id-token` RUNS NO REPOSITORY CODE (`ceo`'s ruling and the review of #4365; the shape of #3969 and `promote-action-tag`).
   # `id-token: write` puts the OIDC request URL in the environment of EVERY step of its job, so a dependency lifecycle script run by `pnpm install` could
   # ask for the audience Octo STS accepts and get `contents` + `workflows` write on a repository outside the organisation. So `decide-outsider-pin`
-  # (`contents: read`, NO `id-token`) checks out, installs, runs `generate.mjs` and `refresh-pin.ts` against a read of the public outside file, and hands on
+  # (`contents: read`, NO `id-token`) checks out, installs, runs `generate.ts` and `refresh-pin.ts` against a read of the public outside file, and hands on
   # three strings and the generated file; `refresh-outsider-pin` (`id-token: write`, NO checkout, no install) mints, writes and reads back with `gh`,
   # `jq`, `base64` and `cmp` only, and checks that the file it was handed pins the commit it was told.
   #
   # Like `promote-action-tag` both `need` the promotion's SUCCESS, so a `next` publish and a red qualification leave the pin alone; there is no fallback to
-  # another token, and a failed mint is red. `refresh-pin.ts` writes only a file that differs from what `generate.mjs` makes for the release, and never moves
+  # another token, and a failed mint is red. `refresh-pin.ts` writes only a file that differs from what `generate.ts` makes for the release, and never moves
   # the pin to an older release. The write is one commit of ONE file on `main`, compare-and-set on that file's blob sha, and the read-back is the evidence.
   # The outside repository's own `poll` job then finds a pin for the new version and runs it.
   #

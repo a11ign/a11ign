@@ -7,7 +7,7 @@
 // runs the module-graph-affected set (#3572), which skips tests again BY DESIGN. It is not safe by construction; this is
 // what says whether it is safe in fact, and `forceRerunTriggers` in `scripts/rstest/rstest.config.mjs` is what widens it.
 //
-// IT READS #3212'S FUNCTION AND COMPUTES NO SECOND ONE. `firstRunPassRate` and `inWindow` come from `ci-health.mjs`; the
+// IT READS #3212'S FUNCTION AND COMPUTES NO SECOND ONE. `firstRunPassRate` and `inWindow` come from `ci-health.ts`; the
 // red list below uses the same `pullRequestGroups` and `completed`, and `main` refuses to print when its count of reds
 // disagrees with the rate's own (`counted - passed`), because two readings of "first completed run" drift apart silently.
 //
@@ -229,7 +229,7 @@ export function renderReport({ merged, deleted, before, after, traces, asOf }: {
   return [
     `## First-run pass rate around the local \`--changed\` run (#3576)`,
     "",
-    `Local \`--changed\` merged ${merged} (#3572). First-run pass rate = of pull requests with a completed \`ci.yml\` run in the window, the share whose FIRST completed run was \`success\`; a cancelled run is not completed (\`firstRunPassRate\` in \`scripts/ci-health.mjs\`, called over \`inWindow\`'s window).`,
+    `Local \`--changed\` merged ${merged} (#3572). First-run pass rate = of pull requests with a completed \`ci.yml\` run in the window, the share whose FIRST completed run was \`success\`; a cancelled run is not completed (\`firstRunPassRate\` in \`scripts/ci-health.ts\`, called over \`inWindow\`'s window).`,
     "",
     rateLine("Before", before),
     rateLine("After", after),

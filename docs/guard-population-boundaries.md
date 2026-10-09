@@ -82,7 +82,7 @@ applied as a fix.
    above.)
 3. **A hand-written list** — blind to whatever nobody remembered.
 4. **A walk that is correct while the PROSE describing it is wider.** No result the guard produces can say
-   so, and the prose is what the next reader trusts. `install-git-hooks.mjs` carried a comment claiming a
+   so, and the prose is what the next reader trusts. `install-git-hooks.ts` carried a comment claiming a
    sibling guard was blind for hours after that guard was fixed — and it was cited, twice, as live
    evidence.
 

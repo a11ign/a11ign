@@ -247,7 +247,7 @@ has actually cost this project four rules is not among them.
 
 **Status: MET 2026-08-28. All done-conditions, including the unserved-page refusal.**
 
-`gateVerdict` in `packages/lab/src/gates/verdict.mjs` derives the verdict from coverage, so a PASS with
+`gateVerdict` in `packages/lab/src/gates/verdict.ts` derives the verdict from coverage, so a PASS with
 `examined < of` is unconstructible. Five gates migrated; `verdict-adoption.test.ts` discovers every gate
 script and fails in BOTH directions — an unmigrated gate must be exempt, and a migrated one must NOT be.
 It caught a stale exemption on three of the five migrations, including one made minutes after committing

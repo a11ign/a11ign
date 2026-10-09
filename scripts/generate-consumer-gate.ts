@@ -439,7 +439,7 @@ function buildCheckPinJob(pinnedSha: string): string {
     `            echo "::error::consumer-gate.yml's uses: step is pinned to ${pinnedSha}, which is not an"`,
     `            echo "::error::ancestor of the commit this run is executing at, \${{ github.sha }} (ref"`,
     `            echo "::error::\${{ github.ref_name }}, \${{ github.event_name }}) -- regenerate (node"`,
-    `            echo "::error::scripts/generate-consumer-gate.mjs) against a commit in this history"`,
+    `            echo "::error::scripts/generate-consumer-gate.ts) against a commit in this history"`,
     "            exit 1",
     "          fi",
     // #3864: A PIN THAT IS AN ANCESTOR CAN STILL PREDATE A CHANGE TO WHAT IT PINS. The ancestry test above answers "is this
@@ -454,7 +454,7 @@ function buildCheckPinJob(pinnedSha: string): string {
     `          if ! git diff --quiet ${pinnedSha} "\${{ github.sha }}" -- ${ACTION_DEFINITION.join(" ")}; then`,
     `            echo "::error::${ACTION_DEFINITION.join(", ")} changed between the pin, ${pinnedSha}, and the commit"`,
     `            echo "::error::this run is executing at, \${{ github.sha }}: the a11y job would run the OLD Action --"`,
-    `            echo "::error::regenerate (node scripts/generate-consumer-gate.mjs) at a commit containing the change"`,
+    `            echo "::error::regenerate (node --import tsx scripts/generate-consumer-gate.ts) at a commit containing the change"`,
     `            git diff --stat ${pinnedSha} "\${{ github.sha }}" -- ${ACTION_DEFINITION.join(" ")}`,
     "            exit 1",
     "          fi",
@@ -661,7 +661,7 @@ function main() {
     /** @param {string} text */
     const stripSha = (text: string) => text.replaceAll(/\b[0-9a-f]{40}\b/g, "<sha>");
     if (stripSha(current) !== stripSha(workflow)) {
-      console.error(`STALE  ${OUT} does not match README.md. Run: node scripts/run.mjs consumer-gate`);
+      console.error(`STALE  ${OUT} does not match README.md. Run: node scripts/run.ts consumer-gate`);
       process.exitCode = 1;
       return;
     }

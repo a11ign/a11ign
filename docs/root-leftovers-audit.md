@@ -44,7 +44,7 @@ holds no such directory because it IS the tool.
   checkout; `beforeTick` (`project.json`) runs in this checkout before each tick.
 - *CI.* `.github/workflows/nightly.yml:280` reads `.agent-org/project.json` for the repository list and `:282` fails with `CANNOT_TELL` without it.
 - *Guard tests.* `packages/guards/src/dora-declaration.test.ts:27`, `layer-repository-protection.test.ts:49`, `branch-protection.test.ts:439`
-  (all `project.json`); `role-files-no-standing-cron.test.ts:18` (`roles/`); `scripts/doc-checks/roles-readme.ts:9` and `roles-memory.mjs:9`.
+  (all `project.json`); `role-files-no-standing-cron.test.ts:18` (`roles/`); `scripts/doc-checks/roles-readme.ts:9` and `roles-memory.ts:9`.
 - *The test selector.* `scripts/rstest/rstest.config.mjs:41-42` (`.agent-org/roles/**`, `.agent-org/units/**`) and about 20 further file triggers
   (21 hits in the file), so a change here runs the tests that read it.
 - *The release rule.* `scripts/release-reads-qualification.mjs:83` lists `^\.agent-org\/` and `^\.claude\/` among the paths that do NOT make a
@@ -105,7 +105,7 @@ READMEs; a root document is outside them, in the company of `README.md`, `CONTRI
 - *A person:* the chairman's records point at its "UPDATE" entries (`docs/outsider-runs.md:47`).
 
 **What a move would break.** Not a gate: `ci-changed.test.ts:93` pins the five-name list and would fail on a rename of the entry, and
-`doc-references.mjs` would report each stale `./PLAN.md` link in the nightly cross-reference report (that check no longer runs on a pull request,
+`doc-references.ts` would report each stale `./PLAN.md` link in the nightly cross-reference report (that check no longer runs on a pull request,
 #954). The rest is stale prose in about 29 files. **Read from the grep, not tried.** A trial move in a scratch copy was not run: a worktree has no
 `node_modules`, and the readers are in the greps above.
 
@@ -158,7 +158,7 @@ or CI job that has run `pnpm install`; they are untracked, laid, and not members
 
 **Who reads it.** *Claude Code, by location*: it loads a nested `CLAUDE.md` when a session works under that directory. **No tracked file names it**:
 `git grep -nE 'packages/judge/CLAUDE\.md|judge/CLAUDE'` prints nothing. No guard enumerates nested `CLAUDE.md` files either (the `CLAUDE.md`
-walkers I found, `scripts/doc-checks/claude-md-links.ts` and `doc-citation-integrity.mjs:41`, read the root one and `docs/*.md`). The root
+walkers I found, `scripts/doc-checks/claude-md-links.ts` and `doc-citation-integrity.ts:41`, read the root one and `docs/*.md`). The root
 `CLAUDE.md` table "Where else to look" lists the nested files of `control`, the worker, `lab` and `.github`, and **not this one**.
 
 **What a move would break.** Nothing red, and the rules would stop loading for judge edits unless the file stays under `packages/judge/`. It names

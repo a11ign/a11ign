@@ -21,13 +21,15 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
+const TSX = pathToFileURL(createRequire(import.meta.url).resolve("tsx")).href;
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const SCRIPT = join(REPO_ROOT, "scripts/known-gaps-index.ts");
 const {
   KNOWN_GAPS_FILE, CLOSED_PATTERN, INDEX_START, INDEX_END,
   parseHeadings, isClosed, slugify, openSections, buildIndexBlock, currentIndexBlock, applyIndexBlock,
-} = await import(pathToFileURL(SCRIPT).href);
+} = await import("../../../scripts/known-gaps-index.ts");
 
 /** Marker, generated header, marker. */
 const HEADER_ONLY_LINES = 3;
@@ -170,7 +172,7 @@ function withCopy(doc: string | null, body: (cli: Cli) => void): void {
     symlinkSync(join(REPO_ROOT, "node_modules"), join(dir, "node_modules"));
     const docPath = join(dir, KNOWN_GAPS_FILE);
     if (doc !== null) writeFileSync(docPath, doc);
-    body({ dir, docPath, run: (args = []) => spawnSync(process.execPath, [join(dir, "scripts/known-gaps-index.ts"), ...args], { cwd: dir, encoding: "utf8" }) });
+    body({ dir, docPath, run: (args = []) => spawnSync(process.execPath, ["--import", TSX, join(dir, "scripts/known-gaps-index.ts"), ...args], { cwd: dir, encoding: "utf8" }) });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -216,7 +218,7 @@ test("CLI: a missing known-gaps file exits 1 naming it, and an unknown flag exit
 
 test("CLI against THIS checkout, read-only (never --write): its exit code agrees with whether the committed index is current", () => {
   const committed = readFileSync(join(REPO_ROOT, KNOWN_GAPS_FILE), "utf8");
-  const result = spawnSync(process.execPath, [SCRIPT], { cwd: tmpdir(), encoding: "utf8" });
+  const result = spawnSync(process.execPath, ["--import", TSX, SCRIPT], { cwd: tmpdir(), encoding: "utf8" });
   assert.equal(result.status, applyIndexBlock(committed) === committed ? 0 : 1);
   assert.ok(openSections(committed).length > 0, "positive control: the real file has open sections");
 });

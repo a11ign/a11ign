@@ -17,7 +17,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const review = await import(pathToFileURL(join(REPO_ROOT, "scripts/weekly-review.ts")).href);
+const review = await import("../../../scripts/weekly-review.ts");
 const {
   TITLE_PREFIX, FILING_SESSION, FIRST_REVIEW_WAITS_ON, isoWeek, isoWeekLabel, reviewTitle, filingPlan, reviewWindow,
   extractRequirements, extractQuestions, ineligibleSessions, eligible, buildBody, bodyReadFromSources,

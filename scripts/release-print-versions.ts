@@ -10,7 +10,7 @@
 //
 // Run AFTER `npm run release:version` -- that is when the six manifests hold the version this run would
 // publish. `publishedManifests` is the same "which packages does Changesets actually publish" rule
-// `manifest-repository-check.mjs` and `release-safety.test.ts` already use, so this names exactly the
+// `manifest-repository-check.ts` and `release-safety.test.ts` already use, so this names exactly the
 // packages the pending reading (`changeset status --verbose`, before `release:version`) names too.
 import { readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";

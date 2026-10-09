@@ -1,5 +1,5 @@
 [Unit]
-# THE CLOCK BEHIND weekly-review.mjs -- #3183, scheduled by #3319. See a11ign-weekly-review.service.
+# THE CLOCK BEHIND weekly-review.ts -- #3183, scheduled by #3319. See a11ign-weekly-review.service.
 Description=Weekly (Monday) filing of the outsider review row (#3319)
 
 [Timer]

@@ -302,7 +302,7 @@ function main(argv: string[]) {
   const base = flagValue(rest, "base");
   if (command === "check" && base) process.exit(check(base, flagValue(rest, "since")) ? 0 : 1);
   if (command === "compile") return compile({ dryRun: rest.includes("--dry-run") });
-  console.error("usage: dependency-changeset.mjs check --base=<ref> [--since=<sha>] | compile [--dry-run]");
+  console.error("usage: dependency-changeset.ts check --base=<ref> [--since=<sha>] | compile [--dry-run]");
   process.exit(2);
 }
 

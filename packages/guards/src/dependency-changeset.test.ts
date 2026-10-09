@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { withGitSandbox } from "../../../scripts/test-support/git-sandbox.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const changeset = await import(pathToFileURL(join(REPO_ROOT, "scripts/dependency-changeset.ts")).href);
+const changeset = await import("../../../scripts/dependency-changeset.ts");
 const { RUNTIME_SECTIONS, refusalFor, entriesFor, deriveDependencyChangeset, renderEntry, parseEntry, checkEntries, compile } = changeset;
 
 type Change = {

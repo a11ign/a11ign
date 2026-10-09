@@ -1,6 +1,6 @@
 # The gate exit-code contract — what each script's non-zero codes actually mean
 
-Audit §9, row 2. `packages/lab/src/gates/verdict.mjs` defines one contract — **0 PASS, 1 FAIL, 2
+Audit §9, row 2. `packages/lab/src/gates/verdict.ts` defines one contract — **0 PASS, 1 FAIL, 2
 INCONCLUSIVE** — and **6 of the ~40 scripts that call `process.exit` with a meaningful code adopt it.**
 Everywhere else, the same numbers mean something else, script by script, and nothing states what. A caller
 sequencing a chain off these codes — `lab:job` returning 4, `fleet:deploy` returning 3, `capture:check`
@@ -17,10 +17,10 @@ reasoned design — several collapse two or three distinct causes into one code 
 maintainer weighed at the time — and changing an exit code is changing a contract every chain that reads it
 already depends on. The deliverable is the table, plus a discovery test
 (`packages/lab/src/gates/exit-code-contract.test.ts`) that requires every gate script to be classified —
-adopts `verdict.mjs`, or documented here with its own meanings — so a new script cannot join the
+adopts `verdict.ts`, or documented here with its own meanings — so a new script cannot join the
 uncatalogued 34 without the test failing. See "What this recommends" at the end.
 
-## The `verdict.mjs` contract, and who actually uses it
+## The `verdict.ts` contract, and who actually uses it
 
 ```js
 gateVerdict({ examined, of, source, failures })   // -> { verdict: PASS | FAIL | INCONCLUSIVE, why, ... }
@@ -29,7 +29,7 @@ exitCodeFor(verdict)                              // -> 0 | 1 | 2
 
 FAIL beats INCONCLUSIVE beats PASS, and coverage is checked **before** failures are, so a gate that fell
 short of its own population reports INCONCLUSIVE rather than a false PASS — the 2-of-48 defect
-`evidence-check` once shipped, from `verdict.mjs`'s own header.
+`evidence-check` once shipped, from `verdict.ts`'s own header.
 
 | script | adopts it via |
 |---|---|
@@ -49,11 +49,11 @@ verdict states not just what it examined but which machine produced it.
 
 **DECIDED: `check-shipped-provenance.mjs` adopts the contract but can never produce its middle state, and
 that is correct, not a defect.** It calls `gateVerdict({ examined: 1, of: 1, ... })` — both hardcoded — so
-`examined < of` (the line `verdict.mjs`'s own header calls "the whole point," coverage checked before
+`examined < of` (the line `verdict.ts`'s own header calls "the whole point," coverage checked before
 failure) is `1 < 1`, always false. Investigated rather than left as an open question: this gate's subject
 is one shipped artefact and one binary fact ("does an entry account for it"), which is either true or false
 every time it runs — there is no population to have PARTIAL coverage of, so `examined` can never
-legitimately fall short of `of`. `verdict.mjs`'s own header names this exact gate as the reason `failures`
+legitimately fall short of `of`. `verdict.ts`'s own header names this exact gate as the reason `failures`
 is decoupled from `examined`/`of`: it can find several problems about the one artefact it examined ("N
 problem(s) across 1 of 1"), which is a different question from whether it examined all of a population.
 Stated explicitly in the gate's own code now, and proven in `provenance-gate-refuses.test.ts`'s
@@ -63,12 +63,12 @@ and asserts none reaches exit 2 — mutation-checked by decoupling `of` from `ex
 exact test catch it first.
 
 Adopting the TYPE does not guarantee exercising every STATE it defines — this remains the general lesson
-for reading any `verdict.mjs` consumer, but it is no longer an open question for THIS gate.
+for reading any `verdict.ts` consumer, but it is no longer an open question for THIS gate.
 
 ## Every other gate, by area — codes, and what each one means
 
 **Read as: code → the condition that actually produces it, from the source.** A script not listed under
-"adopts verdict.mjs" has its own scheme; where two conditions share one code, both are named — that sharing
+"adopts verdict.ts" has its own scheme; where two conditions share one code, both are named — that sharing
 is the finding, not an omission.
 
 ### `packages/lab/scripts/`
@@ -90,7 +90,7 @@ is the finding, not an omission.
 | `corpus-snapshot.mjs` | 0 success; 2 nothing to snapshot OR the archive holds FEWER JSON files than were on disk (it lists the archive back with `tar -tzf` and compares, because `tar` exits 0 on a short archive — a 417 MB snapshot once extracted to 4,959 of 5,445 files with no error anywhere) |
 | `corpus-release.mjs` | 0 the asset uploaded AND downloaded back with a matching JSON count, or `--dry-run`/a standalone `--verify` listed one; **1 the round trip FAILED** — the asset holds fewer files than the archive (truncated: a failed backup) or MORE (the tag names a different snapshot, which restores cleanly as the wrong corpus and is the harder failure to notice), or the release downloaded and contained no archive; **2 a USAGE refusal before anything is uploaded** — no `--archive=`, no file at that path, or a filename that is not a corpus snapshot so no tag can be derived from it. 1 and 2 are deliberately apart: 2 means nothing was attempted, 1 means a backup exists and cannot be trusted |
 | `corpus-release-nightly.mjs` | #1042 item 3, the fetch-and-release half `a11ign-corpus-release-nightly.timer` fires daily: **2 a refusal in this script's OWN fetch/naming step** — `lab:fetch -e artifact=corpus-archive` failed, or its own "from ... on the lab" line did not name a source file this script could restore the snapshot's real `corpus-<timestamp>.tar.gz` identity from (the fetch flattens every artifact to a fixed local name, which is right for every other artifact and wrong for this one); once `corpus-release.mjs` is invoked with that restored name, its OWN exit code (0/1/2, documented above) is passed through unmodified — the same passthrough shape `lab-job.mjs` uses for Ansible's codes |
-| `everything-pipeline.mjs` | 0 every stage in `STEPS` succeeded; 1 any stage failed OR any stage's process crashed for an unrelated reason (e.g. an import error) — two different causes, one code, via its own `pipeline()` helper (not `verdict.mjs`) |
+| `everything-pipeline.mjs` | 0 every stage in `STEPS` succeeded; 1 any stage failed OR any stage's process crashed for an unrelated reason (e.g. an import error) — two different causes, one code, via its own `pipeline()` helper (not `verdict.ts`) |
 | `evidence-check.mjs` | 0 safe to ship; 1 the evidence CHANGED (the designed verdict; Node's own `1` for a failure before the script's handler runs — a module that will not load, an unknown flag — also lands here); 2 means THREE things in this one file: no `--worker` given (usage), no comparable case has a current-page capture, and page title unreadable, alongside its INCONCLUSIVE coverage verdict; **3 the script THREW** (#2197 — a crash used to exit 1, indistinguishable from CHANGED, and the job told the operator to recapture the fleet over a stale manifest) |
 | `evidence-check-exit.mjs` | shared machinery for `evidence-check.mjs` (#2197): `EXIT` names its four codes and `runToExit` exits 3 when the script throws. It has no `main`; the script inherits it, and the row above documents what each code means |
 | `explain-capture.mjs` | 2 no search term given (usage) OR no capture file matched (not found) |
@@ -109,7 +109,7 @@ is the finding, not an omission.
 | `capture-fixtures.mjs` | 0 all fixtures recaptured; 1 some fixture failed; 2 no pages matched `--set`/`--only` (usage) |
 | `judge-file.ts` | 0 ran; 1 no path argument (usage) OR `judge()` threw — one top-level `.catch` for both |
 | `judge-sample.ts` | 0 ran; 1 `judge()` threw. A one-off demo tool with no verdict concept |
-| `page-identity-rate.mjs` | 0 no wrong-page reads; 1 `wrong > 0`, a real gate failure; 2 malformed `--worker` (usage); **3 "MEASURED NOTHING"** — no capture ever navigated a reused window, so the fault under test structurally could not occur, explicitly documented as "not evidence" (i.e. this script's own INCONCLUSIVE, spelled 3 rather than `verdict.mjs`'s 2) |
+| `page-identity-rate.mjs` | 0 no wrong-page reads; 1 `wrong > 0`, a real gate failure; 2 malformed `--worker` (usage); **3 "MEASURED NOTHING"** — no capture ever navigated a reused window, so the fault under test structurally could not occur, explicitly documented as "not evidence" (i.e. this script's own INCONCLUSIVE, spelled 3 rather than `verdict.ts`'s 2) |
 | `run-spike.ts` | 0 ran; 1 no URL argument (usage) OR any thrown error. One-off spike tool |
 | `eval/rules-check.ts` | 0 no false positives on conformant fixtures — **including when every fixture is pending/uncaptured, so 0 fixtures examined still reports success**; 1 `cleanFP > 0` |
 | `eval/run.ts` | 0 by default, always, unless `EVAL_GATE` is set AND fitness fails (then `exitCode=1`) — **by default this cannot fail on judge quality at all**, only on a thrown error (also 1). A caller reading a bare `pnpm run eval`'s exit code as a quality verdict is reading something this script does not compute unless asked to |
@@ -120,7 +120,7 @@ is the finding, not an omission.
 |---|---|
 | `capture-real-pages.mjs` | 0 all pages captured; 1 `failed.length > 0`; 2 bad `--worker` OR no pages for the given role — two usage/precondition causes share 2; **3 fleet browser-version inconsistency** — a distinct meaning for 3, again |
 | `capture-screenreader-dataset.mjs` (`training:capture`) | 0 default/success; 1 any thrown error, caught at the top-level guard; 2 the host's power state refuses to start (on battery, or asleep-prone) and `--allow-battery` was not passed — a precondition, not a verdict about any capture |
-| `check-signals.mjs` | Two hard exits before the real check: 1 no case matches `--only` (usage); 2 REFUSING — the manifest names cases the current case definitions no longer define (a stale local build, not a broken signal). Then `signalVerdict()` — a from-scratch reimplementation of the identical PASS/FAIL/INCONCLUSIVE concept, not imported from `verdict.mjs` — returns 0 PASS, 1 FAIL (defects, or gaps under `--require-complete`), 2 INCONCLUSIVE (below `MIN_EXAMINED`). So 1 and 2 each already carry two distinct meanings before `signalVerdict` is even reached. **Considered, and declined, as an adoption candidate** — see below |
+| `check-signals.mjs` | Two hard exits before the real check: 1 no case matches `--only` (usage); 2 REFUSING — the manifest names cases the current case definitions no longer define (a stale local build, not a broken signal). Then `signalVerdict()` — a from-scratch reimplementation of the identical PASS/FAIL/INCONCLUSIVE concept, not imported from `verdict.ts` — returns 0 PASS, 1 FAIL (defects, or gaps under `--require-complete`), 2 INCONCLUSIVE (below `MIN_EXAMINED`). So 1 and 2 each already carry two distinct meanings before `signalVerdict` is even reached. **Considered, and declined, as an adoption candidate** — see below |
 | `capture-status.mjs` (`training:status`/`training:wait`) | Its own named `EXIT` map, and it is the contract CLAUDE.md already documents in prose: 0 clean; 1 finished with failures; 2 no run recorded; 3 stale/"WEDGED" (`isStale()`, past one capture timeout plus slack). **Identical scheme to `wait-for-capture.mjs`, independently** — the two together are the one place in this table where the SAME four meanings are used consistently by two different files, rather than colliding |
 | `page-server.mjs` | 130/143 — standard Unix 128+signal codes for SIGINT/SIGTERM. A long-running daemon, not a gate |
 | `preflight-screenreader-dataset.mjs` | 0 generated page manifest validates; 1 a validation error in the manifest (bad instrument/metadata) — reported, not a screen-reader verdict, per the script's own note. An uncaught `throw` for a missing manifest crashes with Node's default code rather than a chosen one |
@@ -132,7 +132,7 @@ is the finding, not an omission.
 `dispatchUnlessLocal` hands a gate to the lab via `pnpm run lab:job` and exits with whatever that returns —
 **except that a spawn error or a killed child also produces 2**, with its own honest comment ("INCONCLUSIVE
 is the honest verdict for a dispatch that was killed"). So a bare `2` from any gate using this helper is
-ambiguous between three things: the dispatched job's own INCONCLUSIVE (if it happens to use `verdict.mjs`),
+ambiguous between three things: the dispatched job's own INCONCLUSIVE (if it happens to use `verdict.ts`),
 the dispatched job's own unrelated meaning of 2 (a usage error, in most of the scripts above), or the
 dispatch itself dying before the job could answer at all.
 
@@ -151,7 +151,7 @@ table, after `promote-model.mjs`'s dirty-tree refusal and `deploy-worker.mjs`'s 
 `refuseUnknownFlags` calls `process.exit(2)` directly when a caller passes a flag none of `GUARDED`'s ~30
 adopters declared. This is the ONE place code 2 means, uniformly and by design, "you mistyped a flag" — and
 it is shared machinery every guarded script above inherits, not a code any of them chose for itself. Not a
-gate, and excluded from the discovery test below the same way `verdict.mjs`, `dispatch.mjs` and `fleet.mjs`
+gate, and excluded from the discovery test below the same way `verdict.ts`, `dispatch.mjs` and `fleet.mjs`
 are — it is the guard, not something the guard watches.
 
 ### `packages/worker-fleet/src/`
@@ -179,7 +179,7 @@ are — it is the guard, not something the guard watches.
 | `lab-job.mjs` | Exactly one exit call: `process.exit(result.status ?? 1)`, where `result` is the **raw, unmodified exit status of the `ansible-playbook` subprocess it spawns synchronously**. This script has no exit-code scheme of its own — its 0/1/2/3/4/5/99/250 are Ansible's own documented conventions (0 OK, 1 error, 2 host failure, 3 unreachable, 4 parser error, 5 bad options, 99 user interrupt, 250 unexpected error), not anything this repo defined. A caller reading `lab:job`'s code as a verdict about the JOB is reading Ansible's verdict about running the PLAYBOOK — a different question whenever they diverge |
 | `with-control-plane-fleet.mjs` | 2 usage error (no `<bin>` argument given); otherwise `process.exit(status ?? 1)`, the **raw, unmodified exit status of the wrapped worker-fleet bin** (`doctor.mjs`, `check-worker-code.mjs`) it spawns as a child with `A11Y_WORKERS` injected — the identical passthrough shape as `lab-job.mjs`'s own 0/1/2/… above, except the child here is a published bin whose own exit codes this table already lists under `packages/worker-fleet/src/`. A control-plane refusal never reaches an exit code of its own: it is a stderr warning, and the child still runs with whatever it resolves on its own (#1356) |
 | `fleet-playbook.mjs` | 2 any of five distinct argument-validation refusals in `parseArgs` (bad `--playbook=`, `--limit=`, `--serial=`, unreachable control plane checking `SubState`) — all usage/precondition, one code; **3 a `CAPTURE_PROTOCOL_VERSION` refusal** (`guardProtocolChange`) — the OTHER, separate meaning of 3, confirming this repo already has at least two live meanings for exit 3 before counting `promote-model.mjs`'s third; 1 the control plane is on the wrong commit, OR whatever raw exit status the started unit reports (passed through directly, so this is NOT always literally 1 despite the source code, in the same way `lab-job.mjs` is not always literally its own number); **4 `followUnit` gave up watching a unit still in `SubState=running` past its own budget** — self-documented in the code's own stderr message: *"It has NOT been stopped — this command gave up watching, which is not the same thing."* **This is the clearest, cleanest confirmed instance of the exact shape flagged going into this unit** |
-| `lab-pipeline.mjs` | 2 SEVEN distinct causes share this one code: invalid `--only=`, a job needing `--only=` that lacks it, an unreachable control plane, "NO CURRENT INVOCATION" is not one of these — actually see below, unknown `--pipeline=`, invalid `--ref=`, and a `--ref=` that does not resolve on origin — all usage/precondition, none of them INCONCLUSIVE in the `verdict.mjs` sense; 3 "NOT LOADED", no pipeline of this name has run since the last reap — a genuine "no run recorded" state, matching `wait-for-capture.mjs`'s 2 and giving exit 3 its FOURTH distinct meaning across this table; 1 `Result !== success \|\| ExecMainStatus !== "0"` after the unit finished — a real failure; 0 covers three DIFFERENT states on purpose and says so: `--list`, "RUNNING" (still in progress — explicitly not a verdict about the pipeline, just that dispatch worked and the unit exists), and "SUCCEEDED". The `status` exit at the end of `--follow` mode passes through whatever the failing STAGE reported, the same non-literal-number caveat as `fleet-playbook.mjs`'s 1 |
+| `lab-pipeline.mjs` | 2 SEVEN distinct causes share this one code: invalid `--only=`, a job needing `--only=` that lacks it, an unreachable control plane, "NO CURRENT INVOCATION" is not one of these — actually see below, unknown `--pipeline=`, invalid `--ref=`, and a `--ref=` that does not resolve on origin — all usage/precondition, none of them INCONCLUSIVE in the `verdict.ts` sense; 3 "NOT LOADED", no pipeline of this name has run since the last reap — a genuine "no run recorded" state, matching `wait-for-capture.mjs`'s 2 and giving exit 3 its FOURTH distinct meaning across this table; 1 `Result !== success \|\| ExecMainStatus !== "0"` after the unit finished — a real failure; 0 covers three DIFFERENT states on purpose and says so: `--list`, "RUNNING" (still in progress — explicitly not a verdict about the pipeline, just that dispatch worked and the unit exists), and "SUCCEEDED". The `status` exit at the end of `--follow` mode passes through whatever the failing STAGE reported, the same non-literal-number caveat as `fleet-playbook.mjs`'s 1 |
 | `lab-failed-units.mjs` | #866. **Not a gate — a REPORT** over `systemctl list-units`'s own output shape, so its codes read QUIET/ATTENTION rather than PASS/FAIL. `--report`: 0 no `a11y-job-*` unit is failed; 1 at least one is, named with its own age in the printed lines. 2 usage — neither `--list-failed` nor `--report` given, or an unrecognised flag (`refuseUnknownFlags`, already documented under `cli-flags.mjs` below) |
 | `lab-watch.mjs` | #866, the unattended half of the row above — the same three-state shape `org-watch.mjs` uses for the identical reason (a clock that cannot read its source must not read as clean). 0 QUIET, nothing needs attention; 1 ATTENTION, a failed unit was found and named (posted to #928 only under `--post`); 2 CANNOT_ASK — `lab-status.yml`'s own JSON report task did not run or produced nothing, so this could not honestly answer either way |
 | `fleet-watch.mjs` | #1815, `lab-watch.mjs`'s identical three-state shape one subsystem over: nothing read `fleet:status` on a schedule, so a worker stuck non-`ready` for hours to days was invisible to every cause. 0 QUIET, no worker has been non-`ready` past the threshold (default 10 minutes, `--threshold-ms=`); 1 ATTENTION, at least one has, named with its own age and reason (posted to #928 only under `--post`); 2 CANNOT_ASK — `fleetStatus()` itself threw, so this could not honestly answer either way |
@@ -244,7 +244,7 @@ overrides it.
 **2** — the single most overloaded code in this repo. Confirmed distinct meanings: usage/argument error (the
 large majority — `evidence-check.mjs`, `capture-fixtures.mjs`, `explain-capture.mjs`,
 `compare-workers.mjs`, `fleet-discover.mjs`, `capture-real-pages.mjs`, `repeat-capture.mjs`, and most of
-`fleet-playbook.mjs`/`lab-pipeline.mjs`'s refusals), `verdict.mjs`'s INCONCLUSIVE, a stale local corpus
+`fleet-playbook.mjs`/`lab-pipeline.mjs`'s refusals), `verdict.ts`'s INCONCLUSIVE, a stale local corpus
 (`check-signals.mjs`), a precondition with no data at all (`corpus-snapshot.mjs`, `calibrate-abstention.mjs`,
 `build-realism-tier.mjs`), and a killed dispatch (`dispatch.mjs`).
 
@@ -293,7 +293,7 @@ available.
 
 ## What this recommends
 
-1. **Do not mass-rewrite.** Confirmed above: most non-`verdict.mjs` scripts collapse several real, distinct
+1. **Do not mass-rewrite.** Confirmed above: most non-`verdict.ts` scripts collapse several real, distinct
    causes into one code deliberately or by accretion, and several (`check-signals.mjs` chief among them)
    carry hard-won, specific summary text that a generic `gateVerdict`/`renderVerdict` swap would flatten
    into "N problem(s) across M examined" — a real loss, not a neutral refactor. `check-signals.mjs` was
@@ -301,7 +301,7 @@ available.
    PASS/FAIL/INCONCLUSIVE concept by hand) and declined for exactly this reason.
 2. **The discovery test** (`packages/lab/src/gates/exit-code-contract.test.ts`) requires every script that
    calls `process.exit`/`process.exitCode =` with a code the caller might read as a verdict to be either a
-   confirmed `verdict.mjs` adopter or named in this document, in the shape `cli-flags.test.ts` already uses
+   confirmed `verdict.ts` adopter or named in this document, in the shape `cli-flags.test.ts` already uses
    for the same kind of population (a list that may only shrink, never grow silently). Extended 2026-09-06
    to Python: every `.py` script under `packages/lab/scripts`/`packages/scorer/python` calling
    `sys.exit`/`raise SystemExit` must be documented here too — a ninth Python gate fails the test the same

@@ -19,10 +19,12 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
+const TSX = pathToFileURL(createRequire(import.meta.url).resolve("tsx")).href;
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const SCRIPT = join(REPO_ROOT, "scripts/stale-dist-diagnosis.ts");
-const { srcPathFor, staleDistNote, specifierFromFailure, diagnoseResolutionFailure } = await import(pathToFileURL(SCRIPT).href);
+const { srcPathFor, staleDistNote, specifierFromFailure, diagnoseResolutionFailure } = await import("../../../scripts/stale-dist-diagnosis.ts");
 
 const EXPORT_ERROR = "SyntaxError: The requested module '@a11ign/evidence/conformance' does not provide an export named 'activationBudget'";
 const MODULE_ERROR = "error TS2307: Cannot find module '@a11ign/evidence/document-identity' or its corresponding type declarations.";
@@ -139,7 +141,7 @@ test("diagnoseResolutionFailure with the default resolver treats a specifier tha
 });
 
 function runCli(args: string[], cwd = tmpdir(), script = SCRIPT) {
-  return spawnSync(process.execPath, [script, ...args], { cwd, encoding: "utf8" });
+  return spawnSync(process.execPath, ["--import", TSX, script, ...args], { cwd, encoding: "utf8" });
 }
 
 function withLog(text: string, body: (logPath: string, dir: string) => void): void {
@@ -156,7 +158,7 @@ function withLog(text: string, body: (logPath: string, dir: string) => void): vo
 test("CLI: no file prints the usage to stderr and exits 2; an unknown flag is refused", () => {
   const none = runCli([]);
   assert.equal(none.status, 2);
-  assert.match(none.stderr, /^Usage: node scripts\/stale-dist-diagnosis\.mjs <file with the failure's stderr>/);
+  assert.match(none.stderr, /^Usage: node --import tsx scripts\/stale-dist-diagnosis\.ts <file with the failure's stderr>/);
   assert.equal(none.stdout, "");
   const bogus = runCli(["--verbose"]);
   assert.notEqual(bogus.status, 0);

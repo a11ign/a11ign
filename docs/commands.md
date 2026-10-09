@@ -46,7 +46,7 @@ Regenerate with `node --import tsx scripts/run.ts docs-commands`. Checked by `co
 - `node scripts/release-promote.mjs` — decide which versions published to `next` become `latest`, and print the plan release.yml's `promote` job carries out
 - `node --import tsx scripts/release-publish-rehearsal.ts` — rehearse the release's pnpm-to-npm publish hand-off for every published package, publishing nothing
 - `node scripts/release-reads-qualification.mjs` — read the fleet part's `qualification` commit status for the release's sha, and say proceed, wait, rerun or regression
-- `node --import tsx scripts/run.ts` — the one-line dispatcher: run a named command from commands.mjs, or --list every command declared
+- `node --import tsx scripts/run.ts` — the one-line dispatcher: run a named command from commands.ts, or --list every command declared
 - `node --import tsx scripts/selection-skipped.ts` — for a CI run id, whether `rstest --changed` skipped the test that failed it; for a merge time, the first-run pass rate 14 days either side
 - `node --import tsx scripts/spotlight-exclude.ts` — stop Spotlight indexing every git worktree on this machine
 - `node --import tsx scripts/stale-dist-diagnosis.ts` — augment a resolution failure naming a missing export or module with a stale-dist diagnosis

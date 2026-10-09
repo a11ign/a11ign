@@ -23,11 +23,13 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
+const TSX = pathToFileURL(createRequire(import.meta.url).resolve("tsx")).href;
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const SCRIPT = join(REPO_ROOT, "scripts/coverage-failure-classifier.ts");
-const { KIND, testFailuresIn, classifyCoverageFailure, commentBody } = await import(pathToFileURL(SCRIPT).href);
-const { thresholdMissLines } = await import(pathToFileURL(join(REPO_ROOT, "scripts/coverage.ts")).href);
+const { KIND, testFailuresIn, classifyCoverageFailure, commentBody } = await import("../../../scripts/coverage-failure-classifier.ts");
+const { thresholdMissLines } = await import("../../../scripts/coverage.ts");
 
 const TAP_LOG = "TAP version 13\nok 1 - fine\nnot ok 2 - fails on purpose\nnot ok 3 - also fails\n# tests 3\n# fail 2\n";
 const SPEC_LOG = "✔ fine (0.2ms)\n✖ fails on purpose (0.36ms)\n✖ no timing\nℹ tests 3\nℹ fail 2\n";
@@ -158,7 +160,7 @@ test("commentBody has a distinct headline per kind, then the detail, then the ru
 });
 
 function runCli(args: string[]) {
-  return spawnSync(process.execPath, [SCRIPT, ...args], { encoding: "utf8" });
+  return spawnSync(process.execPath, ["--import", TSX, SCRIPT, ...args], { encoding: "utf8" });
 }
 
 function withLog(text: string, body: (logPath: string) => void): void {
@@ -200,7 +202,7 @@ test("CLI: a missing required flag prints usage and exits 2, and an unknown flag
   for (const args of [[], ["--ci-outcome=success", "--build-outcome=success"], ["--build-outcome=success", "--log=x"], ["--ci-outcome=success", "--log=x"]]) {
     const result = runCli(args);
     assert.equal(result.status, 2, JSON.stringify(args));
-    assert.match(result.stderr, /^Usage: node scripts\/coverage-failure-classifier\.mjs --ci-outcome=/);
+    assert.match(result.stderr, /^Usage: node --import tsx scripts\/coverage-failure-classifier\.ts --ci-outcome=/);
     assert.equal(result.stdout, "");
   }
   const unknown = runCli(["--ci-outcome=success", "--build-outcome=success", "--log=x", "--bogus"]);

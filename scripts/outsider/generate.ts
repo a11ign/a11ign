@@ -10,7 +10,7 @@
 // documented shape. It fails for the reason a reader's own copy would: the 2026-08-05 class (an untracked scorer
 // no fresh clone could run) and the three publish-blockers #494 found.
 //
-// THE READERS ARE `generate-consumer-gate.mjs`'S, NOT A SECOND SET. `extractDocumentedJobsBlock`, `pinActionRef`
+// THE READERS ARE `generate-consumer-gate.ts`'S, NOT A SECOND SET. `extractDocumentedJobsBlock`, `pinActionRef`
 // and `substituteTarget` are imported; that script is not edited, because `consumer-gate.yml`'s `check-pin`
 // refuses any change to it until the pin is regenerated. The same three are what the drift check masks with, so
 // "the workflow equals README's fence" and "the generator reads README's fence" cannot disagree about a line.
@@ -19,7 +19,7 @@
 // Both directions are PULLS of public data. The `poll` job runs on `schedule`, reads `npm view a11ign
 // dist-tags.latest` and the release tag, and starts a `workflow_dispatch` run (the one event `GITHUB_TOKEN` may
 // start) for a version with no completed run in its own history. `a11ign` reads this repository's public run list
-// (`verdict.mjs`). The dispatched run is NAMED `outsider v<version> <tag sha>`: that name is what the reader matches.
+// (`verdict.ts`). The dispatched run is NAMED `outsider v<version> <tag sha>`: that name is what the reader matches.
 //
 // THE PIN IS A LITERAL, AND THAT IS THE OPEN SEAM. `uses:` takes no expression, so the sha this file pins is
 // baked at generation, and a new release needs the file regenerated with `--sha=<the tag's commit>` and committed
@@ -48,7 +48,7 @@
 //        `consumer-gate.yml` and `registry-consumer-gate.yml`: the run exists at the dispatch second, its first job
 //        starts 2..5 s later, and the windows-2022 job starts 3..4 s after it is created.
 //      - the windows-2022 job on a green run: 6:00 and 6:07 (two green `consumer-gate.yml` runs).
-//      So a publish is run-complete within about 7.2 h + 5 s + 7 min = 7.4 h at the worst gap seen. `verdict.mjs`
+//      So a publish is run-complete within about 7.2 h + 5 s + 7 min = 7.4 h at the worst gap seen. `verdict.ts`
 //      names its window from that.
 //   2. IS AN INACTIVE PUBLIC REPOSITORY'S SCHEDULE DISABLED? NOT READ. GitHub documents disablement after 60 days
 //      without repository activity; `gh api repos/<owner>/<repo>/actions/workflows --jq '.workflows[].state'` shows
@@ -552,7 +552,7 @@ function main() {
       console.log(`OK  ${OUT} matches what README.md's documented workflow generates (its pin aside).`);
       return;
     }
-    console.error(`STALE  ${OUT} differs from what README.md generates. Run: node scripts/outsider/generate.mjs\n${result.diff}`);
+    console.error(`STALE  ${OUT} differs from what README.md generates. Run: node scripts/outsider/generate.ts\n${result.diff}`);
     process.exitCode = 1;
     return;
   }

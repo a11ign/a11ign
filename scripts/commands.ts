@@ -45,7 +45,7 @@ export const COMMANDS: Record<string, Command> = {
   "reconstitution-drill": { argv: ["pnpm", "exec", "agent-org", "reconstitution-drill"] },
   // #478 (A6b): registered here rather than as a new `package.json` script, on purpose -- this file
   // exists so a new command does not mean editing that one. `docs/commands.md` is committed and checked
-  // deliberately (see generate-commands-doc.mjs's own header, and generated-paths.test.ts's
+  // deliberately (see generate-commands-doc.ts's own header, and generated-paths.test.ts's
   // TRACKED_EXEMPT), so regenerating it after a header changes is itself a command a person types.
   "docs-commands": { argv: ["node", "scripts/generate-commands-doc.ts"] },
   // #494: regenerates .github/workflows/consumer-gate.yml from README.md's own Quickstart fence, pinned

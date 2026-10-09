@@ -14,7 +14,7 @@
 // `only-allow` is fetched from the registry at run time, which is the opposite of the reason the dependency tree is
 // pinned. This file reaches nothing outside the repository and node itself, so the CHECK costs no network and cannot be
 // broken by one (what the installer had already fetched before it ran this is the next section): it imports `node:` built-ins and `cli-flags.mjs` BY RELATIVE PATH (the shape `build-packages.mjs` and
-// `install-git-hooks.mjs` use for the same reason: it runs BEFORE `node_modules` exists, so a package specifier would not
+// `install-git-hooks.ts` use for the same reason: it runs BEFORE `node_modules` exists, so a package specifier would not
 // resolve), and `cli-flags.mjs` itself imports built-ins only. `one-package-manager.test.ts` pins that, and that no import
 // is a network-capable built-in and nothing calls `fetch`.
 //
@@ -42,7 +42,7 @@
 //
 // ## What it does not catch, on purpose
 //
-// The registry gates (`registry-consumer-gate.mjs`, `release-publish-rehearsal.mjs`) and the consumer half of
+// The registry gates (`registry-consumer-gate.mjs`, `release-publish-rehearsal.ts`) and the consumer half of
 // `isolation-gate.mjs` run `npm install a11ign` / `npm publish` in a temporary directory with NO root manifest, so this
 // `preinstall` never sees them. `one-package-manager.test.ts` pins that the directories they use are outside this manifest.
 //

@@ -74,7 +74,7 @@ const RELOCATED: Record<string, string> = {
   "packages/lab/src/packaging/branch-protection.test.ts": "packages/guards/src/branch-protection.test.ts", // nightly.yml
   "packages/lab/src/packaging/layer-repository-protection.test.ts": "packages/guards/src/layer-repository-protection.test.ts", // nightly.yml
   "packages/lab/src/packaging/release-publishes-only-what-stays.test.ts": "packages/guards/src/release-publishes-only-what-stays.test.ts", // release.yml
-  "packages/lab/src/packaging/board-document-chrome-resolver.test.ts": "packages/guards/src/board-document-chrome-resolver.test.ts", // reusable-board.yml, ci.yml's agentOrg job, verify.mjs
+  "packages/lab/src/packaging/board-document-chrome-resolver.test.ts": "packages/guards/src/board-document-chrome-resolver.test.ts", // reusable-board.yml, ci.yml's agentOrg job, verify.ts
   "packages/lab/src/packaging/tracked-source-leak-guard.test.ts": "packages/guards/src/tracked-source-leak-guard.test.ts", // the pre-push hook's leak scan
   "packages/lab/src/packaging/tracked-prose-leak-guard.test.ts": "packages/guards/src/tracked-prose-leak-guard.test.ts", // the pre-push hook's leak scan
   "packages/lab/src/packaging/leak-patterns.mjs": "packages/guards/src/leak-patterns.ts", // the two leak guards' patterns

@@ -49,7 +49,7 @@ const REQUIRED_DECLARATION_FIELDS = ["subtype", "retiredAt", "reason", "where"];
 
 /**
  * Pure so the test can drive it — the filesystem is the caller's business, not this function's, exactly
- * as `migrationVerdict` in `check-schema-migration.mjs` (the sibling this file's shape follows) keeps
+ * as `migrationVerdict` in `check-schema-migration.ts` (the sibling this file's shape follows) keeps
  * "is a declaration present" out of the verdict itself.
  *
  * @param {Set<string>} shippedHeads

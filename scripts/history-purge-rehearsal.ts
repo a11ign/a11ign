@@ -136,7 +136,7 @@ const blobText = (repoDir: string, sha: string) => execFileSync("git", ["cat-fil
  * DOES THE REWRITE DO ONLY WHAT THE RULES SAY? The check that was missing, and whose absence let a rewrite
  * that changed every file in the repository read as a clean one.
  *
- * `history-secret-scan.mjs` looks for SECRET PATTERNS. A rewrite that mangles every `#` still scores zero,
+ * `history-secret-scan.ts` looks for SECRET PATTERNS. A rewrite that mangles every `#` still scores zero,
  * because `#` is not a secret -- so `CLEAN: 0 findings` meant "the target pattern is gone", never
  * "nothing else changed", and it was read as the latter. This asks the other question: for every path
  * whose blob MOVED, is the new content exactly `applyReplacementRules(old)`? A file the rules cannot

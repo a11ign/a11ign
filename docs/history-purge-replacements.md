@@ -34,7 +34,7 @@ verify the purge worked could never read zero — it would just be checking its 
 
 ## Why the secret scan could not catch the damage
 
-`history-secret-scan.mjs` looks for **secret patterns**. A rewrite that mangles every `#` still scores
+`history-secret-scan.ts` looks for **secret patterns**. A rewrite that mangles every `#` still scores
 zero findings, because `#` is not a secret. `CLEAN: 0 findings` meant "the target pattern is gone", never
 "nothing else changed" — and it was read as the latter.
 

@@ -45,7 +45,7 @@ function throwawayTree(): Tree {
   return { dir, tmp, home, ready: join(dir, "ready") };
 }
 
-/** The child's whole program: a real step of verify.mjs, run where the test says. @param {Mode} mode */
+/** The child's whole program: a real step of verify.ts, run where the test says. @param {Mode} mode */
 function childProgram(mode: Mode, tree: Tree): string {
   const verify = JSON.stringify(pathToFileURL(VERIFY).href);
   if (mode === "private") {
@@ -126,14 +126,14 @@ for (const signal of ["SIGTERM", "SIGINT"] as const) {
   });
 }
 
-test("every mkdtempSync in verify.mjs is the one inside the scratch helper, so no tree is made outside the cleanup", () => {
+test("every mkdtempSync in verify.ts is the one inside the scratch helper, so no tree is made outside the cleanup", () => {
   const source = readFileSync(VERIFY, "utf8");
   const sites = [...source.matchAll(/\bmkdtempSync\(/g)].map((match) => match.index ?? -1);
   const helper = /^export function makeScratch\b[\s\S]*?^}/m.exec(source);
-  assert.ok(helper, "verify.mjs has no `export function makeScratch`, the helper this test names");
+  assert.ok(helper, "verify.ts has no `export function makeScratch`, the helper this test names");
   const start = helper.index;
   const end = start + helper[0].length;
-  assert.ok(sites.length > 0, "verify.mjs has no mkdtempSync at all, so the count below would pass on nothing");
+  assert.ok(sites.length > 0, "verify.ts has no mkdtempSync at all, so the count below would pass on nothing");
   const outside = sites.filter((at) => at < start || at > end);
   assert.deepEqual(outside, [], `a mkdtempSync outside makeScratch, at offsets ${outside.join(", ")}`);
   assert.equal(sites.length - outside.length, 1, "the helper's own mkdtempSync is the positive control, and there must be exactly one");
@@ -169,10 +169,10 @@ test("removeInSmallCalls refuses an empty name, and removes a tree one entry at 
   }
 });
 
-test("main takes the private TMPDIR after the slot and before any step, and verify.mjs has one place that sets TMPDIR", () => {
+test("main takes the private TMPDIR after the slot and before any step, and verify.ts has one place that sets TMPDIR", () => {
   const source = readFileSync(VERIFY, "utf8");
   const main = /^async function main\(\) \{[\s\S]*?^}/m.exec(source)?.[0] ?? "";
-  assert.ok(main.length > 0, "verify.mjs has no `async function main`");
+  assert.ok(main.length > 0, "verify.ts has no `async function main`");
   const slot = main.indexOf("underTheHostsSlot()");
   const taken = main.indexOf("privateRunTmp()");
   assert.ok(slot >= 0 && taken > slot, "main must call privateRunTmp() after underTheHostsSlot(), so only the process that does the work makes one");

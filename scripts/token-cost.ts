@@ -470,7 +470,7 @@ function definitionLines(prices: PriceList, window: Window) {
     `Window: ${window.since} to ${window.until} (UTC, end exclusive)${hours}.`,
     "- **Call**: one model request, counted once by its `message.id` (a request writes one transcript line per content block).",
     "- **Sessions**: every Claude Code session on the host (standing seats, spawned workers, reviewers, subagents); Claude only.",
-    `- **Price**: list price per million tokens, the list read ${prices.readOn} (\`scripts/token-cost.mjs\`, \`PRICE_LIST\`).`,
+    `- **Price**: list price per million tokens, the list read ${prices.readOn} (\`scripts/token-cost.ts\`, \`PRICE_LIST\`).`,
     "- **Attribution**: a call belongs to a merged pull request when its branch is that pull request's head, else by `reviewer-<n>` / `worker-<n>`; otherwise it belongs to NO pull request.",
     "- **Merged**: merged in the window, in either repository. Full definitions: `docs/token-cost.md`.",
   ];
@@ -490,7 +490,7 @@ export function renderSection({ readings, whole, targets, prices, window, commit
   return [
     MARKER, "### Calls and dollars per merged pull request", "",
     ...definitionLines(prices, window),
-    `Script: \`scripts/token-cost.mjs\` at \`${commit}\`. Rate limit seen: ${rateLimit}.`, "",
+    `Script: \`scripts/token-cost.ts\` at \`${commit}\`. Rate limit seen: ${rateLimit}.`, "",
     "| Measure | Target | Reading | Count it came from | Verdict |", "|---|---|---|---|---|",
     row({ measure: "Calls per merged pull request (ALL calls)", target: t.callsPerMergedPullRequest, value: whole.callsPerPull, enough: enough, count: allIn }),
     row({ measure: "Dollars per merged pull request (ALL calls) (verdict of record: list price as reported)", target: t.dollarsPerMergedPullRequest, value: whole.dollarsPerPull, enough: enough, count: allIn }),

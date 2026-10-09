@@ -16,7 +16,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const REPO = fileURLToPath(new URL("../../..", import.meta.url));
 const read = (path: string) => readFileSync(`${REPO}${path}`, "utf8");
 
-const { checkCommitted } = await import(pathToFileURL(`${REPO}scripts/outsider/generate.mjs`).href);
+const { checkCommitted } = await import("../../../scripts/outsider/generate.ts");
 
 const readme = read("README.md");
 const committed = read("scripts/outsider/outsider-job.yml");
@@ -26,7 +26,7 @@ const SUMMARY_MD_LINE = /^.*steps\.a11ign\.outputs\.summary-md.*\n/m;
 
 test("the committed outsider-job.yml matches what README's Quickstart fence generates", () => {
   const result = checkCommitted(readme, committed);
-  assert.ok(result.ok, `outsider-job.yml is stale: run \`node scripts/outsider/generate.mjs\` and commit it.\n${result.ok ? "" : result.diff}`);
+  assert.ok(result.ok, `outsider-job.yml is stale: run \`node scripts/outsider/generate.ts\` and commit it.\n${result.ok ? "" : result.diff}`);
 });
 
 test("positive control: a README fence without its summary-md line is NOT ok", () => {
@@ -35,7 +35,7 @@ test("positive control: a README fence without its summary-md line is NOT ok", (
   assert.equal(result.ok, false);
 });
 
-const { generateOutsiderJob } = await import(pathToFileURL(`${REPO}scripts/outsider/generate.mjs`).href);
+const { generateOutsiderJob } = await import("../../../scripts/outsider/generate.ts");
 
 const RELEASE_SHA = "d92e97384b11edb7bf1cdfcf150394af46a9a2f6";
 const PIN_LINE = /^\s*- uses: a11ign\/a11ign@.*$/m;

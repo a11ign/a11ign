@@ -21,7 +21,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const tc = await import(pathToFileURL(join(REPO_ROOT, "scripts/token-cost.ts")).href);
+const tc = await import("../../../scripts/token-cost.ts");
 
 const MILLION = 1_000_000;
 const SONNET = "claude-sonnet-5-5";
@@ -531,7 +531,7 @@ test("renderSection: opens with the marker, states the definitions once, and rea
   assert.equal(lines[1], "### Calls and dollars per merged pull request");
   assert.match(text, /Window: 2026-10-01T00:00:00Z to 2026-10-02T00:00:00Z \(UTC, end exclusive\)\./);
   assert.match(text, /list read 2026-10-05/);
-  assert.match(text, /Script: `scripts\/token-cost\.mjs` at `abc123def456`\. Rate limit seen: 4999 of 5000\./);
+  assert.match(text, /Script: `scripts\/token-cost\.ts` at `abc123def456`\. Rate limit seen: 4999 of 5000\./);
   assert.match(text, /\| Calls per merged pull request \(ALL calls\) \| at most 70 \| 0\.5 \| 1 calls over 2 merged pull requests, both repositories \| \*\*MET\*\* \|/);
   assert.match(text, /\| Dollars per merged pull request \(ALL calls\) \(verdict of record: list price as reported\) \| under \$2\.50 \| \$0\.50 \| .* \| \*\*MET\*\* \|/);
   assert.match(text, /UNATTRIBUTED .*: 0 of 1 calls \(0\.0%\), \$0\.00 of \$1\.00\./);

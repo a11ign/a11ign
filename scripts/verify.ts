@@ -570,7 +570,7 @@ export function provisionAgentOrg({ repo = REPO, env = process.env, say = { out:
 }
 
 /**
- * A hybrid `node_modules` for a worktree that has none (`selection-skipped.mjs` makes one; the `agentOrg` step that first needed it is gone, #3885): every entry links to where the author's tree gets it, and
+ * A hybrid `node_modules` for a worktree that has none (`selection-skipped.ts` makes one; the `agentOrg` step that first needed it is gone, #3885): every entry links to where the author's tree gets it, and
  * `@a11ign/*` is relinked with the SAME relative targets, so inside the clone they reach the clone's own `packages/`
  * and not the author's (docs/operational-lessons.md#resolves-to-dist-does-not-say-whose). No build runs: CI's job has none.
  * @param {{ from: string, to: string }} dirs
