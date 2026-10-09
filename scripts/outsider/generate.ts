@@ -33,7 +33,11 @@
 // RULED (product-manager, #3182 done-when 7): Dependabot's `github-actions` ecosystem on the outside repository bumps
 // the pin, with no token. It bumps a sha pin reliably only with a trailing `# v<version>` comment, so
 // `--version=<version>` writes one (and no `--version` writes none: a comment naming a release the sha is not the tag
-// of would be false). The drift check, `--check` and `extractPinnedSha` all read past it.
+// of would be false). The drift check, `--check` and `extractPinnedSha` all read past it. THE DRIFT CHECK READS PAST README'S
+// COMMENT TOO, but only when the workflow's pin line carries a `# v<version>` (#4421): `--version` REPLACES README's trailing comment,
+// so the two lines differ by exactly that comment, and the check masks the pin line's trailing comment on BOTH sides. A workflow
+// whose comment is not a `# v<version>` (`# pinned by hand`) or is gone is not masked, so README's comment is compared as written
+// and the difference is drift, as it is for a job generated without `--version`.
 //
 // MEASURED 2026-10-03 as `a11ign-ai-workers`, and both measurements are READINGS AT A MOMENT:
 //
@@ -145,6 +149,21 @@ const withoutBakedPin = (line: string): string => line.replace(/(uses:\s*\S+@)[0
 
 /** @param {string} jobText @returns {string} the job with a pin line's `# v<version>` comment removed: a comment is not drift */
 const withoutPinComment = (jobText: string): string => jobText.replace(PIN_VERSION_COMMENT, "$1");
+
+/**
+ * README's fence with the trailing comment on the Action's pin line removed, IF the workflow's pin line carries a `# v<version>`.
+ * `--version` replaced README's comment with that one (#4041), so the two sides differ by exactly the comment; a workflow with any
+ * other comment, or none, leaves README's comment in place to be compared (#4421).
+ * @param {string} fenceText README's job
+ * @param {string} workflowText the workflow's copy of that job
+ * @returns {string}
+ */
+function withoutReplacedPinComment(fenceText, workflowText) {
+  const pin = PIN_VERSION_COMMENT.exec(workflowText);
+  if (!pin) return fenceText;
+  const action = /uses:\s*(\S+)@/.exec(pin[1])?.[1] ?? "";
+  return fenceText.replace(new RegExp(`^(\\s*(?:- )?uses:\\s*${escapeRegExp(action)}@\\S+)[ \\t]+#.*$`, "m"), "$1");
+}
 
 /** @param {string} jobText @returns {string} */
 const maskVariable = (jobText: string): string => substituteTarget(pinActionRef(withoutPinComment(jobText), MASK.ref), MASK.target);
@@ -436,8 +455,9 @@ export function refuseDriftFromReadme(readmeText: string, workflowText: string) 
   let expected;
   let actual;
   try {
-    expected = maskVariable(fenceLines.join("\n")).split("\n");
-    actual = maskVariable(workflowLines.join("\n")).split("\n");
+    const workflowJob = workflowLines.join("\n");
+    expected = maskVariable(withoutReplacedPinComment(fenceLines.join("\n"), workflowJob)).split("\n");
+    actual = maskVariable(workflowJob).split("\n");
   } catch (cause) {
     throw new Error(`the workflow's copy of README's job cannot be read the way README's fence is: ${cause instanceof Error ? cause.message : cause}`, { cause });
   }

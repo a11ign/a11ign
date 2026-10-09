@@ -2,9 +2,11 @@
 
 ## Status
 
-**Proposed, 2026-10-04.** Row #3550. The standard itself is **decided** (the chairman, relayed by `ceo`, 2026-10-04); what this ADR
+**Proposed, 2026-10-04. Amended 2026-10-09 (Decision 8).** Row #3550. The standard itself is **decided** (the chairman, relayed by `ceo`, 2026-10-04); what this ADR
 adds is the shape of the shared config, the bundling mode per package type, the order of the moves, and the readings that size them.
 **It changes no code in any repository:** the rows that do are the appendix.
+
+**Amended 2026-10-09 (Decision 8), the chairman's session, rows #4388 to #4390.** Decision 8 treated a replaceable host package as a fixed limit: its own table rejected a host Node with type stripping for being "a host change" and chose `tsx`. The host change was made (#4388, upstream Node v24.21.0, `process.features.typescript` is `strip`), so Decision 8 now chooses it, and `tsx` is the rejected option. Nothing else in this ADR moves.
 
 The chairman's words (relayed to `ceo` about 21:25Z): "All tests should use rstest." If the issue is TypeScript and testing, use the
 Rstack (Rslib to build libraries, Rstest to test, one Rspack transform). "All our packages that publish aren't actually bundled":
@@ -371,16 +373,17 @@ other (section 13 of both), and the published tarball never contained it. The fo
 `screenreader-worker` row plus a one-line lab row, filed by `product-manager`, and until both land lab reads the old path and the
 repository stays as it is.
 
-### DECISION 8: how un-bundled code runs: `.ts` under `node --import tsx`, from the checkout
+### DECISION 8: how un-bundled code runs: `node <file>.ts` on upstream Node 24, from the checkout
 
-**Decision (ONE answer):** **published** packages ship Rslib's built `.mjs` and `.d.ts` (Decision 4, not in question). **Code RUN FROM A CHECKOUT**
-(agent-org's gate and scripts, the work-tick units, `pnpm run` scripts, the Ansible one-liners) is `.ts` source that runs as
-`/usr/bin/node --import tsx <file>.ts` with the checkout as the working directory. No host change, no build step in a unit. `tsx` is installed
-in every checkout that has run `pnpm install` (measured: agent-org `node_modules/.bin/tsx` v4.23.15, a11ign's root `node_modules/tsx` 4.23.15), and
-`typescript` stays the only type check (Decision 2): neither `tsx` nor Node's stripping checks a type.
+**Decision (ONE answer; amended 2026-10-09, the first version chose `tsx`):** **published** packages ship Rslib's built `.mjs` and `.d.ts` (Decision 4, not in question). **Code RUN FROM A CHECKOUT**
+(agent-org's gate and scripts, the work-tick units, `pnpm run` scripts, the Ansible one-liners) is `.ts` source that runs as `node <file>.ts` with the checkout as the working directory, on
+**upstream Node 24 LTS installed for the agent user** (`~/.local/opt/node-v24.21.0-linux-x64/`, linked at `~/.local/bin/node`; `/usr/bin/node` stays the distro build and **no unit names it**). No loader, no build step in a unit, and
+`tsx` is not a runtime dependency (it leaves `dependencies`; it may stay a dev tool if something still needs it). `typescript` stays the only type check (Decision 2): Node's stripping checks no type.
+**Proof that the host does it** (#4388, read 2026-10-09): `~/.local/bin/node -p "process.version + ' ' + process.features.typescript"` prints `v24.21.0 strip`, and a transient systemd unit ran a real `.ts` with no loader.
+**The property is a STRING (`strip`, `transform` or `false`), never `true`**: a test that waits for `true` fails on a correct install.
 
-**The default this ADR was asked to test was Node's own type stripping (v22.22.1, `erasableSyntaxOnly`, `rewriteRelativeImportExtensions`). It does
-not run on this host as it stands**, measured 2026-10-08 on this host, where `node` is `/usr/bin/node`, the Ubuntu `nodejs 22.22.1+dfsg` package:
+**Why the first version of this decision did not choose it: the distro Node cannot run it.** The default this ADR was asked to test was Node's own type stripping (v22.22.1, `erasableSyntaxOnly`, `rewriteRelativeImportExtensions`). It did
+not run on this host as it then stood, measured 2026-10-08, where `node` was `/usr/bin/node`, the Ubuntu `nodejs 22.22.1+dfsg` package (**still the reading of that binary, which is why nothing may name it**):
 
 ```
 $ node -p "process.version + ' typescript=' + process.features.typescript"
@@ -395,30 +398,32 @@ ERR_UNKNOWN_FILE_EXTENSION
 
 **Read the three errors apart: only the flagged form prints `ERR_NO_TYPESCRIPT`** (the row's own Open-check grepped the flag-less form and got
 `0`). The cause is inferred to be the build, not the version (the package reports no stripper; the unflagged default is from Node's release notes, not re-read here): upstream Node 22.18 and later strip types unflagged, and this package is built without the
-stripper, so no flag and no version bump of THIS package fixes it.
+stripper, so no flag and no version bump of THIS package fixes it. An upstream build does, and was installed beside it (#4388).
 
-**Weighed, per unit, on this host:**
+**Weighed, per unit, on this host** (the verdict column is the amended one):
 
 | | what it needs | measured here | cost per unit | verdict |
 |---|---|---|---|---|
-| (i) a host Node built with type stripping | a HOST install (an upstream build beside `/usr/bin/node`, or a replacement); `orchestrator` and the chairman's host, never an engineer. Proof: `node -p process.features.typescript` prints `true` | **refused by the host as it stands** (above) | every `ExecStart` pins the new binary's path; one more Node to patch | **not chosen:** a host change, and it still cannot run the pinned copy (trap a) |
-| (ii) `tsx` | nothing new: a dependency every checkout already installs | **runs** a `.ts` as a unit would, from a checkout, and **under `node_modules`** (below) | `node -e 0` 0.17 s; `node --import tsx -e 0` 0.45 s (3 runs each, warm, trivial file): about **+0.28 s per process start** | **chosen** |
+| (i) a host Node built with type stripping | a HOST install (an upstream build beside `/usr/bin/node`); `orchestrator` and the chairman's host, never an engineer. Proof: `process.features.typescript` prints `strip` | **done** (#4388): `v24.21.0 strip` at `~/.local/bin/node`, checksum verified, no sudo, `/usr/bin/node` untouched | every `ExecStart` pins `%h/.local/bin/node`; one more Node to patch | **chosen** (amended): the host change was one install, and it removes a runtime dependency from every unit |
+| (ii) `tsx` | nothing new: a dependency every checkout already installs | ran a `.ts` as a unit would, from a checkout, and under `node_modules` (2026-10-08); `node -e 0` 0.17 s, `node --import tsx -e 0` 0.45 s, about **+0.28 s per process start** | a loader in every `ExecStart`; `tsx` a RUNTIME dependency of checkout-run code | **rejected (amended):** it worked around a replaceable host package, and left 110 files in agent-org as `.mjs` for a loader's sake |
 | (iii) a BUILD of the host-run code, the units running `dist/` | a build before every tick, after every `primary:update` and `update-tool` | not run | a build step in `ExecStartPre`, so a broken build stops the tick; a stale `dist` is the failure `docs/operational-lessons.md#resolves-to-dist-does-not-say-whose` records | **not chosen:** it moves the failure from startup to every update |
 
-**Why (ii):** it is the only option that needs no host change, it is the only one measured to run the pinned copy, and the +0.28 s is paid by
-timers and one-shot scripts, not by a hot path. **What it costs, honestly:** `tsx` becomes a RUNTIME dependency of checkout-run code (it is a
-`devDependency` today), so removing it from a checkout breaks the units; the sweep row for agent-org pins that with a test that names the loader in
-every `ExecStart`. And the day `process.features.typescript` prints `true` on the host, (ii) can be replaced by plain `node` by editing the
-`ExecStart` lines only, because the files are already written to the stripping subset.
+**Why (i):** the first version rejected it as "a host change" and never priced it. Priced, it is one tarball extracted into the agent user's home and a symlink, with a rollback of removing the
+symlink. **What it costs, honestly:** the host now has TWO Nodes, so a unit that names `/usr/bin/node` runs the one that cannot strip, and nothing in the unit fails until it starts a `.ts` file. That is
+guarded by a signal and not by this paragraph (below). The +0.28 s that (ii) paid per process start is gone.
+
+**The class check is a HOST HEALTH SIGNAL, not a CI step, and the reason is the fact being guarded.** A CI step would prove `actions/setup-node`'s Node, which is upstream and strips types; it would have passed on the day this was
+wrong. What went wrong is the HOST's `node`, so `org-health` reads `process.features.typescript` once per run from the `node` that `PATH` resolves for a session and from every `node` an `ExecStart` of a rendered unit names, and raises
+`node-cannot-strip` (naming the binary and the unit) for anything but `strip` or `transform`. A binary that cannot be run is raised too: absence is not a pass (#4390, `src/node-strips-types.ts` in agent-org).
 
 **Trap (a): Node REFUSES to strip types under `node_modules`, and `host:check` via pnpm runs the PINNED agent-org copy from there.** Measured: the
 pinned copy is `node_modules/.pnpm/agent-org@https+++codeload.github.com+a11ign+agent-org+tar.gz+<sha>_typescript@6.0.3/node_modules/agent-org/`,
 which carries the repository's `src` and `host` as raw source (no build) and, in its own `node_modules`, only `typescript`. A `.ts` file placed in it
 **ran under `node --import tsx` from a11ign's root** (`pinned-copy ran 7 true`, the `true` being `import.meta.url.includes("node_modules")`),
 and **plain `node` on it died** (`ERR_UNKNOWN_FILE_EXTENSION`, the host having no stripper at all; on a Node that has one, the refusal under
-`node_modules` is documented behaviour and was NOT exercised here). So after the conversion the pinned copy is `.ts` run by the CONSUMER's `tsx`,
-and every consumer of agent-org gets `tsx` as a peer dependency. **Not measured, and the agent-org sweep row proves it before it merges:** that a
-tarball install gives `bin` a built file. A `bin` needs `#!/usr/bin/env node`, which cannot load a loader, so **`bin` is always built output**
+`node_modules` is documented behaviour and was NOT exercised here). **Under the amended decision this trap is still open and a loader is not its answer:** row #4389
+measures it on Node 24 and ships ONE mechanism that makes the pinned copy run (a built `dist/` for the entries it runs, or an install outside `node_modules`).
+**Not measured, and that row proves it before it merges:** that a tarball install gives `bin` a built file. A `bin` needs `#!/usr/bin/env node`, which resolves whatever `node` a caller's PATH finds, so **`bin` is always built output**
 (`dist/bin.mjs` by Rslib), never a `.ts`.
 
 **Trap (b): `erasableSyntaxOnly` forbids enums, namespaces and parameter properties.** Counted at each repository's `origin/main` on 2026-10-08
@@ -437,33 +442,34 @@ properties `constructor(... public|private|protected|readonly ...)`), a count of
 | toolchain (`e7f0aff`) | 0 | 0 | 0 | 0 |
 
 So the flag costs one line today (the fixture), not nothing. **It is set once, in the shared `packages/toolchain/tsconfig.base.json`** that the
-repositories extend (Decision 3), by the conversion-script row, and it is worth setting even though `tsx` does not need it: it keeps every file
-runnable by the stripper, which is what makes (ii) replaceable.
+repositories extend (Decision 3), by the conversion-script row, and under the amended decision it is **required, not merely worth setting**: the stripper
+refuses an enum, a namespace or a parameter property, and `tsx` is no longer there to run what it refuses.
 
-**What each name becomes** (every line is `tsx` at the end of its row's sweep; none is changed by THIS row):
+**What each name becomes** (every line is `node <file>.ts` at the end of its row's sweep, the binary being `%h/.local/bin/node`; none is changed by THIS row):
 
 | where | today | after |
 |---|---|---|
-| agent-org `host/*.service.in`, 6 `ExecStart` lines (`kernel-reboot`, `otel-receiver`, `shadow-window`, `tmp-prune`, `trace-publish`, `work-tick`) | `/usr/bin/node packages/agent-org/src/<x>.mjs` | `/usr/bin/node --import tsx <path>/<x>.ts` |
-| the `work-tick` unit's `--import` | `--import=./.../crash-exit.mjs` | `--import tsx --import=./.../crash-exit.ts` (two `--import`s run in order; measured with a stand-in) |
-| agent-org units that run `pnpm run` (`chairman-listen`, `chairman-watch`, `worktree-prune`, `primary:update`) | `ExecStart=%h/.local/bin/pnpm run ...` | the `ExecStart` is unchanged; the **11 `package.json` scripts** that say `node src/<x>.mjs` become `node --import tsx src/<x>.ts` |
-| a11ign `.agent-org/units/*.service`, 3 `.mjs` lines (`corpus-release-nightly`, `token-cost-weekly`, `weekly-review`) | `/usr/bin/node <path>.mjs` | `/usr/bin/node --import tsx <path>.ts` |
-| control `a11y-fleet-auto-off.service` (the unit whose script broke fleet auto-off once) | `/usr/bin/node /root/a11y-witness/packages/control/src/fleet-auto-off.mjs --apply` | the same with `--import tsx` **if the fleet box's checkout has `tsx`, which is NOT measured here (the fleet is off limits to an engineer)**: this is the one host question, on the row |
+| agent-org `host/*.service.in`, 6 `ExecStart` lines (`kernel-reboot`, `otel-receiver`, `shadow-window`, `tmp-prune`, `trace-publish`, `work-tick`) | `/usr/bin/node packages/agent-org/src/<x>.mjs` | `%h/.local/bin/node <path>/<x>.ts` |
+| the `work-tick` unit's `--import` | `--import=./.../crash-exit.mjs` | `--import=./.../crash-exit.ts`, and no loader |
+| agent-org units that run `pnpm run` (`chairman-listen`, `chairman-watch`, `worktree-prune`, `primary:update`) | `ExecStart=%h/.local/bin/pnpm run ...` | the `ExecStart` is unchanged; the **11 `package.json` scripts** that say `node src/<x>.mjs` become `node src/<x>.ts` |
+| a11ign `.agent-org/units/*.service`, 3 `.mjs` lines (`corpus-release-nightly`, `token-cost-weekly`, `weekly-review`) | `/usr/bin/node <path>.mjs` | `%h/.local/bin/node <path>.ts` |
+| control `a11y-fleet-auto-off.service` (the unit whose script broke fleet auto-off once) | `/usr/bin/node /root/a11y-witness/packages/control/src/fleet-auto-off.mjs --apply` | the same `node <path>.ts` **if the fleet box's `node` strips types, which is NOT measured here (the fleet is off limits to an engineer)**: this is the one host question, on the row |
 | `bin` in `package.json` | agent-org `src/bin.mjs`; a11ign `dist/cli.mjs`; the scorer `bin/fetch-encoder.mjs` (hand-written); the worker `dist/server.mjs`; fleet `dist/*.mjs` and `src/local-worker/worker-ctl.sh` | agent-org and the scorer become built `dist/*.mjs`; the rest are already built output or a shell script and **stay** |
-| Ansible `deploy.yml`, the inline `import("./packages/control/src/layer-checkouts.mjs")` in `node --input-type=module -e` | `.mjs` path | `node --import tsx --input-type=module -e 'await import("./.../layer-checkouts.ts")'`, where the playbook runs |
-| CI one-liners that `import()` a `.mjs` (`nightly.yml`, `release.yml`, `reusable-acceptance.yml`; the last imports agent-org's `acceptance-commands.mjs` from `AGENT_ORG_TOOL`, a path under `node_modules`) | `node -e 'import(...)'` | `node --import tsx -e '...'` |
+| Ansible `deploy.yml`, the inline `import("./packages/control/src/layer-checkouts.mjs")` in `node --input-type=module -e` | `.mjs` path | `node --input-type=module -e 'await import("./.../layer-checkouts.ts")'`, on a `node` that strips types where the playbook runs |
+| CI one-liners that `import()` a `.mjs` (`nightly.yml`, `release.yml`, `reusable-acceptance.yml`; the last imports agent-org's `acceptance-commands.mjs` from `AGENT_ORG_TOOL`, a path under `node_modules`) | `node -e 'import(...)'` | `node -e 'import("./x.ts")'`: `actions/setup-node` is upstream, so it strips; the `AGENT_ORG_TOOL` import sits under `node_modules` and is trap (a)'s |
 | **the installed host copies** (`~/.config/systemd/user/a11ign-*.service`, rendered from the templates) | name `.mjs` | **unchanged until `host:install` renders them again**: a host action for `orchestrator`, and the window in which template and installed copy disagree is the one `host:check` exists to flag |
 
-**Order, so nothing runs a name that is gone:** the sweep for a repository edits its templates and scripts in one pull request; `host:install`
+**Order, so nothing runs a name that is gone** (a unit that still names `/usr/bin/node` while its file is `.ts` is the other way to break, and `node-cannot-strip` raises it): the sweep for a repository edits its templates and scripts in one pull request; `host:install`
 follows the merge; until it runs, the installed units still name `.mjs` files that are `.ts` in the checkout, so **a unit's `.mjs` is not
 deleted by a sweep until its replacement is installed** (the sweep row names the order and `orchestrator` runs the install). That, and the control
 unit above, are the host changes this ADR names; it makes none.
 
-**Falsified by:** `node -p process.features.typescript` printing `true` on the host AND the pinned copy no longer living under `node_modules`
-(then (i) costs less than (ii)); or the tarball install failing to give agent-org a built `bin` (then the pinned copy needs (iii) for that file).
+**Falsified by (first version):** `node -p process.features.typescript` printing `true` on the host AND the pinned copy no longer living under `node_modules` (then (i) costs less than (ii)); or the tarball install failing to give agent-org a built `bin`
+(then the pinned copy needs (iii) for that file). **The first clause FIRED on 2026-10-09:** the host's Node 24 prints `strip` (the property is a string, so the clause's `true` was itself a misreading, #4388), which is what the amendment records. The second clause stands, as trap (a).
+**Falsified by (amended):** `node-cannot-strip` raised on a binary a unit names that cannot be moved off the distro build; or upstream Node 24's stripping failing a file the repositories already hold (then `erasableSyntaxOnly` was not enough and (ii) returns as a stopgap).
 
 **Owner:** the conversion-script row (the flag, the rewrite of every `ExecStart` and `package.json` script); each repository's sweep row for its own
-units; the host rows `product-manager` files from this decision's comment on #4246.
+units (agent-org's is #4389); the host rows `product-manager` files from this decision's comment on #4246; the amendment's host install (#4388) and its health signal (#4390).
 
 ## Consequences (including the ones the chairman will not like)
 
@@ -531,6 +537,7 @@ is that run's output, on the full suite in CI. **Not measured here:** only a 69-
   measured gain; per-repository adoption stays open.
 - **`checkJs: true` as the first gate.** 379 errors in 83 files against 198 in 68: the larger number is the 27 un-annotated files, which the
   ratchet is for.
+- **`tsx` as the way checkout-run code runs (Decision 8's first version).** It worked on the distro Node and cost +0.28 s per process start, a runtime dependency on a loader in every `ExecStart`, and 110 agent-org files kept as `.mjs` for the loader's sake. Rejected 2026-10-09 because the constraint it routed around was a replaceable host package (#4388).
 - **A big-bang `.mjs` to `.ts`.** Ruled out by the chairman; the worked example shows why it is unnecessary.
 
 ## What would falsify this
