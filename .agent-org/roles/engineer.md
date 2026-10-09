@@ -55,7 +55,7 @@ assumed standing seats. The org has ruled since, so what follows replaces it.
   tree has no `node_modules`; the remedy is a hybrid link, not a symlink of the whole directory
   ([why](../../../../docs/operational-lessons.md#resolves-to-dist-does-not-say-whose)).
 - **Open the PR with `agent-org pr:open`, never raw `gh pr create` (#2931).** `pr:open` labels the PR with your
-  session after creating it, checks the body's `Acceptance:` and `Closes` with the parser CI uses, and refuses a
+  session after creating it, checks the `Acceptance:` and `Closes` with the parser CI uses, and refuses a
   diff outside the row's Region before anything is sent; a raw create skips all three (#2925, #2921 and #2919
   carry no session label for that reason).
 - **Verifying the row is still open is yours**, against `origin/main` PLUS every unmerged `agent/*` branch:
@@ -108,6 +108,11 @@ Said once here, because this brief is the one place an engineer is sent to read.
 ## The acceptance standard
 
 A unit is finished when a COMMAND says so, not when it looks right.
+
+- **Your PR's Acceptance lives in a file the PR adds under `.acceptance/`, not in its body** (ADR 0044): the branch with each `/` as `~`
+  (`agent/foo-4415` is `.acceptance/agent~foo-4415.md`), in the body's own grammar (`Acceptance:`, `Mutation:`, the other sections). CI
+  reads the file the PR ADDS, so a later description edit cannot change the verdict. The body keeps `Closes` and one pointer line naming
+  the file; an `Acceptance:` block in the body is the deprecated fallback, so do not write a new one.
 
 - **The suite that covers what you touched.** `pnpm test` runs `test:ts` and `test:python`, and `test:ts` does
   NOT cover `agent-org`, `guards`, `lab` or `control`: those are `pnpm run test:org`. `pnpm run test:all` is
