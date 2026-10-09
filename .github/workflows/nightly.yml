@@ -249,14 +249,17 @@ jobs:
       # Every other nightly job that runs tests (`coverage`, `nightly-only`, `doc-report`) builds for the
       # same reason.
       - run: pnpm run build
-      # #4195, A NAMED GAP: THIS READ STAYS ON `A11IGN_BOT_TOKEN`, for two reasons that each suffice.
-      #   1. IDENTITY, NOW STATED. Since #4198 (PR #4304, `mergedBy: app/octo-sts`) the identity that completes a merge is the Octo STS app,
-      #      and this read still answers for the PAT's owner (`DanBeckDev`, above): a true statement about the subject that no longer
-      #      merges, so until it is re-pointed it certifies less than it appears to. `rulesetReadAsApp` below MEASURES what an installation
-      #      token answers for `current_user_can_bypass`; re-point this read (or leave it, and say so on #4195) when that reading is on the row.
+      # #4195, A NAMED GAP: THIS READ STAYS ON `A11IGN_BOT_TOKEN`, and the identity half is now MEASURED while the reach half is not closable here.
+      #   1. IDENTITY. Since #4198 (PR #4304, `mergedBy: app/octo-sts`) the identity that completes a merge is the Octo STS app, and this read
+      #      still answers for the PAT's owner (`DanBeckDev`, above): a true statement about the subject that no longer merges, so it certifies
+      #      less than it appears to. MEASURED 2026-10-09 (run 37863640022, a dispatch on `main`, a `metadata: read` installation token): the app
+      #      reads `rules/branches/main` (`merge_queue` and `pull_request`, both from ruleset 23681721) and `rulesets/23681721` answers
+      #      `current_user_can_bypass: "never"` with no `bypass_actors` field, so an installation token DOES return the field and the read
+      #      could answer for the merging identity. That answer is for the asking identity alone, as ever (`main-review-requirement.md`).
       #   2. REACH. The loop below reads every declared code repository, and a repository policy reaches only the repository it sits in
       #      (Octo STS v0.11.2 forces `repositories` to that one). Nine repositories means an organisation policy in `a11ign/.github`,
-      #      which is outside this row's Region and `ceo`'s crossing.
+      #      which is outside this row's Region and `ceo`'s crossing. Re-point this read to the app when that policy exists; until then it
+      #      stays on the token, and a half-and-half guard (one repository as the app, eight as the PAT) would read as one subject and be two.
       - name: Ask GitHub, once per code repository, whether the default branch's `pull_request` rule binds the identity that merges here
         env:
           A11IGN_BOT_TOKEN: ${{ secrets.A11IGN_BOT_TOKEN }}
@@ -385,39 +388,6 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.octo.outputs.token }}
         run: agent-org ready:audit
-
-  # #4195, A MEASUREMENT AND NOT A CHECK: what does an Octo STS installation token answer for `current_user_can_bypass`? Since #4198
-  # the identity that completes a merge is `app/octo-sts` (PR #4304, `mergedBy`), so the ruleset read's subject is the app, and the read
-  # in `mainRulesetBinds` still answers for the PAT's owner. This job reads the same two endpoints as the app, for a11ign/a11ign only (a
-  # repository policy reaches no more), and PRINTS the answers; it asserts nothing and fails nothing, so a reading of `null`, a 403 or a
-  # 404 lands in the log as itself. It is its own job so that `mainRulesetBinds`, which reads a stored token, never holds `id-token: write`.
-  # DELETE it, or promote it to the real read, once the reading is on #4195.
-  rulesetReadAsApp:
-    if: github.event.schedule != '37 * * * *'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write   # the Octo STS exchange below and nothing else (#4195)
-    steps:
-      - name: Exchange this run's identity for a metadata-read token (Octo STS)
-        id: octo
-        uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05   # v1.1.1
-        with:
-          scope: a11ign/a11ign
-          identity: nightly-ruleset-read
-      - name: Print what the installation token answers for the main rules and each ruleset behind them
-        env:
-          GH_TOKEN: ${{ steps.octo.outputs.token }}
-        run: |
-          set +e
-          echo "== rules/branches/main"
-          gh api repos/a11ign/a11ign/rules/branches/main --jq '[.[] | {type, ruleset_id}]'
-          echo "exit $?"
-          for id in $(gh api repos/a11ign/a11ign/rules/branches/main --jq '[.[].ruleset_id] | unique | .[]'); do
-            echo "== rulesets/$id"
-            gh api "repos/a11ign/a11ign/rulesets/$id" --jq '{id, name, enforcement, current_user_can_bypass, bypass_actors_present: has("bypass_actors")}'
-            echo "exit $?"
-          done
 
   # #948 (The CI Reset, step 3 of the doc-guard triage #905): the doc cross-reference REPORT, once a night,
   # as one comment. Until #954 retires them, the ~14 doc cross-reference guards still run on every PR; this
