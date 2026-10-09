@@ -175,6 +175,33 @@ test("#2301 CONTROL: the same pair with a satisfied range gets PAST the range ch
   });
 });
 
+test("#4654: the consumer the smoke runs in is an ES module, so the `.ts` smoke's `import` parses", () => {
+  // The nightly real-consumer test reads only `stage === "bin"`, and `npm init -y` under npm 11 writes
+  // `"type": "commonjs"`, so every package failed at the smoke for a day with nothing on the PR path red. The smoke
+  // asserts the consumer's `type` itself, because Node's syntax detection would let a TYPELESS one pass.
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "a11y-esm-smoke-")));
+  try {
+    const dir = join(root, "esm-smoke");
+    mkdirSync(dir);
+    writeFileSync(join(dir, "package.json"),
+      JSON.stringify({ name: "@a11ign/esm-smoke", version: "1.0.0", main: "index.js", files: ["index.js"] }));
+    writeFileSync(join(dir, "index.js"), "module.exports = 1;\n");
+    writeFileSync(join(dir, "isolation-smoke.ts"), [
+      'import assert from "node:assert/strict";',
+      'import { readFileSync } from "node:fs";',
+      'assert.equal(JSON.parse(readFileSync("package.json", "utf8")).type, "module");',
+      'console.log("smoke parsed as an ES module");',
+    ].join("\n") + "\n");
+    // The gate's last check reads `git ls-files`, so the fixture is tracked, as a package in the repository is.
+    for (const args of [["init", "-q"], ["add", "-A"]]) execFileSync("git", args, { cwd: dir, env: sandboxGitEnv() });
+    const verdict = checkIsolation(dir);
+    assert.equal(verdict.ok, true, `the smoke failed in the consumer at stage ${verdict.stage}: ${verdict.detail}`);
+    assert.match(verdict.detail, /smoke parsed as an ES module/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 // --- pnpmCliInvocation -----------------------------------------------------------------------------------
 
 /** Runs `fn` with PATH and `npm_execpath` set, and puts both back. */
