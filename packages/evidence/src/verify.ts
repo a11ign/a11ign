@@ -360,8 +360,17 @@ export interface OracleCounts {
    * Form controls' `autocomplete` attribute, read from the DOM — 1.3.5 Identify Input Purpose. Absent
    * means the probe never ran, never "no form inputs", matching `media`'s own contract. #869: no worker
    * census populates this yet; see `RuleInput.formInputs`'s own comment (`packages/judge/src/rules.ts`).
+   *
+   * `pasteCancelled` (#4324, 3.3.8 Accessible Authentication): did a cancelable `paste` event dispatched at this
+   * control come back default-prevented? Absent = not examined (NOT "paste is allowed"), `false` = dispatched and
+   * not cancelled. The worker census (#4314) carries it; the rule that reads it is #4259.
    */
-  formInputs?: { tag: string; type: string | null; autocomplete: string | null }[];
+  formInputs?: {
+    tag: string;
+    type: string | null;
+    autocomplete: string | null;
+    pasteCancelled?: boolean;
+  }[];
   /** Per-type: whether the sweep announced everything the page exposes. `unknown` is a real answer. */
   completeness?: Record<string, Completeness>;
   census?: PageCensus;
