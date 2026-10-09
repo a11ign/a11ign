@@ -21,11 +21,11 @@ Run on a **clean checkout of `HEAD`**, which is what CI and a consumer see:
 | `verify.corpus.test.ts` | 6/6 |
 | CI (`lint` + `capture-regression`) | **both green** — first time since 1 August; the fix was `capture-pure.mjs` |
 | shipped model | `calibrationClean: true`, `generalisationVerified: true` (held-out, 0 errors), `releaseBlockedBy: []` |
-| `npm run scorer:shortcuts` | **225 free vetoes across 13 heads** — the one number in this table that is not a pass. See the 4.1.2 operating limitation below; every other check here is blind to it by construction |
+| `npm run scorer:shortcuts` | **Read 2026-10-06 on the lab** (`orchestrator`, [#3130](https://github.com/a11ign/a11ign/issues/3130#issuecomment-6014497720), lab job at `8940cc2b6`, exit 0): **74 unclosable and 28 closable veto pairs, 1 constant feature (`transcript_present`), over 3,131 records.** It reports and does not pass or fail; nobody has said those counts are acceptable, and whether any of the 28 closable pairs sits on a head the scorer decides alone was not read. The figure this row carried before — **225 free vetoes across 13 heads, measured 2026-08-22** — is superseded and is not comparable with this one (16 heads now, a different corpus; `PLAN.md` B8 records 225 → a residual two that can reach a report at protocol 17, 2026-09-05). Still the one row in this table that is not a pass; not re-read since 2026-10-06, and not by this edit, because a gate reading `runs/` is the lab agent's to report. Re-read is [#4552](https://github.com/a11ign/a11ign/issues/4552). See the 4.1.2 operating limitation below; every other check here is blind to it by construction |
 
 > **Read this before the table above reassures you.** Every gate in it evaluates on data that shares the
 > corpus's structure, so none of them can see a head penalising a feature that is 0 on all of its training
-> positives. Measured 2026-08-22: **225 such free penalties across 13 heads**. A green row is evidence about
+> positives. Measured 2026-08-22: **225 such free penalties across 13 heads** (since re-read: the row above gives the 2026-10-06 reading). A green row is evidence about
 > the thing it measures, not a general assurance — see *OPERATING LIMITATION* below and
 > [ADR 0015](./docs/adr/0015-one-defect-per-page-taught-the-scorer-to-veto.md).
 >
@@ -34,9 +34,10 @@ Run on a **clean checkout of `HEAD`**, which is what CI and a consumer see:
 > `1.1.1:filename-alt` and every keyboard/navigation criterion are unaffected. The nine subtypes the model
 > decides alone are where a veto reaches a report.
 
-Measured on a tree containing only committed content, which is what CI and a consumer see. `release:gate`
-itself stops at `check-signals` for the 418 stale captures recorded below — a corpus-state item, deliberately
-deferred; every other stage above was run individually.
+Measured on a tree containing only committed content, which is what CI and a consumer see. When this table was written (2026-08)
+`release:gate` stopped at `check-signals` for 418 stale captures; that is closed (*Closed since*, below), and `check-signals` last read
+**0 stale on 2026-09-24**. The lab's last run of the whole chain that I found (2026-10-06, #3130) stopped earlier, at stage 5
+`gate:isolation` (cause #3830, closed the same day), so stages 6 to 14 — `training:check-signals:complete` among them — were *unread*, not passed.
 
 The judge runs on **our own trained scorer** (`judge-backend: local`) — 27 KB of heads over an 87 MB
 encoder. No LLM, no API key, nothing leaves the runner.
@@ -224,15 +225,33 @@ It was 190 at the swap (2026-10-03), and **that number is a reading, not a failu
 
 - **The `anthropic` and `openai` judge backends.** Written to their SDK specs and unexercised; this project
   keeps no metered key. They are opt-in, never the default.
-- **The Action on a real Windows runner.** Its logic is covered by 14 renderer/policy tests and by
-  `packages/lab/scripts/action-dry-run.sh`, which runs the Action's own bash locally against a live worker. The
-  Windows-only setup steps (NVDA install, Speech Viewer, Edge policy) are exercised by
-  `capture-regression.yml` on a real runner for the same reasons. `act` cannot help — it is Docker/Linux
-  and NVDA needs Windows.
 - **`msEdgeImageMagnifyUI`** in `--disable-features`. The name is taken from Microsoft's documented *enable*
   flag and is unverifiable through CDP (`SystemInfo.getFeatureState` answers "Unknown feature" even for
   flags that demonstrably work). It is a belt beside a verified brace — `pointer.mjs` is what actually
   closes that hole.
+
+### Closed since
+
+Moved out of the two lists above when they stopped being true, each with the run or reading it rests on.
+
+- **The Action on a real Windows runner — VERIFIED, read 2026-10-09.** [Run 37865857734](https://github.com/a11ign/a11ign/actions/runs/37865857734)
+  (`release.yml`, `workflow_dispatch`, sha `06ec4559a`, 2026-10-09 00:39Z to 00:57Z) passed `action-smoke / consumer` and
+  `capture-regression / capture`, both on `windows-2022`. `action-smoke` is `uses: ./` with inputs only, so it runs `action.yml`'s own
+  steps as a consumer would: NVDA install, Speech Viewer off, Edge first-run policy, the local scorer. It makes three runs (all steps in the
+  job passed): W3C's conformant `bad/after/survey.html` must draw a report, an interaction and **no** 1.1.1 accusation; W3C's
+  inaccessible demo must still draw 1.1.1; and a run with no `probe-forms` input must press nothing `probe-forms` owns, while the probing run
+  must press something. `action.yml` has changed once since that sha, in a description string only
+  (`git diff 06ec4559a origin/main -- action.yml`, #4355). **Not shown by it:** any page beyond those two, `windows-2025` or a later
+  runner image, a consumer's own `runs-on`, and what the report SAYS (the outsider job's question).
+  `act` still cannot help: it is Docker/Linux and NVDA needs Windows. Do not read `capture-regression.yml`'s own run list for this: its newest
+  entries (2026-09-18) are `push` runs that failed, on a trigger the workflow's header says was removed on 2026-09-06, and I did not establish why they exist.
+- **The 418 stale captures — CLOSED, read 2026-09-24.** The lab's `a11y-job-retrain.service` recaptured the corpus
+  (`Capture complete: 1743 captured, 0 failed, 0 skipped, of 1743 cases across 10 workers`) and `check-signals` then read
+  **`1743 discriminating, 0 blind, 0 contaminated, 0 uncaptured, 0 stale`** at 2026-09-24T00:54:57Z (`worker-tooling`, read on the lab,
+  [#1926](https://github.com/a11ign/a11ign/issues/1926#issuecomment-5809655558)). The generated tier reads uniformly protocol 21. The
+  corpus was recaptured again on 2026-10-06 (1,795 of 1,795, #3524); **`check-signals` has not been read since that recapture** by anything this
+  repository records, and not by this edit: it reads `runs/`, which is the lab agent's to report ([#4552](https://github.com/a11ign/a11ign/issues/4552)).
+  The ~2.9 h `--resume` recapture quoted under *Deferred* below was therefore overtaken by a full recapture and is not owed.
 
 ## Known limitations, stated plainly
 
@@ -330,7 +349,7 @@ It was 190 at the swap (2026-10-03), and **that number is a reading, not a failu
     `postSubmitFields`**. So they are masked on every real page — they were previously trained as clean on
     41 and 39 pages from evidence that was never gathered, which is indistinguishable from a failed capture.
     They keep perfect held-out performance (8/8 each), because those records carried nothing for them.
-  - **OPERATING LIMITATION: the scorer's heads carry 225 free vetoes, measured 2026-08-22, not yet fixed.**
+  - **OPERATING LIMITATION: the scorer's heads carried 225 free vetoes, measured 2026-08-22; the mechanism is current, the number is not (last read 2026-10-06: 74 unclosable + 28 closable veto pairs, in the table at the top).**
     A head penalises features that are 0 on every one of its training positives — free to learn, and
     invisible to every accuracy metric here, because each shares the corpus's structure. Causal, by
     ablation on unedited real captures: `4.1.2:unnamed-control` moves `before/tickets.html` from 0.4525 to
@@ -418,6 +437,8 @@ Not bugs being hidden — work consciously not done before shipping.
 | `packages/lab/scripts/check-screenreader-hardening.py` was also untracked | Now committed; backs `npm run training:hardening`, which is in no gate, so it had no effect on any recorded result |
 
 ### Why those 418 captures went stale — diagnosed, so nobody re-derives it
+
+> **Closed — read 2026-09-24 (see *Closed since*): 0 stale after a full recapture. What follows is the 2026-08 diagnosis, kept as history; the `--resume` command below is no longer owed.**
 
 `check-signals` reports **554 discriminating, 83 blind, 6 contaminated, 418 stale**. The stale ones were
 captured while the page rescale was live in the working tree; `3cce38d` shelved the rescale and restored the
