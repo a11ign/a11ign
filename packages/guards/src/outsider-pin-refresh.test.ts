@@ -110,7 +110,7 @@ test("the write step refuses an empty token, shape-checks what the deciding job 
   const script = refresh.steps?.find((step) => step.run?.includes("gh api -X PUT"))?.run ?? "";
   assert.match(script, /\[ -n "\$\{GH_TOKEN:-\}" \]/);
   assert.match(script, /\[0-9a-f\]\{40\}/, "the sha handed over is shape-checked");
-  assert.match(script, /grep -qx -- "      - uses: a11ign\/a11ign@\$TAG_SHA # v\$VERSION"/, "the file is checked to pin what it was told");
+  assert.match(script, /grep -qx -- " {6}- uses: a11ign\/a11ign@\$TAG_SHA # v\$VERSION"/, "the file is checked to pin what it was told");
   assert.match(script, /cmp - "\$scratch\/generated\.yml"/);
   const generate = decide.steps?.find((step) => step.run?.includes("generate.mjs"))?.run ?? "";
   assert.match(generate, /--sha="\$tag_sha" --version="\$version"/);
