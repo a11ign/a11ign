@@ -33,6 +33,9 @@ function sources(): [string, string][] {
         continue;
       }
       if (!entry.name.endsWith(".ts") || /\.test\.ts$/.test(entry.name)) continue;
+      // A package's `isolation-smoke.ts` BUILDS a literal input to prove the packed bundle loads, in a consumer that has no
+      // `CaptureStructure` to derive from: a value, not a declaration. It became `.ts` in #4393; as `.mjs` this walk never read it.
+      if (entry.name === "isolation-smoke.ts") continue;
       out.push([path.slice(ROOT.length + 1), readFileSync(path, "utf8")]);
     }
   };

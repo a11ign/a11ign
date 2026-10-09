@@ -20,7 +20,7 @@ const ROOT = join(import.meta.dirname, "../../..");
 const WIRE = "packages/evidence/src/index.ts";
 
 /**
- * The directories `layers.json` LAYS into this checkout: another repository's source at its locked tag (`lay-layer.mjs`), so
+ * The directories `layers.json` LAYS into this checkout: another repository's source at its locked tag (`lay-layer.ts`), so
  * a change to the layer's version changes what this walk reads, and its restatements are that repository's to fix, not this one's.
  */
 const LAID_LAYERS = new Set(Object.values(JSON.parse(readFileSync(join(ROOT, "layers.json"), "utf8")).layers as { path: string }[])

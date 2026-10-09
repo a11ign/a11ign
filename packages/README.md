@@ -21,7 +21,7 @@ decide across whichever layers exist and so name none of them.
 **`toolchain` joined under [ADR 0043](../docs/adr/0043-one-toolchain-for-every-repository.md) (row 4-0, #3578) and left it again (row 5, #3625)**: `@a11ign/toolchain`, product,
 AGPL-3.0-or-later, published from `a11ign/toolchain` and taken here BY VERSION from npm (a pinned devDependency of the root, `cli`, `judge` and `scorer`; there is no `packages/toolchain/`). The rstest config as a function of what differs per repository (`./rstest-config`), the `node:test` shim and alias hook, the
 run record and verdict line, the child-coverage merge, the Rslib presets and the helper that derives a package's entries from its own `exports`, and
-the shared `tsconfig.base.json`. a11ign's own `scripts/rstest/rstest.config.mjs` is a thin call into the installed package.
+the shared `tsconfig.base.json`. a11ign's own `scripts/rstest/rstest.config.ts` is a thin call into the installed package.
 
 **`pdf` joined after M1–M8 rather than inside them** — the migration above renamed what already existed;
 `pdf` is the first package ADR 0036's "a new layer joins by the same contract" clause was ever tested
@@ -51,7 +51,7 @@ rather than asking a human to judge.
 |---|---|---|
 | workspace root | `package.json` `"workspaces": ["packages/*"]` | npm workspaces, not pnpm — `workspace:*` is rejected by npm 11.5.1 with `EUNSUPPORTEDPROTOCOL` (ADR 0005, measured) |
 | shared build options | `tsconfig.base.json` | `composite: true` so project references make the dependency graph compiler-enforced |
-| the isolation gate | `packages/guards/src/isolation-gate.mjs`, `npm run gate:isolation` | packs a package, installs it **outside the repo**, runs its smoke test |
+| the isolation gate | `packages/guards/src/isolation-gate.ts`, `npm run gate:isolation` | packs a package, installs it **outside the repo**, runs its smoke test |
 | proof the gate works | `scripts/isolation-fixtures/` | one sound package it must accept, two broken ones it must reject |
 
 ## The contract every package follows
@@ -63,7 +63,7 @@ and passed once `prepack` existed. **No package carries a `prepare`.** The root 
 `pnpm install`, `pnpm -r run build`, which pnpm orders by the packages' declared dependencies, so the root
 `typecheck` resolves each package's `.d.ts` without a separate step (#168: five unordered builds raced).
 
-Each package under `packages/` owns an `isolation-smoke.mjs` that imports itself **by package name** and
+Each package under `packages/` owns an `isolation-smoke.ts` that imports itself **by package name** and
 exercises the first example in its README. The gate copies it into a throwaway consumer directory next to
 the installed tarball and runs it there. Importing by name rather than by path is the whole point: a
 relative import would resolve inside the repo and prove nothing.

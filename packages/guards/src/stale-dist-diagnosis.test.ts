@@ -180,7 +180,7 @@ test("CLI: a failure naming a stale package prints the note; the same package ma
   withPackage({ dist: OLDER, src: NEWER }, ({ dist, src }, tmp) => {
     mkdirSync(join(tmp, "scripts"));
     copyFileSync(SCRIPT, join(tmp, "scripts/stale-dist-diagnosis.ts"));
-    copyFileSync(join(REPO_ROOT, "scripts/cli-flags.mjs"), join(tmp, "scripts/cli-flags.mjs"));
+    copyFileSync(join(REPO_ROOT, "scripts/cli-flags.ts"), join(tmp, "scripts/cli-flags.ts"));
     const copy = join(tmp, "scripts/stale-dist-diagnosis.ts");
     const failure = "SyntaxError: The requested module 'fx-pkg/foo' does not provide an export named 'x'\n";
     withLog(failure, (logPath) => {

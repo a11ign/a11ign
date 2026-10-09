@@ -16,7 +16,7 @@
 //   write     anything else, including a file whose pin carries no readable version: not being able to read it is not a reason to leave it.
 import { appendFileSync, readFileSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { refuseUnknownFlags } from "../cli-flags.mjs";
+import { refuseUnknownFlags } from "../cli-flags.ts";
 
 /** The path in the outside repository the release writes: the only file the minted token is ever used on. */
 export const OUTSIDER_JOB_PATH = ".github/workflows/outsider-job.yml";

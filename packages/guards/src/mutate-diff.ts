@@ -35,8 +35,8 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { changedFiles } from "./changed-files.mjs";
-import { sandboxGitEnv } from "./git-env.mjs";
+import { changedFiles } from "./changed-files.ts";
+import { sandboxGitEnv } from "./git-env.ts";
 import { changedLines } from "./mutant-survivors.ts";
 import { flagValue, refuseUnknownFlags } from "@a11ign/screenreader-fleet/cli-flags";
 
@@ -51,7 +51,7 @@ const TAIL_CHARS = 4000;
 const MAX_DIFF_BYTES = 268_435_456;
 const SNIPPET_LENGTH = 100;
 const STRING_LITERAL_MAX = 200;
-const ASSERT_GLOB = fileURLToPath(new URL("./assert-glob-not-empty.mjs", import.meta.url));
+const ASSERT_GLOB = fileURLToPath(new URL("./assert-glob-not-empty.ts", import.meta.url));
 
 const require = createRequire(import.meta.url);
 /**

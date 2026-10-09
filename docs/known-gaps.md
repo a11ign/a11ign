@@ -3873,7 +3873,7 @@ runbook (merge settings, the publish environment, the bots team, the release sha
 `A11IGN_BOT_TOKEN`. `ceo` ruled B on #4486 (2026-10-09): the Octo STS organisation policy carries `metadata: read`, the table needs contents, trees,
 environments, deployment-branch policies and the bots team, and widening the app was refused as a security grant bought to keep a drift check. The step no
 longer names the secret, so #4203 can delete it. *Not measured:* which of those reads the app could be granted (its installation page is admin-only), and
-whether a repository has drifted since the last scheduled run. *The command:* `A11Y_CHECK_MAIN_RULESET=1 pnpm exec rstest run --config scripts/rstest/rstest.config.mjs
+whether a repository has drifted since the last scheduled run. *The command:* `A11Y_CHECK_MAIN_RULESET=1 pnpm exec rstest run --config scripts/rstest/rstest.config.ts
 --include packages/guards/src/layer-repository-protection.test.ts --disableConsoleIntercept`, as an identity that reads the nine repositories (with no `gh` login and
 no `GH_TOKEN` it refuses by name and reads nothing). *Cost:* a repository that drifts waits for a person to run it. *Fixed when:* a new row, with the app's actual
 installation permissions measured by an admin, puts the read back on an Octo STS token.

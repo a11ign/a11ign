@@ -33,7 +33,7 @@
 //
 // THIS SCRIPT CHECKS URLS, NOT MENTIONS -- 29 URLs across 22 files, not the 34 files the #524 audit
 // counted. The gap is twelve files that name `a11ign/a11ign` as a bare STRING with no fetchable URL
-// attached: `PLAN.md`'s historical prose, `.agent-org/roles/README.md`, `repo-identity.mjs`'s own declaration,
+// attached: `PLAN.md`'s historical prose, `.agent-org/roles/README.md`, `repo-identity.ts`'s own declaration,
 // three consistency tests (`action-reference`, `repo-identity-consolidated`, `documented-checkout-step`)
 // that reference `PRODUCT_REPO` via the IMPORTED CONSTANT rather than a literal, and six more docs
 // mentioning the org in passing. Nothing there for a fetch to check -- that population is `repo-identity-
@@ -46,8 +46,8 @@ import { fileURLToPath } from "node:url";
 import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
 
-import { refuseUnknownFlags } from "./cli-flags.mjs";
-import { PRODUCT_REPO } from "./repo-identity.mjs";
+import { refuseUnknownFlags } from "./cli-flags.ts";
+import { PRODUCT_REPO } from "./repo-identity.ts";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 

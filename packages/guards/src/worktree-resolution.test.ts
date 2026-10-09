@@ -18,8 +18,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   RESOLUTION, OVERRIDE_ENV, worktreeResolution, resolutionLine, classifyResolvedPath, suiteStartVerdict,
-} from "./worktree-resolution.mjs";
-import { memberScopeLister } from "./assert-glob-not-empty.mjs";
+} from "./worktree-resolution.ts";
+import { memberScopeLister } from "./assert-glob-not-empty.ts";
 
 const REPO = fileURLToPath(new URL("../../../", import.meta.url));
 const PACKAGE = "agent-org";
@@ -259,8 +259,8 @@ test("#2218 THE CALLER: `assert-glob-not-empty --run` refuses in a mis-wired tre
   // spawn, so no runner is reached and nothing is measured.
   withScratch((base) => {
     const tree = checkout(base, "wt-caller");
-    for (const rel of ["packages/guards/src/assert-glob-not-empty.mjs", "packages/guards/src/worktree-resolution.mjs",
-      "packages/guards/src/test-memory-cap.mjs", "scripts/npm-cli-executable.mjs"]) {
+    for (const rel of ["packages/guards/src/assert-glob-not-empty.ts", "packages/guards/src/worktree-resolution.ts",
+      "packages/guards/src/test-memory-cap.ts", "scripts/npm-cli-executable.ts"]) {
       mkdirSync(join(tree, rel, ".."), { recursive: true });
       copyFileSync(join(REPO, rel), join(tree, rel));
     }
@@ -277,7 +277,7 @@ test("#2218 THE CALLER: `assert-glob-not-empty --run` refuses in a mis-wired tre
     copyFileSync(join(REPO, "node_modules/@a11ign/screenreader-fleet/dist/cli-flags.mjs"), join(other, "dist", "cli-flags.mjs"));
     mkdirSync(join(tree, "node_modules", "@a11ign"), { recursive: true });
     symlinkSync(other, join(tree, "node_modules", "@a11ign", "screenreader-fleet"));
-    const ran = spawnSync(process.execPath, [join(tree, "packages/guards/src/assert-glob-not-empty.mjs"),
+    const ran = spawnSync(process.execPath, [join(tree, "packages/guards/src/assert-glob-not-empty.ts"),
       "packages/x/a.test.ts", "--run", "--runner=rstest"], { cwd: tree, encoding: "utf8", env: { ...process.env, [OVERRIDE_ENV]: "" } });
     assert.equal(ran.status, 1, ran.stdout + ran.stderr);
     assert.match(ran.stderr, /REFUSING: this tree does not measure itself/);

@@ -231,7 +231,7 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 22 }
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       - name: Mint the arming token (Octo STS, `auto-arm.sts.yaml`) -- no fallback to `GITHUB_TOKEN`, see the header (#4198)
         id: octo-sts
         uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05 # v1.1.1
@@ -329,7 +329,7 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 22 }
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       - name: Mint the arming token (Octo STS, `auto-arm.sts.yaml`) -- no fallback to `GITHUB_TOKEN`, see the header (#4198)
         id: octo-sts
         uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05 # v1.1.1
@@ -400,7 +400,7 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 22 }
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       - name: Report every armed, green PR that cannot merge as-is against main
         env:
           GH_TOKEN: ${{ github.token }}

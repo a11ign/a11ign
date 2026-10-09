@@ -89,7 +89,7 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 22 }
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       - name: Close the rows the merged PR declared, naming the merge sha on each
         env:
           GH_TOKEN: ${{ github.token }}
@@ -136,7 +136,7 @@ jobs:
       # Moved ABOVE the first liveness step (#2975): that step now runs the tool from `node_modules`, so the install comes first.
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       - name: Was the pull request that produced this commit actually tested? (#118)
         continue-on-error: true
         env:
@@ -159,7 +159,7 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 22 }
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       # #411: A MERGE CAN DELETE WORK ALREADY ON `main` WHILE EVERY OTHER CHECK STAYS GREEN -- see
       # trunk-revert-guard.mjs's own header for the incident and why the obvious instruments (git
       # merge-tree on the merge's two parents, GitHub's own PR file list) both fail to catch it. Pure git,
@@ -222,7 +222,7 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       - run: pnpm run build
       # The re-check runs the red job's own battery, which includes pytest (#2389 review).
       - uses: actions/setup-python@v7

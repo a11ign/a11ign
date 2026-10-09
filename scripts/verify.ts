@@ -7,7 +7,7 @@
 // transitively, and every tree-wide guard. A partial local run is not "passing", and
 // nothing let an author tell the difference. This runs what CI's `gate` waits for.
 //
-// IT REUSES CI'S CODE AND DOES NOT COPY IT. Which jobs apply is `ci-changed.mjs`'s `classify`, imported. The population is `gate`'s own
+// IT REUSES CI'S CODE AND DOES NOT COPY IT. Which jobs apply is `ci-changed.ts`'s `classify`, imported. The population is `gate`'s own
 // `needs` list, read from `ci.yml`: every job in it is a step below or an entry of CI_ONLY with a reason, and
 // `verify-matches-ci.test.ts` fails the day a job is added to CI and to neither.
 //
@@ -32,16 +32,16 @@ import {
 import { constants as osConstants, homedir, tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { changedFiles } from "../packages/guards/src/changed-files.mjs";
-import { underFloor } from "../packages/guards/src/assert-glob-not-empty.mjs";
-import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
-import { refuseUnknownFlags, flagValue } from "./cli-flags.mjs";
+import { changedFiles } from "../packages/guards/src/changed-files.ts";
+import { underFloor } from "../packages/guards/src/assert-glob-not-empty.ts";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.ts";
+import { refuseUnknownFlags, flagValue } from "./cli-flags.ts";
 const { checkBody } = await toolExport("pr-open");
-import { classify, knownPackages, packedFiles } from "./ci-changed.mjs";
-import { privateRunRoot } from "./private-tmp.mjs";
+import { classify, knownPackages, packedFiles } from "./ci-changed.ts";
+import { privateRunRoot } from "./private-tmp.ts";
 // NEVER a bare `pnpm` spawn -- unsafe on Windows (CVE-2024-27980), and this repo's own guard refuses one.
-import { pnpmCliInvocation } from "./npm-cli-executable.mjs";
-import { toolBin, toolExport } from "./agent-org-newest-tag.mjs";
+import { pnpmCliInvocation } from "./npm-cli-executable.ts";
+import { toolBin, toolExport } from "./agent-org-newest-tag.ts";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 const STAMP_FILE = "verify-stamp.json";
@@ -250,7 +250,7 @@ function pnpm(pnpmArgs: string[], { stdio = "inherit" }: { stdio?: import("node:
  */
 export const AFFECTED_INCLUDE = "packages/*/src/**/*.test.ts";
 export const AFFECTED_MIN_FILES = 107;
-const RSTEST_CONFIG = "scripts/rstest/rstest.config.mjs";
+const RSTEST_CONFIG = "scripts/rstest/rstest.config.ts";
 
 /**
  * The words the stamp says, in ONE place: the verify output and `--check` both print it, and a test pins that it carries
@@ -345,7 +345,7 @@ export async function runAffectedSet({ base }: { base: string; }, run: (command:
  * worktree here (each `node_modules/.cache` is a symlink to the primary's), keeps a `failed` flag per file for 30 days, and
  * holds failures of scratch fixtures that never existed in this tree, so it says "this file once failed" and never "the last
  * run failed". A record is per worktree, one per top-level run, green ones too, and says `status` for the run as a whole.
- * The directory is `rstest.config.mjs`'s, spelled twice because that file is outside this row's Region; a test pins the pair.
+ * The directory is `rstest.config.ts`'s, spelled twice because that file is outside this row's Region; a test pins the pair.
  * @param {Record<string, string | undefined>} [env]
  */
 export function runRecordDir(env: Record<string, string | undefined> = process.env) {

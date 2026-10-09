@@ -171,7 +171,7 @@ each repository copies. It carries what a11ign's `scripts/rstest/` already holds
 | **CI runs `rstest run --trace` once**, the summary archived as an artifact | |
 | `tsconfig.base.json` and the Rslib presets of Decision 4 | each package's entries |
 
-**Package, because the config is not 183 lines of settings but eight recorded decisions** (the bullets in the header of `scripts/rstest/rstest.config.mjs`),
+**Package, because the config is not 183 lines of settings but eight recorded decisions** (the bullets in the header of `scripts/rstest/rstest.config.ts`),
 and five copies would drift: `scripts/rstest/` is already 685 lines in 5 files. A template is rejected for exactly that. **Where it
 lives:** `packages/toolchain` in a11ign, where the source and its tests already are, published like `evidence`, `judge` and `scorer` by
 a11ign's release (ADR 0041), and consumed by every other repository as a `devDependency` semver range, which is the only edge ADR 0041

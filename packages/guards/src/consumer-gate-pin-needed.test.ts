@@ -255,11 +255,11 @@ test("#4374: what the minting job was handed is shape-checked before it is writt
   assert.doesNotMatch(script, /\bgit (push|commit|switch|add)\b/, "no repository checkout to commit in");
 });
 
-const RESOLVES_THE_TOOL = /agent-org-newest-tag\.mjs --dest=/;
+const RESOLVES_THE_TOOL = /agent-org-newest-tag\.ts --dest=/;
 const REACHES_REPO_IDENTITY = /scripts\/(consumer-gate-pin-needed\.ts|generate-consumer-gate\.ts)/;
 
-test("#4373: every job that runs a script reaching repo-identity.mjs resolves the tool BEFORE it, under the same condition", () => {
-  // Both scripts import repo-identity.mjs, which loads the tool's `project-config` at import: on a runner no tool exists until the resolver has cloned
+test("#4373: every job that runs a script reaching repo-identity.ts resolves the tool BEFORE it, under the same condition", () => {
+  // Both scripts import repo-identity.ts, which loads the tool's `project-config` at import: on a runner no tool exists until the resolver has cloned
   // one. The first real run died in `decide` for want of it, because the tests above read this file as text and nothing ran it.
   const jobs = Object.entries(workflow.jobs).filter(([, job]) => job.steps.some((s) => REACHES_REPO_IDENTITY.test(s.run ?? "")));
   assert.deepEqual(jobs.map(([name]) => name).sort(), ["decide", "regenerate", "release"], "positive control: the population is the three jobs, not empty");

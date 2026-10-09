@@ -82,7 +82,7 @@ async function until(what: string, holds: () => boolean, evidence: () => string)
 
 /** Runs the child in `tree`; resolves with how it ended once it has. `kill` is sent when the step is mid-way, and `null` lets it finish. */
 async function runChild(mode: Mode, tree: Tree, kill: NodeJS.Signals | null) {
-  // The mode travels in the environment: changed-files.mjs reads `process.argv[1]` as a path to its own entry, and `-e` makes an argument that.
+  // The mode travels in the environment: changed-files.ts reads `process.argv[1]` as a path to its own entry, and `-e` makes an argument that.
   const env: NodeJS.ProcessEnv = { ...process.env, TMPDIR: tree.tmp, TEST_RUNS_TO_COMPLETION: kill === null ? "1" : "0" };
   delete env.NODE_TEST_CONTEXT; // the suite inside the clone would inherit it and refuse to start ("run() called recursively")
   const args = ["--input-type=module", "-e", childProgram(mode, tree)];

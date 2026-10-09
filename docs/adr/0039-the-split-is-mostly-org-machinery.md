@@ -96,9 +96,9 @@ $ git grep -l "a11ign/a11ign" -- . ':!docs/adr/0039-*' | wc -l; git grep -l "a11
 ```
 
 ```
-$ git grep -nE '^export const (REPO|PRODUCT_REPO)\b' -- scripts/repo-identity.mjs
-scripts/repo-identity.mjs:22:export const REPO = "a11ign/a11ign";
-scripts/repo-identity.mjs:56:export const PRODUCT_REPO = "a11ign/a11ign";
+$ git grep -nE '^export const (REPO|PRODUCT_REPO)\b' -- scripts/repo-identity.ts
+scripts/repo-identity.ts:22:export const REPO = "a11ign/a11ign";
+scripts/repo-identity.ts:56:export const PRODUCT_REPO = "a11ign/a11ign";
 ```
 
 ```
@@ -113,7 +113,7 @@ $ git grep -nE '"--repo"' -- packages/agent-org/src ':!*.test.*' | wc -l
 
 **What assumes one repository.**
 
-- **`REPO` is the tracker AND the code, and the file already records that it was two questions once (measured, reading 4).** `scripts/repo-identity.mjs:22` is `REPO`, `:56` is `PRODUCT_REPO`; both are `"a11ign/a11ign"`. Its own comment says they "answer different questions, and the next rename would split them again". The split is that rename: this is a THIRD meaning, and a rename of one constant does not answer it.
+- **`REPO` is the tracker AND the code, and the file already records that it was two questions once (measured, reading 4).** `scripts/repo-identity.ts:22` is `REPO`, `:56` is `PRODUCT_REPO`; both are `"a11ign/a11ign"`. Its own comment says they "answer different questions, and the next rename would split them again". The split is that rename: this is a THIRD meaning, and a rename of one constant does not answer it.
 - **The constant is imported by 39 files and mentioned by 48 (measured, readings 1 and 2).** 22 + 5 + 2 + 1 = 30 of the 39 are `agent-org` source, 4 are `scripts/`, 5 are lab tests. The other 9 files that mention it are not imports (comments, a shell script, an Ansible default).
 - **The literal `a11ign/a11ign` sits in 93 files; 30 are neither tests nor documents (measured, reading 3).** Those 30 are the ones that cannot import anything: 8 `package.json` `repository` fields, workflow strings, Ansible defaults, bootstrap scripts, host units. `repo-identity-consolidated.test.ts` pins each against a constant, so a rename is one edit plus a failing list. That guard is the reason the change is cheap and it must be extended, not bypassed.
 - **Inside `agent-org` the constant serves BOTH meanings, and they separate cleanly (measured, reading 5).** 44 files touch a pull-request surface (`gh pr`, `/pulls`) and 34 touch an issue surface (`gh issue`, `/issues`); 18 touch both. 89 lines pass `"--repo"`. Issues, labels, the board and comments are the TRACKER and stay `a11ign/a11ign` by `ceo`'s ruling; pull requests, the merge queue, protection and checkouts are the CODE side and become plural. **The keyword split is a classification by pattern (inferred), not a reading of each site: the first task of the row is to classify all 89 and 44, and the test pins the classification.**
@@ -165,7 +165,7 @@ $ node -e 'import("./packages/agent-org/src/row-claim/file-overlap-rule.mjs").th
 
 **What assumes one repository.**
 
-- **B4 lists one repository's open PRs (measured, reading 1).** `file-overlap-rule.mjs:252` is `gh pr list --repo REPO --state open --json number,changedFiles,files,body,labels` and `:275` pages `repos/${REPO}/pulls/<n>/files`; `REPO` is the constant in `scripts/repo-identity.mjs:31` (`"a11ign/a11ign"`). A file changed by an open PR in a layer repository is never in the list, so B4 says "no overlap" for it. Callers of the lookup: `row-claim.mjs:582` (claim), `row-claim.mjs:1771` (`reportB4`, the `check` command) and `wake.mjs:3952` (the spawn filter).
+- **B4 lists one repository's open PRs (measured, reading 1).** `file-overlap-rule.mjs:252` is `gh pr list --repo REPO --state open --json number,changedFiles,files,body,labels` and `:275` pages `repos/${REPO}/pulls/<n>/files`; `REPO` is the constant in `scripts/repo-identity.ts:31` (`"a11ign/a11ign"`). A file changed by an open PR in a layer repository is never in the list, so B4 says "no overlap" for it. Callers of the lookup: `row-claim.mjs:582` (claim), `row-claim.mjs:1771` (`reportB4`, the `check` command) and `wake.mjs:3952` (the spawn filter).
 - **The other PR readers in row-claim are keyed on a bare PR number (measured, reading 1).** `blocked-by-rule.mjs:70` (`pr view <n> --repo REPO --json comments`), `own-pr-health-rule.mjs:584` (`pr view <n> --json commits`) and `:595` (`pr list --repo REPO`, the review-health read). A layer PR number handed to these reads core's PR of the same number: wrong data, no error. Inferred for `own-pr-health`: it finds a row's PR through the tracker issue's `closedByPullRequestsReferences` (`own-pr-health-rule.mjs:667-688`, `nodes{number state headRefOid}`, no repository field), so a layer PR closing a core row arrives as a bare number.
 - **The rows are NOT the problem (measured).** Reading 2 sums to 23 `"--repo", REPO` uses (9 in `row-claim.mjs`, 1+2+2+8+1 in the rule files); 4 of them are the PR reads of reading 1, so 19 address the tracker (`issue view`, `issue comment`, `label create`, `issue edit`) and stay `REPO` by the ruling. Only the 5 lines of reading 1 (4 `--repo` reads and the `pulls/<n>/files` REST path) need to become per-repository.
 - **A Region path has no repository, and a prefix is silently discarded today (measured, reading 3).** `declaredRegionFiles` returns `[]` for `nvda-worker:src/x.ts` AND `unrecognisedRegionPaths` returns `[]` for it, so `row-file`'s warning (`row-file.mjs:246`) does not fire either: a row that wrote a prefix reserves nothing and is told nothing. `a11ign/nvda-worker:src/x.ts` is flagged, but as the fragment `a11ign/nvda-worker`, which misleads. The grammar is in `region-paths.mjs`: `pathInProse` (top-level directories derived from `git ls-files` of THIS checkout), `DIRECTORY_ITEM` (`:415`), `FENCED_PATH_ITEM`, `ROOT_FILE_CANDIDATE` (root files read from `origin/main` of THIS checkout). All four are "a path in this tree".
@@ -334,7 +334,7 @@ $ node -e 'import("./packages/agent-org/src/acceptance-commands.mjs").then(m=>{f
 
 - **measured** `packages/lab/src/packaging/branch-protection.test.ts` (1,510 lines) spells `a11ign/a11ign` in five live reads and imports no `REPO`: lines 443 (`pr list --repo`), 473 (`branches/main`), 478 (`branches/main/protection`), 931 (`rules/branches/main`), 951 (`rulesets/{id}`). The ruleset id `23681721` is in 14 lines of that file but only in FIXTURES (692-693, 733, 826, 1079-1080, 1148, 1182, 1393-1394); the live read at 931-951 discovers the id from `rules/branches/main`, so the id is not the live hazard, the repo literal is. `merge-queue-window.test.ts:313` pins `{ id: 23681721, updatedAt: ... }` as a live snapshot.
 - **measured** the guard runs in ONE place: `.github/workflows/nightly.yml:241-265` reads the ruleset with `A11IGN_BOT_TOKEN` (the merging identity) and runs only `branch-protection.test.ts`. A layer repository is read by nothing today: reading 3 shows `screenreader-worker` already exists (created 2026-09-26T07:09:25Z, public, Issues off) with no branch, no rules and no ruleset, i.e. nothing protects it, and nothing in the tree would notice.
-- **measured** the merge machinery names its repository two incompatible ways (reading 2): `merge-queue.mjs` and `merge-guard.mjs` import the constant `REPO` from `scripts/repo-identity.mjs` (116 `"--repo", REPO` / `repos/${REPO}` call sites across `packages/agent-org/src` and `scripts`, 48 files mention `repo-identity` (`git grep -l repo-identity | wc -l`)); `arm-pr.mjs:882`, `auto-arm-sweep.mjs:399`, `update-branch-sweep.mjs:684` read `GITHUB_REPOSITORY` (the repository the workflow runs IN). In a layer repository the second family would act on the layer, the first on the tracker: two answers to "which repository" in one merge.
+- **measured** the merge machinery names its repository two incompatible ways (reading 2): `merge-queue.mjs` and `merge-guard.mjs` import the constant `REPO` from `scripts/repo-identity.ts` (116 `"--repo", REPO` / `repos/${REPO}` call sites across `packages/agent-org/src` and `scripts`, 48 files mention `repo-identity` (`git grep -l repo-identity | wc -l`)); `arm-pr.mjs:882`, `auto-arm-sweep.mjs:399`, `update-branch-sweep.mjs:684` read `GITHUB_REPOSITORY` (the repository the workflow runs IN). In a layer repository the second family would act on the layer, the first on the tracker: two answers to "which repository" in one merge.
 - **measured** one file disagrees with itself: `merge-queue.mjs:277` runs `gh pr list --state open` with NO `--repo` (resolved from the working directory's `origin`), while lines 222, 235 and 256 of the same file pass `${REPO}`. In a layer checkout the queue listing would be the layer's and the compare/delete calls the tracker's.
 - **measured** the arming call is per repository and per identity: `arm-pr.mjs:477` and `auto-arm-sweep.mjs:440` run `gh pr merge --auto --merge <n> --repo <repo>`. `auto-arm.yml` (one file, 17 `A11IGN_BOT_TOKEN` mentions) is a per-repository workflow and its secret is a per-repository or per-organisation secret. **Not readable by this account** (`gh api orgs/a11ign/actions/secrets` and `repos/a11ign/a11ign/actions/secrets` both 403), so whether a new repository inherits the token is UNKNOWN. The file's own comment (auto-arm.yml, #416) records that a `github-actions`-attributed merge does not apply `Closes #N` while a PAT merge does (12 of 12, 2026-09-07), so a layer without the token merges without closing the tracker row.
 - **measured** `ci.yml:115` is the only workflow with a `merge_group:` trigger (`git grep -l 'merge_group:' -- .github/workflows` = 1). A layer repository whose `ci.yml` lacks it can never leave the queue, and the required context is a single job named `gate` (`ci.yml`, `gate` job) that a new repository's workflow must also produce.
@@ -541,7 +541,7 @@ Totals: 14 of 14 check out one repository and none carries a `repository:` key (
 - **measured** the token-less `acceptance` job (`reusable-acceptance.yml`, `permissions: contents: read`, no secret) installs with pnpm, builds, then runs the PR body's stated Acceptance through `packages/agent-org/src/acceptance-commands.mjs`. A layer PR's Acceptance would run in the layer checkout; the command guard that refuses tokens, `gh` and fleet is tracker code.
 - **measured** the guards dominate a layer-only run and live in the tracker (readings 2 and 3, reproducing `#2610`'s measurement below): `server.mjs` selects 9 tests, `capture-pure.mjs` 55, plus 214 always-run guards after `narrowByDeclaredScope` (230 before it) of 729 test files in the selector's view (731 by `git ls-files '*.test.*'`: the two the selector does not see are `packages/lab/nightly/bounded-window-reads.test.ts` and `isolation-gate-real-consumer.test.ts`, which run only in `nightly`). The 230 sit in `lab` (181), `worker-fleet` (15), `control` (11), `agent-org` (9), `judge` (8), `nvda-worker` (3), `cli` (2), `scorer` (1). So a layer repository that carries only its own tests runs at most its 83 test files (reading 3, `nvdaWorkerTests=83`, 3 of them guards) versus 9-55 + 214 today: the win is real only if the 181 `lab` guards stay in core and are NOT copied. The layer's PR then no longer runs the tree-wide guards over core, which is exactly the coverage the head gate below must replace.
 - **REFERENCE (not my measurement)**: row #2610's own body states "9 selected for `server.mjs` and 55 for `capture-pure.mjs`, plus 214 always-run guard tests, of 729 test files" (from `gh issue view 2610 --json body`, its Open-check reading). I re-ran the same selector and got the same numbers (reading 2), which confirms the number, not the method: both use the shipped selector, so any selector defect is shared.
-- **measured** how always-run is decided: `scripts/select-changed-tests.mjs:373 alwaysRunTests` marks a test a guard when `discoversFromTree` says its source enumerates tracked files or walks a directory (skipping build output), or when any module in its import closure does (`asHelper` stricter rule); `narrowByDeclaredScope` (#929) then drops guards whose declared walk scope the diff cannot reach. `scripts/ci-changed.mjs` classifies the diff into booleans and `testPackages` = touched packages plus their transitive dependents, computed from the real `package.json` dependency graph, not a hand-written map.
+- **measured** how always-run is decided: `scripts/select-changed-tests.mjs:373 alwaysRunTests` marks a test a guard when `discoversFromTree` says its source enumerates tracked files or walks a directory (skipping build output), or when any module in its import closure does (`asHelper` stricter rule); `narrowByDeclaredScope` (#929) then drops guards whose declared walk scope the diff cannot reach. `scripts/ci-changed.ts` classifies the diff into booleans and `testPackages` = touched packages plus their transitive dependents, computed from the real `package.json` dependency graph, not a hand-written map.
 - **measured** the #2519 gate (`registry-consumer-gate.yml`, `registry-consumer-gate.test.ts`; the 14th workflow, pinned by name in `workflow-count.test.ts`) installs `a11ign@<spec>` from the REGISTRY into an empty directory: job `install` (ubuntu) then `combination` (windows-2022, NVDA). Triggers: daily, after `release` completes (`workflow_run`), on dispatch. It proves the PUBLISHED contract. It cannot see a layer's unpublished head or core's, and its own header says it "says which layers it did NOT check". So today a layer merge is tested against core only after it is published and the next daily run, a gap of up to a release cycle plus a day. **A head gate does not exist; this row is it.**
 - **measured** release and changesets are one pipeline for seven public packages: `release.yml` runs `changeset publish` with OIDC provenance (`id-token: write`), and `scripts/manifest-repository-check.ts` (run by `release.yml`, #1536) refuses any manifest whose `repository.url` is not `GITHUB_REPOSITORY` (reading 4: all 7 public manifests name `a11ign/a11ign`; `packages/nvda-worker/package.json` among them). `.changeset/config.json` has `baseBranch: main`, empty `linked`/`fixed`, `updateInternalDependencies: patch` (an in-workspace mechanism), and 208 `.md` files (README.md is one). `@a11ign/lab` (private) depends on `@a11ign/nvda-worker` and `@a11ign/worker-fleet` depends on it too (`grep -n '@a11ign/nvda-worker' packages/lab/package.json packages/worker-fleet/package.json` gives `lab/package.json:13` and `worker-fleet/package.json:66`, both the range `0.0.0`): after the split those become registry ranges, so core's tests would test the PUBLISHED layer, not its head.
 - **measured** `ci.yml:115` is the only workflow that listens to `merge_group` (reading 3). Each layer's own required workflow needs it or its queue stalls (ITEM 5).
@@ -930,16 +930,16 @@ start any of them.** The ten follow-on rows named in "The sum" have no body here
 ````markdown
 ## What it is
 
-**Child of #69, item 1: `REPO` answers two questions and the split makes them different.** `scripts/repo-identity.mjs:22` exports one `REPO`, imported by 39 files (30 in `agent-org`) and mentioned by 48; 89 lines in `agent-org` source pass `"--repo"`. Issues, the board and labels are the tracker (`a11ign/a11ign` forever, by `ceo`'s ruling on #69); pull requests, the merge queue, protection and checkouts are the code side, which becomes plural in items 2 to 5. This row names the two meanings and changes NO behaviour: `TRACKER_REPO` and `CORE_REPO` are both `a11ign/a11ign` today, `REPO` stops being exported, and every `agent-org` use is rewritten to one of the two.
+**Child of #69, item 1: `REPO` answers two questions and the split makes them different.** `scripts/repo-identity.ts:22` exports one `REPO`, imported by 39 files (30 in `agent-org`) and mentioned by 48; 89 lines in `agent-org` source pass `"--repo"`. Issues, the board and labels are the tracker (`a11ign/a11ign` forever, by `ceo`'s ruling on #69); pull requests, the merge queue, protection and checkouts are the code side, which becomes plural in items 2 to 5. This row names the two meanings and changes NO behaviour: `TRACKER_REPO` and `CORE_REPO` are both `a11ign/a11ign` today, `REPO` stops being exported, and every `agent-org` use is rewritten to one of the two.
 
 ## Region
 
 ```
-scripts/repo-identity.mjs
+scripts/repo-identity.ts
 packages/lab/src/packaging/repo-identity-consolidated.test.ts
 packages/agent-org/src/
 scripts/check-transfer-urls.ts
-scripts/ci-changed.mjs
+scripts/ci-changed.ts
 scripts/commands.ts
 scripts/generate-commands-doc.ts
 scripts/generate-consumer-gate.ts
@@ -949,7 +949,7 @@ scripts/release-reuses-verdict.mjs
 ## Acceptance
 
 ```bash
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/repo-identity-consolidated.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/repo-identity-consolidated.test.ts
 ```
 
 **The test must show, and it FAILS before the change (`REPO` is exported):** `repo-identity.mjs` exports `TRACKER_REPO` and `CORE_REPO` and does not export `REPO`; every file that imported `REPO` now imports one of the two (the file list is derived from `git ls-files`, not typed); every `"--repo"` argument in `packages/agent-org/src` outside tests is `TRACKER_REPO`, `CORE_REPO` or a named parameter; the classification is pinned as two lists (tracker sites, code sites) that together equal the set of sites, with a positive control that a fixture file using bare `REPO` is refused.
@@ -991,7 +991,7 @@ packages/lab/src/packaging/region-repo-prefix.test.ts (new)
 ```
 ## Acceptance
 ```bash
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/region-repo-prefix.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/region-repo-prefix.test.ts
 ```
 ## Done-when
 1. `declaredRegionFiles` of a Region section whose fenced line is `nvda-worker:src/x.ts` returns `["nvda-worker:src/x.ts"]`; the same with an unlisted prefix is returned by `unrecognisedRegionPaths`; an unprefixed path is unchanged (pinned by the new test, and `region-paths.test.ts` stays green).
@@ -1023,7 +1023,7 @@ packages/lab/src/packaging/work-gate-two-repos.test.ts (new)
 ```
 ## Acceptance
 ```bash
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/work-gate-two-repos.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/work-gate-two-repos.test.ts
 ```
 ## Done-when
 1. `reviewerInstanceOf("reviewer-nvda-worker-12")` is `{repo: "nvda-worker", number: 12}`, `reviewerInstanceOf("reviewer-12")` is `{repo: "core", number: 12}`, `reviewerInstanceOf("reviewer-2")` stays `null` (retired) and `reviewerInstanceOf("reviewer-nvda-worker-2")` is NOT null (new test).
@@ -1056,7 +1056,7 @@ packages/lab/src/packaging/closes-cross-repo.test.ts (new)
 ```
 ## Acceptance
 ```bash
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/closes-cross-repo.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/closes-cross-repo.test.ts
 ```
 ## Done-when
 1. `extractClosesDeclaration("Closes a11ign/a11ign#12", {tracker: "a11ign/a11ign", here: "a11ign/nvda-worker"})` is `{kind: "closes", numbers: [12]}`; the comma form gives `[12, 13]`; `Closes: a11ign/a11ign#12` too (new test).
@@ -1090,7 +1090,7 @@ docs/new-code-repository.md (new)
 
 ## Acceptance
 ```bash
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/layer-repository-protection.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/layer-repository-protection.test.ts
 ```
 
 The live read is opt-in (`A11Y_CHECK_MAIN_RULESET=1`) and is not part of this command, as in `branch-protection.test.ts`.
@@ -1134,7 +1134,7 @@ packages/worker-fleet/src/deploy-worker.mjs
 ## Acceptance
 
 ```bash
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/control/src/layer-checkouts.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/control/src/layer-checkouts.test.ts
 ```
 
 The test must show: `layerSourceDir("nvda-worker")` equals `workerSourceDir()` (same directory today); it REFUSES an undeclared layer and a declared layer whose path is absent, naming the layer and the path, never falling back to the monorepo path; `layer-checkouts.mjs` imports only `node:` modules (`control-has-no-dependencies.test.ts` still passes); and no file in `packages/control/src`, `deploy.yml`, `code-drift.mjs`, `check-worker-code.mjs` or `deploy-worker.mjs` still contains the literal `nvda-worker/src` (the six readers are listed in the test, and the test asserts the list is non-empty and that each file exists, so an empty list cannot pass). Positive control: a fixture layer at a second path gives a different `codeVersion` from the real one.
@@ -1171,7 +1171,7 @@ docs/repository-access.md (new)
 
 ## Acceptance
 ```bash
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/layer-repository-access.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/layer-repository-access.test.ts
 ```
 
 The live `collaborators` read is opt-in and read-only (`A11Y_CHECK_REPO_ACCESS=1`) and is not part of this command.
@@ -1207,7 +1207,7 @@ packages/lab/src/packaging/workflow-count.test.ts
 
 ## Acceptance
 ```bash
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/head-consumer-gate.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/head-consumer-gate.test.ts
 ```
 
 No fleet is needed (see `## Fleet`): `windows-2022` is a GitHub-hosted runner, as in #2519.
@@ -1249,7 +1249,7 @@ docs/operational-lessons.md
 ## Acceptance
 
 ```bash
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/prefix-budget.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/prefix-budget.test.ts
 ```
 
 The test must show, and this fails before the change (no projected layer set exists, and once declared it reads 23,363 B): the tracker set (`CLAUDE.md` + every file of `ORG_RULES` and `CODE_RULES`) is still within 20,000 B; the projected `nvda-worker` layer set (`packages/nvda-worker/CLAUDE.md` + `CODE_RULES`, root conventions included) is within 20,000 B; `CODE_RULES` and `ORG_RULES` together equal `RULES_FILES` exactly and share no file; **positive control, in the test file:** a set one byte over the budget is asserted `over` and the projected set is asserted NON-EMPTY and larger than `CODE_RULES` alone, so a set that resolves to nothing cannot pass "within budget".
@@ -1291,7 +1291,7 @@ packages/lab/src/packaging/layer-edges-movable.test.ts (new)
 ## Acceptance
 
 ```bash
-npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/lab/src/packaging/layer-edges-movable.test.ts
+npx rstest run --config scripts/rstest/rstest.config.ts --include packages/lab/src/packaging/layer-edges-movable.test.ts
 ```
 
 The test must show, one fixture baseline each: an `out` entry with `by-name` to a `private: true` package is NOT movable; an `out` entry `cut` is movable; an `in` source entry with no disposition is NOT movable; a `travels` test entry is movable; an `owned-by:<n>` entry is NOT movable while row `<n>` is open and IS movable when the fixture marks it closed; a `by-name` test entry is movable. **Positive controls in the test file:** a fixture baseline of only movable entries is asserted `movable: true`, and the real baseline is asserted non-empty, so a verdict that always says "movable" or that reads an empty file cannot pass.

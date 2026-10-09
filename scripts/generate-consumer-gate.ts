@@ -70,8 +70,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { refuseUnknownFlags } from "@a11ign/screenreader-fleet/cli-flags";
-import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
-import { REPO as ACTION_REPO, PRODUCT_REPO } from "./repo-identity.mjs";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.ts";
+import { REPO as ACTION_REPO, PRODUCT_REPO } from "./repo-identity.ts";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 export const README_PATH = `${REPO}README.md`;
@@ -81,7 +81,7 @@ export const OUT = `${REPO}.github/workflows/consumer-gate.yml`;
  * The Action's published identities, either side of the transfer -- #1555. This was one constant,
  * `"a11ign/a11ign"`, used to find README's fence and to pin and read back its `uses:` line; the transfer (#63)
  * rewrites that line to `a11ign/a11ign`, and the generator and its `--check` would then refuse README outright. README's
- * own fence now decides which name is found and pinned, from `repo-identity.mjs`'s two answers.
+ * own fence now decides which name is found and pinned, from `repo-identity.ts`'s two answers.
  */
 /**
  * The name this repository had BEFORE #63 moved it, BUILT rather than written, so a transfer sweep of
@@ -251,7 +251,7 @@ export function extractJobName(jobsYaml: string): string {
   if (jobs.length === 1) return jobs[0].name;
   // #1305: WITH MORE THAN ONE JOB, THE ACTION'S JOB, NEVER THE FIRST. This took the first key under `jobs:`, so a
   // fence listing any job above the Action's made check-pin a dependency of that other job and pointed verify-report
-  // at it. The Action is matched by IDENTITY (`repo-identity.mjs`'s REPO, imported as PRE_TRANSFER_REPO beside this file's own REPO root, and PRODUCT_REPO), not one literal owner:
+  // at it. The Action is matched by IDENTITY (`repo-identity.ts`'s REPO, imported as PRE_TRANSFER_REPO beside this file's own REPO root, and PRODUCT_REPO), not one literal owner:
   // the transfer (#63) rewrites README's `uses:` line from one to the other, and a literal would refuse the document.
   const carrying = jobs.filter((job) => job.carriesAction);
   if (carrying.length === 1) return carrying[0].name;
@@ -470,11 +470,11 @@ function buildCheckPinJob(pinnedSha: string): string {
     "      - uses: actions/setup-node@v7",
     "        with: { node-version: 22, cache: pnpm }",
     "      - run: pnpm install --frozen-lockfile",
-    // #3828: `--check` imports `repo-identity.mjs`, which reads the project declaration through the tool and so needs
+    // #3828: `--check` imports `repo-identity.ts`, which reads the project declaration through the tool and so needs
     // `$AGENT_ORG_TOOL`. On a runner nothing sets it but this step (the other workflows run it for the same reason), so
     // without it the import died with ERR_MODULE_NOT_FOUND on a host path, in the last two release runs.
     "      - name: The tool at the newest release tag, cloned for this run, so `--check` can read the project declaration",
-    '        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"',
+    '        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"',
     // #3828: NO `if ! ... ; then echo "does not match"` AROUND `--check`. That wrapper turned every non-zero exit, a
     // crash at import included, into a claim about the file that nothing had measured, and sent the reader to
     // regenerate, which cannot help. `--check` prints its own `STALE` line when it HAS measured a mismatch.

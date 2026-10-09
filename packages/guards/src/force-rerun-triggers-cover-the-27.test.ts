@@ -2,7 +2,7 @@
  * THE FILES CORE TESTS READ BY NAME ARE IN `forceRerunTriggers` (#4419, found by lab#39 / a11ign#4372).
  *
  * A `verify --changed` run re-runs only the tests whose import closure a change touches (#3210). A test that reads a data file by path has
- * that file outside its closure, so `scripts/rstest/rstest.config.mjs` lists such files as `forceRerunTriggers` and a change to one runs
+ * that file outside its closure, so `scripts/rstest/rstest.config.ts` lists such files as `forceRerunTriggers` and a change to one runs
  * everything. Twenty-seven files were read by name and listed nowhere, so editing one left the local affected set green. CI runs the whole
  * suite, which bounds the cost to the local run.
  *
@@ -29,7 +29,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const REPO = fileURLToPath(new URL("../../..", import.meta.url));
 
-const config = (await import(pathToFileURL(`${REPO}scripts/rstest/rstest.config.mjs`).href)).default;
+const config = (await import(pathToFileURL(`${REPO}scripts/rstest/rstest.config.ts`).href)).default;
 const TRIGGERS: string[] = config.forceRerunTriggers;
 
 /** What the stand-in matcher is trusted for: literal segments, `*` inside a segment, and `**` as a whole trailing or middle segment. */

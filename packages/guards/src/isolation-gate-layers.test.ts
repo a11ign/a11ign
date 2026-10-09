@@ -23,9 +23,9 @@ import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const REAL_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
-const GATE = "packages/guards/src/isolation-gate.mjs";
+const GATE = "packages/guards/src/isolation-gate.ts";
 /** The gate and the relative imports it carries: nothing else of this repository is needed to run discovery. */
-const COPIED = [GATE, "packages/guards/src/git-env.mjs", "scripts/cli-flags.mjs", "scripts/npm-cli-executable.mjs"];
+const COPIED = [GATE, "packages/guards/src/git-env.ts", "scripts/cli-flags.ts", "scripts/npm-cli-executable.ts"];
 const LAYERS_JSON = "layers.json";
 const LAYER = "packages/some-layer";
 const REMOTE = "https://example.invalid/some-layer.git";

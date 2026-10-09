@@ -8,7 +8,7 @@
  *
  * WHAT COUNTS AS A REACH, per source line, once comments are gone (a comment that NAMES a path is a mention, and stripping is what
  * separates the two; `stripComments` for code, whole `#` lines for YAML and systemd units):
- *   - a call to `toolPath(` / `toolModule(` / `toolUrl(` / `toolRoot(` (the resolvers in `scripts/agent-org-newest-tag.mjs`, each of which
+ *   - a call to `toolPath(` / `toolModule(` / `toolUrl(` / `toolRoot(` (the resolvers in `scripts/agent-org-newest-tag.ts`, each of which
  *     takes a path under the tool), a DEFINITION `function toolPath(` excepted;
  *   - `AGENT_ORG_TOOL` and a `/src/` on the same line;
  *   - a literal `agent-org/src/<file>.mjs|ts`.
@@ -36,7 +36,7 @@ import { fileURLToPath } from "node:url";
 
 import { stripComments } from "@a11ign/evidence/source-text";
 
-import { sandboxGitEnv } from "./git-env.mjs";
+import { sandboxGitEnv } from "./git-env.ts";
 
 const HERE = fileURLToPath(import.meta.url);
 const REPO_ROOT = join(dirname(HERE), "..", "..", "..");
@@ -160,7 +160,7 @@ const NOT_REACHES: Record<string, [string, string]> = {
   "a declared export in a workflow": [".github/workflows/w.yml", "          import('agent-org/acceptance-commands').then((m) => m.run())"],
   "the bin": ["scripts/x.mjs", 'spawnSync("agent-org", ["owned-path-signoff", diff]);'],
   "the toolchain import (a package, not agent-org's src)": ["scripts/x.mjs", 'import { defineToolchainConfig } from "@a11ign/toolchain/rstest-config";'],
-  "a bare import of the resolver module, which calls nothing": ["scripts/x.mjs", 'import { toolModule } from "./agent-org-newest-tag.mjs";'],
+  "a bare import of the resolver module, which calls nothing": ["scripts/x.mjs", 'import { toolModule } from "./agent-org-newest-tag.ts";'],
   "the DEFINITION of a resolver": ["scripts/x.mjs", "export function toolPath(relative) {"],
   "AGENT_ORG_TOOL set with no src path": ["packages/guards/src/t.test.ts", 'const env = { AGENT_ORG_TOOL: join(dir, "tool") };'],
 };

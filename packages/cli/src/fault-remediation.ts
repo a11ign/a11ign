@@ -13,7 +13,7 @@ import type { AuthFault } from "./auth/auth-faults.js";
  * for having a table at all does not: a caller must not have to parse a message to act on a failure.
  *
  * DUPLICATED, deliberately: `@a11ign/screenreader-worker` is not a dependency of this package.
- * `isolation-smoke.mjs` asserts it must not be — the CLI speaks HTTP to a worker, and importing that
+ * `isolation-smoke.ts` asserts it must not be — the CLI speaks HTTP to a worker, and importing that
  * package once already broke the published bundle (it reaches guidepup, which throws at import wherever
  * there is no screen reader; see `cli.ts`'s own comment on `no-win32-imports.test.ts`'s finding). So the
  * four fault-code STRINGS below are copied rather than imported, and pinned equal to

@@ -1,5 +1,5 @@
 /**
- * `scripts/ci-changed.mjs` classifies a PR's changed files into the `ci.yml` jobs that must run. The classification is the one place
+ * `scripts/ci-changed.ts` classifies a PR's changed files into the `ci.yml` jobs that must run. The classification is the one place
  * the conditional jobs read, so a category that stops matching anything is a CI budget regression nobody sees and a category that
  * matches too little is a SKIPPED check on a diff that needed it (#2329: docs-only, `ts` skipped, main red).
  *
@@ -24,7 +24,7 @@ import { parse as parseYaml } from "yaml";
 import { sandboxGitEnv, withGitSandbox, type GitSandbox } from "../../../scripts/test-support/git-sandbox.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const ci = await import(pathToFileURL(join(REPO_ROOT, "scripts/ci-changed.mjs")).href);
+const ci = await import(pathToFileURL(join(REPO_ROOT, "scripts/ci-changed.ts")).href);
 const { DOC_ROOT_FILES, boardOnly, candidatePackedPaths, reachesPacked, feedsBuiltOutput, noReleaseReason, classify, jobsFor, knownPackages, testDependencyMap, docsReadingTests } = ci;
 
 interface Deps {
@@ -133,10 +133,10 @@ test("classify: a file under a package marks that package, sorted and deduplicat
   });
 });
 
-test("classify: a root config file or a scripts/*.mjs file touches EVERY package; a scripts file of another extension does not", () => {
+test("classify: a root config file or a scripts/*.ts or scripts/*.mjs file touches EVERY package; a scripts file of another extension does not", () => {
   withGitSandbox((sandbox) => {
     trackFixtureRepo(sandbox);
-    for (const file of ["package.json", "pnpm-lock.yaml", "tsconfig.base.json", "eslint.config.mjs", "action.yml", "scripts/cli-flags.mjs"]) {
+    for (const file of ["package.json", "pnpm-lock.yaml", "tsconfig.base.json", "eslint.config.mjs", "action.yml", "scripts/cli-flags.ts", "scripts/isolation-fixtures/sound/index.mjs"]) {
       const result = classifyIn(sandbox.dir, [file]);
       assert.deepEqual(result.packages, ALL_PACKAGES, file);
       assert.equal(result.ts, true, file);
@@ -290,7 +290,7 @@ test("ci.yml: the changeset job reads the live body for `no-release:` and its re
   const noRelease = job.steps.find((step) => step.id === "noRelease");
   assert.ok(noRelease, "the changeset job has a noRelease step");
   assert.match(noRelease.run ?? "", /gh api "repos\/\$REPO\/pulls\/\$number"/, "the LIVE body, never the event payload's stale copy");
-  assert.match(noRelease.run ?? "", /ci-changed\.mjs --no-release/);
+  assert.match(noRelease.run ?? "", /ci-changed\.ts --no-release/);
   assert.ok(noRelease.env?.QUEUE_MESSAGE, "a queue entry finds its pull request through the merge commit message");
   assert.ok(!JSON.stringify(noRelease.run).includes("pull_request.body"), "the body is never interpolated into a shell line");
   const refusal = job.steps.find((step) => /changeset status/.test(step.run ?? ""));
@@ -420,7 +420,7 @@ test("jobsFor: a board-only diff routes to board, and a docs diff to docs, again
   assert.ok(docs.includes("docs") && !docs.includes("board"), docs.join(","));
 });
 
-const SCRIPT = join(REPO_ROOT, "scripts/ci-changed.mjs");
+const SCRIPT = join(REPO_ROOT, "scripts/ci-changed.ts");
 const EXIT_REFUSED = 2;
 const BASE_REF = "base-ref";
 

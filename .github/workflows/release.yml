@@ -68,8 +68,8 @@
 #             are the gate for `next`.
 #   `latest`  `latest` MOVES ONLY WHEN THE FLEET PART'S QUALIFICATION (#3136) IS GREEN FOR THE SHA A VERSION WAS RELEASED ON, and stays on
 #             the last qualified version when it is red, which is the rollback by construction. The `decide` job reads it AFTER the
-#             publish with `scripts/release-reads-qualification.mjs`'s decider (`proceed`, `wait`, `rerun`, `regression`), through
-#             `scripts/release-promote.mjs`, and the `promote` job runs `npm dist-tag add <name>@<version> latest` by OIDC for each
+#             publish with `scripts/release-reads-qualification.ts`'s decider (`proceed`, `wait`, `rerun`, `regression`), through
+#             `scripts/release-promote.ts`, and the `promote` job runs `npm dist-tag add <name>@<version> latest` by OIDC for each
 #             package of a release that `proceed`s. THE JOB HOLDING `id-token` RUNS NO CODE FROM ANOTHER REPOSITORY (#3969): the one that
 #             clones the tool and runs the decider holds none, and the verdict it reads counts only from the lab's own identity
 #             (`QUALIFICATION_WRITER`). It never moves `latest` backwards, and a `regression` or an overdue `wait` files ONE row
@@ -176,7 +176,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       - run: pnpm run build
 
       # EACH PUBLIC PACKAGE'S MANIFEST AGAINST THE REGISTRY'S LATEST, taken once and handed to the step that reads it: the
@@ -287,7 +287,7 @@ jobs:
           set -o pipefail
           # The runner's config path is read from its one owner, never spelled here: `entry-points.test.ts` treats any
           # script path a workflow names as an entry point that must be inert on import, and the config is not one.
-          RSTEST_CONFIG="$(node -e 'import("./packages/guards/src/assert-glob-not-empty.mjs").then((m) => { if (m.RSTEST_CONFIG) console.log(m.RSTEST_CONFIG); else process.exit(1); })')" || RSTEST_CONFIG=""
+          RSTEST_CONFIG="$(node -e 'import("./packages/guards/src/assert-glob-not-empty.ts").then((m) => { if (m.RSTEST_CONFIG) console.log(m.RSTEST_CONFIG); else process.exit(1); })')" || RSTEST_CONFIG=""
           if [ -z "$RSTEST_CONFIG" ]; then
             echo '::error::CANNOT_TELL: could not read RSTEST_CONFIG, so the hold never ran. Nothing published.'
             exit 1
@@ -383,7 +383,7 @@ jobs:
       dist-tag: next
 
   # THE PROMOTION, IN TWO JOBS (#3947, split by #3969): the job that can mint an npm token runs no code from another repository.
-  # `decide` clones the newest `agent-org` tag and runs `release-promote.mjs` (which imports that tool), so it holds NO `id-token` and
+  # `decide` clones the newest `agent-org` tag and runs `release-promote.ts` (which imports that tool), so it holds NO `id-token` and
   # no environment: it reads the registry, the tags and the lab's statuses, and its only product is a list of `name@x.y.z`. `promote`
   # holds `id-token: write` for npm's OIDC dist-tag (the `npm-publish` environment, limited to `main`; "Allow npm dist-tag" is ticked on
   # `a11ign`, `@a11ign/evidence`, `@a11ign/judge` and `@a11ign/scorer`), has NO checkout and clones nothing, and runs `npm dist-tag add`
@@ -421,7 +421,7 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 22 }
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
 
       # THE DECISION, which moves nothing: the registry's `next` against its `latest`, each version's release sha, and the decider's
       # outcome for it. A wait, a rerun and a regression leave `promote` empty; a status that cannot be read leaves it empty and counts in
@@ -431,7 +431,7 @@ jobs:
         id: plan
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/release-promote.mjs
+        run: node scripts/release-promote.ts
 
       # A group the script could not read (no readable tag, a status in no known state, a registry that did not answer, or a version
       # older than latest) is never a pass and never silent: this job is red, and the move below still runs for the groups that WERE
@@ -478,7 +478,7 @@ jobs:
             exit 1
           }
 
-      # EVERY spec is checked before ANY is moved, with the same shape `release-promote.mjs` checks (`SPEC`): `name@x.y.z`, scoped or not.
+      # EVERY spec is checked before ANY is moved, with the same shape `release-promote.ts` checks (`SPEC`): `name@x.y.z`, scoped or not.
       # What does not match moves nothing at all, so a list that was tampered with in transit costs a red run and no tag.
       - name: Move latest to the versions the decision promoted
         id: move

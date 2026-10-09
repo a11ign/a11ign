@@ -1,5 +1,5 @@
 /**
- * `mutation-check.mjs` is a COMMAND, not a library: it exports nothing, so every case here runs it as a child process against a
+ * `mutation-check.ts` is a COMMAND, not a library: it exports nothing, so every case here runs it as a child process against a
  * fixture file in a temp directory (never a file of this repository: the tool rewrites the file it is given).
  *
  * What is pinned is the exit-code contract the header names, because callers read the code and not the prose:
@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const SCRIPT = join(REPO_ROOT, "packages/guards/src/mutation-check.mjs");
+const SCRIPT = join(REPO_ROOT, "packages/guards/src/mutation-check.ts");
 const EXIT = { BITES: 0, DID_NOT_BITE: 1, REFUSED: 2, RESTORE_FAILED: 3 };
 const GOOD = "value = good\n";
 /** The tool names at most this many failing tests; the fixture reports two more than that. */

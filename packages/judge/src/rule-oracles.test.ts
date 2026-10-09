@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
-import { sandboxGitEnv } from "../../guards/src/git-env.mjs";
+import { sandboxGitEnv } from "../../guards/src/git-env.ts";
 
 import { stripComments } from "@a11ign/evidence/source-text";
 
@@ -31,7 +31,7 @@ const ROOT = resolve(import.meta.dirname, "../../..");
 const NOT_CAPTURE_CALLERS: Record<string, string> = {
   "packages/judge/src/rules.ts": "defines ruleFindings",
   "packages/judge/src/judge.ts": "receives a JudgeInput its caller already built",
-  "packages/judge/isolation-smoke.mjs": "builds a literal input to prove the bundle loads",
+  "packages/judge/isolation-smoke.ts": "builds a literal input to prove the bundle loads",
 };
 
 function discoverCallers(): string[] {
@@ -53,7 +53,7 @@ test("the callers are DISCOVERED rather than trusted from a list", () => {
   // nothing, which this repo records as a rule: a test must not derive its expectations from source TEXT
   // without first proving the text was found.
   // Was 8 over a tree that tracked the lab's scripts, which called it too (and two of them were exempt above); they left for a11ign/lab (#3505), so
-  // `git grep` here finds the four modules this package and `cli` hold: `cli.ts`, `judge.ts`, `rules.ts` and `isolation-smoke.mjs`.
+  // `git grep` here finds the four modules this package and `cli` hold: `cli.ts`, `judge.ts`, `rules.ts` and `isolation-smoke.ts`.
   assert.ok(callers.length >= 4, `discovered only ${callers.length} rule callers: ${callers.join(", ")}`);
   assert.ok(callers.includes("packages/cli/src/cli.ts"), "the product path must be among them");
 });

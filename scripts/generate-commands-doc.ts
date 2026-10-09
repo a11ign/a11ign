@@ -16,7 +16,7 @@
 //
 // WHICH SCRIPTS NEED A HEADER IS DERIVED, NOT A HAND LIST. `scripts/commands.ts`'s own header (A3) says
 // "only a person can say which [.mjs files are commands]" and hand-lists four modules
-// (`board-data.mjs`, `board-markdown.mjs`, `git-env.mjs`, `repo-identity.mjs`) that are imported and never
+// (`board-data.mjs`, `board-markdown.mjs`, `git-env.ts`, `repo-identity.ts`) that are imported and never
 // run. That list did not need writing: every one of those four -- and only those four, plus this file's
 // own sibling `commands.ts` -- is missing the entry-point guard every real CLI in this repo already
 // carries (`if (import.meta.url === pathToFileURL(...).href) main();`, `entry-points.test.ts`'s own
@@ -28,7 +28,7 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 import { realpathSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { refuseUnknownFlags } from "@a11ign/screenreader-fleet/cli-flags";
-import { TOOLING_ROOTS } from "../packages/guards/src/tooling-roots.mjs";
+import { TOOLING_ROOTS } from "../packages/guards/src/tooling-roots.ts";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 export const OUT = resolve(REPO, "docs/commands.md");

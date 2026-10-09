@@ -14,9 +14,9 @@ import globals from "globals";
 import { builtinRules } from "eslint/use-at-your-own-risk";
 // #1155: the rule lives in its own module rather than inline -- this config already carries two rules and
 // their headers, and the third's reasoning is longer than the rule. Imported by RELATIVE path for the
-// reason `isolation-gate.mjs` states: a package specifier here dies before any install has run.
-import { derivedLocalRule } from "./packages/guards/src/uncontrolled-emptiness.mjs";
-import { gitSpawnScrubbed } from "./packages/guards/src/git-spawn-scrubbed.mjs";
+// reason `isolation-gate.ts` states: a package specifier here dies before any install has run.
+import { derivedLocalRule } from "./packages/guards/src/uncontrolled-emptiness.ts";
+import { gitSpawnScrubbed } from "./packages/guards/src/git-spawn-scrubbed.ts";
 
 // ESLint's OWN `max-lines-per-function`, registered a second time under a local name so it can run with
 // different options beside the first (#908). A rule takes one set of options per name, and the two budgets
@@ -112,7 +112,7 @@ export default tseslint.config(
       "packages/*/dist/**",
       "packages/*/.rstack/**", // Rslib's scratch for the declaration rollup (a11ign: cli): rewritten by every build, so a walk races it
       "packages/nvda-worker/**", // the same, for `a11ign/screenreader-worker` (#3447): laid from its tag at the locked version, linted there
-      "packages/worker-fleet/**", // a LAYER CHECKOUT where laid (`scripts/lay-layer.mjs`, #3504): another repository's code, linted there
+      "packages/worker-fleet/**", // a LAYER CHECKOUT where laid (`scripts/lay-layer.ts`, #3504): another repository's code, linted there
       "packages/lab/**", // the same, for `a11ign/lab` (#3505): its own CI lints it, over a checkout of this repository
       "packages/control/**", // the same, for `a11ign/control` (#3506)
       "node_modules/**",

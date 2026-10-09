@@ -11,9 +11,9 @@
 import { execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
-import { refuseUnknownFlags } from "./cli-flags.mjs";
-import { npmCliInvocation } from "./npm-cli-executable.mjs";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.ts";
+import { refuseUnknownFlags } from "./cli-flags.ts";
+import { npmCliInvocation } from "./npm-cli-executable.ts";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 const PACKAGE = "a11ign";

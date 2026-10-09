@@ -26,7 +26,7 @@ import {
   LISTED_SURVIVORS, affordable, chooseSubjects, codeSpan, editsOf, hunt, kindOf, mutantsOfSubject, mutateDiff,
   mutatedText, parses, positive, renderComment, renderSummary, runChangedTests, sampleByStride, scopeOf,
 } from "./mutate-diff.ts";
-import { sandboxGitEnv } from "./git-env.mjs";
+import { sandboxGitEnv } from "./git-env.ts";
 import { tempDir } from "./test-tmp.ts";
 
 const REPO = resolve(import.meta.dirname, "../../..");

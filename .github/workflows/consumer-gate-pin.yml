@@ -23,8 +23,8 @@ name: consumer-gate-pin
 #
 # ## Every job resolves the tool first (#4373)
 #
-# `scripts/consumer-gate-pin-needed.ts` and `scripts/generate-consumer-gate.ts` import `repo-identity.mjs`, which does `await toolModule(...)` at import.
-# On the host `.agent-org/host.json` names the checkout; on a runner no tool exists until `agent-org-newest-tag.mjs --dest` has cloned one, so each job
+# `scripts/consumer-gate-pin-needed.ts` and `scripts/generate-consumer-gate.ts` import `repo-identity.ts`, which does `await toolModule(...)` at import.
+# On the host `.agent-org/host.json` names the checkout; on a runner no tool exists until `agent-org-newest-tag.ts --dest` has cloned one, so each job
 # that runs either script carries that step BEFORE it. The first real run (37881883814) died in `decide` without it, because the tests read this file as text.
 #
 # ## Authority: Octo STS, no stored token (chairman direction (a)), and the job that holds it runs no repository code (ceo, #4374)
@@ -79,7 +79,7 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       - name: Does the pin at this commit predate action.yml at this commit?
         id: decide
         run: pnpm exec tsx scripts/consumer-gate-pin-needed.ts --commit=HEAD
@@ -101,7 +101,7 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       - name: Regenerate the pin at this commit, and refuse anything that changed but consumer-gate.yml
         run: |
           set -euo pipefail
@@ -190,7 +190,7 @@ jobs:
           Regenerates \`consumer-gate.yml\`'s pin at ${PIN}, which contains the latest \`action.yml\` change. Opened by \`consumer-gate-pin.yml\` (#4331): the merge that staled the pin started this repair.
 
           Acceptance:
-          pnpm exec rstest run --config=scripts/rstest/rstest.config.mjs --include packages/guards/src/generate-consumer-gate.test.ts
+          pnpm exec rstest run --config=scripts/rstest/rstest.config.ts --include packages/guards/src/generate-consumer-gate.test.ts
 
           Closes: none -- automated regeneration of consumer-gate.yml's pin (#4331)
           EOF
@@ -215,7 +215,7 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       - name: Is a release owed -- did the newest release run on main die in consumer-gate / check-pin?
         id: owed
         env:

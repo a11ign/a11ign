@@ -28,9 +28,9 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
 import { stripComments } from "@a11ign/evidence/source-text";
-import { sandboxGitEnv } from "./git-env.mjs";
-import { checkIsolation, packedRangeProblems, satisfies } from "./isolation-gate.mjs";
-import { pnpmCliInvocation } from "../../../scripts/npm-cli-executable.mjs";
+import { sandboxGitEnv } from "./git-env.ts";
+import { checkIsolation, packedRangeProblems, satisfies } from "./isolation-gate.ts";
+import { pnpmCliInvocation } from "../../../scripts/npm-cli-executable.ts";
 import { refusal } from "../../../scripts/release-publish-rehearsal.ts";
 
 const REPO = fileURLToPath(new URL("../../../", import.meta.url));
@@ -94,13 +94,13 @@ test("#2301: the provenance request REHEARSES the pnpm-to-npm hand-off, after th
 
 test("#2301: `release:version` refreshes the pnpm lockfile", () => {
   const scripts = JSON.parse(read("package.json")).scripts as Record<string, string>;
-  assert.equal(scripts["release:version"], "changeset version && node scripts/pnpm.mjs install --lockfile-only");
+  assert.equal(scripts["release:version"], "changeset version && node scripts/pnpm.ts install --lockfile-only");
 });
 
 // --- the isolation gate ----------------------------------------------------------------------------------
 
 test("#2301: the gate PACKS with pnpm and INSTALLS with npm, and never the other way about", () => {
-  const code = stripComments(read("packages/guards/src/isolation-gate.mjs"));
+  const code = stripComments(read("packages/guards/src/isolation-gate.ts"));
   assert.match(code, /runPnpm\(\["pack", "--pack-destination"/, "the tarballs the consumer receives are pnpm's");
   assert.match(code, /runPnpm\(\["pack", "--dry-run", "--json"\]/, "what ships is asked of the tool that ships it");
   assert.match(code, /runNpm\(\["install", "--silent", "--no-workspaces"/, "the stranger installs with npm");
@@ -152,7 +152,7 @@ function withSiblingPair(range: string, run: (user: string) => void): void {
       writeFileSync(join(root, dir, "package.json"), JSON.stringify(manifest));
       writeFileSync(join(root, dir, "index.js"), "module.exports = 1;\n");
     }
-    writeFileSync(join(root, "range-user", "isolation-smoke.mjs"), "console.log('unreached when the ranges are wrong');\n");
+    writeFileSync(join(root, "range-user", "isolation-smoke.ts"), "console.log('unreached when the ranges are wrong');\n");
     run(join(root, "range-user"));
   } finally {
     rmSync(root, { recursive: true, force: true });

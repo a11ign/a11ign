@@ -25,13 +25,13 @@ is counted as not found, in the `Found:` line of each section (`yes`, `half`, `n
   --base=<merge base> --test='<the Acceptance commands the reviewer ran>' --budget=300 --cap=10`, which is the
   budget and cap this row proposed for `pr:open` (its defaults), run by hand. It chooses mutants on the lines the diff **added**, in
   source files (never tests, comments or docs), with six line-local operators; it applies each through
-  `mutation-check.mjs` (`pnpm run mutate`), so the copy-aside, the byte-for-byte restore and the exit codes are that tool's.
+  `mutation-check.ts` (`pnpm run mutate`), so the copy-aside, the byte-for-byte restore and the exit codes are that tool's.
 - **Each PR at the commit the reviewer refused**, in a detached worktree (`git worktree add --detach <dir> <commit>`),
   `node_modules` symlinked to the primary's, `--base` the merge base with `main` at the time.
 - **The tests are the reviewer's own recorded Acceptance commands** for that head, because those are what the row's
   "only the tests the row names" means at `pr:open`. #2392 needed `A11Y_ALLOW_FOREIGN_RESOLUTION=1`, as the reviewer's run did:
   the symlinked `node_modules` resolves package imports into the primary.
-- **Every mutant's exit was believed only with `mutation-check.mjs`'s own sentence beside it** (`THE GUARD BITES.` /
+- **Every mutant's exit was believed only with `mutation-check.ts`'s own sentence beside it** (`THE GUARD BITES.` /
   `THE GUARD DID NOT BITE.`): a crash also exits 1, which is the code for "survived". In these three replays, 0 mutants were
   refused or unreadable, so no result below rests on a crash.
 - **"Found" means:** a survivor reproduces the WHOLE of what the reviewer's own mutation did (or, where the reviewer named
@@ -55,7 +55,7 @@ is counted as not found, in the `Found:` line of each section (`yes`, `half`, `n
 - Refused: 2026-09-24T15:34:57Z, reviewer-2, "not convinced": *the interpreter parity test does not exercise its twelfth scenario through both implementations, leaving the claimed parity lock incomplete.*
 - Reviewer's path:
 > `packages/cli/src/auth/interpreter.test.ts:213-225` is the twelfth test and only calls the CLI's `controlsNamed`, `expectationMet`, and `requiredEnvNames`; it never calls the worker counterparts or compares results. The first 11 tests call `both(...)`, so the 12-test count is real but the “each through BOTH” claim is not.
-- Tests run: `npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/cli/src/auth/interpreter.test.ts && npx rstest run --config scripts/rstest/rstest.config.mjs --include packages/cli/src/auth/rule-layer.test.ts`
+- Tests run: `npx rstest run --config scripts/rstest/rstest.config.ts --include packages/cli/src/auth/interpreter.test.ts && npx rstest run --config scripts/rstest/rstest.config.ts --include packages/cli/src/auth/rule-layer.test.ts`
 - Found: no
 - Operators that found it: none
 - Survivor covering it: none
@@ -66,7 +66,7 @@ is counted as not found, in the `Found:` line of each section (`yes`, `half`, `n
 - Refused: 2026-09-24T17:40:58Z, reviewer-2, "not convinced": *the required page-shape variation is not pinned by the acceptance tests.*
 - Reviewer's path:
 > The new test checks the population floor, announced strings, status roles, and well-formedness, but never checks those shape distributions. I changed both builders to discard `element` and `field`, making every new page a `<p>` with no named field; the acceptance suite remained green.
-- Tests run: `A11Y_ALLOW_FOREIGN_RESOLUTION=1 node packages/guards/src/assert-glob-not-empty.mjs "packages/lab/src/training/case-matrix.test.ts" --min=1 --run` and the same for `held-out-is-disjoint-from-training.test.ts`
+- Tests run: `A11Y_ALLOW_FOREIGN_RESOLUTION=1 node packages/guards/src/assert-glob-not-empty.ts "packages/lab/src/training/case-matrix.test.ts" --min=1 --run` and the same for `held-out-is-disjoint-from-training.test.ts`
 - Found: half
 - Operators that found it: arg-empty, cond-false
 - Survivor covering it: the `field` half only, `packages/lab/src/training/case-matrix.mjs:1409` (`label ? <label>...: ""` -> `false ? ...`, so `statusPageField` always returns `""`: the reviewer's `statusPageField("")` mutant in behaviour), and `:1435` and `:1456`, one in each of the two builders the reviewer edited (`statusPageField(field)` -> `statusPageField([])`, the field discarded).
@@ -90,16 +90,16 @@ So the miss on this PR is a miss of REACH, and there are three reasons, none of 
 1. **695 mutants against a budget for about ten.** `auth-flow.mjs` was added whole, so all 405 of its lines are "changed", and the
    round-robin across ten files takes each file's first mutant before any file's second. The three helpers sit at :232-366 of a
    file whose priority-ordered list reaches them long after the budget ends.
-2. **Three test runs a mutant.** `mutation-check.mjs` runs the test clean, mutated and restored, so a 12-second test costs 36
+2. **Three test runs a mutant.** `mutation-check.ts` runs the test clean, mutated and restored, so a 12-second test costs 36
    seconds a mutant, of which 24 are the clean run and the post-restore run. A one-run-per-mutant mode is the
-   obvious lever and lives in `mutation-check.mjs`, outside this row's Region, so it is a follow-up and not in this diff.
+   obvious lever and lives in `mutation-check.ts`, outside this row's Region, so it is a follow-up and not in this diff.
 3. **No notion of which changed line a test could reach.** A mutant on a line no named test executes cannot be killed by it, and
    that is not the same finding as a line it executes and never asserts on; this generator does not tell them apart.
 
 ## Threats to this reading
 
 - **It is in-sample.** The operators were written AFTER the three refusals were read, and `arg-empty` (an argument replaced with `[]`) is the reviewer's own #2384 mutant turned into a class. The hit is therefore evidence that the operators can express what one reviewer did, not that they find what a reviewer will do next; it is one of the reasons the verdict is NULL RESULT.
-- **Wall-clock budgets are measured on a shared host.** These runs shared the box with other sessions' suites (load average 15-71 while they ran), so "ran 12 of 695" is a count under that load and would read higher on a quiet machine. The direction is not in doubt: `mutation-check.mjs` runs the test three times per mutant (before, mutated, after), so a PR whose named test takes 12s costs 36s a mutant.
+- **Wall-clock budgets are measured on a shared host.** These runs shared the box with other sessions' suites (load average 15-71 while they ran), so "ran 12 of 695" is a count under that load and would read higher on a quiet machine. The direction is not in doubt: `mutation-check.ts` runs the test three times per mutant (before, mutated, after), so a PR whose named test takes 12s costs 36s a mutant.
 - **A big PR is exactly where the budget bites.** #2368 changed 28 files and added `auth-flow.mjs` whole; the budget covers under 2% of its mutants. "DID NOT FINISH", and how many never ran, is printed for that reason.
 - **Noise.** #2384: 12 survivors of 24. Equivalent mutants are in there (a comparator's tie-breaker, an unread argument); the cap (10) and the count cut are stated in the output, and nobody is refused on the list. (A wired `pr:open` would have printed this on every PR.)
 - **A syntax-error mutant reads as killed.** The suite goes red for the wrong reason; that can hide a survivor and cannot invent one.
@@ -119,6 +119,6 @@ generator and its test stay as a script run by hand (`node packages/guards/src/m
 the first section) so this record can be reproduced; it is not an npm script and nothing calls it. **The row closes on this
 record, and a null result is a finished row.**
 
-**Not closed for good.** A one-run-per-mutant mode in `mutation-check.mjs` (#2448) would triple the reach, and bears on the
+**Not closed for good.** A one-run-per-mutant mode in `mutation-check.ts` (#2448) would triple the reach, and bears on the
 #2368 miss. If it lands, a re-replay is a NEW row with its own gate, and its operators must be fixed BEFORE the three refusals
 are re-read, or run on refusals not yet seen. This record does not pre-decide it.

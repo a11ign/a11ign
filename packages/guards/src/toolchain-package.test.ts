@@ -11,7 +11,7 @@
  *    references that needed them). Control: a base that carries `composite` is RED.
  * 4. THE PEERS. `@rstest/core` and `@rslib/core` are peers of the installed package and devDependencies of the root, with ranges that include the versions
  *    `pnpm-lock.yaml` resolved. Control: a range that excludes the locked version is RED.
- * 5. THE THIN CONFIG. `scripts/rstest/rstest.config.mjs` holds no run-record, reporter or alias logic and imports the package by NAME, and the four files
+ * 5. THE THIN CONFIG. `scripts/rstest/rstest.config.ts` holds no run-record, reporter or alias logic and imports the package by NAME, and the four files
  *    that moved are gone from `scripts/rstest/`. Control: the old body's own lines are RED.
  */
 import { test } from "node:test";
@@ -21,7 +21,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { parse as parseYaml } from "yaml";
-import { satisfies } from "./isolation-gate.mjs";
+import { satisfies } from "./isolation-gate.ts";
 
 const REPO = fileURLToPath(new URL("../../../", import.meta.url));
 const NAME = "@a11ign/toolchain";
@@ -85,7 +85,7 @@ test("control: a range, a second version, a link and a missing declaration are e
 // 2. THE OLD HOME IS GONE -------------------------------------------------------------------------------------------------------
 
 test("the package has no manifest under packages/toolchain/, and the same read finds one where a package lives", () => {
-  assert.ok(existsSync(join(REPO, "scripts/rstest/rstest.config.mjs")), "the positive control: the same read finds a file that is in the tree");
+  assert.ok(existsSync(join(REPO, "scripts/rstest/rstest.config.ts")), "the positive control: the same read finds a file that is in the tree");
   assert.equal(existsSync(join(REPO, "packages/toolchain/package.json")), false);
   assert.equal(existsSync(join(REPO, "packages/toolchain/src")), false);
 });
@@ -169,14 +169,14 @@ function logicIn(source: string): string[] {
 }
 
 test("the thin config at the old path contains no run-record, reporter or alias logic, and imports the package by name", () => {
-  const source = readFileSync(join(REPO, "scripts/rstest/rstest.config.mjs"), "utf8");
+  const source = readFileSync(join(REPO, "scripts/rstest/rstest.config.ts"), "utf8");
   assert.deepEqual(logicIn(source), []);
   assert.match(source, /from "@a11ign\/toolchain\/rstest-config"/, "the thin config does not import the installed package");
   assert.doesNotMatch(source.replace(/\/\*[\s\S]*?\*\//g, ""), /packages\/toolchain/, "the thin config still reads the old path in code");
 });
 
 test("the four other files are gone from scripts/rstest/, so a copy beside the package cannot pass", () => {
-  assert.deepEqual(readdirSync(join(REPO, "scripts/rstest")), ["rstest.config.mjs"]);
+  assert.deepEqual(readdirSync(join(REPO, "scripts/rstest")), ["rstest.config.ts"]);
 });
 
 test("control: the old config body's own lines are RED", () => {

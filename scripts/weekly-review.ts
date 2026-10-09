@@ -27,8 +27,8 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 import { realpathSync } from "node:fs";
 import { refuseUnknownFlags } from "@a11ign/screenreader-fleet/cli-flags";
 const { assertNoLeakInArgv, leakRefusalReason } = await toolExport("leak-patterns");
-import { pnpmCliInvocation } from "./npm-cli-executable.mjs";
-import { toolExport } from "./agent-org-newest-tag.mjs";
+import { pnpmCliInvocation } from "./npm-cli-executable.ts";
+import { toolExport } from "./agent-org-newest-tag.ts";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const PRODUCT_REPO = "a11ign/a11ign";

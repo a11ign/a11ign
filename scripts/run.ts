@@ -27,7 +27,7 @@ import { spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
-import { didYouMean } from "./cli-flags.mjs";
+import { didYouMean } from "./cli-flags.ts";
 import { COMMANDS } from "./commands.ts";
 
 const EXIT = { REFUSED: 2 };
@@ -50,7 +50,7 @@ export function decide(argv: string[], commands: Record<string, { argv: string[]
   }
   const command = commands[name];
   if (!command) {
-    // `didYouMean` FROM `cli-flags.mjs`, not a second spelling of it. The first version of this file had
+    // `didYouMean` FROM `cli-flags.ts`, not a second spelling of it. The first version of this file had
     // its own substring matcher, and my own test caught it failing on `merge-gaurd` -- a transposition,
     // the commonest typo there is, which no substring test can see. That module already carries a
     // Levenshtein written for exactly this question, so the fix was to delete the copy rather than to

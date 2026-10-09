@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { toolBin, toolExport, toolExportPath } from "../../../scripts/agent-org-newest-tag.mjs";
+import { toolBin, toolExport, toolExportPath } from "../../../scripts/agent-org-newest-tag.ts";
 
 async function aTool(manifest: object, files: Record<string, string>, body: (dir: string) => Promise<void> | void) {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), "tool-export-")));

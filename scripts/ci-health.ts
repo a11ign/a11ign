@@ -23,7 +23,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { refuseUnknownFlags } from "@a11ign/screenreader-fleet/cli-flags";
-import { toolExport } from "./agent-org-newest-tag.mjs";
+import { toolExport } from "./agent-org-newest-tag.ts";
 const { assertNoLeakInArgv, leakRefusalReason } = await toolExport("leak-patterns");
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));

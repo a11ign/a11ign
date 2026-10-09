@@ -1,5 +1,5 @@
 /**
- * `walk-scope-declaration.mjs` (#929): a guard's `WALK_SCOPE` declaration, read statically from its SOURCE TEXT.
+ * `walk-scope-declaration.ts` (#929): a guard's `WALK_SCOPE` declaration, read statically from its SOURCE TEXT.
  *
  * Three things have to hold or the CI selector silently stops running a guard, or crashes on every pull request:
  *   1. `null` AND `[]` ARE DIFFERENT ANSWERS. `null` is "this guard has not said" (keep running it); `[]` is "it reads nothing outside its imports".
@@ -13,7 +13,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { inScope, parseWalkScope } from "./walk-scope-declaration.mjs";
+import { inScope, parseWalkScope } from "./walk-scope-declaration.ts";
 
 test("a file with no WALK_SCOPE declares nothing (null), which is not an empty scope", () => {
   assert.equal(parseWalkScope("import { test } from 'node:test';\ntest('x', () => {});\n"), null);

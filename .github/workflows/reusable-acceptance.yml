@@ -57,7 +57,7 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
-        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       - run: pnpm run build
       # THE LIVE BODY, READ AS LATE AS THE STEPS BELOW ALLOW (#3286): after the install and the build, so the window
       # against `dependency-pr-body`'s rewrite is this job's own setup time rather than the seconds after the event.

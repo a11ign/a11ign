@@ -12,8 +12,8 @@
  * ## WHY A DATA FILE RATHER THAN A DIRECTORY SCAN
  *
  * A scan would make every `scripts/*.mjs` a command, and 4 of the 28 without an npm entry today are
- * MODULES that are imported and never run (`board-data.mjs`, `board-markdown.mjs`, `git-env.mjs`,
- * `repo-identity.mjs`). "Runnable" is not the same as "a command somebody types", and only a person can
+ * MODULES that are imported and never run (`board-data.mjs`, `board-markdown.mjs`, `git-env.ts`,
+ * `repo-identity.ts`). "Runnable" is not the same as "a command somebody types", and only a person can
  * say which. The same reason `commands-documented.test.ts` keeps `INTERNAL` as a decision rather than
  * inferring it from a shape.
  *

@@ -1,5 +1,5 @@
 /**
- * `piped-exit-status-guard.mjs` (#180, #375, #535, #1642): `cmd | head; echo $?` reports `head`'s status, not `cmd`'s.
+ * `piped-exit-status-guard.ts` (#180, #375, #535, #1642): `cmd | head; echo $?` reports `head`'s status, not `cmd`'s.
  *
  * What is pinned, and why each matters:
  *   1. THE HAZARD NEEDS BOTH HALVES. A pipeline ending in head/tail/grep is refused only when a `$?` is read in the same text; a pipe with
@@ -19,9 +19,9 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { checkPipedExitStatus, checkPipedExitStatusInText, judgeLines, splitIntoBlocks } from "./piped-exit-status-guard.mjs";
+import { checkPipedExitStatus, checkPipedExitStatusInText, judgeLines, splitIntoBlocks } from "./piped-exit-status-guard.ts";
 
-const SCRIPT = join(resolve(dirname(fileURLToPath(import.meta.url))), "piped-exit-status-guard.mjs");
+const SCRIPT = join(resolve(dirname(fileURLToPath(import.meta.url))), "piped-exit-status-guard.ts");
 const EXIT = { ALLOW: 0, HAZARD: 1, ERROR: 2 };
 
 test("a pipe into head/tail/grep followed by a $? read is a hazard, naming the statement", () => {
@@ -137,7 +137,7 @@ test("CLI: a second argument, or an empty command, exits 2 (error), never 1 (haz
   assert.match(extra.stderr, /takes no flags; unexpected argument\(s\): --flag, x/);
   const empty = runCli([""]);
   assert.equal(empty.status, EXIT.ERROR);
-  assert.match(empty.stderr, /usage: piped-exit-status-guard\.mjs '<shell command string>'/);
+  assert.match(empty.stderr, /usage: piped-exit-status-guard\.ts '<shell command string>'/);
 });
 
 test("CLI: with no argument it judges stdin line by line (batch), and empty stdin is a usage error", () => {
@@ -174,7 +174,7 @@ test("CLI: a file that cannot be read exits 2 with GUARD ERROR, not node's defau
     writeFileSync(locked, "echo hi\n", { mode: 0 });
     const result = runCli([locked]);
     assert.equal(result.status, EXIT.ERROR);
-    assert.match(result.stderr, /^GUARD ERROR: piped-exit-status-guard\.mjs could not examine its input: /);
+    assert.match(result.stderr, /^GUARD ERROR: piped-exit-status-guard\.ts could not examine its input: /);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

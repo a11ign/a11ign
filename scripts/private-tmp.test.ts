@@ -1,7 +1,7 @@
 /**
  * #3855 (incident #3846, 1): EVERY RUN HAS A PRIVATE `TMPDIR` THAT IS REMOVED WHEN THE RUN ENDS, AND A TEST FILE THAT LEAVES AN ENTRY IN IT IS NAMED.
  *
- * Acceptance: `npx rstest run --config scripts/rstest/rstest.config.mjs --include scripts/private-tmp.test.ts`.
+ * Acceptance: `npx rstest run --config scripts/rstest/rstest.config.ts --include scripts/private-tmp.test.ts`.
  *
  * TWO KINDS OF READING. The first test reads THIS run: the file is running under the repository's config, so its own `TMPDIR` must already be a
  * subdirectory of a `run-<id>` under `~/.cache/a11ign/tmp`. The rest drive the helper, and the end-to-end ones start a SECOND rstest run in a
@@ -19,11 +19,11 @@ import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { tempDir } from "../packages/guards/src/test-tmp.ts";
-import { adoptFileDirectory, endRun, fileDirectoryName, formatLeftovers, PRIVATE_TMP_ROOT, privateRunRoot, privateRunTmp, removeInSmallCalls, reportLeftovers, requirePrivateRunDir, withPrivateTmp } from "./private-tmp.mjs";
-import config from "./rstest/rstest.config.mjs";
+import { adoptFileDirectory, endRun, fileDirectoryName, formatLeftovers, PRIVATE_TMP_ROOT, privateRunRoot, privateRunTmp, removeInSmallCalls, reportLeftovers, requirePrivateRunDir, withPrivateTmp } from "./private-tmp.ts";
+import config from "./rstest/rstest.config.ts";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
-const HELPER = join(REPO, "scripts/private-tmp.mjs");
+const HELPER = join(REPO, "scripts/private-tmp.ts");
 const RSTEST = join(REPO, "node_modules/.bin/rstest");
 const RUN_ENV = "A11Y_PRIVATE_TMP_RUN";
 const READ_ONLY_MODE = 0o555;

@@ -988,7 +988,7 @@ VMs, the page server and NVDA.
   > where a tree's `@a11ign/*` resolve, and nobody runs it before `npm run test:all` — the moment a wrong
   > answer costs (7,253 passed at a head CI was failing; 44 of 57 trees on the host were wired that way).
   > `assert-glob-not-empty.mjs --run`, which every `test:all`/`test:ts` goes through, now asks
-  > `suiteStartVerdict` (`packages/guards/src/worktree-resolution.mjs`) before any runner starts: **another
+  > `suiteStartVerdict` (`packages/guards/src/worktree-resolution.ts`) before any runner starts: **another
   > checkout, or a frozen copy under the tree's own `node_modules/`, is refused**; a tree with nothing linked
   > proceeds (the runner cannot start and says so); `A11Y_ALLOW_FOREIGN_RESOLUTION=1` runs anyway and still
   > prints the line. The remedy is a hybrid `node_modules` (third-party entries symlinked to the primary,

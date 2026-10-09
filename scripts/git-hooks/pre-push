@@ -41,7 +41,7 @@
 # `main` pushes are UNCHANGED: full suite, every time, because nothing else gates a merge to `main`.
 # `agent/*`/`lead/*` pushes run a FAST gate instead — lint, typecheck (both whole-repo checks regardless of
 # branch, so neither shrinks), and unit tests SCOPED to the packages/<name> directories the branch actually
-# touched against `origin/main` (`packages/guards/src/changed-packages.mjs`). A push touching no `packages/` file at
+# touched against `origin/main` (`packages/guards/src/changed-packages.ts`). A push touching no `packages/` file at
 # all (docs, this hook, the workflow) runs every package's tests -- an EMPTY touched-package result must
 # read as "run everything", never as "run nothing", the same rule this repo's discovery tests already
 # apply to an empty walk.
@@ -535,10 +535,10 @@ run_gate() { # run_gate <branch-label>
   snapshot_children_cpu "$cpu_start_file"; wall_start="$(now_ms)"
 
   # LINT IS SCOPED BY CHANGED PATH, NOT BY CHANGED PACKAGE -- #911, measured rather than argued.
-  # `changed-packages.mjs` lists `packages/<name>` directories only, so a `scripts/`-only change (the most
+  # `changed-packages.ts` lists `packages/<name>` directories only, so a `scripts/`-only change (the most
   # common shape of a row in this repository) scopes to the EMPTY LIST, and a check handed an empty
   # population reports clean about a population it never read. eslint's unit IS the file, so a path list
-  # costs nothing in coverage. `changed-files.mjs` (#939) is the one place this repo asks git which paths a
+  # costs nothing in coverage. `changed-files.ts` (#939) is the one place this repo asks git which paths a
   # range touched, and it lists BOTH SIDES of a rename -- a file moved out of a linted directory is still
   # linted here.
   #
@@ -560,7 +560,7 @@ run_gate() { # run_gate <branch-label>
   if git rev-parse --verify -q origin/main >/dev/null; then
     while IFS= read -r changed_path; do
       [ -n "$changed_path" ] && add_lint_path "$changed_path"
-    done < <(node packages/guards/src/changed-files.mjs origin/main...HEAD)
+    done < <(node packages/guards/src/changed-files.ts origin/main...HEAD)
   else
     # FAILS CLOSED, not open: with no base ref there is no committed diff to scope by, so read the whole
     # tree rather than read nothing and print "ok".
@@ -593,12 +593,12 @@ run_gate() { # run_gate <branch-label>
   # for the merge. It was two of the 22 files in `guards:sweep`, which is why "keep the leak scan while
   # deleting the sweep" would have deleted it.
   #
-  # #2507: IT RUNS UNDER THE MEMORY CAP, through `test-memory-cap.mjs` and not through `assert-glob-not-empty.mjs --run`.
+  # #2507: IT RUNS UNDER THE MEMORY CAP, through `test-memory-cap.ts` and not through `assert-glob-not-empty.ts --run`.
   # The leak scan is a runner start like any other, and these two files read tracked blobs, the shape #1995 measured
   # growing to 25 GB. The entry that `test:*` use refuses a suite start in a tree whose `node_modules` reads another
   # checkout (#2218), which is 42 of 56 linked worktrees, and a push hook that newly refused those pushes would be a
   # different change. The cap module is the shared half; it prints `memory cap: ...` so this run says which path it took.
-  run "leak scan" node packages/guards/src/test-memory-cap.mjs run tsx -- pnpm exec tsx --test \
+  run "leak scan" node packages/guards/src/test-memory-cap.ts run tsx -- pnpm exec tsx --test \
     packages/guards/src/tracked-source-leak-guard.test.ts \
     packages/guards/src/tracked-prose-leak-guard.test.ts
 

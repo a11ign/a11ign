@@ -37,7 +37,7 @@ name: dependency-pr-body
 #
 # The `Acceptance:` command spells `--config=<path>`, not `--config <path>`, on purpose: `entry-points.test.ts` reads every
 # workflow for a whitespace-preceded `scripts/*.mjs` and demands an entry guard of whatever it finds, and
-# `rstest.config.mjs` is a config file, not an entry point.
+# `rstest.config.ts` is a config file, not an entry point.
 #
 # ## The edit has to be seen by `ci.yml`
 #
@@ -115,7 +115,7 @@ jobs:
           Dependency update by dependabot[bot] (ADR 0041): bump $name from $old to $new.
 
           Acceptance:
-          pnpm exec rstest run --config=scripts/rstest/rstest.config.mjs --include packages/guards/src/one-package-manager.test.ts
+          pnpm exec rstest run --config=scripts/rstest/rstest.config.ts --include packages/guards/src/one-package-manager.test.ts
 
           Closes: none -- dependency update by dependabot[bot] (ADR 0041)
           EOF

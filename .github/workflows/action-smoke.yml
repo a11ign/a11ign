@@ -35,7 +35,7 @@ jobs:
       # `layers.json` declares, which needs git and nothing installed: this job installs nothing before the action runs.
       - name: Lay a11ign/lab's scripts where the assertions read them
         shell: bash
-        run: node scripts/lay-layer.mjs lab
+        run: node scripts/lay-layer.ts lab
 
       # TWO runs, each guarding one DIRECTION, because for an accessibility tool the two failures are not
       # symmetrical. A missed finding costs a user; an invented one is an accusation someone may be

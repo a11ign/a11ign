@@ -7,52 +7,52 @@
   "description": "Repo-hygiene guards: refusals that are about engineering practice, not about this product.",
   "exports": {
     "./assert-glob-not-empty": {
-      "default": "./src/assert-glob-not-empty.mjs"
+      "default": "./src/assert-glob-not-empty.ts"
     },
     "./changed-files": {
-      "default": "./src/changed-files.mjs"
+      "default": "./src/changed-files.ts"
     },
     "./changed-packages": {
-      "default": "./src/changed-packages.mjs"
+      "default": "./src/changed-packages.ts"
     },
     "./git-env": {
-      "default": "./src/git-env.mjs"
+      "default": "./src/git-env.ts"
     },
     "./git-spawn-scrubbed": {
-      "default": "./src/git-spawn-scrubbed.mjs"
+      "default": "./src/git-spawn-scrubbed.ts"
     },
     "./isolation-gate": {
-      "default": "./src/isolation-gate.mjs"
+      "default": "./src/isolation-gate.ts"
     },
     "./local-import-closure": {
-      "default": "./src/local-import-closure.mjs"
+      "default": "./src/local-import-closure.ts"
     },
     "./mutation-check": {
       "default": "./src/mutation-check.ts"
     },
     "./piped-exit-status-guard": {
-      "default": "./src/piped-exit-status-guard.mjs"
+      "default": "./src/piped-exit-status-guard.ts"
     },
     "./tree-wide-guard": {
       "default": "./src/tree-wide-guard.ts"
     },
     "./tree-wide-guards": {
-      "default": "./src/tree-wide-guards.mjs"
+      "default": "./src/tree-wide-guards.ts"
     },
     "./uncontrolled-emptiness": {
-      "default": "./src/uncontrolled-emptiness.mjs"
+      "default": "./src/uncontrolled-emptiness.ts"
     },
     "./walk-scope": {
-      "default": "./src/walk-scope.mjs"
+      "default": "./src/walk-scope.ts"
     },
     "./walk-scope-declaration": {
-      "default": "./src/walk-scope-declaration.mjs"
+      "default": "./src/walk-scope-declaration.ts"
     },
     "./worktree-resolution": {
-      "default": "./src/worktree-resolution.mjs"
+      "default": "./src/worktree-resolution.ts"
     },
     "./tooling-roots": {
-      "default": "./src/tooling-roots.mjs"
+      "default": "./src/tooling-roots.ts"
     }
   },
   "files": [

@@ -1,11 +1,11 @@
 /**
  * #3506 (move 4 of #69, the delete step): THE DELETE'S OWN TEST. `packages/control` left the workspace for `a11ign/control` (ADR 0040, M4), and this
  * repository takes it as a PINNED TAG: `layers.json` (at the ROOT since this row, because a file inside a directory that is laid and untracked cannot say
- * which tag to lay it at) declares the tag, and `scripts/lay-layer.mjs` lays control's `src/` and `ansible/` at `packages/control` (untracked, never a
+ * which tag to lay it at) declares the tag, and `scripts/lay-layer.ts` lays control's `src/` and `ansible/` at `packages/control` (untracked, never a
  * workspace member) for the root scripts, the workflows and the hosts that run them by path. It lives in `packages/guards`, not in the directory it proves
  * gone: that directory cannot hold the test that says it is not there. `lab-delete.test.ts` is the same test for the lab, and this one differs where control does:
  *
- *   - control is the layer that READS the declaration which lays it, so the laid directory carries a COPY of `layers.json` that `lay-layer.mjs` writes
+ *   - control is the layer that READS the declaration which lays it, so the laid directory carries a COPY of `layers.json` that `lay-layer.ts` writes
  *     over whatever the tag holds (`declares`). Claim 6 pins that the two are equal, which is what keeps `fleet:deploy`'s hasher (`layerCodeVersion`)
  *     reading the one declaration through the resolver it always used.
  *   - the root scripts RUN control's files by path, so "no root script names it" would be false and wrong. The claim is the one the row states: every
@@ -36,7 +36,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
-import { sandboxGitEnv } from "./git-env.mjs";
+import { sandboxGitEnv } from "./git-env.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const DEPARTED_DIRECTORY = "control";
@@ -48,7 +48,7 @@ const MIN_LOCKFILE_IMPORTERS = 5;
 const MIN_TEST_GLOBS = 4;
 const MIN_WORKFLOWS = 10;
 const MIN_ROOT_SCRIPT_REFERENCES = 20;
-/** What a declared tag looks like: `v` and a semver. Spelled here as well as in `lay-layer.mjs`, so a loosening in one is a failure in the other. */
+/** What a declared tag looks like: `v` and a semver. Spelled here as well as in `lay-layer.ts`, so a loosening in one is a failure in the other. */
 const SEMVER_TAG = /^v\d+\.\d+\.\d+$/;
 /** The two paths the row names: `fleet:deploy` and `fleet:provision` run these, and a delete that stopped them resolving would be found by an operator at a host. */
 const DEPLOY_AND_PROVISION = [
@@ -253,7 +253,7 @@ function pinRefusals({ manifest, scripts, gitignore }: { manifest: LayersManifes
     ...(Array.isArray(entry.lays) && entry.lays.length > 0 ? [] : ["the layer names nothing to lay"]),
     ...(entry.declares === "layers.json" ? [] : ["the layer does not declare the copy of layers.json it reads, so a laid control would read the tag's, not this repository's"]),
   ];
-  const laid = ["build", "prepare"].filter((name) => !(scripts[name] ?? "").includes("lay-layer.mjs control")).map((name) => `\`${name}\` does not lay control`);
+  const laid = ["build", "prepare"].filter((name) => !(scripts[name] ?? "").includes("lay-layer.ts control")).map((name) => `\`${name}\` does not lay control`);
   const ignored = gitignore.split("\n").some((line) => line.trim() === `/${DEPARTED_PATH}`) ? [] : [`.gitignore does not ignore /${DEPARTED_PATH}`];
   return [...declaration, ...laid, ...ignored];
 }
@@ -276,14 +276,14 @@ test("control is taken as a pinned tag of a11ign/control, laid by build and prep
 test("POSITIVE CONTROL: a branch for a tag, a missing layer, a layer a deploy would demand a pin for, no declaration copy, a build that does not lay it and an unignored laid copy are each REFUSED", () => {
   const control = { path: DEPARTED_PATH, remote: "https://github.com/a11ign/control.git", tag: "v0.1.2", lays: ["src", "ansible"], declares: "layers.json" };
   const good = { manifest: { layers: {}, pinned: { control } },
-    scripts: { build: "node scripts/lay-layer.mjs control", prepare: "node scripts/lay-layer.mjs control && x" }, gitignore: `/${DEPARTED_PATH}\n` };
+    scripts: { build: "node scripts/lay-layer.ts control", prepare: "node scripts/lay-layer.ts control && x" }, gitignore: `/${DEPARTED_PATH}\n` };
   assert.deepEqual(pinRefusals(good), []);
   assert.match(pinRefusals({ ...good, manifest: { layers: {}, pinned: { control: { ...control, tag: "main" } } } })[0], /a pin is a v<semver> tag, never a branch or a sha/);
   assert.match(pinRefusals({ ...good, manifest: { layers: {}, pinned: { control: { ...control, tag: undefined } } } })[0], /a pin is a v<semver> tag/);
   assert.deepEqual(pinRefusals({ ...good, manifest: { layers: {}, pinned: {} } }), ["layers.json declares no `control` layer under `pinned`"]);
   assert.deepEqual(pinRefusals({ ...good, manifest: { layers: { control }, pinned: { control } } }), ["`control` is declared under `layers`, which makes fleet:deploy and every lab job demand a pin for it"]);
   assert.match(pinRefusals({ ...good, manifest: { layers: {}, pinned: { control: { ...control, declares: undefined } } } })[0], /does not declare the copy of layers\.json it reads/);
-  assert.deepEqual(pinRefusals({ ...good, scripts: { build: "node scripts/lay-layer.mjs control", prepare: "x" } }), ["`prepare` does not lay control"]);
+  assert.deepEqual(pinRefusals({ ...good, scripts: { build: "node scripts/lay-layer.ts control", prepare: "x" } }), ["`prepare` does not lay control"]);
   assert.deepEqual(pinRefusals({ ...good, gitignore: "node_modules\n" }), [`.gitignore does not ignore /${DEPARTED_PATH}`]);
 });
 
@@ -335,9 +335,9 @@ test("every packages/control path a root script or a workflow names resolves thr
 test("the deploy and provision paths resolve (read, not run), and the laid layers.json is the root's byte for byte", () => {
   const scripts = (JSON.parse(read(REPO_ROOT, "package.json")) as { scripts: Record<string, string> }).scripts;
   for (const script of ["fleet:deploy", "fleet:provision"]) assert.match(scripts[script] ?? "", /packages\/control\/src\/fleet-playbook\.mjs/, `${script} no longer runs the playbook wrapper by the path this test reads`);
-  for (const path of DEPLOY_AND_PROVISION) assert.ok(existsSync(join(REPO_ROOT, path)), `${path} is not in the laid tree: \`node scripts/lay-layer.mjs control\` lays it`);
+  for (const path of DEPLOY_AND_PROVISION) assert.ok(existsSync(join(REPO_ROOT, path)), `${path} is not in the laid tree: \`node scripts/lay-layer.ts control\` lays it`);
   // `fleet:deploy`'s hasher (`layerCodeVersion`) and every Ansible play read `packages/control/layers.json`: it must be the declaration this repository tracks.
-  assert.equal(read(REPO_ROOT, "packages/control/layers.json"), read(REPO_ROOT, "layers.json"), "the laid declaration differs from the root's: lay-layer.mjs writes it, so someone edited one");
+  assert.equal(read(REPO_ROOT, "packages/control/layers.json"), read(REPO_ROOT, "layers.json"), "the laid declaration differs from the root's: lay-layer.ts writes it, so someone edited one");
 });
 
 test("POSITIVE CONTROL: a root script that runs packages/control/src by a bare path, a path the declaration does not lay and a file the laid tree lacks are each REFUSED, naming it", () => {

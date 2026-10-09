@@ -9,7 +9,7 @@
  * fetched because the registry was unreachable.
  *
  * `chooseRuleLayer` is the one place that decides. It is exercised here directly, not through a hand-built
- * report object standing in for its output -- `isolation-smoke.mjs` already proves the RENDER half (an
+ * report object standing in for its output -- `isolation-smoke.ts` already proves the RENDER half (an
  * `axe: null` report says "not run... unchecked"); this proves the DECISION half feeds it that value and
  * tells the user why, rather than swallowing the gap.
  */

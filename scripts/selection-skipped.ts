@@ -5,7 +5,7 @@
 // THE REGRESSION GUARD FOR #3215 (#3576, chairman via ceo, 2026-10-04). #3215's fix was a verify that runs what CI runs,
 // because one that skipped tests left 41 of 63 pull requests red on their first completed run (#928). Local `verify` now
 // runs the module-graph-affected set (#3572), which skips tests again BY DESIGN. It is not safe by construction; this is
-// what says whether it is safe in fact, and `forceRerunTriggers` in `scripts/rstest/rstest.config.mjs` is what widens it.
+// what says whether it is safe in fact, and `forceRerunTriggers` in `scripts/rstest/rstest.config.ts` is what widens it.
 //
 // IT READS #3212'S FUNCTION AND COMPUTES NO SECOND ONE. `firstRunPassRate` and `inWindow` come from `ci-health.ts`; the
 // red list below uses the same `pullRequestGroups` and `completed`, and `main` refuses to print when its count of reds
@@ -17,7 +17,7 @@
 // `main` and a merge-base against today's `main` would be the head itself, an empty diff that "skips" nothing.
 //
 // A TREE-WIDE GUARD IS NOT A `--changed` MISS. #3572 leaves the tests ABOUT the repository (`declareTreeWideGuard`) to CI
-// on purpose and ruled that line, so a failing file the head's own `tree-wide-guards.mjs` lists reads `ci-only` even
+// on purpose and ruled that line, so a failing file the head's own `tree-wide-guards.ts` lists reads `ci-only` even
 // when it fails inside the `ts` job, and never `yes`: widening `forceRerunTriggers` for it would be the whole suite.
 //
 // THE SIX ANSWERS, because absence is not proof. `yes` and `no` are the headline. `gone` is a failing file the head does
@@ -32,13 +32,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { refuseUnknownFlags } from "@a11ign/screenreader-fleet/cli-flags";
-import { changedFiles } from "../packages/guards/src/changed-files.mjs";
-import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
+import { changedFiles } from "../packages/guards/src/changed-files.ts";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.ts";
 import { AGGREGATE_JOB, completed, daySlices, firstRunPassRate, inWindow, pullRequestGroups } from "./ci-health.ts";
 import { CI_ONLY, linkNodeModules } from "./verify.ts";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
-const RSTEST_CONFIG = "scripts/rstest/rstest.config.mjs";
+const RSTEST_CONFIG = "scripts/rstest/rstest.config.ts";
 const DEFAULT_REPOSITORY = "a11ign/a11ign";
 const WINDOW_DAYS = 14;
 const MS_PER_DAY = 86_400_000;
@@ -237,7 +237,7 @@ export function renderReport({ merged, deleted, before, after, traces, asOf }: {
     ...traces.map((t) => `- run ${t.runId}: ${lineFor(t)}${t.changed.length ? `; diff: ${t.changed.slice(0, MAX_CHANGED_SHOWN).join(", ")}` : ""}`),
     "",
     counts.yes > 0
-      ? "**A red answered yes: the input that made the miss goes into `forceRerunTriggers` in `scripts/rstest/rstest.config.mjs`, in a pull request that cites the run id.**"
+      ? "**A red answered yes: the input that made the miss goes into `forceRerunTriggers` in `scripts/rstest/rstest.config.ts`, in a pull request that cites the run id.**"
       : "Nothing answered yes, so nothing is widened by this reading.",
   ].join("\n");
 }
@@ -316,12 +316,12 @@ function rstestList({ tree, mergeBase }: { tree: string; mergeBase: string; }): 
 }
 
 /**
- * The tree-wide guards AT THE HEAD, from the head's own `tree-wide-guards.mjs` (the population is derived from its tree, and
+ * The tree-wide guards AT THE HEAD, from the head's own `tree-wide-guards.ts` (the population is derived from its tree, and
  * a guard declared since is not one then). Run in the head's worktree, which `rstestList` has already linked.
  * @param {{ tree: string }} where @returns {string[]}
  */
 function treeWideGuards({ tree }: { tree: string; }): string[] {
-  return sh("node", ["packages/guards/src/tree-wide-guards.mjs"], tree).split("\n").filter(Boolean);
+  return sh("node", ["packages/guards/src/tree-wide-guards.ts"], tree).split("\n").filter(Boolean);
 }
 
 /**

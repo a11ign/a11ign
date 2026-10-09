@@ -391,7 +391,7 @@ test("#3123 LIVE: every code repository carries the review requirement and the m
   // that spawns `gh` whenever a token happens to be present asks GitHub on every local run.
   if (process.env.A11Y_CHECK_MAIN_RULESET !== "1") {
     console.log("  NOT RUN: the live per-repository read is opt-in -- `A11Y_CHECK_MAIN_RULESET=1 npx rstest run --config "
-      + "scripts/rstest/rstest.config.mjs --include packages/guards/src/layer-repository-protection.test.ts "
+      + "scripts/rstest/rstest.config.ts --include packages/guards/src/layer-repository-protection.test.ts "
       + "--disableConsoleIntercept` asks GitHub about every declared repository. Nothing here read one.");
     return;
   }
@@ -695,8 +695,8 @@ const FULL_SHA = /^[0-9a-f]{40}$/;
 const NODE_TEST_RUNNER = /\b(?:tsx|node)\b[^;&|\n]*\s--test(?![\w-])/;
 const RUNS_RSTEST = /(?<![\w./-])rstest(?![\w./-])/;
 const TSC_NO_EMIT = /\btsc\b[^;&|\n]*\s--noEmit\b/;
-/** `pnpm run x`, `pnpm x`, `npm run x`, `node scripts/pnpm.mjs run x`; the flags before `run` (`--filter`, `-r`) send it to the workspace's packages. */
-const RUN_SCRIPT = /\b(?:pnpm(?:\.mjs)?|npm|yarn)\b((?:\s+(?:--filter[= ]\S+|-F\s+\S+|-r|--recursive|-w|--silent|--if-present))*)(?:\s+run)?\s+([A-Za-z][\w:.-]*)/g;
+/** `pnpm run x`, `pnpm x`, `npm run x`, `node scripts/pnpm.ts run x`; the flags before `run` (`--filter`, `-r`) send it to the workspace's packages. */
+const RUN_SCRIPT = /\b(?:pnpm(?:\.ts)?|npm|yarn)\b((?:\s+(?:--filter[= ]\S+|-F\s+\S+|-r|--recursive|-w|--silent|--if-present))*)(?:\s+run)?\s+([A-Za-z][\w:.-]*)/g;
 
 type Manifest = { dependencies?: Record<string, string>; devDependencies?: Record<string, string>; scripts?: Record<string, string> };
 type TreeAnswer = { tree?: { path?: string; type?: string }[]; truncated?: boolean };
@@ -1355,7 +1355,7 @@ test("#3962: test-runner -- each part of the standard fails on its own, and a sc
     ["no rstest", { devDependencies: { "@a11ign/toolchain": "0.1.2" } }, /does not carry @rstest\/core/],
     ["node --test", { scripts: { test: "node --test src/" } }, /runs node's test runner/],
     ["another runner", { scripts: { test: "vitest run" } }, /`test` does not run rstest/],
-    ["a path that only looks like it", { scripts: { test: "node --import tsx scripts/run.ts --config scripts/rstest/rstest.config.mjs" } }, /`test` does not run rstest/],
+    ["a path that only looks like it", { scripts: { test: "node --import tsx scripts/run.ts --config scripts/rstest/rstest.config.ts" } }, /`test` does not run rstest/],
   ];
   for (const [what, over, why] of cases) {
     const cell = standardOf({ manifest: manifestWith(over) })[TEST_RUNNER_COLUMN];
@@ -1368,8 +1368,8 @@ test("#3962: test-runner -- each part of the standard fails on its own, and a sc
 
 test("#3962: test-runner follows `pnpm run <script>`, the hooks, and a wrapper that is not node's runner; a cycle ends", () => {
   // `a11ign`'s own: `test` runs `test:ts` through the repository's pnpm wrapper, which hands rstest to a guard script.
-  const wrapped = scriptsWith({ test: "node scripts/pnpm.mjs run test:ts && node scripts/pnpm.mjs run test:python",
-    "test:ts": "node packages/guards/src/assert-glob-not-empty.mjs \"packages/*/src/**/*.test.ts\" --min=95 --run --runner=rstest ${A11Y_TEST_CONCURRENCY:+--test-concurrency=$A11Y_TEST_CONCURRENCY}",
+  const wrapped = scriptsWith({ test: "node scripts/pnpm.ts run test:ts && node scripts/pnpm.ts run test:python",
+    "test:ts": "node packages/guards/src/assert-glob-not-empty.ts \"packages/*/src/**/*.test.ts\" --min=95 --run --runner=rstest ${A11Y_TEST_CONCURRENCY:+--test-concurrency=$A11Y_TEST_CONCURRENCY}",
     "test:python": "python -m pytest" });
   assert.equal(stateOf(standardOf({ manifest: wrapped })[TEST_RUNNER_COLUMN]), "OK", "`--test-concurrency` passed to a wrapper is not `node --test`");
   const hooked = scriptsWith({ test: "echo done", pretest: "pnpm run unit", unit: "tsx --test src/" });
@@ -1574,7 +1574,7 @@ test("#3705 LIVE: every code repository is read against docs/new-code-repository
   // `A11Y_PROTECTION_REPO` (one repository, possibly not yet declared) does not narrow it.
   if (process.env.A11Y_CHECK_MAIN_RULESET !== "1") {
     console.log("  NOT RUN: the live settings table is opt-in and HAND-RUN (#4486) -- `A11Y_CHECK_MAIN_RULESET=1 pnpm exec rstest run --config "
-      + "scripts/rstest/rstest.config.mjs --include packages/guards/src/layer-repository-protection.test.ts --disableConsoleIntercept` "
+      + "scripts/rstest/rstest.config.ts --include packages/guards/src/layer-repository-protection.test.ts --disableConsoleIntercept` "
       + "asks GitHub about every declared repository (settings, environments, the bots team, pull requests, a search). Nothing here read one.");
     return;
   }

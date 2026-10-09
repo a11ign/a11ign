@@ -56,7 +56,7 @@
   "_roles": "Where this project's role briefs live (ADR 0040, decision 1, surface 3; #2621, child 3e of #69), read by `src/project-roles.mjs` of a11ign/agent-org. The tool ships none of its own; `sessions.json` and every `<role>.md` are a11ign's, at `dir`.",
   "roles": { "dir": ".agent-org/roles" },
   "_causes": "The project's own addition to the gate's 30 tool causes (ADR 0040, decision 1, surface 3; #2621, child 3e of #69), read by `src/cause-declaration.mjs` of a11ign/agent-org's `projectCauseDeclarations`. ABSENT reads as none -- a project with no fleet, lab or corpus declares no plugin and gets no fleet cause. `module` is resolved relative to this file's own directory (`.agent-org/`), and its file must export a `causeDeclarations` array built with `declareCause`.",
-  "causes": { "module": "plugins/causes.mjs" },
+  "causes": { "module": "plugins/causes.ts" },
   "_messaging": "The chairman's messaging channel (a11ign/a11ign#2899; docs/messaging.md decision 1), read by `src/messaging/config.mjs` of a11ign/agent-org. Its presence is what makes `host:install` write the `chairman-watch` pair; ABSENT is OFF. Both paths are REFERENCES to files under `~/.config/agent-org/`: the secret is read from them when used and is never written in this file. No `summary` key, so the tool's own defaults (08:00, Europe/London) apply (#3142).",
   "messaging": {
     "provider": "telegram",
