@@ -37,8 +37,8 @@ importers:
         version: link:packages/cli
     devDependencies:
       '@a11ign/toolchain':
-        specifier: 0.1.4
-        version: 0.1.4(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))
+        specifier: 0.4.0
+        version: 0.4.0(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)
       '@changesets/cli':
         specifier: 3.0.3
         version: 3.0.3
@@ -196,6 +196,23 @@ packages:
       '@rslib/core':
         optional: true
       '@rstest/coverage-v8':
+        optional: true
+
+  '@a11ign/toolchain@0.4.0':
+    resolution: {integrity: sha512-cpuedDGFf7A6+S7zVpYXvKZ6P3DNHGPV/NCvRZbfY7cPy1ypo0wMnt41+jIVdCUPR22rK/CgPE4kY8+FWjfRcQ==}
+    engines: {node: '>=22.15.0'}
+    hasBin: true
+    peerDependencies:
+      '@rslib/core': ^1.0.3
+      '@rstest/core': ^0.12.3
+      '@rstest/coverage-v8': ^0.12.3
+      typescript: ^6.0.3 || ^7.0.0
+    peerDependenciesMeta:
+      '@rslib/core':
+        optional: true
+      '@rstest/coverage-v8':
+        optional: true
+      typescript:
         optional: true
 
   '@anthropic-ai/sdk@0.131.0':
@@ -1950,6 +1967,14 @@ snapshots:
     optionalDependencies:
       '@rslib/core': 1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3)
       '@rstest/coverage-v8': 0.12.3(@rstest/core@0.12.3)
+
+  '@a11ign/toolchain@0.4.0(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)':
+    dependencies:
+      '@rstest/core': 0.12.3
+    optionalDependencies:
+      '@rslib/core': 1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3)
+      '@rstest/coverage-v8': 0.12.3(@rstest/core@0.12.3)
+      typescript: 6.0.3
 
   '@anthropic-ai/sdk@0.131.0':
     dependencies:
