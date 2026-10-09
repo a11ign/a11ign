@@ -111,6 +111,7 @@ export default tseslint.config(
     ignores: [
       "packages/*/dist/**",
       "packages/*/.rstack/**", // Rslib's scratch for the declaration rollup (a11ign: cli): rewritten by every build, so a walk races it
+      "packages/nvda-worker/**", // the same, for `a11ign/screenreader-worker` (#3447): laid from its tag at the locked version, linted there
       "packages/worker-fleet/**", // a LAYER CHECKOUT where laid (`scripts/lay-layer.mjs`, #3504): another repository's code, linted there
       "packages/lab/**", // the same, for `a11ign/lab` (#3505): its own CI lints it, over a checkout of this repository
       "packages/control/**", // the same, for `a11ign/control` (#3506)

@@ -171,7 +171,7 @@ test("THE EMITTED LISTS MATCH A REAL CAPTURE, not just each other", () => {
  */
 // The layer publishes `dist/` only (#3937): the typedefs survive as the JSDoc header of `capture-core.d.mts`, and `capture-probes.mjs` is bundled into the
 // `src_capture-core_mjs.mjs` chunk.
-const CAPTURE_CORE_PATH = layerFile("@a11ign/screenreader-worker", "dist/capture-core.d.mts", { from: import.meta.dirname });
+const CAPTURE_CORE_PATH = layerFile("@a11ign/screenreader-worker", "dist/capture-core.d.ts", { from: import.meta.dirname });
 
 /** One `@typedef {{ ... }} Name` LINE's field names, by regex — every one of these three typedefs is
  *  written on a single line (confirmed by reading the file), so this works line-by-line rather than over
@@ -235,7 +235,7 @@ test("Capture is a SUBSET of the published CaptureResult — server.mjs adds tas
  * Whether the TYPE admits `null` is `tsc`'s: the typed error entry below fails to compile without `| null`, which
  * `npx tsx --test` cannot see. That is stated in the PR as a typecheck observation, not an Acceptance red.
  */
-const PROBES_PATH = layerFile("@a11ign/screenreader-worker", "dist/src_capture-core_mjs.mjs", { from: import.meta.dirname });
+const PROBES_PATH = layerFile("@a11ign/screenreader-worker", "dist/src_capture-core_ts.mjs", { from: import.meta.dirname });
 type StateChange = CaptureInteraction["stateChanges"][number];
 type FormChange = CaptureInteraction["formChanges"][number];
 
