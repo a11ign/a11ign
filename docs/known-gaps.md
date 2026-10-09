@@ -1625,6 +1625,16 @@ the evidence it was measured on rather than being a claim about screen readers i
 reaches about a third of users": n=6 on one page shape, one NVDA and one guidepup, and findings are `cantTell`
 triage. The advice stays here with its bound. Repeats over more than one page shape would change this; none is queued.
 
+### Read against the project's own fixtures (#4537, sizing in [outcome 15](./outcomes/outcome-15-spa-reliability.md))
+
+**The rate is NOT measured on any page now in the tree, and the corpus cannot reproduce it.** Measured 2026-10-09 at
+`2b4bb5bbf`, by a script over `runs/screenreader-dataset/pages/*/good.html` (1,715 case pages): 451 carry a live region
+and **0 of those 451 also carry a checkbox or radio**. Every live-region case is triggered by a button or a form
+submission, the condition above that was heard 6 of 6. The two cases that held the checkbox shape were withdrawn, so the
+figures in the table are n=6 on a page that is no longer here, and the one stability canary that activates a control
+(`filter-status-silent-solar/bad`) is the silent variant, with no region to drop. A rate on a fixture in the tree is
+not measured; the first row to give it is sized in the outcome document.
+
 
 ---
 
@@ -3808,6 +3818,11 @@ read 2026-10-07, see the entry in `stability-gate.mjs`).
 
 **"All gates pass" must not be read as covering it.** The replacement loses nothing the gate was asserting (the other eight canaries were STABLE at the
 same run), and it gains nothing about first visits.
+
+**How many real-corpus pages carry first-visit state is NOT measured (#4537).** Nothing records cold or warm, and the only local
+real-page captures (`runs/witness/`, 34 files from 2026-09-19) are not the corpus. The corpus is 85 URLs
+(`baselines/real-page-findings.json` in `a11ign/lab` at `004c1d50`); counting a consent panel in capture 1 and not in later ones is a
+read for `orchestrator` ([outcome 15](./outcomes/outcome-15-spa-reliability.md)).
 
 **What would close it:** a capture that records whether its profile had met the page before, and a check that reads the first visit as its own
 reading rather than as a sample of the warm one. That is a decision about the capture protocol and not a change to this gate, and nothing in
