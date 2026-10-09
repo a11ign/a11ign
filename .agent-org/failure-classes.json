@@ -145,7 +145,7 @@
     {
       "id": "hold-on-idle-row",
       "name": "A pull request is held until a row closes, but that row is ready and unclaimed with no open pull request, so the hold never ends.",
-      "guard": null,
+      "guard": "`pr:hold --until=\"closed #N\"` REFUSES (exit 1, before any write) when #N is open, carries neither `in-progress` nor a `session:` label, and no open pull request closes it: `holdTargetIdleReason` in `src/pr-hold-state.ts` of a11ign/agent-org, merged as a11ign/agent-org#563 (row #4661, 2026-10-09T22:17:43Z). `src/packaging/pr-hold-idle-target.test.ts` pins it, with mutations never/always/boundary/key each breaking its own tests.",
       "seed": [
         {
           "ref": "a11ign/agent-org#550",
@@ -158,7 +158,7 @@
           "note": "comment 6089503125 (2026-10-09 21:24Z): the chairman-verified direction that names the class and orders the guard null with a guardNote"
         }
       ],
-      "guardNote": "none in force. Set guard to a11ign/a11ign#4661 (a pr:hold --until closed #N is refused when #N is unclaimed with no open pull request, plus a 15-minute detector) when it merges; its code half is a second pull request in a11ign/agent-org."
+      "guardNote": "Not covered: a hold already in place before #563, and a hold taken on a target it cannot read (a pull request number, an unseen repository, a failed call) is taken with a note, not refused. The 15-minute detector `idleHoldIncident` exists as a pure function but is NOT yet wired into the gate (`waitTickFacts` in `src/work-gate/org-health.ts` was named for it, and no row for it was found filed at 2026-10-09), so an idle-target hold made another way is not yet raised."
     },
     {
       "id": "closed-on-merge-not-outcome",
