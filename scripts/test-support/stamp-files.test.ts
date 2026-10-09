@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { stampEnvironmentFiles } from "./stamp-files.ts";
 
+const ENTRIES = 5;
+
 // The shape of `stamp-provision-revision.ps1` at screenreader-fleet v0.5.3 and v0.6.0: the first entry is a
 // Get-LayerFile call, then two variables the stamp reads, then quoted paths with a comment between them.
 const STAMP = `
@@ -17,7 +19,7 @@ $ENVIRONMENT_FILES = @(
 
 test("the Get-LayerFile entry stays in the list, in its position, resolved from layers.json", () => {
   const files = stampEnvironmentFiles(STAMP);
-  assert.equal(files.length, 5);
+  assert.equal(files.length, ENTRIES);
   assert.deepEqual(files, [
     "packages/worker-fleet/src/provisioning/provision-nvda-worker.ps1",
     "packages/nvda-worker/src/run-server.cmd",
