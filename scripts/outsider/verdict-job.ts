@@ -165,7 +165,7 @@ function readPromotedAt(version: string): string | null {
   try {
     return promotionTimeFrom(gh(["release", "view", `${PACKAGE}@${version}`, "--repo", PRODUCT_REPO, "--json", "body", "--jq", ".body"]));
   } catch (error) {
-    const stderr = String(/** @type {{ stderr?: unknown }} */ (error).stderr ?? "");
+    const stderr = String((error as { stderr?: unknown }).stderr ?? "");
     if (/release not found/i.test(stderr)) return null;
     throw error;
   }

@@ -292,7 +292,7 @@ test("reportLeftovers names the file that left an entry, and says nothing for th
   const written: string[] = [];
   const [leakyDir, cleanDir] = [leaky, clean].map((testPath) => adoptFileDirectory({ env: { [RUN_ENV]: run }, testPath }) ?? "");
   assert.deepEqual(reportLeftovers({ dir: cleanDir, testPath: clean, root, write: (text) => written.push(text) }), [], "the control: a file that left nothing");
-  assert.deepEqual(written, []);
+  assert.deepEqual<string[]>(written, []); // typed, or the assertion narrows `written` to `never[]` and the pushes below stop compiling
   writeFileSync(join(leakyDir, "left-behind"), "x");
   assert.deepEqual(reportLeftovers({ dir: leakyDir, testPath: leaky, root, write: (text) => written.push(text) }), ["left-behind"]);
   assert.equal(written.length, 1);

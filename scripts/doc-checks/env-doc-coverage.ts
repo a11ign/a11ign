@@ -77,8 +77,9 @@ export function envReadsByFile(root: string): Map<string, Set<string>> {
     for (const match of readFileSync(file, "utf8").matchAll(ENV_READ)) {
       const name = match[1] ?? match[2];
       if (NOT_A_PROJECT_VARIABLE.has(name)) continue;
-      if (!map.has(name)) map.set(name, new Set());
-      /** @type {Set<string>} */ (map.get(name)).add(file);
+      const readers = map.get(name) ?? new Set<string>();
+      readers.add(file);
+      map.set(name, readers);
     }
   }
   return map;

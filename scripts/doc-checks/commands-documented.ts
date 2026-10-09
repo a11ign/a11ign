@@ -95,8 +95,8 @@ export function commandsPageDrift(root: string): { line: string; side: "stale" |
   const had = new Set(committed.split("\n"));
   const want = new Set(fresh.split("\n"));
   const drift = [
-    ...[...had].filter((line) => line && !want.has(line)).map((line) => ({ line, side: /** @type {const} */ ("stale") })),
-    ...[...want].filter((line) => line && !had.has(line)).map((line) => ({ line, side: /** @type {const} */ ("missing") })),
+    ...[...had].filter((line) => line && !want.has(line)).map((line) => ({ line, side: "stale" as const })),
+    ...[...want].filter((line) => line && !had.has(line)).map((line) => ({ line, side: "missing" as const })),
   ];
   return drift.length ? drift : [{ line: "(order or blank lines)", side: "stale" }];
 }

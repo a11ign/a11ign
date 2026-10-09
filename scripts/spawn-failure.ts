@@ -47,7 +47,7 @@ export type SpawnError = { message?: string, status?: number | null, signal?: st
  * @returns {string}
  */
 export function describeSpawnFailure(error: unknown, { inherited }: { inherited: boolean; }): string {
-  const failure = /** @type {SpawnError} */ (error ?? {});
+  const failure = (error ?? {}) as SpawnError;
   const argv = firstLine(failure.message) ?? "a spawned command failed with no message";
   if (failure.code && !failure.pid) {
     return `${argv} -- the command never started (${failure.code})`;
