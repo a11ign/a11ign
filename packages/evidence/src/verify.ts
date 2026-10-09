@@ -371,6 +371,18 @@ export interface OracleCounts {
      * cancelled. Filled by the worker census (#4314).
      */
     pasteCancelled?: boolean;
+    /**
+     * 3.3.7 Redundant Entry (#4355, #4362): the index, in document order, of the `<form>` that owns this control.
+     * Absent = NOT KNOWN (a control outside any form, or a census that did not record it), never "no form".
+     */
+    form?: number;
+    /** 3.3.7: the `required` ATTRIBUTE. Absent = NOT CHECKED, never "optional". */
+    required?: boolean;
+    /**
+     * 3.3.7: after a value was typed into an EARLIER control of the same form, did this control come to hold a
+     * value by itself? Absent = NOT CHECKED, never "stayed empty". Filled by the worker census (#4361).
+     */
+    populatedFromEarlier?: boolean;
   }[];
   /** Per-type: whether the sweep announced everything the page exposes. `unknown` is a real answer. */
   completeness?: Record<string, Completeness>;
