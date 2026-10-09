@@ -25,7 +25,59 @@ node packages/lab/scripts/referral-repeat-share.mjs runs/fetched/candidate.calib
 TOTAL	49	0	0.0%	(49 pages; BELOW the 20.0% line)
 ```
 
-Per page: 49 pages, 26 with at least one referral, **0 repeats on every page**. Referrals per page, pages with any: `w3.org/WAI/demos/bad/before/{template,tickets}` 7 each, `.../before/news` 6, `tfl.gov.uk/modes/tube` 3, `networkrail.co.uk/careers`, `cqc.org.uk/search`, `weather.metoffice.gov.uk`, `reports.ofsted.gov.uk` 2 each, and 1 each on the other 18 (the full 49-row table is the script's output above; reprint it, do not quote it from here).
+Per page, 49 pages, 26 with at least one referral, **0 repeats on every page** (the script's output, in its order, with the TOTAL line above):
+
+| page | referrals | repeats | repeat share |
+|---|---|---|---|
+| https://www.gov.scot/publications/ | 1 | 0 | 0.0% |
+| https://www.gov.scot/about/ | 0 | 0 | 0.0% |
+| https://www.networkrail.co.uk/careers/ | 2 | 0 | 0.0% |
+| https://www.nrscotland.gov.uk/publications/ | 0 | 0 | 0.0% |
+| https://www.nrscotland.gov.uk/statistics-and-data/ | 0 | 0 | 0.0% |
+| https://www.w3.org/WAI/demos/bad/after/survey.html | 1 | 0 | 0.0% |
+| https://www.w3.org/WAI/demos/bad/after/news.html | 0 | 0 | 0.0% |
+| https://www.mygov.scot/browse/benefits | 0 | 0 | 0.0% |
+| https://www.mygov.scot/scottish-child-payment | 0 | 0 | 0.0% |
+| https://www.w3.org/WAI/demos/bad/after/template.html | 0 | 0 | 0.0% |
+| https://caselaw.nationalarchives.gov.uk/search?query= | 1 | 0 | 0.0% |
+| https://design-system.service.gov.uk/components/checkboxes/ | 1 | 0 | 0.0% |
+| https://design-system.service.gov.uk/components/date-input/ | 1 | 0 | 0.0% |
+| https://design-system.service.gov.uk/components/accordion/ | 1 | 0 | 0.0% |
+| https://www.w3.org/WAI/demos/bad/after/tickets.html | 0 | 0 | 0.0% |
+| https://design-system.service.gov.uk/components/details/ | 0 | 0 | 0.0% |
+| https://design-system.service.gov.uk/components/error-message/ | 0 | 0 | 0.0% |
+| https://design-system.service.gov.uk/components/error-summary/ | 0 | 0 | 0.0% |
+| https://design-system.service.gov.uk/components/radios/ | 0 | 0 | 0.0% |
+| https://design-system.service.gov.uk/components/select/ | 0 | 0 | 0.0% |
+| https://design-system.service.gov.uk/components/skip-link/ | 0 | 0 | 0.0% |
+| https://design-system.service.gov.uk/components/table/ | 0 | 0 | 0.0% |
+| https://design-system.service.gov.uk/components/tabs/ | 1 | 0 | 0.0% |
+| https://design-system.service.gov.uk/components/text-input/ | 0 | 0 | 0.0% |
+| https://www.nationalarchives.gov.uk/about-us/ | 0 | 0 | 0.0% |
+| https://www.transport.gov.scot/publications/ | 1 | 0 | 0.0% |
+| https://tfl.gov.uk/modes/tube/ | 3 | 0 | 0.0% |
+| https://www.cqc.org.uk/search/all?query=hospital | 2 | 0 | 0.0% |
+| https://www.nhs.uk/conditions/ | 1 | 0 | 0.0% |
+| https://www.gla.ac.uk/undergraduate/degrees/ | 1 | 0 | 0.0% |
+| https://service-manual.nhs.uk/design-system/components/table | 1 | 0 | 0.0% |
+| https://www.sportengland.org/research-and-data/data/active-lives | 1 | 0 | 0.0% |
+| https://www.scotcourts.gov.uk/judgments/ | 0 | 0 | 0.0% |
+| https://ico.org.uk/action-weve-taken/enforcement/ | 0 | 0 | 0.0% |
+| https://www.gov.uk/browse/benefits | 0 | 0 | 0.0% |
+| https://www.w3.org/WAI/demos/bad/before/template.html | 7 | 0 | 0.0% |
+| https://www.w3.org/WAI/demos/bad/before/news.html | 6 | 0 | 0.0% |
+| https://data.southwark.gov.uk/data-catalog-explorer/ | 1 | 0 | 0.0% |
+| https://www.gov.wales/statistics-and-research | 1 | 0 | 0.0% |
+| https://www.cqc.org.uk/about-us | 1 | 0 | 0.0% |
+| https://www.gov.uk/vehicle-tax | 0 | 0 | 0.0% |
+| https://www.w3.org/WAI/demos/bad/before/tickets.html | 7 | 0 | 0.0% |
+| https://check-for-flooding.service.gov.uk/river-and-sea-levels | 0 | 0 | 0.0% |
+| https://weather.metoffice.gov.uk/warnings-and-advice/uk-warnings | 2 | 0 | 0.0% |
+| https://reports.ofsted.gov.uk/search?q=school | 2 | 0 | 0.0% |
+| https://ico.org.uk/for-the-public/ | 1 | 0 | 0.0% |
+| https://www.ofgem.gov.uk/your-energy-supply/your-energy-bill/energy-price-cap-and-standing-charges-explained | 1 | 0 | 0.0% |
+| https://ratings.food.gov.uk/search-a-local-authority-area | 1 | 0 | 0.0% |
+| https://disinfectants.defra.gov.uk/ | 0 | 0 | 0.0% |
 
 Counted separately from the file with a one-off `node -e` over `pages[]` (not part of the script): the 49 split into **29 referrals on the 46 `conformant` pages** (23 of them with at least one) and **20 on the 3 `inaccessible` pages**, which are the `w3.org/WAI/demos/bad/before/*` demos. The script does not filter on `claim`, so the 0.0% includes pages the complaint's population excludes; with them removed the conformant-only count is 29 referrals and the share is still 0 (no repeat anywhere in the file).
 
