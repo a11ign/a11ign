@@ -578,6 +578,19 @@ jobs:
           else
             fail "$version_tag is at $existing but a11ign@$version is at $new, and a per-version tag is never moved"
           fi
+          # THE VERSIONS A PROMOTION LEAPT OVER (#4544): a promotion tags only the HIGHEST version it promoted, and `a11ign@0.5.2` was released and then
+          # superseded by 0.5.3 before the qualification passed on it, so no promotion ever named it and `v0.5.2` was never written. Every `a11ign@<older>`
+          # with no `v<older>` gets one here, at its own commit and created only when absent: one that exists, wherever it points, is left, since only
+          # the promoted version's tag is judged above. A version NEWER than the promoted one has not qualified and is not tagged.
+          while IFS=$'\t' read -r skipped _; do
+            [ -n "$skipped" ] || continue
+            older=${skipped#a11ign@}
+            [ "$older" != "$version" ] || continue
+            printf '%s\n%s\n' "$older" "$version" | sort -V -C || continue
+            [ -z "$(commit_of "v$older")" ] || continue
+            write_ref gh api -X POST "repos/$GH_REPO/git/refs" -f ref="refs/tags/v$older" -f sha="$(commit_of "$skipped")"
+            echo "v$older: was absent, now $(commit_of "$skipped") (a11ign@$older, leapt over by the promotion of $version)"
+          done <<<"$(awk -F'\t' '$1 ~ /^a11ign@[0-9]+\.[0-9]+\.[0-9]+$/' <<<"$commits" | sort -V)"
           old=$(commit_of "$major_tag")
           if [ -z "$old" ]; then
             write_ref gh api -X POST "repos/$GH_REPO/git/refs" -f ref="refs/tags/$major_tag" -f sha="$new"
