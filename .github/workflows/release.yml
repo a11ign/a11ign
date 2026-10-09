@@ -785,9 +785,14 @@ jobs:
             fi
             label_args=()
             while IFS= read -r label; do
-              # Create only what is missing: `gh label create --force` would repaint a label that exists.
-              present=$(LABEL="$label" gh label list --limit 1000 --json name --jq '[.[] | select(.name == env.LABEL)] | length')
-              if [ "$present" = "0" ]; then gh label create "$label"; fi
+              # Create only what is missing: `gh label create --force` would repaint a label that exists. Ask for the ONE label by
+              # name: a list is capped (`gh label list --limit 1000` missed `qualification-overdue` among 1277 labels, #4466), so
+              # a label past the cap read as missing, `create` failed with "already exists", and the row was never filed.
+              # Only a 404 means missing; any other failure stops the step rather than guessing.
+              encoded=$(jq -rn --arg l "$label" '$l | @uri')
+              if ! looked=$(gh api "repos/$GH_REPO/labels/$encoded" --silent 2>&1); then
+                if grep -q 'HTTP 404' <<<"$looked"; then gh label create "$label"; else echo "$looked" >&2; exit 1; fi
+              fi
               label_args+=(--label "$label")
             done < <(jq -r '.labels[]' <<<"$row")
             gh issue create --title "$ROW_TITLE" --body "$(jq -r .body <<<"$row")" "${label_args[@]}"
