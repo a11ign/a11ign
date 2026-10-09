@@ -256,6 +256,22 @@ export interface RuleInput {
      * (`paste-allowed-good.html` / `paste-blocked-bad.html`, a11ign/lab#33).
      */
     pasteCancelled?: boolean;
+    /**
+     * 3.3.7 Redundant Entry (#4355): the index, in document order, of the `<form>` that owns this control.
+     * Absent means NOT KNOWN (a control outside any form, or a census that did not record it), and the rule
+     * pairs nothing then: two email fields on one page are two questions unless they share a form.
+     */
+    form?: number;
+    /** 3.3.7: the `required` ATTRIBUTE. "Required to be entered again" is the criterion's own wording, so an optional second field is not asking again. */
+    required?: boolean;
+    /**
+     * 3.3.7: after a value was typed into an EARLIER control of the same form, did this control come to hold a
+     * value by itself? That is the criterion's first branch ("auto-populated"), read as an outcome so a script
+     * that copies the answer across counts and markup alone would not. Absent means NOT CHECKED, never "stayed
+     * empty": no census populates it on a real capture yet (filed from #4355), so the rule has only ever read it
+     * from hand-built evidence shaped like the corpus trio in `src/eval/pages/redundant-entry/` (a11ign/lab#43).
+     */
+    populatedFromEarlier?: boolean;
   }[];
 }
 
@@ -1228,6 +1244,55 @@ function addPasteCancelledPassword(input: RuleInput, add: AddFinding): void {
 }
 
 /**
+ * The input types whose TYPE names a kind of information, so two of them in one form are plausibly the same
+ * question. Only `email` is claimed: it is the one the corpus trio validates (`email-confirm-bad.html`). `tel` and
+ * `url` look the same and are not claimed, because a "Home phone" beside a "Work phone" asks two things, and
+ * nothing here has measured how often that happens. `text` is never claimed: it names no kind of information.
+ */
+const KIND_NAMING_TYPES: ReadonlySet<string> = new Set(["email"]);
+
+/**
+ * 3.3.7 Redundant Entry — a later required email field that stayed empty after an earlier email field in the
+ * same form was filled (#4355, #4084 outcome 2).
+ *
+ * Read against the Understanding page's own body, which does NOT show an email-and-confirm form (re-read
+ * 2026-10-09; no "email" appears on the page or in technique G221): the criterion is "Information previously
+ * entered by or provided to the user that is required to be entered again in the same process is either:
+ * auto-populated, or available for the user to select" (w3.org/WAI/WCAG22/Understanding/redundant-entry), and
+ * a process is a "series of user actions where each action is required in order to complete an activity". So a
+ * one-page form is in scope by that text, and calling this pair a failure is a READING of it.
+ *
+ * The pairing reads the control's TYPE and never its label. "These two fields want the same information" is a
+ * label heuristic when read from words ("Home address", "Billing address"), the `vague_link_present` shape that
+ * took 2.4.4 to 27 false positives. A password confirmation pairs up by label exactly as an email one does, and
+ * is the criterion's own SECURITY exception ("having users re-validate their new string is allowed"), so the
+ * type check is what keeps it silent: `password` is not in `KIND_NAMING_TYPES`.
+ *
+ * `secondary`, so a referral: the ESSENTIAL and NO-LONGER-VALID exceptions are judgements this evidence cannot
+ * make, and so is the second branch ("available to select": a `<datalist>` or a select this census does not
+ * read). Silent unless the census says the field stayed empty (`populatedFromEarlier === false`) AND was
+ * required: absence of either is not a finding.
+ */
+function addRedundantEntry(input: RuleInput, add: AddFinding): void {
+  if (!input.formInputs) return; // absent means not checked; only a probe's silence is a finding
+  const typesSeenInForm = new Map<number, Set<string>>();
+  for (const element of input.formInputs) {
+    const type = element.type?.toLowerCase();
+    if (element.form === undefined || !type || !KIND_NAMING_TYPES.has(type)) continue;
+    const seen = typesSeenInForm.get(element.form) ?? new Set<string>();
+    typesSeenInForm.set(element.form, seen);
+    if (seen.has(type) && element.required === true && element.populatedFromEarlier === false) {
+      add("3.3.7 Redundant Entry",
+        "A later required field of the same input type asks again for what an earlier field in the same form "
+          + "already took, and was not auto-populated, so a user who must retype it meets a redundant entry "
+          + "unless the data is available to select or an exception applies",
+        `<${element.tag} type="${type}" required> stayed empty after an earlier type="${type}" control in form ${element.form} was filled`);
+    }
+    seen.add(type);
+  }
+}
+
+/**
  * 2.1.2 — Tab stopped moving, so focus is trapped.
  *
  * A non-interference criterion (WCAG §5.2.5): it applies to ALL content whether or not it is relied upon,
@@ -1822,6 +1887,7 @@ export function ruleFindings(input: RuleInput): Finding[] {
   addAutoplayingAudio(input, add);
   addUnidentifiedInputPurpose(input, add);
   addPasteCancelledPassword(input, add);
+  addRedundantEntry(input, add);
   addKeyboardTrap(input, add);
   addStaleRouteTitle(input, add);
   addBrokenFocusOrder(input, add);

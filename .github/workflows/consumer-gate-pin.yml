@@ -19,6 +19,12 @@ name: consumer-gate-pin
 #               `consumer-gate / check-pin`, `release.yml` is dispatched on `main`: the retry-after-the-cause-is-fixed that workflow already
 #               documents (#4000). A release that failed for any OTHER reason is not re-dispatched.
 #
+# ## Every job resolves the tool first (#4373)
+#
+# `scripts/consumer-gate-pin-needed.ts` and `scripts/generate-consumer-gate.mjs` import `repo-identity.mjs`, which does `await toolModule(...)` at import.
+# On the host `.agent-org/host.json` names the checkout; on a runner no tool exists until `agent-org-newest-tag.mjs --dest` has cloned one, so each job
+# that runs either script carries that step BEFORE it. The first real run (37881883814) died in `decide` without it, because the tests read this file as text.
+#
 # ## Authority: Octo STS, no stored token (chairman direction (a))
 #
 # The branch push and the pull request are written with a token minted by `octo-sts/action` under
@@ -61,6 +67,8 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
+      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
+        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
       - name: Does the pin at this commit predate action.yml at this commit?
         id: decide
         run: pnpm exec tsx scripts/consumer-gate-pin-needed.ts --commit=HEAD
@@ -92,6 +100,9 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
         if: needs.decide.outputs.action == 'regenerate'
+      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
+        if: needs.decide.outputs.action == 'regenerate'
+        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
       - name: Regenerate the pin at this commit, and refuse anything that changed but consumer-gate.yml
         if: needs.decide.outputs.action == 'regenerate'
         run: |
@@ -163,6 +174,8 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
+      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
+        run: node scripts/agent-org-newest-tag.mjs --dest="$RUNNER_TEMP/agent-org"
       - name: Is a release owed -- did the newest release run on main die in consumer-gate / check-pin?
         id: owed
         env:

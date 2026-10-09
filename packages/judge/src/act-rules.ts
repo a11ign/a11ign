@@ -196,6 +196,30 @@ export const ACT_RULES: ActRuleDescription[] = [
       + "at all, since a cancelled paste has no accessibility-tree equivalent.",
   },
   {
+    id: "a11ign:redundant-email-entry",
+    version: "2026-10-09",
+    name: "A later required email field stayed empty after an earlier one in the same form was filled",
+    description: "The Understanding page for 3.3.7: \"Information previously entered by or provided to the user that is "
+      + "required to be entered again in the same process is either: auto-populated, or available for the user to "
+      + "select\".",
+    ruleType: "atomic",
+    accessibilityRequirements: [{ criterion: "3.3.7", mapping: "secondary" }],
+    inputAspects: ["DOM"],
+    applicability: "Every `input` of type `email` that is `required`, follows another `email` input in the same "
+      + "`form`, and the DOM census carries an auto-population outcome for.",
+    expectation: "The control holds a value after a value was typed into the earlier control.",
+    assumptions: [
+      "SECONDARY, not conformance: the ESSENTIAL and NO-LONGER-VALID exceptions are judgements, and so is \"available "
+        + "to select\" (a drop-down, a \"same as\" checkbox), none of which this evidence reads.",
+      "PAIRED BY INPUT TYPE, NEVER BY LABEL: a password confirmation pairs by label exactly as an email one does and "
+        + "is the criterion's SECURITY exception, so only `email` is claimed. `tel` and `url` are not.",
+      "#4355: no worker-side census populates `formInputs[].form`, `.required` or `.populatedFromEarlier` on a real "
+        + "capture yet, so this rule has never fired on a real page -- see `criterion-coverage.ts`'s 3.3.7 entry.",
+    ],
+    accessibilitySupport: "The page's own script decides the outcome; no screen reader involvement at all, since "
+      + "auto-population has no accessibility-tree equivalent.",
+  },
+  {
     id: "a11ign:unnamed-graphic-count",
     version: "2026-08-08",
     name: "The page exposes images with no accessible name",

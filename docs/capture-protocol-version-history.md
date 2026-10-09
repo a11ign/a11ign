@@ -326,3 +326,26 @@ captured before reads blind while any page captured later reads the field.
 
 **The cost is a recapture, and it is `orchestrator`'s window:** it rides any other pending bump (none was open on
 2026-10-09), and the PR (`a11ign/screenreader-worker#36`) deploys nothing.
+
+## 23 → 24 (2026-10-09): the form census reports `form`, `required` and `populatedFromEarlier`
+
+3.3.7's rule (`addRedundantEntry`, #4355) reads `formInputs[].form`, `.required` and `.populatedFromEarlier`, and no
+capture carried them, so on a real page it read `untested` (#4361). The census in `a11ign/screenreader-worker`
+(`FORM_INPUT_CENSUS_EXPRESSION`) now records `form` (the index of the owning form in `document.forms`, absent with none)
+and `required` (the property, which reflects the attribute and not `aria-required`) on every control, and
+`populatedFromEarlier` on an `input[type=email]` that has an earlier email in the same form. Other controls carry no
+`populatedFromEarlier` key: absent means not examined, never `false`.
+
+**It is the first census key that WRITES to the page.** A sentinel is set on the earlier email through the native value
+setter, `input` and `change` are dispatched, one task passes, and the answer is whether the later field's value became
+non-empty and differs from what it held (a server pre-filled field does not count). Both fields are restored in a
+`finally`. No button is pressed (`probeForms` does that, and is not involved). A page listener runs on the sentinel, so a
+page that logs input events logs two. Whether this belongs in the census or inside the opt-in `probeTyping` is a design
+question left to `orchestrator`; the rule is silent either way when the key is absent.
+
+**Why it is a bump and not an additive field**, #170's and 22 → 23's reason: a v23 capture lacks the keys and a reader
+treats that as "not asked", which is correct, but the cache would keep serving v23 captures, so a page captured before
+reads blind while any page captured later reads them.
+
+**The cost is a recapture, and it is `orchestrator`'s window:** it rides any other pending bump, and the PR
+(`a11ign/screenreader-worker`, branch `agent/worker-census-populate-forminputs-4361`) deploys nothing.
