@@ -4,8 +4,8 @@
 /**
  * THE ONE-LINE DISPATCHER — A3.
  *
- *   node scripts/run.ts --list             every command this repository declares, by name
- *   node scripts/run.ts <name> [args...]   run one, passing everything after the name through
+ *   node --import tsx scripts/run.ts --list             every command this repository declares, by name
+ *   node --import tsx scripts/run.ts <name> [args...]   run one, passing everything after the name through
  *
  * A command in `commands.mjs` needs no `package.json` entry, which is the whole point: 19 PRs edited
  * `package.json` for unrelated reasons, so a changeset, a dependency bump and a new script collided in one

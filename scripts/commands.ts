@@ -6,7 +6,7 @@
  * script all land in one file, so two of them collide for no reason connected to either. B4 (no two open
  * PRs touch the same file) is impractical while that is true, which is why this row comes before it.
  *
- * A command declared here is invoked as `node scripts/run.ts <name>` and needs no `package.json` entry at
+ * A command declared here is invoked as `node --import tsx scripts/run.ts <name>` and needs no `package.json` entry at
  * all. Versions and dependencies keep that file; commands leave it.
  *
  * ## WHY A DATA FILE RATHER THAN A DIRECTORY SCAN

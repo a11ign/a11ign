@@ -141,7 +141,7 @@ export function applyIndexBlock(text: string) {
 
 function main() {
   // Guarded per #164: reads --write.
-  refuseUnknownFlags(["--write"], { entry: import.meta.url, command: "node scripts/known-gaps-index.ts" });
+  refuseUnknownFlags(["--write"], { entry: import.meta.url, command: "node --import tsx scripts/known-gaps-index.ts" });
   const repoRoot = fileURLToPath(new URL("../", import.meta.url));
   const path = join(repoRoot, KNOWN_GAPS_FILE);
   if (!existsSync(path)) {

@@ -642,7 +642,7 @@ function appendToCiHealthComment(body: string, on: { repository: string; issue: 
 }
 
 function main() {
-  refuseUnknownFlags(["--since=", "--until=", "--hours=", "--transcripts=", "--post"], { entry: import.meta.url, command: "node scripts/token-cost.ts" });
+  refuseUnknownFlags(["--since=", "--until=", "--hours=", "--transcripts=", "--post"], { entry: import.meta.url, command: "node --import tsx scripts/token-cost.ts" });
   const file = readTargetsFile(TARGETS_FILE);
   if ("missing" in file) {
     process.stdout.write(`${unreadSection(file.missing)}\n`);

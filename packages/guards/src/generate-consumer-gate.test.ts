@@ -174,7 +174,7 @@ test("buildConsumerGateWorkflow: the pinned sha appears in the check-pin ancestr
   assert.ok(workflow.includes(`git merge-base --is-ancestor ${SHA} "\${{ github.sha }}"`));
   assert.ok(workflow.includes(`git diff --quiet ${SHA} "\${{ github.sha }}" -- ${ACTION_DEFINITION.join(" ")}`));
   assert.ok(workflow.includes(`git diff --stat ${SHA} "\${{ github.sha }}" -- action.yml`));
-  assert.ok(workflow.includes("run: node scripts/generate-consumer-gate.ts --check"));
+  assert.ok(workflow.includes("run: node --import tsx scripts/generate-consumer-gate.ts --check"));
   assert.ok(workflow.includes('if [ "${{ needs.a11y.result }}" != "success" ]; then'));
   assert.deepEqual(ACTION_DEFINITION, ["action.yml"]);
 });
@@ -337,7 +337,7 @@ test("actionPinVerdict (#4153, #4331): the real tree -- the committed pin contai
 });
 
 test("actionPinVerdict (#4153): the refusal says what the release's own check-pin says, so the two cannot drift", () => {
-  const phrases = ["would run the OLD Action", "regenerate (node scripts/generate-consumer-gate.ts)"];
+  const phrases = ["would run the OLD Action", "regenerate (node --import tsx scripts/generate-consumer-gate.ts)"];
   const workflow = generate(readFileSync(README_PATH, "utf8"), SHA) as string;
   withGitSandbox((sandbox) => {
     sandbox.run(["init", "-q", "-b", "main"]);

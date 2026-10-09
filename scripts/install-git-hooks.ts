@@ -117,6 +117,6 @@ if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.arg
   // Guarded HERE rather than inside `installHooks`, which is exported and driven by tests with injected
   // dependencies — a guard inside it would be reading a test runner's argv, which is the exact mistake
   // `refuseUnknownFlags`'s own `entry` parameter exists to prevent.
-  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/install-git-hooks.ts" });
+  refuseUnknownFlags([], { entry: import.meta.url, command: "node --import tsx scripts/install-git-hooks.ts" });
   installHooks();
 }

@@ -361,7 +361,7 @@ const flagValue = (flag: string): string | undefined => process.argv.slice(2).fi
 const readRun = (repository: string, id: number) => ghJson(`repos/${repository}/actions/runs/${id}`);
 
 function main() {
-  refuseUnknownFlags(["--run=", "--merged=", "--policy=", "--deleted=", "--repo="], { entry: import.meta.url, command: "node scripts/selection-skipped.ts" });
+  refuseUnknownFlags(["--run=", "--merged=", "--policy=", "--deleted=", "--repo="], { entry: import.meta.url, command: "node --import tsx scripts/selection-skipped.ts" });
   const repository = flagValue("--repo") ?? DEFAULT_REPOSITORY;
   sh("git", ["fetch", "--quiet", "origin", "main"]);
   const runId = flagValue("--run");

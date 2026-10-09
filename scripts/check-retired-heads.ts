@@ -38,7 +38,7 @@ export const DECLARATION_FILE = "packages/scorer/models/retired-heads.json";
  * @param {{ criteria?: Record<string, { subtypes?: Record<string, unknown> }> } | null | undefined} report
  */
 export function headSet(report: { criteria?: Record<string, { subtypes?: Record<string, unknown>; }>; } | null | undefined) {
-  const ids = new Set();
+  const ids = new Set<string>();
   for (const entry of Object.values(report?.criteria ?? {})) {
     for (const id of Object.keys(entry?.subtypes ?? {})) ids.add(id);
   }
@@ -99,7 +99,7 @@ function readJson(path: string) {
 
 function main() {
   // Guarded per #164: takes no flags at all.
-  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/check-retired-heads.ts" });
+  refuseUnknownFlags([], { entry: import.meta.url, command: "node --import tsx scripts/check-retired-heads.ts" });
   const repoRoot = fileURLToPath(new URL("../", import.meta.url));
   const shipped = readJson(join(repoRoot, SHIPPED_REPORT));
   const candidate = readJson(join(repoRoot, CANDIDATE_REPORT));

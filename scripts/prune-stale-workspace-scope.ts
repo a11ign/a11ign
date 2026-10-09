@@ -125,6 +125,6 @@ export function pruneStaleWorkspaceScopes({ repo = REPO, log = console.error, re
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
-  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/prune-stale-workspace-scope.ts" });
+  refuseUnknownFlags([], { entry: import.meta.url, command: "node --import tsx scripts/prune-stale-workspace-scope.ts" });
   pruneStaleWorkspaceScopes();
 }

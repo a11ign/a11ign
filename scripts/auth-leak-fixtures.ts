@@ -14,6 +14,7 @@
  * Every path is under `/<fixture>/`, so a URL says which site it is and one server can serve either.
  */
 import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { randomBytes } from "node:crypto";
 
 export const LOGIN_HEADING = "Sign in";
@@ -86,7 +87,7 @@ export async function startFixtureSite({ fixture, user, secret }: { fixture: "lo
     } else send(HTTP_NOT_FOUND, page("Not found", "<h1>Not found</h1>"));
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(undefined)));
-  const port = /** @type {import("node:net").AddressInfo} */ (server.address()).port;
+  const port = (server.address() as AddressInfo).port;
   return {
     origin: `http://127.0.0.1:${port}`,
     close: () => new Promise((resolve) => { server.close(() => resolve(undefined)); server.closeAllConnections(); }),

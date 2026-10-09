@@ -405,7 +405,7 @@ function windowFromArgv(): { since: string; until: string; } {
 }
 
 function main() {
-  refuseUnknownFlags(["--since=", "--until=", "--post"], { entry: import.meta.url, command: "node scripts/ci-health.ts" });
+  refuseUnknownFlags(["--since=", "--until=", "--post"], { entry: import.meta.url, command: "node --import tsx scripts/ci-health.ts" });
   const targets = targetsFrom(JSON.parse(readFileSync(TARGETS_FILE, "utf8")));
   const window = windowFromArgv();
   const readings = targets.repositories.map((repository) => readOne(repository, targets, window));

@@ -21,7 +21,7 @@ import { refuseUnknownFlags } from "./cli-flags.mjs";
 const REPO = fileURLToPath(new URL("../", import.meta.url));
 
 function main() {
-  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/release-print-versions.ts" });
+  refuseUnknownFlags([], { entry: import.meta.url, command: "node --import tsx scripts/release-print-versions.ts" });
   for (const { path, name } of publishedManifests(REPO)) {
     const { version } = JSON.parse(readFileSync(join(REPO, path), "utf8"));
     console.log(`${name}@${version}`);

@@ -264,7 +264,7 @@ jobs:
       # `release:version`: after it the changesets are already spent. Not folded into `release:version` itself, whose exact
       # text `pnpm-publish-path.test.ts` and `release-safety.test.ts` pin.
       - name: Write the entry each dependency pull request owes, from the manifests at the last release tags
-        run: node scripts/dependency-changeset.ts compile
+        run: node --import tsx scripts/dependency-changeset.ts compile
       # `changeset version` does NOT update the lockfile; `release:version` is that plus the lockfile-only install
       # (see .changeset/README.md), so the version pull request does not break the next frozen install.
       - run: pnpm run release:version
@@ -297,7 +297,7 @@ jobs:
           weights: unchanged
 
           Acceptance:
-          node scripts/release-print-versions.ts
+          node --import tsx scripts/release-print-versions.ts
 
           Closes: none — a version pull request finishes no row
           BODY
@@ -557,14 +557,14 @@ jobs:
       # itself, on ubuntu-latest, before that job's Windows step even starts. This step and guard 7 check
       # two different things and neither one alone would close the "checked something, not this" gap.
       - name: consumer-gate.yml matches README.md's documented workflow (sha aside -- guard 7 checks that)
-        run: node scripts/generate-consumer-gate.ts --check
+        run: node --import tsx scripts/generate-consumer-gate.ts --check
 
       # #1397: THIS COUNT USED TO BE TYPED INTO THE MESSAGE ("4 of release:gate's 12 stages") rather than
       # read from the two chains it describes, and drifted the day release:gate grew a stage: the true
       # count was 5 of 13. `release-gate-scope.mjs` reads `package.json`'s own `release:gate` and
       # `release:gate:ci` scripts every run, so the warning can only ever describe the chain that exists.
       - name: Name what this runner did NOT check
-        run: node scripts/release-gate-scope.ts
+        run: node --import tsx scripts/release-gate-scope.ts
 
       # BEFORE `version`, and the order is the whole point. `changeset status` reports what is PENDING, so
       # after `version` has consumed them it says "Some packages have been changed but no changesets were
@@ -599,7 +599,7 @@ jobs:
       # `manifest-repository-check.mjs` already treats as "published", so this names exactly the packages
       # the pending step above named.
       - name: What each package's version now is
-        run: node scripts/release-print-versions.ts
+        run: node --import tsx scripts/release-print-versions.ts
 
       # AFTER, and it asks a different question: what did `version` actually write? The two together are
       # "what was asked for" and "what happened", which is the shape every verification here takes.
@@ -624,7 +624,7 @@ jobs:
       # place a dry run can see the mismatch. Until the transfer (#63) a run from the pre-transfer repository goes
       # red HERE by design -- the manifests already name a11ign/a11ign -- and that is not a regression.
       - name: Every published manifest names the repository this run publishes from
-        run: node scripts/manifest-repository-check.ts
+        run: node --import tsx scripts/manifest-repository-check.ts
 
       # NOT AN EIGHTH GUARD (#3126): a TEMPORARY HOLD that each move row's last step lifts, one package at a time, until
       # `@a11ign/screenreader-worker`, `-fleet` and `@a11ign/documents` have released from their own repositories (ADR 0040).
@@ -756,7 +756,7 @@ jobs:
         if: inputs.dry-run == true
         env:
           NPM_CONFIG_PROVENANCE: "true"
-        run: node scripts/release-publish-rehearsal.ts
+        run: node --import tsx scripts/release-publish-rehearsal.ts
 
       # #1824 / #3131: THERE IS NO "COMMIT THE VERSION BUMP BACK" STEP, AND ITS ABSENCE IS THE POINT. It pushed straight to
       # `main`, which `main`'s required review refuses. The bump is committed by the `version-pr` job, onto a branch,

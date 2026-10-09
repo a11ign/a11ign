@@ -97,7 +97,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          BODY=$(node scripts/coverage-failure-classifier.ts \
+          BODY=$(node --import tsx scripts/coverage-failure-classifier.ts \
             --ci-outcome=${{ steps.ci.outcome }} \
             --build-outcome=${{ steps.build.outcome }} \
             --log=coverage-output.log \
@@ -434,7 +434,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          node scripts/doc-cross-reference-report.ts > /tmp/doc-report.md
+          node --import tsx scripts/doc-cross-reference-report.ts > /tmp/doc-report.md
           gh issue comment 928 --body-file /tmp/doc-report.md
 
   # #912: THE ORG'S CLOCK, durable. `org-watch.mjs` reads main's colour (and, as its remaining reads land,
