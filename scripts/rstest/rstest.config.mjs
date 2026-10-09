@@ -41,6 +41,7 @@ const READ_DIRECTORY_TRIGGERS = [
   ".agent-org/roles/**",
   ".agent-org/units/**",
   ".claude/rules/**",
+  ".github/chainguard/**",
   ".github/workflows/**",
   "docs/adr/**",
   "docs/board/**",
@@ -50,11 +51,16 @@ const READ_DIRECTORY_TRIGGERS = [
   "packages/scorer/tests/**",
   "packages/worker-fleet/src/local-worker/**",
   "packages/worker-fleet/src/provisioning/**",
+  "scripts/fixtures/registry-consumer-gate/**",
   "scripts/git-hooks/**",
   "scripts/isolation-fixtures/missing-sibling/**",
 ];
 
-/** #3572: single files a non-tree-wide test reads by path (a doc, a workflow, a role brief, a fixture), derived as above. */
+/**
+ * #3572: single files a non-tree-wide test reads by path (a doc, a workflow, a role brief, a fixture), derived as above. #4419: the last 27 the lab's
+ * derivation found missing, pinned by `force-rerun-triggers-cover-the-27.test.ts`; `scripts/fixtures/octo-sts-*` is one glob for the six fixtures
+ * `octo-sts-policies.test.ts` and `octo-sts-trusted-issuers.test.ts` read, which picomatch (rstest's matcher) accepts.
+ */
 const READ_FILE_TRIGGERS = [
   ".agent-org/project.json",
   ".agent-org/roles/README.md",
@@ -112,20 +118,24 @@ const READ_FILE_TRIGGERS = [
   "docs/README.md",
   "docs/adr/0041-every-repository-releases-itself-continuously.md",
   "docs/architecture-audit.md",
+  "docs/auth-attach-spike.md",
   "docs/backlog-ready.md",
   "docs/backlog.md",
   "docs/board/summaries/2026-09-07.md",
   "docs/code-repository-protection.json",
   "docs/capture-cost.md",
+  "docs/ci-targets.json",
   "docs/commands.md",
   "docs/control-plane-hygiene.md",
   "docs/control-plane-proxmox.md",
+  "docs/evidence-pack.md",
   "docs/gate-exit-codes.md",
   "docs/getting-started.md",
   "docs/github-action.md",
   "docs/history-purge-replacements.md",
   "docs/known-gaps.md",
   "docs/lane-ownership.json",
+  "docs/licence-faq.md",
   "docs/mutant-replay.md",
   "docs/nvda-worker-runbook.md",
   "docs/operational-lessons.md",
@@ -153,8 +163,10 @@ const READ_FILE_TRIGGERS = [
   "packages/worker-fleet/src/display-mode-harness.ps1",
   "requirements-ci.txt",
   "scripts/fixtures/calibration-verdicts.json",
+  "scripts/fixtures/octo-sts-*",
   "scripts/fixtures/release-before-3717.yml",
   "scripts/history-purge-replacements.txt",
+  "scripts/outsider/outsider-job.yml",
   "scripts/test-support/launcher-reach.stand-in.cmd",
 ];
 
