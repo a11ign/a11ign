@@ -261,7 +261,7 @@ words would have found it, because the defect was that a number had been typed r
 
 ## The tracker's rules, ruled by `ceo` 2026-09-07 after the board asked why the count mattered
 
-**Haiku by default (chairman, 2026-10-09, #928).** A row whose change is mechanical and whose `## Acceptance` is a command a machine can run is filed with `tier:haiku`, and so are `ready` rows not yet claimed. A Sonnet worker needs a stated reason on the row. The stop rule of #4382 is the revert; `ceo` posts the share and the first-pass merge rate on #928.
+**The router decides the model and effort for every row (chairman, 2026-10-09, #4627 comment 6089878534).** The chairman's words: "the router decides the model and effort for EVERY row", because hand-tagging guesses what the router decides and today it OVERRIDES the router. A row is filed and promoted with no `tier:haiku`, and the router (#4629) decides. `tier:haiku` is a deliberate override only, added by the chairman or `ceo` with a one-line reason on the row, and any other `tier:haiku` is removed when the row is next touched. Haiku effort stays `high` for the trial, and a Haiku medium or low route is a later measured step that is not added now. The stop rule of #4382 stays the revert; `ceo` posts the share and the first-pass merge rate on #928.
 
 **The honest answer was that it does not — three things it stood for do.** The total cap is withdrawn.
 
