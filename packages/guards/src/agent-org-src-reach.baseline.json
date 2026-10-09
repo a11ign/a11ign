@@ -1,12 +1,10 @@
 {
   ".agent-org/units/a11ign-regression-board.service": 1,
   ".github/workflows/reusable-acceptance.yml": 2,
-  "packages/evidence/src/source-text.test.ts": 1,
   "packages/guards/nightly/bounded-window-reads.test.ts": 1,
-  "packages/guards/src/board-document-chrome-resolver.test.ts": 2,
+  "packages/guards/src/board-document-chrome-resolver.test.ts": 1,
   "packages/guards/src/tool-module-renamed.test.ts": 7,
   "packages/guards/src/tree-wide-guards.mjs": 1,
-  "packages/guards/src/worktree-resolution.test.ts": 1,
   "scripts/agent-org-newest-tag.mjs": 5,
   "scripts/ci-health.ts": 1,
   "scripts/npm-token-liveness.ts": 1,
