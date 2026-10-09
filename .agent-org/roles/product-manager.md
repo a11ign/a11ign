@@ -261,6 +261,8 @@ words would have found it, because the defect was that a number had been typed r
 
 ## The tracker's rules, ruled by `ceo` 2026-09-07 after the board asked why the count mattered
 
+**Haiku by default (chairman, 2026-10-09, #928).** A row whose change is mechanical and whose `## Acceptance` is a command a machine can run is filed with `tier:haiku`, and so are `ready` rows not yet claimed. A Sonnet worker needs a stated reason on the row. The stop rule of #4382 is the revert; `ceo` posts the share and the first-pass merge rate on #928.
+
 **The honest answer was that it does not — three things it stood for do.** The total cap is withdrawn.
 
 **1. Work-in-progress limits, where they bite.** Ready holds **at least three PRODUCT rows** and at most six unclaimed. ~~**A worker holds at most one claimed row beyond the one in flight** — two claimed, total.~~ **RETIRED 2026-09-09 by `ceo`, replaced by liveness:** a claim is live while its branch has a push or its row has a comment from the claimant in the last four hours; a claim that has neither is dead, and the tracker-auditor releases it. No cap on claimed rows and no cap on the open total. A count of claims measured reservations, and a reservation costs nothing to hold and nothing to break — the incident below shows six held while Ready was empty. Four hours of silence on a claimed row is the stalled state `README.md` calls worse than unclaimed, whatever label it carries, and it is a measurement rather than a label: nobody can meet it by relabelling.
