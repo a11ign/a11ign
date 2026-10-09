@@ -195,6 +195,8 @@ jobs:
           if-no-files-found: warn
 ```
 
+**A release is tagged `a11ign@<version>`** (`a11ign@0.5.3` is the tag the pin above names), and every published version has one; that is the form to look for, and `node --import tsx scripts/release-tags-complete.ts` prints any published version that lacks it. The `v<version>` tags are not that contract: the release job writes them only so Dependabot can see the Action, and not every version has one. `a11ign/a11ign@v0` is the Action's major tag, which follows the newest qualified release.
+
 **That is the job, not yet a workflow file.** Put it in `.github/workflows/a11ign.yml` under two more lines, `name: a11ign` and a trigger such as `on: [pull_request, workflow_dispatch]`; the whole runnable file, trigger included, is at the top of [the Action guide](./docs/github-action.md).
 
 **No API key and no account** — `judge-backend` defaults to `local`, this
