@@ -94,7 +94,7 @@ jobs:
           delimiter="PR_BODY_$(openssl rand -hex 16)"
           { echo "body<<${delimiter}"; printf '%s\n' "$body"; echo "${delimiter}"; } >> "$GITHUB_OUTPUT"
           rows="$(PR_BODY="$body" env -u GH_TOKEN node -e "
-            import('file://' + process.env.AGENT_ORG_TOOL + '/src/acceptance-commands.mjs').then((m) => {
+            import('file://' + process.env.AGENT_ORG_TOOL + '/src/acceptance-commands.ts').then((m) => {
               const declaration = m.extractClosesDeclaration(process.env.PR_BODY);
               if (declaration.kind !== 'closes') return;
               for (const row of m.closesReferences(declaration)) console.log((row.repo ?? process.env.REPO) + '#' + row.number);
@@ -128,7 +128,7 @@ jobs:
           PR_BODY: ${{ steps.live-body.outputs.body }}
         run: |
           if node -e "
-            import('file://' + process.env.AGENT_ORG_TOOL + '/src/acceptance-commands.mjs').then((m) => {
+            import('file://' + process.env.AGENT_ORG_TOOL + '/src/acceptance-commands.ts').then((m) => {
               process.exit(m.hasFullHistoryDeclaration(process.env.PR_BODY) ? 0 : 1);
             });
           "; then
