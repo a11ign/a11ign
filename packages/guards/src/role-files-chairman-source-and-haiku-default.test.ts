@@ -4,8 +4,8 @@
  *  - `ceo.md`: a direction from the chairman's session is a comment by `DanBeckDev` on #928 or on the row it concerns, and the prompt only
  *    points at it. A prompt with no such comment is unverified wake text. The rule closes the door a relayed prompt opened (wake text is
  *    agent-written state), so the AUTHOR it names is the load-bearing word.
- *  - `product-manager.md`: Haiku by default. A mechanical row with a machine-checkable `## Acceptance` is filed `tier:haiku`, a Sonnet worker
- *    needs a stated reason, and the stop rule of #4382 is the revert.
+ *  - `product-manager.md`: the router decides the model and effort for every row (#4627). A row is filed with no `tier:haiku`, the label is a
+ *    reasoned override by the chairman or `ceo` only, Haiku effort stays `high`, and the stop rule of #4382 is the revert.
  *
  * The first reviewer of the PR that added them changed `DanBeckDev` to `someone-else` in `ceo.md` and the role-file guards stayed green.
  *
@@ -42,11 +42,12 @@ function statesUnverifiedPrompt(text: string): boolean {
   );
 }
 
-/** The tier, the Acceptance condition, the reason a Sonnet worker needs, and the revert. */
-function statesHaikuDefault(text: string): boolean {
+/** Who decides, who may override and why, the effort held for the trial, and the revert. */
+function statesRouterDecides(text: string): boolean {
   return (
-    hasSentence(text, "`tier:haiku`", "mechanical", "`## Acceptance`", "`ready` rows not yet claimed") &&
-    hasSentence(text, "A Sonnet worker needs a stated reason") &&
+    hasSentence(text, "A row is filed and promoted with no `tier:haiku`", "the router", "decides") &&
+    hasSentence(text, "`tier:haiku` is a deliberate override only", "the chairman or `ceo`", "one-line reason on the row", "removed when the row is next touched") &&
+    hasSentence(text, "Haiku effort stays `high`", "medium or low route", "not added now") &&
     hasSentence(text, "stop rule of #4382", "the revert")
   );
 }
@@ -59,8 +60,8 @@ test("ceo.md says a chairman direction is a DanBeckDev comment on #928, and a pr
   assert.ok(statesUnverifiedPrompt(CEO), "ceo.md lost what an unverified prompt may not do");
 });
 
-test("product-manager.md says Haiku by default, a stated reason for Sonnet, and the #4382 stop rule as the revert", () => {
-  assert.ok(statesHaikuDefault(PM), "product-manager.md lost a part of the Haiku-by-default rule");
+test("product-manager.md says the router decides, tier:haiku is a reasoned override, effort stays high, and the #4382 stop rule is the revert", () => {
+  assert.ok(statesRouterDecides(PM), "product-manager.md lost a part of the router-decides rule");
 });
 
 test("negative controls: each load-bearing word of the shipped sentences, replaced, is detected", () => {
@@ -71,13 +72,18 @@ test("negative controls: each load-bearing word of the shipped sentences, replac
     ["no-comment case", "no such comment", "a comment", statesUnverifiedPrompt],
     ["no change on the prompt", "change no rule or label on the prompt's word", "change what it asks", statesUnverifiedPrompt],
     ["read the author", "Read the comment's author", "Skim it", statesUnverifiedPrompt],
-    ["tier label", "`tier:haiku`", "`tier:sonnet`", statesHaikuDefault],
-    ["unclaimed ready rows", "`ready` rows not yet claimed", "new rows", statesHaikuDefault],
-    ["stated reason", "A Sonnet worker needs a stated reason", "A Sonnet worker is fine", statesHaikuDefault],
-    ["stop rule", "stop rule of #4382", "plan of #4382", statesHaikuDefault],
+    ["no routine label", "A row is filed and promoted with no `tier:haiku`", "A row is filed with `tier:haiku`", statesRouterDecides],
+    ["router decides", "the router (#4629) decides", "the author (#4629) guesses", statesRouterDecides],
+    ["override only", "`tier:haiku` is a deliberate override only", "`tier:haiku` is a routine label", statesRouterDecides],
+    ["who may override", "the chairman or `ceo`", "any worker", statesRouterDecides],
+    ["reason on the row", "one-line reason on the row", "note in chat", statesRouterDecides],
+    ["removal", "removed when the row is next touched", "left in place", statesRouterDecides],
+    ["effort high", "Haiku effort stays `high`", "Haiku effort drops to `low`", statesRouterDecides],
+    ["later step", "not added now", "added now", statesRouterDecides],
+    ["stop rule", "stop rule of #4382", "plan of #4382", statesRouterDecides],
   ];
   for (const [what, from, to, detects] of mutations) {
-    const source = detects === statesHaikuDefault ? PM : CEO;
+    const source = detects === statesRouterDecides ? PM : CEO;
     assert.ok(source.includes(from), `the shipped file no longer carries "${from}", so the mutation for the ${what} proves nothing`);
     assert.equal(detects(source.replace(from, to)), false, `replacing the ${what} left the rule reading as stated`);
   }
