@@ -275,6 +275,10 @@ test("#2218 THE CALLER: `assert-glob-not-empty --run` refuses in a mis-wired tre
       name: "@a11ign/screenreader-fleet", type: "module", exports: { "./cli-flags": "./dist/cli-flags.mjs" },
     }));
     copyFileSync(join(REPO, "node_modules/@a11ign/screenreader-fleet/dist/cli-flags.mjs"), join(other, "dist", "cli-flags.mjs"));
+    // Since 0.7.0 that file re-exports the guard from `@a11ign/toolchain/lib/cli-flags` (#4425), so the other checkout must resolve the
+    // toolchain too; without it the import threw ERR_MODULE_NOT_FOUND before the floor could print its refusal.
+    mkdirSync(join(base, "other-checkout", "node_modules", "@a11ign"), { recursive: true });
+    symlinkSync(realpathSync(join(REPO, "node_modules", "@a11ign", "toolchain")), join(base, "other-checkout", "node_modules", "@a11ign", "toolchain"));
     mkdirSync(join(tree, "node_modules", "@a11ign"), { recursive: true });
     symlinkSync(other, join(tree, "node_modules", "@a11ign", "screenreader-fleet"));
     const ran = spawnSync(process.execPath, [join(tree, "packages/guards/src/assert-glob-not-empty.ts"),
