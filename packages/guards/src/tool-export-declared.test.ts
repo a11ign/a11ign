@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { toolBin, toolExport, toolExportPath } from "../../../scripts/agent-org-newest-tag.mjs";
 
-function aTool(manifest: object, files: Record<string, string>, body: (dir: string) => Promise<void> | void) {
+async function aTool(manifest: object, files: Record<string, string>, body: (dir: string) => Promise<void> | void) {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), "tool-export-")));
   try {
     writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "agent-org", type: "module", ...manifest }));
@@ -19,7 +19,7 @@ function aTool(manifest: object, files: Record<string, string>, body: (dir: stri
       mkdirSync(join(dir, file, ".."), { recursive: true });
       writeFileSync(join(dir, file), text);
     }
-    return body(dir);
+    await body(dir);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 }
 
@@ -44,9 +44,9 @@ test("a name the tool does not declare is refused, naming what it does declare",
     assert.throws(() => toolExportPath("hidden", dir), (error: Error) => /does not declare `agent-org\/hidden`/.test(error.message) && /greeting/.test(error.message));
   }));
 
-test("the bin is the one package.json declares, as an object or as a string", () => {
-  aTool({ bin: { "agent-org": "src/cli.mjs" } }, {}, (dir) => assert.equal(toolBin(dir), join(dir, "src/cli.mjs")));
-  aTool({ bin: "bin/run.mjs" }, {}, (dir) => assert.equal(toolBin(dir), join(dir, "bin/run.mjs")));
+test("the bin is the one package.json declares, as an object or as a string", async () => {
+  await aTool({ bin: { "agent-org": "src/cli.mjs" } }, {}, (dir) => assert.equal(toolBin(dir), join(dir, "src/cli.mjs")));
+  await aTool({ bin: "bin/run.mjs" }, {}, (dir) => assert.equal(toolBin(dir), join(dir, "bin/run.mjs")));
 });
 
 test("a tool declaring no bin is refused", () => aTool({}, {}, (dir) => assert.throws(() => toolBin(dir), /declares no `agent-org`/)));
