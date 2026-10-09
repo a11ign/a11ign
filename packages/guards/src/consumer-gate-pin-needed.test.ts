@@ -1,3 +1,4 @@
+// requires: history
 // no-token: gh -- reads the workflow and the policy as text and drives `git` in a temp directory with a bare repository as "origin"; the GH_TOKEN it names is a string asserted on in the workflow, never read, and nothing reaches the network
 /**
  * #4331: THE MERGE THAT STALES `consumer-gate.yml`'S PIN STARTS ITS REPAIR. Eleven rows were filed by hand for one fault, so these tests pin
@@ -73,7 +74,7 @@ test("pinDecision: a pin that is not an ancestor of the commit is REGENERATE too
     const base = commitFiles(sandbox, { "action.yml": "v1\n" });
     sandbox.run(["switch", "-q", "-c", "side"]);
     const side = commitFiles(sandbox, { "other.txt": "side\n" });
-    sandbox.run(["switch", "-q", "main"]);
+    sandbox.run(["switch", "-q", "--detach", base]); // by commit, not by branch name: the fixture does not depend on what `init` calls its first branch
     const head = commitFiles(sandbox, { "other.txt": "main\n" });
     assert.equal(pinDecision({ pin: side, head, cwd: sandbox.dir }).action, REGENERATE);
     assert.match(pinDecision({ pin: side, head, cwd: sandbox.dir }).reason, /not an ancestor/);
