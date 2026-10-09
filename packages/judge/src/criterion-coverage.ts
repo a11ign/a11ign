@@ -815,8 +815,34 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
   "3.2.6": { status: "out-of-scope", needs: ["multi-page"], note: "Consistent Help compares the position of help mechanisms across pages, so it needs more than one." },
   "3.3.4": { status: "out-of-scope", needs: ["human"], note: "THE FLOW WAS NOT THE BARRIER, and this is the third reason in this file to say it was (see 3.3.7 and 3.3.8). W3C: assessment does NOT necessarily require observing a complete transaction; the \"Confirmed\" bullet asks whether \"a mechanism is available for reviewing, confirming, and correcting information before finalizing\", and an order-review page shows that on its own. So `multi-page` was wrong and is dropped. What remains is genuinely a judgement, and it is the FIRST clause rather than the three bullets: deciding that a page \"causes legal commitments or financial transactions\" or \"modifies or deletes user-controllable data\" is a claim about consequence in the world, which no capture carries. And as with 3.3.8 there is a second, independent bar: satisfying oneself that submissions are Reversible would mean submitting one, and `probeForms` is off for pages we do not own precisely because pressing a stranger's button is not a review.", },
   "3.3.7": { status: "reachable", needs: ["screen-reader"], channels: ["formFields", "formChanges"], note: "TWO CORRECTIONS, A DAY APART, AND THE SECOND REVERSED THE FIRST'S CONCLUSION. The original reason was `multi-page`: \"Redundant Entry spans steps of a process\". The criterion governs re-entry \"in the same process\", and W3C puts a process inside one page explicitly -- an email field, then \"confirm your email\", no auto-population, is the textbook failure and entirely one document. The word \"process\" had been read as \"pages\". That correction kept it out of scope on the EXCEPTIONS, assuming they were judgements broad enough to make any rule unsafe. THEY ARE NOT, AND ASSUMING SO WITHOUT READING THEM WAS THE SAME DEFECT ONE LAYER ON. Read: the SECURITY exception explicitly covers password confirmation -- \"having users re-validate their new string is allowed as an exception\" -- and the ESSENTIAL exception is narrow, defined as information whose removal \"would fundamentally change the information or functionality\", with memory games as its only example. **Verifying accuracy does not qualify.** So the common conformant pattern is not a judgement at all, it is one named exception, and NVDA announces a password field distinctly -- the discriminator is in the evidence rather than in a human's head. WHAT IS ACTUALLY MISSING IS A PROBE: nothing today fills one field and asks whether a later one populates, though `probeTyping` already writes to controls. And the mapping should be `secondary` when it is built, not because of the exceptions but because \"these two fields want the same information\" is a LABEL HEURISTIC -- \"Home address\" and \"Billing address\" are similar strings and different information, which is the `vague_link_present` shape that took 2.4.4 to 27 false positives. Corpus case first, per the rule that a probe built now produces evidence nothing can validate.", },
-  "3.3.8": { status: "out-of-scope", needs: ["dom", "human"], note: "\"NEEDS A REAL AUTHENTICATION FLOW\" IS NOT WHAT THE CRITERION REQUIRES, and it was also the wrong `needs`. W3C is explicit that failures are identifiable from the LOGIN PAGE ITSELF: whether paste is blocked, the form field markup and naming, the presence of a cognitive test, and what alternatives are offered. Blocking paste into a password field is named as a failure outright (F109), and an `onpaste` handler is static DOM -- so this never needed a flow, a second page, or an account. Out of scope for THIS tool for two reasons the old note did not give. First, the detectable half is DOM and produces no assistive-technology signal, which makes it axe-shaped rather than ours. Second, and independently: SECURITY.md forbids the alternative. Deciding whether an \"Alternative\", \"Mechanism\", \"Object Recognition\" or \"Personal Content\" exception applies is a judgement, and `probeForms` already refuses to press buttons on pages we do not own -- attempting an authentication step on a stranger's site is not a review. A wrong reason matters here because \"needs a real flow\" reads as \"do it when we can log in\", and the right answer is that we should not.", },
-};
+  "3.3.8": {
+    // PARTIAL (#4259, #4084 outcome 2): ONE failure case is in code, the one the Understanding page spells
+    // out about the login page itself. The exceptions stay with a human, which is why the finding is
+    // `secondary` (a referral) and never an assertion.
+    status: "partial", needs: ["dom", "human"], channels: ["formInputs"],
+    realPageEvidence: {
+      available: false,
+      because: "`RuleInput.formInputs[].pasteCancelled` has no worker-side census on any capture, so the rule "
+        + "(`addPasteCancelledPassword`, #4259) has been exercised only on hand-built evidence shaped like the "
+        + "corpus pair `paste-allowed-good.html` / `paste-blocked-bad.html` (a11ign/lab#33). It has never fired on "
+        + "a real page and cannot until a `screenreader-worker` census populates the field.",
+    },
+    note: "A PASSWORD FIELD THAT CANCELS PASTE IS A REFERRED FINDING. The Understanding page "
+      + "(https://www.w3.org/WAI/WCAG22/Understanding/accessible-authentication-minimum) says: \"users are prevented "
+      + "from copy and paste operations (as they may rely on standalone/external third party password managers), "
+      + "then the page would fail this criterion unless an alternative is provided\". That sentence is the source, "
+      + "and F109 is NOT: F109 is titled \"Failure of Success Criterion 3.3.8 and 3.3.9 due to preventing password "
+      + "or code re-entry in the same format\", a different failure. It is DOM, needs no flow, no second page and "
+      + "no account, and produces no assistive-technology signal, so it is axe-shaped as much as ours. REFERRED, "
+      + "never asserted: \"unless an alternative is provided\" is the Alternative and Mechanism exceptions, and "
+      + "whether the page offers one (a passkey, an email link, a password manager's own fill) is a judgement over "
+      + "the whole page that one control's paste outcome cannot make. `partial` because the one-time-code half of "
+      + "the Understanding text, autofill blocked by script, the cognitive tests themselves and the Object "
+      + "Recognition and Personal Content exceptions are NOT covered. Attempting an authentication step on a "
+      + "stranger's site stays forbidden (SECURITY.md; `probeForms` presses nothing there), and the rule needs "
+      + "none: the evidence is one cancelable `paste` event dispatched at the field. Nothing populates that on a "
+      + "real capture yet -- see `realPageEvidence` above.",
+  },};
 
 /**
  * Exactly the capture fields the channel map reads. Narrow on purpose, like `ScorableCapture` in the scorer:

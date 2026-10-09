@@ -242,7 +242,21 @@ export interface RuleInput {
    * means NOT CHECKED, exactly as `media`'s own comment states, and is true of every capture that exists
    * today.
    */
-  formInputs?: { tag: string; type: string | null; autocomplete: string | null }[];
+  formInputs?: {
+    tag: string;
+    type: string | null;
+    autocomplete: string | null;
+    /**
+     * 3.3.8 Accessible Authentication (Minimum) (#4259): did a cancelable `paste` event dispatched at this
+     * control come back default-prevented? That reads the OUTCOME of an `onpaste="return false"` attribute
+     * and of an `addEventListener("paste", …)` handler alike, where scanning markup would see only the
+     * first. Absent means NOT CHECKED, never "paste is allowed": no census populates it on a real capture
+     * yet (a `screenreader-worker` page census, `orchestrator`'s lane, filed from #4259), so the rule has
+     * only ever read it from hand-built evidence shaped like the corpus pair
+     * (`paste-allowed-good.html` / `paste-blocked-bad.html`, a11ign/lab#33).
+     */
+    pasteCancelled?: boolean;
+  }[];
 }
 
 const EMPTY_NAME = "￼"; // ￼ — screen reader announced an element with no text/name
@@ -1184,6 +1198,36 @@ function addUnidentifiedInputPurpose(input: RuleInput, add: AddFinding): void {
 }
 
 /**
+ * 3.3.8 Accessible Authentication (Minimum) — a password field whose paste is cancelled (#4259, #4084 outcome 2).
+ *
+ * Read against the Understanding page's own body, not F109: "if user agents and password managers are
+ * actively blocked from filling in the fields (…), or users are prevented from copy and paste operations (as
+ * they may rely on standalone/external third party password managers), then the page would fail this
+ * criterion unless an alternative is provided"
+ * (w3.org/WAI/WCAG22/Understanding/accessible-authentication-minimum). F109 is titled "Failure of Success
+ * Criterion 3.3.8 and 3.3.9 due to preventing password or code re-entry in the same format", a different
+ * failure, so it is not the citation for this one.
+ *
+ * `secondary`, so a referral: "unless an alternative is provided" is the criterion's own Alternative and
+ * Mechanism exceptions ("support for password entry by password managers", an email link, a passkey), and
+ * deciding that one exists is a judgement over the whole page that this evidence cannot make. The rule sees
+ * one control's paste outcome and nothing of what else the page offers, the same bound 1.3.5 and 1.4.2 stay
+ * inside. Password fields only: the Understanding page's one-time-code text is a different control kind and
+ * a different detection, and neither is claimed here.
+ */
+function addPasteCancelledPassword(input: RuleInput, add: AddFinding): void {
+  if (!input.formInputs) return; // absent means not checked; only a probe's silence is a finding
+  for (const element of input.formInputs) {
+    if (element.type?.toLowerCase() !== "password" || element.pasteCancelled !== true) continue;
+    add("3.3.8 Accessible Authentication (Minimum)",
+      "A password field cancels paste, so a user who relies on a password manager or on copying a credential "
+        + "from elsewhere cannot enter it, and the page fails unless it offers an alternative",
+      `<${element.tag} type="password"${element.autocomplete ? ` autocomplete="${element.autocomplete}"` : ""}> `
+        + "cancels the paste event");
+  }
+}
+
+/**
  * 2.1.2 — Tab stopped moving, so focus is trapped.
  *
  * A non-interference criterion (WCAG §5.2.5): it applies to ALL content whether or not it is relied upon,
@@ -1777,6 +1821,7 @@ export function ruleFindings(input: RuleInput): Finding[] {
   addUnnamedGraphics(input, add);
   addAutoplayingAudio(input, add);
   addUnidentifiedInputPurpose(input, add);
+  addPasteCancelledPassword(input, add);
   addKeyboardTrap(input, add);
   addStaleRouteTitle(input, add);
   addBrokenFocusOrder(input, add);

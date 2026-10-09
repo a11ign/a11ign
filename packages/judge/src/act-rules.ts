@@ -170,6 +170,32 @@ export const ACT_RULES: ActRuleDescription[] = [
       + "screen reader involvement at all, since `autocomplete` has no accessibility-tree equivalent.",
   },
   {
+    id: "a11ign:paste-cancelled-password",
+    version: "2026-10-09",
+    name: "A password field cancels paste",
+    description: "The Understanding page for 3.3.8: users \"prevented from copy and paste operations (as they "
+      + "may rely on standalone/external third party password managers)\" fail the criterion \"unless an "
+      + "alternative is provided\".",
+    ruleType: "atomic",
+    accessibilityRequirements: [{ criterion: "3.3.8", mapping: "secondary" }],
+    inputAspects: ["DOM"],
+    applicability: "Every `input` of type `password` the DOM census carries a paste outcome for.",
+    expectation: "A cancelable `paste` event dispatched at the field is not default-prevented.",
+    assumptions: [
+      "SECONDARY, not conformance: the Understanding text ends \"unless an alternative is provided\", and the "
+        + "criterion's Alternative and Mechanism exceptions (another authentication method; \"support for "
+        + "password entry by password managers\") are a judgement over the whole page that one field's paste "
+        + "outcome cannot make. F109 is NOT the source: it is titled \"preventing password or code re-entry in "
+        + "the same format\".",
+      "PASSWORD FIELDS ONLY: the one-time-code text on the same page is a different control kind and a "
+        + "different detection, and autofill blocked by script is a different mechanism. Neither is claimed.",
+      "#4259: no worker-side census populates `formInputs[].pasteCancelled` on a real capture yet, so this "
+        + "rule has never fired on a real page -- see `criterion-coverage.ts`'s 3.3.8 entry.",
+    ],
+    accessibilitySupport: "The browser's own event dispatch decides the outcome; no screen reader involvement "
+      + "at all, since a cancelled paste has no accessibility-tree equivalent.",
+  },
+  {
     id: "a11ign:unnamed-graphic-count",
     version: "2026-08-08",
     name: "The page exposes images with no accessible name",
