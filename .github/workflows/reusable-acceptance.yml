@@ -59,7 +59,7 @@ jobs:
           persist-credentials: false
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version: 22, cache: pnpm }
+        with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
         run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
@@ -120,10 +120,10 @@ jobs:
             exit 1
           fi
           # The tool is reached through its DECLARED exports (`agent-org/acceptance-commands`, `agent-org/acceptance-file`, #4407), never an `src/`
-          # path the owner may rename: `createRequire` at the tool's `package.json` resolves the name through its `exports` map, and `--import`
-          # of the tool's own `tsx` lets node load the `.ts` it points at (so this does not depend on the runner's Node stripping types). The
-          # same loader opens the two steps below. A tool that does not declare the name fails here, loudly, which is what a release floor is.
-          handed_on="$(PR_BODY="$body" env -u GH_TOKEN node --import "$AGENT_ORG_TOOL/node_modules/tsx/dist/esm/index.mjs" -e "
+          # path the owner may rename: `createRequire` at the tool's `package.json` resolves the name through its `exports` map, and the
+          # runner's Node 24 (set up above) strips the types of the `.ts` it points at, with no loader. The same bare `node` opens the two steps
+          # below. A tool that does not declare the name fails here, loudly, which is what a release floor is.
+          handed_on="$(PR_BODY="$body" env -u GH_TOKEN node -e "
             const load = (name) => import(require('node:url').pathToFileURL(require('node:module').createRequire(process.env.AGENT_ORG_TOOL + '/package.json').resolve('agent-org/' + name)).href);
             load('acceptance-commands').then((m) => {
               const body = process.env.PR_BODY;
@@ -143,7 +143,7 @@ jobs:
           # value early and let the rest write other step outputs.
           delimiter="PR_BODY_$(openssl rand -hex 16)"
           { echo "body<<${delimiter}"; printf '%s\n' "$handed_on"; echo "${delimiter}"; } >> "$GITHUB_OUTPUT"
-          rows="$(PR_BODY="$handed_on" env -u GH_TOKEN node --import "$AGENT_ORG_TOOL/node_modules/tsx/dist/esm/index.mjs" -e "
+          rows="$(PR_BODY="$handed_on" env -u GH_TOKEN node -e "
             const load = (name) => import(require('node:url').pathToFileURL(require('node:module').createRequire(process.env.AGENT_ORG_TOOL + '/package.json').resolve('agent-org/' + name)).href);
             load('acceptance-commands').then((m) => {
               const declaration = m.extractClosesDeclaration(process.env.PR_BODY);
@@ -179,7 +179,7 @@ jobs:
         env:
           PR_BODY: ${{ steps.live-body.outputs.body }}
         run: |
-          if node --import "$AGENT_ORG_TOOL/node_modules/tsx/dist/esm/index.mjs" -e "
+          if node -e "
             const load = (name) => import(require('node:url').pathToFileURL(require('node:module').createRequire(process.env.AGENT_ORG_TOOL + '/package.json').resolve('agent-org/' + name)).href);
             Promise.all([load('acceptance-commands'), load('acceptance-file')]).then(([commands, file]) => {
               const text = file.sectionsTextOf(commands.acceptanceSourceOfThisPullRequest(process.env.PR_BODY));
