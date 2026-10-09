@@ -117,8 +117,8 @@
     {
       "id": "owner-unresolved",
       "name": "The owner ladder (`ownerOfPr`) named nobody for a pull request, so its order fell to the `ceo` rung.",
-      "guard": null,
-      "guardNote": "recorder: the tick, from #4450, per pull request. #4386 is the resolver defect it first showed.",
+      "guard": "agent-org `ownerOfPr` (src/work-gate/pr-orders.ts) is TOTAL over who can open a pull request: a session's label, row, branch or stamp, else a `dependency-bot` author (Dependabot, Renovate) owned by `ceo` by name; only a pull request by an author of none of those reaches the `ceo` rung and is recorded. Pinned by src/packaging/pr-owner-total.test.ts (the grid of session shapes, #2941) and src/packaging/pr-owner-dependency-bot.test.ts (the bot shape, #4624, with its positive control).",
+      "guardNote": null,
       "seed": []
     },
     {
