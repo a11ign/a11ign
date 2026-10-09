@@ -9,7 +9,10 @@
     "agent": ["a11ign-bot", "a11ign-ai-workers", "a11ign-ai-leads", "a11ign-ci"]
   },
   "teams": {
-    "bots": { "layer": "push" }
+    "bots": {
+      "layer": "push",
+      "exceptions": { "a11ign/.github": "none" }
+    }
   },
   "repositories": {
     "a11ign/a11ign": {

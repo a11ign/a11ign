@@ -36,6 +36,10 @@ never named it before this page** (0 references, ADR 0039, item 7, reading 4); i
   class: every split repository was created at `admin`), `screenreader-worker`, `toolchain` and `agent-org` already
   being `push`; the live collaborators read is green across all six code repositories. The `bots` team level itself is
   readable only with org admin (a non-admin token gets 404), so the chairman's read-back on #3587 is the evidence for it.
+- **The team holds NO level on `a11ign/.github`** (declared as `teams.bots.exceptions` in
+  [`repository-access.json`](./repository-access.json); ceo's ruling 2026-10-09). That repository holds the org-wide
+  Octo STS policies: the reviewer account reads it and does not write, and the lead and worker accounts hold their own
+  `write` grants, so the team is not needed there. Raising it to `push` would be an org-admin act and is not asked for.
 - The team's level on the tracker is its own and is not changed: an org-level `bots` change was rejected in the
   ADR because it would move the tracker's permission too.
 
