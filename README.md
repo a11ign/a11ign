@@ -555,6 +555,22 @@ The corpus correction behind that line is tracked as #1610, and the product-path
 The denominator is part of the claim and stays attached to it. `public-claim.test.ts` enforces both
 halves — no figure that a recorded gate result cannot source, and not that phrase.
 
+**Not yet met.** The measured claim above is a claim about our corpus, and these five things are what stand between it
+and a claim a stranger should rely on. Each is read from [`docs/METHODOLOGY.md`](./docs/METHODOLOGY.md) as it stands, and the
+[plan to move each one](./docs/outcomes/outcome-17-trust-bar-plan.md) says what it would cost and what only a person can supply.
+
+- **Confidence calibration: not done.** Findings carry a confidence number that has not been checked against outcomes
+  ([audit](./docs/METHODOLOGY.md#best-practice-audit-llm-as-judge)).
+- **Test-retest reliability: partial.** Repeat runs are possible, but reliability is not reported as a metric
+  ([audit](./docs/METHODOLOGY.md#best-practice-audit-llm-as-judge)).
+- **Expert labelling: none.** No accessibility expert has labelled a page and been compared with the tool; the ground truth is mostly
+  third-party, not expert-labelled ([audit](./docs/METHODOLOGY.md#best-practice-audit-llm-as-judge)).
+- **Go-live thresholds: not set.** The recall, false-positive and retest bounds that would mean "trustworthy enough" are
+  "to be set with the accessibility expert" ([pre-registration](./docs/METHODOLOGY.md#pre-registration-what-trustworthy-enough-will-mean)).
+- **A synthetic hold-out cannot falsify a synthetic assumption.** Only real pages are an unshared measurement, and the real-page set is small
+  ([ADR 0019](./docs/adr/0019-a-synthetic-holdout-cannot-falsify-a-synthetic-assumption.md); the
+  [held-out row](./docs/METHODOLOGY.md#best-practice-audit-llm-as-judge)).
+
 ## What this tool sends anywhere
 
 **Nothing, and that is a commitment rather than a description.** The command-line tool and the trained
