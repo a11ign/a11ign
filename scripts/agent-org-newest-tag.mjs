@@ -17,7 +17,7 @@
 // A tag list with no stable tag REFUSES; it never falls back to a branch, because `main` is not a release and a run would then execute code
 // nobody had cut.
 import { execFileSync } from "node:child_process";
-import { appendFileSync, chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
@@ -74,9 +74,29 @@ export function toolRoot({ env = process.env, root = ROOT } = {}) {
     + "In CI, run `node scripts/agent-org-newest-tag.mjs --dest=<dir>` first.");
 }
 
-/** A file of the tool, by its path under the tool (`src/work-gate.mjs`, `host/gh`), as a path. @param {string} relative @returns {string} */
+/** The other spelling of a module path (`src/x.mjs` <-> `src/x.ts`), or undefined for a path that is not one of the two. @param {string} relative @returns {string | undefined} */
+function otherSpelling(relative) {
+  if (relative.endsWith(".mjs")) return `${relative.slice(0, -".mjs".length)}.ts`;
+  if (relative.endsWith(".ts")) return `${relative.slice(0, -".ts".length)}.mjs`;
+  return undefined;
+}
+
+/**
+ * A file of the tool, by its path under the tool (`src/work-gate.mjs`, `host/gh`), as a path.
+ *
+ * A module named `.mjs` that the tool holds as `.ts` (or the reverse) resolves to the file the tool HAS: agent-org renames its modules in
+ * batches (agent-org#435, then #4389), and a caller naming the old spelling must not break the day the tool it runs against changes
+ * (#4394). Neither spelling present REFUSES naming both, rather than handing back a path that fails later as `ERR_MODULE_NOT_FOUND`.
+ * @param {string} relative @returns {string}
+ */
 export function toolPath(relative) {
-  return join(toolRoot(), relative);
+  const named = join(toolRoot(), relative);
+  const other = otherSpelling(relative);
+  if (other === undefined || existsSync(named)) return named;
+  const swapped = join(toolRoot(), other);
+  if (existsSync(swapped)) return swapped;
+  throw new Error(`agent-org-newest-tag: the tool holds neither ${named} nor ${swapped}, so \`${relative}\` is not a module of it. `
+    + `The tool is at ${toolRoot()}; a stale checkout or a module the tool dropped both end here.`);
 }
 
 /** The same file as a `URL`, for `readFileSync(url)`. @param {string} relative @returns {URL} */
