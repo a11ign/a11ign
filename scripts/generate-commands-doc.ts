@@ -43,8 +43,17 @@ const COMMAND_HEADER = /^\/\/\s*command:\s*(.+)$/m;
  *  directly, never only imported. See this file's own header for why that makes it the right population. */
 const ENTRY_POINT_GUARD = /import\.meta\.url\s*===/;
 
+/** A command source is `.mjs` or `.ts` (#4273/#4274 renamed most entry points to `.ts`, and a discovery that kept
+ *  only `.mjs` found 16 of ~51 and passed as a clean run). Tests and `.d.ts` declarations are never commands. */
+const COMMAND_SOURCE = /\.(mjs|ts)$/;
+const NOT_A_COMMAND_SOURCE = /\.(test\.(mjs|ts)|d\.ts)$/;
+
+function isCommandSourceName(file: string): boolean {
+  return COMMAND_SOURCE.test(file) && !NOT_A_COMMAND_SOURCE.test(file);
+}
+
 /**
- * Every `scripts/*.mjs` file that is a real, directly-runnable command -- excludes `.test.mjs` (not a
+ * Every `scripts/*.mjs` or `scripts/*.ts` file that is a real, directly-runnable command -- excludes `.test.mjs`/`.test.ts` (not a
  * command at all) and any file with no entry-point guard (a module, imported and never run). EXPORTED so
  * the test and a mutation check can drive the exact same population the generator uses -- and `root` so the
  * nightly doc cross-reference report (#905) can run the same population against a fixture tree.
@@ -60,7 +69,7 @@ export function commandScripts(root: string = REPO): string[] {
     const dir = resolve(root, rel);
     if (!existsSync(dir)) return [];
     return readdirSync(dir)
-      .filter((f) => f.endsWith(".mjs") && !f.endsWith(".test.mjs"))
+      .filter(isCommandSourceName)
       .filter((f) => ENTRY_POINT_GUARD.test(readFileSync(join(dir, f), "utf8")))
       .map((f) => `${rel}/${f}`);
   }).sort();
@@ -81,6 +90,12 @@ export function commandHeader(text: string): string | null {
   const description = match[1].trim();
   if (description.length < 15 || !/\s/.test(description)) return null;
   return description;
+}
+
+/** How a reader runs `file`: a `.ts` entry point needs the tsx loader (what every caller and `--check`'s own usage
+ *  line use); an `.mjs` runs bare. Repo-relative `file`, as `commandScripts` returns it. */
+function invocation(file: string): string {
+  return file.endsWith(".ts") ? `node --import tsx ${file}` : `node ${file}`;
 }
 
 /**
@@ -115,7 +130,7 @@ export function buildPage(scripts: string[], root: string = REPO): string {
     // `file` is repo-relative: commandScripts() spans every tooling root, so the path is the whole name.
     const text = readFileSync(resolve(root, file), "utf8");
     const description = commandHeader(text);
-    lines.push(`- \`node ${file}\` — ${description ?? "**MISSING `// command:` HEADER**"}`);
+    lines.push(`- \`${invocation(file)}\` — ${description ?? "**MISSING `// command:` HEADER**"}`);
   }
   return `${lines.join("\n")}\n`;
 }

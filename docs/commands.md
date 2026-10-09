@@ -8,9 +8,9 @@ Regenerate with `node --import tsx scripts/run.ts docs-commands`. Checked by `co
 - `node packages/guards/src/changed-files.mjs` — list the paths a range changed, BOTH SIDES OF A RENAME
 - `node packages/guards/src/changed-packages.mjs` — list which packages/<name> directories a branch touched against origin/main
 - `node packages/guards/src/isolation-gate.mjs` — prove a published package installs and works standalone, by actually installing and running it
-- `node packages/guards/src/layer-edges.ts` — `node packages/guards/src/layer-edges.ts --check` -- every reach across a LAYER package's boundary, by path, against a baseline (#2612)
-- `node packages/guards/src/mutant-survivors.ts` — choose mutants on a diff's changed lines by machine, run the named tests against each, and list the survivors
-- `node packages/guards/src/mutate-diff.ts` — mutate the lines a pull request ADDED, run the tests it CHANGED, and report the survivors (#3282, decided on #3213)
+- `node --import tsx packages/guards/src/layer-edges.ts` — `node packages/guards/src/layer-edges.ts --check` -- every reach across a LAYER package's boundary, by path, against a baseline (#2612)
+- `node --import tsx packages/guards/src/mutant-survivors.ts` — choose mutants on a diff's changed lines by machine, run the named tests against each, and list the survivors
+- `node --import tsx packages/guards/src/mutate-diff.ts` — mutate the lines a pull request ADDED, run the tests it CHANGED, and report the survivors (#3282, decided on #3213)
 - `node packages/guards/src/mutation-check.mjs` — prove a guard actually bites: mutate a file, confirm its test fails, restore, confirm it passes
 - `node packages/guards/src/piped-exit-status-guard.mjs` — detect a piped command whose exit status was read from the wrong side of the pipe
 - `node packages/guards/src/test-memory-cap.mjs` — run a test runner under a per-process memory cap (systemd-run MemoryMax) and say what the cap did
@@ -24,6 +24,7 @@ Regenerate with `node --import tsx scripts/run.ts docs-commands`. Checked by `co
 - `node --import tsx scripts/check-transfer-urls.ts` — check-transfer-urls -- walk the tree for every URL naming PRODUCT_REPO (a11ign/a11ign) and
 - `node scripts/ci-changed.mjs` — classify what a PR's diff touches, so CI's conditional jobs know whether to run
 - `node --import tsx scripts/ci-health.ts` — read CI health per repository against docs/ci-targets.json and, with --post, comment the table on #928
+- `node --import tsx scripts/consumer-gate-pin-needed.ts` — decide whether `consumer-gate.yml`'s pin must be regenerated at a commit, and whether a release run is owed after the repair (#4331)
 - `node --import tsx scripts/coverage-failure-classifier.ts` — turn a nightly coverage.yml failure comment into an actual finding, not just 'it failed'
 - `node --import tsx scripts/coverage.ts` — the whole-repo coverage gate `pnpm run coverage` runs, now through rstest, not c8
 - `node --import tsx scripts/dependency-changeset.ts` — read what a dependency pull request owes the changelog from its manifests' diff, and compile it at version time
