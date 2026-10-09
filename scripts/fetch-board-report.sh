@@ -11,10 +11,10 @@
 set -euo pipefail
 # THE REPOSITORY IS READ, NOT WRITTEN DOWN. This said `a11ign/a11ign` literally -- the name the project
 # takes at the transfer -- so the chairman's fetch printed "release not found" against a repository that
-# does not exist yet. `repo-identity.mjs` is the one place that name lives and the one value that flips at
+# does not exist yet. `repo-identity.ts` is the one place that name lives and the one value that flips at
 # the transfer; a second copy here is the fact-stated-twice shape with a date attached, and it was already
 # wrong before the date arrived.
-REPO="$(node -e 'import("./scripts/repo-identity.mjs").then(m => console.log(m.REPO))')"
+REPO="$(node -e 'import("./scripts/repo-identity.ts").then(m => console.log(m.REPO))')"
 DAY="${1:-$(date -u +%Y-%m-%d)}"
 # A DESTINATION ON SOMEBODY'S MACHINE IS THEIRS, AND IT DOES NOT MOVE WITH A PRODUCT RENAME.
 # The rename (#66) carried this folder from `a11y-witness-board-reports` to `a11ign-board-reports`

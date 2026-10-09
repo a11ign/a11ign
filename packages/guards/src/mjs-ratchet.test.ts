@@ -44,8 +44,9 @@ function withMirror(paths: string[], baseline: unknown, body: (root: string) => 
 test("the JavaScript source count has not risen above the committed baseline", () => {
   const result = checkMjsRatchet({ from: HERE });
   assert.ok(result.ok, result.message);
-  // POSITIVE CONTROL: an `ok` over a tree that read nothing would be the vacuous pass.
-  assert.ok(result.count > 0, `the walk counted no JavaScript source in ${result.root}: it read nothing`);
+  // POSITIVE CONTROL: the count is ZERO now (#4393), so it cannot show the walk read anything. The reasoned exceptions do: a walk that
+  // missed one would fail as stale, and a walk that read no file at all fails as empty, so an `ok` here means every exception was seen.
+  assert.ok(realBaseline().exceptions.length > 0, "no exception is listed, so nothing shows the walk read the tree");
 });
 
 test("CONTROL: a mirror of the committed baseline passes, so the failures below are the edits and not the mirror", () => {
@@ -57,22 +58,31 @@ test("CONTROL: a mirror of the committed baseline passes, so the failures below 
   });
 });
 
-test("a baseline with one name removed fails and NAMES the file", () => {
+test("a source file the baseline does not list fails and NAMES it", () => {
   const baseline = realBaseline();
-  const [removed, ...rest] = baseline.files;
-  withMirror(mirrorPaths(baseline), { ...baseline, files: rest }, (root) => {
+  const added = "brand-new-script.mjs";
+  withMirror([...mirrorPaths(baseline), join("dnew", added)], baseline, (root) => {
     const result = checkMjsRatchet({ from: root });
     assert.equal(result.ok, false);
-    assert.ok(result.message.includes(removed!), `the failure does not name ${removed}: ${result.message}`);
+    assert.ok(result.message.includes(added), `the failure does not name ${added}: ${result.message}`);
   });
 });
 
-test("a file the tree lost passes and says the baseline can be lowered", () => {
+test("a baseline name the tree no longer holds passes and says the baseline can be lowered", () => {
   const baseline = realBaseline();
-  withMirror(mirrorPaths(baseline).slice(1), baseline, (root) => {
+  withMirror(mirrorPaths(baseline), { ...baseline, files: ["gone.mjs"] }, (root) => {
     const result = checkMjsRatchet({ from: root });
     assert.ok(result.ok, result.message);
     assert.match(result.message, /baseline can be lowered/);
+  });
+});
+
+test("an exception whose file the tree lost fails and says to remove the entry", () => {
+  const baseline = realBaseline();
+  withMirror(mirrorPaths(baseline).slice(1), baseline, (root) => {
+    const result = checkMjsRatchet({ from: root });
+    assert.equal(result.ok, false);
+    assert.match(result.message, /names a file the tree no longer holds/);
   });
 });
 

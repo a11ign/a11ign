@@ -272,9 +272,9 @@ test("#2218 THE CALLER: `assert-glob-not-empty --run` refuses in a mis-wired tre
     const other = join(base, "other-checkout", "packages", "worker-fleet");
     mkdirSync(join(other, "dist"), { recursive: true });
     writeFileSync(join(other, "package.json"), JSON.stringify({
-      name: "@a11ign/screenreader-fleet", type: "module", exports: { "./cli-flags": "./dist/cli-flags.ts" },
+      name: "@a11ign/screenreader-fleet", type: "module", exports: { "./cli-flags": "./dist/cli-flags.mjs" },
     }));
-    copyFileSync(join(REPO, "node_modules/@a11ign/screenreader-fleet/dist/cli-flags.ts"), join(other, "dist", "cli-flags.ts"));
+    copyFileSync(join(REPO, "node_modules/@a11ign/screenreader-fleet/dist/cli-flags.mjs"), join(other, "dist", "cli-flags.mjs"));
     mkdirSync(join(tree, "node_modules", "@a11ign"), { recursive: true });
     symlinkSync(other, join(tree, "node_modules", "@a11ign", "screenreader-fleet"));
     const ran = spawnSync(process.execPath, [join(tree, "packages/guards/src/assert-glob-not-empty.ts"),

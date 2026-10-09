@@ -29,7 +29,7 @@ const NIGHTLY_WORKFLOW = `${REPO}.github/workflows/nightly.yml`;
 
 /** The glob a script hands to assert-glob-not-empty: the first quoted argument. */
 function globOf(script: string): string {
-  const m = /assert-glob-not-empty\.mjs\s+"([^"]+)"/.exec(script);
+  const m = /assert-glob-not-empty\.ts\s+"([^"]+)"/.exec(script);
   assert.ok(m, `script hands a quoted glob to assert-glob-not-empty: ${script}`);
   return m[1];
 }

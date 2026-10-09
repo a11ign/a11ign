@@ -15,7 +15,7 @@
 // a bypass: a pull request moving a file OUT of another session's lane was not seen by the check that owns
 // that lane. Nine readers asked the question and each spelled it itself; #938 fixed one of them.
 //
-// A LEAF MODULE, like `region-paths.mjs`: its only import is `git-env.mjs`, which imports nothing, so
+// A LEAF MODULE, like `region-paths.mjs`: its only import is `git-env.ts`, which imports nothing, so
 // `ci-changed.ts` -- an entry that runs before `npm ci` -- can use it without gaining a package specifier.
 // `select-changed-tests.mjs` re-exports it rather than keeping the copy #938 wrote there.
 //

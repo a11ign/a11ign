@@ -413,8 +413,8 @@ export function classify(files: string[], allPackages: string[] = knownPackages(
   // definition of "touched" living beside the pre-push hook's is exactly the shape that drifts; the hook's
   // own tests already exercise renames, deletions and the no-subdirectory edge case for this function.
   const tsPackages = new Set(changedPackages(files.join("\n")) as string[]);
-  const rootScriptsChanged = files.some((f) => /^scripts\/.*\.mjs$/.test(f));
-  // A root config file (tsconfig, eslint config, the workspace's own package.json) OR a `scripts/*.mjs`
+  const rootScriptsChanged = files.some((f) => /^scripts\/.*\.(?:mjs|ts)$/.test(f));
+  // A root config file (tsconfig, eslint config, the workspace's own package.json) OR a `scripts/*.ts` (or `.mjs`)
   // file can change what EVERY package lints, typechecks or tests as — dozens of packaging tests import
   // `packages/guards/src/git-env.ts`, `scripts/cli-flags.ts` and their siblings directly, so a change there is not
   // scoped to any one package. Both are treated as touching every package rather than none, matching the

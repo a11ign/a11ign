@@ -25,7 +25,11 @@
  */
 
 import type { Rule } from "eslint";
-import type { CallExpression, Identifier, Literal } from "estree";
+
+// The three ESTree nodes this rule reads, taken from the types `eslint` itself carries: `estree` is not a dependency of this repository.
+type CallExpression = Extract<Rule.Node, { type: "CallExpression" }>;
+type Identifier = Extract<Rule.Node, { type: "Identifier" }>;
+type Literal = Extract<Rule.Node, { type: "Literal" }>;
 
 /** The helpers a spawn may go through, by basename -- real imports are relative, so the path varies. */
 const CANONICAL_HELPER_BASENAMES = ["git-env.ts", "git-safe-env.mjs", "git-sandbox.ts"];
@@ -37,7 +41,7 @@ const HELPER_CALLS = new Set(["sandboxGitEnv", "withGitSandbox"]);
 const SPAWNERS = new Set(["execFileSync", "spawnSync", "execFile", "spawn"]);
 
 /** An import specifier's `imported` side is an identifier, or a string literal for `import { "a-b" as c }`. */
-const importedName = (imported: Identifier | Literal): string =>
+const importedName = (imported: Omit<Identifier, "parent"> | Omit<Literal, "parent">): string =>
   imported.type === "Identifier" ? imported.name : String(imported.value);
 
 const calleeName = (node: CallExpression): string | null =>

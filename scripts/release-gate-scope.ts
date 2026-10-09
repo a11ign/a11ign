@@ -14,7 +14,7 @@ import { refuseUnknownFlags } from "./cli-flags.ts";
 const REPO = fileURLToPath(new URL("../", import.meta.url));
 
 /** The stage links a chained script invokes: `npm run x`, `pnpm run x` or `node scripts/pnpm.ts run x`. */
-const STAGE_LINK = /(?:npm|pnpm|pnpm\.mjs) run ([\w:.-]+)/g;
+const STAGE_LINK = /(?:npm|pnpm|pnpm\.ts) run ([\w:.-]+)/g;
 
 /** The stages a chained script invokes, in order. Refuses a chain that parses to none: the spelling of a link
  * changed once (`pnpm run` to `node scripts/pnpm.ts run`, #3277) and the pattern read zero stages, which the

@@ -313,7 +313,7 @@ test("#3836: a git clone is replaced when it is disposable, and REFUSED naming t
       clone.run(["branch", "-D", "wip"]);
       assert.equal(lay(root, plan), `laid ${plan.tag} at ${plan.path}`);
       assert.ok(!existsSync(join(target, ".git")), "the clone is gone");
-      assert.deepEqual(walk(target), [REF_FILE, "src/cli-flags.ts", "src/provisioning/stamp.ps1"]);
+      assert.deepEqual(walk(target), [REF_FILE, "src/cli-flags.mjs", "src/provisioning/stamp.ps1"]);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -383,7 +383,7 @@ test("#3973: a clone detached at a release tag that origin holds, with only buil
       // DISPOSABLE: at origin's tag, with build output only.
       assert.equal(lay(root, plan), `laid ${plan.tag} at ${plan.path}`);
       assert.ok(!existsSync(join(target, ".git")), "the clone is gone");
-      assert.deepEqual(walk(target), [REF_FILE, "src/cli-flags.ts", "src/provisioning/stamp.ps1"]);
+      assert.deepEqual(walk(target), [REF_FILE, "src/cli-flags.mjs", "src/provisioning/stamp.ps1"]);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

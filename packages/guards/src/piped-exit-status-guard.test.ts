@@ -137,7 +137,7 @@ test("CLI: a second argument, or an empty command, exits 2 (error), never 1 (haz
   assert.match(extra.stderr, /takes no flags; unexpected argument\(s\): --flag, x/);
   const empty = runCli([""]);
   assert.equal(empty.status, EXIT.ERROR);
-  assert.match(empty.stderr, /usage: piped-exit-status-guard\.mjs '<shell command string>'/);
+  assert.match(empty.stderr, /usage: piped-exit-status-guard\.ts '<shell command string>'/);
 });
 
 test("CLI: with no argument it judges stdin line by line (batch), and empty stdin is a usage error", () => {
@@ -174,7 +174,7 @@ test("CLI: a file that cannot be read exits 2 with GUARD ERROR, not node's defau
     writeFileSync(locked, "echo hi\n", { mode: 0 });
     const result = runCli([locked]);
     assert.equal(result.status, EXIT.ERROR);
-    assert.match(result.stderr, /^GUARD ERROR: piped-exit-status-guard\.mjs could not examine its input: /);
+    assert.match(result.stderr, /^GUARD ERROR: piped-exit-status-guard\.ts could not examine its input: /);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -55,7 +55,7 @@ import { refusalFor } from "../../../scripts/refuse-other-installers.ts";
 const REPO = fileURLToPath(new URL("../../../", import.meta.url));
 const SCRIPT_PATH = "scripts/refuse-other-installers.ts";
 const SCRIPT = join(REPO, SCRIPT_PATH);
-const MANIFEST = JSON.parse(readFileSync(join(REPO, "package.json"), "utf8")) as { scripts?: Record<string, string>; engines?: Record<string, string> };
+const MANIFEST = JSON.parse(readFileSync(join(REPO, "package.json"), "utf8")) as { type?: string; scripts?: Record<string, string>; engines?: Record<string, string> };
 const NPMRC_PATH = ".npmrc";
 const LOCKFILES = ["package-lock.json", "npm-shrinkwrap.json"];
 
@@ -193,7 +193,8 @@ type Lock = "whole" | "preinstall-only";
  */
 function installFixture(lock: Lock = "whole"): string {
   const dir = tempDir("one-package-manager-");
-  const manifest = { name: "fixture", version: "0.0.0", private: true, scripts: { preinstall: MANIFEST.scripts?.preinstall },
+  // The REAL `type`: a `.ts` under a typeless package is reparsed as ESM and warns on stderr, which this fixture would then pin.
+  const manifest = { name: "fixture", version: "0.0.0", private: true, type: MANIFEST.type, scripts: { preinstall: MANIFEST.scripts?.preinstall },
     ...(lock === "whole" ? { engines: MANIFEST.engines } : {}), dependencies: { left: "file:./left" } };
   writeFileSync(join(dir, "package.json"), JSON.stringify(manifest));
   if (lock === "whole") copyFileSync(join(REPO, NPMRC_PATH), join(dir, NPMRC_PATH));

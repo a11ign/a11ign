@@ -33,7 +33,7 @@ assert.ok(statSync(bin).size > 0, "the bin is empty");
  * `bin` above is built from `require.resolve()`, which — like `process.cwd()` after this process's own
  * `cwd` was set — is ALREADY realpath'd, so spawning it sidesteps the exact mismatch that broke a real
  * invocation and passes either way. `A11Y_ISOLATION_CONSUMER_DIR` is the one surviving copy of the RAW,
- * un-resolved consumer path (`isolation-gate.mjs` captured it before anything could canonicalise it), so
+ * un-resolved consumer path (`isolation-gate.ts` captured it before anything could canonicalise it), so
  * the bin is reached the same way a real `.bin` shim or `npx` cache entry would reach it. Falls back to
  * the resolved `bin` when run outside the gate (still proves execution, just not the symlink case).
  */

@@ -133,10 +133,10 @@ test("classify: a file under a package marks that package, sorted and deduplicat
   });
 });
 
-test("classify: a root config file or a scripts/*.mjs file touches EVERY package; a scripts file of another extension does not", () => {
+test("classify: a root config file or a scripts/*.ts or scripts/*.mjs file touches EVERY package; a scripts file of another extension does not", () => {
   withGitSandbox((sandbox) => {
     trackFixtureRepo(sandbox);
-    for (const file of ["package.json", "pnpm-lock.yaml", "tsconfig.base.json", "eslint.config.mjs", "action.yml", "scripts/cli-flags.ts"]) {
+    for (const file of ["package.json", "pnpm-lock.yaml", "tsconfig.base.json", "eslint.config.mjs", "action.yml", "scripts/cli-flags.ts", "scripts/isolation-fixtures/sound/index.mjs"]) {
       const result = classifyIn(sandbox.dir, [file]);
       assert.deepEqual(result.packages, ALL_PACKAGES, file);
       assert.equal(result.ts, true, file);
@@ -290,7 +290,7 @@ test("ci.yml: the changeset job reads the live body for `no-release:` and its re
   const noRelease = job.steps.find((step) => step.id === "noRelease");
   assert.ok(noRelease, "the changeset job has a noRelease step");
   assert.match(noRelease.run ?? "", /gh api "repos\/\$REPO\/pulls\/\$number"/, "the LIVE body, never the event payload's stale copy");
-  assert.match(noRelease.run ?? "", /ci-changed\.mjs --no-release/);
+  assert.match(noRelease.run ?? "", /ci-changed\.ts --no-release/);
   assert.ok(noRelease.env?.QUEUE_MESSAGE, "a queue entry finds its pull request through the merge commit message");
   assert.ok(!JSON.stringify(noRelease.run).includes("pull_request.body"), "the body is never interpolated into a shell line");
   const refusal = job.steps.find((step) => /changeset status/.test(step.run ?? ""));

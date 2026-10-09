@@ -696,7 +696,7 @@ const NODE_TEST_RUNNER = /\b(?:tsx|node)\b[^;&|\n]*\s--test(?![\w-])/;
 const RUNS_RSTEST = /(?<![\w./-])rstest(?![\w./-])/;
 const TSC_NO_EMIT = /\btsc\b[^;&|\n]*\s--noEmit\b/;
 /** `pnpm run x`, `pnpm x`, `npm run x`, `node scripts/pnpm.ts run x`; the flags before `run` (`--filter`, `-r`) send it to the workspace's packages. */
-const RUN_SCRIPT = /\b(?:pnpm(?:\.mjs)?|npm|yarn)\b((?:\s+(?:--filter[= ]\S+|-F\s+\S+|-r|--recursive|-w|--silent|--if-present))*)(?:\s+run)?\s+([A-Za-z][\w:.-]*)/g;
+const RUN_SCRIPT = /\b(?:pnpm(?:\.ts)?|npm|yarn)\b((?:\s+(?:--filter[= ]\S+|-F\s+\S+|-r|--recursive|-w|--silent|--if-present))*)(?:\s+run)?\s+([A-Za-z][\w:.-]*)/g;
 
 type Manifest = { dependencies?: Record<string, string>; devDependencies?: Record<string, string>; scripts?: Record<string, string> };
 type TreeAnswer = { tree?: { path?: string; type?: string }[]; truncated?: boolean };

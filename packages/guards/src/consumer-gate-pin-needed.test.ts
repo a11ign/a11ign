@@ -255,7 +255,7 @@ test("#4374: what the minting job was handed is shape-checked before it is writt
   assert.doesNotMatch(script, /\bgit (push|commit|switch|add)\b/, "no repository checkout to commit in");
 });
 
-const RESOLVES_THE_TOOL = /agent-org-newest-tag\.mjs --dest=/;
+const RESOLVES_THE_TOOL = /agent-org-newest-tag\.ts --dest=/;
 const REACHES_REPO_IDENTITY = /scripts\/(consumer-gate-pin-needed\.ts|generate-consumer-gate\.ts)/;
 
 test("#4373: every job that runs a script reaching repo-identity.ts resolves the tool BEFORE it, under the same condition", () => {

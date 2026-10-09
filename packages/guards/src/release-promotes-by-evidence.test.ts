@@ -413,7 +413,7 @@ function moveJobName(workflow: Workflow): string | undefined {
 /** The job that reads the verdict: the one whose step runs the decision script. A step that echoes the name does not count. */
 function decideJobName(workflow: Workflow): string | undefined {
   const found = Object.entries(workflow.jobs ?? {}).filter(([name]) => !PUBLISH_PATH.includes(name))
-    .find(([, job]) => (job.steps ?? []).some((step) => /^\s*node scripts\/release-promote\.mjs\s*$/m.test(step.run ?? "")));
+    .find(([, job]) => (job.steps ?? []).some((step) => /^\s*node scripts\/release-promote\.ts\s*$/m.test(step.run ?? "")));
   return found?.[0];
 }
 
