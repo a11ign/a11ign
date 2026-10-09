@@ -23,7 +23,7 @@
     },
     "./coverage": {
       "types": "./dist/coverage.d.ts",
-      "default": "./dist/coverage.ts"
+      "default": "./dist/coverage.mjs"
     },
     "./outcomes": {
       "types": "./dist/outcomes.d.ts",

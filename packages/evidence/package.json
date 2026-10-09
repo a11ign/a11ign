@@ -11,7 +11,7 @@
     },
     "./verify": {
       "types": "./dist/verify.d.ts",
-      "default": "./dist/verify.ts"
+      "default": "./dist/verify.mjs"
     },
     "./wcag": {
       "types": "./dist/wcag.d.ts",
