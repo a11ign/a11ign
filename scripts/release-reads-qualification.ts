@@ -19,7 +19,7 @@
 //               fresh capture. No threshold moves and no stage is skipped to get a pass; no revert (fix forward)
 //   regression  TWO `failure`s since the last `success`: real. A row is filed (`regression` label) by release.yml's
 //               `qualification-row` job, which holds `issues: write` and nothing else; the publishing job never does (#3291)
-//   wait        absent or `pending`: NOT a pass and NOT a failure. NO NEWS IS NEVER GOOD NEWS -- the absent case is
+//   wait        absent, `pending`, or a `NO VERDICT` failure (a launch refused before any capture, #4574): NOT a pass and NOT a failure. NO NEWS IS NEVER GOOD NEWS -- the absent case is
 //               the one a default of "proceed" would pass, and `release-reads-qualification.test.ts` pins it
 //
 // A FAILURE IS NEVER SOFTENED by an older success: the NEAREST commit that carries a status decides.
@@ -108,6 +108,19 @@ function readState(state: string): "success" | "failure" | "pending" {
   throw new Error(`CANNOT_TELL: a ${QUALIFICATION_CONTEXT} status in state "${state}", which is none of success, failure, pending`);
 }
 
+// The lab writes this description on a `failure` when the launch died BEFORE any capture (the laid-copy check on the lab host, #4572): it
+// read nothing, so it is neither a failed run nor a pass. Counting it as a failure raised a `regression` row for a sha no capture ever ran on.
+const NO_VERDICT = /^NO VERDICT/;
+
+/** A status as the decision reads it: `no-verdict` is a `failure`/`error` whose description begins `NO VERDICT`, and only those. It is
+ * deliberately NOT a fourth state of `readState`: every other caller of that must still refuse an unknown state.
+ * @param {Status} status
+ * @returns {"success" | "failure" | "pending" | "no-verdict"} */
+function readStatus(status: Status): "success" | "failure" | "pending" | "no-verdict" {
+  const state = readState(status.state);
+  return state === "failure" && NO_VERDICT.test(status.description ?? "") ? "no-verdict" : state;
+}
+
 /**
  * The nearest commit, going back from the release sha, that carries a status -- and only while no path the fleet
  * part reads has changed between it and the release. The first commit that did change one ends the search, because
@@ -123,7 +136,8 @@ function nearestVerdict(history: HistoryEntry[]) {
   return null;
 }
 
-/** `failure`s since the last `success`, newest first in, so a pending re-run in between does not hide the first one.
+/** `failure`s since the last `success`, newest first in, so a pending re-run in between does not hide the first one. A `no-verdict` is
+ * skipped, not counted: it neither adds a failure nor hides one older than it.
  * @param {string[]} states */
 function failuresSinceSuccess(states: string[]) {
   const lastSuccess = states.indexOf("success");
@@ -138,7 +152,7 @@ function failuresSinceSuccess(states: string[]) {
  * @returns {{ outcome: Outcome, reason: string }}
  */
 function verdictFor(entry: HistoryEntry, releaseSha: string): { outcome: Outcome; reason: string; } {
-  const states = entry.statuses.map((status) => readState(status.state));
+  const states = entry.statuses.map(readStatus);
   const failures = failuresSinceSuccess(states);
   const where = entry.sha === releaseSha ? releaseSha
     : `${entry.sha} (the release sha ${releaseSha} changed no path the fleet part reads since)`;
@@ -147,6 +161,10 @@ function verdictFor(entry: HistoryEntry, releaseSha: string): { outcome: Outcome
   if (states[0] === "pending") {
     const rerun = failures > 0 ? "the re-run after a failure" : "the first run";
     return { outcome: "wait", reason: `qualification is pending on ${where}: ${rerun} has not reported${named}` };
+  }
+  if (states[0] === "no-verdict") {
+    const counted = failures > 0 ? `; ${failures} earlier failed run${failures === 1 ? " is" : "s are"} still counted` : "";
+    return { outcome: "wait", reason: `no verdict has been read on ${where}: the last status is a NO VERDICT, which is a launch that read nothing, not a failed run${counted}${named}` };
   }
   if (failures >= 2) {
     return { outcome: "regression", reason: `qualification FAILED twice on ${where}: a real regression, file a row with the \`regression\` label${named}` };
