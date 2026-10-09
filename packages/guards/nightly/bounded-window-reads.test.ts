@@ -63,8 +63,13 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { toolModule } from "../../../scripts/agent-org-newest-tag.mjs";
-const { newestPerName, newestConclusionOf } = await toolModule("src/newest-check-run.mjs");
+import { createRequire } from "node:module";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { toolRoot } from "../../../scripts/agent-org-newest-tag.mjs";
+// A declared export of the tool (`agent-org/newest-check-run`, its `package.json` `exports`), never a path under its `src/` (#4407).
+const { newestPerName, newestConclusionOf } = await import(
+  pathToFileURL(createRequire(join(toolRoot(), "package.json")).resolve("agent-org/newest-check-run")).href);
 
 // #1144: `NAMES_ITS_WINDOW` and `WIDER_WINDOW_IS_HARMLESS` moved WITH the per-node check --
 // the wrapper names are the rule's `NARROWS_THE_WINDOW` set and the exemption is its

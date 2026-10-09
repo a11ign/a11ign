@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { stripComments } from "./source-text.js";
-import { toolPath } from "../../../scripts/agent-org-newest-tag.mjs";
 
 test("a line comment is removed", () => {
   assert.equal(stripComments("const a = 1; // trailing comment\nconst b = 2;"),
@@ -356,19 +356,19 @@ test("`//` and `/*` are comments in EVERY position, including a value position w
 
 // --- THE POSITIVE CONTROL FOR THE WHOLE FIX: an ordinary file must still strip to nothing ---
 
-/** The floor under `wake.mjs`'s comment density, well below the 130 measured, so ordinary edits to that
+/** The floor under `verify.ts`'s comment density, well below the 150 measured, so ordinary edits to that
  *  file do not move this control -- only its stopping to be densely commented at all would. */
 const A_DENSELY_COMMENTED_FILE = 100;
 
 test("a file that was ALREADY stripped correctly still strips to zero surviving comment lines -- the "
   + "control a fix that broke ordinary stripping would fail", () => {
-  // `wake.mjs` read 130 leading-`//` lines before and 0 after, at ec27b8ccb and unchanged by this fix. A
-  // FLOOR rather than a pin on 130: the file legitimately gains and loses comments, and what this test is
-  // for is the `0`. Read from the repo root the same way `wire-request-describes-the-wire.test.ts` does.
-  const source = readFileSync(toolPath("src/wake.mjs"), "utf8");
+  // A file of THIS package, never another repository's source: this read `wake.mjs` out of agent-org by path, which is no interface (#4409).
+  // `verify.ts` reads 150 leading-`//` lines before stripping and 0 after (measured). A FLOOR rather than a pin on 150: the file legitimately
+  // gains and loses comments, and what this test is for is the `0`.
+  const source = readFileSync(join(import.meta.dirname, "verify.ts"), "utf8");
   const leading = (text: string) => text.split("\n").filter((line) => line.trim().startsWith("//")).length;
   assert.ok(leading(source) >= A_DENSELY_COMMENTED_FILE,
-    `wake.mjs has only ${leading(source)} leading-// lines, below the 130 measured -- this control has `
+    `verify.ts has only ${leading(source)} leading-// lines, below the 150 measured -- this control has `
       + "stopped being a control, so pick another densely commented file rather than weakening it");
   assert.equal(leading(stripComments(source)), 0,
     "every one of them is a real comment and must be gone -- a fix that breaks ordinary stripping to "

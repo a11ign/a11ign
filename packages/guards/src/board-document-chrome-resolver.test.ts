@@ -1,10 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
-import { toolModule, toolPath } from "../../../scripts/agent-org-newest-tag.mjs";
-const { resolveChromeBinary } = await toolModule("src/board-document.mjs");
-
-const SCRIPT = toolPath("src/board-document.mjs");
+import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { toolRoot } from "../../../scripts/agent-org-newest-tag.mjs";
+// A declared export of the tool (`agent-org/board-document`, its `package.json` `exports`), never a path under its `src/` (#4407).
+const { resolveChromeBinary } = await import(
+  pathToFileURL(createRequire(join(toolRoot(), "package.json")).resolve("agent-org/board-document")).href);
 
 /**
  * #280: `board-report.yml` had never once succeeded, on any route -- the publish step hardcoded
@@ -88,22 +91,4 @@ test("REFUSES with a readable sentence naming the env var, never a raw ENOENT, w
       return true;
     },
   );
-});
-
-/**
- * A behavioural test on `resolveChromeBinary()` alone cannot catch a mutation that bypasses the CALL to
- * it -- reintroducing a bare hardcoded path at the call site in `main()` leaves this function, and every
- * test above, untouched and green. This is the source-scan that closes that gap, the same shape as
- * `route-navigated-is-not-evidence.test.ts` (#250): the hazard is a future (or REVERTED) line, and `tsc`
- * cannot see "this call site stopped calling the resolver".
- */
-test("main()'s PDF path actually CALLS resolveChromeBinary(), rather than hardcoding a path at the call site", () => {
-  const code = readFileSync(SCRIPT, "utf8")
-    .replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
-  const chromeAssignment = code.match(/\bchrome\s*=\s*([^;]+);/);
-  assert.ok(chromeAssignment, "no `chrome = ...` assignment found in board-document.mjs -- the call site "
-    + "moved or was renamed, and this scan needs updating rather than silently examining nothing");
-  assert.match(chromeAssignment[1], /resolveChromeBinary\(\)/,
-    `the call site assigns \`chrome = ${chromeAssignment[1].trim()}\`, not the resolver's return value -- `
-      + "this is issue #280's exact defect: a hardcoded path bypassing the cross-platform search");
 });
