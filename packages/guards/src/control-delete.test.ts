@@ -52,7 +52,7 @@ const MIN_ROOT_SCRIPT_REFERENCES = 20;
 const SEMVER_TAG = /^v\d+\.\d+\.\d+$/;
 /** The two paths the row names: `fleet:deploy` and `fleet:provision` run these, and a delete that stopped them resolving would be found by an operator at a host. */
 const DEPLOY_AND_PROVISION = [
-  "packages/control/src/fleet-playbook.mjs",
+  "packages/control/src/fleet-playbook.ts",
   "packages/control/ansible/deploy.yml",
   "packages/control/ansible/provision-role.yml",
   "packages/control/ansible/ansible.cfg",
@@ -334,7 +334,7 @@ test("every packages/control path a root script or a workflow names resolves thr
 
 test("the deploy and provision paths resolve (read, not run), and the laid layers.json is the root's byte for byte", () => {
   const scripts = (JSON.parse(read(REPO_ROOT, "package.json")) as { scripts: Record<string, string> }).scripts;
-  for (const script of ["fleet:deploy", "fleet:provision"]) assert.match(scripts[script] ?? "", /packages\/control\/src\/fleet-playbook\.mjs/, `${script} no longer runs the playbook wrapper by the path this test reads`);
+  for (const script of ["fleet:deploy", "fleet:provision"]) assert.match(scripts[script] ?? "", /packages\/control\/src\/fleet-playbook\.ts/, `${script} no longer runs the playbook wrapper by the path this test reads`);
   for (const path of DEPLOY_AND_PROVISION) assert.ok(existsSync(join(REPO_ROOT, path)), `${path} is not in the laid tree: \`node scripts/lay-layer.ts control\` lays it`);
   // `fleet:deploy`'s hasher (`layerCodeVersion`) and every Ansible play read `packages/control/layers.json`: it must be the declaration this repository tracks.
   assert.equal(read(REPO_ROOT, "packages/control/layers.json"), read(REPO_ROOT, "layers.json"), "the laid declaration differs from the root's: lay-layer.ts writes it, so someone edited one");
