@@ -195,7 +195,7 @@ jobs:
           if-no-files-found: warn
 ```
 
-**A release is tagged `a11ign@<version>`** (`a11ign@0.5.3` is the tag the pin above names), and every published version has one; that is the form to look for, and `node --import tsx scripts/release-tags-complete.ts` prints any published version that lacks it. The `v<version>` tags are not that contract: the release job writes them only so Dependabot can see the Action, and not every version has one. `a11ign/a11ign@v0` is the Action's major tag, which follows the newest qualified release.
+**A release is tagged `a11ign@<version>`** (`a11ign@0.5.3` is the tag the pin above names), and every published version has one; that is the form to look for, and `node --import tsx scripts/release-tags-complete.ts` prints any published version that lacks it. The `v<version>` tags are not that contract: the release job writes them only so Dependabot can see the Action, and not every version has one. `a11ign/a11ign@v0` is the Action's major tag, which follows the newest qualified release. **Which channel is stable (`latest`), what a version number promises before 1.0, and where the changelog is** (the GitHub Release for the tag, not the packages' `CHANGELOG.md`) are in [the release policy](./docs/release-policy.md), checked there against the last ten releases. **Pin the Action by SHA, as above, and stay on it:** `v0` moves on every promotion, and a 0.x minor may change an input or a default.
 
 **That is the job, not yet a workflow file.** Put it in `.github/workflows/a11ign.yml` under two more lines, `name: a11ign` and a trigger such as `on: [pull_request, workflow_dispatch]`; the whole runnable file, trigger included, is at the top of [the Action guide](./docs/github-action.md).
 

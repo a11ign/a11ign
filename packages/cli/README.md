@@ -46,6 +46,8 @@ repeat that decision.
   take it unqualified, use `a11ign@next`.
 - **A release is tagged `a11ign@<version>`**, for example `a11ign@0.5.3`, and its GitHub Release hangs off that tag. The
   `v<version>` tags are not that contract: they exist only so Dependabot can see the Action, and not every version has one.
+- **What a version number promises before 1.0, and where the changelog is**, are in
+  [the release policy](https://github.com/a11ign/a11ign/blob/main/docs/release-policy.md), checked against the last ten releases.
 
 **How long a merged fix takes to reach each**, as measured on one release and never as a promise:
 
