@@ -159,6 +159,24 @@
         }
       ],
       "guardNote": "none in force. Set guard to a11ign/a11ign#4661 (a pr:hold --until closed #N is refused when #N is unclaimed with no open pull request, plus a 15-minute detector) when it merges; its code half is a second pull request in a11ign/agent-org."
+    },
+    {
+      "id": "closed-on-merge-not-outcome",
+      "name": "A row closes on its merge while the outcome it was filed for is not in effect: a switch is off, a release is not published, or a consumer still runs the old version.",
+      "guard": null,
+      "seed": [
+        {
+          "ref": "a11ign/a11ign#4629",
+          "basis": "chairman-named",
+          "note": "merged as agent-org#550 at 21:29Z on 2026-10-09 with .agent-org/decisions.json absent (404 on main), so model-routing was off and the epic's Done-when 1 was unmet"
+        },
+        {
+          "ref": "a11ign/a11ign#4627",
+          "basis": "chairman-named",
+          "note": "comment 6089585564 (2026-10-09 21:30:40Z): the chairman-verified direction that a use's row is not done until the project's switch is on and a live start is quoted"
+        }
+      ],
+      "guardNote": "none in force. The verify-row rule of 2026-10-09 20:05Z applies row by row, but nothing refuses the close. Set guard to the rule's reference when a rule that refuses the close is in force."
     }
   ]
 }

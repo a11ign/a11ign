@@ -1,0 +1,1 @@
+Acceptance: node -e 'const c=JSON.parse(require("fs").readFileSync(".agent-org/failure-classes.json","utf8")).classes.find(x=>x.id==="closed-on-merge-not-outcome"); if(!c||c.guard!==null||!c.guardNote||!c.seed.length||c.seed.some(x=>!x.ref||!x.basis)) process.exit(1)'
