@@ -17,21 +17,22 @@
 //   node packages/guards/src/tree-wide-guards.mjs                    one path per line, for `npm run guards:sweep`
 import { execFileSync } from "node:child_process";
 import { readFileSync, realpathSync } from "node:fs";
-import { resolve } from "node:path";
+import { createRequire } from "node:module";
+import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { sandboxGitEnv } from "./git-env.mjs";
 import { localImports, stripComments } from "./local-import-closure.mjs";
 import { refuseUnknownFlags } from "@a11ign/screenreader-fleet/cli-flags";
-import { toolPath } from "../../../scripts/agent-org-newest-tag.mjs";
+import { toolRoot } from "../../../scripts/agent-org-newest-tag.mjs";
 
 /** Exported so the discovery's own test can construct a fixture that genuinely resolves to this module,
  *  rather than guessing at the path a real `localImports` call would compute. */
 export const MARKER_MODULE = resolve(new URL(".", import.meta.url).pathname, "tree-wide-guard.ts");
-/** #2623 (child 5 of #69): `agent-org`'s own copy of `tree-wide-guard.mjs` is a SECOND valid resolved path --
+/** #2623 (child 5 of #69): `agent-org`'s own copy of `tree-wide-guard.mjs`, by its declared export (#4407), is a SECOND valid resolved path --
  *  a travelling guard repointed at the copy must stay discovered, exactly as it was importing the original.
  *  Both are checked, never swapped: `MARKER_MODULE` alone stays exported and correct for anything still
  *  reading it. */
-export const MARKER_MODULES = [MARKER_MODULE, toolPath("src/lib/tree-wide-guard.mjs")];
+export const MARKER_MODULES = [MARKER_MODULE, createRequire(join(toolRoot(), "package.json")).resolve("agent-org/tree-wide-guard")];
 /** Imported is not used -- the same distinction `git-spawn-classification.test.ts`'s own
  *  `usesCanonicalHelper` draws for the identical reason (a canonical helper pulled in and never called). */
 const CALLS_MARKER = /\bdeclareTreeWideGuard\(/;

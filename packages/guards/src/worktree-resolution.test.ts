@@ -19,7 +19,6 @@ import { fileURLToPath } from "node:url";
 import {
   RESOLUTION, OVERRIDE_ENV, worktreeResolution, resolutionLine, classifyResolvedPath, suiteStartVerdict,
 } from "./worktree-resolution.mjs";
-import { toolPath } from "../../../scripts/agent-org-newest-tag.mjs";
 import { memberScopeLister } from "./assert-glob-not-empty.mjs";
 
 const REPO = fileURLToPath(new URL("../../../", import.meta.url));
@@ -160,7 +159,7 @@ test("#2181 THE CALLER: `worktree:whose` prints the resolution line for the tree
     const primary = checkout(base, "primary");
     const tree = checkout(base, "wt-cli");
     linkScope(tree, join(primary, "packages", PACKAGE));
-    const ran = spawnSync(process.execPath, [toolPath("src/worktree-owner.mjs"), tree],
+    const ran = spawnSync("agent-org", ["worktree:whose", tree],
       { encoding: "utf8", env: { ...process.env, A11Y_SESSION: "worker-capture" } });
     assert.equal(ran.status, 0, ran.stderr);
     assert.match(ran.stdout, /UNSTAMPED/, "control: the ownership answer is still there");
@@ -267,15 +266,15 @@ test("#2218 THE CALLER: `assert-glob-not-empty --run` refuses in a mis-wired tre
     }
     mkdirSync(join(tree, "packages", "x"), { recursive: true });
     writeFileSync(join(tree, "packages", "x", "a.test.ts"), "");
-    // The floor imports `@a11ign/screenreader-fleet/cli-flags`, which the real package serves from `dist/` -- a
-    // build product a clean checkout does not have. So the OTHER checkout is constructed too, with the one
-    // entry the import needs copied from source: the fixture depends on nothing `npm run build` makes.
+    // The floor imports `@a11ign/screenreader-fleet/cli-flags`, which the real package serves from `dist/`. So the OTHER checkout is
+    // constructed too, with the one entry the import needs copied from the installed package (a path, not `import.meta.resolve`, which rstest stubs): `packages/worker-fleet/src` no longer
+    // exists in this repository (the package is consumed from the registry, #3447), so reading it there threw ENOENT.
     const other = join(base, "other-checkout", "packages", "worker-fleet");
     mkdirSync(join(other, "dist"), { recursive: true });
     writeFileSync(join(other, "package.json"), JSON.stringify({
       name: "@a11ign/screenreader-fleet", type: "module", exports: { "./cli-flags": "./dist/cli-flags.mjs" },
     }));
-    copyFileSync(join(REPO, "packages/worker-fleet/src/cli-flags.mjs"), join(other, "dist", "cli-flags.mjs"));
+    copyFileSync(join(REPO, "node_modules/@a11ign/screenreader-fleet/dist/cli-flags.mjs"), join(other, "dist", "cli-flags.mjs"));
     mkdirSync(join(tree, "node_modules", "@a11ign"), { recursive: true });
     symlinkSync(other, join(tree, "node_modules", "@a11ign", "screenreader-fleet"));
     const ran = spawnSync(process.execPath, [join(tree, "packages/guards/src/assert-glob-not-empty.mjs"),
