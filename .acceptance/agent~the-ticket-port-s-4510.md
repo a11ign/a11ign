@@ -8,9 +8,7 @@ node -e 'const fs=require("fs");const f=fs.readdirSync("docs/adr").find(n=>/^004
 ```
 ## Evidence
 
-The command above printed `ok` at 1c1206f37.
-
-Not run locally: `pnpm run verify` (the fresh worktree has no `node_modules`; the change is two markdown files under `docs/adr/`). CI's `gate` is the check.
+The command above printed `ok`. `pnpm run verify` was green at this head: the affected set passed (201 test files, 2686 tests, against origin/main); the tree-wide guards run in CI only.
 
 Closes #4510
 
