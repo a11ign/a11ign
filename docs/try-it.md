@@ -579,7 +579,7 @@ it, and nothing else. No telemetry, no usage reporting, no call home, and no pla
      docs/board/reported/, exactly as the README's claim block is. This figure lived here as a
      SECOND COPY for a while and went stale when the first one moved; that is why the markers exist. -->
 
-**On our own corpus of 1,405 conformant records the deterministic rules asserted no failures.** The real-page figure is under re-measurement since 2026-09-06 and this page states none: a refreshed baseline produced four findings on pages an older baseline had passed, and until each is established as an assertion or a referral there is no honest number to give.
+**On our own corpus of 1,405 conformant records the deterministic rules asserted no failures.** The real-page figure is in the README's claim block: measured 2026-09-24 on the 40 conformant real pages of the calibration set at protocol 21, 0 criteria asserted wrongly and 395 referred ([`README.md`](../README.md)). The time a capture takes is a different figure: one capture occupied a worker for 105 s to 460 s depending on the page, measured 2026-09-24 at protocol 21 and not refreshed since ([`capture-cost.md`](./capture-cost.md)).
 
 <!-- CLAIM:END -->
 
