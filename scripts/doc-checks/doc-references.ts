@@ -65,8 +65,10 @@ export const missingDocs = (root: string): string[] => DOCS.filter((doc) => !exi
 export function brokenCitations(root: string, { generatedResolves = false }: { generatedResolves?: boolean; } = {}): { broken: string[]; checked: number; } {
   const generators = new Map(GENERATED_CITATIONS.map((g) => [g.path, g.generator[g.generator.length - 1]]));
   const cited = citedPaths(root);
-  const resolves = (/** @type {string} */ path: string) => existsSync(join(root, path))
-    || (generatedResolves && generators.has(path) && existsSync(join(root, /** @type {string} */ (generators.get(path)))));
+  const resolves = (path: string) => {
+    const generator = generators.get(path);
+    return existsSync(join(root, path)) || (generatedResolves && generator !== undefined && existsSync(join(root, generator)));
+  };
   return { broken: cited.filter(({ path }) => !resolves(path)).map(({ doc, path }) => `${doc}: ${path}`), checked: cited.length };
 }
 
@@ -84,7 +86,7 @@ export function gitIgnoredAmong(root: string, paths: string[]): Set<string> {
     out = execFileSync("git", ["check-ignore", "--stdin"],
       { cwd: root, env: sandboxGitEnv(), input: `${paths.join("\n")}\n`, encoding: "utf8", stdio: "pipe" });
   } catch (error) {
-    out = String(/** @type {{ stdout?: string }} */ (error).stdout ?? "");
+    out = String((error as { stdout?: string }).stdout ?? "");
   }
   return new Set(out.split("\n").map((line) => line.trim()).filter(Boolean));
 }

@@ -74,11 +74,13 @@ export function brokenAnchorLinks(root: string): string[] {
   const byFile: Map<string, Set<string>> = new Map();
   const broken = [];
   for (const { file, anchor } of localAnchorLinks(claudeMd(root))) {
-    if (!byFile.has(file)) {
+    let anchors = byFile.get(file);
+    if (anchors === undefined) {
       const path = join(root, file);
-      byFile.set(file, existsSync(path) ? headingAnchors(readFileSync(path, "utf8")) : new Set());
+      anchors = existsSync(path) ? headingAnchors(readFileSync(path, "utf8")) : new Set();
+      byFile.set(file, anchors);
     }
-    if (!/** @type {Set<string>} */ (byFile.get(file)).has(anchor)) broken.push(`${file}#${anchor}`);
+    if (!anchors.has(anchor)) broken.push(`${file}#${anchor}`);
   }
   return broken;
 }

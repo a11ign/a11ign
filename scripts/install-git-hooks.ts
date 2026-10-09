@@ -93,7 +93,7 @@ export function installHooks({ run = gitConfig, exists = existsSync, log = conso
       log(`  git hooks installed: core.hooksPath -> ${HOOKS_PATH}`);
       return true;
     } catch (cause) {
-      log(`  hooks NOT installed (${/** @type {Error} */ (cause).message}). This is not fatal — but the `
+      log(`  hooks NOT installed (${(cause as Error).message}). This is not fatal — but the `
         + "pre-push gate and the shared-checkout commit guard are NOT running for you. "
         + `Set it by hand: git config core.hooksPath ${HOOKS_PATH}`);
       return false;

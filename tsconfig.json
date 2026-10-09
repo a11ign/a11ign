@@ -65,7 +65,10 @@
     // this list alone changes nothing without `checkJs` or a per-file `// @ts-check` pragma -- see the
     // comment on the `.mjs` entries above ("or `// @ts-check` is a comment"). This is that half: every
     // file gets the pragma, is fixed, or carries `// @ts-nocheck` with a stated reason.
-    "scripts/**/*.mjs"
+    "scripts/**/*.mjs",
+    // #4499: #4274 renamed 55 of the `scripts/*.mjs` above to `.ts`, which left them OUTSIDE this program, so the core's `tsc` stopped
+    // seeing them while the lab's (which follows its imports into them) found 18 errors in 8 files. `.ts` is checked without a pragma.
+    "scripts/**/*.ts"
   ],
   // The lab left the workspace (#3505) and is LAID at `packages/lab` for the scripts and tests that read it by path: untracked, a copy of another
   // repository's tree. It is typechecked THERE, where its own `@a11ign/control` link resolves; here the include patterns above would read its

@@ -62,7 +62,7 @@ export function wrongOwner(lines: UsesLine[], repo: string): string[] {
  * @param {string} root @returns {Set<string> | null}
  */
 export function remoteRefs(root: string): Set<string> | null {
-  const refs = new Set();
+  const refs = new Set<string>();
   try {
     for (const line of execFileSync("git", ["ls-remote", "--tags", "--heads", "origin"],
       { cwd: root, env: sandboxGitEnv(), encoding: "utf8", stdio: "pipe" }).split("\n")) {
