@@ -31,7 +31,7 @@ const walkScope = fileURLToPath(new URL("../../packages/guards/src/walk-scope.ts
  * config is a call into the installed toolchain and a new version of it changes what every run does, and `walk-scope` and `private-tmp` because
  * each is loaded by the config and by every worker (#3855).
  */
-const A11IGN_LOADED_TRIGGERS = ["scripts/rstest/**", "pnpm-lock.yaml", "packages/guards/src/walk-scope*.mjs", "scripts/private-tmp.ts"];
+const A11IGN_LOADED_TRIGGERS = ["scripts/rstest/**", "pnpm-lock.yaml", "packages/guards/src/walk-scope*.ts", "scripts/private-tmp.ts"];
 
 /**
  * #3572: data directories a non-tree-wide test reads by path, whole, because a file added to one is read too. NONE IS UNDER `packages/lab/` (#3505) OR `packages/control/` (#3506): those
