@@ -37,6 +37,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
@@ -370,6 +371,21 @@ function liveTargets(): Entry[] {
   return [{ repo: only, defaultBranch: branch, requiredCheck: (entries[0] as Entry).requiredCheck, publishes: false }];
 }
 
+/**
+ * #4486: THIS FILE'S LIVE READS ARE HAND-RUN, with the operator's own `gh` login or a `GH_TOKEN` that reads the nine repositories (`nightly.yml`
+ * no longer runs them: `docs/known-gaps.md` §60). Without any credential every cell would come back CANNOT_TELL on an `HTTP 401` the table
+ * buries, so say so ONCE and by name; it is still a refusal, never a pass, because nothing was read.
+ */
+function requireCredential(): void {
+  if (process.env.GH_TOKEN || process.env.GITHUB_TOKEN) return;
+  try {
+    execFileSync("gh", ["auth", "token"], { stdio: "ignore" });
+  } catch (cause) {
+    throw new Error("NO CREDENTIAL: `gh` holds no login and neither GH_TOKEN nor GITHUB_TOKEN is set, so NOTHING WAS READ. Run `gh auth login` "
+      + "(or export GH_TOKEN) as an identity that reads the nine repositories, then repeat the command. This is not a pass.", { cause });
+  }
+}
+
 test("#3123 LIVE: every code repository carries the review requirement and the merge queue, asked of GitHub", () => {
   // OPT-IN under the SAME switch as `branch-protection.test.ts`'s no-admin read, for the same reason: a test
   // that spawns `gh` whenever a token happens to be present asks GitHub on every local run.
@@ -379,6 +395,7 @@ test("#3123 LIVE: every code repository carries the review requirement and the m
       + "--disableConsoleIntercept` asks GitHub about every declared repository. Nothing here read one.");
     return;
   }
+  requireCredential();
   const targets = liveTargets();
   assert.ok(targets.length >= 1, "no repository to read: the declared list was empty, and an empty read certifies nothing");
   const bad: string[] = [];
@@ -1556,10 +1573,12 @@ test("#3705 LIVE: every code repository is read against docs/new-code-repository
   // OPT-IN under the same switch as the read above, for the same reason. It reads EVERY declared repository, so
   // `A11Y_PROTECTION_REPO` (one repository, possibly not yet declared) does not narrow it.
   if (process.env.A11Y_CHECK_MAIN_RULESET !== "1") {
-    console.log("  NOT RUN: the live settings table is opt-in -- `A11Y_CHECK_MAIN_RULESET=1` asks GitHub about every declared "
-      + "repository (settings, environments, the bots team, pull requests, a search). Nothing here read one.");
+    console.log("  NOT RUN: the live settings table is opt-in and HAND-RUN (#4486) -- `A11Y_CHECK_MAIN_RULESET=1 pnpm exec rstest run --config "
+      + "scripts/rstest/rstest.config.mjs --include packages/guards/src/layer-repository-protection.test.ts --disableConsoleIntercept` "
+      + "asks GitHub about every declared repository (settings, environments, the bots team, pull requests, a search). Nothing here read one.");
     return;
   }
+  requireCredential();
   const declared = declaredRepositories();
   const entries = protectionEntries();
   const org: OrgReads = { bots: ghRead(`orgs/a11ign/teams/bots/repos?per_page=${BOTS_PAGE}`), trackers: readJson<ProjectFile>(PROJECT_FILE).tracker.map((t) => t.repo) };

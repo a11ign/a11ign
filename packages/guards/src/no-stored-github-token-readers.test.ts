@@ -54,12 +54,10 @@ type Counted = { file: string; secret: string };
 
 /**
  * The readers this tree has not removed. EACH ENTRY IS A NAMED GAP with its row, and the list only ever gets shorter: the exact comparison below
- * is red when a reader is not listed AND when a listed one is gone. `nightly.yml`'s settings table reads contents, trees, environments,
- * deployment-branch policies and a team's repositories, which the `metadata: read` organisation policy does not carry (#4195, #4330;
- * `nightly-reads-octo-sts.test.ts` pins the same read from the workflow's side). Widening that policy is `ceo`'s crossing, so it is
- * recorded here and not worked round.
+ * is red when a reader is not listed AND when a listed one is gone. EMPTY since #4486 (`ceo`'s ruling B retired `nightly.yml`'s settings-table
+ * read; `nightly-reads-octo-sts.test.ts` pins the same absence from the workflow's side).
  */
-const KNOWN_GAPS: Counted[] = [{ file: `${WORKFLOWS}/nightly.yml`, secret: "A11IGN_BOT_TOKEN" }];
+const KNOWN_GAPS: Counted[] = [];
 
 /** Every string value of a parsed document, with its dotted path; a mapping key `secrets` with the value `inherit` is reported as a string too. */
 function* strings(node: unknown, path: string): Generator<{ path: string; text: string }> {

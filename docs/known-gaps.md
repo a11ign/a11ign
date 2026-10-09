@@ -42,6 +42,7 @@ entry names what is missing, what it would cost, and what would tell you it is f
 - [§57](#57-a-page-whose-first-visit-differs-from-every-later-one-is-not-something-gatestability-watches-open-by-design-3905-3130) A PAGE WHOSE FIRST VISIT DIFFERS FROM EVERY LATER ONE IS NOT SOMETHING gate:stability WATCHES — OPEN, by design (#3905, #3130)
 - [§58](#58-the-liaison-shares-the-host-and-the-account-the-do-it-for-me-queue-cannot-see-his-session-and-a-walk-through-verifies-only-what-a-read-can-see-open-by-design-3409-3429-3430) THE LIAISON SHARES THE HOST AND THE ACCOUNT, THE DO-IT-FOR-ME QUEUE CANNOT SEE HIS SESSION, AND A WALK-THROUGH VERIFIES ONLY WHAT A READ CAN SEE — OPEN, by design (#3409, #3429, #3430)
 - [§59](#59-the-first-real-use-of-the-drained-kernel-reboot-is-unmeasured-open-until-the-next-kernel-apt-installs-4046) THE FIRST REAL USE OF THE DRAINED KERNEL REBOOT IS UNMEASURED — OPEN, until the next kernel apt installs (#4046)
+- [§60](#60-the-nine-repositories-settings-table-is-hand-run-not-scheduled-open-by-design-4486-3705-3708) THE NINE REPOSITORIES' SETTINGS TABLE IS HAND-RUN, NOT SCHEDULED — OPEN, by design (#4486, #3705, #3708)
 <!-- known-gaps-index:end -->
 
 ## The order these should be done in
@@ -3864,3 +3865,15 @@ unreadable here; `sudo -n -l` lists it), that the 30-minute bound is a sensible 
 booted host, and **that anything runs `--reboot` at all: the module is the procedure, and no unit or tick calls it yet** (the row's Region was three files).
 *Cost:* the note is a note, and a note wakes nobody, so until a trigger is wired a newer kernel waits for a person to read `host:check`. *Fixed when:* the
 first kernel apt installs after this lands is booted by the org, and the reading (`uname -r`, the sysctl values, the tick, the seats, the trace pages) is posted on #4046.
+
+## 60. THE NINE REPOSITORIES' SETTINGS TABLE IS HAND-RUN, NOT SCHEDULED — OPEN, by design (#4486, #3705, #3708)
+
+**A settings drift is found only when somebody runs the table.** `layer-repository-protection.test.ts` reads every declared repository against the creation
+runbook (merge settings, the publish environment, the bots team, the release shape), and until #4486 `nightly.yml` ran it every night with the stored
+`A11IGN_BOT_TOKEN`. `ceo` ruled B on #4486 (2026-10-09): the Octo STS organisation policy carries `metadata: read`, the table needs contents, trees,
+environments, deployment-branch policies and the bots team, and widening the app was refused as a security grant bought to keep a drift check. The step no
+longer names the secret, so #4203 can delete it. *Not measured:* which of those reads the app could be granted (its installation page is admin-only), and
+whether a repository has drifted since the last scheduled run. *The command:* `A11Y_CHECK_MAIN_RULESET=1 pnpm exec rstest run --config scripts/rstest/rstest.config.mjs
+--include packages/guards/src/layer-repository-protection.test.ts --disableConsoleIntercept`, as an identity that reads the nine repositories (with no `gh` login and
+no `GH_TOKEN` it refuses by name and reads nothing). *Cost:* a repository that drifts waits for a person to run it. *Fixed when:* a new row, with the app's actual
+installation permissions measured by an admin, puts the read back on an Octo STS token.

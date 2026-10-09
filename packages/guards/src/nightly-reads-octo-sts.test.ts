@@ -1,7 +1,7 @@
 // no-token: gh -- reads this repository's own `nightly.yml` and `.github/chainguard/`, and calls nothing.
 /**
- * #4195: `nightly.yml` mints two Octo STS tokens under policies bound to that workflow on `main`, and the one stored-token read left (the
- * settings table, which a `metadata: read` token cannot reach) is a NAMED GAP.
+ * #4195: `nightly.yml` mints two Octo STS tokens under policies bound to that workflow on `main`. The one stored-token read it had left (the
+ * settings table, which a `metadata: read` token cannot reach) was retired by `ceo`'s ruling B on #4486: the table is a hand-run read.
  *
  * Pinned against the workflow's parsed YAML (not its text, where a comment mentioning a token would count):
  *   1. exactly the two jobs that mint hold `id-token: write`, and no other job in the file does (the permission is the right to mint);
@@ -9,9 +9,8 @@
  *      through `job_workflow_ref` AND `ref`, because a `workflow_dispatch` on a branch presents that branch's `sub`. The ruleset read's
  *      policy is an ORGANISATION policy in `a11ign/.github` (#4330), whose file this repository cannot read: its step is pinned to the
  *      org scope and the identity name, and #4330's Acceptance pins the file;
- *   3. the ruleset loop is read with the minted token and the stored token is exported only AFTER it, for the settings table alone;
- *   4. `secrets.A11IGN_BOT_TOKEN` is read exactly where the gap is named, so a SECOND stored read cannot appear unnoticed and the gap
- *      cannot be closed without this test saying so.
+ *   3. the ruleset loop is read with the minted token, and nothing in the step exports any other token or reads the settings table;
+ *   4. `secrets.A11IGN_BOT_TOKEN` is read nowhere in the workflow, so a stored read cannot come back unnoticed.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -107,15 +106,12 @@ test("#4195: the ruleset step mints under the organisation policy and reads the 
   const run = read.run ?? "";
   const loopAt = run.indexOf("A11Y_PROTECTION_REPO=");
   const asApp = run.indexOf('export GH_TOKEN="$OCTO_TOKEN"');
-  const asStored = run.indexOf('export GH_TOKEN="$A11IGN_BOT_TOKEN"');
   assert.ok(asApp >= 0 && asApp < loopAt, "the protection loop must run with the minted token exported before it");
-  assert.ok(asStored > loopAt, "the stored token may be exported only after the loop, for the settings table alone");
+  assert.equal(run.match(/export GH_TOKEN=/g)?.length, 1, "the minted token is the only one this step exports");
+  assert.ok(!/--include\s+\S*layer-repository-protection/.test(run), "the settings table is a hand-run read (#4486), not a step of this one");
 });
 
-test("#4195: the one remaining stored-token read is the settings-table step, whose gap the workflow names", () => {
-  const reads = storedTokenReads(workflow);
-  assert.equal(reads.length, 1, `expected exactly the named gap, found ${JSON.stringify(reads)}`);
-  assert.deepEqual(reads[0].job, RULESET_JOB);
-  assert.match(reads[0].step, GAP_STEP);
-  assert.match(read(WORKFLOW), /THE SETTINGS TABLE BELOW STAYS ON THE STORED TOKEN, A NAMED GAP/);
+test("#4486: no job reads the stored token, and the workflow says the settings table is a hand-run read", () => {
+  assert.deepEqual(storedTokenReads(workflow), []);
+  assert.match(read(WORKFLOW), /THE SETTINGS TABLE IS NOT READ HERE \(#4486/);
 });
