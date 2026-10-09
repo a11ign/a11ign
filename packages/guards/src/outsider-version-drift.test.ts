@@ -22,7 +22,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const REPO = fileURLToPath(new URL("../../..", import.meta.url));
-const { generateOutsiderJob, refuseDriftFromReadme } = await import(pathToFileURL(`${REPO}scripts/outsider/generate.mjs`).href);
+const { generateOutsiderJob, refuseDriftFromReadme } = await import(pathToFileURL(`${REPO}scripts/outsider/generate.ts`).href);
 
 const readme = readFileSync(`${REPO}README.md`, "utf8");
 

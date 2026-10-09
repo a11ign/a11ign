@@ -15,7 +15,7 @@
  * An import through a declared export (`agent-org/pr-open`) is none of these and does not count.
  *
  * WHAT IT CANNOT SEE, stated rather than left to be found: a path assembled from a checkout directory the file obtained elsewhere
- * (`join(provisionAgentOrg(), "src/suite-slots.mjs")` in `scripts/verify.mjs`) names no resolver and no `agent-org/src` text, and a bare
+ * (`join(provisionAgentOrg(), "src/suite-slots.mjs")` in `scripts/verify.ts`) names no resolver and no `agent-org/src` text, and a bare
  * `"src/x.mjs"` literal is too common in this tree (lay-layer, mutate-diff, ci-changed fixtures) to charge. That reach is #4408's to remove
  * and to find, in the file the baseline already lists.
  *

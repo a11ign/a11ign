@@ -158,7 +158,7 @@ const withoutPinComment = (jobText: string): string => jobText.replace(PIN_VERSI
  * @param {string} workflowText the workflow's copy of that job
  * @returns {string}
  */
-function withoutReplacedPinComment(fenceText, workflowText) {
+function withoutReplacedPinComment(fenceText: string, workflowText: string): string {
   const pin = PIN_VERSION_COMMENT.exec(workflowText);
   if (!pin) return fenceText;
   const action = /uses:\s*(\S+)@/.exec(pin[1])?.[1] ?? "";

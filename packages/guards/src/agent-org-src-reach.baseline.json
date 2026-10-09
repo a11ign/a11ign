@@ -8,12 +8,12 @@
   "packages/guards/src/tree-wide-guards.mjs": 1,
   "packages/guards/src/worktree-resolution.test.ts": 1,
   "scripts/agent-org-newest-tag.mjs": 5,
-  "scripts/ci-health.mjs": 1,
-  "scripts/npm-token-liveness.mjs": 1,
-  "scripts/outsider/verdict-job.mjs": 1,
+  "scripts/ci-health.ts": 1,
+  "scripts/npm-token-liveness.ts": 1,
+  "scripts/outsider/verdict-job.ts": 1,
   "scripts/release-reads-qualification.mjs": 1,
   "scripts/repo-identity.mjs": 1,
-  "scripts/token-cost.mjs": 1,
-  "scripts/verify.mjs": 2,
-  "scripts/weekly-review.mjs": 1
+  "scripts/token-cost.ts": 1,
+  "scripts/verify.ts": 2,
+  "scripts/weekly-review.ts": 1
 }
