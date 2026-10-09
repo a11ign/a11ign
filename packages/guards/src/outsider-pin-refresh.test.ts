@@ -59,7 +59,7 @@ test("a version that is not x.y.z is refused, not decided", () => {
 });
 
 type Step = { id?: string; uses?: string; with?: Record<string, string>; env?: Record<string, string>; run?: string };
-type Job = { if?: string; needs?: string[]; permissions?: Record<string, string>; steps?: Step[] };
+type Job = { if?: string; needs?: string[]; outputs?: Record<string, string>; permissions?: Record<string, string>; steps?: Step[] };
 const release = parseYaml(read(".github/workflows/release.yml")) as { jobs: Record<string, Job> };
 const refresh = release.jobs["refresh-outsider-pin"];
 const mint = refresh?.steps?.find((step) => step.uses?.startsWith("octo-sts/action@"));
@@ -70,11 +70,30 @@ const policy = parseYaml(read("scripts/outsider/outsider-pin-write.sts.yaml")) a
 };
 const promoteTagPolicy = parseYaml(read(".github/chainguard/promote-action-tag.sts.yaml")) as typeof policy;
 
-test("the job exists, follows the promotion, and holds no write permission of its own (positive control for every job assertion below)", () => {
+const decide = release.jobs["decide-outsider-pin"];
+
+test("both jobs exist, in order, and only the minting one holds id-token (positive control for every job assertion below)", () => {
+  assert.ok(decide, "release.yml has no decide-outsider-pin job");
   assert.ok(refresh, "release.yml has no refresh-outsider-pin job");
-  assert.deepEqual(refresh.needs, ["promote"]);
+  assert.deepEqual(decide.needs, ["promote"]);
+  assert.deepEqual(refresh.needs, ["decide-outsider-pin"]);
+  assert.deepEqual(decide.permissions, { contents: "read" }, "the job that runs repository code holds no id-token");
   assert.deepEqual(refresh.permissions, { contents: "read", "id-token": "write" });
   assert.ok(mint, "the job has no octo-sts/action step: the token would be GITHUB_TOKEN, which cannot write .github/workflows");
+});
+
+test("THE JOB HOLDING id-token RUNS NO REPOSITORY CODE: no checkout, no install, no node, no pnpm (ceo, the review of #4365)", () => {
+  const steps = refresh.steps ?? [];
+  assert.ok(steps.length > 0);
+  const uses = steps.map((step) => step.uses ?? "");
+  assert.deepEqual(uses.filter((u) => u !== "" && !u.startsWith("octo-sts/action@")), [], "the only action the minting job uses is the mint");
+  const scripts = steps.map((step) => step.run ?? "").join("\n");
+  assert.doesNotMatch(scripts, /\b(pnpm|npm|npx|node|tsx|yarn)\b|scripts\//, "a run step of the minting job reaches repository code or a package manager");
+  assert.match(scripts, /gh api -X PUT/, "positive control: the scan reads the step that writes");
+  // The control the scan must not miss: the deciding job DOES run them.
+  const decideText = JSON.stringify(decide.steps);
+  assert.match(decideText, /actions\/checkout/);
+  assert.match(decideText, /pnpm install/);
 });
 
 test("it mints for the repository repository.json names, under the identity this repository keeps a policy for", () => {
@@ -82,16 +101,20 @@ test("it mints for the repository repository.json names, under the identity this
   assert.equal(mint?.with?.scope, repository);
   assert.equal(mint?.with?.identity, "outsider-pin-write");
   assert.ok(existsSync(`${REPO}scripts/outsider/${mint?.with?.identity}.sts.yaml`), "the identity has no policy source beside the generator");
-  const write = refresh.steps?.find((step) => step.run?.includes("outsider-job.yml") && step.env?.OUTSIDE !== undefined);
+  const write = refresh.steps?.find((step) => step.env?.OUTSIDE !== undefined);
   assert.equal(write?.env?.OUTSIDE, repository, "the step writes a repository other than the one the token was minted for");
   assert.equal(write?.env?.GH_TOKEN, `\${{ steps.${mint?.id}.outputs.token }}`);
 });
 
-test("the write step refuses an empty token and reads its own write back", () => {
-  const script = refresh.steps?.find((step) => step.run?.includes("refresh-pin.ts"))?.run ?? "";
+test("the write step refuses an empty token, shape-checks what the deciding job handed over, and reads its own write back", () => {
+  const script = refresh.steps?.find((step) => step.run?.includes("gh api -X PUT"))?.run ?? "";
   assert.match(script, /\[ -n "\$\{GH_TOKEN:-\}" \]/);
+  assert.match(script, /\[0-9a-f\]\{40\}/, "the sha handed over is shape-checked");
+  assert.match(script, /grep -qx -- "      - uses: a11ign\/a11ign@\$TAG_SHA # v\$VERSION"/, "the file is checked to pin what it was told");
   assert.match(script, /cmp - "\$scratch\/generated\.yml"/);
-  assert.match(script, /--sha="\$tag_sha" --version="\$version"/);
+  const generate = decide.steps?.find((step) => step.run?.includes("generate.mjs"))?.run ?? "";
+  assert.match(generate, /--sha="\$tag_sha" --version="\$version"/);
+  assert.deepEqual(Object.keys(decide.outputs ?? {}).sort(), ["action", "generated", "tag_sha", "version"]);
 });
 
 test("the policy grants exactly contents + workflows, to the same workflow-on-main that promote-action-tag binds", () => {
@@ -105,12 +128,15 @@ test("the policy source is NOT in .github/chainguard/, where Octo STS would read
   assert.equal(existsSync(`${REPO}.github/chainguard/outsider-pin-write.sts.yaml`), false);
 });
 
-test("the job is SKIPPED, not red, until OUTSIDER_PIN_REFRESH is set to 1 at install -- and it keeps its own promotion conditions", () => {
-  const condition = refresh.if ?? "";
-  assert.match(condition, /vars\.OUTSIDER_PIN_REFRESH == '1'/, "without the variable gate the job mints, is refused, and turns every release red");
-  assert.match(condition, /!cancelled\(\)/);
-  assert.match(condition, /needs\.promote\.result == 'success'/, "the gate must narrow the promotion condition, not replace it");
-  assert.doesNotMatch(promoteTagPolicyJobIf(), /OUTSIDER_PIN_REFRESH/, "positive control: the variable gates this job only, not the tag move");
+test("BOTH jobs are SKIPPED, not red, until OUTSIDER_PIN_REFRESH is set to 1 at install -- and keep their own conditions", () => {
+  for (const [name, job] of [["decide-outsider-pin", decide], ["refresh-outsider-pin", refresh]] as const) {
+    const condition = job.if ?? "";
+    assert.match(condition, /vars\.OUTSIDER_PIN_REFRESH == '1'/, `${name}: without the variable gate the job mints, is refused, and turns every release red`);
+    assert.match(condition, /!cancelled\(\)/, name);
+  }
+  assert.match(decide.if ?? "", /needs\.promote\.result == 'success'/, "the gate must narrow the promotion condition, not replace it");
+  assert.match(refresh.if ?? "", /needs\.decide-outsider-pin\.outputs\.action == 'write'/, "the minting job runs only when a write was decided");
+  assert.doesNotMatch(promoteTagPolicyJobIf(), /OUTSIDER_PIN_REFRESH/, "positive control: the variable gates the outsider jobs only, not the tag move");
 });
 
 function promoteTagPolicyJobIf(): string {
