@@ -436,6 +436,14 @@ function runCli(args: string[], env: Record<string, string> = {}) {
   return { status: run.status, stdout: run.stdout, stderr: run.stderr };
 }
 
+/** The fixture's packages, as `packages=` prints them; the `ALL_PACKAGES` the in-process tests pass are the same four. */
+const FIXTURE_PACKAGES = ALL_PACKAGES.join(" ");
+
+/** The `key=value` lines the CLI prints outside Actions, as an object. */
+function outputsOf(stdout: string): Record<string, string> {
+  return Object.fromEntries(stdout.trimEnd().split("\n").map((line) => line.split("=", 2) as [string, string]));
+}
+
 /** The fixture checkout with a base ref, then one more commit that edits `file` (a PR's diff against `BASE_REF`). */
 function branchEditing(sandbox: GitSandbox, file: string): void {
   trackFixtureRepo(sandbox);
@@ -500,7 +508,35 @@ test("CLI: under Actions the outputs are APPENDED to $GITHUB_OUTPUT, not printed
     assert.equal(run.status, 0, run.stderr);
     assert.equal(run.stdout, "");
     assert.equal(readFileSync(outFile, "utf8"), [
-      "earlier=1", "ts=false", "python=false", "ansible=true", "docs=false", "board=false", "changeset=false", "rulesFitness=false", "packages=", "",
+      "earlier=1", "ts=true", "python=true", "ansible=true", "docs=true", "board=true", "changeset=true", "rulesFitness=true", `packages=${FIXTURE_PACKAGES}`, "",
     ].join("\n"));
+  });
+});
+
+const REUSABLE_ACCEPTANCE = ".github/workflows/reusable-acceptance.yml";
+
+test("CLI: merge_group runs the full required set for a workflow-only diff, and the same diff under pull_request still skips ts (#4440, #4428)", () => {
+  withGitSandbox((sandbox) => {
+    branchEditing(sandbox, REUSABLE_ACCEPTANCE);
+    const queue = runCli(["--event=merge_group", `--base=${BASE_REF}`, `--repo=${sandbox.dir}`]);
+    assert.equal(queue.status, 0, queue.stderr);
+    assert.deepEqual(outputsOf(queue.stdout), {
+      ts: "true", python: "true", ansible: "true", docs: "true", board: "true", changeset: "true", rulesFitness: "true", packages: FIXTURE_PACKAGES,
+    });
+
+    const pr = runCli(["--event=pull_request", `--base=${BASE_REF}`, `--repo=${sandbox.dir}`]);
+    assert.equal(pr.status, 0, pr.stderr);
+    assert.equal(outputsOf(pr.stdout).ts, "false");
+    assert.equal(outputsOf(pr.stdout).packages, "");
+  });
+});
+
+test("CLI: merge_group with --precise keeps changeset as the diff's answer, so a queue entry owing no release is not ejected (#4440)", () => {
+  withGitSandbox((sandbox) => {
+    branchEditing(sandbox, REUSABLE_ACCEPTANCE);
+    const run = runCli(["--event=merge_group", "--precise", `--base=${BASE_REF}`, `--repo=${sandbox.dir}`]);
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(outputsOf(run.stdout).changeset, "false");
+    assert.equal(outputsOf(run.stdout).ts, "true");
   });
 });
