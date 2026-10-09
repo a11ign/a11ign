@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/octo-sts/app/refs/heads/main/pkg/octosts/octosts.TrustPolicy.json
+#
+# THE TRUST POLICY FOR `release.yml`'s `refresh-outsider-pin` JOB (#4359). IT DOES NOT TAKE EFFECT WHERE IT IS KEPT. Octo STS reads a repository
+# policy from `.github/chainguard/<identity>.sts.yaml` IN THE REPOSITORY THE TOKEN IS SCOPED TO, and that repository is
+# `a11ign-labs/a11ign-consumer-check` (`repository.json`), not this one. So this is the reviewed source, and installing it is a hand step:
+# commit it there as `.github/chainguard/outsider-pin-write.sts.yaml` (on its `main`, which carries no protection), with the Octo STS GitHub App
+# installed on that repository. It lives under `scripts/outsider/` and NOT in this repository's `.github/chainguard/`, where Octo STS would read
+# it as a policy for `a11ign/a11ign` itself and `octo-sts-policies.test.ts` would count it among this repository's grants.
+# `outsider-pin-refresh.test.ts` pins that its claims equal `promote-action-tag.sts.yaml`'s and that its grant is the two permissions below.
+#
+# Octo STS v0.11.2 syntax; a repository policy reaches only the repository it sits in (the server forces it), so there is no `repositories:` key.
+# Every pattern is matched against the WHOLE claim, so none is anchored here.
+#
+# BOUND TO THE WORKFLOW AS IT IS ON `main` (the reading of #4191, repeated from `promote-action-tag.sts.yaml`): `sub` carries the IMMUTABLE ids of
+# `a11ign/a11ign`, never its name, and `release.yml` runs on `push`, `status` and `workflow_dispatch`, all presenting `ref:refs/heads/main` when on
+# `main`. A dispatch on any other branch presents that branch in `sub`, `ref` and `job_workflow_ref`, so a branch that edits this workflow cannot mint.
+#
+# WHAT IT HOLDS: `contents: write` (one commit of one file to the outside repository's `main`) and `workflows: write`, because the file is under
+# `.github/workflows/` and GitHub refuses any change to it without that permission. Nothing else, and on that repository only.
+issuer: https://token.actions.githubusercontent.com
+subject: repo:a11ign@320310787/a11ign@1280353940:ref:refs/heads/main
+claim_pattern:
+  job_workflow_ref: a11ign/a11ign/\.github/workflows/release\.yml@refs/heads/main
+  ref: refs/heads/main
+permissions:
+  contents: write
+  workflows: write

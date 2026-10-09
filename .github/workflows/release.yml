@@ -597,6 +597,80 @@ jobs:
           write_ref gh api -X PATCH "repos/$GH_REPO/git/refs/tags/$major_tag" -f sha="$new" -F force=true
           echo "$major_tag: was $old (follows $followed), now $new for $version (a11ign@$version)"
 
+  # THE OUTSIDE REPOSITORY'S PIN (#4359, found by #4349): `a11ign-labs/a11ign-consumer-check` runs the documented path from an account that is not an
+  # `a11ign` member, pinned to the Action's commit by a LITERAL `uses:` sha. Three releases in a row (0.3.2, 0.4.0, 0.5.0) left its run red until a person
+  # regenerated that file by hand (#4041), and Dependabot, ruled the refresher by #3182, never opened a pin pull request: its log said `No update needed for
+  # a11ign/a11ign 0.1.0` (#4349). A workflow cannot commit under `.github/workflows` with `GITHUB_TOKEN`, so the token is minted by Octo STS from
+  # `scripts/outsider/outsider-pin-write.sts.yaml`, which is INSTALLED IN THE OUTSIDE REPOSITORY (a repository policy reaches only the repository it sits in)
+  # and binds the token to this workflow as it is on `main`. Like `promote-action-tag` it `needs` the promotion's SUCCESS, so a `next` publish and a red
+  # qualification leave the pin alone; it has no fallback to another token, and a failed mint is red. `refresh-pin.ts` decides: it writes only a file that
+  # differs from what `generate.mjs` makes for the release, and never moves the pin to an older release. The write is one commit of ONE file on `main`; the
+  # read-back below it is the evidence. The outside repository's own `poll` job then finds a pin for the new version and runs it.
+  refresh-outsider-pin:
+    name: pin the outside repository's job at the promoted a11ign version
+    needs: [promote]
+    if: ${{ !cancelled() && (needs.promote.result == 'success' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.action-tag-version != '')) }}
+    runs-on: ubuntu-latest
+    concurrency:
+      group: outsider-pin
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Mint the token that may write the outside repository's workflow (Octo STS; refused for a run of this workflow that is not on main)
+        id: octo-sts
+        uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05   # v1.1.1
+        with:
+          scope: a11ign-labs/a11ign-consumer-check
+          identity: outsider-pin-write
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Regenerate the outside job at the promoted tag's commit, and write it when it differs and is not older
+        env:
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
+          OUTSIDE: a11ign-labs/a11ign-consumer-check
+          WORKFLOW_PATH: .github/workflows/outsider-job.yml
+          PROMOTED: ${{ needs.promote.outputs.promoted }}
+          ONLY_VERSION: ${{ inputs.action-tag-version }}
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::CANNOT_TELL: $1. The outside repository was not written."; exit 1; }
+          [ -n "${GH_TOKEN:-}" ] || fail "the Octo STS token (step octo-sts) is empty"
+          if [ -n "${ONLY_VERSION:-}" ]; then
+            version=$ONLY_VERSION
+          else
+            version=$(jq -r '[.[] | .tag | select(startswith("a11ign@")) | ltrimstr("a11ign@")] | sort_by(split(".") | map(tonumber)) | last // empty' <<<"${PROMOTED:-[]}")
+          fi
+          if [ -z "$version" ]; then
+            echo "no version of the Action was promoted; the outside pin stays where it is"
+            exit 0
+          fi
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "'$version' is not an x.y.z"
+          # The commit of the release tag, PEELED when the tag is annotated: the sha `uses:` must name.
+          tag_sha=$(git ls-remote "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" "refs/tags/a11ign@$version" "refs/tags/a11ign@$version^{}" | tail -n1 | cut -f1)
+          [[ "$tag_sha" =~ ^[0-9a-f]{40}$ ]] || fail "no tag a11ign@$version to pin the outside job at"
+          scratch=$(mktemp -d)
+          node scripts/outsider/generate.mjs --sha="$tag_sha" --version="$version"
+          cp scripts/outsider/outsider-job.yml "$scratch/generated.yml"
+          current=$(gh api "repos/$OUTSIDE/contents/$WORKFLOW_PATH") || fail "$WORKFLOW_PATH of $OUTSIDE could not be read"
+          jq -r .content <<<"$current" | base64 -d > "$scratch/current.yml"
+          pnpm exec tsx scripts/outsider/refresh-pin.ts --current="$scratch/current.yml" --generated="$scratch/generated.yml" --version="$version" | tee "$scratch/decision.txt"
+          grep -q '^WRITE ' "$scratch/decision.txt" || exit 0
+          # A write answers with the body when it is refused, and exits red (a `workflows` refusal reads `Resource not accessible by integration`).
+          if ! response=$(gh api -X PUT "repos/$OUTSIDE/contents/$WORKFLOW_PATH" \
+            -f message="outsider-job.yml: pin a11ign/a11ign at v$version (release.yml refresh-outsider-pin, #4359)" \
+            -f content="$(base64 -w0 "$scratch/generated.yml")" -f sha="$(jq -r .sha <<<"$current")" -f branch=main 2>&1); then
+            echo "::error::the write to $OUTSIDE was refused; the response says why."; echo "$response"; exit 1
+          fi
+          gh api "repos/$OUTSIDE/contents/$WORKFLOW_PATH" --jq .content | base64 -d | cmp - "$scratch/generated.yml" || fail "the read-back of $WORKFLOW_PATH is not what was written"
+          echo "$OUTSIDE now pins a11ign/a11ign@$tag_sha (v$version, a11ign@$version)"
+
   # WHEN `latest` MOVED, recorded where `dora` reads it with no token (the header). The only job here holding `contents: write` for this,
   # and it runs no repository code: no checkout, `gh` and `jq`. The line is appended once (a re-run finds it and leaves the notes alone), and
   # `a11ign`'s Release is marked the latest Release only now.
