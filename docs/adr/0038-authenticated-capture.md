@@ -475,7 +475,7 @@ build row runs it.
 output, `runs/witness/*.json`, the rendered summary (which is posted as a PR comment), and the worker's
 stdout and stderr (which the Action prints into the job log when the worker does not start).
 
-**The command.** A build row can run this. `scripts/auth-leak-check.mjs`, wired as `npm run auth:leak-check`,
+**The command.** A build row can run this. `scripts/auth-leak-check.ts`, wired as `npm run auth:leak-check`,
 is proposed; it does not exist yet. It drives a real capture in which a login flow types a **known fake
 credential**, then searches what was captured and written for it, and fails on a hit.
 

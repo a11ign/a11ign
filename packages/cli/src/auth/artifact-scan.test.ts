@@ -21,7 +21,7 @@ interface Ran { code: number | null; out: string; err: string }
 
 function scan(path: string, env: Record<string, string | undefined> = { FAKE_USER, FAKE_SECRET }): Promise<Ran> {
   return new Promise((done) => {
-    const child = spawn(process.execPath, ["--import", "tsx", "scripts/auth-artifact-scan.mjs", "--path", path, ...ARGS], {
+    const child = spawn(process.execPath, ["--import", "tsx", "scripts/auth-artifact-scan.ts", "--path", path, ...ARGS], {
       cwd: ROOT, env: { ...process.env, FAKE_USER: undefined, FAKE_SECRET: undefined, ...env } as NodeJS.ProcessEnv,
     });
     let out = ""; let err = "";

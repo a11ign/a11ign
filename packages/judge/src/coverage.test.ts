@@ -33,7 +33,7 @@ import { WCAG_22_AA } from "@a11ign/evidence/wcag";
 
 import { assessedCriteria, criterionNumber, RULE_CRITERIA, SCORED_CRITERIA } from "./coverage.js";
 import { ruleFindings } from "./rules.js";
-import { retiredHeadsVerdict, DECLARATION_FILE } from "../../../scripts/check-retired-heads.mjs";
+import { retiredHeadsVerdict, DECLARATION_FILE } from "../../../scripts/check-retired-heads.ts";
 
 test("a criterion the report GAINED still needs SCORED_CRITERIA updated -- the coverage count must not read LOW", () => {
   const report = JSON.parse(readFileSync(scorerPaths().trainingReport, "utf8"));

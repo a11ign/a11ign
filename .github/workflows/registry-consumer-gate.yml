@@ -20,7 +20,7 @@
 #
 # A THIRD JOB, `outsider`, IS THE V1 REHEARSAL'S VERDICT (#3184, ADR 0042 decision 6). It replaced `release:rehearsal-check` as the
 # release check, in the same pull request, so no commit on `main` had neither. A repository OUTSIDE the organisation runs the
-# documented path from an empty workspace for each release (#3181, #3182); `scripts/outsider/verdict-job.mjs` reads its public run
+# documented path from an empty workspace for each release (#3181, #3182); `scripts/outsider/verdict-job.ts` reads its public run
 # list and the registry. `green` passes; `pending` inside the window passes with a notice naming the version and its age; `red`, and
 # `absent` past the window, FAIL the job and file ONE `regression` row per version. IT DOES NOT REFUSE THE NEXT PUBLISH: a fix is
 # itself a release and would deadlock behind its own defect (ADR 0041 decision 3). The outside repository's name is in

@@ -23,7 +23,7 @@ regex:\b(?:192\.168|10\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}\b==
 ```
 
 **One pattern: RFC 1918 private addresses** — the measured defect, 2,268 matches across 715 (blob, path)
-pairs on the pre-purge history, verified by `scripts/history-secret-scan.mjs`. Add a further
+pairs on the pre-purge history, verified by `scripts/history-secret-scan.ts`. Add a further
 `regex:PATTERN==>REPLACEMENT` line here, never a second file: one file the invocation reads is one file
 that can go stale, and a second would be the fact-stated-twice shape this project keeps finding in its own
 tooling.

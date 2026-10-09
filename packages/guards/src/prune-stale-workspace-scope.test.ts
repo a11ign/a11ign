@@ -1,5 +1,5 @@
 /**
- * `scripts/prune-stale-workspace-scope.mjs` (#376): after a workspace scope rename `npm install` ADDS the new scope's `node_modules` symlinks and never removes the
+ * `scripts/prune-stale-workspace-scope.ts` (#376): after a workspace scope rename `npm install` ADDS the new scope's `node_modules` symlinks and never removes the
  * old one, so a leftover `@old/*` import keeps working on that machine and fails only on a fresh clone. This removes the old scope, and must NEVER fail an install.
  *
  * What is pinned, against fixture trees (the script's repo root is a parameter, and its CLI derives it from its own location, so the CLI runs as a COPY inside a fixture):
@@ -23,7 +23,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const SCRIPT = join(REPO_ROOT, "scripts/prune-stale-workspace-scope.mjs");
+const SCRIPT = join(REPO_ROOT, "scripts/prune-stale-workspace-scope.ts");
 const { currentWorkspaceScope, staleWorkspaceScopes, pruneStaleWorkspaceScopes } = await import(pathToFileURL(SCRIPT).href);
 
 function writeManifest(repo: string, dir: string, manifest: object | string): void {
@@ -193,9 +193,9 @@ test("a removal that fails is reported with the by-hand command, does not throw,
 test("CLI (a copy inside a fixture, never the real node_modules): prunes the stale scope and prints what it removed; an unknown flag is refused", () => {
   withRepo((repo) => {
     mkdirSync(join(repo, "scripts"));
-    copyFileSync(SCRIPT, join(repo, "scripts/prune-stale-workspace-scope.mjs"));
+    copyFileSync(SCRIPT, join(repo, "scripts/prune-stale-workspace-scope.ts"));
     copyFileSync(join(REPO_ROOT, "scripts/cli-flags.mjs"), join(repo, "scripts/cli-flags.mjs"));
-    const copy = join(repo, "scripts/prune-stale-workspace-scope.mjs");
+    const copy = join(repo, "scripts/prune-stale-workspace-scope.ts");
 
     const refused = spawnSync(process.execPath, [copy, "--force"], { cwd: repo, encoding: "utf8" });
     assert.notEqual(refused.status, 0);

@@ -1,5 +1,5 @@
 /**
- * `scripts/token-cost.mjs` reads calls and dollars per merged pull request from the host's session transcripts. Every definition is a pure
+ * `scripts/token-cost.ts` reads calls and dollars per merged pull request from the host's session transcripts. Every definition is a pure
  * function over injected transcript lines and a merged-pull-request list, so this pins them with no network, no real transcript and no clock.
  *
  * What has to hold or the chairman's two numbers (calls per merged pull request, dollars per merged pull request) are wrong without looking it:
@@ -21,7 +21,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const tc = await import(pathToFileURL(join(REPO_ROOT, "scripts/token-cost.mjs")).href);
+const tc = await import(pathToFileURL(join(REPO_ROOT, "scripts/token-cost.ts")).href);
 
 const MILLION = 1_000_000;
 const SONNET = "claude-sonnet-5-5";

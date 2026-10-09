@@ -1,5 +1,5 @@
 /**
- * `scripts/check-transfer-urls.mjs` (#524): on transfer day, find every URL naming PRODUCT_REPO in the tree and fetch it, so the interval during which the docs
+ * `scripts/check-transfer-urls.ts` (#524): on transfer day, find every URL naming PRODUCT_REPO in the tree and fetch it, so the interval during which the docs
  * point at a 404 is PROVEN closed rather than assumed.
  *
  * What is pinned, with no network and no read of the real tree (`findTransferUrls` takes the root, `checkTransferUrls` takes the fetch):
@@ -22,7 +22,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const SCRIPT = join(REPO_ROOT, "scripts/check-transfer-urls.mjs");
+const SCRIPT = join(REPO_ROOT, "scripts/check-transfer-urls.ts");
 const { findTransferUrls, checkTransferUrls, reportTransferUrls } = await import(pathToFileURL(SCRIPT).href);
 const { PRODUCT_REPO } = await import(pathToFileURL(join(REPO_ROOT, "scripts/repo-identity.mjs")).href);
 

@@ -111,7 +111,7 @@ and package names, not the org-level secret, and #72's own configuration step is
 
 ## What is already built, and what it proves
 
-`pnpm run npm-token:check` (`scripts/npm-token-liveness.mjs`) answers "is `NPM_TOKEN` gone" as one of
+`pnpm run npm-token:check` (`scripts/npm-token-liveness.ts`) answers "is `NPM_TOKEN` gone" as one of
 **three** states, never two — present, gone, or *could not ask*:
 
 ```

@@ -71,7 +71,7 @@ jobs:
       # the repo the workflow runs in. `pnpm run coverage` runs the whole suite under rstest, so it reaches
       # both.
       #
-      # CAPTURED TO A FILE, NOT JUST THE ACTIONS LOG -- `scripts/coverage-failure-classifier.mjs` (#169)
+      # CAPTURED TO A FILE, NOT JUST THE ACTIONS LOG -- `scripts/coverage-failure-classifier.ts` (#169)
       # reads this to tell a real threshold miss from a test failure from nothing at all. `set -o
       # pipefail`, because `| tee` on its own reports the PIPELINE's exit status as `tee`'s (always 0) --
       # this file's own project already lost real time to that shape once (CLAUDE.md's own rule: "never
@@ -87,7 +87,7 @@ jobs:
       # identically whichever of `ci`/`build`/`coverage` broke, and the three need three different
       # responses: an infrastructure failure means coverage was never measured at all; a test failure is a
       # TEST regression, not a coverage one; only a real c8 threshold miss is what this tracking issue
-      # exists to catch. `scripts/coverage-failure-classifier.mjs` reads each step's own `outcome` plus the
+      # exists to catch. `scripts/coverage-failure-classifier.ts` reads each step's own `outcome` plus the
       # coverage step's captured output and says which. One comment per failing run, not per day, because
       # a repeating warning is a warning people filter -- `github.run_id` in the link is what makes a
       # rerun of the SAME failure distinct from tomorrow's fresh one without spamming the issue on a retry
@@ -97,7 +97,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          BODY=$(node scripts/coverage-failure-classifier.mjs \
+          BODY=$(node scripts/coverage-failure-classifier.ts \
             --ci-outcome=${{ steps.ci.outcome }} \
             --build-outcome=${{ steps.build.outcome }} \
             --log=coverage-output.log \
@@ -434,7 +434,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          node scripts/doc-cross-reference-report.mjs > /tmp/doc-report.md
+          node scripts/doc-cross-reference-report.ts > /tmp/doc-report.md
           gh issue comment 928 --body-file /tmp/doc-report.md
 
   # #912: THE ORG'S CLOCK, durable. `org-watch.mjs` reads main's colour (and, as its remaining reads land,

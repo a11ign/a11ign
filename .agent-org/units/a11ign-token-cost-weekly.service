@@ -1,5 +1,5 @@
 [Unit]
-# THE WEEKLY CALLS-AND-DOLLARS READING'S POSTING -- #3690, the host half of #3217 (`scripts/token-cost.mjs --post`,
+# THE WEEKLY CALLS-AND-DOLLARS READING'S POSTING -- #3690, the host half of #3217 (`scripts/token-cost.ts --post`,
 # `docs/token-cost.md`). It appends one section to the week's CI-health comment on #928, and the transcripts it reads are
 # on THIS host, so no workflow can run it.
 #
@@ -51,7 +51,7 @@ ExecStartPre=-%h/.local/bin/agent-org primary:update
 
 # The program is the repository-relative script, as a11ign-corpus-release-nightly.service's is, so `unitEntryPoints`
 # resolves it from any checkout.
-ExecStart=/usr/bin/node scripts/token-cost.mjs --post
+ExecStart=/usr/bin/node scripts/token-cost.ts --post
 
 TimeoutStartSec=600
 

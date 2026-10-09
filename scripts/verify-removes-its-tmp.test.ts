@@ -1,4 +1,4 @@
-// no-token: gh -- runs `scripts/verify.mjs`'s own steps in a child against throwaway repositories in a temp directory; no `gh`, no network, no real worktree of this repository is touched
+// no-token: gh -- runs `scripts/verify.ts`'s own steps in a child against throwaway repositories in a temp directory; no `gh`, no network, no real worktree of this repository is touched
 /**
  * #3847 (incident #3846, 1a): `verify` REMOVES THE SCRATCH TREES IT MAKES ON EVERY EXIT A PROCESS CAN CHOOSE, A KILL BY SIGTERM OR SIGINT INCLUDED.
  *
@@ -20,10 +20,10 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpath
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { removeInSmallCalls } from "./verify.mjs";
+import { removeInSmallCalls } from "./verify.ts";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
-const VERIFY = join(REPO, "scripts/verify.mjs");
+const VERIFY = join(REPO, "scripts/verify.ts");
 const READY_WAIT_MS = 15_000;
 const POLL_MS = 50;
 

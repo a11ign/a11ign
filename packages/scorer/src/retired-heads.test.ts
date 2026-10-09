@@ -12,7 +12,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { headSet, retiredHeadsVerdict, DECLARATION_FILE }
-  from "../../../scripts/check-retired-heads.mjs";
+  from "../../../scripts/check-retired-heads.ts";
 
 const SHIPPED = { criteria: {
   "1.1.1": { subtypes: { "1.1.1:missing-alt": {}, "1.1.1:generic-alt": {} } },

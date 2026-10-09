@@ -1,7 +1,7 @@
 # Calls and dollars per merged pull request
 
 The chairman's other two targets, **at most 70 calls and under $2.50 per merged pull request** (`docs/ci-targets.json`),
-read from the host's Claude Code session transcripts by `scripts/token-cost.mjs` and appended to the week's
+read from the host's Claude Code session transcripts by `scripts/token-cost.ts` and appended to the week's
 `## CI health, week of <date>` comment on #928 (row #3217). A figure without its definition is the defect this reading
 exists to avoid, so each definition is one line below, and the first six are printed at the top of every reading.
 
@@ -29,7 +29,7 @@ A call that fits none of the four is **none of the four** and stays out of all o
 
 ## What was reproduced (2026-10-05)
 
-The chairman's figures are on #928 (`ceo`'s relay of 2026-10-04, comment 5980190668), taken from his session's own scripts. Reproduced from the transcripts with `node scripts/token-cost.mjs --since=<date> --until=<ISO> [--hours=14-20]`:
+The chairman's figures are on #928 (`ceo`'s relay of 2026-10-04, comment 5980190668), taken from his session's own scripts. Reproduced from the transcripts with `node scripts/token-cost.ts --since=<date> --until=<ISO> [--hours=14-20]`:
 
 | Window (UTC) | Merged | Calls per PR: his / here | Dollars per PR: his / list price / 5-minute-write proxy | Mean context per call: his / here |
 |---|---|---|---|---|
@@ -52,9 +52,9 @@ The chairman's figures are on #928 (`ceo`'s relay of 2026-10-04, comment 5980190
 ## Running it
 
 ```bash
-node scripts/token-cost.mjs                       # last week's window, to stdout
-node scripts/token-cost.mjs --since=2026-09-25 --until=2026-09-26T00:00:00Z --hours=14-20   # a reproduction
-node scripts/token-cost.mjs --post                # append to this week's CI-health comment on #928
+node scripts/token-cost.ts                       # last week's window, to stdout
+node scripts/token-cost.ts --since=2026-09-25 --until=2026-09-26T00:00:00Z --hours=14-20   # a reproduction
+node scripts/token-cost.ts --post                # append to this week's CI-health comment on #928
 ```
 
 It spends one REST call per merged pull request (its reviews), a few pages of pull requests and of `ci.yml` runs, and prints the rate-limit header it saw. It reads transcripts and merged-pull-request metadata only.

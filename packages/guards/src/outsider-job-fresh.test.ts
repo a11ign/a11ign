@@ -1,7 +1,7 @@
 /**
  * THE COMMITTED OUTSIDER JOB IS WHAT README'S QUICKSTART FENCE GENERATES (#4035, found on #4031).
  *
- * `scripts/outsider/outsider-job.yml` is generated from README's fence. Nothing in CI ran `node scripts/outsider/generate.mjs --check`,
+ * `scripts/outsider/outsider-job.yml` is generated from README's fence. Nothing in CI ran `node scripts/outsider/generate.ts --check`,
  * so #3299 moved the fence and left the file stale on `main` with no red check. The sibling `consumer-gate.yml` has its check in a
  * workflow; this one is a test, so the PR `ts` job runs it with no workflow edit.
  *

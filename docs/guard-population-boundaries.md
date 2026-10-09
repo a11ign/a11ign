@@ -176,7 +176,7 @@ Two instances of one defect, at two layers, both fixed 2026-08-26 and both worth
   `cli-flags.test.ts` is the only place that says how many.** It DISCOVERS them by walking the tree and
   fails on any it cannot classify. This paragraph used to carry the count, and the count moved six times
   in one night (75, 76, 77, 79, 82, 85), each value correct for the minutes between two merges; a number
-  the tree computes does not live in prose. The one exemption, `scripts/check-schema-migration.mjs`, is
+  the tree computes does not live in prose. The one exemption, `scripts/check-schema-migration.ts`, is
   copied into a throwaway directory by its own gate test and so cannot resolve a workspace import; its
   single flag fails closed, and the test names it with that reason.
   > **The flag lists are READ out of each file, never derived, and every batch proved why.**

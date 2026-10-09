@@ -1,5 +1,5 @@
 /**
- * `scripts/generate-consumer-gate.mjs` turns README.md's own Quickstart fence into `consumer-gate.yml`. These are the pure steps of that
+ * `scripts/generate-consumer-gate.ts` turns README.md's own Quickstart fence into `consumer-gate.yml`. These are the pure steps of that
  * transformation, pinned over small fixture documents so no checkout, `git` history or runner is needed.
  *
  * What is pinned, and the wrong answer each guards against:
@@ -24,7 +24,7 @@ import { regenerationInFlight } from "../../../scripts/consumer-gate-pin-needed.
 import { sandboxGitEnv, withGitSandbox, type GitSandbox } from "../../../scripts/test-support/git-sandbox.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const gen = await import(pathToFileURL(join(REPO_ROOT, "scripts/generate-consumer-gate.mjs")).href);
+const gen = await import(pathToFileURL(join(REPO_ROOT, "scripts/generate-consumer-gate.ts")).href);
 const {
   README_PATH, OUT, ACTION_DEFINITION, extractDocumentedJobsBlock, pinActionRef, substituteTarget, extractJobName, extractPinnedSha,
   buildConsumerGateWorkflow, generate, refuseDirtyGenerationInputs, currentHeadSha, actionPinVerdict, PIN_COMMENT, restatePinComment,
@@ -174,7 +174,7 @@ test("buildConsumerGateWorkflow: the pinned sha appears in the check-pin ancestr
   assert.ok(workflow.includes(`git merge-base --is-ancestor ${SHA} "\${{ github.sha }}"`));
   assert.ok(workflow.includes(`git diff --quiet ${SHA} "\${{ github.sha }}" -- ${ACTION_DEFINITION.join(" ")}`));
   assert.ok(workflow.includes(`git diff --stat ${SHA} "\${{ github.sha }}" -- action.yml`));
-  assert.ok(workflow.includes("run: node scripts/generate-consumer-gate.mjs --check"));
+  assert.ok(workflow.includes("run: node scripts/generate-consumer-gate.ts --check"));
   assert.ok(workflow.includes('if [ "${{ needs.a11y.result }}" != "success" ]; then'));
   assert.deepEqual(ACTION_DEFINITION, ["action.yml"]);
 });
@@ -241,17 +241,17 @@ test("generate: a README whose fence is malformed fails at generation, not later
 });
 
 test("refuseDirtyGenerationInputs: a modified, staged or untracked generation input is refused, naming the file", () => {
-  for (const status of [" M README.md", "M  README.md", "?? README.md", "MM scripts/generate-consumer-gate.mjs", " M /abs/path/README.md"]) {
+  for (const status of [" M README.md", "M  README.md", "?? README.md", "MM scripts/generate-consumer-gate.ts", " M /abs/path/README.md"]) {
     assert.throws(() => refuseDirtyGenerationInputs(`${status}\n`), (e: Error) => /has an uncommitted or staged change/.test(e.message) && /\(#1721\)/.test(e.message), status);
   }
   assert.throws(() => refuseDirtyGenerationInputs(" M README.md\n"), /README\.md has an uncommitted/);
-  assert.throws(() => refuseDirtyGenerationInputs("M  scripts/generate-consumer-gate.mjs"), /scripts\/generate-consumer-gate\.mjs has an uncommitted/);
+  assert.throws(() => refuseDirtyGenerationInputs("M  scripts/generate-consumer-gate.ts"), /scripts\/generate-consumer-gate\.mjs has an uncommitted/);
 });
 
 test("refuseDirtyGenerationInputs: a rename or copy IN or OUT of an input is refused on either side", () => {
   assert.throws(() => refuseDirtyGenerationInputs("R  README.md -> docs/old-readme.md\n"), /README\.md has an uncommitted/);
   assert.throws(() => refuseDirtyGenerationInputs("R  docs/draft.md -> README.md\n"), /README\.md has an uncommitted/);
-  assert.throws(() => refuseDirtyGenerationInputs("C  a.txt -> scripts/generate-consumer-gate.mjs\n"), /generate-consumer-gate\.mjs has an uncommitted/);
+  assert.throws(() => refuseDirtyGenerationInputs("C  a.txt -> scripts/generate-consumer-gate.ts\n"), /generate-consumer-gate\.mjs has an uncommitted/);
 });
 
 test("refuseDirtyGenerationInputs: a clean tree, blank lines and other dirty files are not refused", () => {
@@ -337,7 +337,7 @@ test("actionPinVerdict (#4153, #4331): the real tree -- the committed pin contai
 });
 
 test("actionPinVerdict (#4153): the refusal says what the release's own check-pin says, so the two cannot drift", () => {
-  const phrases = ["would run the OLD Action", "regenerate (node scripts/generate-consumer-gate.mjs)"];
+  const phrases = ["would run the OLD Action", "regenerate (node scripts/generate-consumer-gate.ts)"];
   const workflow = generate(readFileSync(README_PATH, "utf8"), SHA) as string;
   withGitSandbox((sandbox) => {
     sandbox.run(["init", "-q", "-b", "main"]);

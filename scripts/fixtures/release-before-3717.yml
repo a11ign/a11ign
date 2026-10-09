@@ -264,7 +264,7 @@ jobs:
       # `release:version`: after it the changesets are already spent. Not folded into `release:version` itself, whose exact
       # text `pnpm-publish-path.test.ts` and `release-safety.test.ts` pin.
       - name: Write the entry each dependency pull request owes, from the manifests at the last release tags
-        run: node scripts/dependency-changeset.mjs compile
+        run: node scripts/dependency-changeset.ts compile
       # `changeset version` does NOT update the lockfile; `release:version` is that plus the lockfile-only install
       # (see .changeset/README.md), so the version pull request does not break the next frozen install.
       - run: pnpm run release:version
@@ -297,7 +297,7 @@ jobs:
           weights: unchanged
 
           Acceptance:
-          node scripts/release-print-versions.mjs
+          node scripts/release-print-versions.ts
 
           Closes: none — a version pull request finishes no row
           BODY
@@ -325,7 +325,7 @@ jobs:
     uses: ./.github/workflows/capture-regression.yml
 
   # #494. `consumer-gate.yml`'s own `uses: a11ign/a11ign@<sha>` step is pinned to a LITERAL sha
-  # baked in at generation time (see scripts/generate-consumer-gate.mjs's own header for why `${{ }}` does
+  # baked in at generation time (see scripts/generate-consumer-gate.ts's own header for why `${{ }}` does
   # not work in a `uses:` field) -- so unlike action-smoke/capture-regression, this job does NOT
   # automatically track "the exact sha this workflow ran at" by virtue of being a local
   # `workflow_call`. #558 closes that gap FROM INSIDE consumer-gate.yml itself: it now carries its own
@@ -334,7 +334,7 @@ jobs:
   # job ever starts, with no separate step needed. The "consumer-gate.yml is current" step in the
   # `release` job below still checks something DIFFERENT: real drift between README.md's documented
   # workflow and the committed file (a reworded doc, a generator change) -- regenerate (`node
-  # scripts/generate-consumer-gate.mjs`) and commit if that one fires.
+  # scripts/generate-consumer-gate.ts`) and commit if that one fires.
   consumer-gate:
     needs: plan
     if: needs.plan.outputs.mode == 'publish' || needs.plan.outputs.mode == 'rehearsal'
@@ -557,14 +557,14 @@ jobs:
       # itself, on ubuntu-latest, before that job's Windows step even starts. This step and guard 7 check
       # two different things and neither one alone would close the "checked something, not this" gap.
       - name: consumer-gate.yml matches README.md's documented workflow (sha aside -- guard 7 checks that)
-        run: node scripts/generate-consumer-gate.mjs --check
+        run: node scripts/generate-consumer-gate.ts --check
 
       # #1397: THIS COUNT USED TO BE TYPED INTO THE MESSAGE ("4 of release:gate's 12 stages") rather than
       # read from the two chains it describes, and drifted the day release:gate grew a stage: the true
       # count was 5 of 13. `release-gate-scope.mjs` reads `package.json`'s own `release:gate` and
       # `release:gate:ci` scripts every run, so the warning can only ever describe the chain that exists.
       - name: Name what this runner did NOT check
-        run: node scripts/release-gate-scope.mjs
+        run: node scripts/release-gate-scope.ts
 
       # BEFORE `version`, and the order is the whole point. `changeset status` reports what is PENDING, so
       # after `version` has consumed them it says "Some packages have been changed but no changesets were
@@ -599,7 +599,7 @@ jobs:
       # `manifest-repository-check.mjs` already treats as "published", so this names exactly the packages
       # the pending step above named.
       - name: What each package's version now is
-        run: node scripts/release-print-versions.mjs
+        run: node scripts/release-print-versions.ts
 
       # AFTER, and it asks a different question: what did `version` actually write? The two together are
       # "what was asked for" and "what happened", which is the shape every verification here takes.
@@ -624,7 +624,7 @@ jobs:
       # place a dry run can see the mismatch. Until the transfer (#63) a run from the pre-transfer repository goes
       # red HERE by design -- the manifests already name a11ign/a11ign -- and that is not a regression.
       - name: Every published manifest names the repository this run publishes from
-        run: node scripts/manifest-repository-check.mjs
+        run: node scripts/manifest-repository-check.ts
 
       # NOT AN EIGHTH GUARD (#3126): a TEMPORARY HOLD that each move row's last step lifts, one package at a time, until
       # `@a11ign/screenreader-worker`, `-fleet` and `@a11ign/documents` have released from their own repositories (ADR 0040).
@@ -756,7 +756,7 @@ jobs:
         if: inputs.dry-run == true
         env:
           NPM_CONFIG_PROVENANCE: "true"
-        run: node scripts/release-publish-rehearsal.mjs
+        run: node scripts/release-publish-rehearsal.ts
 
       # #1824 / #3131: THERE IS NO "COMMIT THE VERSION BUMP BACK" STEP, AND ITS ABSENCE IS THE POINT. It pushed straight to
       # `main`, which `main`'s required review refuses. The bump is committed by the `version-pr` job, onto a branch,

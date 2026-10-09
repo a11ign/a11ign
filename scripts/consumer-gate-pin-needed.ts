@@ -5,7 +5,7 @@
 //
 // A pull request that changes `action.yml` can never carry a pin containing its own change, because that commit does not exist until it
 // merges (#558, #4153). So every such merge leaves the pin stale the instant it lands, and eleven rows were filed by hand to repair it. The
-// repair is mechanical (`node scripts/generate-consumer-gate.mjs` at the new tip), so the merge starts it: this file is the decision, and the
+// repair is mechanical (`node scripts/generate-consumer-gate.ts` at the new tip), so the merge starts it: this file is the decision, and the
 // workflow is the actor.
 //
 // THE DECISION IS A PURE READING OF ONE COMMIT: the pin `consumer-gate.yml` carries AT that commit, against `action.yml` AT that commit. It
@@ -17,7 +17,7 @@ import { appendFileSync, readFileSync, realpathSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { sandboxGitEnv } from "../packages/guards/src/git-env.mjs";
 import { refuseUnknownFlags } from "./cli-flags.mjs";
-import { actionPinVerdict, extractPinnedSha } from "./generate-consumer-gate.mjs";
+import { actionPinVerdict, extractPinnedSha } from "./generate-consumer-gate.ts";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 export const CONSUMER_GATE_PATH = ".github/workflows/consumer-gate.yml";

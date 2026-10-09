@@ -1,5 +1,5 @@
 /**
- * `scripts/dependency-changeset.mjs` derives what a dependency pull request owes the changelog FROM ITS MANIFESTS' DIFF (#3159). Four
+ * `scripts/dependency-changeset.ts` derives what a dependency pull request owes the changelog FROM ITS MANIFESTS' DIFF (#3159). Four
  * things have to hold or a consumer-visible change ships with no entry, or a human-visible one is waved through:
  *   1. A BUMP OF A RUNTIME RANGE OF A PUBLISHED PACKAGE IS A `patch` ENTRY naming the dependency and both ranges; `devDependencies`
  *      and private packages are EMPTY, recorded as such rather than inferred from silence.
@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { withGitSandbox } from "../../../scripts/test-support/git-sandbox.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const changeset = await import(pathToFileURL(join(REPO_ROOT, "scripts/dependency-changeset.mjs")).href);
+const changeset = await import(pathToFileURL(join(REPO_ROOT, "scripts/dependency-changeset.ts")).href);
 const { RUNTIME_SECTIONS, refusalFor, entriesFor, deriveDependencyChangeset, renderEntry, parseEntry, checkEntries, compile } = changeset;
 
 type Change = {

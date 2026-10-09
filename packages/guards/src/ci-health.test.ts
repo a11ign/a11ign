@@ -1,5 +1,5 @@
 /**
- * `scripts/ci-health.mjs` reads CI health per repository against `docs/ci-targets.json`. Its definitions are pure functions over a run list, so
+ * `scripts/ci-health.ts` reads CI health per repository against `docs/ci-targets.json`. Its definitions are pure functions over a run list, so
  * this pins them without a network or a clock (every date is passed in).
  *
  * What has to hold or the weekly table quietly says something false:
@@ -19,7 +19,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const ci = await import(pathToFileURL(join(REPO_ROOT, "scripts/ci-health.mjs")).href);
+const ci = await import(pathToFileURL(join(REPO_ROOT, "scripts/ci-health.ts")).href);
 
 const MINIMUM = 2;
 const RATIO_TARGET = { label: "Pass", unit: "ratio", atLeast: 0.8 };

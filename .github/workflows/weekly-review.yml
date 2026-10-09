@@ -3,7 +3,7 @@ name: Weekly outsider review
 # THE JUDGEMENT HALF OF THE V1 REHEARSAL: ONE ROW A WEEK, NEVER A GATE (chairman's direction, #928; row #3183).
 # A wall-clock event is the one thing a schedule is right for -- this does not look for work, it files the
 # week's review for a session that built none of the recent work to take.
-# `scripts/weekly-review.mjs` says what the row holds and why; `docs/weekly-review.md` is how a reviewer works.
+# `scripts/weekly-review.ts` says what the row holds and why; `docs/weekly-review.md` is how a reviewer works.
 #
 # THE SCHEDULE IS A SYSTEMD TIMER ON THE HOST, NOT THIS FILE (ceo, #3183, 2026-10-03; row #3318). The board step
 # cannot run under `github.token` (organization Project 1 does not resolve for it, run 37133463643) and must not
@@ -52,4 +52,4 @@ jobs:
           # protects a tree OTHER SESSIONS SHARE (#1352); a runner's is deleted when the job ends. The printed override
           # is the one the refusal's own docs name for "CI's plain clone", not a way round the filing contract.
           A11Y_POLICY_LAUNCH_REASON: ephemeral Actions runner, shares no tree with any session
-        run: node scripts/weekly-review.mjs
+        run: node scripts/weekly-review.ts

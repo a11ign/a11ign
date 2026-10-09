@@ -1,5 +1,5 @@
 /**
- * `scripts/selection-skipped.mjs` answers, for a first-run red, whether `rstest --changed` SKIPPED the test that failed it (#3576, the
+ * `scripts/selection-skipped.ts` answers, for a first-run red, whether `rstest --changed` SKIPPED the test that failed it (#3576, the
  * regression guard for #3215). It is only worth running if its answers cannot be mistaken for each other, so the tests pin:
  *   1. THE LOG IS READ AS IT IS SHOWN: runner timestamps and colour stripped, each FAIL file once, in order; a roll-up `gate` log names
  *      the sibling run to follow.
@@ -22,7 +22,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { withGitSandbox, type GitSandbox } from "../../../scripts/test-support/git-sandbox.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const skipped = await import(pathToFileURL(join(REPO_ROOT, "scripts/selection-skipped.mjs")).href);
+const skipped = await import(pathToFileURL(join(REPO_ROOT, "scripts/selection-skipped.ts")).href);
 const {
   cleanLine, failingFiles, siblingRunId, skippedByChanged, runAnswer, firstRunReds, windowReading, windowsAround, traceRed,
   countAnswers, lineFor, renderReport, containsCommit, affectedAt,

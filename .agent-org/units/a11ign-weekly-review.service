@@ -1,6 +1,6 @@
 [Unit]
 # THE WEEKLY OUTSIDER REVIEW'S FILING -- #3183, scheduled here by #3319 (ceo, #3183, 2026-10-03). ONE row a week
-# for a session that built none of the recent work to take; `scripts/weekly-review.mjs` says what the row holds.
+# for a session that built none of the recent work to take; `scripts/weekly-review.ts` says what the row holds.
 #
 # A HOST UNIT AND NOT weekly-review.yml's `schedule`: the board step (`gh project item-add 1 --owner a11ign`) cannot
 # resolve an organization Project v2 under `github.token` ("Could not resolve to a ProjectV2 with the number 1",
@@ -50,7 +50,7 @@ ExecStartPre=-%h/.local/bin/agent-org primary:update
 #
 # `pnpm exec agent-org row-file` RESOLVES THROUGH THE PRIMARY'S REAL node_modules (`.bin/agent-org`, installed by
 # pnpm there), not a symlinked tree; `npm-cli-executable.mjs` finds the shim on the PATH above.
-ExecStart=/usr/bin/sh -c 'GITHUB_SHA="$$(git rev-parse HEAD)" exec /usr/bin/node scripts/weekly-review.mjs'
+ExecStart=/usr/bin/sh -c 'GITHUB_SHA="$$(git rev-parse HEAD)" exec /usr/bin/node scripts/weekly-review.ts'
 
 TimeoutStartSec=300
 

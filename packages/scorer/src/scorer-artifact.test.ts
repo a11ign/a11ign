@@ -48,7 +48,7 @@ const MIGRATION_FILE = "packages/scorer/models/schema-migration.json";
  * Before this existed the only way past the assertion below was `A11Y_SKIP_VERIFY=1`, and that does not skip
  * this check — it skips the whole pre-push hook, lint and 949 tests included. A guard that is routinely
  * bypassed by disabling every other guard is a net loss, so the divergence is declared instead and refused at
- * release by `scripts/check-schema-migration.mjs`.
+ * release by `scripts/check-schema-migration.ts`.
  */
 function openMigration(): { pendingSchema: string; shippedSchema: string; why?: string } | null {
   const path = join(packageRoot, "models/schema-migration.json");

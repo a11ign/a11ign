@@ -1,5 +1,5 @@
 /**
- * `scripts/weekly-review.mjs` files one "Weekly outsider review" row per ISO week. Every decision in it is a pure function, and four
+ * `scripts/weekly-review.ts` files one "Weekly outsider review" row per ISO week. Every decision in it is a pure function, and four
  * things have to hold or the row says something false:
  *   1. THE WEEK IS THE ISO WEEK OF ITS THURSDAY, so a year boundary neither files two rows for one week nor skips one, and a re-run of
  *      the same week files nothing (idempotence is the only thing stopping a daily schedule from filing seven rows).
@@ -17,7 +17,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const review = await import(pathToFileURL(join(REPO_ROOT, "scripts/weekly-review.mjs")).href);
+const review = await import(pathToFileURL(join(REPO_ROOT, "scripts/weekly-review.ts")).href);
 const {
   TITLE_PREFIX, FILING_SESSION, FIRST_REVIEW_WAITS_ON, isoWeek, isoWeekLabel, reviewTitle, filingPlan, reviewWindow,
   extractRequirements, extractQuestions, ineligibleSessions, eligible, buildBody, bodyReadFromSources,

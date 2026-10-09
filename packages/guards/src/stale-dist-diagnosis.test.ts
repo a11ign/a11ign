@@ -1,5 +1,5 @@
 /**
- * `scripts/stale-dist-diagnosis.mjs` (#789): a `dist` older than the source it was built from reports an export or module as MISSING when it exists in the source.
+ * `scripts/stale-dist-diagnosis.ts` (#789): a `dist` older than the source it was built from reports an export or module as MISSING when it exists in the source.
  * The tool only DIAGNOSES: it reads two mtimes and appends a line, and it must stay silent on every case it was not written for, or it becomes a warning that cries wolf.
  *
  * What is pinned:
@@ -21,7 +21,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const SCRIPT = join(REPO_ROOT, "scripts/stale-dist-diagnosis.mjs");
+const SCRIPT = join(REPO_ROOT, "scripts/stale-dist-diagnosis.ts");
 const { srcPathFor, staleDistNote, specifierFromFailure, diagnoseResolutionFailure } = await import(pathToFileURL(SCRIPT).href);
 
 const EXPORT_ERROR = "SyntaxError: The requested module '@a11ign/evidence/conformance' does not provide an export named 'activationBudget'";
@@ -177,9 +177,9 @@ test("CLI: text with no stale-dist signature says so; an unreadable file is an e
 test("CLI: a failure naming a stale package prints the note; the same package made current prints the no-signature line", () => {
   withPackage({ dist: OLDER, src: NEWER }, ({ dist, src }, tmp) => {
     mkdirSync(join(tmp, "scripts"));
-    copyFileSync(SCRIPT, join(tmp, "scripts/stale-dist-diagnosis.mjs"));
+    copyFileSync(SCRIPT, join(tmp, "scripts/stale-dist-diagnosis.ts"));
     copyFileSync(join(REPO_ROOT, "scripts/cli-flags.mjs"), join(tmp, "scripts/cli-flags.mjs"));
-    const copy = join(tmp, "scripts/stale-dist-diagnosis.mjs");
+    const copy = join(tmp, "scripts/stale-dist-diagnosis.ts");
     const failure = "SyntaxError: The requested module 'fx-pkg/foo' does not provide an export named 'x'\n";
     withLog(failure, (logPath) => {
       const stale = runCli([logPath], tmp, copy);

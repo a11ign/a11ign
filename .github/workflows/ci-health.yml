@@ -1,7 +1,7 @@
 name: CI health
 
 # THE CHAIRMAN'S CI TARGETS, READ WEEKLY AND POSTED ON #928 (chairman's direction 2026-10-03; row #3212). A target nobody
-# re-reads is decoration, so a schedule re-reads it. `scripts/ci-health.mjs` says what each figure means and
+# re-reads is decoration, so a schedule re-reads it. `scripts/ci-health.ts` says what each figure means and
 # `docs/ci-targets.json` holds the targets as data; this file only runs the one and hands it the token.
 #
 # THE ACTIONS JOB'S OWN TOKEN, so the org's API pool is untouched (both repositories are public; nothing broader is
@@ -55,4 +55,4 @@ jobs:
       - name: Read CI health and post it
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/ci-health.mjs --post
+        run: node scripts/ci-health.ts --post

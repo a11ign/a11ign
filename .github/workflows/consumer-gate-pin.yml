@@ -10,7 +10,7 @@ name: consumer-gate-pin
 #
 #   decide      `scripts/consumer-gate-pin-needed.ts` reads the pin AT THIS COMMIT against `action.yml` AT THIS COMMIT (the two refusals of
 #               `check-pin`) and answers `regenerate` or `nothing to do`. It never reads which files the push touched, so a re-run is harmless.
-#   regenerate  runs `node scripts/generate-consumer-gate.mjs`, REFUSES the run unless `consumer-gate.yml` is the only file that changed, and
+#   regenerate  runs `node scripts/generate-consumer-gate.ts`, REFUSES the run unless `consumer-gate.yml` is the only file that changed, and
 #               uploads that one file. It holds no `id-token`: it is the job that runs repository and third-party code (see below).
 #   repair      mints the token, shape-checks the uploaded file, force-moves ONE branch (`automation/consumer-gate-pin`, so a second `action.yml`
 #               change updates the open repair and never opens a second) to this commit, writes the file onto it and opens the pull request if
@@ -23,7 +23,7 @@ name: consumer-gate-pin
 #
 # ## Every job resolves the tool first (#4373)
 #
-# `scripts/consumer-gate-pin-needed.ts` and `scripts/generate-consumer-gate.mjs` import `repo-identity.mjs`, which does `await toolModule(...)` at import.
+# `scripts/consumer-gate-pin-needed.ts` and `scripts/generate-consumer-gate.ts` import `repo-identity.mjs`, which does `await toolModule(...)` at import.
 # On the host `.agent-org/host.json` names the checkout; on a runner no tool exists until `agent-org-newest-tag.mjs --dest` has cloned one, so each job
 # that runs either script carries that step BEFORE it. The first real run (37881883814) died in `decide` without it, because the tests read this file as text.
 #
@@ -105,7 +105,7 @@ jobs:
       - name: Regenerate the pin at this commit, and refuse anything that changed but consumer-gate.yml
         run: |
           set -euo pipefail
-          node scripts/generate-consumer-gate.mjs
+          node scripts/generate-consumer-gate.ts
           changed="$(git status --porcelain)"
           if [ "$changed" != " M .github/workflows/consumer-gate.yml" ]; then
             echo "::error::regeneration must change .github/workflows/consumer-gate.yml and nothing else; git status says:"

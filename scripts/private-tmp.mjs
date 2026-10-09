@@ -7,7 +7,7 @@
  * it when the run ends, pass or fail. `os.tmpdir()` reads `TMPDIR` on every call, so every `mkdtempSync(join(tmpdir(), ...))` in the suite and every child a
  * test spawns lands inside it without a line changing in them.
  *
- * THE INTERFACE `scripts/verify.mjs` CALLS (#3847 wrote `privateRunTmp` and `removeInSmallCalls` there first, with this signature, so it can import them
+ * THE INTERFACE `scripts/verify.ts` CALLS (#3847 wrote `privateRunTmp` and `removeInSmallCalls` there first, with this signature, so it can import them
  * from here and delete its copies): `privateRunTmp({ home? }) -> dir`, which makes the directory, sets `process.env.TMPDIR` and removes it on `exit`; and
  * `removeInSmallCalls(dir)`, which removes any directory in small calls and refuses an empty or relative name.
  *

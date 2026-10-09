@@ -33,11 +33,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse, stringify } from "yaml";
-import { publishArgs, releaseDistTag } from "../../../scripts/release-publish-rehearsal.mjs";
+import { publishArgs, releaseDistTag } from "../../../scripts/release-publish-rehearsal.ts";
 
 const REPO = fileURLToPath(new URL("../../..", import.meta.url));
 const WORKFLOW = join(REPO, ".github/workflows/release.yml");
-const REHEARSAL = join(REPO, "scripts/release-publish-rehearsal.mjs");
+const REHEARSAL = join(REPO, "scripts/release-publish-rehearsal.ts");
 const FULL_SHA_PIN = /^a11ign\/toolchain\/\.github\/workflows\/release-per-merge\.yml@[0-9a-f]{40}$/;
 
 interface Step { id?: string; name?: string; run?: string; env?: Record<string, string> }

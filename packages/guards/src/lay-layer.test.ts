@@ -209,7 +209,7 @@ test("#3505: lay puts down every part the declaration names, without tests, and 
     try {
       const plan = { remote: pathToFileURL(sandbox.dir).href, tag: "v0.1.2", path: "packages/lab", lays: ["src", "scripts", "rule-ownership.json"] };
       assert.equal(lay(root, plan), "laid v0.1.2 at packages/lab");
-      assert.deepEqual(walk(join(root, "packages/lab")), [REF_FILE, "rule-ownership.json", "scripts/run.mjs", "src/a.mjs"],
+      assert.deepEqual(walk(join(root, "packages/lab")), [REF_FILE, "rule-ownership.json", "scripts/run.ts", "src/a.mjs"],
         "src, scripts and the file named, no test and no manifest");
       // A part the tag lacks: refused (a declaration that gained a part is not "already at" the tag), and the copy already there is still there.
       assert.throws(() => lay(root, { ...plan, lays: ["src", "baselines"] }), /holds no packages\/lab\/baselines/);

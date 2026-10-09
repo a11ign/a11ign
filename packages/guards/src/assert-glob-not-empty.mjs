@@ -101,7 +101,7 @@ export const RSTEST_CONFIG = fileURLToPath(new URL("../../../scripts/rstest/rste
  * #1319: THE COMMAND `--run` EXECUTES, PURE, so the runner switch is pinned by a test rather than read off a spawn.
  *
  * `tsx` stays the default: `test:nightly` still runs node:test through it. `coverage` moved off this floor's
- * `--run` entirely in step 4 of the rstest adoption (#1320) -- `scripts/coverage.mjs` now drives rstest with
+ * `--run` entirely in step 4 of the rstest adoption (#1320) -- `scripts/coverage.ts` now drives rstest with
  * coverage directly, and only checks its population against this floor first. `test:ts` and CI's scoped step
  * ask for `rstest`.
  *

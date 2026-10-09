@@ -522,7 +522,7 @@ a channel, and the Action still skips browser download. The old Actions run cite
   rationale pinned by `typecheck-coverage.test.ts:98-110` ("allowJs in the root pulls every `.mjs` into the
   main program where `@ts-check` fails under strict") is no longer true, and `tsconfig.json:19-21` contradicts
   `:31-35` in the same file.
-- `.c8rc.json:88` excludes `scripts/coverage.mjs`, which does not exist.
+- `.c8rc.json:88` excludes `scripts/coverage.ts`, which does not exist.
 - `packages/cli/README.md:64-67` documents that a consent-wall capture "exits 2"; `cli.ts:485-487` warns and
   continues to exit 0. Only the Action runner exits 2. No CLI exit-code table exists.
 - `backlog.test.ts` enforces "every record heading ending `— OPEN` appears on the backlog"; exactly one
@@ -1046,7 +1046,7 @@ lines above it) — will throw "unbound variable" the first time that branch exe
   `browser-args.test.ts`; the `existsSync` skip means the entry is silently never checked — **still open**.
 - `tsconfig.mjs.json` and its stale rationale in `typecheck-coverage.test.ts` — **still open**, unchanged
   (not re-measured for file-count overlap this pass).
-- `.c8rc.json:88` still excludes `scripts/coverage.mjs`, which still does not exist — **still open**.
+- `.c8rc.json:88` still excludes `scripts/coverage.ts`, which still does not exist — **still open**.
 - `packages/cli/README.md`'s "exits 2" claim — **still open**, and the code confirms the audit's original
   reading precisely: `cli.ts` only warns on an unverified capture; the actual `process.exit(2)` lives in
   `packages/cli/src/action/run.ts`, the Action runner only.

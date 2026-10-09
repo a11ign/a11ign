@@ -1,5 +1,5 @@
 {
-  "_why": "The chairman's CI-health targets (2026-10-03, #928, row #3212) as DATA. scripts/ci-health.mjs reads this file and holds no second copy, so changing a target is a one-line edit here and the weekly table's Target column changes with it. A target is atLeast, atMost or below; unit is ratio (printed as a percentage), count or dollars. readBy names the row that measures a target this reader does not, which the table prints as 'not read here' rather than leaving the target out.",
+  "_why": "The chairman's CI-health targets (2026-10-03, #928, row #3212) as DATA. scripts/ci-health.ts reads this file and holds no second copy, so changing a target is a one-line edit here and the weekly table's Target column changes with it. A target is atLeast, atMost or below; unit is ratio (printed as a percentage), count or dollars. readBy names the row that measures a target this reader does not, which the table prints as 'not read here' rather than leaving the target out.",
   "workflow": "ci.yml",
   "reportOn": { "repository": "a11ign/a11ign", "issue": 928 },
   "repositories": ["a11ign/a11ign", "a11ign/agent-org"],

@@ -543,7 +543,7 @@ Totals: 14 of 14 check out one repository and none carries a `repository:` key (
 - **REFERENCE (not my measurement)**: row #2610's own body states "9 selected for `server.mjs` and 55 for `capture-pure.mjs`, plus 214 always-run guard tests, of 729 test files" (from `gh issue view 2610 --json body`, its Open-check reading). I re-ran the same selector and got the same numbers (reading 2), which confirms the number, not the method: both use the shipped selector, so any selector defect is shared.
 - **measured** how always-run is decided: `scripts/select-changed-tests.mjs:373 alwaysRunTests` marks a test a guard when `discoversFromTree` says its source enumerates tracked files or walks a directory (skipping build output), or when any module in its import closure does (`asHelper` stricter rule); `narrowByDeclaredScope` (#929) then drops guards whose declared walk scope the diff cannot reach. `scripts/ci-changed.mjs` classifies the diff into booleans and `testPackages` = touched packages plus their transitive dependents, computed from the real `package.json` dependency graph, not a hand-written map.
 - **measured** the #2519 gate (`registry-consumer-gate.yml`, `registry-consumer-gate.test.ts`; the 14th workflow, pinned by name in `workflow-count.test.ts`) installs `a11ign@<spec>` from the REGISTRY into an empty directory: job `install` (ubuntu) then `combination` (windows-2022, NVDA). Triggers: daily, after `release` completes (`workflow_run`), on dispatch. It proves the PUBLISHED contract. It cannot see a layer's unpublished head or core's, and its own header says it "says which layers it did NOT check". So today a layer merge is tested against core only after it is published and the next daily run, a gap of up to a release cycle plus a day. **A head gate does not exist; this row is it.**
-- **measured** release and changesets are one pipeline for seven public packages: `release.yml` runs `changeset publish` with OIDC provenance (`id-token: write`), and `scripts/manifest-repository-check.mjs` (run by `release.yml`, #1536) refuses any manifest whose `repository.url` is not `GITHUB_REPOSITORY` (reading 4: all 7 public manifests name `a11ign/a11ign`; `packages/nvda-worker/package.json` among them). `.changeset/config.json` has `baseBranch: main`, empty `linked`/`fixed`, `updateInternalDependencies: patch` (an in-workspace mechanism), and 208 `.md` files (README.md is one). `@a11ign/lab` (private) depends on `@a11ign/nvda-worker` and `@a11ign/worker-fleet` depends on it too (`grep -n '@a11ign/nvda-worker' packages/lab/package.json packages/worker-fleet/package.json` gives `lab/package.json:13` and `worker-fleet/package.json:66`, both the range `0.0.0`): after the split those become registry ranges, so core's tests would test the PUBLISHED layer, not its head.
+- **measured** release and changesets are one pipeline for seven public packages: `release.yml` runs `changeset publish` with OIDC provenance (`id-token: write`), and `scripts/manifest-repository-check.ts` (run by `release.yml`, #1536) refuses any manifest whose `repository.url` is not `GITHUB_REPOSITORY` (reading 4: all 7 public manifests name `a11ign/a11ign`; `packages/nvda-worker/package.json` among them). `.changeset/config.json` has `baseBranch: main`, empty `linked`/`fixed`, `updateInternalDependencies: patch` (an in-workspace mechanism), and 208 `.md` files (README.md is one). `@a11ign/lab` (private) depends on `@a11ign/nvda-worker` and `@a11ign/worker-fleet` depends on it too (`grep -n '@a11ign/nvda-worker' packages/lab/package.json packages/worker-fleet/package.json` gives `lab/package.json:13` and `worker-fleet/package.json:66`, both the range `0.0.0`): after the split those become registry ranges, so core's tests would test the PUBLISHED layer, not its head.
 - **measured** `ci.yml:115` is the only workflow that listens to `merge_group` (reading 3). Each layer's own required workflow needs it or its queue stalls (ITEM 5).
 
 **Size:** 14 workflows (reading 1): 4 tracker-only, 6 code-only, 4 both, 0 with a second checkout; 1 workflow to add (the head gate) and 1 pinned count to change (`workflow-count.test.ts`, 14 to 15); 7 manifests to re-point at their repository when a package moves (reading 4).
@@ -938,11 +938,11 @@ start any of them.** The ten follow-on rows named in "The sum" have no body here
 scripts/repo-identity.mjs
 packages/lab/src/packaging/repo-identity-consolidated.test.ts
 packages/agent-org/src/
-scripts/check-transfer-urls.mjs
+scripts/check-transfer-urls.ts
 scripts/ci-changed.mjs
-scripts/commands.mjs
-scripts/generate-commands-doc.mjs
-scripts/generate-consumer-gate.mjs
+scripts/commands.ts
+scripts/generate-commands-doc.ts
+scripts/generate-consumer-gate.ts
 scripts/release-reuses-verdict.mjs
 ```
 
