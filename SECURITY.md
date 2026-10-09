@@ -189,7 +189,7 @@ never a value.
 - **Never over the worker's channel.** The request to the worker carries the flow and the variable NAMES, never a value,
   and never a cookie or the contents of a storage state (`--auth-state` sends a PATH, and the worker reads the file itself). A worker that is not on the same machine **refuses** an authentication request
   (`auth-refused-remote-worker`), because that channel is plain HTTP with no authentication and no TLS; a worker that
-  predates the field is caught by insisting on `authApplied: true` in its answer (`auth-not-applied`).
+  predates the field is caught by insisting on `authApplied: true` in its answer (`auth-not-applied`). There is no opt-in for a remote worker, by design; [why, and the two supported routes](docs/try-it.md#a-remote-worker-auth-refused-remote-worker-with-no-opt-in).
 - **Not into what the run writes or prints.** A screen reader announces what is typed, so every value (and its JSON-escaped,
   URL-encoded and base64 forms) is replaced with `‹credential›` before anything is written, printed, judged or reported,
   the count is disclosed, and a value that survives redaction — or a run of one-character announcements spelling one —
@@ -293,7 +293,7 @@ capture transcript — which contains the page's text as a screen reader announc
 page is behind your authentication, that transcript may contain data from it. **An authenticated run therefore refuses a
 non-local backend by default** (`auth-refused-judge-backend`), and the one override is
 `--send-authenticated-transcript-to-judge-vendor`, an argument and never an environment variable: it prints the vendor
-that receives the transcript before the judge runs, and credentials are redacted before the transcript leaves either way.
+that receives the transcript before the judge runs, and credentials are redacted before the transcript leaves either way. The refusals, the reasons and what each opt-in risks are on one page: [`docs/try-it.md`](docs/try-it.md#why-an-authenticated-run-refuses-and-how-to-opt-in).
 
 ### And it will not start collecting, deliberately
 
