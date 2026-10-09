@@ -171,28 +171,20 @@ test("THE EMITTED LISTS MATCH A REAL CAPTURE, not just each other", () => {
  */
 // The layer publishes `dist/` only (#3937): the typedefs survive as the JSDoc header of `capture-core.d.mts`, and `capture-probes.mjs` is bundled into the
 // `src_capture-core_mjs.mjs` chunk.
-const CAPTURE_CORE_PATH = layerFile("@a11ign/screenreader-worker", "dist/capture-core.d.mts", { from: import.meta.dirname });
+const CAPTURE_CORE_PATH = layerFile("@a11ign/screenreader-worker", "dist/capture-core.d.ts", { from: import.meta.dirname });
 
-/** One `@typedef {{ ... }} Name` LINE's field names, by regex — every one of these three typedefs is
- *  written on a single line (confirmed by reading the file), so this works line-by-line rather than over
- *  the whole file. That matters: a whole-file, non-greedy `{{...}}...Name` match does not anchor to which
- *  `{{` starts the group, so a lazy `[^]*?` searching from the FIRST `@typedef {{` in the file for the
- *  LATER line naming `Capture` swallows every typedef in between as one field list — caught by mutation
- *  (this exact version, first written), not by reasoning about the regex. Field names are matched by a
- *  colon anchor, so a type reference (`Record<string, unknown>`, `AnnouncedChange[]`) is never mistaken
- *  for one: none of those tokens are themselves followed by a colon. */
+/** One `type Name = { ... };` block's TOP-LEVEL field names, read from `capture-core.d.ts` (#4442: 0.9.0 publishes the
+ *  typedefs as TypeScript aliases, where the JSDoc `@typedef {{ ... }}` one-liners were). Only four-space-indented field
+ *  lines count, so a nested object's keys are never mistaken for the type's own; a field is named by its colon anchor. */
 function typedefFields(source: string, typedefName: string): string[] {
-  const nameBoundary = new RegExp(`\\}\\}\\s*${typedefName}\\b`);
-  const line = source.split("\n").find((l) => l.includes("@typedef {{") && nameBoundary.test(l));
-  assert.ok(line, `@typedef {{ ... }} ${typedefName} not found on one line — capture-core.mjs has moved`);
-  const body = (line as string).match(/\{\{([^]*)\}\}/);
-  assert.ok(body, `no {{ ... }} body found on the ${typedefName} typedef line`);
-  return [...new Set([...(body as RegExpMatchArray)[1].matchAll(/\b([A-Za-z_$][\w$]*)\??:\s*/g)]
-    .map((m) => m[1]))].sort();
+  const start = source.indexOf(`type ${typedefName} = {`);
+  assert.ok(start >= 0, `type ${typedefName} = { not found in capture-core.d.ts -- the layer has moved its declarations`);
+  const body = source.slice(start, source.indexOf("\n};", start));
+  return [...new Set([...body.matchAll(/^ {4}([A-Za-z_$][\w$]*)\??:/gm)].map((m) => m[1]))].sort();
 }
 
-test("capture-core.mjs's own JSDoc typedefs cannot find every hop, or this test checks nothing", () => {
-  assert.ok(existsSync(CAPTURE_CORE_PATH), "capture-core.mjs has moved; update CAPTURE_CORE_PATH");
+test("capture-core.d.ts's own typedefs cannot find every hop, or this test checks nothing", () => {
+  assert.ok(existsSync(CAPTURE_CORE_PATH), "capture-core.d.ts has moved; update CAPTURE_CORE_PATH");
   const source = readFileSync(CAPTURE_CORE_PATH, "utf8");
   const structureFields = typedefFields(source, "CapturedStructure");
   const interactionFields = typedefFields(source, "CapturedInteraction");
@@ -235,7 +227,7 @@ test("Capture is a SUBSET of the published CaptureResult — server.mjs adds tas
  * Whether the TYPE admits `null` is `tsc`'s: the typed error entry below fails to compile without `| null`, which
  * `npx tsx --test` cannot see. That is stated in the PR as a typecheck observation, not an Acceptance red.
  */
-const PROBES_PATH = layerFile("@a11ign/screenreader-worker", "dist/src_capture-core_mjs.mjs", { from: import.meta.dirname });
+const PROBES_PATH = layerFile("@a11ign/screenreader-worker", "dist/src_capture-core_ts.mjs", { from: import.meta.dirname });
 type StateChange = CaptureInteraction["stateChanges"][number];
 type FormChange = CaptureInteraction["formChanges"][number];
 

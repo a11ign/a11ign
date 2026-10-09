@@ -225,7 +225,7 @@ const MIN_SCANNED_FILES = 10;
 const AUTH_DIR = "packages/cli/src/auth";
 /** The worker layer's login code, BY PACKAGE NAME (#3447): the layer is installed from the registry and publishes `dist/` only (#3937), where its build bundled
  *  `auth-flow.mjs` and `capture-auth.mjs` into these two chunks, so these are the published files, absolute. */
-const WORKER_AUTH_FILES = ["dist/src_auth-flow_mjs.mjs", "dist/src_capture-core_mjs.mjs"].map((rel) => layerFile("@a11ign/screenreader-worker", rel, { from: REPO }));
+const WORKER_AUTH_FILES = ["dist/src_auth-flow_ts.mjs", "dist/src_capture-core_ts.mjs"].map((rel) => layerFile("@a11ign/screenreader-worker", rel, { from: REPO }));
 const inspected = (root: string): string[] => [
   ...readdirSync(join(root, AUTH_DIR)).filter((name) => /\.(ts|mjs)$/.test(name) && !name.endsWith(".test.ts")).map((name) => `${AUTH_DIR}/${name}`),
   ...WORKER_AUTH_FILES,

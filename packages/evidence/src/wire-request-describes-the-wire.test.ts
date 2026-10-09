@@ -30,7 +30,7 @@ import type { CaptureRequest, CaptureFormState } from "./index.js";
 // BY PACKAGE NAME (#3447): the worker lives in its own repository and is installed from the registry, which publishes `dist/` only (#3937):
 // `server.mjs` is its own entry, and `capture-pure.mjs` is bundled into the `src_capture-pure_mjs.mjs` chunk.
 const SERVER_PATH = layerFile("@a11ign/screenreader-worker", "dist/server.mjs", { from: import.meta.dirname });
-const CAPTURE_PURE_PATH = layerFile("@a11ign/screenreader-worker", "dist/src_capture-pure_mjs.mjs", { from: import.meta.dirname });
+const CAPTURE_PURE_PATH = layerFile("@a11ign/screenreader-worker", "dist/src_capture-pure_ts.mjs", { from: import.meta.dirname });
 
 /** `PROBE_FLAGS`, straight out of `capture-pure.mjs`'s own `Object.freeze([...])` array literal —
  *  the worker's own copy of the ten opt-in probe names. */
