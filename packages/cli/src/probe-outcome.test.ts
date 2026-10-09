@@ -17,7 +17,7 @@ import assert from "node:assert/strict";
 import { WAKE_HINT, WORKER_PROBE_TIMEOUT_MS, describeProbe, probeHealth } from "@a11ign/screenreader-fleet/probe-outcome";
 import { refuseIfNothingListening } from "./worker-probe.js";
 import { workerProblem } from "../../../scripts/auth-leak-worker-probe.ts";
-import { refuseIfBusy, sampleVitals } from "../../worker-fleet/src/measure-guard.mjs";
+import { refuseIfBusy, sampleVitals } from "../../worker-fleet/src/measure-guard.ts";
 
 /** The slowest healthy first-after-idle answer on the real fleet (a11y-worker-13/-14/-16, read by `orchestrator`, #2671). */
 const SLOW_HEALTHY_MS = 3_090;

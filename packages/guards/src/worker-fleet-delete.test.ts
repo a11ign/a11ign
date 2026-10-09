@@ -36,7 +36,7 @@ import { sandboxGitEnv } from "./git-env.ts";
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const DEPARTED_DIRECTORY = "worker-fleet";
 const CONSUMED = "@a11ign/screenreader-fleet";
-const CONSUMED_VERSION = "0.5.3";
+const CONSUMED_VERSION = "0.6.0";
 /** Both names the package has carried; a changeset may name neither. BUILT, NOT WRITTEN: a rename test refuses a file that spells the old name whole. */
 const NAMES = [CONSUMED, ["@a11ign", "worker-fleet"].join("/")] as const;
 /** What a pnpm integrity looks like: an algorithm, a dash and base64. Not a hash of anything: a SHAPE, so a placeholder is refused. */
@@ -170,7 +170,7 @@ const REAL_INTEGRITY = `sha512-${"A".repeat(86)}==`;
 /** A minimal lockfile: the root declares the package at `version`, with `integrity` (or none) in `packages:`. */
 function lockfileWith({ version, integrity, extra = "" }: { version: string; integrity?: string; extra?: string }): string {
   const resolution = integrity === undefined ? "" : `    resolution: {integrity: ${integrity}}\n`;
-  return `lockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    dependencies:\n      '${CONSUMED}':\n        specifier: ^0.5.3\n        version: ${version}\n${extra}\n`
+  return `lockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    dependencies:\n      '${CONSUMED}':\n        specifier: ^0.6.0\n        version: ${version}\n${extra}\n`
     + `packages:\n\n  '${CONSUMED}@${CONSUMED_VERSION}':\n${resolution}    engines: {node: '>=20'}\n`;
 }
 
@@ -263,12 +263,12 @@ test("lab, guards, cli and the root scripts import the fleet by package name, ne
 
 test("POSITIVE CONTROL: a relative import of the fleet is REFUSED naming the file; the by-name form, a test and a control import are not", () => {
   assert.deepEqual(relativeImportRefusals({
-    "packages/lab/src/training/a.mjs": 'import { x } from "../../../worker-fleet/src/worker-http.mjs";\n',
-    "packages/guards/src/b.mjs": 'import { y } from "../../worker-fleet/src/cli-flags.mjs";\n',
-    "scripts/c.mjs": 'import { z } from "../packages/worker-fleet/src/cli-flags.mjs";\n',
+    "packages/lab/src/training/a.mjs": 'import { x } from "../../../worker-fleet/src/worker-http.ts";\n',
+    "packages/guards/src/b.mjs": 'import { y } from "../../worker-fleet/src/cli-flags.ts";\n',
+    "scripts/c.mjs": 'import { z } from "../packages/worker-fleet/src/cli-flags.ts";\n',
     "packages/lab/src/d.mjs": `import { w } from "${CONSUMED}/cli-flags";\n`,
-    "packages/lab/src/e.test.ts": 'import { v } from "../../worker-fleet/src/doctor.mjs";\n',
-    "packages/control/src/f.mjs": 'import { u } from "../../worker-fleet/src/cli-flags.mjs";\n',
+    "packages/lab/src/e.test.ts": 'import { v } from "../../worker-fleet/src/doctor.ts";\n',
+    "packages/control/src/f.mjs": 'import { u } from "../../worker-fleet/src/cli-flags.ts";\n',
   }), [
     `packages/lab/src/training/a.mjs imports packages/worker-fleet by a relative path: name ${CONSUMED}`,
     `packages/guards/src/b.mjs imports packages/worker-fleet by a relative path: name ${CONSUMED}`,
