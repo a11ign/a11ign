@@ -230,12 +230,15 @@ const releasablePathsOf = (repo: string, declared: unknown): string[] => {
 
 /** #4092: a prefix the worker repository does not have, which no test above could see because claim 3 reads the installed manifest. */
 const STALE_WORKER_PREFIX = "packages/nvda-worker/";
+/** #4220: `nvda-speech` was folded into `src/nvda-speech/` (screenreader-worker 0.5.2, #4214), so `src/` already counts it and its old directory is no prefix at all. */
+const FOLDED_SPEECH_PREFIX = "packages/nvda-speech/";
 const WORKER = "a11ign/screenreader-worker";
 
 /** Why the worker's declared paths do not name its own layout (`src/`), or null when they do. */
 function staleWorkerPathRefusal(declared: unknown): string | null {
   const paths = releasablePathsOf(WORKER, declared);
   if (paths.includes(STALE_WORKER_PREFIX)) return `${WORKER} still declares ${STALE_WORKER_PREFIX}, which that repository does not have`;
+  if (paths.includes(FOLDED_SPEECH_PREFIX)) return `${WORKER} still declares ${FOLDED_SPEECH_PREFIX}, which was folded into src/nvda-speech/`;
   return paths.includes("src/") ? null : `${WORKER} declares ${JSON.stringify(paths)}, and its code is under src/`;
 }
 
@@ -246,7 +249,8 @@ test("the worker's releasable paths name its own layout (src/), not the director
 test("control: the old prefix put back, or no src/, is REFUSED, naming it", () => {
   const withPaths = (releasablePaths: string[]) => (realDeclared as Declared[]).map((entry) => (entry.repo === WORKER ? { ...entry, releasablePaths } : entry));
   assert.match(staleWorkerPathRefusal(withPaths([STALE_WORKER_PREFIX, "packages/nvda-speech/"])) ?? "", /still declares packages\/nvda-worker\//);
-  assert.match(staleWorkerPathRefusal(withPaths(["packages/nvda-speech/"])) ?? "", /its code is under src\//);
+  assert.match(staleWorkerPathRefusal(withPaths(["src/", FOLDED_SPEECH_PREFIX])) ?? "", /folded into src\/nvda-speech\//);
+  assert.match(staleWorkerPathRefusal(withPaths(["packages/other/"])) ?? "", /its code is under src\//);
   assert.match(staleWorkerPathRefusal([]) ?? "", /declares \[\]/);
 });
 

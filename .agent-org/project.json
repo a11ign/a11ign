@@ -23,7 +23,7 @@
   "dora": [
     { "repo": "a11ign/a11ign", "release": { "kind": "npm", "package": "a11ign" }, "releasablePaths": ["packages/cli/", "packages/evidence/", "packages/judge/", "packages/scorer/"] },
     { "repo": "a11ign/agent-org", "release": { "kind": "tag" }, "releasablePaths": ["src/"] },
-    { "repo": "a11ign/screenreader-worker", "release": { "kind": "npm", "package": "@a11ign/screenreader-worker" }, "releasablePaths": ["src/", "packages/nvda-speech/"] },
+    { "repo": "a11ign/screenreader-worker", "release": { "kind": "npm", "package": "@a11ign/screenreader-worker" }, "releasablePaths": ["src/"] },
     { "repo": "a11ign/screenreader-fleet", "release": { "kind": "npm", "package": "@a11ign/screenreader-fleet" }, "releasablePaths": ["packages/worker-fleet/"] },
     { "repo": "a11ign/documents", "release": { "kind": "npm", "package": "@a11ign/documents" }, "releasablePaths": ["src/"] },
     { "repo": "a11ign/lab", "release": { "kind": "tag" }, "releasablePaths": ["packages/lab/"] },
