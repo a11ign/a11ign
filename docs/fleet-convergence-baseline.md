@@ -64,7 +64,8 @@ around from a stale local copy.
 **#4459** (`ready`, `lane:any`, parent #4405) writes the per-run record named above, in the lab repository.
 Until it merges, **the month-later reading has no "before" for runs earlier than that merge**, and the first
 month of its data is the baseline. A corpus-reading limitation (the lab alone may remember runs this host's
-`runs/` does not) is routed to `orchestrator` on #4444.
+`runs/` does not) is routed to `orchestrator` on #4444. Comparable data starts at **2026-10-09**, the merge date of
+a11ign/lab#45 (the per-run record that closed #4459), and its source is `runs/capture-runs.jsonl`.
 
 ## What the follow-up reading repeats
 
