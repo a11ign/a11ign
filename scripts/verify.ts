@@ -37,6 +37,7 @@ import { underFloor } from "../packages/guards/src/assert-glob-not-empty.ts";
 import { sandboxGitEnv } from "../packages/guards/src/git-env.ts";
 import { refuseUnknownFlags, flagValue } from "./cli-flags.ts";
 const { checkBody } = await toolExport("pr-open");
+import { acceptanceDiffOf } from "./verify-acceptance-source.ts";
 import { classify, knownPackages, packedFiles } from "./ci-changed.ts";
 import { privateRunRoot } from "./private-tmp.ts";
 // NEVER a bare `pnpm` spawn -- unsafe on Windows (CVE-2024-27980), and this repo's own guard refuses one.
@@ -463,17 +464,19 @@ async function runChangeset({ base }: { base: string; }) {
  * CI's `acceptance` job: every report in agent-org's `CI_BODY_REPORTS` over the body, through `checkBody`, the call
  * `pr:open` makes, so the two cannot be spelled apart (#3209). It takes the diff rather than reading it from a merge
  * commit as the CLI does, and a plain branch has none: the CLI would print `MUTATION: UNCHECKED` here where CI refuses.
- * No body is not a pass: there is nothing to lint.
- * @param {{ body: string | null, files: string[] }} ctx
+ * No body is not a pass: there is nothing to lint. The diff names the paths the branch ADDS, so `checkBody` reads the `.acceptance/` file
+ * the branch adds (ADR 0044) as `pr:open` and CI do, and falls back to the body only when it adds none (#4600).
+ * @param {StepContext} ctx
  */
-function runAcceptance({ body, files }: { body: string | null; files: string[]; }) {
+function runAcceptance({ body, files, base }: StepContext) {
   if (body === null) {
     console.error("verify: no body to lint -- pass --draft-body=<path to the draft body>. A stamp without one is not green.");
     return "fail";
   }
-  // Deleted files, and the old side of a rename, are in `files` and owe no mutant: CI's own reading excludes them.
-  const present = files.filter((file) => existsSync(join(REPO, file)));
-  const checked = checkBody(body, { diff: { ok: true, files: present } });
+  // `--diff-filter=A` is agent-org's rule too: a rename is not an add (`resolveAcceptanceSource`).
+  const added = git(["diff", "--name-only", "--diff-filter=A", `${base}...HEAD`]).split("\n").filter(Boolean);
+  const diff = acceptanceDiffOf({ files, added, exists: (file) => existsSync(join(REPO, file)) });
+  const checked = checkBody(body, { diff, readFile: (path: string) => readFileSync(join(REPO, path), "utf8") });
   for (const line of checked.lines) console.log(line);
   return checked.ok ? "pass" : "fail";
 }
