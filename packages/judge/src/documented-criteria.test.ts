@@ -23,7 +23,7 @@ import { RULE_CRITERIA, assessedCriteria, realPageAssessableCriteria, realPageUn
 
 const SPELLED = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
   "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen",
-  "nineteen", "twenty", "twenty-one"];
+  "nineteen", "twenty", "twenty-one", "twenty-two"];
 
 /**
  * A repo file with whitespace collapsed.

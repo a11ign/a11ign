@@ -814,7 +814,43 @@ export const CRITERION_COVERAGE: Record<string, CriterionCoverage> = {
   "3.2.4": { status: "out-of-scope", needs: ["multi-page"], note: "Consistent Identification compares how the same function is labelled across pages, so it needs more than one." },
   "3.2.6": { status: "out-of-scope", needs: ["multi-page"], note: "Consistent Help compares the position of help mechanisms across pages, so it needs more than one." },
   "3.3.4": { status: "out-of-scope", needs: ["human"], note: "THE FLOW WAS NOT THE BARRIER, and this is the third reason in this file to say it was (see 3.3.7 and 3.3.8). W3C: assessment does NOT necessarily require observing a complete transaction; the \"Confirmed\" bullet asks whether \"a mechanism is available for reviewing, confirming, and correcting information before finalizing\", and an order-review page shows that on its own. So `multi-page` was wrong and is dropped. What remains is genuinely a judgement, and it is the FIRST clause rather than the three bullets: deciding that a page \"causes legal commitments or financial transactions\" or \"modifies or deletes user-controllable data\" is a claim about consequence in the world, which no capture carries. And as with 3.3.8 there is a second, independent bar: satisfying oneself that submissions are Reversible would mean submitting one, and `probeForms` is off for pages we do not own precisely because pressing a stranger's button is not a review.", },
-  "3.3.7": { status: "reachable", needs: ["screen-reader"], channels: ["formFields", "formChanges"], note: "TWO CORRECTIONS, A DAY APART, AND THE SECOND REVERSED THE FIRST'S CONCLUSION. The original reason was `multi-page`: \"Redundant Entry spans steps of a process\". The criterion governs re-entry \"in the same process\", and W3C puts a process inside one page explicitly -- an email field, then \"confirm your email\", no auto-population, is the textbook failure and entirely one document. The word \"process\" had been read as \"pages\". That correction kept it out of scope on the EXCEPTIONS, assuming they were judgements broad enough to make any rule unsafe. THEY ARE NOT, AND ASSUMING SO WITHOUT READING THEM WAS THE SAME DEFECT ONE LAYER ON. Read: the SECURITY exception explicitly covers password confirmation -- \"having users re-validate their new string is allowed as an exception\" -- and the ESSENTIAL exception is narrow, defined as information whose removal \"would fundamentally change the information or functionality\", with memory games as its only example. **Verifying accuracy does not qualify.** So the common conformant pattern is not a judgement at all, it is one named exception, and NVDA announces a password field distinctly -- the discriminator is in the evidence rather than in a human's head. WHAT IS ACTUALLY MISSING IS A PROBE: nothing today fills one field and asks whether a later one populates, though `probeTyping` already writes to controls. And the mapping should be `secondary` when it is built, not because of the exceptions but because \"these two fields want the same information\" is a LABEL HEURISTIC -- \"Home address\" and \"Billing address\" are similar strings and different information, which is the `vague_link_present` shape that took 2.4.4 to 27 false positives. Corpus case first, per the rule that a probe built now produces evidence nothing can validate.", },
+  "3.3.7": {
+    // PARTIAL (#4355, #4084 outcome 2): ONE failure case is in code, a later REQUIRED `type="email"` control in a
+    // form that already has one and that stayed empty. Everything else the criterion covers stays with a human.
+    status: "partial", needs: ["dom", "human"], channels: ["formInputs"],
+    realPageEvidence: {
+      available: false,
+      because: "`RuleInput.formInputs[].form`, `.required` and `.populatedFromEarlier` have no worker-side census on "
+        + "any capture, so the rule (`addRedundantEntry`, #4355) has been exercised only on hand-built evidence shaped "
+        + "like the corpus trio `email-confirm-bad.html` / `email-once-good.html` / `password-confirm-exception.html` "
+        + "(a11ign/lab#43). It has never fired on a real page and cannot until a `screenreader-worker` census "
+        + "populates the fields (filed from #4355; `orchestrator`'s lane).",
+    },
+    note: "A SECOND REQUIRED EMAIL FIELD THAT STAYED EMPTY IS A REFERRED FINDING. W3C DOES NOT SHOW THIS FORM, AND "
+      + "THIS NOTE USED TO SAY IT DID. Re-read 2026-10-09: neither the Understanding page "
+      + "(https://www.w3.org/WAI/WCAG22/Understanding/redundant-entry) nor technique G221 contains an email-and-confirm "
+      + "form, and the page's only examples are a corporate ID, billing and delivery addresses, a checkout card number "
+      + "and a search term. What the page DOES say is the criterion, \"Information previously entered by or provided to "
+      + "the user that is required to be entered again in the same process is either: auto-populated, or available for "
+      + "the user to select\", and that a process is a \"series of user actions where each action is required in order "
+      + "to complete an activity\". It adds that data which is \"available to select\" \"would need to be on the same "
+      + "page\". By that text a one-page form is in scope, so the email-and-confirm pair is a failure by READING the "
+      + "criterion, not by a quotation, and the corpus trio (a11ign/lab#43) says so in its own comments. HISTORY, "
+      + "because the first two readings were both wrong: the original barrier was `multi-page`, read from the word "
+      + "\"process\"; the correction kept the criterion out of scope by assuming its exceptions were broad judgements "
+      + "without reading them. Read: the SECURITY exception names password confirmation (\"having users re-validate "
+      + "their new string is allowed as an exception\"), and ESSENTIAL is narrow (memory games). THE RULE PAIRS BY "
+      + "INPUT TYPE, NEVER BY LABEL: \"these two fields want the same information\" read from words is the "
+      + "`vague_link_present` shape that took 2.4.4 to 27 false positives (\"Home address\", \"Billing address\"), and "
+      + "a password confirmation pairs up by label exactly as an email one does, so `password-confirm-exception.html` "
+      + "is the negative control a label rule trips on and a type rule does not. Only `email` is claimed: `tel` and "
+      + "`url` look alike and are NOT claimed, since a home phone beside a work phone asks two things and nothing has "
+      + "measured how often. REFERRED, never asserted: the ESSENTIAL and NO-LONGER-VALID exceptions are judgements, "
+      + "and so is \"available to select\" (a drop-down, or a \"same as\" checkbox, which this census does not read). "
+      + "`partial` because those exceptions, the same data asked on a LATER PAGE of a process (the Understanding "
+      + "page puts a process across pages and even domains), fields whose requiredness is script rather than the "
+      + "`required` attribute, and every type other than `email` are not covered. Not in this row: 2.5.7, 3.2.6.",
+  },
   "3.3.8": {
     // PARTIAL (#4259, #4084 outcome 2): ONE failure case is in code, the one the Understanding page spells
     // out about the login page itself. The exceptions stay with a human, which is why the finding is
