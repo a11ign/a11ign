@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { sandboxGitEnv } from "./git-env.mjs";
+import { sandboxGitEnv } from "./git-env.ts";
 import { CANNOT_TELL, GUARDED_DOC, pinFaults, type Reader } from "./docs-release-pin-currency.ts";
 
 const REPO = fileURLToPath(new URL("../../..", import.meta.url));
