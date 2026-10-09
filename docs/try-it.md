@@ -328,6 +328,46 @@ Each fault is a sentence in the log's last lines with `(fault: <code>)` after it
 
 A run that fails outside these (for example a runner that never becomes ready) is not a fault of the login: re-run the same commit **once**. A second identical failure is not flakiness: read the last lines of the Action step's log for the line that names it, and compare it with the table above.
 
+## Why an authenticated run refuses, and how to opt in
+
+A run that logs in is refused in three places before it examines your page. Two of them are about where a copy of the signed-in page's text would go, and each is refused **by default on purpose**: a refusal is cheap to lift on purpose and expensive to find out about afterwards. The third, a public repository, is in [section 1](#1-the-repository-must-be-private) and has no opt-in. This section covers the other two: the fault name you will see, the reason, whether there is a deliberate way past it, and what taking it risks. The decision is [ADR 0038](./adr/0038-authenticated-capture.md) (Constraints 1 and 5); the statement of what leaves your machine is in [SECURITY.md](../SECURITY.md#it-can-log-in-to-the-page-it-examines-and-then-it-holds-a-credential--2026-09-24-adr-0038).
+
+| fault | refused when | opt-in |
+|---|---|---|
+| `auth-refused-remote-worker` | the run logs in and `--worker` names a machine other than this one | **none, by design** |
+| `auth-refused-judge-backend` | the run logs in and `JUDGE_BACKEND` is `codex`, `anthropic` or `openai` | `--send-authenticated-transcript-to-judge-vendor` |
+
+### A remote worker: `auth-refused-remote-worker`, with no opt-in
+
+**Why.** The CLI talks to a worker over plain HTTP with no authentication and no TLS, so anything sent to it can be read by anyone on the network, and a session is a credential. The refusal is raised before the request body is built: nothing is sent and no page is examined, and the run ends with the fault and **no report**, never a clean one. A worker that is not on the same machine is any `--worker` address whose host is not `localhost`, an address in `127.0.0.0/8` or `[::1]`; a worker address that cannot be parsed, or none at all, is treated as remote too, because refusing is the safe reading of "I could not tell".
+
+**There is no opt-in, and that is the decision, not a gap.** ADR 0038 refuses until the channel is authenticated and encrypted, and no flag or environment variable switches the refusal off, because a switch would be the one thing a shared runner or a copied command line could turn on without anyone deciding to. What the run needs is the browser and the worker on one machine, and there are two supported ways to get that:
+
+- **The GitHub Action**, which starts the worker on a throwaway runner from the environment you gave the step ([section 4](#4-the-workflow)). This is the route this page walks.
+- **The CLI with a worker on your own machine:** point `--worker` at `http://127.0.0.1:8765`.
+
+**An SSH tunnel to a remote worker is tolerated by accident, and is not an opt-in.** The CLI judges the address it was given, and a tunnel's local end is `127.0.0.1`, so it passes the check without being asked. Nothing in the tool can tell the difference, and it is no safer: the tunnelled worker reads the variables named in your flows file from its **own** environment, so the run either ends in `auth-credential-missing` (that worker holds nothing) or, if it does hold your variable, performs the login in a browser on a machine other people can reach. Do not export a test account's variables into a shared worker to make a tunnel work ([SECURITY.md](../SECURITY.md) says the same). No code change would make this safe: the missing piece is an authenticated, encrypted channel and a worker that is yours alone, and neither is built.
+
+### A vendor judge backend: `auth-refused-judge-backend`, and the opt-in
+
+**Why.** The default judge is `local`, our own scorer running on your machine, and nothing leaves it. `JUDGE_BACKEND=codex|anthropic|openai` sends the capture's transcript to that vendor, and the transcript is the page's text as a screen reader announced it. For a page behind your login, that is text from behind your login. The refusal is raised when the arguments are read, before the capture starts, so a refused run does not first spend a capture.
+
+**The opt-in.** Name the flag on the run. It is one flag per run, it only means something on a run that logs in (`--flows` and `--login-flow`), and it cannot be set from the environment, so a variable left on a shared runner cannot turn it on for a job that never named it:
+
+```bash
+# CLI
+npx a11ign https://app.example.com/dashboard --flows .github/a11y-flows.yml --login-flow login \
+  --send-authenticated-transcript-to-judge-vendor
+```
+
+```yaml
+# the Action
+with:
+  send-authenticated-transcript-to-judge-vendor: "true"
+```
+
+**What it risks.** The signed-in page's transcript **leaves your machine (or your runner) for the vendor you named**, under that vendor's terms and retention, not yours. Given the flag, the run prints on stderr which vendor receives it before the judge runs, so you can see it was taken. Your credentials are not part of what is sent: every value from your login is replaced with `‹credential›` before the transcript leaves, with or without the flag, and the flag does not switch that off. **Everything else on the page is still sent**: names, balances, messages, whatever the signed-in view announces. Use it with a dedicated test account on seeded data you would be content to show that vendor; if you cannot say that about the page, leave `judge-backend` at `local`.
+
 ## The other route: run it from the repository
 
 **Use this if your app is not on GitHub, or you want to see the output before you commit a workflow file.**

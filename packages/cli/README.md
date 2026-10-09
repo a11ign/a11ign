@@ -44,6 +44,8 @@ repeat that decision.
 - **Read both with `npm view a11ign dist-tags`.** When `latest` is behind `next`, that version is waiting for its
   qualification, or failed it; a failure is a public row, so it is not silent. If you need the newest change and can
   take it unqualified, use `a11ign@next`.
+- **A release is tagged `a11ign@<version>`**, for example `a11ign@0.5.3`, and its GitHub Release hangs off that tag. The
+  `v<version>` tags are not that contract: they exist only so Dependabot can see the Action, and not every version has one.
 
 **How long a merged fix takes to reach each**, as measured on one release and never as a promise:
 
