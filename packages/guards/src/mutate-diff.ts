@@ -56,19 +56,17 @@ const ASSERT_GLOB = fileURLToPath(new URL("./assert-glob-not-empty.mjs", import.
 const require = createRequire(import.meta.url);
 /**
  * `typescript` and `yaml` are the parsers that decide whether a mutant is a mutant or a typo. Loaded LAZILY, for the
- * reason `tree-wide-guard.mjs` records above its own `require`: a process that never parses a JS or YAML mutant
+ * reason `tree-wide-guard.ts` records above its own `require`: a process that never parses a JS or YAML mutant
  * should not pay 170-380 ms for one. `yaml` is publicly hoisted to the root (`pnpm-workspace.yaml`).
  * @param {string} name
  * @returns {any}
  */
 const lazy = (name: string): any => require(name);
 
-/**
- * @typedef {{ op: string, from: number, len: number, to: string | null }} Edit
- *   One line-local text edit; `to === null` deletes the line.
- * @typedef {"js" | "yml" | "json" | "md"} Kind
- * @typedef {{ file: string, line: number, op: string, edit: Edit, original: string, mutated: string }} Mutant
- */
+/** One line-local text edit; `to === null` deletes the line. */
+export type Edit = { op: string, from: number, len: number, to: string | null };
+export type Kind = "js" | "yml" | "json" | "md";
+export type Mutant = { file: string, line: number, op: string, edit: Edit, original: string, mutated: string };
 
 // ---- operators ---------------------------------------------------------------------------------------------------
 
@@ -239,7 +237,7 @@ export function scopeOf({ base, head, cwd }: { base: string; head: string; cwd: 
   const present = changedFiles([range], { repoRoot: cwd }).filter((f) => existsSync(path.join(cwd, f)));
   const tests = present.filter((f) => TEST_FILE.test(f));
   const subjects = chooseSubjects({ changed: present.filter((f) => added.has(f)), tests, read })
-    .map((file) => ({ file, lines: /** @type {Set<number>} */ (added.get(file)) }));
+    .map((file) => ({ file, lines: (added.get(file) as Set<number>) }));
   return { tests, subjects };
 }
 
@@ -303,7 +301,7 @@ export function runChangedTests({ cwd, tests, argv = [ASSERT_GLOB, ...tests, "--
     child.stderr.on("data", keep);
     const timer = setTimeout(() => {
       timedOut = true;
-      try { process.kill(-(/** @type {number} */ (child.pid)), "SIGKILL"); } catch (error) { console.error(`mutate-diff: the timed-out run had already gone: ${error}`); }
+      try { process.kill(-((child.pid as number)), "SIGKILL"); } catch (error) { console.error(`mutate-diff: the timed-out run had already gone: ${error}`); }
     }, timeoutMs);
     child.on("close", (code) => { clearTimeout(timer); resolve({ code, timedOut, ms: Date.now() - started, tail }); });
   });
@@ -330,9 +328,7 @@ async function runOneMutant({ cwd, mutant, original, run }: { cwd: string; mutan
   return verdict;
 }
 
-/**
- * @typedef {{ ran: number, killed: number, timedOut: number, survivors: Mutant[], cutByBudget: number }} Hunt
- */
+export type Hunt = { ran: number, killed: number, timedOut: number, survivors: Mutant[], cutByBudget: number };
 
 /**
  * Run the mutants one at a time until they are done or the wall budget is spent. The budget gates STARTING a mutant,
@@ -353,7 +349,7 @@ export async function hunt({ mutants, cwd, run, budgetSeconds, now = Date.now }:
   for (const mutant of mutants) {
     if (now() - started >= budgetSeconds * MS) { result.cutByBudget = mutants.length - result.ran; break; }
     if (!originals.has(mutant.file)) originals.set(mutant.file, readFileSync(path.join(cwd, mutant.file), "utf8"));
-    const verdict = await runOneMutant({ cwd, mutant, original: /** @type {string} */ (originals.get(mutant.file)), run });
+    const verdict = await runOneMutant({ cwd, mutant, original: (originals.get(mutant.file) as string), run });
     result.ran++;
     if (verdict === "survived") result.survivors.push(mutant);
     else if (verdict === "timeout") result.timedOut++;
@@ -364,11 +360,7 @@ export async function hunt({ mutants, cwd, run, budgetSeconds, now = Date.now }:
 
 // ---- the whole run -----------------------------------------------------------------------------------------------
 
-/**
- * @typedef {{ tests: string[], subjects: string[], generated: number, discarded: number, eligible: number,
- *   planned: number, maxMutants: number, budgetSeconds: number, baselineSeconds: number | null,
- *   baselineRed: boolean, baselineTail: string, hunt: Hunt }} Report
- */
+export type Report = { tests: string[], subjects: string[], generated: number, discarded: number, eligible: number, planned: number, maxMutants: number, budgetSeconds: number, baselineSeconds: number | null, baselineRed: boolean, baselineTail: string, hunt: Hunt };
 
 /** @returns {Hunt} */
 const nothingRan = (): Hunt => ({ ran: 0, killed: 0, timedOut: 0, survivors: [], cutByBudget: 0 });

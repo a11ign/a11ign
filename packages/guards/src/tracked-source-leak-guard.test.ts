@@ -29,7 +29,7 @@
  *
  * A regex cannot make any of these calls, which is why this is a table with a reason on every row, never
  * a bare list — the same discipline `tracked-prose-leak-guard.test.ts` already established. Reused rather
- * than duplicated: `allLeaksIn` (`leak-patterns.mjs`) is the one matcher both files drive.
+ * than duplicated: `allLeaksIn` (`leak-patterns.ts`) is the one matcher both files drive.
  *
  * ## #119: this file's IPv4-pattern EXEMPT entries are now the ONLY copy
  *
@@ -59,7 +59,7 @@
  * exposed it at scale: an Intel driver INF's Windows platform-version decorations
  * (`NTamd64.10.0.1..17763`) and ordinary npm semver in `package-lock.json` (`"10.0.0"`) both satisfy
  * three octets and neither is an address — 444 and ~30 false matches respectively, gone entirely once
- * `leak-patterns.mjs`'s pattern was corrected to spell each branch's own full four-octet shape. Fixed
+ * `leak-patterns.ts`'s pattern was corrected to spell each branch's own full four-octet shape. Fixed
  * there rather than here, since every consumer (`tracked-prose-leak-guard.test.ts`,
  * `roles-memory.test.ts`) shares the one matcher and the bug reached all three.
  *

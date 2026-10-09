@@ -89,11 +89,11 @@ export const EDGE_KINDS = Object.freeze(["import", "path-literal", "launcher", "
  */
 const DISPOSITION = /^(?:cut|by-name|checkout-path|moves-with:([\w-]+)|owned-by:#\d+)$/;
 
-/** @typedef {{ declaredLine: number, readLine: number }} Via */
-/** @typedef {{ from: string, to: string, kind: string, direction: "in" | "out", via?: Via }} Edge */
-/** @typedef {Edge & { disposition: string, reason: string }} BaselineEntry */
-/** @typedef {{ has(path: string): boolean }} PathIndex */
-/** @typedef {{ literal: string, kind: string, via?: Via }} Reach */
+export type Via = { declaredLine: number, readLine: number };
+export type Edge = { from: string, to: string, kind: string, direction: "in" | "out", via?: Via };
+export type BaselineEntry = Edge & { disposition: string, reason: string };
+export type PathIndex = { has(path: string): boolean };
+export type Reach = { literal: string, kind: string, via?: Via };
 
 /**
  * `packages/<name>/...` -> `name`; anything else (root, scripts, docs, .github) is not in a package.
@@ -217,7 +217,8 @@ function argumentsOfCall(src: string, open: number, lookup: Lookup): Argument[] 
   return args;
 }
 
-/** @typedef {{ options: string[], declaredAt?: number }} Argument one direct argument: the paths it can hold, and where a `const` that supplied them was written */
+/** one direct argument: the paths it can hold, and where a `const` that supplied them was written */
+export type Argument = { options: string[], declaredAt?: number };
 
 /** @param {string} src @param {number} i */
 const startsIdentifier = (src: string, i: number) =>
@@ -245,17 +246,18 @@ function optionsOf(binding: Binding | undefined, prop: string | undefined): stri
 // so is one in a list that a loop or an array method walks into a read. Each name is bound over the SPAN in which it is
 // visible, and a read is judged on the binding that is innermost at the read -- a `const` shadowed by a different value in
 // an inner block is the inner value there and the outer one after the block ends.
-/** @typedef {{ values: string[], byProp: Map<string, string[]>, container: boolean, declaredAt?: number }} Bound `declaredAt`: the offset of the declaration (or list literal) the strings were written in */
-/** @typedef {{ name: string, from: number, to: number, value: Bound }} Binding */
+/** `declaredAt`: the offset of the declaration (or list literal) the strings were written in */
+export type Bound = { values: string[], byProp: Map<string, string[]>, container: boolean, declaredAt?: number };
+export type Binding = { name: string, from: number, to: number, value: Bound };
 /** The 1-based line of offset `at`; comments are blanked in place, so it is the line in the file. @param {string} src @param {number} at */
 const lineAt = (src: string, at: number) => src.slice(0, at).split("\n").length;
 
-/** @typedef {{ close: Map<number, number>, open: Map<number, number> }} Pairs */
-/** @typedef {(name: string, at: number) => Binding | undefined} Lookup */
-/** @typedef {{ src: string, pairs: Pairs, lookup: Lookup }} Scope */
-/** @typedef {{ names: { name: string, key: string | null }[], from: number, to: number, over: Bound }} Iteration */
+export type Pairs = { close: Map<number, number>, open: Map<number, number> };
+export type Lookup = (name: string, at: number) => Binding | undefined;
+export type Scope = { src: string, pairs: Pairs, lookup: Lookup };
+export type Iteration = { names: { name: string, key: string | null }[], from: number, to: number, over: Bound };
 
-const NOTHING = /** @type {Bound} */ ({ values: [], byProp: new Map(), container: false });
+const NOTHING = ({ values: [], byProp: new Map(), container: false } as Bound);
 const ARRAY_METHODS = "map|forEach|filter|flatMap|some|every|find|findIndex";
 
 /**
@@ -332,7 +334,7 @@ function valueAt(/** @type {Scope} */ scope: Scope, /** @type {number} */ from: 
   const at = from + (wrapped?.[0].length ?? 0);
   const c = scope.src[at];
   if (c === '"' || c === "'" || c === "`") {
-    return /** @type {Bound} */ ({ values: [readQuoted(scope.src, at, Math.min(scope.src.length, at + MAX_CALL_CHARS)).text], byProp: new Map(), container: false });
+    return ({ values: [readQuoted(scope.src, at, Math.min(scope.src.length, at + MAX_CALL_CHARS)).text], byProp: new Map(), container: false } as Bound);
   }
   const end = scope.pairs.close.get(at);
   return (c === "[" || c === "{") && end !== undefined ? containerBetween(scope, at, end) : NOTHING;
@@ -611,7 +613,7 @@ function stripTextComments(path: string, text: string) {
   return text.replace(line, (m) => " ".repeat(m.length));
 }
 
-const KIND_BY_FILE = /** @type {const} */ ([[LAUNCHER_FILE, "launcher"], [WORKFLOW_FILE, "workflow"], [CONFIG_FILE, "config"]]);
+const KIND_BY_FILE = ([[LAUNCHER_FILE, "launcher"], [WORKFLOW_FILE, "workflow"], [CONFIG_FILE, "config"]] as const);
 
 /**
  * The literals a file reaches by. Code is read by flow; everything else by token.

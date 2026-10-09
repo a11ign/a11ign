@@ -9,7 +9,7 @@
  */
 import { execFileSync } from "node:child_process";
 
-/** @typedef {{ kind: "ok", value: unknown } | { kind: "refused" } | { kind: "unreadable", why: string }} GhRead */
+export type GhRead = { kind: "ok", value: unknown } | { kind: "refused" } | { kind: "unreadable", why: string };
 
 const REFUSED_STATUSES = new Set(["403", "404"]);
 
@@ -22,7 +22,7 @@ export function ghApiRead(path: string): GhRead {
     const out = execFileSync("gh", ["api", path], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
     return { kind: "ok", value: JSON.parse(out) };
   } catch (cause) {
-    const stderr = String(/** @type {{ stderr?: unknown }} */ (cause).stderr ?? "");
+    const stderr = String((cause as { stderr?: unknown }).stderr ?? "");
     const status = /HTTP (\d{3})/.exec(stderr)?.[1];
     return status !== undefined && REFUSED_STATUSES.has(status)
       ? { kind: "refused" }

@@ -21,19 +21,27 @@
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 
-/**
- * @typedef {object} WalkChoices
- * @property {(name: string) => boolean} [skipDirectory] a directory NOT to descend, by entry name. The
- *   caller's own decision: `node_modules` and `dist` are not source to most walks here, and are to none.
- * @property {(name: string) => boolean} [keepFile] a file to REPORT, by entry name. Defaults to all of
- *   them, so a caller that wants every file says nothing.
- * @property {boolean} [skipVanishedDirectories] a directory that was LISTED and is gone by the time the
- *   walk descends into it is skipped rather than thrown. For a caller that walks a tree other processes
- *   are writing into (#2255): a test that plants a temp directory inside the repository and removes it
- *   in a `finally` leaves a window between the parent's listing and this walk's read of the child. Only
- *   `ENOENT`, and only for a directory BELOW the root -- a missing root is still a caller's mistake, and
- *   any other error (`EACCES`, `ELOOP`) is still a real defect that the walk is positioned to see.
- */
+export type WalkChoices = {
+  /**
+   * a directory NOT to descend, by entry name. The
+   * caller's own decision: `node_modules` and `dist` are not source to most walks here, and are to none.
+   */
+  skipDirectory?: (name: string) => boolean;
+  /**
+   * a file to REPORT, by entry name. Defaults to all of
+   * them, so a caller that wants every file says nothing.
+   */
+  keepFile?: (name: string) => boolean;
+  /**
+   * a directory that was LISTED and is gone by the time the
+   * walk descends into it is skipped rather than thrown. For a caller that walks a tree other processes
+   * are writing into (#2255): a test that plants a temp directory inside the repository and removes it
+   * in a `finally` leaves a window between the parent's listing and this walk's read of the child. Only
+   * `ENOENT`, and only for a directory BELOW the root -- a missing root is still a caller's mistake, and
+   * any other error (`EACCES`, `ELOOP`) is still a real defect that the walk is positioned to see.
+   */
+  skipVanishedDirectories?: boolean;
+};
 
 /**
  * Every file beneath `root`, depth-first, each directory's entries in name order, joined onto `root` as
@@ -93,7 +101,7 @@ function childEntries(dir: string, { skipVanishedDirectories = false }: WalkChoi
   try {
     return readdirSync(dir, { withFileTypes: true });
   } catch (cause) {
-    const code = /** @type {NodeJS.ErrnoException} */ (cause).code;
+    const code = (cause as NodeJS.ErrnoException).code;
     if (skipVanishedDirectories && code === "ENOENT") return null;
     throw cause;
   }

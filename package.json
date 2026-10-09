@@ -10,7 +10,7 @@
     "npm": "use pnpm instead: run pnpm install"
   },
   "scripts": {
-    "mutate": "node packages/guards/src/mutation-check.ts",
+    "mutate": "tsx packages/guards/src/mutation-check.ts",
     "guards:sweep": "node packages/guards/src/tree-wide-guards.mjs | xargs node packages/guards/src/assert-glob-not-empty.mjs --min=1 --run --runner=rstest",
     "npm-token:check": "node scripts/npm-token-liveness.mjs",
     "spike": "tsx packages/lab/src/harnesses/run-spike.ts",

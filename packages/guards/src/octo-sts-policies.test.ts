@@ -1,5 +1,5 @@
 // no-token: gh -- every test below drives a pure checker over fixtures, a temp directory, and this repository's own `.github/chainguard/`;
-// the `gh api` reads (`ghApiRead`, in `gh-api-read.mjs`) are reached only from the live test, which returns before it unless
+// the `gh api` reads (`ghApiRead`, in `gh-api-read.ts`) are reached only from the live test, which returns before it unless
 // `A11Y_CHECK_OCTO_STS_POLICIES=1`, and the acceptance job sets neither that nor a token.
 /**
  * #4192: NO OCTO STS POLICY MAY NAME OR GRANT ON `corpus-backups` OR `auth-capture-check`.

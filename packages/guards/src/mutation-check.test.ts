@@ -1,5 +1,5 @@
 /**
- * `mutation-check.mjs` is a COMMAND, not a library: it exports nothing, so every case here runs it as a child process against a
+ * `mutation-check.ts` is a COMMAND, not a library: it exports nothing, so every case here runs it as a child process against a
  * fixture file in a temp directory (never a file of this repository: the tool rewrites the file it is given).
  *
  * What is pinned is the exit-code contract the header names, because callers read the code and not the prose:
@@ -45,7 +45,7 @@ function withFixture(body: (fx: Fixture) => void): void {
 }
 
 function runTool(fx: Fixture, args: string[]) {
-  const result = spawnSync(process.execPath, [SCRIPT, ...args], {
+  const result = spawnSync(process.execPath, ["--import", import.meta.resolve("tsx"), SCRIPT, ...args], {
     cwd: fx.dir, encoding: "utf8", env: { ...process.env, TMPDIR: fx.scratch },
   });
   return { status: result.status, stdout: result.stdout, stderr: result.stderr };

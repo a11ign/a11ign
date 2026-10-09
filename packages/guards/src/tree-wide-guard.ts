@@ -37,7 +37,7 @@ let tsModule: typeof import("typescript") | null = null;
 /** @returns {typeof import("typescript")} */
 function typescriptModule(): typeof import("typescript") {
   if (tsModule === null) tsModule = require("typescript");
-  return /** @type {typeof import("typescript")} */ (tsModule);
+  return (tsModule as typeof import("typescript"));
 }
 
 /** Test-only: has this process actually loaded `typescript` yet -- proof the laziness is real, not
@@ -96,8 +96,8 @@ export function _lsFilesSpawnCountForTests() {
  * `scriptKind` is `undefined` for a `kind: "all"` walk -- that population isn't ts/mjs, so there is no
  * `ScriptKind` to compute, and computing one anyway is exactly the unconditional `typescript` load #795's
  * CPU follow-up traced nine seconds to.
- * @typedef {{ path: string, scriptKind: import("typescript").ScriptKind | undefined, isSelf: boolean }} WalkedFile
  */
+export type WalkedFile = { path: string, scriptKind: import("typescript").ScriptKind | undefined, isSelf: boolean };
 
 /**
  * #795: THE SHARED TREE WALK, so the SEARCH is asserted once rather than 20-odd times, each written by

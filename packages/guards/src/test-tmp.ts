@@ -69,4 +69,4 @@ process.once("exit", removeTempDirs);
 // Observes an uncaught exception without handling it. Under `node:test` a file that throws while it is loaded ends with
 // exit code 7 and no `exit` event, so this is the only place that case can be reached.
 process.once("uncaughtExceptionMonitor", removeTempDirs);
-for (const signal of /** @type {const} */ (["SIGTERM", "SIGINT", "SIGHUP"])) removeThenDieOf(signal);
+for (const signal of (["SIGTERM", "SIGINT", "SIGHUP"] as const)) removeThenDieOf(signal);

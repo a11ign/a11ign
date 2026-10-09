@@ -1,5 +1,5 @@
 /**
- * `sandbox-exhaustion.mjs` (#2158): a test sandbox that could not be built because the HOST is full says so, on one line, instead of a bare errno.
+ * `sandbox-exhaustion.ts` (#2158): a test sandbox that could not be built because the HOST is full says so, on one line, instead of a bare errno.
  *
  * What is pinned:
  *   1. WHAT COUNTS AS EXHAUSTION. `error.code` of ENOSPC/EDQUOT/EACCES, or (for a spawned child, which carries no code) the two CAPACITY phrases in the message

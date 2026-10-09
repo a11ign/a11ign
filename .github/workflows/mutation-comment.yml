@@ -63,7 +63,7 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
         run: >
-          node packages/guards/src/mutate-diff.ts "origin/$BASE_REF" HEAD
+          pnpm exec tsx packages/guards/src/mutate-diff.ts "origin/$BASE_REF" HEAD
           --comment="$RUNNER_TEMP/mutation-comment.md" --summary="$RUNNER_TEMP/mutation-summary.md"
 
       - name: Job summary (no token needed)
