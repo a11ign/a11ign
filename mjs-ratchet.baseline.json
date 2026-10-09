@@ -71,6 +71,7 @@
     "lay-layer.mjs",
     "local-import-closure.mjs",
     "manifest-repository-check.mjs",
+    "mutation-check.mjs",
     "not-working-numbering.mjs",
     "npm-cli-executable.mjs",
     "npm-token-liveness.mjs",

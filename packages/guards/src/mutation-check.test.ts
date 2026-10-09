@@ -1,5 +1,5 @@
 /**
- * `mutation-check.ts` is a COMMAND, not a library: it exports nothing, so every case here runs it as a child process against a
+ * `mutation-check.mjs` is a COMMAND, not a library: it exports nothing, so every case here runs it as a child process against a
  * fixture file in a temp directory (never a file of this repository: the tool rewrites the file it is given).
  *
  * What is pinned is the exit-code contract the header names, because callers read the code and not the prose:
@@ -17,12 +17,11 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { createRequire } from "node:module";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const SCRIPT = join(REPO_ROOT, "packages/guards/src/mutation-check.ts");
+const SCRIPT = join(REPO_ROOT, "packages/guards/src/mutation-check.mjs");
 const EXIT = { BITES: 0, DID_NOT_BITE: 1, REFUSED: 2, RESTORE_FAILED: 3 };
 const GOOD = "value = good\n";
 /** The tool names at most this many failing tests; the fixture reports two more than that. */
@@ -39,17 +38,14 @@ function withFixture(body: (fx: Fixture) => void): void {
   try {
     spawnSync("mkdir", [scratch]);
     writeFileSync(file, GOOD);
-    body({ dir, file, scratch, stashes: () => readdirSync(scratch).filter((name) => !name.startsWith("tsx-")) });  // tsx keeps its own cache in TMPDIR
+    body({ dir, file, scratch, stashes: () => readdirSync(scratch) });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 }
 
-// #4273: the script is TypeScript, and a bare `node` cannot run one (ADR 0043 Decision 8: `node --import tsx`).
-const TSX = pathToFileURL(createRequire(import.meta.url).resolve("tsx")).href;
-
 function runTool(fx: Fixture, args: string[]) {
-  const result = spawnSync(process.execPath, ["--import", TSX, SCRIPT, ...args], {
+  const result = spawnSync(process.execPath, [SCRIPT, ...args], {
     cwd: fx.dir, encoding: "utf8", env: { ...process.env, TMPDIR: fx.scratch },
   });
   return { status: result.status, stdout: result.stdout, stderr: result.stderr };

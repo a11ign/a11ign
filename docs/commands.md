@@ -11,7 +11,7 @@ Regenerate with `node scripts/run.mjs docs-commands`. Checked by `commands-docum
 - `node packages/guards/src/layer-edges.ts` — `node packages/guards/src/layer-edges.ts --check` -- every reach across a LAYER package's boundary, by path, against a baseline (#2612)
 - `node packages/guards/src/mutant-survivors.ts` — choose mutants on a diff's changed lines by machine, run the named tests against each, and list the survivors
 - `node packages/guards/src/mutate-diff.ts` — mutate the lines a pull request ADDED, run the tests it CHANGED, and report the survivors (#3282, decided on #3213)
-- `node packages/guards/src/mutation-check.ts` — prove a guard actually bites: mutate a file, confirm its test fails, restore, confirm it passes
+- `node packages/guards/src/mutation-check.mjs` — prove a guard actually bites: mutate a file, confirm its test fails, restore, confirm it passes
 - `node packages/guards/src/piped-exit-status-guard.mjs` — detect a piped command whose exit status was read from the wrong side of the pipe
 - `node packages/guards/src/test-memory-cap.mjs` — run a test runner under a per-process memory cap (systemd-run MemoryMax) and say what the cap did
 - `node packages/guards/src/tree-wide-guards.mjs` — every tracked *.test.ts file that DECLARES ITSELF a TREE-WIDE GUARD by importing and calling
