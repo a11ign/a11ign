@@ -28,6 +28,7 @@ import { resolve } from "node:path";
 
 import { layerFile } from "../../guards/src/layer-file.mjs";
 import type { CaptureStructure, CaptureInteraction, CaptureResult } from "./index.js";
+import type { OracleCounts } from "./verify.js";
 
 /** The sweep names `capture-core` writes into `structure`, and the probes it writes into `interaction`. */
 // `frames` added with capture-protocol 11 — the iframe sweep. This list and the type must move
@@ -82,6 +83,26 @@ test("CaptureResult declares every field a capture response carries, environment
     },
   };
   assert.deepEqual(Object.keys(declared).sort(), [...EMITTED_RESULT].sort());
+});
+
+// What a `formInputs[]` entry carries: the 1.3.5 pair, 3.3.8's `pasteCancelled` (#4324) and 3.3.7's three (#4362).
+const EMITTED_FORM_INPUT = ["tag", "type", "autocomplete", "pasteCancelled", "form", "required",
+  "populatedFromEarlier"];
+
+test("formInputs entries declare every key the census writes, in both published types", () => {
+  // Compile-time, as above: an undeclared key in an object LITERAL is a tsc error, so each type gets its own
+  // literal (assigning one typed variable to the other checks nothing, because extra keys pass). Both types
+  // are named because they are declared separately and drifted apart once (#4355 typed one, #4362 the other two).
+  const captured: Required<NonNullable<CaptureResult["formInputs"]>[number]> = {
+    tag: "input", type: "text", autocomplete: null, pasteCancelled: false, form: 0, required: true,
+    populatedFromEarlier: false,
+  };
+  const counted: Required<NonNullable<OracleCounts["formInputs"]>[number]> = {
+    tag: "input", type: "text", autocomplete: null, pasteCancelled: false, form: 0, required: true,
+    populatedFromEarlier: false,
+  };
+  assert.deepEqual(Object.keys(captured).sort(), [...EMITTED_FORM_INPUT].sort());
+  assert.deepEqual(Object.keys(counted).sort(), [...EMITTED_FORM_INPUT].sort());
 });
 
 test("the emitted lists are not empty, so this cannot pass having declared nothing", () => {
