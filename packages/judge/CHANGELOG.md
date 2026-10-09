@@ -1,5 +1,31 @@
 # @a11ign/judge
 
+## 0.4.1
+
+### Patch Changes
+
+- Updated dependencies [38d5ec9]
+  - @a11ign/evidence@0.3.1
+  - @a11ign/scorer@0.3.1
+
+## 0.4.0
+
+### Minor Changes
+
+- aed675e: 3.3.8 Accessible Authentication (Minimum) can now produce a finding: a password field whose paste event is cancelled is a REFERRED finding (`secondary`, so `cantTell`, never asserted), read from an optional `formInputs[].pasteCancelled` and silent when it is absent or false. The criterion's coverage note cites the Understanding page's own paste text and no longer cites F109, which is titled "preventing password or code re-entry in the same format" (#4259). No worker-side census populates the field on a real capture yet, so the rule has not fired on a real page.
+
+## 0.3.0
+
+### Minor Changes
+
+- f2e2697: `exports` and `bin` now point at `.mjs` (and `.d.ts` for types) where they pointed at `.js`, because the packages are built by Rslib instead of `tsc --build`: a deep import of `<package>/dist/<file>.js` stops resolving, and the CLI's `bin` is `./dist/cli.mjs`, so this is `minor` (a breaking change on a 0.x package) for each of the four. The CLI is also now one bundle that inlines `@a11ign/documents` (and the `pdf-lib` behind it) and `yaml`, so a consumer no longer installs them (#3580, ADR 0043).
+
+### Patch Changes
+
+- Updated dependencies [f2e2697]
+  - @a11ign/evidence@0.3.0
+  - @a11ign/scorer@0.3.0
+
 ## 0.2.3
 
 ### Patch Changes
