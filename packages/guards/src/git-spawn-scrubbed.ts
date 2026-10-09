@@ -31,8 +31,8 @@ type CallExpression = Extract<Rule.Node, { type: "CallExpression" }>;
 type Identifier = Extract<Rule.Node, { type: "Identifier" }>;
 type Literal = Extract<Rule.Node, { type: "Literal" }>;
 
-/** The helpers a spawn may go through, by basename -- real imports are relative, so the path varies. */
-const CANONICAL_HELPER_BASENAMES = ["git-env.ts", "git-safe-env.mjs", "git-sandbox.ts"];
+/** The helpers a spawn may go through, by basename -- real imports are relative, so the path varies. `git-safe-env` takes both spellings: `control` laid at a tag that imports fleet 0.5.x says `.mjs`, one that imports 0.6.0 says `.ts` (#4514). */
+const CANONICAL_HELPER_BASENAMES = ["git-env.ts", "git-safe-env.mjs", "git-safe-env.ts", "git-sandbox.ts"];
 
 /** Calling one of these is what makes the import USED rather than merely present. */
 const HELPER_CALLS = new Set(["sandboxGitEnv", "withGitSandbox"]);
