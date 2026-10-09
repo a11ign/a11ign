@@ -60,7 +60,7 @@ function workflowFaults(workflow: Workflow): string[] {
   return faults;
 }
 
-/** Every command that writes a ref must name the major tag, or CREATE (POST) the exact `v<version>` tag: a per-version tag is never moved. */
+/** Every command that writes a ref must name the major tag, or CREATE (POST) the exact `v<version>` tag (or `v<older>`, #4544): a per-version tag is never moved. */
 function tagWriteFaults(script: string): string[] {
   const faults: string[] = [];
   if (/--delete|-X\s*DELETE|--method\s*DELETE|git push|git tag\b|update-ref/.test(script)) faults.push("the tag job deletes, pushes or tags by another route than the one write");
@@ -68,7 +68,9 @@ function tagWriteFaults(script: string): string[] {
   const writes = [...joined.matchAll(/gh api[^\n]*git\/refs[^\n]*/g)].map((m) => m[0]);
   if (writes.length === 0) faults.push("the tag job has no `gh api … git/refs` write");
   const createsVersionTag = (write: string) => /-X\s*POST/.test(write) && /refs\/tags\/\$\{?version_tag\}?/.test(write);
-  for (const write of writes) if (!/refs\/tags\/\$\{?major_tag\}?/.test(write) && !createsVersionTag(write)) faults.push(`a ref write that does not name $major_tag: ${write.trim()}`);
+  // The older versions a promotion leapt over (#4544) are created the same way, at their own tag's commit, and still never moved.
+  const createsOlderTag = (write: string) => /-X\s*POST/.test(write) && /refs\/tags\/v\$\{?older\}?/.test(write);
+  for (const write of writes) if (!/refs\/tags\/\$\{?major_tag\}?/.test(write) && !createsVersionTag(write) && !createsOlderTag(write)) faults.push(`a ref write that does not name $major_tag: ${write.trim()}`);
   if (!writes.some(createsVersionTag)) faults.push("the tag job never creates the exact v<version> tag (#4058)");
   if (!/version_tag="v\$version"/.test(script)) faults.push("the exact tag is not derived as v<version> of the promoted version");
   if (!/major_tag="v\$\{version%%\.\*\}"/.test(script)) faults.push("the major tag is not derived as v<major> of the promoted version");
@@ -161,6 +163,8 @@ interface Scenario {
   writes?: { kind: "create" | "move"; tag: string; sha: string };
   /** The exact `v<version>` tag the step must CREATE (#4058), never move; none when it is present or the step stops before it. */
   versionTag?: { tag: string; sha: string };
+  /** The `v<older>` tags of OLDER `a11ign@<older>` tags that have none, which the step must also CREATE at those tags' own commits (#4544); none when every older one is tagged. */
+  backfilled?: { tag: string; sha: string }[];
   exits: "ok" | "fail";
   says: RegExp;
 }
@@ -168,22 +172,22 @@ interface Scenario {
 const SCENARIOS: Scenario[] = [
   { name: "the first move: `v0` is absent, read from ls-remote, and is created at the promoted version's tag",
     remote: [line(C1, "a11ign@0.1.0"), line(C2, "a11ign@0.2.0")], promoted: [{ tag: "a11ign@0.2.0", sha: OTHER }],
-    writes: { kind: "create", tag: "v0", sha: C2 }, versionTag: { tag: "v0.2.0", sha: C2 }, exits: "ok", says: /v0: was absent, now C2 for 0\.2\.0/ },
+    writes: { kind: "create", tag: "v0", sha: C2 }, versionTag: { tag: "v0.2.0", sha: C2 }, backfilled: [{ tag: "v0.1.0", sha: C1 }], exits: "ok", says: /v0: was absent, now C2 for 0\.2\.0/ },
   { name: "a newer version: `v0` follows 0.1.0 and moves to 0.2.0, naming the old target, the new one and the version",
     remote: [line(C1, "a11ign@0.1.0"), line(C2, "a11ign@0.2.0"), line(C1, "v0")], promoted: [{ tag: "a11ign@0.2.0", sha: OTHER }],
-    writes: { kind: "move", tag: "v0", sha: C2 }, versionTag: { tag: "v0.2.0", sha: C2 }, exits: "ok", says: /v0: was C1.* now C2 for 0\.2\.0/ },
+    writes: { kind: "move", tag: "v0", sha: C2 }, versionTag: { tag: "v0.2.0", sha: C2 }, backfilled: [{ tag: "v0.1.0", sha: C1 }], exits: "ok", says: /v0: was C1.* now C2 for 0\.2\.0/ },
   { name: "an ANNOTATED per-version tag is read through its peeled commit, not the tag object",
     remote: [line(OTHER, "a11ign@0.2.0"), line(C2, "a11ign@0.2.0^{}"), line(C1, "v0"), line(C1, "a11ign@0.1.0")], promoted: [{ tag: "a11ign@0.2.0", sha: OTHER }],
-    writes: { kind: "move", tag: "v0", sha: C2 }, versionTag: { tag: "v0.2.0", sha: C2 }, exits: "ok", says: /now C2/ },
+    writes: { kind: "move", tag: "v0", sha: C2 }, versionTag: { tag: "v0.2.0", sha: C2 }, backfilled: [{ tag: "v0.1.0", sha: C1 }], exits: "ok", says: /now C2/ },
   { name: "ten is newer than nine: the order is by version, not by text",
     remote: [line(C1, "a11ign@0.9.0"), line(C2, "a11ign@0.10.0"), line(C1, "v0")], promoted: [{ tag: "a11ign@0.10.0", sha: OTHER }],
-    writes: { kind: "move", tag: "v0", sha: C2 }, versionTag: { tag: "v0.10.0", sha: C2 }, exits: "ok", says: /for 0\.10\.0/ },
+    writes: { kind: "move", tag: "v0", sha: C2 }, versionTag: { tag: "v0.10.0", sha: C2 }, backfilled: [{ tag: "v0.9.0", sha: C1 }], exits: "ok", says: /for 0\.10\.0/ },
   { name: "a re-run: `v0` is already at the version's commit, so nothing is written and the log says so",
     remote: [line(C2, "a11ign@0.2.0"), line(C2, "v0.2.0"), line(C2, "v0")], promoted: [{ tag: "a11ign@0.2.0", sha: OTHER }],
     exits: "ok", says: /already at C2/ },
   { name: "a re-run before `v0` moved: `v0.2.0` is present at the commit, so it is left and only `v0` moves",
     remote: [line(C1, "a11ign@0.1.0"), line(C2, "a11ign@0.2.0"), line(C2, "v0.2.0"), line(C1, "v0")], promoted: [{ tag: "a11ign@0.2.0", sha: OTHER }],
-    writes: { kind: "move", tag: "v0", sha: C2 }, exits: "ok", says: /v0\.2\.0: already at C2; left/ },
+    writes: { kind: "move", tag: "v0", sha: C2 }, backfilled: [{ tag: "v0.1.0", sha: C1 }], exits: "ok", says: /v0\.2\.0: already at C2; left/ },
   { name: "`v0.2.0` exists at ANOTHER commit: CANNOT_TELL, red, and neither it nor `v0` is written",
     remote: [line(C1, "a11ign@0.1.0"), line(C2, "a11ign@0.2.0"), line(C3, "v0.2.0"), line(C1, "v0")], promoted: [{ tag: "a11ign@0.2.0", sha: OTHER }],
     exits: "fail", says: /CANNOT_TELL.*v0\.2\.0.*never moved/ },
@@ -207,7 +211,7 @@ const SCENARIOS: Scenario[] = [
     exits: "ok", says: /no version of the Action was promoted/ },
   { name: "a 1.x version moves `v1` and never `v0`",
     remote: [line(C1, "a11ign@0.9.0"), line(C1, "v0"), line(C2, "a11ign@1.0.0")], promoted: [{ tag: "a11ign@1.0.0", sha: OTHER }],
-    writes: { kind: "create", tag: "v1", sha: C2 }, versionTag: { tag: "v1.0.0", sha: C2 }, exits: "ok", says: /v1: was absent/ },
+    writes: { kind: "create", tag: "v1", sha: C2 }, versionTag: { tag: "v1.0.0", sha: C2 }, backfilled: [{ tag: "v0.9.0", sha: C1 }], exits: "ok", says: /v1: was absent/ },
 ];
 
 interface Ran { code: number; out: string; calls: string[] }
@@ -264,15 +268,26 @@ function scenarioFaults(script: string): string[] {
   return refused;
 }
 
-/** The exact `v<version>` tag is CREATED (POST) at the commit of `a11ign@<version>` when the scenario says so, and is otherwise not written at all. */
+/** Each of these `v<version>` tags is CREATED (POST) at the commit wanted and is otherwise not written at all: exactly these, no more. */
+function createdExactly(wanted: { tag: string; sha: string }[], written: string[], what: string): string[] {
+  if (written.length !== wanted.length) return [`wanted ${wanted.length} ${what} write(s), saw ${written.length}: ${written.join(" | ")}`];
+  return wanted.flatMap(({ tag, sha }) => {
+    const write = written.find((w) => w.includes(`refs/tags/${tag} `));
+    if (!write) return [`no ${what} write for ${tag}: ${written.join(" | ")}`];
+    return [
+      ...(/-X POST/.test(write) ? [] : [`a v<version> tag is created, never moved: ${write}`]),
+      ...(write.includes(sha) ? [] : [`wrong commit for ${tag}: ${write}`]),
+    ];
+  });
+}
+
+/** The promoted version's `v<version>` (#4058) and the older ones the promotion leapt over (#4544) are told apart by the tag the scenario names. */
 function versionTagFaults(scenario: Scenario, written: string[]): string[] {
-  const want = scenario.versionTag;
-  if (!want) return written.length > 0 ? [`wrote a v<version> tag when it must not: ${written.join(" | ")}`] : [];
-  if (written.length !== 1) return [`wanted exactly one v<version> write, saw ${written.length}: ${written.join(" | ")}`];
-  const [write] = written;
+  const promoted = scenario.versionTag ? written.filter((w) => w.includes(`refs/tags/${scenario.versionTag?.tag} `)) : [];
+  const others = written.filter((w) => !promoted.includes(w));
   return [
-    ...(/-X POST/.test(write) ? [] : [`a v<version> tag is created, never moved: ${write}`]),
-    ...(write.includes(`refs/tags/${want.tag} `) && write.includes(want.sha) ? [] : [`wrong v<version> tag or commit: ${write}`]),
+    ...createdExactly(scenario.versionTag ? [scenario.versionTag] : [], promoted, "promoted v<version>"),
+    ...createdExactly(scenario.backfilled ?? [], others, "older v<version>"),
   ];
 }
 
@@ -340,4 +355,10 @@ test("a step that moves on EVERY input is refused by the older, equal, unaccount
 test("a step that never moves is refused by exactly the rows that must move the tag", () => {
   const refused = scenarioFaults(NEVER_MOVES);
   for (const scenario of SCENARIOS.filter((s) => s.writes)) assert.ok(refused.includes(scenario.name), `${scenario.name} was not refused`);
+});
+
+test("a tag job that MOVES an older v<older> tag is refused, while the loop that creates them is accepted (#4544)", () => {
+  assert.deepEqual(workflowFaults(mutated(() => undefined)), []);
+  const faults = workflowFaults(mutated((job) => withScript(job, (s) => `${s}\ngh api -X PATCH "repos/$GH_REPO/git/refs/tags/v$older" -f sha="$new" -F force=true\n`)));
+  assert.ok(faults.some((f) => /does not name \$major_tag/.test(f)), faults.join("; "));
 });
