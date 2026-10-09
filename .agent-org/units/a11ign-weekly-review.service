@@ -50,7 +50,7 @@ ExecStartPre=-%h/.local/bin/agent-org primary:update
 #
 # `pnpm exec agent-org row-file` RESOLVES THROUGH THE PRIMARY'S REAL node_modules (`.bin/agent-org`, installed by
 # pnpm there), not a symlinked tree; `npm-cli-executable.ts` finds the shim on the PATH above.
-ExecStart=/usr/bin/sh -c 'GITHUB_SHA="$$(git rev-parse HEAD)" exec /usr/bin/node --import tsx scripts/weekly-review.ts'
+ExecStart=/usr/bin/sh -c 'GITHUB_SHA="$$(git rev-parse HEAD)" exec %h/.local/bin/node --import tsx scripts/weekly-review.ts'
 
 TimeoutStartSec=300
 

@@ -45,7 +45,7 @@ Environment="A11Y_POLICY_LAUNCH_REASON=host timer: row-file --board= calls gh, a
 # does not stop the rest: `rc` carries the failure out, so the journal shows a red line for THAT row and a red unit.
 # `--board=` leaves a row already on the board alone, in any Status, and exits 0 saying so. `--limit 200` is far above the
 # one-row-per-version rate this serves. `$$` is systemd's spelling of a literal `$`.
-ExecStart=/usr/bin/sh -c 'rows="$$(gh issue list --repo a11ign/a11ign --label regression --state open --limit 200 --json number --jq ".[].number")" || exit 1; rc=0; for n in $$rows; do /usr/bin/node %h/repos/agent-org/src/bin.mjs row-file --board="$$n" --lane=any || rc=1; done; exit "$$rc"'
+ExecStart=/usr/bin/sh -c 'rows="$$(gh issue list --repo a11ign/a11ign --label regression --state open --limit 200 --json number --jq ".[].number")" || exit 1; rc=0; for n in $$rows; do %h/.local/bin/node %h/repos/agent-org/src/bin.mjs row-file --board="$$n" --lane=any || rc=1; done; exit "$$rc"'
 
 TimeoutStartSec=300
 

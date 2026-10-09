@@ -54,7 +54,7 @@ EnvironmentFile=-%h/.config/a11ign/fleet.env
 # update non-fatal: a firing against a slightly stale checkout is worth far more than no firing at all.
 ExecStartPre=-%h/.local/bin/agent-org primary:update
 
-ExecStart=/usr/bin/node packages/lab/scripts/corpus-release-nightly.mjs
+ExecStart=%h/.local/bin/node packages/lab/scripts/corpus-release-nightly.mjs
 
 # Generous relative to a11ign-fleet-gated-nightly.service's 120s: this job moves an archive of real bytes
 # over the network twice (fetch, then corpus:release's own upload-and-download verify), not just two `gh`
