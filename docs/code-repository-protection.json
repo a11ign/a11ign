@@ -3,19 +3,18 @@
   "_read": "`branch-protection.test.ts` takes its repository and branch from here (`A11Y_PROTECTION_REPO=<owner/name>`, else the primary's), `layer-repository-protection.test.ts` reads every entry, and `nightly.yml` runs the read once per listed repository. A repository that is declared but unreadable is CANNOT_TELL and never a pass. The order a new one is created in is `docs/new-code-repository.md`.",
   "_requiredCheck": "`gate` on both: `ci.yml`'s single job that every path-scoped result rolls up into (a required check with no run blocks a merge for ever), and the context `a11ign/agent-org`'s own ruleset requires.",
   "_publishes": "Whether the repository publishes to the npm registry (#3705). It decides what the `npm-publish` environment cell reads: a publisher must carry the environment, restricted to its default branch (`docs/new-code-repository.md`), and a repository that does not publish must carry none. `agent-org`, `control` and `lab` release a tag and a GitHub Release only, with no registry token by design (each `release.yml` says so, read 2026-10-05).",
-  "_tokenProbe": "Which workflow file carries the job named `token-reach` (#3710): the one that PROBES `A11IGN_BOT_TOKEN`'s reach on the write side and fails red with a `TOKEN-REACH <owner/repo>: <cause>` line. `layer-repository-protection.test.ts`'s `token` cell reads the latest run of that job on the default branch, and an entry with no `tokenProbe` reads CANNOT_TELL. `tokenUnused` (a reason) stands INSTEAD of a probe for a repository that uses the token nowhere (`documents`): the live read lists its workflows and the cell is OK `not applicable` only while none reads `secrets.A11IGN_BOT_TOKEN` on a live line, DRIFT the day one does, so the claim cannot go stale. `auto-arm.yml` wherever the repository has one and its pinned tests allow it (the arm step is the token's lasting user); `token-reach.yml` for `a11ign`, a file of its own since #3717 (its `auto-arm.yml` is pinned at two reads of the secret by `agent-org`'s `auto-arm-token.test.ts`, and `release.yml` no longer reads the token at all).",
   "_releaseShape": "Not a field of an entry: every repository's release workflow is `.github/workflows/release.yml` on its `defaultBranch`, and `layer-repository-protection.test.ts`'s `release-shape` cell parses it (#3718). A per-merge workflow reads OK and a version-pull-request workflow DRIFT; the rule is on `docs/new-code-repository.md`, under *The table*.",
   "_standardColumns": "Not fields of an entry either (#3962): `test-runner`, `release-standard`, `typecheck` and `build` are read from each repository's default branch, and the only entry field they use is `publishes` (a publisher must build with Rslib) and `requiredCheck` (the job `tsc --noEmit` must run in or be waited for by). The rule is on `docs/new-code-repository.md`, under *The standard columns*.",
   "schema": 1,
   "repositories": [
-    { "repo": "a11ign/a11ign", "defaultBranch": "main", "requiredCheck": "gate", "publishes": true, "tokenProbe": "token-reach.yml" },
-    { "repo": "a11ign/agent-org", "defaultBranch": "main", "requiredCheck": "gate", "publishes": false, "tokenProbe": "auto-arm.yml" },
-    { "repo": "a11ign/screenreader-worker", "defaultBranch": "main", "requiredCheck": "gate", "publishes": true, "tokenProbe": "auto-arm.yml" },
-    { "repo": "a11ign/screenreader-fleet", "defaultBranch": "main", "requiredCheck": "gate", "publishes": true, "tokenProbe": "auto-arm.yml" },
-    { "repo": "a11ign/control", "defaultBranch": "main", "requiredCheck": "gate", "publishes": false, "tokenProbe": "auto-arm.yml" },
-    { "repo": "a11ign/lab", "defaultBranch": "main", "requiredCheck": "gate", "publishes": false, "tokenProbe": "auto-arm.yml" },
-    { "repo": "a11ign/toolchain", "defaultBranch": "main", "requiredCheck": "gate", "publishes": true, "tokenProbe": "auto-arm.yml" },
-    { "repo": "a11ign/documents", "defaultBranch": "main", "requiredCheck": "gate", "publishes": true, "tokenUnused": "its workflows read no secret named A11IGN_BOT_TOKEN; its release.yml calls the per-merge release and names the token only in a comment saying it has none (#3716)" },
-    { "repo": "a11ign/.github", "defaultBranch": "main", "requiredCheck": "gate", "publishes": false, "tokenUnused": "it holds a README only and no workflow (read 2026-10-08, #4190); the Octo STS policy rows add the first, and the first to read secrets.A11IGN_BOT_TOKEN would be refused here" }
+    { "repo": "a11ign/a11ign", "defaultBranch": "main", "requiredCheck": "gate", "publishes": true },
+    { "repo": "a11ign/agent-org", "defaultBranch": "main", "requiredCheck": "gate", "publishes": false },
+    { "repo": "a11ign/screenreader-worker", "defaultBranch": "main", "requiredCheck": "gate", "publishes": true },
+    { "repo": "a11ign/screenreader-fleet", "defaultBranch": "main", "requiredCheck": "gate", "publishes": true },
+    { "repo": "a11ign/control", "defaultBranch": "main", "requiredCheck": "gate", "publishes": false },
+    { "repo": "a11ign/lab", "defaultBranch": "main", "requiredCheck": "gate", "publishes": false },
+    { "repo": "a11ign/toolchain", "defaultBranch": "main", "requiredCheck": "gate", "publishes": true },
+    { "repo": "a11ign/documents", "defaultBranch": "main", "requiredCheck": "gate", "publishes": true },
+    { "repo": "a11ign/.github", "defaultBranch": "main", "requiredCheck": "gate", "publishes": false }
   ]
 }

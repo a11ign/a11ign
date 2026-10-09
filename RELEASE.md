@@ -137,8 +137,8 @@ runs on the merged tree, not on the release commit,** because a guard cannot be 
 repository are kept out of the publish by the #3126 hold, a `guards` step on a push; **`changeset publish` publishes every
 non-private package whose version the registry lacks, so a package still in the workspace and not named in the hold is
 published**. A `workflow_dispatch` of `release.yml` runs the guards and the provenance rehearsal and stops: it does not call
-the reusable workflow and never publishes. The daily token-reach probe that used to live in this file is
-`.github/workflows/token-reach.yml`.
+the reusable workflow and never publishes. There is no token-reach probe any more (#4200): the arming and tag-move tokens are minted per job, so a mint that
+cannot reach is a red step at the point of use.
 
 **What nobody reads on a publish: the fleet part of the gate.** The runner proves 5 of `release:gate`'s 13
 stages (`release:gate:ci`); the other eight need the Python venv or the corpus. **No person asserts them now, and no
