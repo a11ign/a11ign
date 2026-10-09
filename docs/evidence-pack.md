@@ -13,7 +13,7 @@ document says so in its first line.
 Ask for it on the run that produces the result JSON, so the pack and the JSON describe the same capture (#4252):
 
 ```bash
-npm run witness -- https://example.com --json --evidence-pack ./a11ign-evidence-pack.md > a11ign-result.json
+pnpm run witness -- https://example.com --json --evidence-pack ./a11ign-evidence-pack.md > a11ign-result.json
 ```
 
 `--evidence-pack <file.md>` needs `--json` and takes ONE capture: it is refused with a list of pages (`--urls`) or a
