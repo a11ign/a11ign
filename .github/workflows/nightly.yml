@@ -59,7 +59,7 @@ jobs:
         with: { ref: main }
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version: 22, cache: pnpm }
+        with: { node-version: 24, cache: pnpm }
       - id: ci
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
@@ -97,7 +97,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          BODY=$(node --import tsx scripts/coverage-failure-classifier.ts \
+          BODY=$(node scripts/coverage-failure-classifier.ts \
             --ci-outcome=${{ steps.ci.outcome }} \
             --build-outcome=${{ steps.build.outcome }} \
             --log=coverage-output.log \
@@ -384,7 +384,7 @@ jobs:
         with: { ref: main }
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version: 22, cache: pnpm }
+        with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
         run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
@@ -393,7 +393,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          node --import tsx scripts/doc-cross-reference-report.ts > /tmp/doc-report.md
+          node scripts/doc-cross-reference-report.ts > /tmp/doc-report.md
           gh issue comment 928 --body-file /tmp/doc-report.md
 
   # #912: THE ORG'S CLOCK, durable. `org-watch.mjs` reads main's colour (and, as its remaining reads land,

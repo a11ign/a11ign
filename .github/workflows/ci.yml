@@ -405,7 +405,7 @@ jobs:
         with: { fetch-depth: 0 }
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version: 22, cache: pnpm }
+        with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
         run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
@@ -450,7 +450,7 @@ jobs:
         name: A dependency pull request owes the entry its diff derives
         if: steps.precise.outputs.changeset == 'true' && (startsWith(github.event.pull_request.title, 'deps:') || steps.dependencyQueue.outputs.queue == 'true')
         run: |
-          node --import tsx scripts/dependency-changeset.ts check --base=${{ needs.changed.outputs.base }} --since=${{ github.event.merge_group.base_sha }}
+          node scripts/dependency-changeset.ts check --base=${{ needs.changed.outputs.base }} --since=${{ github.event.merge_group.base_sha }}
           echo "settled=true" >> "$GITHUB_OUTPUT"
       # #4136: `no-release: <reason>` IN THE BODY SETTLES A REFUSAL HERE AS IT DOES IN THE SHARED CHECK (a11ign/toolchain
       # `changeset-required.yml`, #4127), because two vocabularies are two rules: this job's `npm pack` answer decides WHICH pull

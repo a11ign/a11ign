@@ -42,7 +42,7 @@ jobs:
       - name: Set up node
         uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
@@ -55,4 +55,4 @@ jobs:
       - name: Read CI health and post it
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node --import tsx scripts/ci-health.ts --post
+        run: node scripts/ci-health.ts --post
