@@ -1001,7 +1001,10 @@ export function reportWitnessArtifact(path: string | null): void {
     : "capture not written (--no-keep)");
 }
 
-/** The judge over a capture already narrowed to the site (`examineWithinTheSite`): `runWitness` and `runCompareAxe` judge by the same call. */
+/**
+ * The judge over a capture already narrowed to the site, for `--compare-axe`. `runWitness` keeps its own literal call: two tests pin its
+ * source shape (`left-site-acceptance.test.ts`, `multi-page.test.ts`), so this repeats it rather than moving it.
+ */
 function judgeExamined(examined: CaptureResponse, task: string): Promise<Judgment> {
   return judge({
     url: examined.url,
@@ -1061,7 +1064,17 @@ async function runWitness(
 
   process.stderr.write(`Captured ${cap.transcript.length} announcements; judging ...\n`);
   await shadowScreenReaderCapture(examined);
-  const verdict = await judgeExamined(examined, task);
+  const verdict = await judge({
+    url: examined.url,
+    task,
+    screenReader: examined.screenReader,
+    transcript: examined.transcript,
+    structure: examined.structure,
+    interaction: examined.interaction,
+    // The oracle counts, so the rules that assert an ABSENCE can corroborate it. Without these a page
+    // with no headings and a capture that failed to reach them are the same input.
+    ...oracleCounts(examined),
+  }).catch(rejectedScorer);
 
   const conformance = conformanceFor(examined, ruleFindings, left && { control: left.control, notExamined }, axe.coverage);
   // Per-criterion ACT outcomes. `truncatedSweeps` is what turns Conformance Requirement 2 into something
