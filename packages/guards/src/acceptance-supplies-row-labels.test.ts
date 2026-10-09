@@ -101,7 +101,7 @@ function runLiveBodyStep(input: { body: string; labels: Record<string, string[]>
     writeFileSync(join(bin, "gh"), FAKE_GH);
     chmodSync(join(bin, "gh"), EXECUTABLE);
     mkdirSync(join(dir, "tool/src"), { recursive: true });
-    writeFileSync(join(dir, "tool/src/acceptance-commands.mjs"), STAND_IN_TOOL);
+    writeFileSync(join(dir, "tool/src/acceptance-commands.ts"), STAND_IN_TOOL);
     const output = join(dir, "output");
     writeFileSync(output, "");
     const script = liveBodyOf(THE_TREE)?.run ?? "";
