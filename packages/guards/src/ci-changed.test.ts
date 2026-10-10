@@ -21,7 +21,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parse as parseYaml } from "yaml";
-import { sandboxGitEnv, withGitSandbox, type GitSandbox } from "../../../scripts/test-support/git-sandbox.ts";
+import { sandboxGitEnv, withGitSandbox, type GitSandbox } from "@a11ign/toolchain/lib/git-sandbox";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const ci = await import(pathToFileURL(join(REPO_ROOT, "scripts/ci-changed.ts")).href);

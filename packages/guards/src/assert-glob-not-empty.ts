@@ -40,7 +40,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { refuseUnknownFlags, flagValue } from "@a11ign/screenreader-fleet/cli-flags";
 import { pnpmCliInvocation } from "../../../scripts/npm-cli-executable.ts";
 import { suiteStartVerdict } from "@a11ign/toolchain/lib/worktree-resolution";
-import { runUnderCap } from "./test-memory-cap.ts";
+import { runUnderCap } from "@a11ign/toolchain/lib/test-memory-cap";
 
 /**
  * Pure: which of the given globs resolved to fewer than `min` files, and how many each actually matched.

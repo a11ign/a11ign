@@ -19,7 +19,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
-import { sandboxGitEnv } from "../../../scripts/test-support/git-sandbox.ts";
+import { sandboxGitEnv } from "@a11ign/toolchain/lib/git-sandbox";
 
 const REPO = fileURLToPath(new URL("../../..", import.meta.url));
 const SHELL_SINGLE_QUOTE = `'"'"'`;

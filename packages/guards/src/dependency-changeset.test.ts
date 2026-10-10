@@ -17,7 +17,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Derivation } from "../../../scripts/dependency-changeset.ts";
-import { withGitSandbox } from "../../../scripts/test-support/git-sandbox.ts";
+import { withGitSandbox } from "@a11ign/toolchain/lib/git-sandbox";
 
 const changeset = await import("../../../scripts/dependency-changeset.ts");
 const { RUNTIME_SECTIONS, refusalFor, entriesFor, deriveDependencyChangeset, renderEntry, parseEntry, checkEntries, compile } = changeset;
