@@ -37,8 +37,8 @@ importers:
         version: link:packages/cli
     devDependencies:
       '@a11ign/toolchain':
-        specifier: 0.7.0
-        version: 0.7.0(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)
+        specifier: 0.7.1
+        version: 0.7.1(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)
       '@changesets/cli':
         specifier: 3.0.3
         version: 3.0.3
@@ -108,8 +108,8 @@ importers:
         specifier: ^0.1.1
         version: 0.1.1
       '@a11ign/toolchain':
-        specifier: 0.7.0
-        version: 0.7.0(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)
+        specifier: 0.7.1
+        version: 0.7.1(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)
       axe-core:
         specifier: ^4.14.0
         version: 4.14.0
@@ -139,8 +139,8 @@ importers:
         version: link:../evidence
     devDependencies:
       '@a11ign/toolchain':
-        specifier: 0.7.0
-        version: 0.7.0(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)
+        specifier: 0.7.1
+        version: 0.7.1(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)
 
   packages/scorer:
     dependencies:
@@ -149,8 +149,8 @@ importers:
         version: link:../evidence
     devDependencies:
       '@a11ign/toolchain':
-        specifier: 0.7.0
-        version: 0.7.0(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)
+        specifier: 0.7.1
+        version: 0.7.1(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)
 
 packages:
 
@@ -202,8 +202,8 @@ packages:
       typescript:
         optional: true
 
-  '@a11ign/toolchain@0.7.0':
-    resolution: {integrity: sha512-+XeVAH45pfQmCSP6krFPfCPu3a2inQ94wAfWz8HCpmxsGoshhf3fMmp25iY6uSEmQqi5tmFlJkUMRncnCEC3uQ==}
+  '@a11ign/toolchain@0.7.1':
+    resolution: {integrity: sha512-8Yk+Z7wsKQiR793UXwF/qDkUHw6GxVZ2Sum6TBXmggHT9iozBGjQT7qN8OZ/vzzcjP6M/bXMfrcN6fsMSQW2Fw==}
     engines: {node: '>=22.15.0'}
     hasBin: true
     peerDependencies:
@@ -1978,7 +1978,7 @@ snapshots:
       '@rstest/coverage-v8': 0.12.3(@rstest/core@0.12.3)
       typescript: 6.0.3
 
-  '@a11ign/toolchain@0.7.0(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)':
+  '@a11ign/toolchain@0.7.1(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.4))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)':
     dependencies:
       '@rstest/core': 0.12.3
     optionalDependencies:
