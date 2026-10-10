@@ -229,7 +229,7 @@ test("POSITIVE CONTROL: an entry whose frontmatter names a departed package is r
 
 // ---- 5. the nvda-speech read in lab resolves through the layer checkout ----------------------------------------
 
-const HARNESS = "packages/lab/src/harnesses/occurrence-verdict-stability.mjs";
+const HARNESS = "packages/lab/src/harnesses/occurrence-verdict-stability.ts";
 /** The manifest of the real layer, over a root of the caller's choosing: the resolver is the production one, the checkout is a fixture. */
 const layerCheckoutAt = (root: string) => layersFrom({
   manifest: JSON.parse(read(REPO_ROOT, "layers.json")) as Parameters<typeof layersFrom>[0]["manifest"], root,
