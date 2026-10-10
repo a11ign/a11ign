@@ -39,10 +39,19 @@ EnvironmentFile=-%h/.config/a11ign/fleet.env
 
 ExecStartPre=-%h/.local/bin/agent-org primary:update
 
+# A CRASH BEFORE `main` MUST NOT READ AS ATTENTION (#4693). `pnpm run fleet:watch` turns an uncaught
+# ERR_MODULE_NOT_FOUND into exit 1, the same number as ATTENTION, so `SuccessExitStatus=0 1` counted every hourly
+# crash from 2026-10-09T20:47Z as `Result=success` while the fleet went unread. The script cannot be told apart by
+# its code, so the load is proved FIRST: `SuccessExitStatus` governs the main process only, so this step's exit 1
+# fails the unit. The module's own `main` runs only when it is the entry point, so importing it reads nothing and
+# posts nothing. No leading `-`: that is what would swallow the failure. `fleet-watch-unit-exit.test.ts` pins it.
+ExecStartPre=/usr/bin/env node --import tsx -e "import('./packages/control/src/fleet-watch.ts')"
+
 ExecStart=%h/.local/bin/pnpm run fleet:watch -- --post
 
 # 0 QUIET and 1 ATTENTION (already posted) are the unit doing its job; 2 CANNOT_ASK stays FAILED so a
-# fleet this could not read never looks like a healthy one. docs/gate-exit-codes.md.
+# fleet this could not read never looks like a healthy one. docs/gate-exit-codes.md. A crash that exits 1 is
+# NOT covered by this line, which is what the load check above is for.
 SuccessExitStatus=0 1
 
 TimeoutStartSec=300
