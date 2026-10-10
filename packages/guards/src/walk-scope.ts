@@ -35,7 +35,7 @@ import { after } from "node:test";
 import { fileURLToPath } from "node:url";
 import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 // The declaration's parser lives apart, so the selector can read declarations without installing this.
-import { inScope, parseWalkScope } from "./walk-scope-declaration.ts";
+import { inScope, parseWalkScope } from "@a11ign/toolchain/lib/walk-scope-declaration";
 
 export { inScope, parseWalkScope };
 
@@ -706,7 +706,7 @@ export async function declareWalkScope(testUrl: string) {
     // Dynamic, not static: the selector's module graph is loaded only when a declaring guard's tests finish,
     // and never ahead of the observer in a declarer's import order.
     const [{ sourceClosure, packageIndex }, { knownPackages }] = await Promise.all(
-      [import("./walk-scope-discovery.ts"), import("../../../scripts/ci-changed.ts")]);
+      [import("@a11ign/toolchain/lib/walk-scope-discovery"), import("../../../scripts/ci-changed.ts")]);
     const packages = packageIndex(REPO_ROOT, knownPackages(REPO_ROOT));
     const own = new Set([...sourceClosure(testPath, REPO_ROOT, packages)]
       .map((absolute) => relative(REPO_ROOT, absolute)));

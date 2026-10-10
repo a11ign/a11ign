@@ -19,7 +19,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { stripComments } from "@a11ign/evidence/source-text";
+import { stripComments } from "@a11ign/toolchain/lib/source-text";
 
 import { captureAndScan, parseArgs } from "./cli.js";
 import { AuthError } from "./auth/auth-faults.js";

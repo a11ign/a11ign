@@ -32,7 +32,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { AddressInfo } from "node:net";
-import { stripComments } from "@a11ign/evidence/source-text";
+import { stripComments } from "@a11ign/toolchain/lib/source-text";
 import { WCAG_22_AA } from "@a11ign/evidence/wcag";
 import { assessedCriteria } from "@a11ign/judge/coverage";
 import { criterionOutcomes, outcomeTally, type RuleLayerCoverage } from "@a11ign/judge/outcomes";

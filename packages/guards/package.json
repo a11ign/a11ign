@@ -45,12 +45,6 @@
     "./walk-scope": {
       "default": "./src/walk-scope.ts"
     },
-    "./walk-scope-declaration": {
-      "default": "./src/walk-scope-declaration.ts"
-    },
-    "./worktree-resolution": {
-      "default": "./src/worktree-resolution.ts"
-    },
     "./tooling-roots": {
       "default": "./src/tooling-roots.ts"
     }
