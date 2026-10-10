@@ -6,7 +6,7 @@ platform: docs only; nothing replaces the live reading, which is a hand-run of t
 
 Acceptance:
 ```bash
-test -s docs/fleet-convergence-reading.md && grep -c -E "build|display" docs/fleet-convergence-reading.md
+grep -c -E "build|display" docs/fleet-convergence-reading.md
 ```
 
 Closes: none — the month-later before/after pair (done-when 2), the logon task's first result (done-when 3) and one build (done-when 1) are still open on #4449.
