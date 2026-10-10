@@ -129,11 +129,15 @@ jobs:
           # path the owner may rename: `createRequire` at the tool's `package.json` resolves the name through its `exports` map, and the
           # runner's Node 24 (set up above) strips the types of the `.ts` it points at, with no loader. The same bare `node` opens the two steps
           # below. A tool that does not declare the name fails here, loudly, which is what a release floor is.
+          # THE READER IS HANDED THE AUTHOR (#4857): the exemption ADR 0044 gives `dependabot[bot]` / `app/dependabot` (no acceptance FILE needed) applies only to
+          # the reader's third argument, and the reader does not read `PR_AUTHOR` itself on this call. Called with the body alone, a Dependabot pull request that
+          # adds no `.acceptance/` file was narrowed to its `Closes` line and its Acceptance read as missing. Both calls pass it, the one in the full-history
+          # step too; `PR_AUTHOR` is `env:` data from the event, never read from the body, a label or a branch.
           handed_on="$(PR_BODY="$body" env -u GH_TOKEN node -e "
             const load = (name) => import(require('node:url').pathToFileURL(require('node:module').createRequire(process.env.AGENT_ORG_TOOL + '/package.json').resolve('agent-org/' + name)).href);
             load('acceptance-commands').then((m) => {
               const body = process.env.PR_BODY;
-              if (m.acceptanceSourceOfThisPullRequest(body).kind === 'body') return process.stdout.write(body);
+              if (m.acceptanceSourceOfThisPullRequest(body, process.cwd(), process.env.PR_AUTHOR).kind === 'body') return process.stdout.write(body);
               const keeps = (line) => m.extractClosesDeclaration(line).kind !== 'missing' || /^\s*(?:[-*>]\s+)?(?:\*\*|__)?Class:/i.test(line);
               const narrowed = body.split('\n').filter(keeps).join('\n');
               if (JSON.stringify(m.extractClosesDeclaration(narrowed)) !== JSON.stringify(m.extractClosesDeclaration(body))) {
@@ -190,7 +194,7 @@ jobs:
           if node -e "
             const load = (name) => import(require('node:url').pathToFileURL(require('node:module').createRequire(process.env.AGENT_ORG_TOOL + '/package.json').resolve('agent-org/' + name)).href);
             Promise.all([load('acceptance-commands'), load('acceptance-file')]).then(([commands, file]) => {
-              const text = file.sectionsTextOf(commands.acceptanceSourceOfThisPullRequest(process.env.PR_BODY));
+              const text = file.sectionsTextOf(commands.acceptanceSourceOfThisPullRequest(process.env.PR_BODY, process.cwd(), process.env.PR_AUTHOR));
               process.exit(text !== null && commands.hasFullHistoryDeclaration(text) ? 0 : 1);
             });
           "; then
