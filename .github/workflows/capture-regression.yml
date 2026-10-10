@@ -3,7 +3,7 @@ name: capture-regression
 # Phase 1 (ADR 0003): the capture half's regression gate. Drives the real
 # capture worker (NVDA on a Windows runner via guidepup/setup-action) over the
 # bundled tutorial pages and asserts the stable raw signals each should yield
-# (see packages/lab/src/harnesses/capture-check.mjs).
+# (see packages/lab/src/harnesses/capture-check.ts).
 #
 # RELEASE-TIME ONLY, AND NOTHING ELSE — chairman's direction, 2026-09-06, same reasoning as
 # `action-smoke.yml`'s identical change: this used to be path-filtered to fire on a push to `main`
@@ -81,4 +81,4 @@ jobs:
           Set-ItemProperty -Path $key -Name "HideFirstRunExperience" -Value 1 -Type DWord
           Set-ItemProperty -Path $key -Name "BrowserSignin" -Value 0 -Type DWord
       - name: Capture-regression checks (real NVDA)
-        run: node packages/lab/src/harnesses/capture-check.mjs
+        run: node packages/lab/src/harnesses/capture-check.ts
