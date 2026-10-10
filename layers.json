@@ -6,6 +6,6 @@
   },
   "pinned": {
     "lab": { "path": "packages/lab", "source": ".", "remote": "https://github.com/a11ign/lab.git", "tag": "v0.1.24", "lays": ["src", "scripts", "baselines", "rule-ownership.json", "CLAUDE.md"] },
-    "control": { "path": "packages/control", "source": ".", "remote": "https://github.com/a11ign/control.git", "tag": "v0.3.0", "lays": ["src", "ansible", "CLAUDE.md", "README.md"], "declares": "layers.json", "keeps": ["ansible/inventory.yml", "ansible/*.local.yml"] }
+    "control": { "path": "packages/control", "source": ".", "remote": "https://github.com/a11ign/control.git", "tag": "v0.3.2", "lays": ["src", "ansible", "CLAUDE.md", "README.md"], "declares": "layers.json", "keeps": ["ansible/inventory.yml", "ansible/*.local.yml"] }
   }
 }
