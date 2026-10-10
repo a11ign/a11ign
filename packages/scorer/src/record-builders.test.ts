@@ -89,10 +89,30 @@ test("every training-record builder emits `observation` beside `input`", () => {
     + "\n-- one builder is the point; the drift is what this guards.");
 });
 
+/**
+ * The realism builder is `build-realism-tier.mjs` at lab v0.1.27 and `build-realism-tier.ts` from v0.1.28
+ * (a11ign#4551; the `.mjs` then stays one release as a re-export shim that the discovery above does not match).
+ * Exactly ONE spelling is the builder: none is a vanished builder and two is a duplicated one, and both stay
+ * failures. The `.mjs` spelling goes when a11ign#4798 deletes the shims.
+ */
+const REALISM_SPELLINGS = [
+  "packages/lab/scripts/build-realism-tier.mjs",
+  "packages/lab/scripts/build-realism-tier.ts",
+];
+
+/** The discovered set with the realism builder's spelling pinned to the one found, or failing if it is not exactly one. */
+function withRealismSpelling(builders: string[]): string[] {
+  const realism = builders.filter((file) => REALISM_SPELLINGS.includes(file));
+  assert.equal(realism.length, 1,
+    `expected exactly one realism builder spelled ${REALISM_SPELLINGS.join(" or ")}, found ${realism.length}: `
+    + `[${realism.join(", ")}]`);
+  return builders.map((file) => (REALISM_SPELLINGS.includes(file) ? REALISM_SPELLINGS[0] : file));
+}
+
 test("the builders discovered are the ones we think", () => {
   // Named so that a NEW builder is a visible change to this list rather than a silent pass, and so that a
   // builder that disappears is noticed. It is an assertion about coverage, not about correctness.
-  const builders = recordBuilders().sort();
+  const builders = withRealismSpelling(recordBuilders()).sort();
   assert.deepEqual(builders, [
     "packages/lab/scripts/build-realism-tier.mjs",
     "packages/lab/scripts/compose-multi-defect-probe.py",
