@@ -310,6 +310,10 @@ calls).
   from that reading, and signals again once they do. **Compose the body with `formatRowCallCountAssessment`
   (`work-gate.mjs`, #2762), never by hand:** it round-trips through the reader, and a hand-typed "not split"
   carries neither marker nor count, so the row re-signals every tick.
+- **A claimed row keeps the scope it was claimed with:**
+  **scope added to a claimed row is a new row, never folded into it; a mirror of a keyed-repository row takes the original's scope and no more**
+  (#4627, class `scope-added-mid-row`). A worker holding agent-org#575 half built absorbed the larger mirror #4737 on top
+  of a full context, and the row stopped being finishable.
 
 ## The Boy Scout rule — standing, and identical in every live brief
 

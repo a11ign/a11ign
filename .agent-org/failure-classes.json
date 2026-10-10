@@ -101,6 +101,19 @@
       "seed": []
     },
     {
+      "id": "scope-added-mid-row",
+      "name": "Scope is added to a row after it is claimed and folded into the claimed row instead of filed as its own, so the row grows past what its Acceptance named and cannot be finished.",
+      "guard": null,
+      "guardNote": "none in force. The gate comparison (a claimed row whose scope grew after the claim, or a mirror whose scope exceeds its original) is the sibling a11ign/agent-org row and is not merged. Set guard to its reference when it merges. Until then the only control is the product-manager role file sentence: scope added to a claimed row is a new row.",
+      "seed": [
+        {
+          "ref": "a11ign/a11ign#4737",
+          "basis": "chairman-named",
+          "note": "2026-10-10, #4627 comment 6095044053 (class row-not-finishable): the mirror of a11ign/agent-org#575 was sent to the worker while #575 was half built, and the worker absorbed the larger scope on top of a full context"
+        }
+      ]
+    },
+    {
       "id": "main-red",
       "name": "`main` is red: a trunk run of the code repository failed. Recorded per red RUN by the tick (`readTrunkRed`).",
       "guard": null,
