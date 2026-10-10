@@ -79,6 +79,12 @@ jobs:
       # the failure this guards. A pull request that adds NO such file keeps its whole body here: that is the deprecated fallback of ADR 0044
       # row 3, and it is the only way Dependabot's pull requests (whose `Acceptance:` `dependency-pr-body` writes into the body) still run.
       #
+      # THE `Class:` LINES SURVIVE THE NARROWING TOO (#4809, a11ign#4676): the tool's `class` report reads the text this step hands on, and a PR
+      # that closes a `defect` row owes that line (#4123), so a narrowing to `Closes` alone made every such PR `CLASS: MISSING` with the line
+      # present in the body and the file. THE LINE IS RECOGNISED BY THE PREFIX OF THE TOOL'S OWN `CLASS_LINE` (`defect-class-line.ts`: optional
+      # indent, list marker and bold, then `Class:`), which the tool does not export, so a line it reads is a line kept here. Only the shape is
+      # kept: whether it is well-formed is the tool's to say. The `Closes` check below still holds the narrowing to the same declaration.
+      #
       # THE LABELS OF THE ROWS THE BODY CLOSES ARE READ HERE TOO (#4138), because this is the only step that may ask GitHub and the
       # `Class:` check of #4123 needs them: a PR that closes a `defect` row owes a `Class:` line, and the step below is tracker-less on
       # purpose. They go out as the step output `row-labels`, `{"owner/repo#N": ["label", ...]}`, which the step below takes as
@@ -128,7 +134,8 @@ jobs:
             load('acceptance-commands').then((m) => {
               const body = process.env.PR_BODY;
               if (m.acceptanceSourceOfThisPullRequest(body).kind === 'body') return process.stdout.write(body);
-              const narrowed = body.split('\n').filter((line) => m.extractClosesDeclaration(line).kind !== 'missing').join('\n');
+              const keeps = (line) => m.extractClosesDeclaration(line).kind !== 'missing' || /^\s*(?:[-*>]\s+)?(?:\*\*|__)?Class:/i.test(line);
+              const narrowed = body.split('\n').filter(keeps).join('\n');
               if (JSON.stringify(m.extractClosesDeclaration(narrowed)) !== JSON.stringify(m.extractClosesDeclaration(body))) {
                 console.error('the Closes declaration does not survive being read line by line');
                 process.exit(1);
