@@ -12,7 +12,7 @@ Acceptance:
 node packages/guards/src/assert-glob-not-empty.ts "packages/scorer/src/{model-input,record-builders}.test.ts" --min=2 --run --runner=rstest
 ```
 
-Mutation (lab laid at `v0.1.28`, throwaway worktree, measured): with the tolerance removed (both files as at the parent commit) 2 of 6 fail, by name: `model-input.test.ts :: NOBODY builds the model's input except this module` ("../../lab/scripts/build-realism-tier.mjs does not use the shared modelInput builder") and `record-builders.test.ts :: the builders discovered are the ones we think` (actual lists `build-realism-tier.ts`, expected `.mjs`). Guard in both directions: with neither spelling present both tests fail with "exists under neither spelling" / "found 0"; with both spellings discovered as builders (the shim replaced by a copy of the `.ts`) `the builders discovered are the ones we think` fails with "found 2" and no other test does.
+Mutation: (lab laid at `v0.1.28`, throwaway worktree, measured) with the tolerance removed (both files as at the parent commit) 2 of 6 fail, by name: `model-input.test.ts :: NOBODY builds the model's input except this module` ("../../lab/scripts/build-realism-tier.mjs does not use the shared modelInput builder") and `record-builders.test.ts :: the builders discovered are the ones we think` (actual lists `build-realism-tier.ts`, expected `.mjs`). Guard in both directions: with neither spelling present both tests fail with "exists under neither spelling" / "found 0"; with both spellings discovered as builders (the shim replaced by a copy of the `.ts`) `the builders discovered are the ones we think` fails with "found 2" and no other test does.
 
 Closes #4806
 
