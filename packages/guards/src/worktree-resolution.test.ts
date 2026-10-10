@@ -81,6 +81,74 @@ test("#3447: the floor asks only about the workspace's members, so a registry co
   });
 });
 
+/** An installed package under `<checkout>/node_modules/.pnpm/`, the way pnpm lays one out, and `tree/node_modules/@a11ign/<name>` linked to it. */
+function linkInstalled(tree: string, checkout: string, name: string) {
+  const installed = join(checkout, "node_modules", ".pnpm", `@a11ign+${name}@1.0.0`, "node_modules", "@a11ign", name);
+  mkdirSync(installed, { recursive: true });
+  writeFileSync(join(installed, "index.mjs"), "// installed\n");
+  mkdirSync(join(tree, "node_modules", "@a11ign"), { recursive: true });
+  symlinkSync(installed, join(tree, "node_modules", "@a11ign", name));
+}
+
+test("#4816: an installed layer linked into ANOTHER checkout's pnpm store is not another checkout's source -- the per-PR reviewer's tree", () => {
+  withScratch((base) => {
+    // The reviewer's shape: this tree's own member is linked to its own packages/, and three layers link into the primary's store.
+    const primary = join(base, "primary");
+    const tree = checkout(base, "wt-reviewer");
+    linkScope(tree, join(tree, "packages", PACKAGE));
+    const layers = ["screenreader-fleet", "screenreader-worker", "toolchain"];
+    for (const layer of layers) linkInstalled(tree, primary, layer);
+    const asked = (): ReturnType<typeof suiteStartVerdict> => suiteStartVerdict(tree, { env: {}, list: memberScopeLister(tree) });
+    const everyEntry = suiteStartVerdict(tree, { env: {} });
+    assert.equal(everyEntry.action, "refuse", "CONTROL: asked about every entry (the lister before #4816), the guard refuses this tree");
+    assert.match(String(everyEntry.line), /3 of 4 @a11ign\/\* resolve OUTSIDE this worktree/);
+    assert.equal(asked().action, "proceed");
+  });
+});
+
+test("#4816: what is still refused beside a store link -- another checkout's packages/, a member's store copy, a dangling entry", () => {
+  withScratch((base) => {
+    const primary = join(base, "primary");
+    const asked = (tree: string): ReturnType<typeof suiteStartVerdict> => suiteStartVerdict(tree, { env: {}, list: memberScopeLister(tree) });
+    const reviewerTree = (name: string) => {
+      const tree = checkout(base, name);
+      linkScope(tree, join(tree, "packages", PACKAGE));
+      linkInstalled(tree, primary, "toolchain");
+      return tree;
+    };
+    assert.equal(asked(reviewerTree("wt-clean")).action, "proceed", "CONTROL: the store link alone proceeds, so each refusal below is what the added entry caused");
+
+    // A link into another checkout's SOURCE, beside a store link that is excused: the store link does not launder it.
+    const sourceTree = reviewerTree("wt-source");
+    const otherSource = join(primary, "packages", "worker-fleet");
+    mkdirSync(otherSource, { recursive: true });
+    symlinkSync(otherSource, join(sourceTree, "node_modules", "@a11ign", "screenreader-fleet"));
+    assert.equal(asked(sourceTree).action, "refuse", "a link into another checkout's packages/ is the broken shape");
+
+    // Only the `.pnpm` store is excused, not any `node_modules/`: another checkout's own installed copy is still another checkout.
+    const copyTree = reviewerTree("wt-copy");
+    const otherCopy = join(primary, "node_modules", "@a11ign", "screenreader-fleet");
+    mkdirSync(otherCopy, { recursive: true });
+    symlinkSync(otherCopy, join(copyTree, "node_modules", "@a11ign", "screenreader-fleet"));
+    assert.equal(asked(copyTree).action, "refuse", "a link into another checkout's node_modules/ outside .pnpm is not excused");
+
+    // A workspace MEMBER resolved into a store is a stale copy of something this tree holds, so it is asked about whatever the store is.
+    const memberTree = reviewerTree("wt-member");
+    rmSync(join(memberTree, "node_modules", "@a11ign", PACKAGE));
+    linkInstalled(memberTree, primary, PACKAGE);
+    assert.equal(asked(memberTree).action, "refuse", "a member's store copy is still asked about");
+
+    // A dangling entry resolves nowhere, so it is no installed package: it stays in the list the guard is asked about and the guard
+    // classifies it, as it did before. Read off the list itself, since the guard may rightly find nothing to refuse in a link to nowhere.
+    const danglingTree = reviewerTree("wt-dangling");
+    const scope = join(danglingTree, "node_modules", "@a11ign");
+    symlinkSync(join(primary, "node_modules", ".pnpm", "gone", "node_modules", "@a11ign", "gone"), join(scope, "gone"));
+    const listed = memberScopeLister(danglingTree)(scope) as string[];
+    assert.ok(listed.includes("gone"), "a dangling entry is still asked about");
+    assert.ok(!listed.includes("toolchain"), "CONTROL: the installed layer beside it is not");
+  });
+});
+
 test("#3447: a tree with no packages/ directory is asked about in full -- silence never grants the exemption", () => {
   withScratch((base) => {
     const tree = checkout(base, "wt-no-packages");

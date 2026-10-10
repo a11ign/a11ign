@@ -135,15 +135,25 @@ export function runnerInvocation({ runner, patterns, concurrency }: { runner: st
 /** The scope every workspace package is published under, and so the one a manifest `name` is stripped of. */
 const SCOPE_PREFIX = "@a11ign/";
 
+/** The directory pnpm installs every package into, which a symlink in `node_modules/@a11ign/` reaches when the entry is an installed package. */
+const PNPM_STORE = `${sep}node_modules${sep}.pnpm${sep}`;
+
 /**
  * #3447: THE `@a11ign/*` ENTRIES A TREE'S START GUARD SHOULD ASK ABOUT. A package that LEFT for its own repository (`screenreader-worker`)
  * is consumed from the registry, so its copy under this tree's own `node_modules/` is the intended source and not a frozen copy of anything
  * under `packages/`; asked about it, the guard would refuse every suite start in the tree that just did what the split asked.
  *
- * ONLY THAT ENTRY IS LEFT OUT: one that is not a workspace member (by directory, or by manifest `name`: `worker-fleet` is
- * `@a11ign/screenreader-fleet`) AND resolves to a real copy inside this tree's own `node_modules/`. A member's stale copy, and any entry
- * that reads ANOTHER checkout whatever it is called, are still asked about, and so is every entry when the tree has no `packages/`
- * (silence never grants the exemption).
+ * ONLY AN INSTALLED PACKAGE IS LEFT OUT: an entry that is not a workspace member (by directory, or by manifest `name`: `worker-fleet` is
+ * `@a11ign/screenreader-fleet`) AND resolves, by `realpath`, to either a real copy inside this tree's own `node_modules/` or anywhere under
+ * a `node_modules/.pnpm/` store, this tree's or another checkout's (#4816). The second half is the per-PR reviewer's shape: its layers
+ * (`screenreader-fleet`, `screenreader-worker`, `toolchain`) link into the PRIMARY's `.pnpm` store, so with only the first half every
+ * review whose Acceptance goes through `--run` was refused as "3 of 7 resolve OUTSIDE this worktree". A store entry is a published
+ * package, not another checkout's source. A member's stale copy, and any entry that reads ANOTHER checkout's `packages/` (or anywhere not
+ * under a `.pnpm` store) whatever it is called, are still asked about, and so is a dangling entry and every entry when the tree has no
+ * `packages/` (silence never grants the exemption).
+ *
+ * THE COST: a PR that bumps a layer pin is measured against the primary's installed layer, not the one its own lockfile names. The
+ * guard exists to refuse a measurement of the wrong checkout's SOURCE; it cannot also tell whose installed version a store link is.
  *
  * LIVES HERE, NOT IN `worktree-resolution.ts`, which `agent-org` carries a declared copy of: the guard stays byte-identical and which
  * entries to ask it about is this caller's to say.
@@ -161,15 +171,18 @@ export function memberScopeLister(worktree: string, { exists = existsSync, list 
     const { name } = JSON.parse(String(read(manifest, "utf8")));
     return typeof name === "string" ? name.replace(SCOPE_PREFIX, "") : null;
   };
-  /** A copy of its own: resolving into this tree's `node_modules/`. A dangling entry resolves nowhere, so the guard is left to classify it. @param {string} path */
-  const isCopyInOwnModules = (path: string) => {
-    try { return realpath(path).startsWith(ownModules); } catch { return false; }
+  /** An installed package: a copy inside this tree's `node_modules/`, or a link into any `.pnpm` store. A dangling entry resolves nowhere, so the guard is left to classify it. @param {string} path */
+  const isInstalledPackage = (path: string) => {
+    try {
+      const resolved = realpath(path);
+      return resolved.startsWith(ownModules) || resolved.includes(PNPM_STORE);
+    } catch { return false; }
   };
   const askedAbout = (dir: string): string[] => {
     const entries = list(dir) as string[];
     if (!exists(packagesDir)) return entries;
     const members = new Set((list(packagesDir) as string[]).flatMap((name) => [name, declaredName(join(packagesDir, name, "package.json"))]));
-    return entries.filter((name) => members.has(name) || !isCopyInOwnModules(join(dir, name)));
+    return entries.filter((name) => members.has(name) || !isInstalledPackage(join(dir, name)));
   };
   return askedAbout as unknown as typeof readdirSync;
 }
