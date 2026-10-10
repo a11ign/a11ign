@@ -10,7 +10,9 @@ The core's `walk-scope.ts` copy gains the two `node:test` names Node 24 added, a
 
 platform: nothing built; two table entries and one exact-version pin, lockfile by pnpm.
 
-Acceptance: both lines of the row's Acceptance, run as written from `/home/agent/repos/wt-4848` on Node `v24.21.0`: line one printed `[]` and exited 0 (it printed `["expectFailure","getTestContext"]` and exited 1 at `origin/main`'s copy); line two (`npm pack @a11ign/toolchain@<root pin>` then `grep -rqE expectFailure package`) exited 0 at `0.7.1`. `pnpm exec tsx --test packages/guards/src/walk-scope-copy-matches-toolchain.test.ts packages/guards/src/toolchain-package.test.ts` printed `ℹ tests 14 / ℹ pass 14 / ℹ fail 0`.
+Acceptance: `bash -c 'node --input-type=module -e "import { createRequire } from \"node:module\"; const w = await import(\"./packages/guards/src/walk-scope.ts\"); const t = createRequire(process.cwd() + \"/x.js\")(\"node:test\"); const u = Object.entries(t).filter(([k, v]) => typeof v === \"function\" && !w.isObserved(v) && !(k in w.NOT_WRAPPED.test)).map(([k]) => k); console.log(JSON.stringify(u)); process.exit(u.length ? 1 : 0);" && V=$(node -p "require(\"./package.json\").devDependencies[\"@a11ign/toolchain\"]") && D=$(mktemp -d) && cd "$D" && npm pack "@a11ign/toolchain@$V" --silent >/dev/null 2>&1 && tar xzf ./*.tgz && grep -rqE "expectFailure" package'` exited 0 at this head, from `/home/agent/repos/wt-4848` on Node `v24.21.0` (the row's two lines run as one, line one first: it printed `[]`, and printed `["expectFailure","getTestContext"]` with exit 1 at `origin/main`'s copy; line two reads the packed pin and exited 1 at `0.7.0`).
+
+Also measured at this head: `pnpm exec tsx --test packages/guards/src/walk-scope-copy-matches-toolchain.test.ts packages/guards/src/toolchain-package.test.ts` printed `ℹ tests 14 / ℹ pass 14 / ℹ fail 0`; `pnpm run verify` ran the affected set, 205 test files and 2671 tests, against `origin/main`.
 
 Closes #4848
 
