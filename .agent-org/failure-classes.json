@@ -114,6 +114,24 @@
       ]
     },
     {
+      "id": "row-not-finishable",
+      "name": "A row offered to an engineer, or kept open after its deliverable merged, that waits on a future reading, another seat's decision, another row's outcome or a live check after merge, so the claim is held on something the claimant cannot finish through.",
+      "guard": null,
+      "seed": [
+        {
+          "ref": "a11ign/a11ign#4637",
+          "basis": "title states it",
+          "note": "10-09: a claim that reached a wait it could not finish through was held, not released; the title names the class. The row is the class's first remedy, listed in the epic #4437 table (comment 6088708447), and built the gate's release (agent-org#545, merged 2026-10-09T20:44:45Z), so it is the remedy row and not a defect instance. Chairman direction: #4437 comment 6088558547 ('ready means finishable')"
+        },
+        {
+          "ref": "a11ign/a11ign#4669",
+          "basis": "ceo read",
+          "note": "10-10: the first routed start was quoted and Done-when 1 met, and the row stayed open and claimed on a remaining reading (a provider-routed DOWN start, to Haiku) that was not its deliverable; closed on its deliverable at 08:18Z in the sweep the chairman directed (#4437 comment 6095588368, 'tickets should be one deliverable. If follow-up changes are needed, it should be another ticket'), and the reading moved to Done-when 2 of a11ign#4764"
+        }
+      ],
+      "guardNote": "none in force. Four controls are merged and each is partial. Row-file refuses an unsplit Done-when (agent-org#546, 2026-10-09T20:59:00Z) at FILING only, so a wait that arises after filing, or in a row filed before it, is not refused. The gate releases a claim that holds nothing and reaches a wait declared as Not-before, answer:<another session>, needs:chairman or Waiting-for: (agent-org#545, 2026-10-09T20:44:45Z), so a wait declared in none of the four, a holder with work in hand and an open pull request keep the claim, and the release does not file the remainder as its own row. The daily pass records a claim idle over 60 minutes with no open PR, or a PR with nothing pending, as a row-not-finishable ledger incident (agent-org#547, 2026-10-09T20:53:31Z): once a day with the retrospective, and it records only, releasing and closing nothing. A build row that closes on merge files its verify row (agent-org#556, 2026-10-09T21:26:33Z) for the future-time item only, so another seat's decision or another row's outcome gets none. Not built as of this entry: a rule that flags or closes a row left open after its deliverable's pull request merged (the chairman's 30-minute detector, #4437 comment 6095588368). Set guard to that rule's reference when it is in force."
+    },
+    {
       "id": "main-red",
       "name": "`main` is red: a trunk run of the code repository failed. Recorded per red RUN by the tick (`readTrunkRed`).",
       "guard": null,
