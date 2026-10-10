@@ -51,7 +51,7 @@ ExecStartPre=-%h/.local/bin/agent-org primary:update
 
 # The program is the repository-relative script, as a11ign-corpus-release-nightly.service's is, so `unitEntryPoints`
 # resolves it from any checkout.
-ExecStart=%h/.local/bin/node --import tsx scripts/token-cost.ts --post
+ExecStart=%h/.local/bin/node scripts/token-cost.ts --post
 
 TimeoutStartSec=600
 
