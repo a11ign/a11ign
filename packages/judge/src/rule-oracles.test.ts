@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { sandboxGitEnv } from "../../guards/src/git-env.ts";
 
-import { stripComments } from "@a11ign/evidence/source-text";
+import { stripComments } from "@a11ign/toolchain/lib/source-text";
 
 /**
  * EVERY module that runs the rules against a capture must extract the oracle counts with `oracleCounts`.

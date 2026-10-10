@@ -27,7 +27,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
-import { stripComments } from "@a11ign/evidence/source-text";
+import { stripComments } from "@a11ign/toolchain/lib/source-text";
 import { sandboxGitEnv } from "./git-env.ts";
 import { checkIsolation, packedRangeProblems, satisfies } from "./isolation-gate.ts";
 import { pnpmCliInvocation } from "../../../scripts/npm-cli-executable.ts";

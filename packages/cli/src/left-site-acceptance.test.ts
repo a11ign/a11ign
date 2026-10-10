@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import { leftSite, withinTheSite } from "@a11ign/evidence";
-import { stripComments } from "@a11ign/evidence/source-text";
+import { stripComments } from "@a11ign/toolchain/lib/source-text";
 import { oracleCounts } from "@a11ign/evidence/verify";
 import { sweepOutcomes, truncatedSweeps } from "@a11ign/evidence/conformance";
 import { ruleFindings } from "@a11ign/judge/rules";
