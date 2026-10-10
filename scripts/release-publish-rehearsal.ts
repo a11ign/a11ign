@@ -18,7 +18,7 @@
  * variable. `npm publish --dry-run` stops before the registry, so it publishes nothing and cannot show the
  * signing itself: that happens only on a real publish, and this file does not pretend otherwise.
  *
- *   NPM_CONFIG_PROVENANCE=true node --import tsx scripts/release-publish-rehearsal.ts
+ *   NPM_CONFIG_PROVENANCE=true node scripts/release-publish-rehearsal.ts
  */
 import { spawnSync } from "node:child_process";
 import { readFileSync, realpathSync } from "node:fs";
@@ -104,7 +104,7 @@ export function refusal(env: Record<string, string | undefined>, reported: strin
 }
 
 function main() {
-  refuseUnknownFlags([], { entry: import.meta.url, command: "node --import tsx scripts/release-publish-rehearsal.ts" });
+  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/release-publish-rehearsal.ts" });
   const reason = refusal(process.env, npmReportsProvenance());
   if (reason) {
     console.error(`release-publish-rehearsal: ${reason}`);

@@ -59,7 +59,7 @@ function originTags(): string[] {
 }
 
 function main() {
-  refuseUnknownFlags([], { entry: import.meta.url, command: "node --import tsx scripts/release-tags-complete.ts" });
+  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/release-tags-complete.ts" });
   const versions = registryVersions();
   const missing = versionsWithoutTag({ versions, tags: originTags() });
   if (missing.length === 0) {

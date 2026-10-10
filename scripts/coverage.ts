@@ -112,7 +112,7 @@ export function coverageVerdict({ mergedReport, mergeStatus, providerExitCode, t
 }
 
 async function main() {
-  refuseUnknownFlags([], { entry: import.meta.url, command: "node --import tsx scripts/coverage.ts" });
+  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/coverage.ts" });
   const floor = step([join(ROOT, "packages/guards/src/assert-glob-not-empty.ts"), TEST_GLOB, `--min=${MIN_TEST_FILES}`]);
   if (floor.status !== 0) {
     process.stderr.write(`coverage: the vacuity floor failed (${TEST_GLOB} matched fewer than ${MIN_TEST_FILES} files) -- not measuring.\n`);

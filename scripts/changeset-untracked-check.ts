@@ -65,7 +65,7 @@ export function untrackedChangesetReason(porcelain: string): string | null {
 }
 
 function main() {
-  refuseUnknownFlags([], { entry: import.meta.url, command: "node --import tsx scripts/changeset-untracked-check.ts" });
+  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/changeset-untracked-check.ts" });
   const porcelain = execFileSync("git", ["status", "--porcelain", "--", ".changeset"],
     { encoding: "utf8", env: sandboxGitEnv() });
   const reason = untrackedChangesetReason(porcelain);
