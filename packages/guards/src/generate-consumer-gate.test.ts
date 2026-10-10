@@ -21,7 +21,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { regenerationInFlight } from "../../../scripts/consumer-gate-pin-needed.ts";
-import { sandboxGitEnv, withGitSandbox, type GitSandbox } from "../../../scripts/test-support/git-sandbox.ts";
+import { sandboxGitEnv, withGitSandbox, type GitSandbox } from "@a11ign/toolchain/lib/git-sandbox";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const gen = await import("../../../scripts/generate-consumer-gate.ts");

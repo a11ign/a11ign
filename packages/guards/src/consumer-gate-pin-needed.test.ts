@@ -27,7 +27,7 @@ import { parse as parseYaml } from "yaml";
 import {
   pinDecision, decideAtCommit, releaseOwed, regenerationInFlight, REGENERATE, NOTHING_TO_DO, REGENERATION_BRANCH, CONSUMER_GATE_PATH,
 } from "../../../scripts/consumer-gate-pin-needed.ts";
-import { sandboxGitEnv, withGitSandbox, type GitSandbox } from "../../../scripts/test-support/git-sandbox.ts";
+import { sandboxGitEnv, withGitSandbox, type GitSandbox } from "@a11ign/toolchain/lib/git-sandbox";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 

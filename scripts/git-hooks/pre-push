@@ -188,7 +188,7 @@ cd "$(git rev-parse --show-toplevel)"
 # BELT AND BRACES. git exports GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE into this hook's own environment, and
 # `npm test` inherits it — which is exactly how a test that spawned git with `cwd` alone and an inherited
 # `env` forged 15 commits into THIS repo on 2026-09-06 (docs/backlog.md, "a closed row created the
-# exposure"). `scripts/test-support/git-sandbox.ts` is the primary defence, applied per test; this is the
+# exposure"). `@a11ign/toolchain/lib/git-sandbox` is the primary defence, applied per test; this is the
 # second, independent one `orchestrator` required: even a future test that bypasses the helper entirely
 # cannot reach this repository through an inherited GIT_DIR, because by the time `npm test` runs there is
 # none left to inherit. Scrubbed AFTER `git rev-parse --show-toplevel` above (which correctly needs
@@ -593,12 +593,12 @@ run_gate() { # run_gate <branch-label>
   # for the merge. It was two of the 22 files in `guards:sweep`, which is why "keep the leak scan while
   # deleting the sweep" would have deleted it.
   #
-  # #2507: IT RUNS UNDER THE MEMORY CAP, through `test-memory-cap.ts` and not through `assert-glob-not-empty.ts --run`.
+  # #2507: IT RUNS UNDER THE MEMORY CAP, through the toolchain's `test-memory-cap` (`dist/lib/test-memory-cap.mjs`, a CLI, #4590) and not through `assert-glob-not-empty.ts --run`.
   # The leak scan is a runner start like any other, and these two files read tracked blobs, the shape #1995 measured
   # growing to 25 GB. The entry that `test:*` use refuses a suite start in a tree whose `node_modules` reads another
   # checkout (#2218), which is 42 of 56 linked worktrees, and a push hook that newly refused those pushes would be a
   # different change. The cap module is the shared half; it prints `memory cap: ...` so this run says which path it took.
-  run "leak scan" node packages/guards/src/test-memory-cap.ts run tsx -- pnpm exec tsx --test \
+  run "leak scan" node node_modules/@a11ign/toolchain/dist/lib/test-memory-cap.mjs run tsx -- pnpm exec tsx --test \
     packages/guards/src/tracked-source-leak-guard.test.ts \
     packages/guards/src/tracked-prose-leak-guard.test.ts
 

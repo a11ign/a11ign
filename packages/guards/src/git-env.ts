@@ -7,7 +7,7 @@
 // checkout) won -- 15 commits across all refs, six of them real work already on `origin/main`, ended up
 // authored by the string that test's own `git config user.name` call had written into the REAL repo.
 //
-// This is the ONE PLACE that fact is stated. Every caller -- test helper (`test-support/git-sandbox.ts`)
+// This is the ONE PLACE that fact is stated. Every caller -- test helper (`@a11ign/toolchain/lib/git-sandbox`)
 // and production git-spawning code alike -- strips through this function rather than re-deriving the
 // list, because a copy of a defensive filter is exactly the shape this repo's CLAUDE.md calls out as
 // "a fact stated twice, and the copies drifted": one copy missing one variable is silent until the day

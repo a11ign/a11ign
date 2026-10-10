@@ -33,8 +33,8 @@ import assert from "node:assert/strict";
 import { readFileSync, writeFileSync, mkdirSync, symlinkSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { withGitSandbox } from "../../../scripts/test-support/git-sandbox.ts";
-import type { GitSandbox } from "../../../scripts/test-support/git-sandbox.ts";
+import { withGitSandbox } from "@a11ign/toolchain/lib/git-sandbox";
+import type { GitSandbox } from "@a11ign/toolchain/lib/git-sandbox";
 
 const GITIGNORE = fileURLToPath(new URL("../../../.gitignore", import.meta.url));
 

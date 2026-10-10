@@ -96,7 +96,7 @@ test("#2218 THE CALLER: `assert-glob-not-empty --run` refuses in a mis-wired tre
   // spawn, so no runner is reached and nothing is measured.
   withScratch((base) => {
     const tree = checkout(base, "wt-caller");
-    for (const rel of ["packages/guards/src/assert-glob-not-empty.ts", "packages/guards/src/test-memory-cap.ts", "scripts/npm-cli-executable.ts"]) {
+    for (const rel of ["packages/guards/src/assert-glob-not-empty.ts", "scripts/npm-cli-executable.ts"]) {
       mkdirSync(join(tree, rel, ".."), { recursive: true });
       copyFileSync(join(REPO, rel), join(tree, rel));
     }

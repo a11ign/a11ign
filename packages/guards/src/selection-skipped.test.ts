@@ -19,7 +19,7 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Answer, FileReading, Run, Trace } from "../../../scripts/selection-skipped.ts";
-import { withGitSandbox, type GitSandbox } from "../../../scripts/test-support/git-sandbox.ts";
+import { withGitSandbox, type GitSandbox } from "@a11ign/toolchain/lib/git-sandbox";
 
 const skipped = await import("../../../scripts/selection-skipped.ts");
 const {

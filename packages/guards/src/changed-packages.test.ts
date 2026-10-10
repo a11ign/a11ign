@@ -20,7 +20,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { execFileSync, spawnSync } from "node:child_process";
-import { sandboxGitEnv } from "../../../scripts/test-support/git-sandbox.ts";
+import { sandboxGitEnv } from "@a11ign/toolchain/lib/git-sandbox";
 import { changedPackages, changedPackagesAgainstOrigin, filesChangedAgainstOrigin } from "./changed-packages.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
