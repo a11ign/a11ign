@@ -37,6 +37,12 @@ import screenreader_features as features  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[3]
 
+# The lab's scripts are `.ts` and Node loads them by stripping types, which the distro's `/usr/bin/node` does
+# not do reliably. The upstream Node 24 at `~/.local/bin/node` (#4388) does, so prefer it over whatever `node`
+# the PATH happens to resolve to, and fall back to the PATH where that file is absent (CI's setup-node).
+_UPSTREAM_NODE = Path.home() / ".local/bin/node"
+NODE = str(_UPSTREAM_NODE) if _UPSTREAM_NODE.exists() else "node"
+
 
 def grants_from_javascript() -> dict[str, str]:
     """Ask the JS for its map, rather than re-parsing the source with a regex.
@@ -47,11 +53,11 @@ def grants_from_javascript() -> dict[str, str]:
     """
     script = (
         'import { ACCOMPANYING_DEFECTS } from "./packages/lab/src/training/case-matrix.mjs";'
-        'import { grantsMap } from "./packages/lab/scripts/emit-grants-map.mjs";'
+        'import { grantsMap } from "./packages/lab/scripts/emit-grants-map.ts";'
         'process.stdout.write(JSON.stringify(grantsMap(ACCOMPANYING_DEFECTS)));'
     )
     out = subprocess.run(
-        ["node", "--input-type=module", "-e", script],
+        [NODE, "--input-type=module", "-e", script],
         cwd=REPO, capture_output=True, text=True, check=True,
     )
     return json.loads(out.stdout)
