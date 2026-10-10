@@ -9,4 +9,4 @@ rem This file goes, and `stamp-files.ts` reads the layer's own, only if the laye
 rem checkout for another reason.
 set "CHECKOUT_ROOT=%~dp0..\..\.."
 set "FLT=packages\worker-fleet\src\provisioning\apply-foreground-lock-timeout.ps1"
-set "CAPTURE_CHECK=packages\lab\src\harnesses\capture-check.mjs"
+set "CAPTURE_CHECK=packages\lab\src\harnesses\capture-check.ts"
