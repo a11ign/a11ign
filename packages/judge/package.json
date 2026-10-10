@@ -80,6 +80,6 @@
     "judge"
   ],
   "devDependencies": {
-    "@a11ign/toolchain": "0.7.0"
+    "@a11ign/toolchain": "0.7.1"
   }
 }
