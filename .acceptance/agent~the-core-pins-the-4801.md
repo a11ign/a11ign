@@ -13,6 +13,8 @@ The same count against the tree `pnpm install --frozen-lockfile` laid here (`pac
 
 **Not exercised:** no playbook was RUN and no host was deployed (the resource ban), so what is established is that the pinned tag's `lab-job.yml` names no `.mjs`, not that it runs. The lab host's deploy is `orchestrator`'s to schedule; lab `v0.1.28` is the tree it names the `.ts` scripts in.
 
+Measured at this head, with `packages/control` laid at `v0.3.6` by `pnpm install --frozen-lockfile`: `pnpm run verify` printed GREEN (affected set against `origin/main`; its `ts` leg was NOT-NEEDED for a JSON-only diff, so the wider suites were run by hand), `pnpm run test:org` printed `VERDICT pass: 1240 tests in 81 files (1 skipped)`, and `pnpm run test:ts` printed `VERDICT pass: 1410 tests in 124 files (20 skipped)`. `pnpm run lint` 0 errors; `pnpm run typecheck` clean.
+
 platform: nothing built; one pin bump.
 
 Acceptance: `bash -c 'test "$(printf "%s\nv0.3.6\n" "$(node -p "require(\"./layers.json\").pinned.control.tag")" | sort -V | head -1)" = v0.3.6'` exited 0 at this head, from `/home/agent/repos/wt-4801` (rc 1 at `origin/main`, pin `v0.3.5`).
