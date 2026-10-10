@@ -2,7 +2,7 @@ The `liaison` entry in `.agent-org/roles/sessions.json` now declares `"model": "
 
 Measured: the Acceptance command below exits 0 on this branch, and `grep -c '"model"' .agent-org/roles/sessions.json` reads 1 (the open-check read 0 on 2026-10-10). Done-when 2, the `SEAT STARTED liaison` quote, needs the tool row's release and is not claimed here.
 
-Not run: `pnpm run verify`, lint and typecheck. This worktree has no `node_modules` (`verify` stops with `ERR_MODULE_NOT_FOUND` for `@a11ign/screenreader-fleet`), and the diff is one JSON file plus this one; CI's `ts` job runs them. The file still parses (`JSON.parse` on it succeeds), and `git grep` finds no code that reads the roster beyond `scripts/rstest/rstest.config.ts`'s trigger glob and `.agent-org/project.json`.
+`pnpm run verify` (with `--draft-body`) printed `GREEN for this head and body -- the affected set passed at this head, affected against origin/main; the tree-wide guards run in CI only`. `ts`, `python`, `rulesFitness` and `changeset` read NOT-NEEDED for this diff, so lint and typecheck were not exercised on anything; the diff is one JSON file plus this one. `git grep` finds no code that reads the roster beyond `scripts/rstest/rstest.config.ts`'s trigger glob and `.agent-org/project.json`.
 
 platform: nothing to replace; a roster field read by the seat launcher once agent-org's row lands.
 
