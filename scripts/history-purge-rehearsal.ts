@@ -176,10 +176,10 @@ export function verifyRewrite({ sourceRepo, rewrittenRepo, ref = "refs/heads/mai
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
   refuseUnknownFlags(["--source", "--clone-into", "--replacements"],
-    { entry: import.meta.url, command: "node --import tsx scripts/history-purge-rehearsal.ts" });
+    { entry: import.meta.url, command: "node scripts/history-purge-rehearsal.ts" });
   const source = flagValue(process.argv, "source");
   if (!source || !existsSync(source)) {
-    console.error("Usage: node --import tsx scripts/history-purge-rehearsal.ts --source=<real repo> "
+    console.error("Usage: node scripts/history-purge-rehearsal.ts --source=<real repo> "
       + "[--clone-into=<path>] [--replacements=<file>]\n"
       + "--source must be a real, existing local repository to mirror-clone from.");
     process.exit(2);

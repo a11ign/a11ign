@@ -217,9 +217,9 @@ function report(findings: { pattern: string; count: number; why: string; path: s
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
-  refuseUnknownFlags(["--all", "--repo"], { entry: import.meta.url, command: "node --import tsx scripts/history-secret-scan.ts" });
+  refuseUnknownFlags(["--all", "--repo"], { entry: import.meta.url, command: "node scripts/history-secret-scan.ts" });
   if (!process.argv.includes("--all")) {
-    console.error("Usage: node --import tsx scripts/history-secret-scan.ts --all [--repo=<path>]\n"
+    console.error("Usage: node scripts/history-secret-scan.ts --all [--repo=<path>]\n"
       + "`--all` is required and not optional -- scanning only the current branch would silently miss\n"
       + "the branches with more instances of the defect than main has (measured: 72 vs 48).");
     process.exit(2);

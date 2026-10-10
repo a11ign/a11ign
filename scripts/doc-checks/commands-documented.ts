@@ -112,10 +112,10 @@ export function check(root: string): import("./check-result.ts").CheckResult {
       ...undocumentedNpmScripts(root).map((name) => ({ where: "package.json", reference: name,
         why: "discoverable only by reading source -- named nowhere a human looks, and not declared internal" })),
       ...(committed === null && commands.length ? [{ where: COMMANDS_PAGE, reference: COMMANDS_PAGE,
-        why: "the generated commands page does not exist -- run `node --import tsx scripts/run.ts docs-commands`" }] : []),
+        why: "the generated commands page does not exist -- run `node scripts/run.ts docs-commands`" }] : []),
       ...commandsPageDrift(root).map(({ line, side }) => ({ where: COMMANDS_PAGE, reference: line,
         why: side === "stale" ? "on the page, but no longer what the tree's headers say"
-          : "what the tree's headers say, but not on the page -- run `node --import tsx scripts/run.ts docs-commands`" })),
+          : "what the tree's headers say, but not on the page -- run `node scripts/run.ts docs-commands`" })),
     ],
   };
 }

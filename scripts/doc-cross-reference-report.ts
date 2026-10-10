@@ -221,7 +221,7 @@ export function fitToComment(report: string, limit: number = COMMENT_LIMIT): str
   const notice = (/** @type {number} */ dropped: number) =>
     `\n_TRUNCATED: ${dropped} of ${rows} disagreement row(s) are not shown -- the whole report would be `
     + `${report.length} characters and GitHub refuses a comment over ${limit}. The counts above are complete; `
-    + "run `node --import tsx scripts/doc-cross-reference-report.ts` for every row._\n";
+    + "run `node scripts/doc-cross-reference-report.ts` for every row._\n";
   const budget = limit - tail.length - notice(rows).length;
   let shown = 0;
   for (const line of detail) {
@@ -274,7 +274,7 @@ function commitAt(root: string) {
 }
 
 async function main() {
-  refuseUnknownFlags(["--root"], { entry: import.meta.url, command: "node --import tsx scripts/doc-cross-reference-report.ts" });
+  refuseUnknownFlags(["--root"], { entry: import.meta.url, command: "node scripts/doc-cross-reference-report.ts" });
   const root = resolve(flagValue(process.argv, "root") ?? REPO);
   try {
     const report = renderReport(await runChecks(root), { root, commit: commitAt(root), ref: refAt(root) });
