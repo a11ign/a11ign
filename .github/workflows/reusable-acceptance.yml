@@ -185,6 +185,7 @@ jobs:
       - name: Deepen the checkout if the PR asks for full history (#497)
         env:
           PR_BODY: ${{ steps.live-body.outputs.body }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
           if node -e "
             const load = (name) => import(require('node:url').pathToFileURL(require('node:module').createRequire(process.env.AGENT_ORG_TOOL + '/package.json').resolve('agent-org/' + name)).href);
@@ -208,5 +209,6 @@ jobs:
       - name: Run the PR's own stated Acceptance command(s)
         env:
           PR_BODY: ${{ steps.live-body.outputs.body }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           ACCEPTANCE_ROW_LABELS: ${{ steps.live-body.outputs.row-labels }}
         run: agent-org acceptance-commands
