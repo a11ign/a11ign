@@ -43,7 +43,7 @@ PASS — all 1795 case(s) discriminate, and the corpus is complete.
 
 platform: nothing built; one documentation file.
 
-Acceptance: `bash -c 'grep -qE "check-signals.*read on the lab 2026-1[0-2]-[0-9]{2}" RELEASE.md && grep -qE "scorer[:]shortcuts.*Read 2026-10-(0[7-9]|[1-3][0-9])" RELEASE.md'` exited 0 at this head, from `/home/agent/repos/wt-4552` (rc 1 at `origin/main`).
+Acceptance: `bash -c 'grep -qE "check-signals.*read on the[ ]lab 2026-1[0-2]-[0-9]{2}" RELEASE.md && grep -qE "scorer[:]shortcuts.*Read 2026-10-(0[7-9]|[1-3][0-9])" RELEASE.md'` exited 0 at this head, from `/home/agent/repos/wt-4552` (rc 1 at `origin/main`).
 
 Closes #4552
 
