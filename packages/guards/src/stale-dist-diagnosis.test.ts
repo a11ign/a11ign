@@ -158,7 +158,8 @@ function withLog(text: string, body: (logPath: string, dir: string) => void): vo
 test("CLI: no file prints the usage to stderr and exits 2; an unknown flag is refused", () => {
   const none = runCli([]);
   assert.equal(none.status, 2);
-  assert.match(none.stderr, /^Usage: node --import tsx scripts\/stale-dist-diagnosis\.ts <file with the failure's stderr>/);
+  // The script's usage line names its own loader, and a sibling slice of #4596 removes it from `scripts/`: accept the line before and after.
+  assert.match(none.stderr, /^Usage: node (?:--import \S+ )?scripts\/stale-dist-diagnosis\.ts <file with the failure's stderr>/);
   assert.equal(none.stdout, "");
   const bogus = runCli(["--verbose"]);
   assert.notEqual(bogus.status, 0);

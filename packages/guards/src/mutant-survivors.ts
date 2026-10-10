@@ -45,8 +45,8 @@ const MS = 1000;
 const MAX_DIFF_BYTES = 256 * 1024 * 1024;
 const MUTATE = fileURLToPath(new URL("./mutation-check.ts", import.meta.url));
 const SELF = fileURLToPath(import.meta.url);
-// #4273: `apply` (this file) is TypeScript now, and a bare `node` cannot run one (ADR 0043 Decision 8: `node --import tsx`). The loader is
-// handed by ABSOLUTE URL because the mutant runs with the mutated repo as its cwd, where a bare `tsx` need not resolve.
+// #4273: `apply` (this file) is TypeScript now. The loader is still named, so the mutant does not depend on the interpreter stripping
+// types itself (Node 24 does, #4389; ADR 0043 Decision 8 predates it). It is handed by ABSOLUTE URL because the mutant runs with the mutated repo as its cwd, where a bare `tsx` need not resolve.
 // (`createRequire`, not `import.meta.resolve`: the test runner does not implement the latter.)
 const TSX = pathToFileURL(createRequire(import.meta.url).resolve("tsx")).href;
 // `mutation-check.ts`'s own exit codes, named because every branch below reads them.

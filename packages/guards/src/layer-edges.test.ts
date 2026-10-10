@@ -41,7 +41,8 @@ const FIXTURES = join(ROOT, "packages/guards/src/fixtures/layer-edges");
 const fixture = (name: string) => join(FIXTURES, name);
 const edgesOf = (name: string) => findEdges({ root: fixture(name), tracked: trackedFiles(fixture(name)) });
 const textOf = (name: string, path: string) => readFileSync(join(fixture(name), path), "utf8");
-// #4273: the guard is TypeScript, and a bare `node` cannot run one (ADR 0043 Decision 8: `node --import tsx`).
+// #4273: the guard is TypeScript. The loader is handed explicitly so the spawn does not depend on the interpreter stripping types itself
+// (Node 24 does, #4389; ADR 0043 Decision 8 predates it).
 const TSX = pathToFileURL(createRequire(import.meta.url).resolve("tsx")).href;
 const cli = (...args: string[]) => spawnSync(process.execPath, ["--import", TSX, GUARD, ...args], { encoding: "utf8" });
 

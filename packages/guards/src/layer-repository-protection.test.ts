@@ -1355,7 +1355,7 @@ test("#3962: test-runner -- each part of the standard fails on its own, and a sc
     ["no rstest", { devDependencies: { "@a11ign/toolchain": "0.1.2" } }, /does not carry @rstest\/core/],
     ["node --test", { scripts: { test: "node --test src/" } }, /runs node's test runner/],
     ["another runner", { scripts: { test: "vitest run" } }, /`test` does not run rstest/],
-    ["a path that only looks like it", { scripts: { test: "node --import tsx scripts/run.ts --config scripts/rstest/rstest.config.ts" } }, /`test` does not run rstest/],
+    ["a path that only looks like it", { scripts: { test: "node scripts/run.ts --config scripts/rstest/rstest.config.ts" } }, /`test` does not run rstest/],
   ];
   for (const [what, over, why] of cases) {
     const cell = standardOf({ manifest: manifestWith(over) })[TEST_RUNNER_COLUMN];
