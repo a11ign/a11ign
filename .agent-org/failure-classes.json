@@ -306,6 +306,13 @@
           "basis": "title states it"
         }
       ]
+    },
+    {
+      "id": "metrics-outage",
+      "name": "The trace store goes stale while sessions are working, so nobody reads the org's own metrics and nobody is told.",
+      "guard": "One merged control in a11ign/agent-org: #498 gives the trace store a clock of its own, `a11ign-trace-ingest.timer` (`host/trace-ingest.timer.in`, every five minutes, `OnUnitActiveSec=5min`), which runs `src/trace/freshness.ts`. That file ingests (`trace -- --ingest`) and then asks whether the store is stale: no `turn` event for 10 minutes (`STALE_AFTER_MS`, the chairman's figure on a11ign#4437) while a transcript has changed in the last 10 minutes. A stale store raises ONE incident per episode, a comment on the standing row #928 and an order to the owning seat (`orchestrator`) under `Class: metrics-outage`, each effect retried next run if refused. Pinned in `src/trace/freshness.test.ts` (and the unit's wiring in `src/host-units.ts` / `src/packaging/host-units.test.ts`). The timer was listed active on this host on 2026-10-10.",
+      "guardNote": "Not covered: the check lives in the same unit it watches, so a timer that is disabled or a host that is down raises nothing; \"working\" is a transcript modified inside the window, so a single tool call longer than 10 minutes that is the only thing running can read as stale, and a healthy store reads about five minutes old; the incident is one comment and one order per episode, so nothing confirms the seat acted on it. Read from agent-org origin/main and the timer's listing, not from a live incident: no stale episode was observed raised end to end. The incident's ref is empty on the org-health line (a separate row against agent-org, not this one).",
+      "seed": []
     }
   ]
 }
