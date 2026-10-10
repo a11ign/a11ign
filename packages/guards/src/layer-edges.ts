@@ -25,7 +25,7 @@
 // with no scopes at all, which is the old file-wide reading and never a wrong scope.
 // The baseline is a floor on the boundary, never a proof there is nothing under it.
 //
-// `stripComments` is `local-import-closure.ts`'s, not a second one: two comment strippers over the same
+// `stripComments` is `@a11ign/toolchain/lib/local-import-closure`'s, not a second one: two comment strippers over the same
 // tree is what drifts, and this one preserves offsets, which the message line numbers need.
 //
 // THE LAYER PACKAGES ARE DECLARED HERE, never discovered by a glob: a glob that matched nothing would read
@@ -36,7 +36,7 @@ import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, join, posix } from "node:path";
 import { pathToFileURL } from "node:url";
 import { sandboxGitEnv } from "./git-env.ts";
-import { stripComments } from "./local-import-closure.ts";
+import { stripComments } from "@a11ign/toolchain/lib/local-import-closure";
 // RELATIVE, for the reason `changed-files.ts` records above its own identical import.
 import { flagValue, refuseUnknownFlags } from "@a11ign/screenreader-fleet/cli-flags";
 

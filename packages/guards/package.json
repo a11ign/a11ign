@@ -24,17 +24,11 @@
     "./isolation-gate": {
       "default": "./src/isolation-gate.ts"
     },
-    "./local-import-closure": {
-      "default": "./src/local-import-closure.ts"
-    },
     "./mutation-check": {
       "default": "./src/mutation-check.ts"
     },
     "./piped-exit-status-guard": {
       "default": "./src/piped-exit-status-guard.ts"
-    },
-    "./tree-wide-guard": {
-      "default": "./src/tree-wide-guard.ts"
     },
     "./tree-wide-guards": {
       "default": "./src/tree-wide-guards.ts"

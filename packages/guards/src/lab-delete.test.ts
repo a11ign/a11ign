@@ -387,6 +387,15 @@ test("POSITIVE CONTROL: a guard selected from the departed directory, a missing 
     ["packages/guards/src/vanished.test.ts is selected and does not exist"]);
   assert.deepEqual(guardRefusals({ selected: STAYING_GUARDS.slice(1), exists }), [`${STAYING_GUARDS[0]} stayed with the product and is no longer found`]);
   // And the discovery itself, over a fixture population that holds a lab guard: `treeWideGuardFiles` is the product's own, so this is the seam it offers.
-  const found = treeWideGuardFiles({ lsFiles: () => "packages/lab/src/packaging/x.test.ts\n", readFile: () => "declareTreeWideGuard();", imports: () => [resolve(REPO_ROOT, "packages/guards/src/tree-wide-guard.ts")] });
+  const found = treeWideGuardFiles({ lsFiles: () => "packages/lab/src/packaging/x.test.ts\n", readFile: () => "import { declareTreeWideGuard } from \"@a11ign/toolchain/lib/tree-wide-guard\";\ndeclareTreeWideGuard();" });
   assert.deepEqual(guardRefusals({ selected: found, exists: () => true }).slice(0, 1), ["packages/lab/src/packaging/x.test.ts is selected and lives in the directory that left"]);
+  // NEGATIVE CONTROL for the same seam: the marker named only in a comment, or imported and never called, is not a declaration.
+  const notDeclared = treeWideGuardFiles({
+    lsFiles: () => "a.test.ts\nb.test.ts\n",
+    readFile: (path) => path === "a.test.ts"
+      ? "// import { declareTreeWideGuard } from \"@a11ign/toolchain/lib/tree-wide-guard\";\ndeclareTreeWideGuard();"
+      : "import { declareTreeWideGuard } from \"@a11ign/toolchain/lib/tree-wide-guard\";",
+    imports: () => [],
+  });
+  assert.deepEqual(notDeclared, []);
 });
