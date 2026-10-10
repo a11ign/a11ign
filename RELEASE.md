@@ -21,7 +21,7 @@ Run on a **clean checkout of `HEAD`**, which is what CI and a consumer see:
 | `verify.corpus.test.ts` | 6/6 |
 | CI (`lint` + `capture-regression`) | **both green** — first time since 1 August; the fix was `capture-pure.mjs` |
 | shipped model | `calibrationClean: true`, `generalisationVerified: true` (held-out, 0 errors), `releaseBlockedBy: []` |
-| `npm run scorer:shortcuts` | **Read 2026-10-06 on the lab** (`orchestrator`, [#3130](https://github.com/a11ign/a11ign/issues/3130#issuecomment-6014497720), lab job at `8940cc2b6`, exit 0): **74 unclosable and 28 closable veto pairs, 1 constant feature (`transcript_present`), over 3,131 records.** It reports and does not pass or fail; nobody has said those counts are acceptable, and whether any of the 28 closable pairs sits on a head the scorer decides alone was not read. The figure this row carried before — **225 free vetoes across 13 heads, measured 2026-08-22** — is superseded and is not comparable with this one (16 heads now, a different corpus; `PLAN.md` B8 records 225 → a residual two that can reach a report at protocol 17, 2026-09-05). Still the one row in this table that is not a pass; not re-read since 2026-10-06, and not by this edit, because a gate reading `runs/` is the lab agent's to report. Re-read is [#4552](https://github.com/a11ign/a11ign/issues/4552). See the 4.1.2 operating limitation below; every other check here is blind to it by construction |
+| `npm run scorer:shortcuts` | **Read 2026-10-10 on the lab** (`orchestrator`, [#4552](https://github.com/a11ign/a11ign/issues/4552), lab job at `cb8864c7a5fb`, exit 0): **74 unclosable and 28 closable veto pairs, 1 constant feature (`transcript_present`), over 3,131 records** -- the same counts as the 2026-10-06 reading ([#3130](https://github.com/a11ign/a11ign/issues/3130#issuecomment-6014497720), `8940cc2b6`), so the recapture changed neither. It reports and does not pass or fail; nobody has said those counts are acceptable. **9 of the 28 closable pairs sit on heads the scorer decides alone** (absent from `packages/lab/rule-ownership.json`, which means the model decides it): `4.1.3:status-progress` 4 (worst `form_change_nonempty`, -3.48) and `4.1.3:status-waiting` 5 (worst `validation_error_missing`, -6.24). The other 19 are on rules-owned heads (`1.3.1:no-headings` 4, `1.4.13:focus-panel-undismissable` 8, `2.4.1:skip-link-inert` 2, `2.4.2:route-title-stale` 2, `3.3.3:error-remedy-missing` 2, `4.1.2:state-change-silent` 1). The 9 are a finding, reported on #4552 (that row names the row it files), and are not explained away here. The figure this row carried before — **225 free vetoes across 13 heads, measured 2026-08-22** — is superseded and is not comparable with this one (16 heads now, a different corpus; `PLAN.md` B8 records 225 → a residual two that can reach a report at protocol 17, 2026-09-05). Still the one row in this table that is not a pass. See the 4.1.2 operating limitation below; every other check here is blind to it by construction |
 
 > **Read this before the table above reassures you.** Every gate in it evaluates on data that shares the
 > corpus's structure, so none of them can see a head penalising a feature that is 0 on all of its training
@@ -35,8 +35,8 @@ Run on a **clean checkout of `HEAD`**, which is what CI and a consumer see:
 > decides alone are where a veto reaches a report.
 
 Measured on a tree containing only committed content, which is what CI and a consumer see. When this table was written (2026-08)
-`release:gate` stopped at `check-signals` for 418 stale captures; that is closed (*Closed since*, below), and `check-signals` last read
-**0 stale on 2026-09-24**. The lab's last run of the whole chain that I found (2026-10-06, #3130) stopped earlier, at stage 5
+`release:gate` stopped at `check-signals` for 418 stale captures; that is closed (*Closed since*, below), and `check-signals` last read on the lab
+**0 stale on 2026-10-10** (below). The lab's last run of the whole chain that I found (2026-10-06, #3130) stopped earlier, at stage 5
 `gate:isolation` (cause #3830, closed the same day), so stages 6 to 14 — `training:check-signals:complete` among them — were *unread*, not passed.
 
 The judge runs on **our own trained scorer** (`judge-backend: local`) — 27 KB of heads over an 87 MB
@@ -245,12 +245,11 @@ Moved out of the two lists above when they stopped being true, each with the run
   runner image, a consumer's own `runs-on`, and what the report SAYS (the outsider job's question).
   `act` still cannot help: it is Docker/Linux and NVDA needs Windows. Do not read `capture-regression.yml`'s own run list for this: its newest
   entries (2026-09-18) are `push` runs that failed, on a trigger the workflow's header says was removed on 2026-09-06, and I did not establish why they exist.
-- **The 418 stale captures — CLOSED, read 2026-09-24.** The lab's `a11y-job-retrain.service` recaptured the corpus
+- **The 418 stale captures — CLOSED, read 2026-09-24 and again 2026-10-10.** The lab's `a11y-job-retrain.service` recaptured the corpus
   (`Capture complete: 1743 captured, 0 failed, 0 skipped, of 1743 cases across 10 workers`) and `check-signals` then read
   **`1743 discriminating, 0 blind, 0 contaminated, 0 uncaptured, 0 stale`** at 2026-09-24T00:54:57Z (`worker-tooling`, read on the lab,
   [#1926](https://github.com/a11ign/a11ign/issues/1926#issuecomment-5809655558)). The generated tier reads uniformly protocol 21. The
-  corpus was recaptured again on 2026-10-06 (1,795 of 1,795, #3524); **`check-signals` has not been read since that recapture** by anything this
-  repository records, and not by this edit: it reads `runs/`, which is the lab agent's to report ([#4552](https://github.com/a11ign/a11ign/issues/4552)).
+  corpus was recaptured again on 2026-10-06 (1,795 of 1,795, #3524). `check-signals` then read, on the lab at `cb8864c7a5fb` (`orchestrator`, 2026-10-10T15:40Z, exit 0, [#4552](https://github.com/a11ign/a11ign/issues/4552)): **`check-signals` read on the lab 2026-10-10: 1795 discriminating, 0 blind, 0 contaminated, 0 uncaptured, 0 stale, 0 provisional** -- `PASS — all 1795 case(s) discriminate, and the corpus is complete.`
   The ~2.9 h `--resume` recapture quoted under *Deferred* below was therefore overtaken by a full recapture and is not owed.
 
 ## Known limitations, stated plainly
