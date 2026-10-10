@@ -675,7 +675,7 @@ else
   # `if VAR=$(cmd); then ... else ...; fi`, NEVER a bare `VAR=$(cmd); CODE=$?` -- under `set -e` (this
   # file's own #386 guard already states why) a plain assignment IS a simple command, so a non-zero
   # command substitution aborts the script before the next line can read `$?` at all.
-  if UNTRACKED_CHANGESET_OUT="$(node --import tsx scripts/changeset-untracked-check.ts 2>&1)"; then
+  if UNTRACKED_CHANGESET_OUT="$(node scripts/changeset-untracked-check.ts 2>&1)"; then
     UNTRACKED_CHANGESET_CODE=0
   else
     UNTRACKED_CHANGESET_CODE=$?
