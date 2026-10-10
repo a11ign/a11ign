@@ -36,7 +36,7 @@ import { sandboxGitEnv } from "./git-env.ts";
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const DEPARTED_DIRECTORY = "worker-fleet";
 const CONSUMED = "@a11ign/screenreader-fleet";
-const CONSUMED_VERSION = "0.7.1";
+const CONSUMED_VERSION = "0.7.2";
 /** Both names the package has carried; a changeset may name neither. BUILT, NOT WRITTEN: a rename test refuses a file that spells the old name whole. */
 const NAMES = [CONSUMED, ["@a11ign", "worker-fleet"].join("/")] as const;
 /** What a pnpm integrity looks like: an algorithm, a dash and base64. Not a hash of anything: a SHAPE, so a placeholder is refused. */
