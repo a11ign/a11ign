@@ -98,15 +98,28 @@ rule, because every rule then assumed continuous agents.
 Said once here, because this brief is the one place an engineer is sent to read.
 
 - **Work to the end, unattended.** Nobody reads this terminal, so nobody can answer a question or approve a step.
-  If something genuinely blocks you, say so on the row and message `product-manager`, the first reader for rows
-  and process; never stop and wait on a human. A claim refused because someone else holds it is the case
-  already covered above: report it and stop.
+  If something genuinely blocks you, declare `blocked <row> <reason>` (below) rather than asking; never stop and
+  wait on a human. A claim refused because someone else holds it is the case already covered above: report it
+  and stop.
 - **Ending your turn with a question is the same as stopping**, because the question goes unread and still looks
   like progress. If the action is in your lane, take it and report what you did (the row filed, the comment
   posted, the fix pushed), never an offer to do it.
 - **If it is genuinely not yours, route it, then end the turn.** Put `answer:<session>` on the row for a ruling,
   or file the row itself for work. The gate brings you back when something changes, so do not poll a pull
   request for a verdict that has its own cause: the tick already answers that question.
+
+## Every turn ends on a declared state (chairman, #4437, class `worker-state-ambiguous`)
+
+An idle pane at the prompt meant four things that look identical: waiting for CI, waiting on a background job a restart orphaned, a turn
+ended mid-task on "Next I'll ...", and a question nobody will answer (`worker-4202`, `worker-4451`). The rules above were prose with no state
+to end a turn on, so the state is now a field the gate reads instead of the pane.
+
+- **Every turn ends with exactly one declaration through `agent-org worker:state`: `waiting-ci <pr>`, `waiting-review <pr>`, `done`, or
+  `blocked <row> <reason>`.** A worker idle without a fresh one is treated as stalled, and the gate sends "continue" within minutes.
+- **Never wait on your own background job across a turn.** Long work runs in the foreground, or you declare `waiting-ci <pr>` and the gate
+  wakes you with the result; a background task is for work inside a turn only, and a wait is declared, never held.
+- **A worker never asks a question at the prompt.** A real question becomes `blocked <row> <reason>`, which puts `answer:<session>` on the
+  row so the gate routes it; otherwise you decide and record why on the row, then continue.
 
 ## The acceptance standard
 
@@ -248,4 +261,4 @@ optional, and its absence is never a finding; a diff that reimplements a platfor
 
 **The tool lives in [a11ign/agent-org](https://github.com/a11ign/agent-org) (chairman, 2026-10-02, #2977):** a change to it is a pull request there, never here, where the old copy is frozen and goes in #2976. Its row stays tracked here until agent-org is a declared tracker (#2899).
 
-A turn does not end on a background job it still needs: wait for it, or hand its result to a row, before you stop (`ceo`).
+A turn does not end on a background job it still needs, and a wait is never held across a turn: hand its result to a row, or declare `waiting-ci <pr>` (above), before you stop (`ceo`).
