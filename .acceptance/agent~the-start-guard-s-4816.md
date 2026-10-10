@@ -11,7 +11,7 @@ another checkout's packages/: lister -> refuse; (unchanged "every entry" -> refu
 
 **Still asked about** (two new tests in `worktree-resolution.test.ts`, each with its control): a link into another checkout's `packages/` beside an excused store link; a link into another checkout's `node_modules/` outside `.pnpm`; a workspace member resolved into a store; a dangling entry; and, unchanged, every entry when the tree has no `packages/`.
 
-**Not run:** `pnpm run typecheck` as a whole stops in `packages/cli` (`@a11ign/documents` not found): this worktree's `node_modules` is a hand-made hybrid and has no `packages/cli/node_modules`. `tsc --noEmit -p tsconfig.json` filtered to everything outside `packages/cli` is clean. `pnpm run lint`: 0 errors.
+**Also run** (measured, this head): `pnpm run lint` 0 errors; `pnpm exec tsc --noEmit` exit 0 (after the hand-made hybrid `node_modules` was given its per-package links; the pre-push typecheck passed). Not run: `pnpm run verify` and the full `test:org`, so "the affected set passed" is not claimed.
 
 platform: nothing built; one predicate in an existing function.
 
