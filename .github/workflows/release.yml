@@ -652,6 +652,8 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
+      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
       - name: Regenerate the outside job at the promoted tag's commit, and decide whether it differs and is not older
         id: decide
         env:
