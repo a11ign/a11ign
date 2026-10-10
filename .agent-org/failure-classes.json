@@ -171,8 +171,8 @@
     {
       "id": "hand-reroute",
       "name": "A change a human-side session made that the org should have made itself (`hand-fix-ledger`).",
-      "guard": null,
-      "guardNote": "recorder: the tick, from #4450, once a day, per counted change.",
+      "guard": "`classifyLogin` in `src/hand-fix-ledger.ts` of a11ign/agent-org reads a dependency bot (`app/dependabot`, `dependabot[bot]`, Renovate, from the one `DEPENDENCY_BOT_LOGIN` definition) as `automation`, so its pull request is no longer counted as a human-side change: row a11ign/agent-org#560, built on #705, merged as a11ign/agent-org#716 (b7a247af, 2026-10-10T19:19:17Z). `src/packaging/hand-fix-ledger.test.ts` pins it, with controls that a human bump, a lookalike login (`dependabot-fan`) and a declared `Hand-fix:` are still counted. This stops the FALSE occurrences: 23 of this row's 30 ledger lines were Dependabot pull requests (read with `gh pr view` on each ref, row #4623 comment 6089529937).",
+      "guardNote": "recorder: the tick, from #4450, once a day, per counted change. NOT stopped: the 7 genuine occurrences (#2950, #2988, #3001, #2990, #3003, #3018, #3017, all merged 2026-10-02) were org-authored changes with a declared `Hand-fix:` line, each of which built the gate or detector its own line names; the recorder counts them correctly and nothing prevents a human-side session fixing a gap the org should have closed, only the gates those seven produced. None newer than 2026-10-02 is genuine in the ledger as read 2026-10-09. Whether that residual is itself a guard is `ceo`'s call. The ledger was not re-read after #716, so the post-fix count is not measured.",
       "seed": []
     },
     {
