@@ -8,8 +8,9 @@ The fifteen release, coverage, CI-health, token-cost and outsider files in #4697
 
 ## Evidence
 
-- Measured: `pnpm run lint` 0 errors (575 warnings, none on lines this change wrote); `pnpm run typecheck` exit 0; the three guard tests (`coverage-failure-classifier`, `stale-dist-diagnosis`, `outsider-job-fresh`) 38 tests, 0 failed through `rstest`.
-- **`pnpm run verify` is NOT green here, for a cause that is not this diff:** its `ts` step runs `pnpm run docs:coverage`, whose target `packages/lab/scripts/generate-coverage-doc.ts` was deleted by `0a5f6ca61` (#3505), so it fails with `ERR_MODULE_NOT_FOUND` at `origin/main`. Its `acceptance` step reports `no body to lint` for a local stamp. The remaining `ts` steps were run by hand as above; `rstest run --changed=origin/main` found no affected test module (the scripts are not imported by one), which is why the guard tests were named.
+- Measured: `pnpm run verify -- --draft-body=<body>` printed `GREEN for this head and body -- the affected set passed at this head, affected against origin/main` (204 test files, 2717 tests; `ts`, `acceptance`, `ownedPaths` PASS; `python`, `rulesFitness`, `changeset` NOT-NEEDED). The tree-wide guards run in CI only.
+- **The two usage assertions were found by name, not by the affected set:** before the lab layer was laid, `rstest --changed` reported no affected module; running the 21 test files that mention these scripts with `node --test` found the two that failed on the old text.
+- **A premise I held and withdrew:** an earlier run reported `docs:coverage` failing on a missing `packages/lab/scripts/generate-coverage-doc.ts`. That was this worktree not having laid the lab layer (#4166 ruled the same), not a fault at `origin/main`; `node scripts/lay-layer.ts lab` and the verify above settle it.
 
 platform: none needed; a text edit.
 
