@@ -148,9 +148,18 @@
     {
       "id": "owner-unresolved",
       "name": "The owner ladder (`ownerOfPr`) named nobody for a pull request, so its order fell to the `ceo` rung.",
-      "guard": "Two rungs of `ownerOfPr` now name an owner where none was named: `isDependencyBotPr` (a11ign/agent-org#542) names the owner of a bot pull request, and `owner-gone` (a11ign/agent-org#548, row #4644) names `product-manager` for a pull request whose owner session ended and whose closing rows are all closed. `src/packaging/pr-owner-gone.test.ts` in agent-org pins the second.",
-      "guardNote": "Not covered: a pull request with no label whose branch names no row still falls to the `ceo` rung and is recorded by `unresolvedOwnerEvents` (recorder: the tick, from #4450). #4386 is the resolver defect it first showed.",
-      "seed": []
+      "guard": "Three rungs of `ownerOfPr` now name an owner where none was named: `isDependencyBotPr` (a11ign/agent-org#542) names the owner of a bot pull request; `owner-gone` (a11ign/agent-org#548, row #4644) names `product-manager` for a pull request whose owner session ended and every row it closes is closed; and, since a11ign/agent-org#637 (row #4808), the same rung also fires when the closing row is OPEN and held by nobody (`closingRowsUnheld`), the #4805 shape. `src/packaging/pr-owner-gone.test.ts` in agent-org pins both halves of the rung (the #4626 closed-row case and the #4805 open-and-unclaimed case, each with a CONTROL where the row is claimed or the label alive), and the grid oracle in `src/packaging/pr-owner-total.test.ts` pins that `ownerOfPr` names a session for every cell.",
+      "guardNote": "Not covered: a pull request with NO label whose branch names no row still falls to the `ceo` rung and is recorded by `unresolvedOwnerEvents` (recorder: the tick, from #4450). #4386 is the resolver defect it first showed. Also unfixed: the merge-conflict order's own `owner-gone` sentence (`src/work-gate/shared-file-orders.ts`) still says \"the row it closed is closed\", false for an open-unclaimed row (named by a11ign/agent-org#637 as a follow-up).",
+      "seed": [
+        {
+          "ref": "a11ign/a11ign#4805",
+          "basis": "row body names it"
+        },
+        {
+          "ref": "a11ign/a11ign#4808",
+          "basis": "title states it"
+        }
+      ]
     },
     {
       "id": "worker-excluded",
@@ -281,6 +290,22 @@
         }
       ],
       "guardNote": "Not covered: `readProseAndOrder` is the only `answer:<session>` writer found (by reading every `answer:` string in `src/` of agent-org), so a writer added elsewhere, or a label added by hand or by a one-shot script, does not pass through the guard. The label names the comment's AUTHOR, not the handoff's target (noted on #4679, not repaired). The writer of the 2026-10-09 burst was never positively identified in the journal; it is inferred to be `readProseAndOrder` replaying past labels, so a repeat from another path would not be refused."
+    },
+    {
+      "id": "claimed-worker-stalled",
+      "name": "A claimed worker stopped mid-task, or a stalled holder or a spare held the slot a ready row needed, and nothing woke it or started another.",
+      "guard": "Two merged controls in a11ign/agent-org: #597 (row #458) wakes a claimed worker that is `idle` or `done` with a claim naming a branch, no open pull request, no pending check and no declared wait field, with a \"continue\" order after 10 minutes (`STOPPED_CLAIMANT_MINUTES`), tells a holder whose agent-session id changed that its background tasks are lost, and appends one `claimed-worker-stalled` event to the failure ledger per nudge (`src/idle-claimant-stopped.test.ts`, `src/claim-stall-restart-notice.test.ts`); #599 (row #459) types a spare `worker-<n>` only the row it was named for (`ownRowOnly` in `wake.ts`), so an unclaimed ready row starts a FRESH worker rather than a second row being typed into a standing session (`src/ready-row-dispatch.test.ts`).",
+      "guardNote": "Not covered: the 10-minute figure is capped below the measured healthy-wait tail (p90 11.3, p95 16.5 minutes), so some healthy waits draw one unneeded \"continue\" (#597 counted 18 of 146 in three weeks); a holder that has an open pull request or a declared wait stays on the 45-minute idle and 120-minute no-progress clocks; the 10-minute rule was replayed on four workers of #4437, not read on a live tick when #597 merged. A tick-written ledger event is a nudge, not proof the worker resumed.",
+      "seed": [
+        {
+          "ref": "a11ign/agent-org#458",
+          "basis": "title states it"
+        },
+        {
+          "ref": "a11ign/agent-org#459",
+          "basis": "title states it"
+        }
+      ]
     }
   ]
 }
