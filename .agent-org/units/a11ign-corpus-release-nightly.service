@@ -1,7 +1,7 @@
 [Unit]
 # #1042 ITEM 3: the lab's own `a11y-corpus-snapshot.timer` fires daily and produces an archive nobody
 # publishes -- a snapshot on the lab is not a backup, which is this row's whole subject. See
-# packages/lab/scripts/corpus-release-nightly.mjs for what this does and does not decide -- it fetches the
+# packages/lab/scripts/corpus-release-nightly.ts for what this does and does not decide -- it fetches the
 # newest snapshot and hands it to `corpus:release`, which is already idempotent and self-verifying; this
 # unit adds no judgment of its own, the same reason it needs no wake the way #1830's nightly batch does.
 Description=a11ign: fetch the lab's newest corpus snapshot and release it
@@ -54,7 +54,7 @@ EnvironmentFile=-%h/.config/a11ign/fleet.env
 # update non-fatal: a firing against a slightly stale checkout is worth far more than no firing at all.
 ExecStartPre=-%h/.local/bin/agent-org primary:update
 
-ExecStart=%h/.local/bin/node packages/lab/scripts/corpus-release-nightly.mjs
+ExecStart=%h/.local/bin/node packages/lab/scripts/corpus-release-nightly.ts
 
 # Generous relative to a11ign-fleet-gated-nightly.service's 120s: this job moves an archive of real bytes
 # over the network twice (fetch, then corpus:release's own upload-and-download verify), not just two `gh`
