@@ -177,6 +177,79 @@
         }
       ],
       "guardNote": "none in force. The verify-row rule of 2026-10-09 20:05Z applies row by row, but nothing refuses the close. Set guard to the rule's reference when a rule that refuses the close is in force."
+    },
+    {
+      "id": "answer-label-without-question",
+      "name": "An answer:<session> label is added to a row, closed ones included, while no question to that session is open, so the label wakes its owner with nothing to answer.",
+      "guard": "`answerLabelRefusal({ state, lastComment, session, labelledAt })` in `src/answer-label-guard.ts` of a11ign/agent-org, called by `readProseAndOrder` in `src/work-gate/org-health.ts` before every `answer:<route>`, merged as a11ign/agent-org#576 (row #4679, 2026-10-10T00:20:59Z). It refuses a closed row, a newest comment that asks that session nothing, a label already given since the newest comment (the replay) and an unreadable row. `src/answer-label-guard.test.ts` pins it, with mutations never/always/skip/replay each breaking its own tests; `src/work-gate/org-health.test.ts` pins the wiring.",
+      "seed": [
+        {
+          "ref": "a11ign/a11ign#4679",
+          "basis": "title states it",
+          "note": "filed 2026-10-10: an answer:<session> label added to closed rows with no question; fixed by agent-org#576"
+        },
+        {
+          "ref": "a11ign/a11ign#3870",
+          "basis": "row body names it",
+          "note": "labelled answer:<session> by a11ign-ai-workers between 2026-10-09T23:00:59Z and 23:01:56Z, read from the row's own events by the filer of #4679; no comment from that account followed. Membership not re-read by this row"
+        },
+        {
+          "ref": "a11ign/a11ign#4148",
+          "basis": "row body names it",
+          "note": "labelled answer:<session> by a11ign-ai-workers between 2026-10-09T23:00:59Z and 23:01:56Z, read from the row's own events by the filer of #4679; no comment from that account followed. Membership not re-read by this row"
+        },
+        {
+          "ref": "a11ign/a11ign#4241",
+          "basis": "row body names it",
+          "note": "labelled answer:<session> by a11ign-ai-workers between 2026-10-09T23:00:59Z and 23:01:56Z, read from the row's own events by the filer of #4679; no comment from that account followed. Membership not re-read by this row"
+        },
+        {
+          "ref": "a11ign/a11ign#4278",
+          "basis": "row body names it",
+          "note": "labelled answer:<session> by a11ign-ai-workers between 2026-10-09T23:00:59Z and 23:01:56Z, read from the row's own events by the filer of #4679; no comment from that account followed. Membership not re-read by this row"
+        },
+        {
+          "ref": "a11ign/a11ign#4405",
+          "basis": "row body names it",
+          "note": "labelled answer:<session> by a11ign-ai-workers between 2026-10-09T23:00:59Z and 23:01:56Z, read from the row's own events by the filer of #4679; no comment from that account followed. Membership not re-read by this row"
+        },
+        {
+          "ref": "a11ign/a11ign#4437",
+          "basis": "row body names it",
+          "note": "labelled answer:<session> by a11ign-ai-workers between 2026-10-09T23:00:59Z and 23:01:56Z, read from the row's own events by the filer of #4679; no comment from that account followed. Membership not re-read by this row"
+        },
+        {
+          "ref": "a11ign/a11ign#4453",
+          "basis": "row body names it",
+          "note": "labelled answer:<session> by a11ign-ai-workers between 2026-10-09T23:00:59Z and 23:01:56Z, read from the row's own events by the filer of #4679; no comment from that account followed. Membership not re-read by this row"
+        },
+        {
+          "ref": "a11ign/a11ign#4458",
+          "basis": "row body names it",
+          "note": "labelled answer:<session> by a11ign-ai-workers between 2026-10-09T23:00:59Z and 23:01:56Z, read from the row's own events by the filer of #4679; no comment from that account followed. Membership not re-read by this row"
+        },
+        {
+          "ref": "a11ign/a11ign#4516",
+          "basis": "row body names it",
+          "note": "labelled answer:<session> by a11ign-ai-workers between 2026-10-09T23:00:59Z and 23:01:56Z, read from the row's own events by the filer of #4679; no comment from that account followed. Membership not re-read by this row"
+        },
+        {
+          "ref": "a11ign/a11ign#4524",
+          "basis": "row body names it",
+          "note": "labelled answer:<session> by a11ign-ai-workers between 2026-10-09T23:00:59Z and 23:01:56Z, read from the row's own events by the filer of #4679; no comment from that account followed. Membership not re-read by this row"
+        },
+        {
+          "ref": "a11ign/a11ign#4567",
+          "basis": "row body names it",
+          "note": "labelled answer:<session> by a11ign-ai-workers between 2026-10-09T23:00:59Z and 23:01:56Z, read from the row's own events by the filer of #4679; no comment from that account followed. Membership not re-read by this row"
+        },
+        {
+          "ref": "a11ign/a11ign#4627",
+          "basis": "row body names it",
+          "note": "labelled answer:<session> by a11ign-ai-workers between 2026-10-09T23:00:59Z and 23:01:56Z, read from the row's own events by the filer of #4679; no comment from that account followed. Membership not re-read by this row"
+        }
+      ],
+      "guardNote": "Not covered: `readProseAndOrder` is the only `answer:<session>` writer found (by reading every `answer:` string in `src/` of agent-org), so a writer added elsewhere, or a label added by hand or by a one-shot script, does not pass through the guard. The label names the comment's AUTHOR, not the handoff's target (noted on #4679, not repaired). The writer of the 2026-10-09 burst was never positively identified in the journal; it is inferred to be `readProseAndOrder` replaying past labels, so a repeat from another path would not be refused."
     }
   ]
 }
