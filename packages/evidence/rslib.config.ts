@@ -26,7 +26,6 @@ export default defineConfig({
         "document-identity": "./src/document-identity.ts",
         conformance: "./src/conformance.ts",
         earl: "./src/earl.ts",
-        "source-text": "./src/source-text.ts",
       },
     },
     output: { target: "node", autoExternal: true, cleanDistPath: false, filename: { js: "[name].mjs" } },

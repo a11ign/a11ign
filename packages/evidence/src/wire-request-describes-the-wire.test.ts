@@ -24,8 +24,13 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 
 import { layerFile } from "../../guards/src/layer-file.ts";
-import { stripComments } from "./source-text.js";
 import type { CaptureRequest, CaptureFormState } from "./index.js";
+
+// Evidence is Apache-2.0 and may not import the toolchain (ADR 0006), so the comment strip is local (#4712). It keeps a string or template
+// literal whole, so `"https://x"` is not cut at the `//`; it does not know regex literals, which neither worker file puts a comment marker in.
+function stripComments(source: string): string {
+  return source.replace(/("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, (_comment, literal?: string) => literal ?? "");
+}
 
 // BY PACKAGE NAME (#3447): the worker lives in its own repository and is installed from the registry, which publishes `dist/` only (#3937):
 // `server.mjs` is its own entry, and `capture-pure.mjs` is bundled into the `src_capture-pure_mjs.mjs` chunk.

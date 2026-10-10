@@ -28,10 +28,6 @@
     "./earl": {
       "types": "./dist/earl.d.ts",
       "default": "./dist/earl.mjs"
-    },
-    "./source-text": {
-      "types": "./dist/source-text.d.ts",
-      "default": "./dist/source-text.mjs"
     }
   },
   "files": [
