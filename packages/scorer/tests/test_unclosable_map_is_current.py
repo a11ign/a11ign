@@ -37,10 +37,16 @@ import screenreader_features as features  # noqa: E402
 
 EXPECTED_KINDS = {"by-definition", "perturbs-measurement"}
 
+# The emitter is a `.ts` script, which Node runs by stripping types. The distro's `/usr/bin/node` does not do
+# that reliably, so use the upstream Node 24 at `~/.local/bin/node` (#4388) when it is there, and the PATH's
+# `node` otherwise (CI's setup-node).
+_UPSTREAM_NODE = Path.home() / ".local/bin/node"
+NODE = str(_UPSTREAM_NODE) if _UPSTREAM_NODE.exists() else "node"
+
 
 def emitted_map() -> dict[str, dict[str, list[str]]]:
     """Run the emitter and read what it wrote — never a checked-in copy, which would be a third source."""
-    subprocess.run(["node", "packages/lab/scripts/emit-unclosable-vetoes.mjs"],
+    subprocess.run([NODE, "packages/lab/scripts/emit-unclosable-vetoes.ts"],
                    cwd=REPO, check=True, capture_output=True)
     return json.loads((REPO / "runs/unclosable-vetoes.json").read_text(encoding="utf-8"))
 
