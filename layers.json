@@ -5,7 +5,7 @@
     "screenreader-fleet": { "path": "packages/worker-fleet", "source": ".", "remote": "https://github.com/a11ign/screenreader-fleet.git" }
   },
   "pinned": {
-    "lab": { "path": "packages/lab", "source": ".", "remote": "https://github.com/a11ign/lab.git", "tag": "v0.1.27", "lays": ["src", "scripts", "baselines", "rule-ownership.json", "CLAUDE.md"] },
+    "lab": { "path": "packages/lab", "source": ".", "remote": "https://github.com/a11ign/lab.git", "tag": "v0.1.28", "lays": ["src", "scripts", "baselines", "rule-ownership.json", "CLAUDE.md"] },
     "control": { "path": "packages/control", "source": ".", "remote": "https://github.com/a11ign/control.git", "tag": "v0.3.3", "lays": ["src", "ansible", "CLAUDE.md", "README.md"], "declares": "layers.json", "keeps": ["ansible/inventory.yml", "ansible/*.local.yml"] }
   }
 }
