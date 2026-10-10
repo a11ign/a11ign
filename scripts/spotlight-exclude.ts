@@ -68,7 +68,7 @@ function defaultRun(args: string[]) {
 
 async function main() {
   refuseUnknownFlags(["--apply"],
-    { entry: import.meta.url, command: "node --import tsx scripts/spotlight-exclude.ts" });
+    { entry: import.meta.url, command: "node scripts/spotlight-exclude.ts" });
   const apply = process.argv.includes("--apply");
   const { needing, already } = markerPlan(worktreePaths());
   const verb = apply ? "marked" : "WOULD MARK";

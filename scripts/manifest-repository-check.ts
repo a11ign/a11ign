@@ -15,7 +15,7 @@
  * So `release.yml` runs this before `changeset publish`, on the dry run as well as the real run, and the
  * refusal is ours: it names each manifest, what it says, and what the run needs.
  *
- *   GITHUB_REPOSITORY=owner/name node --import tsx scripts/manifest-repository-check.ts
+ *   GITHUB_REPOSITORY=owner/name node scripts/manifest-repository-check.ts
  *
  * Exit 0: every published manifest names `https://github.com/$GITHUB_REPOSITORY`. Exit 1: at least one does not,
  * each named. Exit 2: `GITHUB_REPOSITORY` is unset, so there is nothing to compare against -- never a pass.
@@ -88,7 +88,7 @@ export function publishedManifests(repoRoot: string): Array<{ path: string; name
 }
 
 function main() {
-  refuseUnknownFlags([], { entry: import.meta.url, command: "node --import tsx scripts/manifest-repository-check.ts" });
+  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/manifest-repository-check.ts" });
   const repository = process.env.GITHUB_REPOSITORY ?? "";
   if (!/^[^/\s]+\/[^/\s]+$/.test(repository)) {
     console.error(`::error::manifest-repository-check: GITHUB_REPOSITORY is ${JSON.stringify(repository)}, not owner/name, `
