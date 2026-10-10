@@ -46,7 +46,10 @@ assumed standing seats. The org has ruled since, so what follows replaces it.
   you ONE nudge; another two hours after it reaches you, the claim is released and, if you are a spawned engineer,
   your instance is ended. **Your worktree and everything unpushed in it are kept**, and the next instance starts in
   them. A commit, a push or a row comment resets the clock. A spawned engineer whose pull request MERGES with nothing
-  else held is ended too (and the row asks `product-manager` what is left), whether or not the row closed.
+  else held is ended too, whether or not the row closed: the row closes on its deliverable's merge. **In the
+  chairman's words (#4437): your row is ONE deliverable. Anything you find beyond it, file as a new row; do not hold
+  your claim for it.** A live reading after the merge, a decision for another seat, a premise that did not hold and
+  a CI watch are each a new row or the gate's job, never a reason to hold the claim.
 - **Check, then claim, from a linked worktree, never the primary checkout:**
   `agent-org row-claim check <n>`, then
   `agent-org row-claim claim <n> --session=<you> --branch=agent/<slug>-<n> --worktree=../wt-<n>`.
