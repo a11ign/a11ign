@@ -2234,3 +2234,69 @@ was *"to WHICH checkout"*, and a marker searching for `corpusReadable(` did not 
 and so reported five just-fixed files as unguarded. **All three are a correct method against the wrong
 question, and all three read as a confident clean.** The tell is the same: an answer arrived without the
 question being restated.
+
+## 27. READ 2026-10-10 (`549cfd8af`) — the nine closable vetoes on `4.1.3:status-progress` and `4.1.3:status-waiting`: eight are unclosable by definition, one is the page
+
+`scorer:shortcuts` (a11ign#4552) counted 28 closable veto pairs and 9 of them sit on the two `4.1.3` heads below, which `rule-ownership.json`
+does not list, so no deterministic check stands beside them. Nobody had said why each is there. This entry reads each one on the lab's exported
+corpus with `explain-feature` (`pnpm run scorer:explain-feature --subtype … --feature …`, dispatched with `lab:job`), **one run per pair, nine
+runs, all exit 0, all at `549cfd8af` on 2026-10-10**. A reading at a moment: re-run it before quoting a count.
+
+| subtype | feature | class | positives reading 1 | other records reading 1 |
+|---|---|---|---|---|
+| 4.1.3:status-progress | form_change_nonempty | stale-classification | 0 of 32 | 678 of 3099 |
+| 4.1.3:status-progress | status_update_announced | stale-classification | 0 of 32 | 208 of 3099 |
+| 4.1.3:status-progress | validation_error_announced | stale-classification | 0 of 32 | 299 of 3099 |
+| 4.1.3:status-progress | form_change_observed_absent | stale-classification | 0 of 32 | 549 of 3099 |
+| 4.1.3:status-waiting | validation_error_missing | page-reason | 0 of 30 | 178 of 3101 |
+| 4.1.3:status-waiting | form_change_nonempty | stale-classification | 0 of 30 | 678 of 3101 |
+| 4.1.3:status-waiting | validation_error_announced | stale-classification | 0 of 30 | 299 of 3101 |
+| 4.1.3:status-waiting | status_update_announced | stale-classification | 0 of 30 | 208 of 3101 |
+| 4.1.3:status-waiting | form_change_observed_absent | stale-classification | 0 of 30 | 549 of 3101 |
+
+**No pair is `probe-coverage`.** On every one of the nine runs the form probe ran on every positive: `formChanges` entries 32 of 32
+(`status-progress`: `submit` 25, `taskButton` 7) and 30 of 30 (`status-waiting`: `taskButton` 30), `baselineQuiet` true on all of them, and the
+probe's own "absent" count 0. A channel that is observed and empty is a reading, not a gap.
+
+### The eight `stale-classification` pairs
+
+Each reads 0 on every positive because **the subtype's positive IS the absence of that announcement**. `form_change_nonempty` is
+`any(after.strip())` over the resolved `formChanges`; `status_update_announced` and `validation_error_announced` read the same `after` (and
+`postSubmitFields`) for a status or an error word; `form_change_observed_absent` is "the channel was asked and the page had none", and a positive
+needs the entry that records the silent activation. `form_change_nonempty` reading 0 on 32 of 32 and 30 of 30 means every positive's `after` is
+empty, and that is the 4.1.3 finding: a status message after an activation that NVDA never speaks. A positive that read 1 would be a conformant page.
+Sampled positives (3 of 32, 3 of 30) all show one `formChanges` entry with `after: ""`, `baselineQuiet: true`, `submitted: false`.
+
+This is `4.1.3:form-activation-silent`'s entry in `IMPOSSIBLE_BY_DEFINITION` (`packages/lab/scripts/audit-corpus-starvation.ts:76-82`), which lists
+exactly these four features (plus `validation_error_missing`). The two heads in this entry were added on 2026-09-12 (round 15), after the 2026-09-06
+reading that built that map, and the map has no key for them. So the audit counts as closable what the map already calls unclosable one key over.
+`ceo` ruled the heads' recall a documented limit on #2258 (2026-09-25) and #2536; nothing here asks for a new ruling.
+
+**`form_change_nonempty`, the question the row asked.** Both readings are about the SAME mechanism, and neither is wrong about its own heads. The
+"closable" in the shortcuts audit is a default (`closable` is every pair no map entry covers), not a finding. The 2026-09-06 entry (§2, "REOPENED")
+says `form_change_nonempty` is unclosable on `3.3.1:validation-error-silent` and `4.1.3:form-activation-silent`, and it is right for them. **For
+`status-progress` and `status-waiting` it is also unclosable**, by the same argument and now measured: 0 of 32 and 0 of 30 positives read 1.
+The 2026-09-06 entry's open sub-question (disclosure furniture landing in `formChanges` with `kind: "disclosure"`) does not rescue the pair on these
+two heads: `formChanges` carries **no `disclosure` entry at all** here (0 of 32, 0 of 30); the disclosure activation lands in `stateChanges` (8
+entries on `status-progress`, 7 on `status-waiting`, none errored) and is announced there ("…focused, expanded"). That is a reading of these two
+heads only; the sub-question on `form-activation-silent` and `3.3.1` is not re-read here.
+
+### The one `page-reason` pair, and the ADR it brushes
+
+`4.1.3:status-waiting` / `validation_error_missing` reads 1 only when a form field appears in `postSubmitFields`, the activation is a SUBMIT, and
+no error was announced. The 30 positives are all `taskButton` pages ("Check availability", "Check delivery dates", "Check remaining seats") with the
+button as the only control and no form field after activation, so it reads 0 **because of the page**, not because the subtype forbids it.
+
+**What page would carry it on a positive** (not built here): a waiting-state flow with a real form: at least one labelled field, a real submit
+(`type=submit`, so `submitted: true` is measured) whose click starts a wait ("Checking availability…") that is never spoken. **That page is
+input-identical to a `3.3.1:validation-error-silent` positive**, a rejected submit with nothing announced, so building it is an ADR 0021
+layer-ownership question (*"silence has two causes"*), not a corpus question. **Named for `ceo`, and not decided here**: making the veto go away is
+the wrong reason to rule it. Until then the pair stays `page-reason` and nobody should build the page.
+
+### What follows (for `product-manager`, not this entry's work)
+
+- Eight pairs: one row to add `4.1.3:status-progress` and `4.1.3:status-waiting` to `IMPOSSIBLE_BY_DEFINITION` (and regenerate
+  `runs/unclosable-vetoes.json` and the shortcuts baseline), so the audit stops reporting them as work. That changes the audit's headline from 28
+  to 20 closable pairs. It is a code change in the lab, outside this entry's Region.
+- One pair: no corpus row, because the page cannot be built without the ADR 0021 ruling above.
+- No `probe-coverage` row is wanted.
