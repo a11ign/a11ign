@@ -7,6 +7,8 @@ Nine files in `packages/guards/src` and `packages/cli/src/auth/attach-spike.ts` 
 
 Acceptance: bash -c '! git grep -qE -- "--import[= ]\S*tsx" -- packages/cli/src/auth/attach-spike.ts packages/guards/src'
 
+Mutation: broke the `stale-dist-diagnosis.test.ts` usage regex (`node` to `nodeX`): 11 passed and 1 failed against 12 passed unmutated; restored byte-identical (`diff` empty). The coverage-failure-classifier regex is the same shape.
+
 Closes #4696
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
