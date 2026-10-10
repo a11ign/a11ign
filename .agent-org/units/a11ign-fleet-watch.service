@@ -45,7 +45,7 @@ ExecStartPre=-%h/.local/bin/agent-org primary:update
 # its code, so the load is proved FIRST: `SuccessExitStatus` governs the main process only, so this step's exit 1
 # fails the unit. The module's own `main` runs only when it is the entry point, so importing it reads nothing and
 # posts nothing. No leading `-`: that is what would swallow the failure. `fleet-watch-unit-exit.test.ts` pins it.
-ExecStartPre=/usr/bin/env node --import tsx -e "import('./packages/control/src/fleet-watch.ts')"
+ExecStartPre=%h/.local/bin/node -e "import('./packages/control/src/fleet-watch.ts')"
 
 ExecStart=%h/.local/bin/pnpm run fleet:watch -- --post
 
