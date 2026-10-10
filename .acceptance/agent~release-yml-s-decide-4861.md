@@ -14,6 +14,8 @@ Acceptance: `bash -c 'f=.github/workflows/release.yml; awk "/^  decide-outsider-
 
 Measured at this head: the awk/grep line exited 0 and the rstest run printed `VERDICT pass: 4 tests in 1 file`. Measured, by deriving it: the jobs the rule applies to are `guards` (`scripts/generate-consumer-gate.ts`), `decide` (`scripts/release-promote.ts`) and `decide-outsider-pin` (`scripts/outsider/generate.ts`); `scripts/agent-org-newest-tag.ts` itself does not reach `repo-identity.ts`, so no job is unsatisfiable. Measured: `git show adcc8fc74:.github/workflows/release.yml` equals this file with the new step removed, byte for byte, so the control that removes the step IS the job as it stood when run 38065151444 failed.
 
+`pnpm run verify` was green at this head: the affected set passed (207 test files, 2682 tests, against `origin/main`); the tree-wide guards run in CI only.
+
 Closes #4861
 
 Mutation: each restored from a `cp` copy, `diff` empty.
