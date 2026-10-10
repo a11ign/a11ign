@@ -104,7 +104,7 @@ export function diagnoseResolutionFailure(errorText: string, resolve: (specifier
 }
 
 function usage() {
-  return "Usage: node --import tsx scripts/stale-dist-diagnosis.ts <file with the failure's stderr>\n"
+  return "Usage: node scripts/stale-dist-diagnosis.ts <file with the failure's stderr>\n"
     + "  Paste or redirect the raw error text from a resolution failure -- a SyntaxError naming a "
     + "missing export, or a TS2307 'Cannot find module' -- and this names whether the dist behind it "
     + "is older than its own source.\n";
@@ -115,7 +115,7 @@ function main() {
   // rather than silently ignoring it matters more here than almost anywhere else in this repo: a
   // diagnosis tool that ignores `--verbose` and answers anyway is exactly the "ignored input, plausible
   // wrong answer" shape #789 itself exists to fix, one layer over.
-  refuseUnknownFlags([], { entry: import.meta.url, command: "node --import tsx scripts/stale-dist-diagnosis.ts" });
+  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/stale-dist-diagnosis.ts" });
   const [file] = process.argv.slice(2);
   if (!file) {
     process.stderr.write(usage());

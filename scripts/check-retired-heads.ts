@@ -99,7 +99,7 @@ function readJson(path: string) {
 
 function main() {
   // Guarded per #164: takes no flags at all.
-  refuseUnknownFlags([], { entry: import.meta.url, command: "node --import tsx scripts/check-retired-heads.ts" });
+  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/check-retired-heads.ts" });
   const repoRoot = fileURLToPath(new URL("../", import.meta.url));
   const shipped = readJson(join(repoRoot, SHIPPED_REPORT));
   const candidate = readJson(join(repoRoot, CANDIDATE_REPORT));

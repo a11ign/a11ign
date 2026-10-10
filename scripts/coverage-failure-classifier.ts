@@ -162,14 +162,14 @@ export function commentBody({ verdict, runUrl }: { verdict: { kind: string; deta
 
 function main() {
   const KNOWN_FLAGS = ["--ci-outcome", "--build-outcome", "--log", "--run-url"];
-  refuseUnknownFlags(KNOWN_FLAGS, { entry: import.meta.url, command: "node --import tsx scripts/coverage-failure-classifier.ts" });
+  refuseUnknownFlags(KNOWN_FLAGS, { entry: import.meta.url, command: "node scripts/coverage-failure-classifier.ts" });
 
   const ciOutcome = flagValue(process.argv, "ci-outcome");
   const buildOutcome = flagValue(process.argv, "build-outcome");
   const logPath = flagValue(process.argv, "log");
   const runUrl = flagValue(process.argv, "run-url") ?? "";
   if (!ciOutcome || !buildOutcome || !logPath) {
-    console.error("Usage: node --import tsx scripts/coverage-failure-classifier.ts "
+    console.error("Usage: node scripts/coverage-failure-classifier.ts "
       + "--ci-outcome=<success|failure|skipped> --build-outcome=<...> --log=<path> [--run-url=<url>]\n"
       + "Classifies why the nightly coverage job failed and prints the #169 comment body to stdout.");
     process.exit(2);

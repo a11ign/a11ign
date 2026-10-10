@@ -5,7 +5,7 @@
 //
 // A pull request that changes `action.yml` can never carry a pin containing its own change, because that commit does not exist until it
 // merges (#558, #4153). So every such merge leaves the pin stale the instant it lands, and eleven rows were filed by hand to repair it. The
-// repair is mechanical (`node --import tsx scripts/generate-consumer-gate.ts` at the new tip), so the merge starts it: this file is the decision, and the
+// repair is mechanical (`node scripts/generate-consumer-gate.ts` at the new tip), so the merge starts it: this file is the decision, and the
 // workflow is the actor.
 //
 // THE DECISION IS A PURE READING OF ONE COMMIT: the pin `consumer-gate.yml` carries AT that commit, against `action.yml` AT that commit. It

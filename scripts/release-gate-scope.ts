@@ -46,7 +46,7 @@ export function gateScope(scripts: Record<string, string>) {
 }
 
 function main() {
-  refuseUnknownFlags([], { entry: import.meta.url, command: "node --import tsx scripts/release-gate-scope.ts" });
+  refuseUnknownFlags([], { entry: import.meta.url, command: "node scripts/release-gate-scope.ts" });
   const { scripts } = JSON.parse(readFileSync(`${REPO}package.json`, "utf8"));
   const { full, ci, skipped } = gateScope(scripts);
   console.log(`::warning::release:gate:ci ran ${ci.length} of release:gate's ${full.length} stages. `
