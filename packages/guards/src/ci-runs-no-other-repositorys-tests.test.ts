@@ -71,7 +71,7 @@ ${checkout}
 ${run}
 `) as Workflow;
 
-const THE_DELETED_JOB_RUN = "          node --import tsx --test \"packages/agent-org/src/**/*.test.ts\"";
+const THE_DELETED_JOB_RUN = "          node --test \"packages/agent-org/src/**/*.test.ts\"";
 const ANOTHER = "          repository: a11ign/agent-org\n          path: agent-org";
 
 test("CONTROL: a job shaped like the deleted `agentOrg` job (another repository's checkout, then its tests) is refused", () => {

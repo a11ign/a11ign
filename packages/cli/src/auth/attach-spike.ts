@@ -1,9 +1,9 @@
 // THE MECHANISM 3 SPIKE (ADR 0038, #4087): can this repository's driver attach to a browser a PERSON launched and signed into?
 //
 // Two halves, kept apart on purpose:
-//   - `runQuestion` drives a REAL Chromium and prints what it saw. It is run by hand (`node --import tsx <this file> <q1|q2|q3>`)
-//     and its output is pasted into `docs/auth-attach-spike.md`. `--import tsx` because the driver it exercises is TypeScript and the
-//     agent host's plain `node` has no type stripping.
+//   - `runQuestion` drives a REAL Chromium and prints what it saw. It is run by hand (`node <this file> <q1|q2|q3>`)
+//     and its output is pasted into `docs/auth-attach-spike.md`. No loader: the driver it exercises is TypeScript, and the agent host's
+//     own Node 24 strips types (#4389).
 //   - The check of the DOCUMENT's shape lives in `attach-spike.test.ts`, which needs no browser and no libraries and never skips.
 //     This file is excluded from coverage (`.c8rc.json`) because it IS an integration with a browser a unit test cannot have, and
 //     it holds no pure core: the one pure part moved to the test file rather than stay here at 0%.
@@ -213,6 +213,6 @@ const QUESTIONS: Record<string, () => Promise<void>> = { q1, q2, q3 };
 
 if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) {
   const question = QUESTIONS[process.argv[2] ?? ""];
-  if (!question) { say("usage: node --import tsx attach-spike.ts <q1|q2|q3>"); process.exit(2); }
+  if (!question) { say("usage: node attach-spike.ts <q1|q2|q3>"); process.exit(2); }
   await question();
 }

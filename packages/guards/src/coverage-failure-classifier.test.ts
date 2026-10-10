@@ -202,7 +202,8 @@ test("CLI: a missing required flag prints usage and exits 2, and an unknown flag
   for (const args of [[], ["--ci-outcome=success", "--build-outcome=success"], ["--build-outcome=success", "--log=x"], ["--ci-outcome=success", "--log=x"]]) {
     const result = runCli(args);
     assert.equal(result.status, 2, JSON.stringify(args));
-    assert.match(result.stderr, /^Usage: node --import tsx scripts\/coverage-failure-classifier\.ts --ci-outcome=/);
+    // The script's usage line names its own loader, and a sibling slice of #4596 removes it from `scripts/`: accept the line before and after.
+    assert.match(result.stderr, /^Usage: node (?:--import \S+ )?scripts\/coverage-failure-classifier\.ts --ci-outcome=/);
     assert.equal(result.stdout, "");
   }
   const unknown = runCli(["--ci-outcome=success", "--build-outcome=success", "--log=x", "--bogus"]);

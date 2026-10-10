@@ -165,7 +165,7 @@ test("#4331: the live tree -- the committed pin is current where this branch lef
   const branchPoint = gitIn(REPO_ROOT, ["merge-base", "HEAD", "origin/main"]).trim();
   const at = (commit: string) => decideAtCommit({ commit, cwd: REPO_ROOT }).action;
   assert.ok(at(branchPoint) === NOTHING_TO_DO || at("HEAD") === NOTHING_TO_DO,
-    `stale at the branch point (${at(branchPoint)}) and at HEAD (${at("HEAD")}): regenerate consumer-gate.yml with node --import tsx scripts/generate-consumer-gate.ts`);
+    `stale at the branch point (${at(branchPoint)}) and at HEAD (${at("HEAD")}): regenerate consumer-gate.yml with node scripts/generate-consumer-gate.ts`);
 });
 
 // --- 3. the workflow and its policy --------------------------------------------------------------------------------------------------
