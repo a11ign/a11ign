@@ -1,6 +1,6 @@
 {
   "name": "@a11ign/judge",
-  "version": "0.2.3",
+  "version": "0.5.4",
   "description": "Judges a screen-reader capture against WCAG 2.2 AA: the trained local scorer by default, the deterministic absence rules, and the experience-layer ordering.",
   "license": "AGPL-3.0-or-later",
   "type": "module",
@@ -40,10 +40,10 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@a11ign/evidence": "0.2.0"
+    "@a11ign/evidence": "0.4.0"
   },
   "peerDependencies": {
-    "@a11ign/scorer": "0.2.1",
+    "@a11ign/scorer": "0.3.5",
     "@anthropic-ai/sdk": ">=0.106.0 <0.132.0",
     "@huggingface/transformers": ">=3.0.0"
   },
