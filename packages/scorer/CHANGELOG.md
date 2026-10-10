@@ -1,5 +1,42 @@
 # @a11ign/scorer
 
+## 0.3.4
+
+### Patch Changes
+
+- bb8dfa7: The core's tests and guards import the helpers they share with the toolchain (`fixture-symbols`, `product-home`, `sandbox-exhaustion`, `source-text`, `walk-scope-declaration`, `walk-scope-discovery`, `worktree-resolution`) from `@a11ign/toolchain/lib/<stem>`, and the core's own copies of six of them are deleted. The `@a11ign/toolchain` devDependency moves to 0.7.0 in the root, `a11ign`, `@a11ign/judge` and `@a11ign/scorer` (#4589, #4425 phase 3). `@a11ign/evidence` is unchanged: it keeps its `./source-text` subpath until the fleet stops importing it (#4712).
+
+## 0.3.3
+
+### Patch Changes
+
+- 64b7ab0: The `a11ign-scorer-fetch-encoder` bin is built output, as ADR 0043 Decision 8 has every `bin`: `bin/fetch-encoder.mjs` (hand-written, importing `../dist/index.mjs`) is now `src/fetch-encoder.ts`, an Rslib entry that builds `dist/fetch-encoder.mjs`, and `package.json` names that file. The command does the same thing, and the tarball no longer carries a `bin/` directory. (#4275, sweep 3 of 3.) Nothing else published changes: the other converted files are `packages/cli/src/auth` fixtures and a hand-run spike, and `mjs-ratchet.baseline.json` fell from 56 files to 47 with six reasoned exceptions beside it.
+
+## 0.3.2
+
+### Patch Changes
+
+- Updated dependencies [d2912d5]
+  - @a11ign/evidence@0.3.2
+
+## 0.3.1
+
+### Patch Changes
+
+- Updated dependencies [38d5ec9]
+  - @a11ign/evidence@0.3.1
+
+## 0.3.0
+
+### Minor Changes
+
+- f2e2697: `exports` and `bin` now point at `.mjs` (and `.d.ts` for types) where they pointed at `.js`, because the packages are built by Rslib instead of `tsc --build`: a deep import of `<package>/dist/<file>.js` stops resolving, and the CLI's `bin` is `./dist/cli.mjs`, so this is `minor` (a breaking change on a 0.x package) for each of the four. The CLI is also now one bundle that inlines `@a11ign/documents` (and the `pdf-lib` behind it) and `yaml`, so a consumer no longer installs them (#3580, ADR 0043).
+
+### Patch Changes
+
+- Updated dependencies [f2e2697]
+  - @a11ign/evidence@0.3.0
+
 ## 0.2.1
 
 ### Patch Changes
