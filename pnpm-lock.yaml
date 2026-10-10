@@ -12,13 +12,13 @@ importers:
   .:
     dependencies:
       '@a11ign/evidence':
-        specifier: 0.2.0
+        specifier: 0.4.0
         version: link:packages/evidence
       '@a11ign/judge':
-        specifier: 0.2.3
+        specifier: 0.5.3
         version: link:packages/judge
       '@a11ign/scorer':
-        specifier: 0.2.1
+        specifier: 0.3.5
         version: link:packages/scorer
       '@a11ign/screenreader-fleet':
         specifier: ^0.7.3
@@ -33,7 +33,7 @@ importers:
         specifier: ^0.31.0
         version: 0.31.0
       a11ign:
-        specifier: 0.2.7
+        specifier: 0.6.4
         version: link:packages/cli
     devDependencies:
       '@a11ign/toolchain':
@@ -92,13 +92,13 @@ importers:
   packages/cli:
     dependencies:
       '@a11ign/evidence':
-        specifier: 0.2.0
+        specifier: 0.4.0
         version: link:../evidence
       '@a11ign/judge':
-        specifier: 0.2.3
+        specifier: 0.5.3
         version: link:../judge
       '@a11ign/scorer':
-        specifier: 0.2.1
+        specifier: 0.3.5
         version: link:../scorer
       '@a11ign/screenreader-fleet':
         specifier: ^0.7.3
@@ -135,7 +135,7 @@ importers:
   packages/judge:
     dependencies:
       '@a11ign/evidence':
-        specifier: 0.2.0
+        specifier: 0.4.0
         version: link:../evidence
     devDependencies:
       '@a11ign/toolchain':
@@ -145,7 +145,7 @@ importers:
   packages/scorer:
     dependencies:
       '@a11ign/evidence':
-        specifier: 0.2.0
+        specifier: 0.4.0
         version: link:../evidence
     devDependencies:
       '@a11ign/toolchain':
