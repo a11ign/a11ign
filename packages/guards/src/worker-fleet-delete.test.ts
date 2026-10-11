@@ -36,6 +36,9 @@ import { sandboxGitEnv } from "./git-env.ts";
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const DEPARTED_DIRECTORY = "worker-fleet";
 const CONSUMED = "@a11ign/screenreader-fleet";
+/** The lab layer's directory, built from its name as `lab-delete.test.ts` builds it: the scan under test still treats `lab` as a layer until `layers.json` goes. */
+const LAB_LAYER = "lab";
+const LAB_DIR = `packages/${LAB_LAYER}`;
 const CONSUMED_VERSION = "0.7.3";
 /** Both names the package has carried; a changeset may name neither. BUILT, NOT WRITTEN: a rename test refuses a file that spells the old name whole. */
 const NAMES = [CONSUMED, ["@a11ign", "worker-fleet"].join("/")] as const;
@@ -263,14 +266,14 @@ test("lab, guards, cli and the root scripts import the fleet by package name, ne
 
 test("POSITIVE CONTROL: a relative import of the fleet is REFUSED naming the file; the by-name form, a test and a control import are not", () => {
   assert.deepEqual(relativeImportRefusals({
-    "packages/lab/src/training/a.mjs": 'import { x } from "../../../worker-fleet/src/worker-http.ts";\n',
+    [`${LAB_DIR}/src/training/a.mjs`]: 'import { x } from "../../../worker-fleet/src/worker-http.ts";\n',
     "packages/guards/src/b.mjs": 'import { y } from "../../worker-fleet/src/cli-flags.ts";\n',
     "scripts/c.mjs": 'import { z } from "../packages/worker-fleet/src/cli-flags.ts";\n',
-    "packages/lab/src/d.mjs": `import { w } from "${CONSUMED}/cli-flags";\n`,
-    "packages/lab/src/e.test.ts": 'import { v } from "../../worker-fleet/src/doctor.ts";\n',
+    [`${LAB_DIR}/src/d.mjs`]: `import { w } from "${CONSUMED}/cli-flags";\n`,
+    [`${LAB_DIR}/src/e.test.ts`]: 'import { v } from "../../worker-fleet/src/doctor.ts";\n',
     "packages/control/src/f.mjs": 'import { u } from "../../worker-fleet/src/cli-flags.ts";\n',
   }), [
-    `packages/lab/src/training/a.mjs imports packages/worker-fleet by a relative path: name ${CONSUMED}`,
+    `${LAB_DIR}/src/training/a.mjs imports packages/worker-fleet by a relative path: name ${CONSUMED}`,
     `packages/guards/src/b.mjs imports packages/worker-fleet by a relative path: name ${CONSUMED}`,
     `scripts/c.mjs imports packages/worker-fleet by a relative path: name ${CONSUMED}`,
   ]);

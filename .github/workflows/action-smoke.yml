@@ -31,12 +31,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # `packages/lab/` left this repository for a11ign/lab (#3505), and the two assertions below are its script. It is LAID at the tag
-      # `layers.json` declares, which needs git and nothing installed: this job installs nothing before the action runs.
-      - name: Lay a11ign/lab's scripts where the assertions read them
-        shell: bash
-        run: node scripts/lay-layer.ts lab
-
       # TWO runs, each guarding one DIRECTION, because for an accessibility tool the two failures are not
       # symmetrical. A missed finding costs a user; an invented one is an accusation someone may be
       # challenged over. Both pages are published by W3C WITH their own conformance claim, so the expected
@@ -73,7 +67,7 @@ jobs:
           # logged as a notice and does not fail the job. --require-rule-layer because `axe` DEFAULTS
           # on too, and `ruleBased: null` on a run that never opted out is the axe layer silently failing
           # to launch — exactly what happened on every Action run before this assertion existed.
-          node packages/lab/src/harnesses/assert-action-report.ts "$path" \
+          node packages/cli/src/action/assert-action-report.ts "$path" \
             --expect-activation --forbid-wcag=1.1.1 --require-rule-layer
 
       # The POSITIVE CONTROL for run 3's zero: the same count, on the same page and task, demanded to be more than zero when
@@ -105,7 +99,7 @@ jobs:
         run: |
           path="${{ steps.inaccessible.outputs.result-json }}"
           test -s "$path" || { echo "::error::the inaccessible run produced no result-json" >&2; exit 1; }
-          node packages/lab/src/harnesses/assert-action-report.ts "$path" --require-wcag=1.1.1 --require-rule-layer
+          node packages/cli/src/action/assert-action-report.ts "$path" --require-wcag=1.1.1 --require-rule-layer
 
       # Run 3 — the default, and the reason run 1 cannot stand alone on the other side (#4089). Run 1 proves probing
       # works when ASKED FOR; this proves a run that asks for nothing presses nothing. It is run 1's page and task

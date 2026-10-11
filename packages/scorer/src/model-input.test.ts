@@ -15,8 +15,6 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 
 import { modelInput } from "./evidence-units.js";
 
@@ -56,33 +54,6 @@ test("the contract keeps everything the featurizer and the dataset already read"
   }
 });
 
-/**
- * The realism builder is `build-realism-tier.mjs` at lab v0.1.27 and `build-realism-tier.ts` from v0.1.28, where the
- * `.mjs` stays one release as a re-export shim (a11ign#4551) and holds no builder code. So the `.ts` is the builder
- * whenever it exists, and the `.mjs` is only read when it is the one that does. NEITHER existing is a failure, not a
- * skip: a tolerance that passed a missing builder would defeat the test it sits in. The `.mjs` spelling goes when
- * a11ign#4798 deletes the shims.
- */
-function realismBuilder(): string {
-  const spellings = ["../../lab/scripts/build-realism-tier.ts", "../../lab/scripts/build-realism-tier.mjs"];
-  const present = spellings.find((relative) => existsSync(fileURLToPath(new URL(relative, import.meta.url))));
-  assert.ok(present, `the realism builder exists under neither spelling: ${spellings.join(" or ")}`);
-  return present;
-}
-
-test("NOBODY builds the model's input except this module", () => {
-  // The guard that would have caught the original drift. Two files constructed `input: { screenReader,
-  // transcript, structure, interaction, evidenceUnits, ... }` by hand; a third would drift the same way.
-  const suspects = [
-    "../../lab/src/training/export-screenreader-dataset.mjs",
-    realismBuilder(),
-  ];
-  for (const relative of suspects) {
-    const source = readFileSync(fileURLToPath(new URL(relative, import.meta.url)), "utf8");
-    assert.ok(source.includes("modelInput("),
-      `${relative} does not use the shared modelInput builder`);
-    assert.ok(!/evidenceUnits:\s*evidenceUnits\(/.test(source),
-      `${relative} assembles the model input by hand again — that duplication is what let the contract `
-      + "drift when it gained a field, and the copies cannot be kept in step by remembering");
-  }
-});
+// NOBODY builds the model's input except this module -- the scan of the two lab builders (`export-screenreader-dataset` and `build-realism-tier`)
+// for a hand-assembled `evidenceUnits:` is `a11ign/lab`'s `src/product-checks/model-input-builders.test.ts` (ADR 0045 cut 2, #5080): it read the lab's
+// scripts by a relative path, which a repository does not do to another's source.

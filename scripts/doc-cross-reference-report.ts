@@ -38,7 +38,8 @@ import * as rolesReadme from "./doc-checks/roles-readme.ts";
 import * as schemaMigrationCitations from "./doc-checks/schema-migration-citations.ts";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
-const TESTS = "packages/lab/src/packaging";
+/** Where those tests live: the lab's own repository since #3505, so this is a label for a reader and not a path in this tree. */
+const TESTS = "a11ign/lab/src/packaging";
 
 export type CheckResult = import("./doc-checks/check-result.ts").CheckResult;
 export type DocCheck = { name: string, test: string | null, check: (root: string) => CheckResult | Promise<CheckResult> };

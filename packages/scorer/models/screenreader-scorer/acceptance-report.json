@@ -27833,7 +27833,7 @@
   "failureReasons": [],
   "diagnostic": false,
   "acceptedCases": {
-    "source": "packages/lab/src/training/accepted-acceptance-cases.json",
+    "source": "a11ign/lab/src/training/accepted-acceptance-cases.json",
     "sha256": "14ea549ef30d019539cdd72ecc67554bab84a88df28a1518396786a2f3f57b65",
     "falsePositives": 2,
     "misses": 9

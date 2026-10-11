@@ -34,7 +34,7 @@ ends on and every pull request is opened with, and sharing a `worker:` prefix wi
 need one of them is a row for `orchestrator`, the first reader for fleet and lab questions: say so on the
 row and stop. Do not look for a reading of this ban that lets you through, and do not run one "just to
 look". A gate that reads `runs/` gives a verdict only when the agent driving the fleet and the lab runs it
-(`packages/lab/CLAUDE.md`); anyone else may use it as a pre-check and never as a reported result.
+(`a11ign/lab/CLAUDE.md`); anyone else may use it as a pre-check and never as a reported result.
 
 ## Removal commands the safety check cannot read (a11ign#4957, sixth class)
 

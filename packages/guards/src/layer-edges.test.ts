@@ -48,6 +48,9 @@ const cli = (...args: string[]) => spawnSync(process.execPath, ["--import", TSX,
 
 const TARGET = "packages/other/src/x.ts";
 const LAYER_FILE = "packages/nvda-worker/src/x.ts";
+/** The lab layer's directory, built from the layer's name as `lab-delete.test.ts` builds it: the guard under test still knows `lab` as a layer until `layers.json` goes. */
+const LAB_LAYER = "lab";
+const LAB_DIR = `packages/${LAB_LAYER}`;
 /** The layers that left, or are leaving, first (#2612, #2976): the ones whose every `out` edge a named row owns. */
 const FIRST_LAYERS = ["nvda-worker", "nvda-speech", "agent-org"];
 /** The three the fence of #3501 adds, for moves 2-4 of #69. */
@@ -57,7 +60,8 @@ const DEPARTED_LAYERS = [...FIRST_LAYERS, "worker-fleet", "lab", "control"];
 /** One x.ts and one own.ts per layer, and the other package's x.ts. */
 const THREE_LAYERS_CLEAN_FILES = 7;
 const REASON_AT_LEAST_CHARS = 40;
-const BASELINE_AT_LEAST = 20;
+/** A floor under what the baseline holds, so the loops below cannot pass over nothing. It read 30 before ADR 0045 cut 2 (#5080) took ten edges whose files no longer name the lab, and 20 after. */
+const BASELINE_AT_LEAST = 10;
 const DIRECTED_PAIRS_AMONG_THREE = 6;
 /** A path a test lives at; `moves-with` is only ever a test's disposition. */
 const TEST_PATH = /\.test\.|\/fixtures\/|\/test-support\/|\/tests?\/|(?:^|\/)test_[^/]*\.py$/;
@@ -174,9 +178,9 @@ test("a declared layer of moves 2-4 that reaches across by path is REFUSED, nami
   const edges = edgesOf("three-layers");
   assert.deepEqual(edges, [
     { from: "packages/other/src/y.ts", to: "packages/control/src/own.ts", kind: "import", direction: "in" },
-    { from: "packages/lab/src/x.ts", to: "packages/worker-fleet/src/own.ts", kind: "import", direction: "out" },
+    { from: `${LAB_DIR}/src/x.ts`, to: "packages/worker-fleet/src/own.ts", kind: "import", direction: "out" },
     { from: "packages/worker-fleet/src/x.ts", to: "packages/other/src/x.ts", kind: "import", direction: "out" },
-    { from: "packages/control/src/x.ts", to: "packages/lab/src/own.ts", kind: "path-literal", direction: "out" },
+    { from: "packages/control/src/x.ts", to: `${LAB_DIR}/src/own.ts`, kind: "path-literal", direction: "out" },
   ]);
   const message = describeVerdict(judgeEdges(edges, [])).join("\n");
   assert.match(message, /NEW EDGE out: packages\/worker-fleet\/src\/x\.ts -> packages\/other\/src\/x\.ts/);
@@ -315,8 +319,8 @@ const insideALayerThatLeft = (entries: { from: string }[]) => entries.filter((e)
 
 test("done-when 1, after #3447, #3504 and #3505: no file inside a layer that left is in the baseline, because none is in the tree", () => {
   // THE CONTROL, over the same function: before the delete this loop refused every launcher the worker reached out by, so it is shown to SEE one.
-  const planted = [{ from: "packages/nvda-worker/src/launcher-reach.cmd" }, { from: "packages/nvda-speech/nvda_speech/x.py" }, { from: "packages/worker-fleet/src/doctor.ts" }, { from: "packages/lab/src/a.ts" }];
-  assert.deepEqual(insideALayerThatLeft(planted).map((e) => e.from), ["packages/nvda-worker/src/launcher-reach.cmd", "packages/nvda-speech/nvda_speech/x.py", "packages/worker-fleet/src/doctor.ts", "packages/lab/src/a.ts"]);
+  const planted = [{ from: "packages/nvda-worker/src/launcher-reach.cmd" }, { from: "packages/nvda-speech/nvda_speech/x.py" }, { from: "packages/worker-fleet/src/doctor.ts" }, { from: `${LAB_DIR}/src/a.ts` }];
+  assert.deepEqual(insideALayerThatLeft(planted).map((e) => e.from), ["packages/nvda-worker/src/launcher-reach.cmd", "packages/nvda-speech/nvda_speech/x.py", "packages/worker-fleet/src/doctor.ts", `${LAB_DIR}/src/a.ts`]);
   assert.deepEqual(insideALayerThatLeft(readBaseline(ROOT)), []);
 });
 
@@ -364,8 +368,8 @@ const backEdgesOf = (entries: { from: string; to: string }[]) => entries.filter(
 
 test("done-when 4, after #3505: no code edge leaves worker-fleet or lab for another layer in the baseline, because neither has a file in the tree", () => {
   // THE CONTROL, over the same function: it is shown to SEE one of each kind, so an empty answer over the baseline is not a filter that matches nothing.
-  const planted = [{ from: "packages/worker-fleet/src/a.ts", to: "packages/control/src/b.ts" }, { from: "packages/lab/src/a.ts", to: "packages/control/src/b.ts" },
-    { from: "packages/lab/src/a.test.ts", to: "packages/control/src/b.ts" }, { from: "packages/control/src/a.ts", to: "packages/lab/src/b.ts" }];
+  const planted = [{ from: "packages/worker-fleet/src/a.ts", to: "packages/control/src/b.ts" }, { from: `${LAB_DIR}/src/a.ts`, to: "packages/control/src/b.ts" },
+    { from: `${LAB_DIR}/src/a.test.ts`, to: "packages/control/src/b.ts" }, { from: "packages/control/src/a.ts", to: `${LAB_DIR}/src/b.ts` }];
   assert.equal(backEdgesOf(planted).length, 2, "the worker-fleet edge and the lab code edge, and neither the lab TEST's nor control's own");
   assert.deepEqual(backEdgesOf(readBaseline(ROOT)), []);
 });

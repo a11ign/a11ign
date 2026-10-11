@@ -29,7 +29,7 @@ const NAME = "@a11ign/screenreader-fleet";
 const lockfileWith = (version: string) => `importers:\n\n  .:\n    dependencies:\n      '${NAME}':\n        specifier: ^0.3.0\n        version: ${version}\n      '@anthropic-ai/sdk':\n        specifier: ^0.131.0\n        version: 0.131.0\n`;
 const MANIFEST = { layers: { "screenreader-fleet": { path: "packages/worker-fleet", remote: "https://example.invalid/screenreader-fleet.git" }, bare: { path: "packages/bare" } } };
 /** A layer that is not on the registry: it declares its own tag and what to lay (#3505). */
-const UNPUBLISHED = { path: "packages/lab", remote: "https://example.invalid/lab.git", tag: "v0.1.2", lays: ["src", "scripts", "rule-ownership.json"] };
+const UNPUBLISHED = { path: "packages/example", remote: "https://example.invalid/lab.git", tag: "v0.1.2", lays: ["src", "scripts", "rule-ownership.json"] };
 
 test("the real lockfile pins a registry release, and the plan names its tag", () => {
   const lockfile = readFileSync(join(REPO_ROOT, "pnpm-lock.yaml"), "utf8");
@@ -178,7 +178,7 @@ test("lay: src/ only, without the layer's tests or its manifest, at the pinned t
 test("#3505: a layer that is not on the registry lays the tag IT declares, whatever the lockfile says, and a tag that is not a v<semver> is REFUSED", () => {
   const manifest = { layers: {}, pinned: { lab: UNPUBLISHED } };
   // The lockfile holds no `@a11ign/lab` entry at all, and the plan does not need one: the declaration is the pin.
-  assert.deepEqual(layingPlan(manifest, lockfileWith("0.3.0"), "lab"), { remote: UNPUBLISHED.remote, tag: "v0.1.2", path: "packages/lab", lays: UNPUBLISHED.lays });
+  assert.deepEqual(layingPlan(manifest, lockfileWith("0.3.0"), "lab"), { remote: UNPUBLISHED.remote, tag: "v0.1.2", path: "packages/example", lays: UNPUBLISHED.lays });
   // POSITIVE CONTROL for the refusal: a branch, a sha, a moving range and a missing `v` each stand where a pin should.
   for (const tag of ["main", "e61c6faf9209d7b9c55d6b90a4363807b5dd9b08", "v0.1", "0.1.2", "v0.1.2-rc.1"]) {
     assert.match(layingPlan({ layers: {}, pinned: { lab: { ...UNPUBLISHED, tag } } }, lockfileWith("0.3.0"), "lab").refusal, /not a v<semver> tag/, tag);
@@ -197,23 +197,23 @@ test("#3505: lay puts down every part the declaration names, without tests, and 
       mkdirSync(dirname(join(sandbox.dir, path)), { recursive: true });
       writeFileSync(join(sandbox.dir, path), text);
     };
-    write("packages/lab/package.json", "{}");
-    write("packages/lab/src/a.mjs", "export const a = 1;\n");
-    write("packages/lab/src/a.test.ts", "// a test\n");
-    write("packages/lab/scripts/run.ts", "export const run = 1;\n");
-    write("packages/lab/rule-ownership.json", "{}\n");
+    write("packages/example/package.json", "{}");
+    write("packages/example/src/a.mjs", "export const a = 1;\n");
+    write("packages/example/src/a.test.ts", "// a test\n");
+    write("packages/example/scripts/run.ts", "export const run = 1;\n");
+    write("packages/example/rule-ownership.json", "{}\n");
     sandbox.run(["add", "-A"]);
     sandbox.commit("release 0.1.2");
     sandbox.run(["tag", "v0.1.2"]);
     const root = mkdtempSync(join(tmpdir(), "lay-layer-root-"));
     try {
-      const plan = { remote: pathToFileURL(sandbox.dir).href, tag: "v0.1.2", path: "packages/lab", lays: ["src", "scripts", "rule-ownership.json"] };
-      assert.equal(lay(root, plan), "laid v0.1.2 at packages/lab");
-      assert.deepEqual(walk(join(root, "packages/lab")), [REF_FILE, "rule-ownership.json", "scripts/run.ts", "src/a.mjs"],
+      const plan = { remote: pathToFileURL(sandbox.dir).href, tag: "v0.1.2", path: "packages/example", lays: ["src", "scripts", "rule-ownership.json"] };
+      assert.equal(lay(root, plan), "laid v0.1.2 at packages/example");
+      assert.deepEqual(walk(join(root, "packages/example")), [REF_FILE, "rule-ownership.json", "scripts/run.ts", "src/a.mjs"],
         "src, scripts and the file named, no test and no manifest");
       // A part the tag lacks: refused (a declaration that gained a part is not "already at" the tag), and the copy already there is still there.
-      assert.throws(() => lay(root, { ...plan, lays: ["src", "baselines"] }), /holds no packages\/lab\/baselines/);
-      assert.ok(existsSync(join(root, "packages/lab/scripts/run.ts")), "the refusal came before the old copy was removed");
+      assert.throws(() => lay(root, { ...plan, lays: ["src", "baselines"] }), /holds no packages\/example\/baselines/);
+      assert.ok(existsSync(join(root, "packages/example/scripts/run.ts")), "the refusal came before the old copy was removed");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

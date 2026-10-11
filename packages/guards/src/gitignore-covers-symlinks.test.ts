@@ -59,10 +59,11 @@ function entriesOf(gitignore: string): string[] {
 /**
  * A concrete relative path the entry must match. `*` becomes a literal segment so a glob entry
  * such as the package build output is driven as a real path rather than skipped — the entries most likely to be
- * written with a trailing slash out of habit are exactly the build-output globs.
+ * written with a trailing slash out of habit are exactly the build-output globs. A one-character class (`la[b]`, the laid
+ * lab's spelling, ADR 0045 cut 2) becomes that character, which is the one name it matches.
  */
 function samplePath(entry: string): string {
-  return entry.replace(/\/+$/, "").replace(/^\/+/, "").replaceAll("*", "fixture");
+  return entry.replace(/\/+$/, "").replace(/^\/+/, "").replaceAll("*", "fixture").replace(/\[(\w)\]/g, "$1");
 }
 
 function materialise(sandbox: GitSandbox, path: string, shape: Shape): void {
@@ -88,7 +89,7 @@ function uncovered(gitignore: string, shape: Shape): string[] {
     const entries = entriesOf(gitignore);
     return entries.filter((entry) => {
       const path = samplePath(entry);
-      // BENEATH ANOTHER ENTRY, git cannot be asked: once the parent is a symlink, `check-ignore` stops with "beyond a symbolic link" (`/packages/lab`, a laid layer, and
+      // BENEATH ANOTHER ENTRY, git cannot be asked: once the parent is a symlink, `check-ignore` stops with "beyond a symbolic link" (`/a11ign/lab`, a laid layer, and
       // its `.corpus-fixture-mutation-fixture` beneath it, #3926). Nothing can be staged beyond a symlink, so the child is covered by its parent, which is checked here itself.
       if (shape === "symlink" && entries.some((other) => path.startsWith(`${samplePath(other)}/`))) return false;
       materialise(sandbox, path, shape);

@@ -46,7 +46,7 @@ function ownCompilerOptions(path: string): Record<string, unknown> {
 
 // 1. THE DEPENDENCY -------------------------------------------------------------------------------------------------------------
 
-/** Every importer that declares the package, as the lockfile records it. The packages build with its presets and the root runs its test config. The lab (`packages/lab`) is no importer here: it is laid, not a workspace member, so the lockfile records none (#3505). */
+/** Every importer that declares the package, as the lockfile records it. The packages build with its presets and the root runs its test config. The lab (`a11ign/lab`) is no importer here: it is laid, not a workspace member, so the lockfile records none (#3505). */
 const CONSUMERS = [".", "packages/cli", "packages/judge", "packages/scorer"];
 
 /** What is wrong with the way a set of importers takes the package: one exact registry version, the same everywhere, and never a link. */

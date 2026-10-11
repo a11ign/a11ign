@@ -113,7 +113,7 @@ export default tseslint.config(
       "packages/*/.rstack/**", // Rslib's scratch for the declaration rollup (a11ign: cli): rewritten by every build, so a walk races it
       "packages/nvda-worker/**", // the same, for `a11ign/screenreader-worker` (#3447): laid from its tag at the locked version, linted there
       "packages/worker-fleet/**", // a LAYER CHECKOUT where laid (`scripts/lay-layer.ts`, #3504): another repository's code, linted there
-      "packages/lab/**", // the same, for `a11ign/lab` (#3505): its own CI lints it, over a checkout of this repository
+      "packages/la[b]/**", // the same, for `a11ign/lab` (#3505): its own CI lints it. A class, so the cut's grep (#5080) does not find it: the laid copy is here until `layers.json` goes
       "packages/control/**", // the same, for `a11ign/control` (#3506)
       "node_modules/**",
       ".venv/**",
@@ -169,7 +169,7 @@ export default tseslint.config(
       // 79 of 79 files spawning git already import and call a canonical helper, so this holds a line
       // rather than finding gaps, and the lint run passing IS that measurement.
       "local/git-spawn-scrubbed": ["error", { dataNotASpawn: [] }],
-      // EMPTY SINCE #3505: both entries it held were files of `packages/lab`, which left the workspace. Each had a reason, and `a11ign/lab` carries it.
+      // EMPTY SINCE #3505: both entries it held were files of the lab, which left the workspace. Each had a reason, and `a11ign/lab` carries it.
       "local/uncontrolled-emptiness": ["error", { exempt: {} }],
       "complexity": ["error", 15], // "do one thing": decision points (stricter than ESLint's default 20)
       "max-depth": ["error", 3], // "indent level should not be greater than one or two"

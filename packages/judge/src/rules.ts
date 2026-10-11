@@ -13,7 +13,7 @@
  * headings, so they cannot produce the over-flagging the generative judge did.
  *
  * A note on announcement strings (verified against the real NVDA captures in
- * packages/lab/src/eval/fixtures/nvda/nvda-w3c-*.json, 2026-06-29): published guides document an
+ * a11ign/lab/src/eval/fixtures/nvda/nvda-w3c-*.json, 2026-06-29): published guides document an
  * unlabelled control as "edit, blank" and unnamed image-in-link as a filename or
  * spelled-out URL. Those are JAWS/VoiceOver/version-specific — they do NOT match
  * what our NVDA pipeline emits. Our NVDA announces an empty name as the U+FFFC
@@ -687,7 +687,7 @@ function addContextChanges(input: RuleInput, add: AddFinding): void {
  *
  * DELIBERATELY DUPLICATED rather than imported from `case-matrix.mjs`'s `focusPanelUndismissable`, on the
  * same basis `contextChanged` above already is for 3.2.1/3.2.2's signal predicate: this package does not
- * depend on `packages/lab`, and the condition is two field reads — cheaper to state twice, in the two
+ * depend on `a11ign/lab`, and the condition is two field reads — cheaper to state twice, in the two
  * languages the packages are, than to cross that boundary for.
  *
  * `revealed`/`dismissed` are tri-state (`true` / `false` / `null`), and only `revealed === true` with a
@@ -1142,7 +1142,7 @@ function addAutoplayingAudio(input: RuleInput, add: AddFinding): void {
  *
  * The HTML spec's own "Autofill field name" table
  * (html.spec.whatwg.org/multipage/form-control-infrastructure.html#autofill-detail-tokens),
- * DELIBERATELY DUPLICATED in `packages/lab/src/training/signal-predicates.mjs`'s `inputPurposeInvalid`
+ * DELIBERATELY DUPLICATED in `a11ign/lab/src/training/signal-predicates.mjs`'s `inputPurposeInvalid`
  * rather than imported -- that package does not depend on `packages/judge`, and a fixed vocabulary from
  * one external spec is cheaper to state twice than to cross that boundary for. Neither copy is guessing
  * at what the other meant; both read the same table.

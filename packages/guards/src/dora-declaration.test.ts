@@ -254,9 +254,10 @@ test("control: the old prefix put back, or no src/, is REFUSED, naming it", () =
   assert.match(staleWorkerPathRefusal([]) ?? "", /declares \[\]/);
 });
 
-/** #4222: `lab` holds its package at the ROOT of its repository since the flatten (a11ign/lab#38, released as v0.1.13, #4215), so `src/` is its prefix and `packages/lab/` is a directory it no longer has. A `tag` repository reads no manifest (claim 3), so nothing above could see a stale prefix. */
-const STALE_LAB_PREFIX = "packages/lab/";
+/** #4222: `lab` holds its package at the ROOT of its repository since the flatten (a11ign/lab#38, released as v0.1.13, #4215), so `src/` is its prefix and `packages/<name>/` is a directory it no longer has. A `tag` repository reads no manifest (claim 3), so nothing above could see a stale prefix. */
 const LAB = "a11ign/lab";
+/** The directory the repository's name gives it inside the core's old `packages/`: derived from `LAB`, so it is the flatten's own subject and no tracked file spells it. */
+const STALE_LAB_PREFIX = `packages/${LAB.split("/")[1]}/`;
 
 /** Why lab's declared paths do not name its own layout (`src/`), or null when they do. */
 function staleLabPathRefusal(declared: unknown): string | null {
@@ -271,7 +272,7 @@ test("lab's releasable paths name its own layout (src/), not the directory the f
 
 test("control: lab's old prefix put back, or no src/, is REFUSED, naming it", () => {
   const withPaths = (releasablePaths: string[]) => (realDeclared as Declared[]).map((entry) => (entry.repo === LAB ? { ...entry, releasablePaths } : entry));
-  assert.match(staleLabPathRefusal(withPaths([STALE_LAB_PREFIX])) ?? "", /still declares packages\/lab\//);
+  assert.match(staleLabPathRefusal(withPaths([STALE_LAB_PREFIX])) ?? "", new RegExp(`still declares ${STALE_LAB_PREFIX}`));
   assert.match(staleLabPathRefusal(withPaths(["packages/other/"])) ?? "", /its code is under src\//);
   assert.match(staleLabPathRefusal([]) ?? "", /declares \[\]/);
 });

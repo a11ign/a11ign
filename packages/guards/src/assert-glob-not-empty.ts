@@ -3,7 +3,7 @@
 // command: refuse a test glob that resolves to zero files instead of passing silently
 // `npm test` PASSES, exit 0, if the glob it hands to `tsx --test` resolves to zero files (#355) --
 //
-//   $ pnpm exec tsx --test "packages/lab/src/packaging/nothing-matches-*.test.ts"; echo "EXIT=$?"
+//   $ pnpm exec tsx --test "a11ign/lab/src/packaging/nothing-matches-*.test.ts"; echo "EXIT=$?"
 //   EXIT=0    ℹ tests 0  ℹ pass 0  ℹ fail 0
 //
 // A LITERAL missing path fails correctly (`tsx --test` errors "Could not find ..."); a QUOTED GLOB that

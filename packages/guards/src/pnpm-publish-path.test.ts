@@ -287,7 +287,7 @@ test("the rehearsal refuses without the provenance request, and when npm does no
 
 /**
  * Files that NAME the old lockfile as data: what they assert about, or plant as, a path that must not exist. The walk below reads `git ls-files`, which
- * does not list the lab's laid copy (`packages/lab` is untracked here), so the lab's own sources are a question for the lab's CI and are not named.
+ * does not list the lab's laid copy (`a11ign/lab` is untracked here), so the lab's own sources are a question for the lab's CI and are not named.
  */
 const NAMES_IT_AS_DATA = new Set([
   "packages/guards/src/pnpm-publish-path.test.ts",

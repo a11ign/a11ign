@@ -16,7 +16,7 @@ Plausible, specific, and correct. I ran it myself anyway, because `probe*` field
 inputs and a wrong answer there silently re-keys the corpus:
 
 ```
-node -e 'import("./packages/lab/src/training/case-matrix.mjs").then(({CASES}) => …)'
+node -e 'import("./a11ign/lab/src/training/case-matrix.mjs").then(({CASES}) => …)'
 CASES: 1645 | probe* keys outside the named ten: NONE
 ```
 

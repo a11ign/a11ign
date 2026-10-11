@@ -1,7 +1,7 @@
 /**
  * #1143: THE SIX-PACKAGE PACK-AND-INSTALL, MOVED OFF THE PR PATH — one test, not the file it came from.
  *
- * `isolation-gate.test.ts` sits at `packages/lab/src/packaging/`, which matches the PR suite's glob
+ * `isolation-gate.test.ts` sits at `a11ign/lab/src/packaging/`, which matches the PR suite's glob
  * `packages/*|/src/**|/*.test.ts`, and #1139 made it the most expensive single thing in that suite.
  * Measured per test at #1139's head:
  *
@@ -52,8 +52,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-// A sibling of `src/` now (it moved from `packages/lab/nightly/` with #3505, when the directory left the workspace; the original was at
-// `packages/lab/src/packaging/`). The row warned that "a test written for the PR path may name paths
+// A sibling of `src/` now (it moved from `a11ign/lab/nightly/` with #3505, when the directory left the workspace; the original was at
+// `a11ign/lab/src/packaging/`). The row warned that "a test written for the PR path may name paths
 // relative to its own location, and a move that silently changes what it resolves is the defect this repo
 // files most" -- so this was re-derived rather than copied, and the assertion below would fail loudly on a
 // wrong specifier rather than quietly examining nothing.

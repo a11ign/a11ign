@@ -380,7 +380,7 @@ test("a non-NVDA capture is out of SCOPE, which is neither a failure nor a pass"
  * duplicating the rules where they are already exact.
  *
  * The subtype names here are the corpus's own `target.subtypes` vocabulary, checked against
- * `packages/lab/rule-ownership.json`. They used to include `4.1.2:unnamed-form-field`, which no record
+ * `a11ign/lab/rule-ownership.json`. They used to include `4.1.2:unnamed-form-field`, which no record
  * has — a fixture asserting on a key invented by the test rather than by the data, which is how a
  * hardcoded list stays green while being wrong.
  */

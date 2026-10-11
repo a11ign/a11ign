@@ -632,7 +632,7 @@ Two things the run says that the headline does not:
 > trainer, which records `derivedFloor` and `floorSource` beside it. The derived value would have scored one
 > more page and turned an honest abstention into a miss.
 
-`node packages/lab/scripts/calibrate-abstention.mjs` sweeps candidate floors over the 7 calibration pages
+`node a11ign/lab/scripts/calibrate-abstention.mjs` sweeps candidate floors over the 7 calibration pages
 and reports what each one costs. Measured:
 
 | floor | pages scored | conformant scored | FALSE POSITIVES | inaccessible caught |

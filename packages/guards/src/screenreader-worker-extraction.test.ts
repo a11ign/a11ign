@@ -2,7 +2,7 @@
  * #3447 (move 1 of #69, step 5): THE DELETE'S OWN TEST. `packages/nvda-worker` and `packages/nvda-speech` left the workspace for
  * `a11ign/screenreader-worker` (ADR 0040, M1; ADR 0039 finding 1), and this repository consumes `@a11ign/screenreader-worker` from
  * the registry. Before the delete this file proved the layer could stand alone (licence division, boundary scan, leak scan: #2701,
- * recoverable from `git show d8952882f:packages/lab/src/packaging/screenreader-worker-extraction.test.ts`); those were claims about a
+ * recoverable from commit `d8952882f`, where it sat in the lab's `src/packaging/`); those were claims about a
  * tree that is no longer here, and what is left to prove is that the delete is COMPLETE. Four claims, each with a fixture beside it:
  *
  *   1. Neither package is in the workspace: `pnpm-workspace.yaml`'s globs match no directory of either name, and no workspace manifest
@@ -23,13 +23,12 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
 // By path, through the LAID `a11ign/control` (#3506): `@a11ign/control` is on no registry, so no name resolves to it.
-import { layersFrom } from "../../control/src/layer-checkouts.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const CONSUMED = "@a11ign/screenreader-worker";
@@ -65,8 +64,9 @@ function workspaceDirectories(root: string): string[] {
   const { packages } = parse(read(root, "pnpm-workspace.yaml")) as { packages?: string[] };
   assert.ok(Array.isArray(packages) && packages.length > 0, "pnpm-workspace.yaml names no packages: the reader is looking at the wrong file");
   const excluded = packages.filter((entry) => entry.startsWith("!")).map((entry) => {
-    assert.match(entry, /^![\w./-]+$/, `${entry} is an exclusion shape this reader does not expand: widen it before trusting a pass`);
-    return entry.slice(1);
+    assert.match(entry, /^![\w./[\]-]+$/, `${entry} is an exclusion shape this reader does not expand: widen it before trusting a pass`);
+    // The laid lab is excluded as `la[b]` (ADR 0045 cut 2, #5080): a one-character class names exactly that character.
+    return entry.slice(1).replace(/\[(\w)\]/g, "$1");
   });
   return packages.filter((entry) => !entry.startsWith("!")).flatMap((glob) => {
     assert.match(glob, /^[\w./-]+\/\*$/, `${glob} is a glob shape this reader does not expand: widen it before trusting a pass`);
@@ -225,43 +225,4 @@ test("POSITIVE CONTROL: an entry whose frontmatter names a departed package is r
     assert.deepEqual(changesetRefusals(root).sort(), [`.changeset/bad-entry.md names ${CONSUMED}`, ".changeset/speech.md names @a11ign/nvda-speech"]);
   });
   assert.deepEqual(namedInFrontmatter("no frontmatter at all"), [], "an entry with no frontmatter names nothing, rather than throwing");
-});
-
-// ---- 5. the nvda-speech read in lab resolves through the layer checkout ----------------------------------------
-
-const HARNESS = "packages/lab/src/harnesses/occurrence-verdict-stability.ts";
-/** The manifest of the real layer, over a root of the caller's choosing: the resolver is the production one, the checkout is a fixture. */
-const layerCheckoutAt = (root: string) => layersFrom({
-  manifest: JSON.parse(read(REPO_ROOT, "layers.json")) as Parameters<typeof layersFrom>[0]["manifest"], root,
-});
-
-test("the harness reads nvda-speech through the layer checkout, never the workspace and never a package name", () => {
-  const source = read(REPO_ROOT, HARNESS).split("\n").filter((line) => !line.trimStart().startsWith("//")).join("\n");
-  assert.match(source, /layerRoot\("nvda-worker"\)/, "the read is not resolved from the declared layer");
-  assert.doesNotMatch(source, /@a11ign\/nvda-speech|packages\/nvda-speech|createRequire/, "the harness still names the workspace package or resolves it as a module");
-});
-
-/** The segments the harness joins to the layer's root, read from ITS source: a typed copy here is the bug this test exists to catch (#3748). */
-const harnessLabelsPath = (): string[] => {
-  const declared = /^const LABELS_PATH = (\[.*\]);$/m.exec(read(REPO_ROOT, HARNESS));
-  assert.ok(declared, "the harness no longer declares LABELS_PATH as one array literal");
-  return JSON.parse(declared[1]) as string[];
-};
-
-test("the path the harness builds finds labels.py INSIDE a checkout laid out as the layer's repository is, and is refused where there is none", () => {
-  // The layer repository holds the worker's `src/` at its root and the speech package at `packages/nvda-speech`, so a clone at
-  // `packages/nvda-worker` has labels.py at `packages/nvda-worker/packages/nvda-speech/nvda_speech/labels.py`, not BESIDE the clone.
-  const inClone = "packages/nvda-worker/packages/nvda-speech/nvda_speech/labels.py";
-  withFixture({ [inClone]: "NAMES = {'edit': 1}\n", "packages/nvda-worker/package.json": "{}" }, (root) => {
-    const found = join(layerCheckoutAt(root).layerRoot("nvda-worker"), ...harnessLabelsPath());
-    assert.equal(readFileSync(found, "utf8"), "NAMES = {'edit': 1}\n");
-  });
-  const beside = { "packages/nvda-speech/nvda_speech/labels.py": "NAMES = {}\n", "packages/nvda-worker/package.json": "{}" };
-  withFixture(beside, (root) => {
-    const found = join(layerCheckoutAt(root).layerRoot("nvda-worker"), ...harnessLabelsPath());
-    assert.equal(existsSync(found), false, "a labels.py BESIDE the clone is not where the layer repository puts it");
-  });
-  withFixture({ "unrelated.txt": "x" }, (root) => {
-    assert.throws(() => layerCheckoutAt(root).layerRoot("nvda-worker"), /layer "nvda-worker" is declared at packages\/nvda-worker, and .* does not exist/);
-  });
 });

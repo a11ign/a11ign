@@ -1,7 +1,7 @@
 /**
- * #3505 (move 3 of #69, the delete step): THE DELETE'S OWN TEST. `packages/lab` left the workspace for `a11ign/lab` (ADR 0040, M3), and this repository
+ * #3505 (move 3 of #69, the delete step): THE DELETE'S OWN TEST. The lab's directory left the workspace for `a11ign/lab` (ADR 0040, M3), and this repository
  * takes it as a PINNED TAG: `layers.json` declares the tag, and `scripts/lay-layer.ts` lays the lab's scripts, source, baselines and
- * rule table at `packages/lab` (untracked, never a workspace member) for the scripts, tests and workflows that read them by path. It lives in
+ * rule table at the departed path (untracked, never a workspace member) for the scripts, tests and workflows that read them by path. It lives in
  * `packages/guards`, not in the directory it proves gone: that directory cannot hold the test that says it is not there.
  *
  * WHY A PINNED TAG AND NOT A REGISTRY RELEASE, as the fleet and the worker are taken: `@a11ign/lab` is `private: true` and two of its dependencies
@@ -11,9 +11,9 @@
  *
  * Seven claims, each with a fixture beside it:
  *
- *   1. No tracked file is under `packages/lab/`, and `pnpm-workspace.yaml` matches no member of that name or carrying `@a11ign/lab`. The laid copy is
- *      EXCLUDED (`!packages/lab`), and that exclusion is what the second half reads.
- *   2. `pnpm-lock.yaml` holds no importer under `packages/lab`, no `link:` to it and no `@a11ign/lab` entry.
+ *   1. No tracked file is under the departed directory, and `pnpm-workspace.yaml` matches no member of that name or carrying `@a11ign/lab`. The laid copy is
+ *      EXCLUDED (the `!` entry for it), and that exclusion is what the second half reads.
+ *   2. `pnpm-lock.yaml` holds no importer under the departed path, no `link:` to it and no `@a11ign/lab` entry.
  *   3. No `test:*` script's glob names it: neither as a path nor as a member of a brace list (`packages/{a,lab,b}/src/**`). A glob that names a directory
  *      with no tracked file selects nothing and `assert-glob-not-empty` would blame the floor, so a stale name is refused HERE, by name.
  *   4. No pending changeset versions the package, and `.changeset/config.json` has no entry for it.
@@ -22,9 +22,9 @@
  *   6. Every workflow, hook and script that RUNS a test file of the old directory by path names a file that is tracked. Those tests were relocated by NAME,
  *      below, and an unplaced one is a pin that silently stops running.
  *   7. The tree-wide guards the product keeps (ADR 0040 decision 4; #2703 stated 30 in all, 3 staying and 27 leaving) still run on the product's tree and select
- *      nothing that left: every one exists, none is under `packages/lab/`, and the three that stayed are still found.
+ *      nothing that left: every one exists, none is under the departed directory, and the three that stayed are still found.
  *
- * THE POSITIVE CONTROL is each function over a fixture: a guard glob that still names a deleted `packages/lab/` path is REFUSED naming it, and so is a
+ * THE POSITIVE CONTROL is each function over a fixture: a guard glob that still names a deleted path under the departed directory is REFUSED naming it, and so is a
  * workspace holding the directory, a lockfile with an importer or a link, a changeset naming the package, a declaration with a branch for a tag, and a guard
  * selected from the departed directory. A reader that found nothing in the real tree would otherwise be indistinguishable from one that cannot see.
  */
@@ -43,6 +43,12 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const DEPARTED_DIRECTORY = "lab";
 const DEPARTED_PATH = `packages/${DEPARTED_DIRECTORY}`;
 const PACKAGE_NAME = "@a11ign/lab";
+/**
+ * `pnpm-workspace.yaml` and `.gitignore` name the laid copy as a glob class (`packages/la[b]`), so the cut that took the lab's path out of the core's live
+ * files (ADR 0045 cut 2, #5080) leaves it in `layers.json` and `package.json` only, while the entries keep matching a copy that is still laid.
+ * Both spellings are accepted, because a fixture that spells it out is the same claim; the row that deletes `layers.json` deletes both.
+ */
+const asClass = (path: string) => `${path.slice(0, -1)}[${path.slice(-1)}]`;
 /** Floors on what each reader SEES before an empty answer from it means anything (each is well under the reading, which is the point of a floor, not a pin). */
 const MIN_WORKSPACE_DIRECTORIES = 5;
 const MIN_LOCKFILE_IMPORTERS = 5;
@@ -56,29 +62,29 @@ const SEMVER_TAG = /^v\d+\.\d+\.\d+$/;
 
 /**
  * Where each test of the old directory that something still depends on went, by name (the row's done-when 4). The key is the file as it was named in
- * `packages/lab/src/packaging/` (or `nightly/`), the value is where it is tracked now. A name here with no tracked file at the new path fails, and so does
+ * `a11ign/lab/src/packaging/` (or `nightly/`), the value is where it is tracked now. A name here with no tracked file at the new path fails, and so does
  * one still tracked at the old.
  */
 const RELOCATED: Record<string, string> = {
-  "packages/lab/src/packaging/layer-edges.test.ts": "packages/guards/src/layer-edges.test.ts", // #3501, with its fixtures at packages/guards/src/fixtures/layer-edges
-  "packages/lab/src/packaging/screenreader-worker-extraction.test.ts": "packages/guards/src/screenreader-worker-extraction.test.ts", // #3447
-  "packages/lab/src/packaging/pnpm-workspace.test.ts": "packages/guards/src/pnpm-workspace.test.ts", // #3447
-  "packages/lab/src/packaging/dora-declaration.test.ts": "packages/guards/src/dora-declaration.test.ts", // #3138
-  "packages/lab/src/packaging/lay-layer.test.ts": "packages/guards/src/lay-layer.test.ts", // #3504, the test of the script this row changes
-  "packages/lab/src/packaging/nightly-only-path.test.ts": "packages/guards/src/nightly-only-path.test.ts", // #1135, #1149
-  "packages/lab/nightly/tenants.mjs": "packages/guards/nightly/tenants.ts", // the manifest nightly-only-path.test.ts pins both ways
-  "packages/lab/nightly/bounded-window-reads.test.ts": "packages/guards/nightly/bounded-window-reads.test.ts", // a nightly tenant: a read of GitHub, not of the lab
-  "packages/lab/nightly/isolation-gate-real-consumer.test.ts": "packages/guards/nightly/isolation-gate-real-consumer.test.ts", // a nightly tenant: the product's isolation gate
+  [`${DEPARTED_PATH}/src/packaging/layer-edges.test.ts`]: "packages/guards/src/layer-edges.test.ts", // #3501, with its fixtures at packages/guards/src/fixtures/layer-edges
+  [`${DEPARTED_PATH}/src/packaging/screenreader-worker-extraction.test.ts`]: "packages/guards/src/screenreader-worker-extraction.test.ts", // #3447
+  [`${DEPARTED_PATH}/src/packaging/pnpm-workspace.test.ts`]: "packages/guards/src/pnpm-workspace.test.ts", // #3447
+  [`${DEPARTED_PATH}/src/packaging/dora-declaration.test.ts`]: "packages/guards/src/dora-declaration.test.ts", // #3138
+  [`${DEPARTED_PATH}/src/packaging/lay-layer.test.ts`]: "packages/guards/src/lay-layer.test.ts", // #3504, the test of the script this row changes
+  [`${DEPARTED_PATH}/src/packaging/nightly-only-path.test.ts`]: "packages/guards/src/nightly-only-path.test.ts", // #1135, #1149
+  [`${DEPARTED_PATH}/nightly/tenants.mjs`]: "packages/guards/nightly/tenants.ts", // the manifest nightly-only-path.test.ts pins both ways
+  [`${DEPARTED_PATH}/nightly/bounded-window-reads.test.ts`]: "packages/guards/nightly/bounded-window-reads.test.ts", // a nightly tenant: a read of GitHub, not of the lab
+  [`${DEPARTED_PATH}/nightly/isolation-gate-real-consumer.test.ts`]: "packages/guards/nightly/isolation-gate-real-consumer.test.ts", // a nightly tenant: the product's isolation gate
   // Run BY PATH from a product workflow or hook (claim 6), so they cannot stay in a directory the product does not hold:
-  "packages/lab/src/packaging/one-package-manager.test.ts": "packages/guards/src/one-package-manager.test.ts", // dependency-pr-body.yml
-  "packages/lab/src/packaging/branch-protection.test.ts": "packages/guards/src/branch-protection.test.ts", // nightly.yml
-  "packages/lab/src/packaging/layer-repository-protection.test.ts": "packages/guards/src/layer-repository-protection.test.ts", // nightly.yml
-  "packages/lab/src/packaging/release-publishes-only-what-stays.test.ts": "packages/guards/src/release-publishes-only-what-stays.test.ts", // release.yml
-  "packages/lab/src/packaging/board-document-chrome-resolver.test.ts": "packages/guards/src/board-document-chrome-resolver.test.ts", // reusable-board.yml, ci.yml's agentOrg job, verify.ts
-  "packages/lab/src/packaging/tracked-source-leak-guard.test.ts": "packages/guards/src/tracked-source-leak-guard.test.ts", // the pre-push hook's leak scan
-  "packages/lab/src/packaging/tracked-prose-leak-guard.test.ts": "packages/guards/src/tracked-prose-leak-guard.test.ts", // the pre-push hook's leak scan
-  "packages/lab/src/packaging/leak-patterns.mjs": "packages/guards/src/leak-patterns.ts", // the two leak guards' patterns
-  "packages/lab/src/packaging/gh-api-read.mjs": "packages/guards/src/gh-api-read.ts", // layer-repository-protection's reader
+  [`${DEPARTED_PATH}/src/packaging/one-package-manager.test.ts`]: "packages/guards/src/one-package-manager.test.ts", // dependency-pr-body.yml
+  [`${DEPARTED_PATH}/src/packaging/branch-protection.test.ts`]: "packages/guards/src/branch-protection.test.ts", // nightly.yml
+  [`${DEPARTED_PATH}/src/packaging/layer-repository-protection.test.ts`]: "packages/guards/src/layer-repository-protection.test.ts", // nightly.yml
+  [`${DEPARTED_PATH}/src/packaging/release-publishes-only-what-stays.test.ts`]: "packages/guards/src/release-publishes-only-what-stays.test.ts", // release.yml
+  [`${DEPARTED_PATH}/src/packaging/board-document-chrome-resolver.test.ts`]: "packages/guards/src/board-document-chrome-resolver.test.ts", // reusable-board.yml, ci.yml's agentOrg job, verify.ts
+  [`${DEPARTED_PATH}/src/packaging/tracked-source-leak-guard.test.ts`]: "packages/guards/src/tracked-source-leak-guard.test.ts", // the pre-push hook's leak scan
+  [`${DEPARTED_PATH}/src/packaging/tracked-prose-leak-guard.test.ts`]: "packages/guards/src/tracked-prose-leak-guard.test.ts", // the pre-push hook's leak scan
+  [`${DEPARTED_PATH}/src/packaging/leak-patterns.mjs`]: "packages/guards/src/leak-patterns.ts", // the two leak guards' patterns
+  [`${DEPARTED_PATH}/src/packaging/gh-api-read.mjs`]: "packages/guards/src/gh-api-read.ts", // layer-repository-protection's reader
 };
 
 /** Writes `files` (path -> text) under a fresh directory, runs `body` on it, and removes it however `body` ends. */
@@ -110,7 +116,7 @@ function workspaceDirectories(root: string): string[] {
     assert.match(glob, /^[\w./-]+\/\*$/, `${glob} is a glob shape this reader does not expand: widen it before trusting a pass`);
     const parent = glob.slice(0, -"/*".length);
     return readdirSync(join(root, parent), { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => posix.join(parent, entry.name));
-  }).filter((directory) => !excluded.has(directory));
+  }).filter((directory) => !excluded.has(directory) && !excluded.has(asClass(directory)));
 }
 
 function manifestName(root: string, directory: string): string | null {
@@ -131,7 +137,7 @@ function workspaceRefusals(root: string): string[] {
   return [...byDirectory, ...byName];
 }
 
-test("no file under packages/lab is tracked", () => {
+test(`no file under ${DEPARTED_PATH} is tracked`, () => {
   const files = tracked(REPO_ROOT, DEPARTED_PATH);
   assert.deepEqual(files, [], `${files.length} tracked file(s) remain under the directory that left`);
 });
@@ -144,18 +150,18 @@ test("the workspace matches no lab directory and no manifest carries the package
 test("POSITIVE CONTROL: a workspace holding the directory, or the name under another directory, is refused naming it; the exclusion lets a laid copy stand", () => {
   const files = {
     "pnpm-workspace.yaml": 'packages:\n  - "packages/*"\n',
-    "packages/lab/package.json": `{ "name": "${PACKAGE_NAME}" }`,
+    [`${DEPARTED_PATH}/package.json`]: `{ "name": "${PACKAGE_NAME}" }`,
     "packages/renamed/package.json": `{ "name": "${PACKAGE_NAME}" }`,
     "packages/fine/package.json": '{ "name": "@a11ign/evidence" }',
   };
   withFixture(files, (root) => {
     assert.deepEqual(workspaceRefusals(root), [
-      "packages/lab is still a workspace directory",
-      `packages/lab still carries the name ${PACKAGE_NAME}`,
+      `${DEPARTED_PATH} is still a workspace directory`,
+      `${DEPARTED_PATH} still carries the name ${PACKAGE_NAME}`,
       `packages/renamed still carries the name ${PACKAGE_NAME}`,
     ]);
   });
-  withFixture({ ...files, "pnpm-workspace.yaml": 'packages:\n  - "packages/*"\n  - "!packages/lab"\n' }, (root) => {
+  withFixture({ ...files, "pnpm-workspace.yaml": `packages:\n  - "packages/*"\n  - "!${DEPARTED_PATH}"\n` }, (root) => {
     assert.deepEqual(workspaceRefusals(root), [`packages/renamed still carries the name ${PACKAGE_NAME}`], "the exclusion removes the directory and nothing else");
   });
 });
@@ -173,7 +179,7 @@ function lockfileRefusals(lockfile: string): string[] {
   return [...importers, ...links, ...named];
 }
 
-test("pnpm-lock.yaml holds no importer under packages/lab, no link: to it and no @a11ign/lab entry", () => {
+test(`pnpm-lock.yaml holds no importer under ${DEPARTED_PATH}, no link: to it and no @a11ign/lab entry`, () => {
   const lockfile = read(REPO_ROOT, "pnpm-lock.yaml");
   assert.ok(Object.keys((parse(lockfile) as Lockfile).importers ?? {}).length >= MIN_LOCKFILE_IMPORTERS, "the lockfile has almost no importers: the reader is not looking at it");
   assert.deepEqual(lockfileRefusals(lockfile), []);
@@ -181,7 +187,7 @@ test("pnpm-lock.yaml holds no importer under packages/lab, no link: to it and no
 
 test("POSITIVE CONTROL: an importer, a link: and the package's own name are each REFUSED, naming it", () => {
   const lockfile = (body: string) => `lockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    dependencies: {}\n${body}`;
-  assert.deepEqual(lockfileRefusals(lockfile("\n  packages/lab:\n    dependencies: {}\n")), ["an importer under the departed path: packages/lab"]);
+  assert.deepEqual(lockfileRefusals(lockfile(`\n  ${DEPARTED_PATH}:\n    dependencies: {}\n`)), [`an importer under the departed path: ${DEPARTED_PATH}`]);
   assert.deepEqual(lockfileRefusals(lockfile("\n  packages/cli:\n    dependencies:\n      x:\n        specifier: 0.0.0\n        version: link:../lab\n")),
     ["a link to the departed package: version: link:../lab"]);
   assert.deepEqual(lockfileRefusals(lockfile(`\n  packages/cli:\n    devDependencies:\n      '${PACKAGE_NAME}':\n        specifier: 0.1.0\n        version: 0.1.0\n`)),
@@ -191,7 +197,7 @@ test("POSITIVE CONTROL: an importer, a link: and the package's own name are each
 
 // ---- 3. no test glob names the directory ----------------------------------------------------------------------------
 
-/** `packages/{a,lab,b}/...` and `packages/lab/...`: a glob token that selects the departed directory. */
+/** `packages/{a,lab,b}/...` and `<departed path>/...`: a glob token that selects the departed directory. */
 const NAMES_DEPARTED_DIRECTORY = new RegExp(`packages/(?:lab\\b|\\{[^}]*\\b${DEPARTED_DIRECTORY}\\b[^}]*\\})`);
 
 /** The scripts of the root manifest that run tests and hand a glob to the runner, and the quoted globs each one names. */
@@ -205,7 +211,7 @@ function globRefusals(manifest: { scripts: Record<string, string> }): string[] {
   return testScriptGlobs(manifest).filter(({ glob }) => NAMES_DEPARTED_DIRECTORY.test(glob)).map(({ script, glob }) => `${script} still names the departed directory: ${glob}`);
 }
 
-test("no test:* script's glob names packages/lab, as a path or in a brace list", () => {
+test(`no test:* script's glob names ${DEPARTED_PATH}, as a path or in a brace list`, () => {
   const manifest = JSON.parse(read(REPO_ROOT, "package.json"));
   const globs = testScriptGlobs(manifest);
   // The reader's own precondition: it SEES the globs, or "none names lab" is a statement about an empty list.
@@ -213,14 +219,14 @@ test("no test:* script's glob names packages/lab, as a path or in a brace list",
   assert.deepEqual(globRefusals(manifest), []);
 });
 
-test("POSITIVE CONTROL: a guard glob that still names a deleted packages/lab path is REFUSED, naming the script and the glob", () => {
+test(`POSITIVE CONTROL: a guard glob that still names a deleted ${DEPARTED_PATH} path is REFUSED, naming the script and the glob`, () => {
   const manifest = (script: string) => ({ scripts: { "test:org": script, "test:ts": 'node x.mjs \\"packages/{evidence,judge}/src/**/*.test.ts\\" --min=1' } });
   assert.deepEqual(globRefusals(manifest('node x.mjs \\"packages/{agent-org,guards,lab,control}/src/**/*.test.ts\\" --min=300')),
     ["test:org still names the departed directory: packages/{agent-org,guards,lab,control}/src/**/*.test.ts"], "a brace list that holds lab");
-  assert.deepEqual(globRefusals(manifest('node x.mjs "packages/lab/src/**/*.test.ts" --min=1')),
-    ['test:org still names the departed directory: packages/lab/src/**/*.test.ts'], "a path under it");
+  assert.deepEqual(globRefusals(manifest(`node x.mjs "${DEPARTED_PATH}/src/**/*.test.ts" --min=1`)),
+    [`test:org still names the departed directory: ${DEPARTED_PATH}/src/**/*.test.ts`], "a path under it");
   assert.deepEqual(globRefusals(manifest('node x.mjs \\"packages/{agent-org,guards,control}/src/**/*.test.ts\\" --min=50')), [], "the same glob without it passes");
-  assert.deepEqual(globRefusals(manifest('node x.mjs \\"packages/laboratory/src/**/*.test.ts\\" --min=1')), [], "a directory whose name only begins with lab is not it");
+  assert.deepEqual(globRefusals(manifest(`node x.mjs \\"${DEPARTED_PATH}oratory/src/**/*.test.ts\\" --min=1`)), [], "a directory whose name only begins with lab is not it");
 });
 
 // ---- 4. no changeset names the package ------------------------------------------------------------------------------
@@ -276,7 +282,7 @@ function pinRefusals({ manifest, scripts, gitignore }: { manifest: LayersManifes
     ...(Array.isArray(entry.lays) && entry.lays.length > 0 ? [] : ["the layer names nothing to lay"]),
   ];
   const laid = ["build", "prepare"].filter((name) => !(scripts[name] ?? "").includes("lay-layer.ts lab")).map((name) => `\`${name}\` does not lay lab`);
-  const ignored = gitignore.split("\n").some((line) => line.trim() === `/${DEPARTED_PATH}`) ? [] : [`.gitignore does not ignore /${DEPARTED_PATH}`];
+  const ignored = gitignore.split("\n").some((line) => [`/${DEPARTED_PATH}`, `/${asClass(DEPARTED_PATH)}`].includes(line.trim())) ? [] : [`.gitignore does not ignore /${DEPARTED_PATH}`];
   return [...declaration, ...laid, ...ignored];
 }
 
@@ -304,6 +310,7 @@ test("POSITIVE CONTROL: a branch for a tag, a missing layer, a layer a deploy wo
   assert.deepEqual(pinRefusals({ ...good, manifest: { layers: { lab }, pinned: { lab } } }), ["`lab` is declared under `layers`, which makes fleet:deploy and every lab job demand a pin for it"]);
   assert.deepEqual(pinRefusals({ ...good, scripts: { build: "node scripts/lay-layer.ts lab", prepare: "x" } }), ["`prepare` does not lay lab"]);
   assert.deepEqual(pinRefusals({ ...good, gitignore: "node_modules\n" }), [`.gitignore does not ignore /${DEPARTED_PATH}`]);
+  assert.deepEqual(pinRefusals({ ...good, gitignore: `/${asClass(DEPARTED_PATH)}\n` }), [], "the glob-class spelling is the same claim");
 });
 
 // ---- 6. what runs a test of the old directory by path is tracked, and every relocation is real --------------------------
@@ -322,25 +329,25 @@ function runners(root: string): Record<string, string> {
   return Object.fromEntries(names.map((path) => [path, read(root, path)]));
 }
 
-test("nothing that runs a test by path names a test of packages/lab/", () => {
+test(`nothing that runs a test by path names a test of ${DEPARTED_PATH}/`, () => {
   const files = runners(REPO_ROOT);
   assert.ok(Object.keys(files).length >= MIN_WORKFLOWS, "the reader found almost no workflow: it is not looking at the tree");
   // The workflow that holds the generated-file comment is exempt BY NAME and by claim: `consumer-gate.yml` and `outsider-job.yml` say which test checks them
   // in a header, and that test is a lab one by the ADR's own split (27 move with lab). The header is prose, and `departedTestRefusals` reads prose, so those
   // two files are asserted to carry exactly that and nothing that RUNS it.
-  const generatedHeaders = ["packages/lab/src/packaging/consumer-gate.test.ts"];
+  const generatedHeaders = [`${DEPARTED_PATH}/src/packaging/consumer-gate.test.ts`];
   const found = departedTestRefusals(files).filter((line) => !generatedHeaders.some((header) => line.includes(header)));
   assert.deepEqual(found, []);
 });
 
 test("POSITIVE CONTROL: a workflow, a hook or a script that runs a deleted lab test is REFUSED naming the file and the test", () => {
   assert.deepEqual(departedTestRefusals({
-    ".github/workflows/a.yml": "run: pnpm exec rstest run --include packages/lab/src/packaging/gone.test.ts\n",
-    "scripts/git-hooks/pre-push": "run x tsx --test \\\n  packages/lab/src/packaging/a.test.ts \\\n  packages/lab/src/packaging/a.test.ts\n",
+    ".github/workflows/a.yml": `run: pnpm exec rstest run --include ${DEPARTED_PATH}/src/packaging/gone.test.ts\n`,
+    "scripts/git-hooks/pre-push": `run x tsx --test \\\n  ${DEPARTED_PATH}/src/packaging/a.test.ts \\\n  ${DEPARTED_PATH}/src/packaging/a.test.ts\n`,
     "scripts/verify.ts": 'const t = "packages/guards/src/layer-edges.test.ts";\n',
   }), [
-    ".github/workflows/a.yml names packages/lab/src/packaging/gone.test.ts, a test of the directory that left",
-    "scripts/git-hooks/pre-push names packages/lab/src/packaging/a.test.ts, a test of the directory that left",
+    `.github/workflows/a.yml names ${DEPARTED_PATH}/src/packaging/gone.test.ts, a test of the directory that left`,
+    `scripts/git-hooks/pre-push names ${DEPARTED_PATH}/src/packaging/a.test.ts, a test of the directory that left`,
   ], "named once per file, and a relocated test's new path is not a refusal");
 });
 
@@ -367,7 +374,7 @@ function guardRefusals({ selected, exists }: { selected: string[]; exists: (path
   return [...departed, ...absent, ...lost];
 }
 
-test("the tree-wide guards the product keeps are still discovered, all exist, and none is under packages/lab", () => {
+test(`the tree-wide guards the product keeps are still discovered, all exist, and none is under ${DEPARTED_PATH}`, () => {
   const selected = treeWideGuardFiles();
   const present = new Set(tracked(REPO_ROOT));
   // The population is not empty and is not just the three: the relocated leak scans and the layer-edge fence declare themselves too.
@@ -381,14 +388,14 @@ test("the tree-wide guards the product keeps are still discovered, all exist, an
 test("POSITIVE CONTROL: a guard selected from the departed directory, a missing one and a lost staying guard are each REFUSED", () => {
   const exists = (path: string) => !path.endsWith("/vanished.test.ts");
   assert.deepEqual(guardRefusals({ selected: [...STAYING_GUARDS], exists }), [], "the guard that stayed passes");
-  assert.deepEqual(guardRefusals({ selected: [...STAYING_GUARDS, "packages/lab/src/packaging/ci-changed.test.ts"], exists }),
-    ["packages/lab/src/packaging/ci-changed.test.ts is selected and lives in the directory that left"]);
+  assert.deepEqual(guardRefusals({ selected: [...STAYING_GUARDS, `${DEPARTED_PATH}/src/packaging/ci-changed.test.ts`], exists }),
+    [`${DEPARTED_PATH}/src/packaging/ci-changed.test.ts is selected and lives in the directory that left`]);
   assert.deepEqual(guardRefusals({ selected: [...STAYING_GUARDS, "packages/guards/src/vanished.test.ts"], exists }),
     ["packages/guards/src/vanished.test.ts is selected and does not exist"]);
   assert.deepEqual(guardRefusals({ selected: STAYING_GUARDS.slice(1), exists }), [`${STAYING_GUARDS[0]} stayed with the product and is no longer found`]);
   // And the discovery itself, over a fixture population that holds a lab guard: `treeWideGuardFiles` is the product's own, so this is the seam it offers.
-  const found = treeWideGuardFiles({ lsFiles: () => "packages/lab/src/packaging/x.test.ts\n", readFile: () => "import { declareTreeWideGuard } from \"@a11ign/toolchain/lib/tree-wide-guard\";\ndeclareTreeWideGuard();" });
-  assert.deepEqual(guardRefusals({ selected: found, exists: () => true }).slice(0, 1), ["packages/lab/src/packaging/x.test.ts is selected and lives in the directory that left"]);
+  const found = treeWideGuardFiles({ lsFiles: () => `${DEPARTED_PATH}/src/packaging/x.test.ts\n`, readFile: () => "import { declareTreeWideGuard } from \"@a11ign/toolchain/lib/tree-wide-guard\";\ndeclareTreeWideGuard();" });
+  assert.deepEqual(guardRefusals({ selected: found, exists: () => true }).slice(0, 1), [`${DEPARTED_PATH}/src/packaging/x.test.ts is selected and lives in the directory that left`]);
   // NEGATIVE CONTROL for the same seam: the marker named only in a comment, or imported and never called, is not a declaration.
   const notDeclared = treeWideGuardFiles({
     lsFiles: () => "a.test.ts\nb.test.ts\n",

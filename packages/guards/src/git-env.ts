@@ -18,7 +18,7 @@
 // package -- a published tarball does not carry this repo's top-level `scripts/`. `packages/worker-fleet/
 // src/git-safe-env.mjs` is therefore a DELIBERATE, disclosed duplicate of this file for that one package,
 // pinned equal to it by `packages/worker-fleet/src/git-safe-env.test.ts`. Every other caller (this repo's
-// own top-level scripts, and `packages/lab`/`packages/control`, both `"private": true` and never
+// own top-level scripts, and `a11ign/lab`/`packages/control`, both `"private": true` and never
 // published) imports this file directly.
 
 /**

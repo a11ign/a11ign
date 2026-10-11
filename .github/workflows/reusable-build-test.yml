@@ -13,16 +13,17 @@ name: reusable-build-test
 # THREE INDEPENDENT AXES, because the two real callers are NOT step-identical -- verified against
 # `origin/main` before writing this, not assumed:
 #
-#   ci.yml's `ts` job:        build, docs:coverage, lint, typecheck, whole-suite tests -- no python
+#   ci.yml's `ts` job:        build, lint, typecheck, whole-suite tests -- no python
 #   ci.yml's `python` job:    build only (a prerequisite for a python test that shells to node) -- no lint/
-#                             typecheck/ts-tests, no docs:coverage
-#   trunk-guard's `trunkGate`: build, lint, typecheck, whole-suite tests, python -- no docs:coverage
+#                             typecheck/ts-tests
+#   trunk-guard's `trunkGate`: build, lint, typecheck, whole-suite tests, python
 #
 # (#2298: these three once differed by a fourth axis, a dedicated `node_modules` cache only the `ts` job
 # carried. pnpm's STORE is what is cached now, by setup-node for every caller alike, so the axis is gone.)
 #
-# So parameterizing on the test step ALONE would either give trunk-guard `docs:coverage` it never had (new work
-# on every merge to `main`) or silently drop it from `ci.yml` (a check deleted without anyone deciding to).
+# So parameterizing on the test step ALONE would either give trunk-guard the lint and typecheck it never had (new work
+# on every merge to `main`) or silently drop them from `ci.yml` (a check deleted without anyone deciding to).
+# (A fourth step, `docs:coverage`, was an input here until ADR 0045 cut 2, #5080: the coverage page is `a11ign/lab`'s to generate.)
 # Each input's default below is chosen to match the ORIGINAL, narrowest caller (`python`'s job),
 # so a caller must opt IN to the extra work rather than opt out of it -- the same "additive, not a silent
 # widening" instinct as `permissions:` below.
@@ -31,10 +32,6 @@ on:
     inputs:
       run-lint-typecheck:
         description: "Run pnpm run lint and pnpm run typecheck. On for ci.yml's ts and trunk's trunkGate; off for ci.yml's python (which never ran either)."
-        type: boolean
-        default: false
-      run-docs-coverage:
-        description: "Run pnpm run docs:coverage before lint/typecheck, so doc-references.test.ts sees the generated file. ONLY ci.yml's ts job had this -- neither python nor trunkGate ever ran it."
         type: boolean
         default: false
       run-ts-tests:
@@ -94,12 +91,6 @@ jobs:
           ls -la packages/evidence/dist/ || echo "(no dist directory at all)"
           echo "--- wcag.d.ts, first 20 lines ---"
           head -20 packages/evidence/dist/wcag.d.ts || echo "(no wcag.d.ts)"
-      # docs/coverage.md is GENERATED and DELIBERATELY UNTRACKED (#158) -- a fresh checkout has no copy, so
-      # doc-references.test.ts (reached by the suite) would otherwise report a real
-      # citation as broken. Only the
-      # original `ts` job ever paid for this; kept opt-in so trunkGate does not gain a step it never had.
-      - if: inputs.run-docs-coverage
-        run: pnpm run docs:coverage
       - if: inputs.run-lint-typecheck
         run: pnpm run lint
       - if: inputs.run-lint-typecheck

@@ -27,7 +27,7 @@ type Change = {
 };
 
 const change = (overrides: Partial<Change> = {}): Change => ({
-  path: "packages/lab/package.json", package: "@a11ign/lab", private: false, section: "dependencies", dependency: "yaml",
+  path: "packages/example/package.json", package: "@a11ign/lab", private: false, section: "dependencies", dependency: "yaml",
   from: "2.9.0", to: "2.9.1", ...overrides,
 });
 const bump = (from: string | null, to: string | null) => change({ from, to });
@@ -47,15 +47,15 @@ test("refusalFor accepts a patch or a minor bump under a stable major, with or w
 });
 
 test("refusalFor names an added or a removed dependency", () => {
-  assert.equal(refusalFor(bump(null, "^1.0.0")), "yaml in packages/lab/package.json was added, which is not a version bump");
-  assert.equal(refusalFor(bump("^1.0.0", null)), "yaml in packages/lab/package.json was removed, which is not a version bump");
+  assert.equal(refusalFor(bump(null, "^1.0.0")), "yaml in packages/example/package.json was added, which is not a version bump");
+  assert.equal(refusalFor(bump("^1.0.0", null)), "yaml in packages/example/package.json was removed, which is not a version bump");
 });
 
 test("refusalFor refuses a range a machine cannot compare", () => {
   for (const unplain of ["^1.0", "latest", ">=1.0.0 <2", "workspace:*", "1.0.0-rc.1"]) {
     assert.equal(
       refusalFor(bump("1.0.0", unplain)),
-      `yaml in packages/lab/package.json: 1.0.0 -> ${unplain} is not a plain version a machine can compare`,
+      `yaml in packages/example/package.json: 1.0.0 -> ${unplain} is not a plain version a machine can compare`,
       unplain,
     );
   }
@@ -104,8 +104,8 @@ test("entriesFor labels an optional dependency, and writes nothing for devDepend
 });
 
 const manifest = (overrides: Record<string, unknown> = {}) => ({ name: "@a11ign/lab", version: "1.2.3", dependencies: { yaml: "^2.9.0" }, ...overrides });
-const manifestFiles = ["packages/lab/package.json", "pnpm-lock.yaml"];
-const moved = (before: Record<string, unknown>, after: Record<string, unknown>, path = "packages/lab/package.json") => ({ [path]: { before, after } });
+const manifestFiles = ["packages/example/package.json", "pnpm-lock.yaml"];
+const moved = (before: Record<string, unknown>, after: Record<string, unknown>, path = "packages/example/package.json") => ({ [path]: { before, after } });
 
 test("deriveDependencyChangeset: a runtime range bump of a published package yields an entries verdict", () => {
   const derived = deriveDependencyChangeset({
@@ -161,25 +161,25 @@ test("deriveDependencyChangeset refuses a file that is not a manifest or the loc
 
 test("deriveDependencyChangeset refuses an owned path, and also says it is not a dependency path when it is neither", () => {
   const derived = deriveDependencyChangeset({
-    files: ["packages/lab/package.json", "packages/lab/package.json.d"], owned: ["packages/lab/package.json"], manifests: {},
+    files: ["packages/example/package.json", "packages/example/package.json.d"], owned: ["packages/example/package.json"], manifests: {},
   });
   assert.deepEqual(derived.reasons, [
-    "packages/lab/package.json.d is not a manifest or the lockfile, so this is not a dependency-only diff",
-    "packages/lab/package.json is an owned path: a human states the capture-cache facts for it (docs/owned-path-facts.json)",
-    "packages/lab/package.json.d is an owned path: a human states the capture-cache facts for it (docs/owned-path-facts.json)",
+    "packages/example/package.json.d is not a manifest or the lockfile, so this is not a dependency-only diff",
+    "packages/example/package.json is an owned path: a human states the capture-cache facts for it (docs/owned-path-facts.json)",
+    "packages/example/package.json.d is an owned path: a human states the capture-cache facts for it (docs/owned-path-facts.json)",
   ]);
 });
 
 test("deriveDependencyChangeset refuses a manifest that was added, deleted, or changed beyond its ranges", () => {
-  const files = ["packages/lab/package.json"];
-  const added = deriveDependencyChangeset({ files, owned: [], manifests: { "packages/lab/package.json": { before: null, after: manifest() } } });
-  assert.deepEqual(added.reasons, ["packages/lab/package.json was added, which is not a dependency bump"]);
+  const files = ["packages/example/package.json"];
+  const added = deriveDependencyChangeset({ files, owned: [], manifests: { "packages/example/package.json": { before: null, after: manifest() } } });
+  assert.deepEqual(added.reasons, ["packages/example/package.json was added, which is not a dependency bump"]);
 
-  const deleted = deriveDependencyChangeset({ files, owned: [], manifests: { "packages/lab/package.json": { before: manifest(), after: null } } });
-  assert.deepEqual(deleted.reasons, ["packages/lab/package.json was deleted, which is not a dependency bump"]);
+  const deleted = deriveDependencyChangeset({ files, owned: [], manifests: { "packages/example/package.json": { before: manifest(), after: null } } });
+  assert.deepEqual(deleted.reasons, ["packages/example/package.json was deleted, which is not a dependency bump"]);
 
   const renamed = deriveDependencyChangeset({ files, owned: [], manifests: moved(manifest(), manifest({ version: "1.2.4", dependencies: { yaml: "^2.9.1" } })) });
-  assert.deepEqual(renamed.reasons, ["packages/lab/package.json changes something other than a dependency range"]);
+  assert.deepEqual(renamed.reasons, ["packages/example/package.json changes something other than a dependency range"]);
 });
 
 test("deriveDependencyChangeset refuses an added dependency", () => {
@@ -188,7 +188,7 @@ test("deriveDependencyChangeset refuses an added dependency", () => {
     manifests: moved(manifest(), manifest({ dependencies: { yaml: "^2.9.0", zod: "^3.0.0" } })),
   });
   assert.equal(derived.verdict, "refused");
-  assert.deepEqual(derived.reasons, ["zod in packages/lab/package.json was added, which is not a version bump"]);
+  assert.deepEqual(derived.reasons, ["zod in packages/example/package.json was added, which is not a version bump"]);
 });
 
 test("renderEntry writes the changeset front matter and the text; parseEntry reads it back", () => {
