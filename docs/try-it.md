@@ -31,7 +31,7 @@ the words NVDA spoke.
   trained component only ever says *this is worth a person's look*. A referral on a page you believe is
   fine is expected behaviour, not a bug.
 - **It needs Windows**, because NVDA is Windows-only. That is the real cost of the two hours.
-- **It is published to npm, and it still needs a Windows machine.** `a11ign@0.6.6` was the registry's `latest` and `next` when this was last checked (2026-10-11, `npm view a11ign dist-tags` printed `{ latest: '0.6.6', next: '0.6.6' }`: a reading at a moment, so check it again). This guide pins `latest`, by its commit, in every workflow below. `npx a11ign <url>` saves the clone and the build, not the machine: it needs the same capture worker as a clone does. [The commands are below](#the-other-route-run-it-from-the-repository).
+- **It is published to npm, and it still needs a Windows machine.** `a11ign@0.7.0` was the registry's `latest` when this was last checked (2026-10-11, `npm view a11ign dist-tags` printed `{ latest: '0.7.0', next: '0.8.0' }`: a reading at a moment, so check it again). This guide pins `latest`, by its commit, in every workflow below. `npx a11ign <url>` saves the clone and the build, not the machine: it needs the same capture worker as a clone does. [The commands are below](#the-other-route-run-it-from-the-repository).
 
 ## The fastest route: a GitHub Actions run
 
@@ -53,8 +53,8 @@ jobs:
       pull-requests: write       # for the PR comment below; omit it and the report still runs, only quieter
     steps:
       - uses: actions/checkout@v7
-      - uses: a11ign/a11ign@fd5cf437f37416098b2a4819282f575016ddf2be   # the commit of the release tagged a11ign@0.6.6
-        # Pinned to the full 40-character commit of release 0.6.6, so your CI does not move when a newer
+      - uses: a11ign/a11ign@0f481d193e3347de8f69287ab2b5bf73549b5e92   # the commit of the release tagged a11ign@0.7.0
+        # Pinned to the full 40-character commit of release 0.7.0, so your CI does not move when a newer
         # one is published -- GitHub refuses an abbreviated SHA outright, it does not just discourage it.
         # To take a newer release, read `npm view a11ign dist-tags` for its number and
         # `git ls-remote https://github.com/a11ign/a11ign 'refs/tags/a11ign@*'` for its commit.
@@ -152,7 +152,7 @@ is stated below.
 
 ## What sign-in covers
 
-**Read this before you spend an afternoon on a login.** It is the scope in three lists; the sections after it are the how. It is read against the pinned release (`a11ign@0.6.6`) and `docs/known-gaps.md` [§51](./known-gaps.md#51-a-run-cannot-get-past-mfa-sso-or-a-captcha-and-nothing-in-the-tool-detects-the-third-out-of-v1-by-ruling-2275-2262), and where a thing was only run on a fixture it says so.
+**Read this before you spend an afternoon on a login.** It is the scope in three lists; the sections after it are the how. It is read against the pinned release (`a11ign@0.7.0`) and `docs/known-gaps.md` [§51](./known-gaps.md#51-a-run-cannot-get-past-mfa-sso-or-a-captcha-and-nothing-in-the-tool-detects-the-third-out-of-v1-by-ruling-2275-2262), and where a thing was only run on a fixture it says so.
 
 ### Supported
 
@@ -161,7 +161,7 @@ is stated below.
 
 ### Not supported
 
-- **MFA.** An SMS code, an emailed code or a push approval has no step in the flow vocabulary, and a run waits for no person. TOTP (an authenticator-app code) is deferred.
+- **MFA.** An SMS code, an emailed code or a push approval has no step in the flow vocabulary, and a run waits for no person. TOTP (an authenticator-app code) is computed only by `a11ign login --check`, from a seed in its `login:` block; a scan has no way to supply one, so it cannot answer a code prompt.
 - **SSO**, other than a username and password on a form at an origin you can name. Any other origin ends the run with `auth-login-failed`, reason `left-origin`.
 - **A CAPTCHA.** It is never solved: the run ends `auth-challenge-detected`, which names it.
 - **A hosted provider, run end to end: not yet shown.** The redirect login above is a fixture reading, so against your provider (Auth0, Okta, Entra ID or any other) a run is the first reading.
@@ -192,7 +192,7 @@ this section is the order to do them in. Read [SECURITY.md](../SECURITY.md#it-ca
 
 Decide this before you spend anything, because each of these ends the path rather than slowing it:
 
-- **A site whose only sign-in is MFA, SMS or an emailed code, or that puts a CAPTCHA in front of the login, is out of scope; so is an SSO that is not a username and password on a form at an origin you can name** (one that is, see [`idp-origins:`](#a-login-through-a-separate-identity-provider-origin-idp-origins)). SMS codes, emailed codes and push approvals are a documented gap, and TOTP (an authenticator-app code) is deferred. **If the site has a way to make a test account without them** (a staging environment with MFA off, a role your admin exempts, a separate username and password login next to the SSO button), use that. If it has none, this path cannot reach your page today: say so rather than working around it.
+- **A site whose only sign-in is MFA, SMS or an emailed code, or that puts a CAPTCHA in front of the login, is out of scope; so is an SSO that is not a username and password on a form at an origin you can name** (one that is, see [`idp-origins:`](#a-login-through-a-separate-identity-provider-origin-idp-origins)). SMS codes, emailed codes and push approvals are a documented gap, and TOTP (an authenticator-app code) is out of reach of a scan (see the MFA item above). **If the site has a way to make a test account without them** (a staging environment with MFA off, a role your admin exempts, a separate username and password login next to the SSO button), use that. If it has none, this path cannot reach your page today: say so rather than working around it.
 - **A CAPTCHA is never solved.** A login step that fails on a page showing a reCAPTCHA, hCaptcha or Turnstile widget ends the run with `auth-challenge-detected`, which names the challenge and stops.
 - **Attaching to your own signed-in browser is not built.** What exists instead is loading a sign-in state you saved by hand (`auth-state:`, [#2566](https://github.com/a11ign/a11ign/issues/2566), merged): it is the route for a site behind SSO or MFA, and it is **not walked in this section**, which is the plain username-and-password path. It has its own steps, the limits of the file and one measured reading in [`docs/github-action.md`](./github-action.md#logging-in-with-a-saved-state-auth-state): read that if a form login cannot reach your page.
 - **Only what your flows file names is pressed.** `probe-forms` and `probe-navigation` are switched off for a run that logs in, whatever you set.
@@ -222,7 +222,7 @@ gh secret set APP_TEST_PASSWORD --repo OWNER/REPO
 
 ### 3. The flows file
 
-Save this as `.github/a11y-flows.yml` (any path inside the repository works; the workflow names it). It says how to sign in, in a closed vocabulary of steps: `goto`, `fill`, `choose`, `check`, `press`, `expect` and `capture`. There is no script step and no sleep.
+Save this as `.github/a11y-flows.yml` (any path inside the repository works; the workflow names it). It says how to sign in, in a closed vocabulary of steps: `goto`, `fill`, `choose`, `check`, `press`, `expect` and `capture`. The 0.7.0 source also accepts `dismiss-if-shown` and `auto`, and `when:` and `optional:` modifiers, but the changelog says the worker does not know those keys, so leave them out of this file. There is no script step and no sleep.
 
 ```yaml
 version: 1
@@ -259,12 +259,12 @@ flows:
       - expect: { heading: "Dashboard" }       # on YOUR origin, as before
 ```
 
-What the pinned release (`a11ign@0.6.6`) does with it, read off `packages/cli/src/auth/flows.ts` and `docs/known-gaps.md` §51 at that tag:
+What the pinned release (`a11ign@0.7.0`) does with it, read off `packages/cli/src/auth/flows.ts` and `docs/known-gaps.md` §51 at that tag:
 
 - **Each entry must be an exact `http` or `https` origin.** The file is refused when it loads if an entry "holds a wildcard; list each origin exactly", "carries a path, query or fragment", "carries a username or password", or "is the app's own origin, which needs no allowance". The key is optional, and a file without it behaves as before.
-- **The declared origins are allowed only between the login's steps.** "The last step, the `expect:`, and the requested page must be on the app's origin, so a run that ends parked on the provider is still `left-origin`", and "nothing is typed into an origin that is not declared".
+- **The declared origins are allowed only between the login's steps.** The last step is an `expect:` on the app's origin (the flows rules guarantee it), so a login that ends parked on the provider is `left-origin`; and nothing is typed into an origin that is not declared.
 - **`left-origin` is what any other origin ends in.** An origin the flow does not name, a third site the provider redirects on to, or a login that finishes parked on the provider is `auth-login-failed` with reason `left-origin`, and the message names the step and the page it was on. It is also what you get when the declaration is missing or misspelt.
-- **The in-memory-token case is what this is for.** A hosted provider whose token lives only in the page's memory (an SPA SDK's `cacheLocation: 'memory'`) leaves nothing in cookies or `localStorage` for a saved state to carry. The login therefore round-trips through the provider in the same browser as the capture, and **the flow must finish on the product origin, on the page you asked to examine**: a login that already ended on the requested page is not loaded a second time, because a load discards a token held only in memory.
+- **The in-memory-token case is what this is for.** A hosted provider whose token lives only in the page's memory (an SPA SDK's `cacheLocation: 'memory'`) leaves nothing in cookies or `localStorage` for a saved state to carry. The login therefore round-trips through the provider in the same browser as the capture. A flow that declares a provider and **ends on the requested page does not load that page again**, because a load discards a token held only in memory (measured 2026-10-08 on the #4086 fixture: the reload reads `Sign in`, the page left alone reads `Account`).
 - **It works for a test account without MFA, unattended.** It does not answer MFA, a CAPTCHA or a person present.
 
 **What is not shown:** `docs/known-gaps.md` [§51](./known-gaps.md#51-a-run-cannot-get-past-mfa-sso-or-a-captcha-and-nothing-in-the-tool-detects-the-third-out-of-v1-by-ruling-2275-2262) records that this was read on a local fixture (a real Chromium, a fake provider), **not on a hosted provider**, with one NVDA reading on the same fixture, and that MFA is not covered. Your provider is untested, so a run against it is the first reading.
@@ -295,7 +295,7 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v7
-      - uses: a11ign/a11ign@fd5cf437f37416098b2a4819282f575016ddf2be   # the commit of the release tagged a11ign@0.6.6
+      - uses: a11ign/a11ign@0f481d193e3347de8f69287ab2b5bf73549b5e92   # the commit of the release tagged a11ign@0.7.0
         id: a11ign
         env:                                     # the credential enters HERE, on the step that calls the Action
           APP_TEST_USER: ${{ secrets.APP_TEST_USER }}
@@ -314,7 +314,7 @@ jobs:
             ${{ steps.a11ign.outputs.summary-md }}
 ```
 
-- **Pin the Action to the full 40-character commit SHA of a release that has the login flow, as above.** The pin above is release `0.6.6` (tag `a11ign@0.6.6`, commit `fd5cf437f37416098b2a4819282f575016ddf2be`), which has it; the `v0.1.0` tag predates the login flow, so a workflow pinned to it would ignore `flows` and `login-flow` and examine your login page as though it were the product. On 2026-10-11 `npm view a11ign dist-tags` read `latest` `0.6.6` and `next` `0.6.6`, and `git ls-remote --tags https://github.com/a11ign/a11ign refs/tags/a11ign@0.6.6` printed `fd5cf437f37416098b2a4819282f575016ddf2be` (readings at a moment, so look again). **Pin `latest`, not `next`.** To find the newest `latest`, run `npm view a11ign dist-tags`, then `git ls-remote --tags https://github.com/a11ign/a11ign refs/tags/a11ign@<version>` for that version's commit. The Action runs the code at the SHA you give it, not a registry version, so the SHA is what decides what you get. **Do not write `a11ign/a11ign@v0`:** that tag exists (`git ls-remote --tags https://github.com/a11ign/a11ign refs/tags/v0` printed the `0.6.6` commit on 2026-10-11) but it is a moving tag, so your CI would take a newer release without a change on your side. **What this does not claim:** the cold runs behind this section used a commit earlier than the `0.3.0` release, and the `0.6.6` commit pinned here has not been walked by a fresh reader.
+- **Pin the Action to the full 40-character commit SHA of a release that has the login flow, as above.** The pin above is release `0.7.0` (tag `a11ign@0.7.0`, commit `0f481d193e3347de8f69287ab2b5bf73549b5e92`), which has it; the `v0.1.0` tag predates the login flow, so a workflow pinned to it would ignore `flows` and `login-flow` and examine your login page as though it were the product. On 2026-10-11 `npm view a11ign dist-tags` read `latest` `0.7.0` and `next` `0.8.0`, and `git ls-remote --tags https://github.com/a11ign/a11ign refs/tags/a11ign@0.7.0` printed `0f481d193e3347de8f69287ab2b5bf73549b5e92` (readings at a moment, so look again). **Pin `latest`, not `next`.** To find the newest `latest`, run `npm view a11ign dist-tags`, then `git ls-remote --tags https://github.com/a11ign/a11ign refs/tags/a11ign@<version>` for that version's commit. The Action runs the code at the SHA you give it, not a registry version, so the SHA is what decides what you get. **Do not write `a11ign/a11ign@v0`:** that tag exists (`git ls-remote --tags https://github.com/a11ign/a11ign refs/tags/v0` printed the `0.7.0` commit on 2026-10-11) but it is a moving tag, so your CI would take a newer release without a change on your side. **What this does not claim:** the cold runs behind this section used a commit earlier than the `0.3.0` release, and the `0.7.0` commit pinned here has not been walked by a fresh reader.
 - **The secrets go in `env:` on the step that calls the Action**, never in `with:`: an input is interpolated into shell text, and an environment variable is not. Give `flows` and `login-flow` together or neither.
 - **A pull request from a fork gets no secrets**, so it ends in `auth-credential-missing`. Run it from a branch of the repository itself.
 - **`task` is a label for the report and a hint about what a visitor is doing.** For a run that logs in it does not choose what is pressed; your flows file does.
