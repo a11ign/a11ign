@@ -4,7 +4,7 @@
  * matches too little is a SKIPPED check on a diff that needed it (#2329: docs-only, `ts` skipped, main red).
  *
  * Pinned here, each with a counter-case so that "false" is never the only thing a test has seen:
- *   1. `classify` per category (ts, python, ansible, docs, board, changeset, rulesFitness) and the `packages` list, over injected
+ *   1. `classify` per category (ts, python, docs, board, changeset, rulesFitness) and the `packages` list, over injected
  *      stand-ins for `npm pack`, the test dependency map and the docs-reading tests, so no npm and no runner is needed.
  *   2. THE EAGER DIRECTION: a root config or `scripts/*.mjs` change touches EVERY package; a board-only docs diff is narrower than a
  *      mixed one; the changeset answer asks what is PACKED, not what is under a package directory.
@@ -118,7 +118,7 @@ test("classify: an empty diff turns every category off and names no package", ()
   withGitSandbox((sandbox) => {
     trackFixtureRepo(sandbox);
     const result = classifyIn(sandbox.dir, []);
-    assert.deepEqual(result, { ts: false, python: false, ansible: false, docs: false, board: false, changeset: false, rulesFitness: false, packages: [] });
+    assert.deepEqual(result, { ts: false, python: false, docs: false, board: false, changeset: false, rulesFitness: false, packages: [] });
   });
 });
 
@@ -156,14 +156,6 @@ test("classify: python is the python/tests trees of a package or one of the two 
     for (const file of ["packages/scorer/python/README.md", "packages/scorer/src/train.py", "scripts/x.py", "requirements.txt"]) {
       assert.equal(classifyIn(sandbox.dir, [file]).python, false, file);
     }
-  });
-});
-
-test("classify: ansible turns on for the layer pin alone", () => {
-  withGitSandbox((sandbox) => {
-    trackFixtureRepo(sandbox);
-    assert.equal(classifyIn(sandbox.dir, ["layers.json"]).ansible, true);
-    assert.equal(classifyIn(sandbox.dir, ["packages/control/ansible/site.yml", "ansible/site.yml"]).ansible, false);
   });
 });
 
@@ -407,7 +399,7 @@ test("jobsFor: the job names classify set true, in the workflow's order, for a f
   withGitSandbox((sandbox) => {
     trackFixtureRepo(sandbox);
     assert.deepEqual(jobsFor(["packages/judge/src/rules.ts"], sandbox.dir), ["ts", "rulesFitness"]);
-    assert.deepEqual(jobsFor(["layers.json", "packages/scorer/python/x.py"], sandbox.dir), ["ts", "python", "ansible"]);
+    assert.deepEqual(jobsFor(["layers.json", "packages/scorer/python/x.py"], sandbox.dir), ["ts", "python"]);
     assert.deepEqual(jobsFor(["scripts/x.mjs"], sandbox.dir), ["ts"]);
     assert.deepEqual(jobsFor([], sandbox.dir), []);
   });
@@ -494,7 +486,7 @@ test("CLI: a diff is classified and printed as key=value lines when not inside A
     const run = runCli(["--event=pull_request", `--base=${BASE_REF}`, `--repo=${sandbox.dir}`]);
     assert.equal(run.status, 0, run.stderr);
     assert.equal(run.stdout.trimEnd(), [
-      "ts=true", "python=false", "ansible=false", "docs=false", "board=false", "changeset=true", "rulesFitness=false", "packages=pub",
+      "ts=true", "python=false", "docs=false", "board=false", "changeset=true", "rulesFitness=false", "packages=pub",
     ].join("\n"));
   });
 });
@@ -508,7 +500,7 @@ test("CLI: under Actions the outputs are APPENDED to $GITHUB_OUTPUT, not printed
     assert.equal(run.status, 0, run.stderr);
     assert.equal(run.stdout, "");
     assert.equal(readFileSync(outFile, "utf8"), [
-      "earlier=1", "ts=true", "python=true", "ansible=true", "docs=true", "board=true", "changeset=true", "rulesFitness=true", `packages=${FIXTURE_PACKAGES}`, "",
+      "earlier=1", "ts=true", "python=true", "docs=true", "board=true", "changeset=true", "rulesFitness=true", `packages=${FIXTURE_PACKAGES}`, "",
     ].join("\n"));
   });
 });
@@ -521,7 +513,7 @@ test("CLI: merge_group runs the full required set for a workflow-only diff, and 
     const queue = runCli(["--event=merge_group", `--base=${BASE_REF}`, `--repo=${sandbox.dir}`]);
     assert.equal(queue.status, 0, queue.stderr);
     assert.deepEqual(outputsOf(queue.stdout), {
-      ts: "true", python: "true", ansible: "true", docs: "true", board: "true", changeset: "true", rulesFitness: "true", packages: FIXTURE_PACKAGES,
+      ts: "true", python: "true", docs: "true", board: "true", changeset: "true", rulesFitness: "true", packages: FIXTURE_PACKAGES,
     });
 
     const pr = runCli(["--event=pull_request", `--base=${BASE_REF}`, `--repo=${sandbox.dir}`]);
