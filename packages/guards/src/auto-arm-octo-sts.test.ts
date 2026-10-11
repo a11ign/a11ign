@@ -123,7 +123,11 @@ test("#4969: an approving review reaches arming only through `relay`, which mint
   assert.ok(!relay.steps.some((s) => s.uses?.startsWith("octo-sts/action@")), "relay must not mint: it runs on the branch's merge ref");
   assert.match(relay.if, /github\.event\.review\.state == 'approved'/, "a CHANGES_REQUESTED or COMMENTED review must do nothing");
   assert.match(relay.if, /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/, "a fork head must do nothing");
-  assert.match(relay.steps.map((s) => s.run ?? "").join("\n"), /gh workflow run auto-arm\.yml .*--ref main/, "the hand-off must name main's copy");
+  const handOff = relay.steps.map((s) => s.run ?? "").join("\n");
+  assert.match(handOff, /gh workflow run auto-arm\.yml .*--ref main/, "the hand-off must name main's copy");
+  // Before this lands `main` declares no `pr` input and the dispatch answers 422; that is no failure of the pull request, and the only one forgiven.
+  assert.match(handOff, /\*"Unexpected inputs provided"\*\) .*exit 0 ;;/, "a main that does not declare the input yet is a notice, not a red check");
+  assert.match(handOff, /esac\n\s*echo "\$out" >&2\n\s*exit 1/, "every OTHER refusal of the dispatch stays red");
 
   const armApproved = gated("arm-approved");
   assert.match(armApproved.if, /github\.event_name == 'workflow_dispatch'/);

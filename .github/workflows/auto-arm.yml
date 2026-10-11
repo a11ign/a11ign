@@ -282,7 +282,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PULL_REQUEST: ${{ github.event.pull_request.number }}
           REPOSITORY: ${{ github.repository }}
-        run: gh workflow run auto-arm.yml --repo "$REPOSITORY" --ref main -f pr="$PULL_REQUEST"
+        run: |
+          # `main` declares no `pr` input until this change has landed, and GitHub then answers 422 "Unexpected inputs provided": there is
+          # nothing to hand the number to yet, which is not this pull request's failure. Any OTHER refusal stays red.
+          if ! out=$(gh workflow run auto-arm.yml --repo "$REPOSITORY" --ref main -f pr="$PULL_REQUEST" 2>&1); then
+            case "$out" in
+              *"Unexpected inputs provided"*) echo "::notice::main's copy of auto-arm.yml declares no pr input yet, so there is nothing to hand #${PULL_REQUEST} to"; exit 0 ;;
+            esac
+            echo "$out" >&2
+            exit 1
+          fi
 
   arm-approved:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.inputs.pr != ''
