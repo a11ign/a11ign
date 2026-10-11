@@ -24,9 +24,9 @@ const ROOT = new URL("../../../", import.meta.url);
 const read = (path: string) => JSON.parse(readFileSync(fileURLToPath(new URL(path, ROOT)), "utf8"));
 const stateChangesOf = (path: string): Change[] => read(path).interaction?.stateChanges ?? [];
 
-const DISCLOSURE_GOOD = "packages/lab/src/eval/fixtures/tutorials/disclosure-good.json";
-const MENUS_GOOD = "packages/lab/src/eval/fixtures/tutorials/menus-good.json";
-const DISCLOSURE_BAD = "packages/lab/src/eval/fixtures/tutorials/disclosure-bad.json";
+const DISCLOSURE_GOOD = "packages/judge/src/fitness/fixtures/tutorials/disclosure-good.json";
+const MENUS_GOOD = "packages/judge/src/fitness/fixtures/tutorials/menus-good.json";
+const DISCLOSURE_BAD = "packages/judge/src/fitness/fixtures/tutorials/disclosure-bad.json";
 const REHEARSAL_3 = "packages/cli/src/fixtures/rehearsal3-34774183433-a11ign-result.json";
 
 /** The rule's `4.1.2:state-change-silent` findings, by the issue text `addSilentStateChanges` writes. */
