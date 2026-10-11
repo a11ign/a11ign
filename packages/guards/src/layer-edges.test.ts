@@ -58,7 +58,7 @@ const FLEET_DIR = `packages/${FLEET_LAYER}`;
 const FIRST_LAYERS = ["nvda-worker", "nvda-speech", "agent-org"];
 /** The three the fence of #3501 adds, for moves 2-4 of #69. */
 const SPLIT_LAYERS = ["worker-fleet", "lab", "control"];
-/** The layers whose directory is not in the tree at all: no tracked file is inside one, so no baseline entry may be FROM one. (`worker-fleet` and `lab` are laid there at build time, untracked, #3504, #3505.) */
+/** The layers whose directory is not in the tree at all: no tracked file is inside one, so no baseline entry may be FROM one. (`lab` is laid there at build time, untracked, #3505; `worker-fleet` was until ADR 0045 cut 4, #5082, and a checkout that laid it keeps the directory, #3504.) */
 const DEPARTED_LAYERS = [...FIRST_LAYERS, "worker-fleet", "lab", "control"];
 /** One x.ts and one own.ts per layer, and the other package's x.ts. */
 const THREE_LAYERS_CLEAN_FILES = 7;
