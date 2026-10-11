@@ -17,8 +17,8 @@ The markers were `canaryuser6d3f2a`, `canarysecretb81c94`, `canarytotp4e7a10c2`;
 - `login --check`'s message for a `url:` check is now the shared `login-check-url` rule's text, not its old wording.
 - Not changed: a bare base32 seed passes the env-name regex (an existing gap, outside this row).
 
-Outside-Region: packages/cli/src/cli.ts -- `planFromBlock` there now calls the shared `loginBlockPlan`, and `captureViaWorker` serialises through `onTheWire`; both are one-line call-site changes the shared plan and the dropped `login` key require.
-Outside-Region: packages/cli/src/auth/rule-layer.ts -- the rule layer reads the same `args.auth` the wire does, so it must turn a `loginBlock` request into the plan (`ruleLayerPlanOf`) or it would replay an empty `login`.
+Outside-Region: packages/cli/src/cli.ts — `planFromBlock` there now calls the shared `loginBlockPlan`, and `captureViaWorker` serialises through `onTheWire`; both are one-line call-site changes the shared plan and the dropped `login` key require.
+Outside-Region: packages/cli/src/auth/rule-layer.ts — the rule layer reads the same `args.auth` the wire does, so it must turn a `loginBlock` request into the plan (`ruleLayerPlanOf`) or it would replay an empty `login`.
 
 platform: none needed; a CLI-side wire shape, no Windows worker in this change.
 
