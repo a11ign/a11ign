@@ -357,9 +357,6 @@ test("actionPinVerdict (#4153): the refusal says what the release's own check-pi
 
 // ---- #4959: the committed file against the committed README ------------------------------------------------------------------------
 
-/** A trailing comment on one line of README's fence, which a README-only edit can reword without touching any key. */
-const FENCE_COMMENT = /^( +timeout-minutes: \d+ +# )(.+)$/m;
-
 test("consumer-gate.yml is what README.md's Quickstart fence generates: regenerate with `node scripts/run.ts consumer-gate`", () => {
   const readme = readFileSync(README_PATH, "utf8");
   const committed = readFileSync(OUT, "utf8");
@@ -371,19 +368,23 @@ test("consumer-gate.yml is what README.md's Quickstart fence generates: regenera
   );
 });
 
-test("consumer-gate.yml vs README.md, positive control: ONE reworded comment in README's fence reports the committed file STALE", () => {
-  const readme = readFileSync(README_PATH, "utf8");
-  const committed = readFileSync(OUT, "utf8");
-  assert.match(readme, FENCE_COMMENT, "the control edits a comment in README's fence, so it has to find one: re-point FENCE_COMMENT");
-  const reworded = readme.replace(FENCE_COMMENT, "$1$2 (reworded)");
-  assert.notEqual(reworded, readme);
-  assert.equal(consumerGateIsStale(committed, generate(reworded, SHA)), true);
-  assert.equal(consumerGateIsStale(committed, generate(readme, SHA)), false, "the unedited README is the clean counterpart");
+/**
+ * The controls run over the fixture fence, never the real README or file, so a stale tree turns ONLY the test above red and the
+ * predicate's own behaviour is pinned independently of whatever state the working tree is in.
+ */
+const COMMENTED_FENCE = FENCE.replace("    runs-on: windows-2022", "    runs-on: windows-2022   # NVDA needs Windows");
+
+test("consumerGateIsStale, positive control: ONE reworded comment in the documented fence reports the committed file STALE", () => {
+  const committed = generate(markdownAround(COMMENTED_FENCE), SHA) as string;
+  const reworded = COMMENTED_FENCE.replace("# NVDA needs Windows", "# NVDA needs Windows (reworded)");
+  assert.notEqual(reworded, COMMENTED_FENCE, "the control has to change something, or it proves nothing");
+  assert.equal(consumerGateIsStale(committed, generate(markdownAround(reworded), SHA)), true);
+  assert.equal(consumerGateIsStale(committed, generate(markdownAround(COMMENTED_FENCE), SHA)), false, "the unedited fence is the clean counterpart");
 });
 
-test("consumer-gate.yml vs README.md, a different pin sha alone is NOT stale: the pin is check-pin's question, not this one's", () => {
-  const readme = readFileSync(README_PATH, "utf8");
-  const committed = readFileSync(OUT, "utf8");
-  assert.equal(consumerGateIsStale(committed, generate(readme, OTHER_SHA)), false);
-  assert.notEqual(generate(readme, SHA), generate(readme, OTHER_SHA), "the two generations differ in the pin, so this is not comparing a file to itself");
+test("consumerGateIsStale: a different pin sha alone is NOT stale -- the pin is check-pin's question, not this one's", () => {
+  const committed = generate(markdownAround(COMMENTED_FENCE), SHA) as string;
+  const regenerated = generate(markdownAround(COMMENTED_FENCE), OTHER_SHA) as string;
+  assert.notEqual(committed, regenerated, "the two generations differ in the pin, so this is not comparing a file to itself");
+  assert.equal(consumerGateIsStale(committed, regenerated), false);
 });
