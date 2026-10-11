@@ -109,6 +109,7 @@ until that ledger exists, never `0`). An `unknown` is a source the script could 
   | `prsMerged` (higher is better) | 46 | below 23, and any window of 0 (the report's `STALL:` line) |
   | `medianOpenToMergeMinutes` | 37 | above 74 |
   | `idleMinutes` | 470 (235 of 681 ticks) | above 68, your own bound on that reading: 10% of ticks |
+  | `idleClaimedHours` | about 60 (the chairman's count of 12 idle workers, a11ign#4957, 2026-10-11 07:55Z; not a retro reading) | above 5 worker-hours a day |
   | `orgStalledWakes` | 1 | above 1 |
   | `claimStalledWakes` | 4 | above 4 |
   | `claimStallVoidings` | 4 | above 4 |
