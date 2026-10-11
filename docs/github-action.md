@@ -20,7 +20,8 @@ jobs:
       - uses: actions/checkout@v7
       - uses: a11ign/a11ign@091918da7213322b9893b0b0f144f963127fb8f5   # the commit of the release tagged a11ign@0.9.0
         # Pinned to the full 40-character commit of release 0.9.0 (`npm view a11ign dist-tags` read `latest`
-        # 0.9.0 and `next` 0.9.0, 2026-10-11), so your CI does not move when a newer one is published -- GitHub
+        # 0.9.0 on 2026-10-11; `next` moved from 0.9.0 to 0.10.1 that day), so your CI does not move when a
+        # newer one is published -- GitHub
         # refuses an abbreviated SHA outright, it does not just discourage it.
         id: a11ign
         with:
