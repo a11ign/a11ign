@@ -31,7 +31,7 @@ import {
   formatFaultMessage, formatAuthFaultMessage, formatDoubtMessage, formatEarlyContainmentNotice,
 } from "./fault-remediation.js";
 import { AuthError, isAuthFault } from "./auth/auth-faults.js";
-import { refuseAuthOnRemoteWorker, requireAuthApplied, type AuthRequest } from "./auth/refusals.js";
+import { onTheWire, refuseAuthOnRemoteWorker, requireAuthApplied, type AuthRequest } from "./auth/refusals.js";
 import { ruleLayerSignIn } from "./auth/rule-layer.js";
 import { pressedByThisRun, resolveAuthentication } from "./auth/resolve.js";
 import { buildScrubSet, redactionNotice, scrubArtifact, type ScrubSet } from "./auth/scrub.js";
@@ -42,7 +42,7 @@ import {
 } from "./auth/interpreter.js";
 import { LOGIN_EXIT_CODES, LOGIN_OUTCOMES, retryDecision, type LoginOutcome } from "./auth/login-outcomes.js";
 import { keepLastAttempt, recordStep, startAttempt, writeArtifact, type ArtifactIo, type Attempt, type ObservedStep } from "./auth/login-artifact.js";
-import { LoginBlockError, parseLoginBlock } from "./auth/login-block.js";
+import { LoginBlockError, loginBlockPlan, parseLoginBlock } from "./auth/login-block.js";
 import { loginVerdict, validateCheck, type PageObservation, type SignedInCheck } from "./auth/signed-in-check.js";
 import { classifyScreen, type Classification, type ScreenObservation } from "./auth/screen-loop.js";
 import { openPlaywrightDriver } from "./auth/playwright-driver.js";
@@ -1579,7 +1579,7 @@ export async function captureViaWorker(
         // Omitted rather than sent as null when absent: an older worker reads known fields only, so an
         // absent key is the same "no configured form" it has always understood. Additive, like `fault`.
         ...(formState ? { formState } : {}),
-        ...(auth ? { auth } : {}) },
+        ...(auth ? { auth: onTheWire(auth) } : {}) },
       timeoutMs: CAPTURE_CLIENT_TIMEOUT_MS,
       onProgress: earlyContainmentWatcher(),
     });
@@ -1692,23 +1692,7 @@ function planFromFlow(file: FlowsFile, name: string): LoginCheckPlan {
   };
 }
 
-function planFromBlock(raw: unknown): LoginCheckPlan {
-  const block = parseLoginBlock(raw);
-  if (!("role" in block.check)) {
-    throw new LoginCheckError("login --check cannot run a login: block whose check is a url: yet. Name an element as the check "
-      + "(role and name), which the signed-out page can be asked about before anything is typed.");
-  }
-  const url = new URL(block.url);
-  const stop: FinalExpect = { kind: block.check.role === "heading" ? "heading" : "control", name: block.check.name, timeoutSeconds: EXPECT_DEFAULT_SECONDS };
-  return {
-    plan: {
-      login: [{ goto: `${url.pathname}${url.search}` }, { auto: true }, { expect: stop }],
-      auto: { username: block.username, password: block.password, totp: block.totp, organization: block.organization },
-      idpOrigins: block.idpOrigins,
-    },
-    startUrl: url.href, appOrigin: url.origin, stop, credentialNames: [block.username, block.password], totpName: block.totp,
-  };
-}
+const planFromBlock = (raw: unknown): LoginCheckPlan => loginBlockPlan(parseLoginBlock(raw), { expectSeconds: EXPECT_DEFAULT_SECONDS });
 
 async function loadLoginCheckPlan(request: LoginCheckRequest, readText: (path: string) => Promise<string>): Promise<LoginCheckPlan> {
   const text = await readText(request.flows);

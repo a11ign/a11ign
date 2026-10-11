@@ -30,6 +30,8 @@
  */
 import { parse as parseYaml } from "yaml";
 
+import { LoginBlockError, parseLoginBlock, type LoginBlock } from "./login-block.js";
+
 /** The closed vocabulary. A verb outside it is `closed-vocabulary`, and there is no way to add one from a file. */
 export const FLOW_VERBS = ["goto", "fill", "choose", "check", "press", "expect", "capture", "dismiss-if-shown", "auto"] as const;
 export type FlowVerb = (typeof FLOW_VERBS)[number];
@@ -50,6 +52,12 @@ export const FLOW_RULES = [
   "login-no-capture",
   "login-flow-missing",
   "auth-literal-secret",
+  // The `login:` block's own refusals (`login-block.ts`), raised from a flows file as the rule that refused.
+  "login-block-shape",
+  "login-no-check",
+  "login-unknown-key",
+  "login-url-not-http",
+  "login-check-url",
 ] as const;
 export type FlowRule = (typeof FLOW_RULES)[number];
 
@@ -104,6 +112,9 @@ export interface FlowsFile {
    * declares none, which is every file written before the key existed. Never the app's own origin.
    */
   idpOrigins: string[];
+  /** The `login:` block: a sign-in the screen loop performs, in place of a named login flow. Absent when the file has none. */
+  login?: LoginBlock;
+  /** Empty for a file that is only a `login:` block. */
   flows: Flow[];
 }
 
@@ -122,6 +133,9 @@ export class FlowsError extends Error {
     this.fault = fault;
   }
 }
+
+/** A refusal from `login-block.ts`, raised as this module's own error so the callers that catch a `FlowsError` catch it too. */
+export const flowsErrorFrom = (error: LoginBlockError): FlowsError => new FlowsError(error.rule, error.detail);
 
 /** Annotated on the CONST so `if (bad) fail(...)` narrows; see the note on `fail` in `forms/config.ts`. */
 const fail: (rule: FlowRule, message: string) => never = (rule, message) => {
@@ -443,6 +457,25 @@ function parseFlow(name: string, raw: unknown, origin: string): Flow {
 }
 
 /**
+ * The file's `login:` block, held to this file's origin as every flow URL is: the worker refuses a block that leaves the page's
+ * origin, and learning that after a worker was leased is learning it late.
+ */
+function parseLoginKey(value: unknown, origin: string, path: string): LoginBlock | undefined {
+  if (value === undefined) return undefined;
+  let block: LoginBlock;
+  try {
+    block = parseLoginBlock(value);
+  } catch (error) {
+    if (error instanceof LoginBlockError) throw flowsErrorFrom(error);
+    throw error;
+  }
+  if (new URL(block.url).origin !== origin) {
+    fail("origin-pinned", `${path}: login: "url" is not on this file's origin ${origin}. A login's secrets were named for one site.`);
+  }
+  return block;
+}
+
+/**
  * Parse and validate a flows file.
  *
  * What is decided HERE is everything a flow can be refused for without knowing which one is the login;
@@ -457,15 +490,18 @@ export function parseFlowsFile(text: string, path = "the flows file"): FlowsFile
   }
   if (!isObject(parsed)) fail("file-shape", `${path} is empty or is not a mapping.`);
   const doc = parsed as Record<string, unknown>;
-  refuseUnknownKeys(doc, ["version", "origin", "idp-origins", "flows"], path);
+  refuseUnknownKeys(doc, ["version", "origin", "idp-origins", "login", "flows"], path);
   if (doc.version !== 1) fail("file-shape", `${path}: version: must be 1 (found ${JSON.stringify(doc.version ?? null)}).`);
   const origin = parseOrigin(doc.origin, path);
   const idpOrigins = parseIdpOrigins(doc["idp-origins"], path, origin);
+  const login = parseLoginKey(doc.login, origin, path);
+  // A file that is only a `login:` block is valid: the block is the login, and there is no flow to name.
+  if (login !== undefined && doc.flows === undefined) return { version: 1, origin, idpOrigins, login, flows: [] };
   if (!isObject(doc.flows) || Object.keys(doc.flows).length === 0) {
     fail("file-shape", `${path}: flows: lists nothing, so this file would do nothing.`);
   }
   const flows = Object.entries(doc.flows as Record<string, unknown>).map(([name, flow]) => parseFlow(name, flow, origin));
-  return { version: 1, origin, idpOrigins, flows };
+  return { version: 1, origin, idpOrigins, ...(login === undefined ? {} : { login }), flows };
 }
 
 /**

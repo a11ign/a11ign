@@ -1,11 +1,15 @@
 // The `login:` block (v3 login phase 2, #4084): a start URL, the env-var NAMES of the username, password and
-// TOTP secret, and ONE signed-in check. This module is the schema and its refusals and nothing else: it reads
-// no file and no `process.env`, and `flows.ts` does not call it yet (wiring is the flows-verbs row's).
+// TOTP secret, and ONE signed-in check. This module is the schema, its refusals, and the one plan every sign-in
+// by a block runs (`login --check`, and a scan's rule layer): it reads no file and no `process.env`.
+// `flows.ts` calls `parseLoginBlock` for a flows file's `login:` key, and `resolve.ts` sends the block to the worker.
 //
 // A refusal names the rule and the KEY, never the value: the value may be the secret somebody pasted.
+import type { PageCondition } from "./flows.js";
+import type { AuthPlan } from "./interpreter.js";
 
 export type LoginBlockRule =
   | "login-block-shape"
+  | "login-check-url"
   | "login-literal"
   | "login-no-check"
   | "login-unknown-key"
@@ -13,10 +17,13 @@ export type LoginBlockRule =
 
 export class LoginBlockError extends Error {
   readonly rule: LoginBlockRule;
+  /** The sentence without its `(rule: ...)` tail, for a caller that re-raises it under its own error type and adds the tail itself. */
+  readonly detail: string;
   constructor(rule: LoginBlockRule, message: string) {
     super(`${message} (rule: ${rule})`);
     this.name = "LoginBlockError";
     this.rule = rule;
+    this.detail = message;
   }
 }
 
@@ -138,4 +145,72 @@ export function parseLoginBlock(value: unknown): LoginBlock {
   if (value.fields !== undefined) block.fields = parseFields(value.fields);
   if (value["idp-origins"] !== undefined) block.idpOrigins = parseIdpOrigins(value["idp-origins"], new URL(url).origin);
   return block;
+}
+
+/**
+ * `auth.loginBlock` as the worker validates it (`@a11ign/screenreader-worker` v0.11.0, `LoginBlockPlan`): its own key names, the
+ * three NAMES of environment variables and never a value. **`fields` and `idp-origins` do not ride in it**: the worker refuses
+ * an unknown key, and the origins go beside it as `auth.idpOrigins`.
+ */
+export interface LoginBlockWire {
+  readonly url: string;
+  readonly usernameEnv: string;
+  readonly passwordEnv: string;
+  readonly totpEnv: string;
+  readonly check: LoginCheck;
+  readonly organization?: string;
+}
+
+export function loginBlockWire(block: LoginBlock): LoginBlockWire {
+  const { url, username, password, totp, check, organization } = block;
+  return { url, usernameEnv: username, passwordEnv: password, totpEnv: totp, check, ...(organization === undefined ? {} : { organization }) };
+}
+
+/** The login as the interpreters run it, from a block. Names only: no value of an environment variable. */
+export interface LoginBlockPlan {
+  plan: AuthPlan;
+  startUrl: string;
+  appOrigin: string;
+  /** The signed-in check as the `expect:` that ends the login: the loop's exit condition and the check on the signed-out page. */
+  stop: PageCondition & { timeoutSeconds: number };
+  credentialNames: string[];
+  totpName: string;
+}
+
+/**
+ * The plan `login --check` and a scan's rule layer sign in by, so the two cannot drift: `{ goto }, { auto }, { expect }` with the
+ * loop's variable names. **A `url:` check is refused**, because the signed-out page cannot be asked about a URL before anything is
+ * typed; the same rule on both paths. `expectSeconds` is flows.ts's default, passed in because flows.ts imports this module.
+ */
+export function loginBlockPlan(block: LoginBlock, { expectSeconds }: { expectSeconds: number }): LoginBlockPlan {
+  if (!("role" in block.check)) {
+    throw new LoginBlockError("login-check-url", "login: \"check\" is a url:, which cannot be run yet. Name an element as the check "
+      + "(role and name), which the signed-out page can be asked about before anything is typed.");
+  }
+  const url = new URL(block.url);
+  const stop = { kind: block.check.role === "heading" ? "heading" : "control", name: block.check.name, timeoutSeconds: expectSeconds } as const;
+  return {
+    plan: {
+      login: [{ goto: `${url.pathname}${url.search}` }, { auto: true }, { expect: stop }],
+      auto: { username: block.username, password: block.password, totp: block.totp, organization: block.organization },
+      idpOrigins: block.idpOrigins,
+    },
+    startUrl: url.href, appOrigin: url.origin, stop, credentialNames: [block.username, block.password], totpName: block.totp,
+  };
+}
+
+/**
+ * The plan the rule layer signs in by: a request with no block is its own plan, and one with a block is the block's, rebuilt
+ * from the wire shape (`login` is empty there, and `auto:` is the CLI's own and never sent).
+ */
+export function ruleLayerPlanOf(
+  request: AuthPlan & { readonly loginBlock?: LoginBlockWire }, options: { expectSeconds: number },
+): AuthPlan {
+  const { loginBlock } = request;
+  if (loginBlock === undefined) return request;
+  const block: LoginBlock = {
+    url: loginBlock.url, username: loginBlock.usernameEnv, password: loginBlock.passwordEnv, totp: loginBlock.totpEnv,
+    check: loginBlock.check, organization: loginBlock.organization, idpOrigins: [...(request.idpOrigins ?? [])],
+  };
+  return loginBlockPlan(block, options).plan;
 }
