@@ -308,7 +308,6 @@ test("the real baseline is NON-EMPTY and records the deploy path, so a guard tha
   assert.ok(intoTheFleet.some((e: { from: string }) => e.from.startsWith("package.json")), "the root scripts that run it by path are recorded");
   const intoControl = baseline.filter((e: { to: string }) => e.to.startsWith("packages/control"));
   assert.ok(intoControl.some((e: { from: string }) => e.from === "package.json"), "the root scripts that run control by path are recorded");
-  assert.ok(intoControl.some((e: { from: string }) => e.from === ".github/workflows/ci.yml"), "and the workflow that lays its playbooks to check them");
 });
 
 /** The baseline entries whose `from` is a file INSIDE one of the layers that left first. */

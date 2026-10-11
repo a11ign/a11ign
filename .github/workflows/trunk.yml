@@ -54,9 +54,10 @@ name: trunk
 # definition can touch anything, and pushes to `main` are far less frequent than PR commits -- there is no
 # throughput pressure here that would justify the same path-scoping.
 #
-# KNOWN GAP, STATED RATHER THAN HIDDEN: this does not (yet) run `ci.yml`'s `ansible` syntax-check or
-# `rulesFitness` (`pnpm run rules-check`) jobs. Both are cheap to add later; left out of the first version
-# to keep this row's scope to the red-trunk MECHANISM, which is what #316's acceptance actually exercises.
+# KNOWN GAP, STATED RATHER THAN HIDDEN: this does not (yet) run `ci.yml`'s `rulesFitness` (`pnpm run rules-check`)
+# job. It is cheap to add later; left out of the first version to keep this row's scope to the red-trunk
+# MECHANISM, which is what #316's acceptance actually exercises. The playbook checks are not a gap: they
+# moved to `a11ign/control`'s own CI (#4919), which is where the playbooks live.
 on:
   push:
     branches: [main]
