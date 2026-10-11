@@ -21,6 +21,8 @@ The release-pin guard measured a doc's pin against the NEWEST `a11ign@<x.y.z>` t
   - Each mutation turns only its own named cases red.
 - `pnpm exec rstest run packages/guards/src/docs-release-pin-currency` reports "No test suites found" for these files. They import `test` from `node:test`, as the unchanged file did, and 85 of the guards test files use that runner, so this is the existing runner setup and was not changed here.
 
+Mutation: (M1) measuring against the newest tag, ignoring `v0`, turned 2 of 14 red (the 2026-10-11 case and the untagged-or-prerelease cannot-tell case); (M2) a `v0` that is absent treated as the newest tag turned 1 of 14 red (the `v0 absent` case); (M3) a prerelease or untagged `v0` accepted with no release filter turned 4 of 14 red. Each mutation turned only its own named cases red; the guard file was restored byte-identical (`cmp`).
+
 ## Acceptance
 
 ```bash
