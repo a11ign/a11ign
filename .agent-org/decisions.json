@@ -4,5 +4,6 @@
   "ci-failure-class": true,
   "failure-class-match": true,
   "duplicate-row": true,
-  "review-depth": true
+  "review-depth": true,
+  "routing.haikuDefault": true
 }
