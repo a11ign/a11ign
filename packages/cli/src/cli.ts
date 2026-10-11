@@ -22,7 +22,7 @@ import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { judge, type Judgment } from "@a11ign/judge";
 import { looksLikePdfUrl, scanPdfTagTree } from "@a11ign/documents";
-import { scanWithAxe, axeAvailable, type AxeFinding, type AxeBrowserChannel } from "./scan/axe.js";
+import { scanWithAxe, axeAvailable, launchBrowser, type AxeFinding, type AxeBrowserChannel } from "./scan/axe.js";
 import { fetchPageTitle } from "./scan/page-title.js";
 import { loadAxeResults, warnOnUrlMismatch } from "./scan/axe-results.js";
 import { layerOf } from "@a11ign/judge/layers";
@@ -34,8 +34,20 @@ import { AuthError, isAuthFault } from "./auth/auth-faults.js";
 import { refuseAuthOnRemoteWorker, requireAuthApplied, type AuthRequest } from "./auth/refusals.js";
 import { ruleLayerSignIn } from "./auth/rule-layer.js";
 import { pressedByThisRun, resolveAuthentication } from "./auth/resolve.js";
-import { redactionNotice, scrubArtifact, type ScrubSet } from "./auth/scrub.js";
-import { FlowsError } from "./auth/flows.js";
+import { buildScrubSet, redactionNotice, scrubArtifact, type ScrubSet } from "./auth/scrub.js";
+import { FlowsError, parseFlowsFile, resolveLoginFlow, EXPECT_DEFAULT_SECONDS, type FlowsFile, type PageCondition } from "./auth/flows.js";
+import {
+  assertCredentialsPresent, runSteps, normalise, LoginFailedError, BIND_TIMEOUT_MS, AUTO_BUDGET_MS,
+  type AuthDriver, type AuthPlan, type AxNode, type Environment,
+} from "./auth/interpreter.js";
+import { LOGIN_EXIT_CODES, LOGIN_OUTCOMES, retryDecision, type LoginOutcome } from "./auth/login-outcomes.js";
+import { keepLastAttempt, recordStep, startAttempt, writeArtifact, type ArtifactIo, type Attempt, type ObservedStep } from "./auth/login-artifact.js";
+import { LoginBlockError, parseLoginBlock } from "./auth/login-block.js";
+import { loginVerdict, validateCheck, type PageObservation, type SignedInCheck } from "./auth/signed-in-check.js";
+import { classifyScreen, type Classification, type ScreenObservation } from "./auth/screen-loop.js";
+import { openPlaywrightDriver } from "./auth/playwright-driver.js";
+import { parse as parseYaml } from "yaml";
+import type { Page } from "playwright";
 import { leaseWorker, isAfterRun, type AfterRun, type WorkerLease } from "@a11ign/screenreader-fleet";
 import { CAPTURE_CLIENT_TIMEOUT_MS } from "@a11ign/screenreader-fleet/worker-http";
 import { captureTolerantly } from "@a11ign/screenreader-fleet/capture-client";
@@ -61,7 +73,7 @@ import { assessedCriteria } from "@a11ign/judge/coverage";
 import { earlReport } from "@a11ign/evidence/earl";
 import { documentIdentity, servedPathOf } from "@a11ign/evidence/document-identity";
 import { criterionOutcomes, type CriterionOutcome } from "@a11ign/judge/outcomes";
-import { realpathSync, mkdirSync, writeFileSync } from "node:fs";
+import { realpathSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { relative, resolve as resolvePath } from "node:path";
 import { parseFormsConfig, refuseIfWrongOrigin, FormsConfigError } from "./forms/config.js";
@@ -624,6 +636,8 @@ async function formStateCount(args: Args): Promise<number> {
 }
 
 async function main(): Promise<void> {
+  // `a11ign login` is a subcommand with its own flags, so it is taken before `parseArgs`, which refuses a line with no page in it.
+  if (process.argv[2] === "login") { process.exitCode = await runLoginCommand(process.argv.slice(3)); return; }
   // BEFORE `parseArgs`, which refuses a command line with no page in it: asking what the flags are is not a run.
   if (process.argv.slice(2).includes("--help")) { console.log(USAGE); return; }
   const args = await withAuthentication(parseArgs());
@@ -1619,6 +1633,371 @@ function printReport(report: Report): void {
   console.log(reportLines(report).join("\n"));
 }
 
+// ─── `login --check` (#4995, v3 login phase 1) ───────────────────────────────────────────────────────────────────────────────
+
+/** A refusal of the `login` subcommand's own input: the caller's to fix, so it exits 2 like a flows-file error. */
+export class LoginCheckError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "LoginCheckError";
+  }
+}
+
+const LOGIN_USAGE = "Usage: a11ign login --check --flows <file> [--login-flow <name>]  "
+  + "(without --login-flow the file's login: block is used). Runs only the login and its verification.";
+
+/** What the subcommand was asked: the flows file, and the flow in it that logs in (null: the file's `login:` block). */
+export interface LoginCheckRequest { flows: string; loginFlow: string | null }
+
+export function parseLoginArgs(argv: readonly string[]): LoginCheckRequest {
+  const request: LoginCheckRequest = { flows: "", loginFlow: null };
+  let check = false;
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg === "--check") check = true;
+    else if (arg === "--flows" || arg === "--login-flow") {
+      const value = argv[(i += 1)];
+      if (value === undefined || value.startsWith("--")) throw new LoginCheckError(`${arg} needs a value.\n${LOGIN_USAGE}`);
+      if (arg === "--flows") request.flows = value;
+      else request.loginFlow = value;
+    } else throw new LoginCheckError(`login does not take ${arg}.\n${LOGIN_USAGE}`);
+  }
+  if (!check) throw new LoginCheckError(`login needs --check: checking is the only thing it does.\n${LOGIN_USAGE}`);
+  if (request.flows === "") throw new LoginCheckError(`login --check needs --flows <file>.\n${LOGIN_USAGE}`);
+  return request;
+}
+
+type FinalExpect = PageCondition & { timeoutSeconds: number };
+
+/** The login as the interpreter runs it, plus what the check reports around it. Names only: no value of an environment variable. */
+interface LoginCheckPlan {
+  plan: AuthPlan;
+  startUrl: string;
+  appOrigin: string;
+  /** The signed-in check, as the `expect:` that ends the login: the loop's exit condition and the check on the signed-out page. */
+  stop: FinalExpect;
+  credentialNames: string[];
+  totpName: string | undefined;
+}
+
+function planFromFlow(file: FlowsFile, name: string): LoginCheckPlan {
+  const login = resolveLoginFlow(file, name);
+  const first = login.steps[0];
+  const stop = (login.steps[login.steps.length - 1] as { expect: FinalExpect }).expect;
+  const names = login.steps.flatMap((step) => ("fill" in step && step.fill.fromEnv !== undefined ? [step.fill.fromEnv] : []));
+  return {
+    plan: { login: login.steps, idpOrigins: file.idpOrigins },
+    startUrl: "goto" in first ? new URL(first.goto, file.origin).href : file.origin,
+    appOrigin: file.origin, stop, credentialNames: [...new Set(names)], totpName: undefined,
+  };
+}
+
+function planFromBlock(raw: unknown): LoginCheckPlan {
+  const block = parseLoginBlock(raw);
+  if (!("role" in block.check)) {
+    throw new LoginCheckError("login --check cannot run a login: block whose check is a url: yet. Name an element as the check "
+      + "(role and name), which the signed-out page can be asked about before anything is typed.");
+  }
+  const url = new URL(block.url);
+  const stop: FinalExpect = { kind: block.check.role === "heading" ? "heading" : "control", name: block.check.name, timeoutSeconds: EXPECT_DEFAULT_SECONDS };
+  return {
+    plan: {
+      login: [{ goto: `${url.pathname}${url.search}` }, { auto: true }, { expect: stop }],
+      auto: { username: block.username, password: block.password, totp: block.totp, organization: block.organization },
+      idpOrigins: block.idpOrigins,
+    },
+    startUrl: url.href, appOrigin: url.origin, stop, credentialNames: [block.username, block.password], totpName: block.totp,
+  };
+}
+
+async function loadLoginCheckPlan(request: LoginCheckRequest, readText: (path: string) => Promise<string>): Promise<LoginCheckPlan> {
+  const text = await readText(request.flows);
+  if (request.loginFlow !== null) return planFromFlow(parseFlowsFile(text, request.flows), request.loginFlow);
+  const doc = parseYaml(text) as { login?: unknown } | null;
+  if (typeof doc !== "object" || doc === null || doc.login === undefined) {
+    throw new LoginCheckError(`${request.flows} has no login: block, and no --login-flow names a flow in it.\n${LOGIN_USAGE}`);
+  }
+  return planFromBlock(doc.login);
+}
+
+/** How a check run ends: `signed-in`, one of the named outcomes, or `left-origin` (the login moved to an origin nobody declared). */
+type CheckOutcome = "signed-in" | LoginOutcome | "left-origin";
+
+const SCREEN_ROLES = new Set(["textbox", "password", "searchbox", "button", "link", "radio", "option", "menuitem", "checkbox", "combobox", "alert"]);
+
+/**
+ * The text an unnamed alert shows. An alert takes no name from its content, so its words sit on the text nodes beneath it (measured
+ * 2026-10-11 on the cross-origin fixture: `alert ""` with a `StaticText "Wrong email or password."` child), and without them a
+ * rejected credential reads as an ordinary form.
+ */
+function textUnder(parent: AxNode, nodes: readonly AxNode[]): string {
+  const children = nodes.filter((node) => node.parentId === parent.id && !node.ignored);
+  return children.map((child) => (child.role === "StaticText" ? child.name : textUnder(child, nodes))).join(" ");
+}
+
+/** The page as the screen loop reads it: by accessible name, never by CSS. */
+function screenOf(nodes: readonly AxNode[]): ScreenObservation {
+  const named = nodes.map((node) => (node.role === "alert" && normalise(node.name) === "" ? { ...node, name: textUnder(node, nodes) } : node));
+  const live = named.filter((node) => !node.ignored && normalise(node.name) !== "");
+  return {
+    controls: live.filter((node) => SCREEN_ROLES.has(node.role)).map((node) => ({ role: node.role, name: normalise(node.name) })),
+    headings: live.filter((node) => node.role === "heading").map((node) => normalise(node.name)),
+    signedIn: false,
+  };
+}
+
+const SCREEN_OUTCOMES: Partial<Record<Classification, LoginOutcome>> = {
+  "account-blocked": "account-blocked",
+  "bot-challenge": "bot-challenge",
+  "rate-limited": "rate-limited",
+  "totp-rejected": "totp-rejected",
+  "credentials-rejected": "credentials-rejected",
+  consent: "consent-required",
+  "organization-picker": "organization-required",
+  "mfa-enrollment": "mfa-enrollment-required",
+};
+
+/** The outcome the page a login stopped on names. A code screen with no seed is `mfa-required-no-seed`; anything else it does not name. */
+function outcomeOfScreen(screen: Classification, seedConfigured: boolean): LoginOutcome | undefined {
+  if ((screen === "one-time-code" || screen === "factor-picker") && !seedConfigured) return "mfa-required-no-seed";
+  return SCREEN_OUTCOMES[screen];
+}
+
+/**
+ * Which outcome a login that threw ended with, decided from the FAULT and from the page it stopped on, never from a message. `undefined`
+ * is a failure that is not the login's own ending (a missing variable, a refused origin), which the caller rethrows.
+ */
+function outcomeOfFailure(error: unknown, stoppedOn: { screen: Classification; seedConfigured: boolean }): CheckOutcome | undefined {
+  if (error instanceof LoginFailedError && error.reason === "left-origin") return "left-origin";
+  if (error instanceof AuthError && error.fault === "auth-challenge-detected") return "bot-challenge";
+  if (!(error instanceof AuthError) || error.fault !== "auth-login-failed") return undefined;
+  const named = outcomeOfScreen(stoppedOn.screen, stoppedOn.seedConfigured);
+  if (named !== undefined) return named;
+  return error instanceof LoginFailedError && error.reason === "expect-not-met" ? "signed-in-check-never-matched" : "unknown-screen";
+}
+
+/** The check as an element reading: a heading by role, anything else by whichever role the page gives the name it waits for. */
+function checkOn(stop: PageCondition, nodes: readonly AxNode[]): SignedInCheck {
+  if (stop.kind === "heading") return { role: "heading", name: stop.name };
+  const hit = nodes.find((node) => !node.ignored && normalise(node.name) === stop.name);
+  return { role: hit?.role ?? "", name: stop.name };
+}
+
+function observationOf(nodes: readonly AxNode[], at: { url: string; appOrigin: string; idpOrigins: readonly string[] }): PageObservation {
+  const live = nodes.filter((node) => !node.ignored);
+  return {
+    appOrigin: at.appOrigin, idpOrigins: at.idpOrigins, finalUrl: at.url,
+    elements: live.map((node) => ({ role: node.role, name: normalise(node.name) })),
+    hasPasswordField: live.some((node) => /password/i.test(node.name) && SCREEN_ROLES.has(node.role)),
+  };
+}
+
+const HTTP_SERVER_ERROR = 500;
+
+/** Every main-frame navigation request (the redirect hops included), and whether any answered 5xx: the chain the login followed. */
+function watchNavigation(page: Page): { origins: () => string[]; serverError: () => boolean } {
+  const origins: string[] = [];
+  let serverError = false;
+  page.on("request", (request) => {
+    if (!request.isNavigationRequest() || request.frame() !== page.mainFrame()) return;
+    const url = new URL(request.url());
+    if (url.protocol === "http:" || url.protocol === "https:") origins.push(url.origin);
+  });
+  page.on("response", (response) => {
+    if (response.request().isNavigationRequest() && response.status() >= HTTP_SERVER_ERROR) serverError = true;
+  });
+  return { origins: () => [...new Set(origins)], serverError: () => serverError };
+}
+
+/** A page the check drives, and the way to close the browser behind it. */
+export interface LoginPage { page: Page; close: () => Promise<void> }
+
+async function launchLoginPage(): Promise<LoginPage> {
+  const { chromium } = await import("playwright");
+  const { browser } = await launchBrowser(chromium);
+  const context = (await browser.newContext()) as import("playwright").BrowserContext;
+  return { page: await context.newPage(), close: () => browser.close() };
+}
+
+export interface LoginCheckDeps {
+  env: Environment;
+  readText: (path: string) => Promise<string>;
+  /** One browser page per attempt: a retry starts from a fresh one, so nothing of the failed attempt carries over. */
+  openPage: () => Promise<LoginPage>;
+  pause: (millis: number) => Promise<void>;
+  /** Where a failed run's artefact goes; emptied first, so only the last attempt is in it. */
+  artifactDir: string;
+}
+
+export interface LoginCheckResult {
+  outcome: CheckOutcome;
+  exitCode: number;
+  attempts: number;
+  /** The `idp-origins:` line to paste, or null when the login never left the app's origin. */
+  idpOriginsLine: string | null;
+  artifact: string | null;
+  lines: string[];
+}
+
+interface AttemptEnd { outcome: CheckOutcome; transient: boolean; attempt: Attempt; origins: string[]; detail?: string }
+
+/** What a step of the artefact records: the page as a person would see it, with every field masked in the pixels. */
+async function snapshot(page: Page, driver: AuthDriver, { label, since }: { label: string; since: number }): Promise<ObservedStep> {
+  const nodes = await driver.axNodes();
+  const screen = classifyScreen(screenOf(nodes));
+  return {
+    origin: new URL(page.url()).origin,
+    screen: `${label}: ${screen}`,
+    millis: Date.now() - since,
+    screenshot: await page.screenshot({ mask: [page.locator("input, textarea")] }),
+    tree: nodes.filter((node) => !node.ignored).map((node) => ({ role: node.role, name: normalise(node.name) })),
+  };
+}
+
+interface AttemptContext { setup: LoginCheckPlan; deps: LoginCheckDeps; scrub: ScrubSet }
+
+const noMark = (): void => undefined;
+
+/** Run the login's steps; returns the failure it ended with, or `undefined` when it ran to its last step. */
+async function runLoginSteps({ setup, deps }: AttemptContext, driver: AuthDriver): Promise<unknown> {
+  try {
+    await runSteps({
+      steps: setup.plan.login, origin: setup.appOrigin, driver, env: deps.env, mark: noMark, phase: "login",
+      bindTimeoutMs: BIND_TIMEOUT_MS, idpOrigins: setup.plan.idpOrigins ?? [], auto: setup.plan.auto,
+      pacing: { pause: deps.pause, now: Date.now, budgetMillis: AUTO_BUDGET_MS },
+    });
+    return undefined;
+  } catch (error) {
+    return error;
+  }
+}
+
+/** ONE login, in a fresh page: the signed-out check first, then the steps, then the verdict. Records the page it ended on. */
+async function attemptLogin(context: AttemptContext): Promise<AttemptEnd> {
+  const { setup, deps } = context;
+  const { page, close } = await deps.openPage();
+  const since = Date.now();
+  const watched = watchNavigation(page);
+  const driver = await openPlaywrightDriver(page);
+  try {
+    const loaded = await driver.navigate(setup.startUrl);
+    if (!loaded.ok) throw new LoginCheckError(`the start page ${setup.startUrl} could not be loaded: ${loaded.error ?? "no reason given"}`);
+    const at = { appOrigin: setup.appOrigin, idpOrigins: setup.plan.idpOrigins ?? [] };
+    const before = await driver.axNodes();
+    let attempt = recordStep(startAttempt(context.scrub), await snapshot(page, driver, { label: "signed-out start page", since }));
+    const signedOutPage = validateCheck(checkOn(setup.stop, before), observationOf(before, { ...at, url: page.url() }));
+    if (signedOutPage.outcome !== "accepted") return { outcome: signedOutPage.outcome, transient: false, attempt, origins: watched.origins() };
+    const failure = await runLoginSteps(context, driver);
+    attempt = recordStep(attempt, await snapshot(page, driver, { label: "where the login ended", since }));
+    return { ...(await endOf(failure, { context, driver, page, watched })), attempt, origins: watched.origins() };
+  } finally {
+    await driver.close();
+    await close();
+  }
+}
+
+/** The ending of the steps: a failure is read from the page it stopped on, a run to the end is checked once more with `loginVerdict`. */
+async function endOf(
+  failure: unknown,
+  seen: { context: AttemptContext; driver: AuthDriver; page: Page; watched: { serverError: () => boolean } },
+): Promise<{ outcome: CheckOutcome; transient: boolean; detail?: string }> {
+  const { setup } = seen.context;
+  const nodes = await seen.driver.axNodes();
+  const seedConfigured = setup.totpName !== undefined && (seen.context.deps.env[setup.totpName] ?? "") !== "";
+  if (failure === undefined) {
+    const at = { url: seen.page.url(), appOrigin: setup.appOrigin, idpOrigins: setup.plan.idpOrigins ?? [] };
+    const verdict = loginVerdict(checkOn(setup.stop, nodes), observationOf(nodes, at));
+    return { outcome: verdict === "signed-in" ? "signed-in" : "signed-in-check-never-matched", transient: false };
+  }
+  const outcome = outcomeOfFailure(failure, { screen: classifyScreen(screenOf(nodes)), seedConfigured });
+  if (outcome === undefined) throw failure;
+  // Transient only when the page the login ended on was a 5xx: a rejected credential never is, however it is worded.
+  const detail = failure instanceof AuthError ? failure.message : undefined; // an auth fault's message names the step, never a value
+  return { outcome, detail, transient: outcome === "signed-in-check-never-matched" && seen.watched.serverError() };
+}
+
+const isNamedOutcome = (outcome: CheckOutcome): outcome is LoginOutcome => outcome !== "signed-in" && outcome !== "left-origin";
+
+const idpOriginsLineOf = (origins: readonly string[]): string => `idp-origins: [${origins.join(", ")}]`;
+
+function exitCodeOf(outcome: CheckOutcome): number {
+  if (outcome === "signed-in") return 0;
+  const sessionLost = outcome === "session-lost-mid-scan" || outcome === "session-not-restorable-on-navigation";
+  return sessionLost ? LOGIN_EXIT_CODES.sessionLost : 2;
+}
+
+/** What is printed: the outcome, one line of what to do, where the screen is kept, and the line to paste. */
+function loginReportLines(outcome: CheckOutcome, shown: { origins: readonly string[]; appOrigin: string; artifact: string | null; detail?: string }): string[] {
+  const line = shown.origins.length > 0 ? idpOriginsLineOf(shown.origins) : null;
+  if (outcome === "signed-in") {
+    return [`login: signed in (the signed-in check held on ${shown.appOrigin})`,
+      ...(line === null ? [`the login stayed on ${shown.appOrigin}: no identity-provider origin to declare`] : [`paste into the flows file if it does not say so already:`, line])];
+  }
+  const what = outcome === "left-origin"
+    ? `the login left ${shown.appOrigin} for an origin the flows file does not declare. If that origin is your identity provider, add this line to the file:`
+    : LOGIN_OUTCOMES[outcome as LoginOutcome].remedy;
+  return [`login: ${outcome}`, what, ...(shown.detail === undefined ? [] : [`what happened: ${shown.detail}`]), ...(line === null ? [] : [line]),
+    ...(shown.artifact === null ? [] : [`the screens the login met are kept in ${shown.artifact} (typed values are redacted)`])];
+}
+
+const artifactIo: ArtifactIo = {
+  reset: (dir) => { rmSync(dir, { recursive: true, force: true }); mkdirSync(dir, { recursive: true }); },
+  write: (path, data) => writeFileSync(path, data),
+};
+
+/**
+ * `a11ign login --check`: ONLY the login and its verification. It signs in once (a retry only after a 5xx, once, and never after a
+ * rejected credential: `retryDecision` is the one place that is decided), says which named outcome it ended with and what to do about
+ * it, prints the `idp-origins:` line for the origins the redirect chain visited, and on failure writes the artefact of the last attempt.
+ */
+export async function runLoginCheck(request: LoginCheckRequest, deps: LoginCheckDeps): Promise<LoginCheckResult> {
+  const setup = await loadLoginCheckPlan(request, deps.readText);
+  assertCredentialsPresent(setup.plan, deps.env);
+  const values = [...setup.credentialNames, ...(setup.totpName === undefined ? [] : [setup.totpName])]
+    .flatMap((name) => ((deps.env[name] ?? "") === "" ? [] : [{ name, value: deps.env[name] as string }]));
+  const context: AttemptContext = { setup, deps, scrub: buildScrubSet(values) };
+  const attempts: Attempt[] = [];
+  let end: AttemptEnd;
+  for (let n = 1; ; n += 1) {
+    end = await attemptLogin(context);
+    attempts.push(end.attempt);
+    const decision = isNamedOutcome(end.outcome)
+      ? retryDecision({ outcome: end.outcome, attempt: n, transient: end.transient, retriesSoFar: n - 1 })
+      : { action: "stop" as const };
+    if (decision.action === "stop") break;
+    await deps.pause(decision.backoffMs);
+  }
+  const kept = end.outcome === "signed-in" ? undefined : keepLastAttempt(attempts);
+  const artifact = kept === undefined ? null : (writeArtifact(deps.artifactDir, kept, artifactIo), deps.artifactDir);
+  const crossed = end.origins.filter((origin) => origin !== setup.appOrigin);
+  return {
+    outcome: end.outcome, exitCode: exitCodeOf(end.outcome), attempts: attempts.length,
+    idpOriginsLine: crossed.length > 0 ? idpOriginsLineOf(crossed) : null, artifact,
+    lines: loginReportLines(end.outcome, { origins: crossed, appOrigin: setup.appOrigin, artifact, detail: end.detail }),
+  };
+}
+
+/** The subcommand as `main` runs it: parse, check, print, and hand back the exit code. */
+async function runLoginCommand(argv: readonly string[]): Promise<number> {
+  if (argv.includes("--help")) { console.log(LOGIN_USAGE); return 0; }
+  try {
+    const result = await runLoginCheck(parseLoginArgs(argv), {
+      env: process.env, readText: (path) => readFile(path, "utf8"), openPage: launchLoginPage,
+      pause: (millis) => new Promise((done) => setTimeout(done, millis)),
+      artifactDir: resolvePath(witnessArtifactRoot(), "login-check"),
+    });
+    for (const line of result.lines) console.log(line);
+    return result.exitCode;
+  } catch (error) {
+    if (error instanceof LoginBlockError) throw new LoginCheckError(error.message, { cause: error });
+    throw error;
+  }
+}
+
+/** The errors that are the caller's to fix (a malformed input file, a login check that cannot run as written), not a tool failure. */
+const isCallersMistake = (err: unknown): boolean =>
+  err instanceof FormsConfigError || err instanceof PageListError || err instanceof FlowsError || err instanceof LoginCheckError;
+
 /**
  * Run ONLY when this file is the program, never when it is imported.
  *
@@ -1665,5 +2044,5 @@ if (isProgram) main().catch((err: unknown) => {
   // artifact-schema-mismatch) is a third thing again: not the caller's mistake and not an ordinary tool
   // bug, so exit 3 says "wait for a release" rather than inviting a retry loop the way exit 1 would.
   // An authenticated run's refusal is the caller's to fix, like a config error, and not "wait for a release".
-  process.exit(err instanceof FormsConfigError || err instanceof PageListError || err instanceof FlowsError || isAuthFault(fault) ? 2 : fault ? 3 : 1);
+  process.exit(isCallersMistake(err) || isAuthFault(fault) ? 2 : fault ? 3 : 1);
 });
