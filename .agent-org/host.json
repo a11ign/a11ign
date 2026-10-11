@@ -33,7 +33,7 @@
   "_github": "How each ROLE authenticates (a11ign/agent-org#770, a11ign/a11ign#4900; the switch is #4906). `user-accounts` is the personal-account directories `gh` routes to under `gh` above and is the default for a role not named; `github-apps` mints a one-hour installation token from the app's key, with its own GraphQL allowance, so the gate no longer shares the `a11ign-ai-workers` pool that ran dry about :33 every hour (agent-org#770). `keyPath` is a path, never the key. REVERT is one line: `\"mode\": \"user-accounts\"` for the role, then `agent-org host:install`. The workers role is agent-org#788 (#4900's second switch) and the managers role is a11ign#4911 (the third).",
   "github": {
     "identity": {
-      "scheduler": { "mode": "user-accounts" },
+      "scheduler": { "mode": "github-apps", "slug": "a11ign-scheduler", "appId": 5267089, "installationId": 170075049, "keyPath": "/home/agent/.config/agent-org/apps/a11ign-scheduler.pem" },
       "workers": { "mode": "github-apps", "slug": "a11ign-workers", "appId": 5267128, "installationId": 170075092, "keyPath": "/home/agent/.config/agent-org/apps/a11ign-workers.pem" },
       "managers": { "mode": "github-apps", "slug": "a11ign-managers", "appId": 5267143, "installationId": 170074877, "keyPath": "/home/agent/.config/agent-org/apps/a11ign-managers.pem" }
     }
