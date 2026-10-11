@@ -10,9 +10,9 @@ The core's `rulesFitness` job now reads the product's own cases. `pnpm run rules
 
 **Two behaviour changes in the moved runner, both toward failing:** a fixture that is absent and NOT declared `pendingCapture` fails (the old `existsSync` skip shrank the population silently), and zero cases examined fails (`docs/gate-exit-codes.md` recorded that 0 examined reported success). `FitnessReport`, `evaluate` and `failures` are exported so the test reaches the logic without `process.exit`.
 
-Mutation, each restored with `cp` and `cmp`-identical, and each turned its own test(s) red and none other: (1) `FITNESS_FIXTURES_DIR` pointed at the lab's fixtures: the placement test and the lab-import test fail; (2) one byte appended to `fixtures/tutorials/images-good.json`: the pair pin alone fails; (3) the runner skips an undeclared absence again: "refuses a population that shrank" alone fails.
+Mutation: each restored with `cp` and `cmp`-identical, and each turned its own test(s) red and no other file's: (1) `FITNESS_FIXTURES_DIR` pointed at the lab's fixtures: the placement test and the lab-import test fail; (2) one byte appended to `fixtures/tutorials/images-good.json`: the pair pin alone fails; (3) the runner skips an undeclared absence again: "refuses a population that shrank" alone fails.
 
-Not run, by the resource ban: `eval:gate`/`run.ts` (needs the worker). Not typechecked clean here: `tsc --noEmit` reports only `@a11ign/documents` unresolved in `packages/cli`, which this worktree's linked `node_modules` lacks (0 errors in `fitness/`).
+Verification at head `0a93b2ce8` (the commit before this file's last edit): `pnpm run verify -- --draft-body=<this file>` printed `GREEN for this head and body -- the affected set passed at this head, affected against origin/main` (ts 2673 passed in 209 files, rulesFitness, changeset, acceptance, ownedPaths PASS; python NOT-NEEDED); `pnpm run lint` 0 errors; `tsc --noEmit` 0 errors. Not run, by the resource ban: `eval:gate`/`run.ts` (needs the worker). The tree-wide guards run in CI only.
 
 Left open, filed separately: `packages/judge/src/announced-state-changes.test.ts` and `packages/cli/src/action/summary.test.ts` still read three `tutorials/` fixtures from the lab's tree; they are tests, outside this row's Region and not `rules-check`.
 
