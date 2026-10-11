@@ -58,7 +58,7 @@ name: ci
 #
 # THE `gate` JOB AT THE BOTTOM IS WHAT BRANCH PROTECTION ACTUALLY REQUIRES, not the five scoped jobs
 # above it. Every job but `changed` is conditional on `ci-changed.ts`'s output, so a docs-only PR never
-# runs `ts`/`python`/`ansible` at all -- and a required check with no run against a given commit blocks
+# runs `ts`/`python` at all -- and a required check with no run against a given commit blocks
 # merge FOREVER, it does not pass by default. GitHub does treat a job SKIPPED by its own `if:` as
 # satisfying a required check (a real run, concluding `skipped`, distinct from never running) -- #133
 # required all five path-scoped contexts directly and it merged fine on that behaviour. But relying on an
@@ -219,7 +219,6 @@ jobs:
     outputs:
       ts: ${{ steps.classify.outputs.ts }}
       python: ${{ steps.classify.outputs.python }}
-      ansible: ${{ steps.classify.outputs.ansible }}
       docs: ${{ steps.classify.outputs.docs }}
       board: ${{ steps.classify.outputs.board }}
       changeset: ${{ steps.classify.outputs.changeset }}
@@ -284,39 +283,6 @@ jobs:
     uses: ./.github/workflows/reusable-build-test.yml
     with:
       run-python-tests: true
-
-  ansible:
-    needs: changed
-    if: needs.changed.outputs.ansible == 'true' && !contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with: { python-version: "3.12" }
-      # The playbooks left this repository for `a11ign/control` (#3506): they are LAID at the tag `layers.json` pins, which needs git and node and nothing installed.
-      - name: Lay a11ign/control's playbooks where the checks read them
-        run: node scripts/lay-layer.ts control
-      # `ansible-core`, not the full `ansible` metapackage -- the metapackage bundles hundreds of
-      # collections this fleet does not use.
-      - run: pip install ansible-core pyyaml
-      - name: Install the collections these playbooks import
-        run: ansible-galaxy collection install -r packages/control/ansible/requirements.yml
-      - name: Every playbook still parses
-        env:
-          ANSIBLE_CONFIG: packages/control/ansible/ansible.cfg
-        run: |
-          status=0
-          for playbook in packages/control/ansible/*.yml; do
-            # roles/, tasks/, group_vars/ and the two inventory files are not playbooks (no top-level
-            # `hosts:`) and --syntax-check on one of those fails for a reason unrelated to this check.
-            grep -q "^- hosts:\|^  hosts:" "$playbook" || continue
-            echo "--- $playbook ---"
-            ansible-playbook -i packages/control/ansible/inventory.example.yml --syntax-check "$playbook" || status=1
-          done
-          exit $status
-      - name: Every module invocation matches what the module actually documents
-        working-directory: packages/control/ansible
-        run: python3 check-modules.py
 
   # #1065: the `docs` job that used to stand here (the whole packaging glob on a shallow checkout) is
   # DELETED. Since #902 it reported without deciding, it went red on an environment-only failure (#1064)
@@ -768,7 +734,7 @@ jobs:
   # watched the body) from a queue stall into an edit -- the condition that made blocking unsafe then
   # does not hold now.
   gate:
-    needs: [bodyEdit, changed, ts, python, ansible, changeset, rulesFitness, guardSweep, deliberateRefusals, acceptance, ownedPaths]
+    needs: [bodyEdit, changed, ts, python, changeset, rulesFitness, guardSweep, deliberateRefusals, acceptance, ownedPaths]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     # `actions: read` for the one lookup below, and nothing else: this job checks nothing out and writes nothing.
@@ -782,7 +748,6 @@ jobs:
             "${{ needs.changed.result }}" \
             "${{ needs.ts.result }}" \
             "${{ needs.python.result }}" \
-            "${{ needs.ansible.result }}" \
             "${{ needs.changeset.result }}" \
             "${{ needs.rulesFitness.result }}" \
             "${{ needs.guardSweep.result }}" \
