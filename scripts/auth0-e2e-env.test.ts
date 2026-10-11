@@ -16,7 +16,9 @@ import { chmodSync, mkdtempSync, readFileSync, writeFileSync, existsSync } from 
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { isBase32Seed, NAMES, parseEnvFile } from "./auth0-e2e-env.ts";
+// The script is NOT imported: the acceptance job refuses a test whose import closure reaches `gh` ("needs `token`"), and every
+// test here drives it as a process, which is the only way a stub `gh` on PATH is what it reaches.
+const NAMES = ["AUTH0_DOMAIN", "AUTH0_CLIENT_ID", "AUTH0_TEST_USER", "AUTH0_TEST_PASSWORD", "AUTH0_TOTP_SEED"];
 
 const SCRIPT = fileURLToPath(new URL("./auth0-e2e-env.ts", import.meta.url));
 const SENTINELS: Record<string, string> = {
@@ -159,14 +161,28 @@ test("an unreadable file is refused by its error code only", () => {
   assert.match(result.stdout, /cannot read the tenant file \(ENOENT\)/);
 });
 
-test("parseEnvFile and isBase32Seed", () => {
-  assert.deepEqual(parseEnvFile("# c\nA=1\nexport B='two'\nC=\"x y\"\n").values, { A: "1", B: "two", C: "x y" });
-  assert.equal(isBase32Seed("JBSWY3DPEHPK3PXP"), true);
-  assert.equal(isBase32Seed("jbswy3dpehpk3pxp"), true);
-  assert.equal(isBase32Seed("JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"), true);
-  assert.equal(isBase32Seed("JBSWY3DPEHPK3PXPJB======"), true, "padded to a multiple of eight");
-  assert.equal(isBase32Seed("JBSWY3DPEHPK3PXPJB===="), false, "padding that does not reach a multiple of eight");
-  assert.equal(isBase32Seed("JBSWY3DPEHPK3P"), false, "too short to be a seed");
-  assert.equal(isBase32Seed("JBSWY3DPEHPK3P1X"), false, "1 is not in the alphabet");
-  assert.equal(isBase32Seed("JBSW=Y3DPEHPK3PXP"), false, "padding mid-value");
+const SEED_CASES: [string, string, boolean][] = [
+  ["JBSWY3DPEHPK3PXP", "16 characters, the shortest accepted", true],
+  ["jbswy3dpehpk3pxp", "lowercase", true],
+  ["JBSWY3DPEHPK3PXPJB======", "padded to a multiple of eight", true],
+  ["JBSWY3DPEHPK3PXPJB====", "padding that does not reach a multiple of eight", false],
+  ["JBSWY3DPEHPK3P", "too short to be a seed", false],
+  ["JBSWY3DPEHPK3P1X", "1 is not in the alphabet", false],
+  ["JBSW=Y3DPEHPK3PXP", "padding mid-value", false],
+];
+
+for (const [seed, why, accepted] of SEED_CASES) {
+  test(`seed shape: ${seed} (${why}) is ${accepted ? "accepted" : "refused"}`, () => {
+    const result = run(["--check", "--file", envFile({ ...SENTINELS, AUTH0_TOTP_SEED: seed })]);
+    assert.equal(result.status, accepted ? 0 : 1);
+    assert.deepEqual(leaks(result, { seed }), []);
+  });
+}
+
+test("a quoted value and an `export` prefix are read as the value", () => {
+  const path = envFile({});
+  writeFileSync(path, Object.entries(SENTINELS).map(([k, v], i) => (i % 2 ? `export ${k}="${v}"` : `${k}='${v}'`)).join("\n") + "\n");
+  const result = run(["--apply-secrets", "--repo", "a11ign/example", "--file", path]);
+  assert.equal(result.status, 0, result.stdout);
+  assert.deepEqual(calls(result.record).map((c) => c.stdin), NAMES.map((n) => SENTINELS[n]));
 });

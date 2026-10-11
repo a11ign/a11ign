@@ -1,6 +1,6 @@
 `scripts/auth0-e2e-env.ts` checks the Auth0 tenant file by name, mode (exactly 600) and seed shape (RFC 4648 base32), and with `--apply-secrets --repo <owner/name>` pipes each of the five values to `gh secret set` on stdin. It is NOT run against the real file by this row: the chairman's session runs `--check`, then `--apply-secrets`, once (#4084).
 
-- **Measured:** 13 tests, all passing. Positive control: five sentinels in a mode-600 file are reported present by name and the stub `gh` receives each value on stdin once. Negative controls: a missing name, an empty value, a mode 644 file and a non-base32 seed are each refused by name, and a test greps stdout, stderr and the stub's argv for every sentinel across all of those runs.
+- **Measured:** 20 tests, all passing. Positive control: five sentinels in a mode-600 file are reported present by name and the stub `gh` receives each value on stdin once. Negative controls: a missing name, an empty value, a mode 644 file and a non-base32 seed are each refused by name, and a test greps stdout, stderr and the stub's argv for every sentinel across all of those runs.
 - **Mutation:** passing the value as `--body <value>` in argv turned 2 named tests red (the stdin/argv test and the failing-gh leak test); restored byte-identical.
 
 Acceptance: bash -c 'git grep -q "POSITIVE CONTROL" -- scripts/auth0-e2e-env.test.ts && npx rstest run --config scripts/rstest/rstest.config.ts --include scripts/auth0-e2e-env.test.ts'
