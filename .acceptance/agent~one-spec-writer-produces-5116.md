@@ -6,4 +6,4 @@ Acceptance: `test -f ~/repos/a11y-witness/.agent-org/roles/spec-writer.md; echo 
 
 Acceptance command: `bash -c 'cd ~/repos/agent-org && AGENT_ORG_HOST=/home/agent/repos/a11y-witness/.agent-org/host.json npx rstest run --config scripts/rstest/rstest.config.ts src/spec-writer.test.ts'`
 
-Closes: none -- the row closes when both halves have merged; this is the prompt half, agent-org#1012 the module half.
+Closes: #5116
