@@ -1,5 +1,5 @@
 /**
- * A DOC THAT PINS AN a11ign RELEASE MORE THAN ONE MINOR BEHIND THE NEWEST TAG FAILS (#4508, chairman direction on #2568, class
+ * A DOC THAT PINS AN a11ign RELEASE MORE THAN ONE MINOR BEHIND THE RELEASE `v0` POINTS AT FAILS (#4508, chairman direction on #2568, class
  * `release-docs-drift`): the NAMED CASES, run on fixtures through the injected reader. The logic and the pin-versus-history rule are in
  * `docs-release-pin-currency.ts`.
  *
@@ -11,7 +11,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { GUARDED_DOC, pinFaults, type ReleaseTag, type Reader } from "./docs-release-pin-currency.ts";
 
-// ── fixtures: a tag list and a doc, through the same reader the real test uses ─────────────────────────────────────────────────────────
+// ── fixtures: a tag list, a v0 commit and a doc, through the same reader the real test uses ─────────────────────────────────────────────
 
 /** A full commit SHA length: the Action pin is only valid as one. */
 const SHA_LENGTH = 40;
@@ -22,26 +22,44 @@ const FIXTURE_TAGS: ReleaseTag[] = [
   { name: "a11ign@0.5.4", commit: sha("5") },
   { name: "a11ign@0.6.0-rc.1", commit: sha("6") },
 ];
-const fixture = (text: string, tags: ReleaseTag[] = FIXTURE_TAGS): Reader => ({ tags: () => tags, docs: () => [{ path: "docs/guide.md", text }] });
+/** `v0` on the 0.5.4 release, which is the newest stable tag of FIXTURE_TAGS unless a case says otherwise. */
+const FIXTURE_V0 = sha("5");
+const fixture = (text: string, tags: ReleaseTag[] = FIXTURE_TAGS, v0 = FIXTURE_V0): Reader => ({
+  tags: () => tags,
+  v0Commit: () => v0,
+  docs: () => [{ path: "docs/guide.md", text }],
+});
 const usesLine = (commit: string, comment = "") => `      - uses: a11ign/a11ign@${commit}   ${comment}`.trimEnd();
 
-test("a pin two minors behind the newest tag fails, naming file, line, the pinned release and the newest", () => {
+test("a pin two minors behind v0's release fails, naming file, line, the pinned release and v0's release", () => {
   const verdict = pinFaults(fixture(["# Guide", "", usesLine(sha("3"), "# the commit of the release tagged a11ign@0.3.0")].join("\n")));
   assert.equal(verdict.status, "stale");
   assert.equal(verdict.faults.length, 1);
   assert.match(verdict.faults[0], /^docs\/guide\.md:3 pins release 0\.3\.0 /);
-  assert.match(verdict.faults[0], /the newest tag is a11ign@0\.5\.4/);
+  assert.match(verdict.faults[0], /v0 points at a11ign@0\.5\.4/);
 });
 
-test("a pin one minor behind the newest tag passes", () => {
+test("a pin one minor behind v0's release passes", () => {
   const verdict = pinFaults(fixture(usesLine(sha("4"))));
   assert.deepEqual(verdict.faults, []);
   assert.equal(verdict.pins.length, 1, "the positive control: the pin was found, so the empty fault list is a reading");
   assert.equal(verdict.status, "ok");
 });
 
-test("a pin on the newest tag passes", () => {
+test("a pin on v0's release passes", () => {
   assert.equal(pinFaults(fixture(usesLine(sha("5")))).status, "ok");
+});
+
+test("a pin on v0's release passes while a tag two minors ahead is unpromoted (the 2026-10-11 case)", () => {
+  // FIXTURE_TAGS' newest stable tag is 0.5.4; v0 still names 0.3.0, so the pin is on the qualified release and the newer tag is not drift.
+  const verdict = pinFaults(fixture(usesLine(sha("3")), FIXTURE_TAGS, sha("3")));
+  assert.equal(verdict.v0Release, "0.3.0");
+  assert.equal(verdict.pins.length, 1, "the positive control: the pin was found");
+  assert.equal(verdict.status, "ok");
+});
+
+test("a pin newer than v0 is not a fault", () => {
+  assert.equal(pinFaults(fixture(usesLine(sha("5")), FIXTURE_TAGS, sha("3"))).status, "ok");
 });
 
 test("a checkout with no a11ign@ release tag says CANNOT TELL, names the remedy, and does not pass", () => {
@@ -50,6 +68,23 @@ test("a checkout with no a11ign@ release tag says CANNOT TELL, names the remedy,
   assert.match(verdict.faults[0], /^CANNOT TELL /);
   assert.match(verdict.faults[0], /History: full/);
   assert.match(verdict.faults[0], /fetch --tags/);
+});
+
+test("v0 absent from the checkout says CANNOT TELL, names the remedy, and does not pass", () => {
+  const verdict = pinFaults({ ...fixture(usesLine(sha("3"))), v0Commit: () => undefined });
+  assert.equal(verdict.status, "cannot-tell");
+  assert.equal(verdict.v0Release, undefined);
+  assert.match(verdict.faults[0], /^CANNOT TELL /);
+  assert.match(verdict.faults[0], /`v0` tag is missing/);
+  assert.match(verdict.faults[0], /fetch --tags --force/);
+});
+
+test("v0 at a commit no a11ign@<x.y.z> tag names says CANNOT TELL, for an untagged commit and for a prerelease alike", () => {
+  const untagged = pinFaults(fixture(usesLine(sha("3")), FIXTURE_TAGS, sha("9")));
+  assert.equal(untagged.status, "cannot-tell");
+  assert.match(untagged.faults[0], /names no `a11ign@<x\.y\.z>` release/);
+  const prerelease = pinFaults(fixture(usesLine(sha("3")), FIXTURE_TAGS, sha("6")));
+  assert.equal(prerelease.status, "cannot-tell", "the 0.6.0-rc.1 tag is a prerelease, not a qualified release");
 });
 
 test("a history mention of an old release, not in a `uses:` line or an install command, is not a pin", () => {
@@ -84,9 +119,9 @@ test("a `uses:` SHA that no release tag points at fails: its age cannot be told"
   assert.match(verdict.faults[0], /no `a11ign@<x\.y\.z>` tag points at/);
 });
 
-test("a whole major behind is past any allowance", () => {
+test("a whole major behind v0 is past any allowance", () => {
   const tags = [{ name: "a11ign@1.0.0", commit: sha("1") }, { name: "a11ign@0.9.0", commit: sha("a") }];
-  assert.equal(pinFaults(fixture(usesLine(sha("a")), tags)).status, "stale");
+  assert.equal(pinFaults(fixture(usesLine(sha("a")), tags, sha("1"))).status, "stale");
 });
 
 test("the guard is pointed at the right docs: README, docs/*.md and docs/adr/*.md, and nothing deeper", () => {

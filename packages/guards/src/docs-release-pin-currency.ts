@@ -24,9 +24,11 @@ export interface Doc {
   path: string;
   text: string;
 }
-/** The two things the guard reads, injected so a fixture can stand in for the checkout. */
+/** The things the guard reads, injected so a fixture can stand in for the checkout. */
 export interface Reader {
   tags(): ReleaseTag[];
+  /** The commit the `v0` tag points at, or `undefined` when this checkout has no `v0`. */
+  v0Commit(): string | undefined;
   docs(): Doc[];
 }
 export interface Pin {
@@ -86,32 +88,46 @@ function pinsIn(doc: Doc, tags: ReleaseTag[]): Pin[] {
 }
 
 export interface Verdict {
-  /** `ok`, `cannot-tell` (no release tag to measure against), or `stale` (at least one fault). */
+  /** `ok`, `cannot-tell` (no qualified release to measure against), or `stale` (at least one fault). */
   status: "ok" | "cannot-tell" | "stale";
-  newest: string | undefined;
+  /** The release `v0` points at, the one pins are measured against; `undefined` when it cannot be told. */
+  v0Release: string | undefined;
   pins: Pin[];
   faults: string[];
 }
 
 export const CANNOT_TELL =
   "CANNOT TELL whether any doc's release pin is current: this checkout carries no `a11ign@<x.y.z>` tag. Fetch them " +
-  "(`git fetch --tags`; in CI, `actions/checkout` with `fetch-depth: 0`; in a row, `History: full`). This is not a pass.";
+  "(`git fetch --tags --force`; in CI, `actions/checkout` with `fetch-depth: 0`; in a row, `History: full`). This is not a pass.";
+export const CANNOT_TELL_V0 =
+  "CANNOT TELL whether any doc's release pin is current: the `v0` tag is missing from this checkout, or names no " +
+  "`a11ign@<x.y.z>` release. Fetch the tags (`git fetch --tags --force`: `v0` moves, and a plain fetch refuses to move a tag " +
+  "it already has; in CI, `actions/checkout` with `fetch-depth: 0`). This is not a pass.";
+
+/**
+ * The release `v0` points at: the newest `a11ign@<x.y.z>` tag on the commit `v0` names. `v0` follows the newest QUALIFIED release, and
+ * a tag can run ahead of it while the release is still in flight, so measuring against the newest tag fails a correct pin.
+ */
+function releaseV0Points(v0Commit: string | undefined, tags: ReleaseTag[]): string | undefined {
+  if (v0Commit === undefined) return undefined;
+  return releaseVersions(tags.filter((tag) => tag.commit === v0Commit)).sort(newerFirst)[0];
+}
 
 export function pinFaults(reader: Reader): Verdict {
   const tags = reader.tags();
-  const versions = releaseVersions(tags).sort(newerFirst);
-  if (versions.length === 0) return { status: "cannot-tell", newest: undefined, pins: [], faults: [CANNOT_TELL] };
-  const newest = versions[0];
+  if (releaseVersions(tags).length === 0) return { status: "cannot-tell", v0Release: undefined, pins: [], faults: [CANNOT_TELL] };
+  const v0Release = releaseV0Points(reader.v0Commit(), tags);
+  if (v0Release === undefined) return { status: "cannot-tell", v0Release, pins: [], faults: [CANNOT_TELL_V0] };
   const pins = reader.docs().flatMap((doc) => pinsIn(doc, tags));
-  const faults = pins.flatMap((pin) => faultOf(pin, newest));
-  return { status: faults.length === 0 ? "ok" : "stale", newest, pins, faults };
+  const faults = pins.flatMap((pin) => faultOf(pin, v0Release));
+  return { status: faults.length === 0 ? "ok" : "stale", v0Release, pins, faults };
 }
 
-function faultOf(pin: Pin, newest: string): string[] {
+function faultOf(pin: Pin, v0Release: string): string[] {
   const where = `${pin.path}:${pin.line}`;
   if (pin.version === undefined) {
-    return [`${where} pins commit ${pin.written}, which no \`a11ign@<x.y.z>\` tag points at, so its age cannot be told (newest release: ${newest})`];
+    return [`${where} pins commit ${pin.written}, which no \`a11ign@<x.y.z>\` tag points at, so its age cannot be told (v0's release: ${v0Release})`];
   }
-  if (minorsBehind(pin.version, newest) <= MINORS_ALLOWED_BEHIND) return [];
-  return [`${where} pins release ${pin.version} (${pin.written}); the newest tag is a11ign@${newest}, more than ${MINORS_ALLOWED_BEHIND} minor behind`];
+  if (minorsBehind(pin.version, v0Release) <= MINORS_ALLOWED_BEHIND) return [];
+  return [`${where} pins release ${pin.version} (${pin.written}); v0 points at a11ign@${v0Release}, more than ${MINORS_ALLOWED_BEHIND} minor behind`];
 }
