@@ -14,6 +14,8 @@
   "clones": { "agent-org": "/home/agent/repos/agent-org", "screenreader-worker": "/home/agent/repos/screenreader-worker", "documents": "/home/agent/repos/documents", "screenreader-fleet": "/home/agent/repos/screenreader-fleet", "control": "/home/agent/repos/control", "lab": "/home/agent/repos/lab", "toolchain": "/home/agent/repos/toolchain", "github": "/home/agent/repos/github" },
   "_triage": "Jev (TypeSafe) as an OPTIONAL reader of wake orders (#4384): `provider` is `jev` or `none`, and an absent block, `none`, or a key file that cannot be read all behave as before. `keyPath` is a path, never the key. It routes nothing yet: the wake path is row B's.",
   "triage": { "provider": "jev", "keyPath": "/home/agent/.config/typesafe/key", "minConfidence": 0.7 },
+  "_workers": "The spawned-seat flags (a11ign#5145). `haikuBrief` is read by `haikuBriefEnabled` in a11ign/agent-org's `src/haiku-brief.ts` from THIS file only, not from `project.json`, so a Haiku seat's first order carries the brief only when it is set here. Revert: set it `false`.",
+  "workers": { "haikuBrief": true },
   "gh": {
     "workers": "/home/agent/workers",
     "leads": "/home/agent/leads",
