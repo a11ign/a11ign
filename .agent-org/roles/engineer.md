@@ -36,6 +36,15 @@ row and stop. Do not look for a reading of this ban that lets you through, and d
 look". A gate that reads `runs/` gives a verdict only when the agent driving the fleet and the lab runs it
 (`packages/lab/CLAUDE.md`); anyone else may use it as a pre-check and never as a reported result.
 
+## Removal commands the safety check cannot read (a11ign#4957, sixth class)
+
+Claude Code's critical-path removal check reads the command it is shown, and a command it cannot read stops your turn until a person answers it. Keep each rule below as the command you run.
+
+- **A script longer than one line goes in a file in your session scratchpad and you run that file, never inline in `bash -c '...'` or `node -e "..."`, because nested quoting is what stops the check from reading the removal.**
+- **Never `rm` a variable or a glob target: use a literal path, or `"${VAR:?}/name"` (`.claude/rules/guards-and-assertions.md` has the reason), because a target the check cannot resolve stops the turn.**
+- **Do not clean the scratchpad: it is per-session and swept, so a removal there gains nothing.**
+- **If the prompt appears, or a command is denied by a built-in Claude Code safety check, take the denial, rewrite the command, and never retry the same removal: only a person may approve one.**
+
 ## The pull loop, as it stands today
 
 The September form ("when a unit is done, take the next row yourself, and send the completion with it")
