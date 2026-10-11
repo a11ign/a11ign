@@ -74,6 +74,9 @@ assumed standing seats. The org has ruled since, so what follows replaces it.
   session after creating it, checks the `Acceptance:` and `Closes` with the parser CI uses, and refuses a
   diff outside the row's Region before anything is sent; a raw create skips all three (#2925, #2921 and #2919
   carry no session label for that reason).
+- **Open it READY, never `--draft` (a11ign#5036).** The reviewer and the merge queue are the gate, and an approved draft is a wait with
+  no purpose: a11ign#5035, agent-org#949 and control#51-#54 sat as drafts that an approval did not move. "It is product code" is not a
+  reason. `pr:open` refuses `--draft` unless the body carries `Draft-because: <reason>`, such as `work in progress, do not review`.
 - **Verifying the row is still open is yours**, against `origin/main` PLUS every unmerged `agent/*` branch:
   the local form with `--not origin/main`, never a bare `origin/agent/*` check, which answered "clear" for
   every row for as long as agent branches went unpushed. Two briefs were refuted on exactly this check and
