@@ -21,10 +21,14 @@ pull request**: the conversation does not outlive a restart, but the worktree an
 
 > Do not run anything that reaches the fleet or the lab: no `fleet:*` (including `fleet:deploy` and
 > `fleet:provision`, which touch every box at once), no `lab:*` (`lab:stop` and `lab:status` included), no
-> `training:capture*`, no `worker:*`, no `evidence:check`, no `gate:stability`, no `capture:check`. Those
+> `training:capture*`, no `pnpm run worker:*` (`worker:code`, `worker:compare`, `worker:ctl`, the scripts that reach the
+> Windows workers), no `evidence:check`, no `gate:stability`, no `capture:check`. Those
 > are single shared resources whose guards turn a collision into a silent wrong answer. `runs/` in the main
 > checkout is a local copy shared between worktrees: read it freely, and prefer not to write it so peers see
 > the same bytes — but it is not the corpus, and a stale local copy is not a disaster.
+
+**`agent-org worker:state` and `agent-org pr:open` are not in the resource ban.** They are the commands every turn
+ends on and every pull request is opened with, and sharing a `worker:` prefix with the scripts above does not bind them.
 
 **These are commands, so the ban travels with you into every directory.** A row whose Acceptance seems to
 need one of them is a row for `orchestrator`, the first reader for fleet and lab questions: say so on the
