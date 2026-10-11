@@ -315,6 +315,21 @@ calls).
   (#4627, class `scope-added-mid-row`). A worker holding agent-org#575 half built absorbed the larger mirror #4737 on top
   of a full context, and the row stopped being finishable.
 
+## A build row carries its tests, written FIRST (chairman, 2026-10-11, #5109, the Haiku push)
+
+**The spec decides more than the model:** Haiku went 0/15 to 7/9 with a written spec, and 3/12 one-shot to 11/12 when it could run a
+test oracle; missing detail costs a small model 3.3x against Sonnet's 1.6x. So every BUILD row is filed with, in this order:
+
+- **The exact files** (Region), and **the tests, written before the worker starts**: a `Tests-first: <test file path>` line, then the
+  cases as Given/When/Then with the exact assertion each makes.
+- **The concrete error output** when there is any, and **the one command that runs the tests** (the Acceptance, as written).
+- **What enforces it** (agent-org `row-claim` and `merge-guard`, behind `rows.testsFirst`, default off in agent-org): the claim refuses a
+  row that says `Tests-first:` and names no test file; the worker's FIRST commit adds those tests unchanged and failing; the merge
+  guard refuses a PR that moves them afterwards unless a reviewer who is not its author approves with a review body line
+  `Tests-first: change approved`. **Never write `Tests-first: none`**: a line that names no test file is refused at claim.
+- **Exempt by saying nothing:** decomposition, investigation and fleet rows carry no `Tests-first:` line and stay on Sonnet.
+- **Signals to read:** rows refused as incomplete per day, and first-pass merge rate by route. Revert is the flag off.
+
 ## The Boy Scout rule — standing, and identical in every live brief
 
 > **Boy Scout rule (chairman, 2026-10-01).** Leave every place better than you found it. A fault met on your
