@@ -10,10 +10,12 @@
  * Four properties are the point, and each one has a rule id that the refusal's message carries, so a person
  * (and a test) can tell WHICH rule refused without matching prose:
  *
- * - `closed-vocabulary` — `goto`, `fill`, `choose`, `check`, `press`, `expect`, `capture` and nothing else. No
- *   script step, no evaluated expression and no fixed sleep. A file that can run code is the "some environment
- *   variables are executable" class SECURITY.md already warns about, so this is a security property and not a
- *   simplicity one. `expect` waits, and its wait is BOUNDED.
+ * - `closed-vocabulary` — `goto`, `fill`, `choose`, `check`, `press`, `expect`, `capture`, `dismiss-if-shown` and `auto`,
+ *   and nothing else. No script step, no evaluated expression and no fixed sleep. A file that can run code is the "some
+ *   environment variables are executable" class SECURITY.md already warns about, so this is a security property and not
+ *   a simplicity one. `expect` waits, and its wait is BOUNDED.
+ *   A step may also carry `when:` (run only if a heading, control or text is on the page NOW: it never waits) and
+ *   `optional: true` (a missing target is skipped). Neither takes a selector or a script, and neither is a verb.
  * - `origin-pinned` — every `goto` is resolved against `origin:` and leaving it fails, so a flow written for
  *   staging cannot be pointed at production, and a redirect-shaped `goto` cannot carry a login somewhere else.
  * - `by-accessible-name` — a control is addressed by the name a screen reader announces, never by selector
@@ -29,8 +31,11 @@
 import { parse as parseYaml } from "yaml";
 
 /** The closed vocabulary. A verb outside it is `closed-vocabulary`, and there is no way to add one from a file. */
-export const FLOW_VERBS = ["goto", "fill", "choose", "check", "press", "expect", "capture"] as const;
+export const FLOW_VERBS = ["goto", "fill", "choose", "check", "press", "expect", "capture", "dismiss-if-shown", "auto"] as const;
 export type FlowVerb = (typeof FLOW_VERBS)[number];
+
+/** Keys a step may carry BESIDE its one verb. They say whether the step runs, never what it does. */
+export const STEP_MODIFIERS = ["when", "optional"] as const;
 
 /** Every rule that can refuse a flows file. Named so a test asserts the rule and not the wording. */
 export const FLOW_RULES = [
@@ -62,14 +67,28 @@ export interface ControlRef {
 }
 
 export type FillStep = { fill: ControlRef & ({ value: string; fromEnv?: undefined } | { fromEnv: string; value?: undefined }) };
-export type FlowStep =
+
+/** What is on the page: the three things `expect` can wait for, here read ONCE (`when:`) and never waited for. */
+export interface PageCondition {
+  kind: "heading" | "control" | "text";
+  name: string;
+}
+
+export type ControlTarget = { control: string; within?: string; nth?: number };
+
+type VerbStep =
   | { goto: string }
   | FillStep
   | { choose: ControlRef & { option: string } }
   | { check: ControlRef & { checked: boolean } }
-  | { press: { control: string; within?: string; nth?: number } }
-  | { expect: { kind: "heading" | "control" | "text"; name: string; timeoutSeconds: number } }
-  | { capture: string };
+  | { press: ControlTarget }
+  | { expect: PageCondition & { timeoutSeconds: number } }
+  | { capture: string }
+  | { "dismiss-if-shown": ControlTarget }
+  | { auto: true };
+
+/** `when:` skips the step when its condition is not on the page now; `optional: true` skips it when its target never appears. */
+export type FlowStep = VerbStep & { when?: PageCondition; optional?: true };
 
 export interface Flow {
   name: string;
@@ -279,32 +298,69 @@ function parseCheck(raw: unknown, where: string): FlowStep {
   return { check: { ...ref, checked: entry.checked !== false } };
 }
 
-function parsePress(raw: unknown, where: string): FlowStep {
-  if (isName(raw)) return { press: { control: raw } };
-  if (!isObject(raw)) fail("step-shape", `${where}: press: takes the control's accessible name.`);
+/** A control named by its accessible name alone, or with `within:` and `nth:`; shared by `press:` and `dismiss-if-shown:`. */
+function parseControlTarget(raw: unknown, where: string): ControlTarget {
+  if (isName(raw)) return { control: raw };
+  if (!isObject(raw)) fail("step-shape", `${where} takes the control's accessible name.`);
   const entry = raw as Record<string, unknown>;
-  refuseUnknownKeys(entry, ["control", "within", "nth"], `${where}: press:`);
-  if (!isName(entry.control)) fail("step-shape", `${where}: press: has no control: name.`);
-  const { field, ...disambiguators } = parseControlRef({ ...entry, field: entry.control }, `${where}: press:`);
-  return { press: { control: field, ...disambiguators } };
+  refuseUnknownKeys(entry, ["control", "within", "nth"], where);
+  if (!isName(entry.control)) fail("step-shape", `${where} has no control: name.`);
+  const { field, ...disambiguators } = parseControlRef({ ...entry, field: entry.control }, where);
+  return { control: field, ...disambiguators };
+}
+
+const parsePress = (raw: unknown, where: string): FlowStep => ({ press: parseControlTarget(raw, `${where}: press:`) });
+
+const parseDismissIfShown = (raw: unknown, where: string): FlowStep =>
+  ({ "dismiss-if-shown": parseControlTarget(raw, `${where}: dismiss-if-shown:`) });
+
+/** `auto: true` and nothing else: it hands the screen to the built-in loop, so it has no argument that could say what to do. */
+function parseAuto(raw: unknown, where: string): FlowStep {
+  if (isObject(raw)) refuseUnknownKeys(raw, [], `${where}: auto:`);
+  if (raw !== true) fail("step-shape", `${where}: auto: is written auto: true. It hands the screen to the built-in login loop and takes no argument.`);
+  return { auto: true };
 }
 
 const EXPECT_KINDS = ["heading", "control", "text"] as const;
+
+/** Exactly one of `heading:`, `control:` or `text:`, with a name: what `expect:` waits for and `when:` looks for. */
+function parseCondition(entry: Record<string, unknown>, where: string): PageCondition {
+  const kinds = EXPECT_KINDS.filter((kind) => entry[kind] !== undefined);
+  if (kinds.length !== 1 || !isName(entry[kinds[0]])) {
+    fail("step-shape", `${where} needs exactly one of heading:, control: or text:, with a name.`);
+  }
+  return { kind: kinds[0], name: entry[kinds[0]] as string };
+}
 
 function parseExpect(raw: unknown, where: string): FlowStep {
   if (!isObject(raw)) fail("step-shape", `${where}: expect: takes a mapping such as { heading: "Dashboard" }.`);
   const entry = raw as Record<string, unknown>;
   refuseUnknownKeys(entry, [...EXPECT_KINDS, "timeout"], `${where}: expect:`);
-  const kinds = EXPECT_KINDS.filter((kind) => entry[kind] !== undefined);
-  if (kinds.length !== 1 || !isName(entry[kinds[0]])) {
-    fail("step-shape", `${where}: expect: needs exactly one of heading:, control: or text:, with a name.`);
-  }
+  const condition = parseCondition(entry, `${where}: expect:`);
   const timeout = entry.timeout ?? EXPECT_DEFAULT_SECONDS;
   if (typeof timeout !== "number" || !(timeout > 0) || timeout > EXPECT_MAX_SECONDS) {
     fail("closed-vocabulary", `${where}: expect: waits at most ${EXPECT_MAX_SECONDS} seconds, and a wait with no bound `
       + "is a sleep. Give timeout: as a number of seconds between 0 and " + `${EXPECT_MAX_SECONDS}.`);
   }
-  return { expect: { kind: kinds[0], name: entry[kinds[0]] as string, timeoutSeconds: timeout as number } };
+  return { expect: { ...condition, timeoutSeconds: timeout as number } };
+}
+
+/** `when:` reads the page once. It takes no `timeout:`, because a condition that waited would be a sleep with better manners. */
+function parseWhen(raw: unknown, where: string): PageCondition {
+  if (!isObject(raw)) fail("step-shape", `${where}: when: takes a mapping such as { control: "Not now" }.`);
+  const entry = raw as Record<string, unknown>;
+  refuseUnknownKeys(entry, [...EXPECT_KINDS, "timeout"], `${where}: when:`);
+  if (entry.timeout !== undefined) {
+    fail("step-shape", `${where}: when: takes no timeout:. It looks at the page once and never waits; use expect: for a wait.`);
+  }
+  return parseCondition(entry, `${where}: when:`);
+}
+
+/** `optional: true` and nothing else: a value that could carry a selector or a script is refused by the rule that names it. */
+function parseOptional(raw: unknown, where: string): true {
+  if (isObject(raw)) refuseUnknownKeys(raw, [], `${where}: optional:`);
+  if (raw !== true) fail("step-shape", `${where}: optional: is written optional: true. It skips the step when its control never appears.`);
+  return true;
 }
 
 function parseCapture(raw: unknown, where: string): FlowStep {
@@ -312,13 +368,47 @@ function parseCapture(raw: unknown, where: string): FlowStep {
   return { capture: raw as string };
 }
 
-function parseStep(raw: unknown, origin: string, where: string): FlowStep {
-  if (!isObject(raw) || Object.keys(raw).length !== 1) {
-    fail("step-shape", `${where} must be a mapping with exactly one verb (${FLOW_VERBS.join(", ")}).`);
+/** The step's one verb, with the keys that answer a wrong guess named by the rule that answers it. */
+function verbOfRaw(raw: unknown, where: string): [verb: string, body: unknown] {
+  const shape = `${where} must be a mapping with exactly one verb (${FLOW_VERBS.join(", ")}), and may add when: or optional:.`;
+  if (!isObject(raw)) fail("step-shape", shape);
+  const entries = Object.entries(raw as Record<string, unknown>)
+    .filter(([key]) => !(STEP_MODIFIERS as readonly string[]).includes(key));
+  if (entries.length === 1) return entries[0];
+  // Two keys beside the modifiers: a selector or a script among them is named by its own rule, never by "exactly one verb".
+  for (const [key] of entries) {
+    if (KNOWN_WRONG_VERBS[key]) fail(KNOWN_WRONG_VERBS[key].rule, `${where}: ${key}: is not a step. ${KNOWN_WRONG_VERBS[key].why}.`);
   }
-  const [verb, body] = Object.entries(raw as Record<string, unknown>)[0];
+  refuseUnknownKeys(Object.fromEntries(entries.filter(([key]) => SELECTOR_KEYS.includes(key))), [], where);
+  return fail("step-shape", shape);
+}
+
+/** Which verbs a modifier makes sense on. A condition on a `capture` would move its index; `dismiss-if-shown` is already conditional. */
+const WHEN_REFUSED_ON = ["capture", "dismiss-if-shown"];
+const OPTIONAL_ALLOWED_ON = ["fill", "choose", "check", "press", "expect"];
+
+function withModifiers(step: FlowStep, raw: Record<string, unknown>, where: string): FlowStep {
+  const verb = Object.keys(step)[0];
+  const modified: FlowStep = { ...step };
+  if (raw.when !== undefined) {
+    if (WHEN_REFUSED_ON.includes(verb)) fail("step-shape", `${where}: ${verb}: does not take when:.`);
+    modified.when = parseWhen(raw.when, where);
+  }
+  if (raw.optional !== undefined) {
+    if (!OPTIONAL_ALLOWED_ON.includes(verb)) fail("step-shape", `${where}: ${verb}: does not take optional:, since it has no control that could be missing.`);
+    modified.optional = parseOptional(raw.optional, where);
+  }
+  return modified;
+}
+
+function parseStep(raw: unknown, origin: string, where: string): FlowStep {
+  const [verb, body] = verbOfRaw(raw, where);
   const known = KNOWN_WRONG_VERBS[verb];
   if (known) fail(known.rule, `${where}: ${verb}: is not a step. ${known.why}.`);
+  return withModifiers(parseVerb(verb, body, origin, where), raw as Record<string, unknown>, where);
+}
+
+function parseVerb(verb: string, body: unknown, origin: string, where: string): FlowStep {
   switch (verb as FlowVerb) {
     case "goto": return { goto: parseGoto(body, origin, where) };
     case "fill": return parseFill(body, where);
@@ -327,6 +417,8 @@ function parseStep(raw: unknown, origin: string, where: string): FlowStep {
     case "press": return parsePress(body, where);
     case "expect": return parseExpect(body, where);
     case "capture": return parseCapture(body, where);
+    case "dismiss-if-shown": return parseDismissIfShown(body, where);
+    case "auto": return parseAuto(body, where);
     default:
       return fail("closed-vocabulary", `${where}: ${verb}: is not a step. The vocabulary is closed: ${FLOW_VERBS.join(", ")}.`);
   }
@@ -341,6 +433,12 @@ function parseFlow(name: string, raw: unknown, origin: string): Flow {
     fail("file-shape", `${where} lists no steps:, so it would do nothing.`);
   }
   const steps = (entry.steps as unknown[]).map((step, index) => parseStep(step, origin, `${where} step ${index + 1}`));
+  steps.forEach((step, index) => {
+    if ("auto" in step && !("expect" in (steps[index + 1] ?? {}))) {
+      fail("step-shape", `${where} step ${index + 1}: auto: must be followed by an expect:, which is where the loop stops and the `
+        + "flow resumes. Without one the loop would have nothing to stop on.");
+    }
+  });
   return { name, steps };
 }
 
@@ -398,9 +496,14 @@ export function resolveLoginFlow(file: FlowsFile, name: string): Flow {
         + "ended, so a login captures nothing.");
     }
   });
-  if (!("expect" in found.steps[found.steps.length - 1])) {
+  const last = found.steps[found.steps.length - 1];
+  if (!("expect" in last)) {
     fail("login-final-expect", `login flow "${name}" does not end with expect:. Without a post-condition the run cannot `
       + "tell a signed-in page from the login wall, and would report the wall as the product.");
+  }
+  if (last.when !== undefined) {
+    fail("login-final-expect", `login flow "${name}" ends with an expect: that carries when:. A post-condition that can be `
+      + "skipped is no post-condition, so the login's last step always runs.");
   }
   return found;
 }

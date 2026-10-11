@@ -34,6 +34,9 @@ flows:
     steps:
       - goto: /cart
       - press: "Proceed to checkout"
+      - dismiss-if-shown: "Not now"
+      - auto: true
+      - expect: { heading: "Review your order" }
       - capture: cart-review
       - fill: { field: "Postcode", value: "AB1 2CD" }
       - choose: { field: "Delivery", option: "Next day" }
@@ -264,4 +267,86 @@ test("idp-origins: refuses a wildcard, a path, a credential, a query, the app's 
     });
   }
   refusedBy("file-shape", () => parseFlowsFile(`${VALID.replace("flows:", "idp-origins: https://idp.example.test\nflows:")}`));
+});
+
+// THE FOUR KEYS (#4994): `when:`, `optional:`, `auto:` and `dismiss-if-shown:`. None of them runs code, so each is held to the
+// closed vocabulary: the value is an accessible name or `true`, and a selector or a script in one is refused by the rule that
+// already names it. The runtime half (what is skipped, and what is not) is `interpreter.test.ts`.
+const step = (yaml: string) => parseFlowsFile(withSteps(`${yaml}\n- expect: { heading: "Dashboard" }`)).flows[0].steps[0];
+
+test("POSITIVE CONTROL: when:, optional:, dismiss-if-shown: and auto: parse, and the parsed step says so", () => {
+  assert.deepEqual(step('- press: "Skip"\n  when: { control: "Skip" }'), { press: { control: "Skip" }, when: { kind: "control", name: "Skip" } });
+  assert.deepEqual(step('- when: { heading: "Verify" }\n  fill: { field: "Code", from-env: APP_CODE }'),
+    { fill: { field: "Code", fromEnv: "APP_CODE" }, when: { kind: "heading", name: "Verify" } });
+  assert.deepEqual(step('- check: { field: "Remember me" }\n  optional: true'), { check: { field: "Remember me", checked: true }, optional: true });
+  assert.deepEqual(step('- dismiss-if-shown: "Not now"'), { "dismiss-if-shown": { control: "Not now" } });
+  assert.deepEqual(step('- dismiss-if-shown: { control: "Close", within: "Cookie notice" }'),
+    { "dismiss-if-shown": { control: "Close", within: "Cookie notice" } });
+  assert.deepEqual(step("- auto: true"), { auto: true });
+});
+
+test("NEGATIVE CONTROL: a selector or a script in any of the four keys is refused by the rule that already names it", () => {
+  // A selector is `by-accessible-name`, wherever it is written: inside the key, or beside it on the step.
+  refusedBy("by-accessible-name", () => step('- press: "Skip"\n  when: { selector: "#skip" }'));
+  refusedBy("by-accessible-name", () => step('- press: "Skip"\n  when: { css: ".skip" }'));
+  refusedBy("by-accessible-name", () => step('- dismiss-if-shown: { selector: "#close" }'));
+  refusedBy("by-accessible-name", () => step('- press: "Skip"\n  optional: { xpath: "//a" }'));
+  refusedBy("by-accessible-name", () => step("- auto: { selector: '#loop' }"));
+  refusedBy("by-accessible-name", () => step('- press: "Skip"\n  selector: "#skip"\n  optional: true'));
+  // A script has no key to live in: it is a verb that is not one (closed-vocabulary) or a key this file does not define.
+  refusedBy("closed-vocabulary", () => step('- script: "document.querySelector(\'#x\').click()"\n  optional: true'));
+  refusedBy("unknown-key", () => step('- press: "Skip"\n  when: { script: "true" }'));
+  refusedBy("unknown-key", () => step("- dismiss-if-shown: { control: Close, script: x }"));
+  refusedBy("unknown-key", () => step("- auto: { script: x }"));
+  // Only `true` is a value for optional: and auto:, and `when:` is a condition and never an expression.
+  for (const bad of ["false", '"yes"', '"#skip"', "1", "[true]"]) {
+    refusedBy("step-shape", () => step(`- press: "Skip"\n  optional: ${bad}`));
+    refusedBy("step-shape", () => step(`- auto: ${bad}`));
+  }
+  refusedBy("step-shape", () => step('- press: "Skip"\n  when: "Skip"'));
+  refusedBy("step-shape", () => step('- press: "Skip"\n  when: { control: "Skip", heading: "Skip" }'));
+  refusedBy("step-shape", () => step('- press: "Skip"\n  when: {}'));
+  refusedBy("step-shape", () => step('- dismiss-if-shown: ""'));
+});
+
+test("when: looks once and never waits, so it takes no timeout: and no wait is hiding in it", () => {
+  refusedBy("step-shape", () => step('- press: "Skip"\n  when: { control: "Skip", timeout: 5 }'));
+});
+
+test("a modifier is refused where it has nothing to modify, each with step-shape", () => {
+  refusedBy("step-shape", () => step('- goto: /a\n  optional: true'));
+  refusedBy("step-shape", () => step('- capture: a\n  when: { control: "X" }'));
+  refusedBy("step-shape", () => step('- capture: a\n  optional: true'));
+  refusedBy("step-shape", () => step('- dismiss-if-shown: "X"\n  when: { control: "X" }'));
+  refusedBy("step-shape", () => step('- dismiss-if-shown: "X"\n  optional: true'));
+  refusedBy("step-shape", () => step("- auto: true\n  optional: true"));
+  // A modifier with no verb beside it is not a step.
+  refusedBy("step-shape", () => step("- optional: true"));
+  refusedBy("step-shape", () => step('- when: { control: "X" }'));
+});
+
+test("auto: must be followed by an expect:, which is where the loop stops", () => {
+  refusedBy("step-shape", () => parseFlowsFile(withSteps("- auto: true")));
+  refusedBy("step-shape", () => parseFlowsFile(withSteps('- auto: true\n- press: "Go"\n- expect: { heading: "Dashboard" }')));
+  // POSITIVE CONTROL for the refusals above: the same flow with the expect: directly after is accepted.
+  assert.equal(parseFlowsFile(withSteps('- auto: true\n- expect: { heading: "Dashboard" }')).flows[0].steps.length, 2);
+});
+
+test("NEGATIVE CONTROL: a login flow with no final expect is still login-final-expect, whatever else it holds", () => {
+  const login = (steps: string) => resolveLoginFlow(parseFlowsFile(withSteps(steps)), "login");
+  refusedBy("login-final-expect", () => login('- fill: { field: "Email", from-env: A_B }\n- press: "Sign in"'));
+  refusedBy("login-final-expect", () => login('- auto: true\n- expect: { heading: "Dashboard" }\n- dismiss-if-shown: "Not now"'));
+  refusedBy("login-final-expect", () => login('- press: "Sign in"\n  optional: true'));
+  // A final expect: that may be skipped is no post-condition: `when:` on it is refused as the same rule.
+  refusedBy("login-final-expect", () => login('- press: "Sign in"\n- expect: { heading: "Dashboard" }\n  when: { control: "Sign out" }'));
+  // POSITIVE CONTROL: a login using all four keys and ending in a plain expect: resolves.
+  const flow = login('- dismiss-if-shown: "Accept cookies"\n- when: { control: "Email" }\n  fill: { field: "Email", from-env: A_B }\n'
+    + '- press: "Sign in"\n  optional: true\n- auto: true\n- expect: { heading: "Dashboard" }');
+  assert.equal(flow.steps.length, 5);
+});
+
+test("a literal in a login fill is still login-literal when a modifier is on the step, and a capture is still refused", () => {
+  const login = (steps: string) => resolveLoginFlow(parseFlowsFile(withSteps(steps)), "login");
+  refusedBy("login-literal", () => login('- fill: { field: "Email", value: "a@b.test" }\n  optional: true\n- expect: { heading: "Dashboard" }'));
+  refusedBy("login-no-capture", () => login('- capture: early\n- expect: { heading: "Dashboard" }'));
 });
