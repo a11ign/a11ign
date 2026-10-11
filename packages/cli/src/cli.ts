@@ -31,7 +31,7 @@ import {
   formatFaultMessage, formatAuthFaultMessage, formatDoubtMessage, formatEarlyContainmentNotice,
 } from "./fault-remediation.js";
 import { AuthError, isAuthFault } from "./auth/auth-faults.js";
-import { refuseAuthOnRemoteWorker, requireAuthApplied, type AuthRequest } from "./auth/refusals.js";
+import { onTheWire, refuseAuthOnRemoteWorker, requireAuthApplied, type AuthRequest } from "./auth/refusals.js";
 import { ruleLayerSignIn } from "./auth/rule-layer.js";
 import { pressedByThisRun, resolveAuthentication } from "./auth/resolve.js";
 import { buildScrubSet, redactionNotice, scrubArtifact, type ScrubSet } from "./auth/scrub.js";
@@ -42,7 +42,7 @@ import {
 } from "./auth/interpreter.js";
 import { LOGIN_EXIT_CODES, LOGIN_OUTCOMES, retryDecision, type LoginOutcome } from "./auth/login-outcomes.js";
 import { keepLastAttempt, recordStep, startAttempt, writeArtifact, type ArtifactIo, type Attempt, type ObservedStep } from "./auth/login-artifact.js";
-import { LoginBlockError, parseLoginBlock } from "./auth/login-block.js";
+import { LoginBlockError, loginBlockPlan, parseLoginBlock, ruleLayerPlanOf } from "./auth/login-block.js";
 import { loginVerdict, pageDecision, validateCheck, type PageObservation, type ScanLoss, type SignedInCheck } from "./auth/signed-in-check.js";
 import { classifyScreen, type Classification, type ScreenObservation } from "./auth/screen-loop.js";
 import { openPlaywrightDriver } from "./auth/playwright-driver.js";
@@ -51,6 +51,7 @@ import type { Page } from "playwright";
 import { leaseWorker, isAfterRun, type AfterRun, type WorkerLease } from "@a11ign/screenreader-fleet";
 import { CAPTURE_CLIENT_TIMEOUT_MS } from "@a11ign/screenreader-fleet/worker-http";
 import { captureTolerantly } from "@a11ign/screenreader-fleet/capture-client";
+import { DEFAULT_PROBE_FLAGS } from "./probe-defaults.js";
 import { refuseIfNothingListening } from "./worker-probe.js";
 import { workerFlagValue } from "./worker-flag.js";
 
@@ -205,41 +206,8 @@ function defaultArgs(): Args {
     after: parsedAfterRun(),
     json: false,
     debug: false,
-    // OFF here, ON in the GitHub Action, and the asymmetry is deliberate. `--probe-forms` ACTIVATES
-    // controls: a submit-like button, or one your task names. A workflow runs against your own
-    // application, where submitting is the intended act and an unannounced error is only reachable by
-    // submitting. This CLI can be aimed at any URL on the internet, and pressing *Book* or *Send* on
-    // somebody else's production site is not a review. So the risky default follows who owns the page.
-    probeForms: false,
-    // ON, unlike probe-forms, and the difference is side effects: Tab moves focus and activates nothing,
-    // so it is safe on a page you do not own. 2.1.2 is also a NON-INTERFERENCE criterion — WCAG §5.2.5
-    // applies it to all content whether or not it is relied upon — and a keyboard trap is total: a user
-    // who cannot leave a control cannot use the rest of the page. It costs ~8 s per capture.
-    probeFocus: true,
-    // ON, on the same side of the consent line as `probeFocus` and for the same reason: following a
-    // link is ordinary browsing -- the thing this tool already did to reach the page -- where
-    // submitting a form writes to somebody's system. On essentially every real page the first link IS
-    // the skip link, which is exactly what 2.4.1 exists to test.
-    //
-    // These two defaulted to ABSENT until 2026-09-02, and the cost was the shape this repo names most
-    // often: a gate that does not exercise what ships. `capture-real-pages.mjs` has set both since
-    // 2026-08-24, so the 86-conformant-page validation behind `addInertSkipLink`, `addStaleRouteTitle`
-    // and 3.2.1 was gathered with flags THE PRODUCT COULD NOT SEND. Three criteria the README headlines
-    // as unreachable by a static analyser were unreachable by this CLI too, silently, because an
-    // un-asked probe returns an empty channel and an empty channel is what a clean page looks like.
-    // `observed` is why that was merely invisible rather than a false pass -- it recorded `asked: false`
-    // the whole time, and nothing in the product read it back to the user.
-    probeNavigation: true,
-    probeFocusContext: true,
-    // ON as of 2026-09-05, and the FIRST probe here that presses ESCAPE on a page the user does not own.
-    // The Tab half is free — `probeFocus` already walks the whole ring. Escape is the new keystroke and
-    // it sits with Tab rather than with typing: it enters nothing into a field, submits nothing, and
-    // writes to nobody's system; the most it can do is dismiss a dialog, which is a thing a visitor does.
-    //
-    // SET HERE AND IN `capture-real-pages.mjs` IN THE SAME COMMIT, because `probe-consent.test.ts`
-    // requires it and its own header says what happens otherwise: those two copies drifted for nine days
-    // and three criteria were validated on real pages through a path the product does not take.
-    probeFocusReveal: true,
+    // The consent line lives in `probe-defaults.ts`, where the lab's check can read it.
+    ...DEFAULT_PROBE_FLAGS,
     formsConfig: null,
     flows: null,
     loginFlow: null,
@@ -1490,7 +1458,9 @@ export function recheckedSignIn(
   { plan, url, signInOnce = ruleLayerSignIn({ plan, url }), read = readThroughTheDriver }:
   { plan: AuthRequest; url: string; signInOnce?: (page: Page) => Promise<void>; read?: ReadPage },
 ): (page: Page) => Promise<void> {
-  const stop = signedInConditionOf(plan.login);
+  // The condition is read off the steps the rule layer actually runs: a block request's own `login` is `[]`, and reading that
+  // would skip the check on exactly the runs that sign in by a block (#5054).
+  const stop = signedInConditionOf(ruleLayerPlanOf(plan, { expectSeconds: EXPECT_DEFAULT_SECONDS }).login);
   if (stop === undefined) return signInOnce;
   const at = { appOrigin: new URL(url).origin, idpOrigins: plan.idpOrigins ?? [] };
   return async (page) => {
@@ -1688,7 +1658,7 @@ export async function captureViaWorker(
         // Omitted rather than sent as null when absent: an older worker reads known fields only, so an
         // absent key is the same "no configured form" it has always understood. Additive, like `fault`.
         ...(formState ? { formState } : {}),
-        ...(auth ? { auth } : {}) },
+        ...(auth ? { auth: onTheWire(auth) } : {}) },
       timeoutMs: CAPTURE_CLIENT_TIMEOUT_MS,
       onProgress: earlyContainmentWatcher(),
     });
@@ -1801,23 +1771,7 @@ function planFromFlow(file: FlowsFile, name: string): LoginCheckPlan {
   };
 }
 
-function planFromBlock(raw: unknown): LoginCheckPlan {
-  const block = parseLoginBlock(raw);
-  if (!("role" in block.check)) {
-    throw new LoginCheckError("login --check cannot run a login: block whose check is a url: yet. Name an element as the check "
-      + "(role and name), which the signed-out page can be asked about before anything is typed.");
-  }
-  const url = new URL(block.url);
-  const stop: FinalExpect = { kind: block.check.role === "heading" ? "heading" : "control", name: block.check.name, timeoutSeconds: EXPECT_DEFAULT_SECONDS };
-  return {
-    plan: {
-      login: [{ goto: `${url.pathname}${url.search}` }, { auto: true }, { expect: stop }],
-      auto: { username: block.username, password: block.password, totp: block.totp, organization: block.organization },
-      idpOrigins: block.idpOrigins,
-    },
-    startUrl: url.href, appOrigin: url.origin, stop, credentialNames: [block.username, block.password], totpName: block.totp,
-  };
-}
+const planFromBlock = (raw: unknown): LoginCheckPlan => loginBlockPlan(parseLoginBlock(raw), { expectSeconds: EXPECT_DEFAULT_SECONDS });
 
 async function loadLoginCheckPlan(request: LoginCheckRequest, readText: (path: string) => Promise<string>): Promise<LoginCheckPlan> {
   const text = await readText(request.flows);

@@ -11,7 +11,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { sandboxGitEnv } from "./git-env.ts";
-import { CANNOT_TELL, GUARDED_DOC, pinFaults, type Reader } from "./docs-release-pin-currency.ts";
+import { GUARDED_DOC, pinFaults, type Reader } from "./docs-release-pin-currency.ts";
 
 const REPO = fileURLToPath(new URL("../../..", import.meta.url));
 
@@ -27,6 +27,14 @@ const checkoutReader: Reader = {
         const [name, object, peeled] = row.split(" ");
         return { name, commit: peeled || object };
       }),
+  /** Absent `v0` is a verdict (cannot-tell), not an error: `rev-parse` exits non-zero for it and that is caught here. */
+  v0Commit: () => {
+    try {
+      return git(["rev-parse", "--verify", "--quiet", "refs/tags/v0^{commit}"]).trim();
+    } catch {
+      return undefined;
+    }
+  },
   docs: () =>
     git(["ls-files", "-z", "README.md", "docs"])
       .split("\0")
@@ -34,9 +42,9 @@ const checkoutReader: Reader = {
       .map((path) => ({ path, text: readFileSync(`${REPO}${path}`, "utf8") })),
 };
 
-test("no tracked doc pins an a11ign release more than one minor behind the newest tag", () => {
+test("no tracked doc pins an a11ign release more than one minor behind the release v0 points at", () => {
   const verdict = pinFaults(checkoutReader);
-  assert.notEqual(verdict.status, "cannot-tell", CANNOT_TELL);
+  assert.notEqual(verdict.status, "cannot-tell", verdict.faults[0]);
   assert.ok(verdict.pins.length > 0, "no `uses: a11ign/a11ign@<sha>` pin found in any doc: the positive control for the assertion below");
   assert.deepEqual(verdict.faults, []);
 });

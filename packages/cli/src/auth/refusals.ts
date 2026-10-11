@@ -11,6 +11,7 @@ import { judgeBackend } from "@a11ign/judge";
 
 import { AuthError } from "./auth-faults.js";
 import type { FlowStep } from "./flows.js";
+import type { LoginBlockWire } from "./login-block.js";
 
 /**
  * What a run sends when it needs to log in (ADR 0038, "On the wire and per capture"): the login flow's resolved
@@ -21,7 +22,14 @@ import type { FlowStep } from "./flows.js";
  * validates the same shape again on arrival because the request is untrusted input there.
  */
 export interface AuthRequest {
+  /** Empty when `loginBlock` is set: the block is the login, and `onTheWire` leaves this key off the request. */
   readonly login: readonly FlowStep[];
+  /**
+   * The flows file's `login:` block (v3 login phase 2, #4084), as the worker validates it: the NAMES of the three variables the
+   * screen loop types, the start URL and ONE signed-in check, never a value. The worker signs in by it with its own copy of the
+   * loop, so no step crosses the wire. Absent: `login` is the steps, as it always was.
+   */
+  readonly loginBlock?: LoginBlockWire;
   /** Steps to replay after the login, e.g. a complete process to a capture point. Absent: the login alone. */
   readonly flow?: readonly FlowStep[];
   /** How many of `flow`'s steps to replay: the index of the `capture:` point, or the flow's length. */
@@ -38,6 +46,16 @@ export interface AuthRequest {
    * but the app's ends the run `left-origin`. The worker validates the list again on arrival, because the request is untrusted there.
    */
   readonly idpOrigins?: readonly string[];
+}
+
+/**
+ * What the worker is sent. **A block run drops `login`**: the worker refuses a request carrying BOTH (`auth carries both login and
+ * loginBlock; a request signs in one way`, v0.11.0 and v0.12.0), and `[]` is a `login` all the same. Every reader in this process
+ * reads `login`, so the key stays on `AuthRequest` and is removed here, at the one place the request is serialised.
+ */
+export function onTheWire(auth: AuthRequest): Omit<AuthRequest, "login"> | AuthRequest {
+  if (auth.loginBlock === undefined) return auth;
+  return Object.fromEntries(Object.entries(auth).filter(([key]) => key !== "login")) as Omit<AuthRequest, "login">;
 }
 
 /** Undefined means the run asked for no authentication, and every function below is then a no-op. */

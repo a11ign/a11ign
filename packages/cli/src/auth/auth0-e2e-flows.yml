@@ -1,0 +1,26 @@
+# The flows file `.github/workflows/auth0-e2e.yml` scans with (#4975, under #4084 outcome 1):
+#
+#   a11ign http://localhost:4173/ --flows packages/cli/src/auth/auth0-e2e-flows.yml
+#
+# A `login:` block and no flow: the block IS the login. It names the three environment variables the run reads and never their
+# values (a literal here is refused as `login-literal`), and ONE signed-in check, an element by role and name. The CLI sends the
+# block to the worker as `auth.loginBlock`, so NVDA reads the page the sign-in reaches.
+#
+# THE PAGE is `fixtures/auth0-spa`, served by its own `serve.ts` at the origin the chairman registered with the tenant.
+# `check` is the heading that page writes once the SDK holds a token; "Sign in required" is what a signed-out page reads.
+#
+# THE TENANT'S ORIGIN IS NOT HERE, and that is deliberate. The tenant's domain is the repository secret `AUTH0_DOMAIN`, and a
+# committed file must not carry it. `idp-origins` below holds a PLACEHOLDER on a reserved top-level domain (RFC 2606, which can
+# never resolve), and the workflow writes a copy with the tenant's origin in its place before the scan: `https://` and the
+# secret's value, nothing wider (`auth0-e2e-flows.test.ts` pins that the placeholder is present once, so the substitution
+# cannot silently match nothing). A run given THIS file unchanged is refused by the worker the moment the login leaves the
+# page's origin, which is the honest result for a file that names no tenant.
+version: 1
+origin: http://localhost:4173
+login:
+  url: http://localhost:4173/
+  username: AUTH0_TEST_USER
+  password: AUTH0_TEST_PASSWORD
+  totp: AUTH0_TOTP_SEED
+  check: { role: heading, name: "Signed in to the a11y-witness test page" }
+  idp-origins: [https://tenant.auth0-e2e.invalid]
