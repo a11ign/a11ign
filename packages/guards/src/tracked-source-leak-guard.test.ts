@@ -88,7 +88,7 @@
  * Running `allLeaksIn` unfiltered against this population also fires the SSH-key-filename pattern, widely
  * — `~/.ssh/a11y-pve_ed25519`, `~/.ssh/a11y-witness_ed25519` and similar appear as hardcoded fallback
  * DEFAULTS (`process.env.A11Y_PVE_KEY || "..."`, the identical shape #83's CONTROL_PLANE fix removed) in
- * roughly a dozen files across `packages/control` and `packages/worker-fleet`. That is real and worth
+ * roughly a dozen files across `packages/control` and the fleet's `src/`. That is real and worth
  * fixing, but it is a DIFFERENT class of exposure from a real fleet ADDRESS — #83's own title and
  * acceptance command are about the IPv4 pattern specifically — and each hardcoded key-path default needs
  * the same care `control-plane-host.mjs` took (confirm nothing depends on the silent fallback before
@@ -229,13 +229,11 @@ test("every EXEMPT entry names a file this discovery actually walks", () => {
 });
 
 test("MUTATION: a real leak reintroduced into a currently-clean source file is caught", () => {
-  const file = "packages/worker-fleet/src/host-address.ts";
+  // A tracked file of THIS repository: the fleet's `host-address.ts` this took until ADR 0045 cut 4 (#5082) is no longer laid, and a repository's test never opens another's source.
+  const file = "packages/guards/src/walk-scope.ts";
   const clean = collapsedText(file);
-  const reintroduced = clean.replace(
-    "against a bare-metal worker on the fleet's own LAN",
-    `against a bare-metal worker at ${privateAddress(192, 168, 64, 1)}`,
-  );
-  assert.notEqual(reintroduced, clean, "the replacement did not match — the fixture text has drifted");
+  const reintroduced = `${clean} // against a bare-metal worker at ${privateAddress(192, 168, 64, 1)}`;
+  assert.notEqual(reintroduced, clean, "the appended comment did not change the text");
   const leaks = findLeaks(file, reintroduced);
   assert.ok(leaks.length >= 1, `expected the reintroduced address to be caught, found: ${JSON.stringify(leaks)}`);
 });
@@ -287,7 +285,7 @@ test("every LEAK_PATTERNS entry is exercised by at least one EXEMPT or MUTATION 
   // table, so the pattern is now proven by the two MUTATION cases above -- which is the stronger proof
   // anyway: an exemption shows the guard TOLERATES a value, a mutation shows it CATCHES one.
   const injected = privateAddress(192, 168, 64, 1);
-  assert.ok(findLeaks("packages/worker-fleet/src/host-address.ts", `x ${injected} y`).length >= 1,
+  assert.ok(findLeaks("packages/guards/src/walk-scope.ts", `x ${injected} y`).length >= 1,
     "nothing here exercises the private-LAN-IPv4 pattern -- a pattern this file never triggers is one "
     + "the guard has not proven it can see for the SOURCE population");
   assert.ok(LEAK_PATTERNS.some((p) => p.name === "private LAN IPv4 address"),

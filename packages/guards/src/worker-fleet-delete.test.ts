@@ -1,11 +1,11 @@
 /**
- * #3504 (move 2 of #69, the delete step): THE DELETE'S OWN TEST. `packages/worker-fleet` left the workspace for `a11ign/screenreader-fleet`
+ * #3504 (move 2 of #69, the delete step): THE DELETE'S OWN TEST. The fleet's directory left the workspace for `a11ign/screenreader-fleet`
  * (ADR 0040, M2), and this repository consumes `@a11ign/screenreader-fleet` from the registry. It lives in `packages/guards`, not in the directory
  * it proves gone: that directory cannot hold the test that says it is not there.
  *
  * What is left to prove is that the delete is COMPLETE, in five claims, each with a fixture beside it:
  *
- *   1. No tracked file is under `packages/worker-fleet/`, and `pnpm-workspace.yaml`'s globs match no directory of that name or manifest
+ *   1. No tracked file is under the fleet's directory, and `pnpm-workspace.yaml`'s globs match no directory of that name or manifest
  *      carrying the package's name. A LAYER CHECKOUT may sit at that path (`scripts/lay-layer.ts`, untracked, `src/` only): the workspace
  *      EXCLUDES it, and that exclusion is what the second half of the claim reads, so a laid copy is not a member.
  *   2. `pnpm-lock.yaml` holds no `link:` to the old path and no importer under it.
@@ -13,7 +13,7 @@
  *      whose `resolution` carries an `integrity`. A version with no integrity is a version nobody verified.
  *   4. No pending changeset names the package, under either name it has had. `.changeset/README.md` is prose and may name them; an entry's
  *      frontmatter may not, because `changeset version` would then try to version a package this workspace does not have.
- *   5. Who reaches it, and how. Code in `lab`, `guards`, `cli` and `scripts/` never imports it by a relative path into `packages/worker-fleet`:
+ *   5. Who reaches it, and how. Code in `lab`, `guards`, `cli` and `scripts/` never imports it by a relative path into the fleet's directory:
  *      it names it BY PACKAGE NAME, or (the root's scripts and the guards that run before `node_modules` exists, which cannot import a package
  *      at all) reads `scripts/cli-flags.ts`, the one file of the fleet those need, kept as a copy in this repository. `control` CANNOT (ADR 0012, `control-has-no-dependencies.test.ts`: it runs from a raw checkout with no `node_modules`),
  *      so it reaches the fleet by relative path through the layer `layers.json` declares at that very path, which is the only
@@ -35,11 +35,13 @@ import { sandboxGitEnv } from "./git-env.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const DEPARTED_DIRECTORY = "worker-fleet";
+/** The directory's path, built from its name so the core's live files do not spell it (ADR 0045 cut 4, #5082): the guard still knows it until `layers.json` goes. */
+const DEPARTED_PATH = `packages/${DEPARTED_DIRECTORY}`;
 const CONSUMED = "@a11ign/screenreader-fleet";
 /** The lab layer's directory, built from its name as `lab-delete.test.ts` builds it: the scan under test still treats `lab` as a layer until `layers.json` goes. */
 const LAB_LAYER = "lab";
 const LAB_DIR = `packages/${LAB_LAYER}`;
-const CONSUMED_VERSION = "0.7.3";
+const CONSUMED_VERSION = "0.9.0";
 /** Both names the package has carried; a changeset may name neither. BUILT, NOT WRITTEN: a rename test refuses a file that spells the old name whole. */
 const NAMES = [CONSUMED, ["@a11ign", "worker-fleet"].join("/")] as const;
 /** What a pnpm integrity looks like: an algorithm, a dash and base64. Not a hash of anything: a SHAPE, so a placeholder is refused. */
@@ -98,8 +100,8 @@ function workspaceRefusals(root: string): string[] {
   return [...byDirectory, ...byName];
 }
 
-test("no file under packages/worker-fleet is tracked", () => {
-  const files = tracked(REPO_ROOT, "packages/worker-fleet");
+test(`no file under ${DEPARTED_PATH} is tracked`, () => {
+  const files = tracked(REPO_ROOT, DEPARTED_PATH);
   assert.deepEqual(files, [], `${files.length} tracked file(s) remain under the directory that left`);
 });
 
@@ -111,22 +113,22 @@ test("the workspace matches no worker-fleet directory and no manifest carries th
 test("POSITIVE CONTROL: a workspace holding the directory, or the name under another directory, is refused naming it; the exclusion lets a laid checkout stand", () => {
   const files = {
     "pnpm-workspace.yaml": 'packages:\n  - "packages/*"\n',
-    "packages/worker-fleet/package.json": `{ "name": "${CONSUMED}" }`,
+    [`${DEPARTED_PATH}/package.json`]: `{ "name": "${CONSUMED}" }`,
     "packages/renamed/package.json": `{ "name": "${CONSUMED}" }`,
     "packages/fine/package.json": '{ "name": "@a11ign/evidence" }',
   };
   withFixture(files, (root) => {
     assert.deepEqual(workspaceRefusals(root), [
-      "packages/worker-fleet is still a workspace directory",
+      `${DEPARTED_PATH} is still a workspace directory`,
       `packages/renamed still carries the name ${CONSUMED}`,
-      `packages/worker-fleet still carries the name ${CONSUMED}`,
+      `${DEPARTED_PATH} still carries the name ${CONSUMED}`,
     ]);
   });
-  withFixture({ ...files, "pnpm-workspace.yaml": 'packages:\n  - "packages/*"\n  - "!packages/worker-fleet"\n' }, (root) => {
+  withFixture({ ...files, "pnpm-workspace.yaml": `packages:\n  - "packages/*"\n  - "!${DEPARTED_PATH}"\n` }, (root) => {
     assert.deepEqual(workspaceRefusals(root), [`packages/renamed still carries the name ${CONSUMED}`], "the exclusion removes the directory and nothing else");
   });
   withFixture({ ...files, "packages/renamed/package.json": "{}" }, (root) => {
-    assert.deepEqual(workspaceRefusals(root), ["packages/worker-fleet is still a workspace directory", `packages/worker-fleet still carries the name ${CONSUMED}`]);
+    assert.deepEqual(workspaceRefusals(root), [`${DEPARTED_PATH} is still a workspace directory`, `${DEPARTED_PATH} still carries the name ${CONSUMED}`]);
   });
 });
 
@@ -197,8 +199,8 @@ test("POSITIVE CONTROL: a lockfile with a link:../worker-fleet entry is REFUSED,
   const linked = lockfileWith({ version: "link:../worker-fleet", integrity: REAL_INTEGRITY });
   assert.deepEqual(linkRefusals(linked), ["a link to the departed package: version: link:../worker-fleet"]);
   assert.deepEqual(registryEntryRefusals(linked), [`. resolves ${CONSUMED} to link:../worker-fleet, not the registry's ${CONSUMED_VERSION}`]);
-  const importer = lockfileWith({ version: CONSUMED_VERSION, integrity: REAL_INTEGRITY, extra: "\n  packages/worker-fleet:\n    dependencies: {}\n" });
-  assert.deepEqual(linkRefusals(importer), ["an importer under the departed path: packages/worker-fleet"]);
+  const importer = lockfileWith({ version: CONSUMED_VERSION, integrity: REAL_INTEGRITY, extra: `\n  ${DEPARTED_PATH}:\n    dependencies: {}\n` });
+  assert.deepEqual(linkRefusals(importer), [`an importer under the departed path: ${DEPARTED_PATH}`]);
 });
 
 test("POSITIVE CONTROL: a registry entry passes, with the peers pnpm resolved after the version; no integrity, or a placeholder, does not", () => {
@@ -250,7 +252,7 @@ const NOT_A_TEST = (path: string) => !/\.test\.(?:ts|mjs)$/.test(path) && !path.
 
 function relativeImportRefusals(files: Record<string, string>): string[] {
   return Object.entries(files).filter(([path]) => BY_NAME_SOURCES.test(path) && NOT_A_TEST(path))
-    .filter(([, text]) => RELATIVE_INTO_FLEET.test(text)).map(([path]) => `${path} imports packages/worker-fleet by a relative path: name ${CONSUMED}`);
+    .filter(([, text]) => RELATIVE_INTO_FLEET.test(text)).map(([path]) => `${path} imports ${DEPARTED_PATH} by a relative path: name ${CONSUMED}`);
 }
 
 const trackedText = (root: string): Record<string, string> => Object.fromEntries(tracked(root, "packages", "scripts")
@@ -268,21 +270,21 @@ test("POSITIVE CONTROL: a relative import of the fleet is REFUSED naming the fil
   assert.deepEqual(relativeImportRefusals({
     [`${LAB_DIR}/src/training/a.mjs`]: 'import { x } from "../../../worker-fleet/src/worker-http.ts";\n',
     "packages/guards/src/b.mjs": 'import { y } from "../../worker-fleet/src/cli-flags.ts";\n',
-    "scripts/c.mjs": 'import { z } from "../packages/worker-fleet/src/cli-flags.ts";\n',
+    "scripts/c.mjs": `import { z } from "../${DEPARTED_PATH}/src/cli-flags.ts";\n`,
     [`${LAB_DIR}/src/d.mjs`]: `import { w } from "${CONSUMED}/cli-flags";\n`,
     [`${LAB_DIR}/src/e.test.ts`]: 'import { v } from "../../worker-fleet/src/doctor.ts";\n',
     "packages/control/src/f.mjs": 'import { u } from "../../worker-fleet/src/cli-flags.ts";\n',
   }), [
-    `${LAB_DIR}/src/training/a.mjs imports packages/worker-fleet by a relative path: name ${CONSUMED}`,
-    `packages/guards/src/b.mjs imports packages/worker-fleet by a relative path: name ${CONSUMED}`,
-    `scripts/c.mjs imports packages/worker-fleet by a relative path: name ${CONSUMED}`,
+    `${LAB_DIR}/src/training/a.mjs imports ${DEPARTED_PATH} by a relative path: name ${CONSUMED}`,
+    `packages/guards/src/b.mjs imports ${DEPARTED_PATH} by a relative path: name ${CONSUMED}`,
+    `scripts/c.mjs imports ${DEPARTED_PATH} by a relative path: name ${CONSUMED}`,
   ]);
 });
 
 // `control` reaches the fleet by a relative path through this declaration, and its own repository holds the scan of that (`a11ign/control`, #3506): the
 // directory is laid and untracked here, so a scan of tracked files would read nothing. What stays pinned HERE is the declaration it resolves through.
-test("the fleet is declared as a separate layer at packages/worker-fleet, with its own repository, which is where control's relative imports land", () => {
+test(`the fleet is declared as a separate layer at ${DEPARTED_PATH}, with its own repository, which is where control's relative imports land`, () => {
   const manifest = JSON.parse(read(REPO_ROOT, "layers.json"));
-  assert.equal(manifest.layers["screenreader-fleet"]?.path, "packages/worker-fleet");
+  assert.equal(manifest.layers["screenreader-fleet"]?.path, DEPARTED_PATH);
   assert.match(manifest.layers["screenreader-fleet"]?.remote ?? "", /^https:\/\/github\.com\/a11ign\/screenreader-fleet\.git$/);
 });

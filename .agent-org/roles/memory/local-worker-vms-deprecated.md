@@ -6,7 +6,7 @@ metadata:
 ---
 
 The local UTM worker VMs on the Mac are **deprecated** (stated by the user 2026-08-28). Capture runs on
-the bare-metal fleet: five boxes `a11y-worker-2` … `-6` in `packages/worker-fleet/ansible/inventory.yml`,
+the bare-metal fleet: five boxes `a11y-worker-2` … `-6` in the control plane's `ansible/inventory.yml`,
 deployed with `pnpm run fleet:deploy --ref=<branch>` (git pull on each box), never `pnpm run worker:deploy`
 (which is `utmctl file push` to a VM UUID and cannot reach a physical box).
 

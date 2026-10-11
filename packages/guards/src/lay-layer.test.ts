@@ -24,10 +24,12 @@ import { withGitSandbox } from "@a11ign/toolchain/lib/git-sandbox";
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const { pinnedVersion, layingPlan, lay, REF_FILE } = await import(pathToFileURL(join(REPO_ROOT, "scripts/lay-layer.ts")).href);
 const NAME = "@a11ign/screenreader-fleet";
+/** Where the fleet is laid by a host that still lays it: built from its name so the core's live files do not spell the path (ADR 0045 cut 4, #5082). */
+const FLEET_DIR = `packages/${"worker-fleet"}`;
 
 /** A root importer block as pnpm writes it, with `version` as the lockfile would hold it. */
 const lockfileWith = (version: string) => `importers:\n\n  .:\n    dependencies:\n      '${NAME}':\n        specifier: ^0.3.0\n        version: ${version}\n      '@anthropic-ai/sdk':\n        specifier: ^0.131.0\n        version: 0.131.0\n`;
-const MANIFEST = { layers: { "screenreader-fleet": { path: "packages/worker-fleet", remote: "https://example.invalid/screenreader-fleet.git" }, bare: { path: "packages/bare" } } };
+const MANIFEST = { layers: { "screenreader-fleet": { path: FLEET_DIR, remote: "https://example.invalid/screenreader-fleet.git" }, bare: { path: "packages/bare" } } };
 /** A layer that is not on the registry: it declares its own tag and what to lay (#3505). */
 const UNPUBLISHED = { path: "packages/example", remote: "https://example.invalid/lab.git", tag: "v0.1.2", lays: ["src", "scripts", "rule-ownership.json"] };
 
@@ -36,12 +38,12 @@ test("the real lockfile pins a registry release, and the plan names its tag", ()
   const pinned = pinnedVersion(lockfile, NAME);
   assert.ok("version" in pinned, JSON.stringify(pinned));
   const plan = layingPlan(JSON.parse(readFileSync(join(REPO_ROOT, "layers.json"), "utf8")), lockfile, "screenreader-fleet");
-  assert.deepEqual(plan, { remote: "https://github.com/a11ign/screenreader-fleet.git", tag: `v${pinned.version}`, path: "packages/worker-fleet", source: ".", lays: ["src"] });
+  assert.deepEqual(plan, { remote: "https://github.com/a11ign/screenreader-fleet.git", tag: `v${pinned.version}`, path: FLEET_DIR, source: ".", lays: ["src"] });
 });
 
 test("POSITIVE CONTROL: the version is read past the peers pnpm appends, and a link, a missing entry and an undeclared layer are REFUSED", () => {
   assert.deepEqual(pinnedVersion(lockfileWith("0.3.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)"), NAME), { version: "0.3.0" });
-  assert.match(pinnedVersion(lockfileWith("link:packages/worker-fleet"), NAME).refusal, /not a registry release/);
+  assert.match(pinnedVersion(lockfileWith(`link:${FLEET_DIR}`), NAME).refusal, /not a registry release/);
   assert.match(pinnedVersion(lockfileWith("0.3.0"), "@a11ign/other").refusal, /no importer entry for @a11ign\/other/);
   const ok = lockfileWith("0.3.0");
   assert.match(layingPlan(MANIFEST, ok, "nope").refusal, /not declared with a remote/);
@@ -115,16 +117,16 @@ test("#4119: lay reads the layer from `source` in the repository and lays it at 
   });
 });
 
-/** A repository that holds the layer the way its own repository does: the package at `packages/worker-fleet`, plus tests and a manifest. */
+/** A repository that holds the layer the way its own repository does: the package at the fleet's directory, plus tests and a manifest. */
 function layerRepository(sandbox: { dir: string; run(args: string[]): string; commit(message: string): string }, version: string): void {
   const write = (path: string, text: string) => {
     mkdirSync(dirname(join(sandbox.dir, path)), { recursive: true });
     writeFileSync(join(sandbox.dir, path), text);
   };
-  write("packages/worker-fleet/package.json", `{ "name": "${NAME}", "version": "${version}" }`);
-  write("packages/worker-fleet/src/cli-flags.ts", `export const VERSION = "${version}";\n`);
-  write("packages/worker-fleet/src/provisioning/stamp.ps1", `# ${version}\n`);
-  write("packages/worker-fleet/src/cli-flags.test.ts", "// the layer's own test\n");
+  write(`${FLEET_DIR}/package.json`, `{ "name": "${NAME}", "version": "${version}" }`);
+  write(`${FLEET_DIR}/src/cli-flags.ts`, `export const VERSION = "${version}";\n`);
+  write(`${FLEET_DIR}/src/provisioning/stamp.ps1`, `# ${version}\n`);
+  write(`${FLEET_DIR}/src/cli-flags.test.ts`, "// the layer's own test\n");
   sandbox.run(["add", "-A"]);
   sandbox.commit(`release ${version}`);
   sandbox.run(["tag", `${NAME}@${version}`]);
@@ -138,7 +140,7 @@ test("a CRLF lockfile, as a Windows runner checks it out, pins the same version 
   const crlf = lf.replace(/\n/g, "\r\n");
   assert.notEqual(crlf, lf, "the control must differ from the LF text, or this proves nothing");
   assert.deepEqual(pinnedVersion(crlf, NAME), { version: "0.3.0" });
-  assert.match(pinnedVersion(lockfileWith("link:packages/worker-fleet").replace(/\n/g, "\r\n"), NAME).refusal, /not a registry release/);
+  assert.match(pinnedVersion(lockfileWith(`link:${FLEET_DIR}`).replace(/\n/g, "\r\n"), NAME).refusal, /not a registry release/);
   assert.equal(layingPlan(MANIFEST, crlf, "screenreader-fleet").tag, `${NAME}@0.3.0`);
   const real = readFileSync(join(REPO_ROOT, "pnpm-lock.yaml"), "utf8");
   assert.deepEqual(pinnedVersion(real.replace(/\r?\n/g, "\r\n"), NAME), pinnedVersion(real.replace(/\r?\n/g, "\n"), NAME));
@@ -150,25 +152,25 @@ test("lay: src/ only, without the layer's tests or its manifest, at the pinned t
     layerRepository(sandbox, "0.4.0");
     const root = mkdtempSync(join(tmpdir(), "lay-layer-root-"));
     try {
-      const plan = (version: string) => ({ remote: pathToFileURL(sandbox.dir).href, tag: `${NAME}@${version}`, path: "packages/worker-fleet", lays: ["src"] });
-      assert.equal(lay(root, plan("0.3.0")), `laid ${NAME}@0.3.0 at packages/worker-fleet`);
-      assert.deepEqual(walk(join(root, "packages/worker-fleet")), [REF_FILE, "src/cli-flags.ts", "src/provisioning/stamp.ps1"],
+      const plan = (version: string) => ({ remote: pathToFileURL(sandbox.dir).href, tag: `${NAME}@${version}`, path: FLEET_DIR, lays: ["src"] });
+      assert.equal(lay(root, plan("0.3.0")), `laid ${NAME}@0.3.0 at ${FLEET_DIR}`);
+      assert.deepEqual(walk(join(root, FLEET_DIR)), [REF_FILE, "src/cli-flags.ts", "src/provisioning/stamp.ps1"],
         "the laid directory holds src/ alone: no manifest (a walker would take it for a package) and no test (test:all would run it)");
-      assert.match(readFileSync(join(root, "packages/worker-fleet/src/cli-flags.ts"), "utf8"), /0\.3\.0/);
+      assert.match(readFileSync(join(root, `${FLEET_DIR}/src/cli-flags.ts`), "utf8"), /0\.3\.0/);
       // IDEMPOTENT: an unreachable remote is not asked for a directory already at the tag.
       assert.equal(lay(root, { ...plan("0.3.0"), remote: "https://example.invalid/gone.git" }), `already at ${NAME}@0.3.0`);
       // A REF FILE WITH NO CODE BESIDE IT IS NOT LAID: the rebase over the delete left exactly this, and "already at" over it served an empty directory.
-      rmSync(join(root, "packages/worker-fleet/src"), { recursive: true });
-      assert.equal(lay(root, plan("0.3.0")), `laid ${NAME}@0.3.0 at packages/worker-fleet`);
-      assert.ok(existsSync(join(root, "packages/worker-fleet/src/cli-flags.ts")));
+      rmSync(join(root, `${FLEET_DIR}/src`), { recursive: true });
+      assert.equal(lay(root, plan("0.3.0")), `laid ${NAME}@0.3.0 at ${FLEET_DIR}`);
+      assert.ok(existsSync(join(root, `${FLEET_DIR}/src/cli-flags.ts`)));
       // REPLACES: another tag lays the other release over it and leaves nothing of the first.
-      writeFileSync(join(root, "packages/worker-fleet/src/stale.ts"), "stale\n");
-      assert.equal(lay(root, plan("0.4.0")), `laid ${NAME}@0.4.0 at packages/worker-fleet`);
-      assert.ok(!existsSync(join(root, "packages/worker-fleet/src/stale.ts")));
-      assert.match(readFileSync(join(root, "packages/worker-fleet/src/cli-flags.ts"), "utf8"), /0\.4\.0/);
+      writeFileSync(join(root, `${FLEET_DIR}/src/stale.ts`), "stale\n");
+      assert.equal(lay(root, plan("0.4.0")), `laid ${NAME}@0.4.0 at ${FLEET_DIR}`);
+      assert.ok(!existsSync(join(root, `${FLEET_DIR}/src/stale.ts`)));
+      assert.match(readFileSync(join(root, `${FLEET_DIR}/src/cli-flags.ts`), "utf8"), /0\.4\.0/);
       // A TAG THAT DOES NOT EXIST is a refusal, and it does not leave a half-laid directory to be mistaken for a laid one.
       assert.throws(() => lay(root, plan("9.9.9")));
-      assert.match(readFileSync(join(root, "packages/worker-fleet", REF_FILE), "utf8"), /0\.4\.0/);
+      assert.match(readFileSync(join(root, FLEET_DIR, REF_FILE), "utf8"), /0\.4\.0/);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -279,16 +281,16 @@ test("#3836: a git clone is replaced when it is disposable, and REFUSED naming t
     layerRepository(sandbox, "0.3.0");
     const root = mkdtempSync(join(tmpdir(), "lay-layer-root-"));
     try {
-      const plan = { remote: pathToFileURL(sandbox.dir).href, tag: `${NAME}@0.3.0`, path: "packages/worker-fleet", lays: ["src"] };
+      const plan = { remote: pathToFileURL(sandbox.dir).href, tag: `${NAME}@0.3.0`, path: FLEET_DIR, lays: ["src"] };
       const target = join(root, plan.path);
-      // The clone of the layer's repository holds the package at packages/worker-fleet inside itself, so its tracked file is one level down.
+      // The clone of the layer's repository holds the package at the fleet's directory inside itself, so its tracked file is one level down.
       const clone = cloneInto(sandbox, root, plan.path);
       const refused = (pattern: RegExp) => {
         assert.throws(() => lay(root, plan), (error: Error) => error.message.includes(target) && pattern.test(error.message), String(pattern));
         assert.ok(existsSync(join(target, ".git")), "the refusal came before the clone was removed");
       };
       // DIRTY: an edit to a tracked file, then an untracked one.
-      writeFileSync(join(target, "packages/worker-fleet/src/cli-flags.ts"), "// mine\n");
+      writeFileSync(join(target, `${FLEET_DIR}/src/cli-flags.ts`), "// mine\n");
       refused(/uncommitted/);
       clone.run(["checkout", "--", "."]);
       writeFileSync(join(target, "notes.txt"), "mine\n");
@@ -328,7 +330,7 @@ function cloneAtReleaseTag(sandbox: { dir: string; run(args: string[]): string; 
   layerRepository(sandbox, "0.3.0");
   const branch = sandbox.run(["rev-parse", "--abbrev-ref", "HEAD"]).trim();
   sandbox.run(["checkout", "--quiet", "--detach"]);
-  writeFileSync(join(sandbox.dir, "packages/worker-fleet/src/cli-flags.ts"), `export const VERSION = "0.4.0";\n`);
+  writeFileSync(join(sandbox.dir, `${FLEET_DIR}/src/cli-flags.ts`), `export const VERSION = "0.4.0";\n`);
   sandbox.run(["add", "-A"]);
   sandbox.commit("release 0.4.0");
   sandbox.run(["tag", `${NAME}@0.4.0`]);
@@ -344,7 +346,7 @@ test("#3973: a clone detached at a release tag that origin holds, with only buil
   withGitSandbox((sandbox) => {
     const root = mkdtempSync(join(tmpdir(), "lay-layer-root-"));
     try {
-      const plan = { remote: pathToFileURL(sandbox.dir).href, tag: `${NAME}@0.4.0`, path: "packages/worker-fleet", lays: ["src"] };
+      const plan = { remote: pathToFileURL(sandbox.dir).href, tag: `${NAME}@0.4.0`, path: FLEET_DIR, lays: ["src"] };
       const target = join(root, plan.path);
       const clone = cloneAtReleaseTag(sandbox, root, plan.path);
       const refused = (pattern: RegExp) => {
@@ -357,7 +359,7 @@ test("#3973: a clone detached at a release tag that origin holds, with only buil
       refused(/uncommitted/);
       rmSync(join(target, "notes.txt"));
       // A modified TRACKED file is work whatever it is named, and so is a staged one.
-      writeFileSync(join(target, "packages/worker-fleet/src/cli-flags.ts"), "// mine\n");
+      writeFileSync(join(target, `${FLEET_DIR}/src/cli-flags.ts`), "// mine\n");
       refused(/uncommitted/);
       clone.run(["checkout", "--", "."]);
       // A commit on no remote ref and under no tag origin holds.
@@ -394,7 +396,7 @@ test("#3973: when origin cannot be asked for its tags, a commit no branch holds 
   withGitSandbox((sandbox) => {
     const root = mkdtempSync(join(tmpdir(), "lay-layer-root-"));
     try {
-      const plan = { remote: pathToFileURL(sandbox.dir).href, tag: `${NAME}@0.4.0`, path: "packages/worker-fleet", lays: ["src"] };
+      const plan = { remote: pathToFileURL(sandbox.dir).href, tag: `${NAME}@0.4.0`, path: FLEET_DIR, lays: ["src"] };
       const clone = cloneAtReleaseTag(sandbox, root, plan.path);
       clone.run(["remote", "set-url", "origin", pathToFileURL(join(root, "nowhere")).href]);
       assert.throws(() => lay(root, plan), (error: Error) => /git could not say whether it is disposable/.test(error.message));

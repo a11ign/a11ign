@@ -34,7 +34,7 @@ const walkScope = fileURLToPath(new URL("../../packages/guards/src/walk-scope.ts
 const A11IGN_LOADED_TRIGGERS = ["scripts/rstest/**", "pnpm-lock.yaml", "packages/guards/src/walk-scope*.ts", "scripts/private-tmp.ts"];
 
 /**
- * #3572: data directories a non-tree-wide test reads by path, whole, because a file added to one is read too. NONE IS UNDER `a11ign/lab/` (#3505) OR `packages/control/` (#3506): those
+ * #3572: data directories a non-tree-wide test reads by path, whole, because a file added to one is read too. NONE IS UNDER `a11ign/lab/` (#3505), `packages/control/` (#3506) OR the fleet's laid directory (#5082): those
  * directories are laid and untracked, so a change to it is never in a diff and a trigger naming it would select nothing.
  */
 const READ_DIRECTORY_TRIGGERS = [
@@ -50,8 +50,6 @@ const READ_DIRECTORY_TRIGGERS = [
   "packages/scorer/models/screenreader-scorer/**",
   "packages/scorer/python/**",
   "packages/scorer/tests/**",
-  "packages/worker-fleet/src/local-worker/**",
-  "packages/worker-fleet/src/provisioning/**",
   "scripts/fixtures/registry-consumer-gate/**",
   "scripts/git-hooks/**",
   "scripts/isolation-fixtures/missing-sibling/**",
@@ -161,7 +159,6 @@ const READ_FILE_TRIGGERS = [
   "packages/evidence/src/fixtures/submit-activation-cases.json",
   "packages/scorer/CHANGELOG.md",
   "packages/scorer/requirements.txt",
-  "packages/worker-fleet/src/display-mode-harness.ps1",
   "requirements-ci.txt",
   "scripts/fixtures/calibration-verdicts.json",
   "scripts/fixtures/octo-sts-*",

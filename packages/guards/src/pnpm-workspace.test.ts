@@ -45,7 +45,7 @@ function internalEdges(): { edge: string; version: string }[] {
 /** Packages that publish from ANOTHER repository, so the registry is where their consumers read them: `cli` takes `documents` (#3125;
  * `cli-documents-dependency.test.ts` pins that edge), the root takes `screenreader-worker` (#3447, which deleted `packages/nvda-worker/`;
  * `screenreader-worker-extraction.test.ts` pins the version and its integrity), and the root, `cli` and `guards` take `screenreader-fleet`
- * (#3504, which deleted `packages/worker-fleet/`; `worker-fleet-delete.test.ts` pins it), and the root, `cli`, `judge` and `scorer` take `toolchain`
+ * (#3504, which deleted the fleet's directory; `worker-fleet-delete.test.ts` pins it), and the root, `cli`, `judge` and `scorer` take `toolchain`
  * (#3625, which deleted `packages/toolchain/`; `toolchain-package.test.ts` pins the version). Named, so a package that should be a `link:` and is
  * not still fails here. */
 const CONSUMED_FROM_THE_REGISTRY = [

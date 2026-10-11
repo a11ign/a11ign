@@ -51,11 +51,14 @@ const LAYER_FILE = "packages/nvda-worker/src/x.ts";
 /** The lab layer's directory, built from the layer's name as `lab-delete.test.ts` builds it: the guard under test still knows `lab` as a layer until `layers.json` goes. */
 const LAB_LAYER = "lab";
 const LAB_DIR = `packages/${LAB_LAYER}`;
+/** The fleet's directory, built the same way and for the same reason (ADR 0045 cut 4, #5082): the guard under test still knows `worker-fleet` as a layer until `layers.json` goes. */
+const FLEET_LAYER = "worker-fleet";
+const FLEET_DIR = `packages/${FLEET_LAYER}`;
 /** The layers that left, or are leaving, first (#2612, #2976): the ones whose every `out` edge a named row owns. */
 const FIRST_LAYERS = ["nvda-worker", "nvda-speech", "agent-org"];
 /** The three the fence of #3501 adds, for moves 2-4 of #69. */
 const SPLIT_LAYERS = ["worker-fleet", "lab", "control"];
-/** The layers whose directory is not in the tree at all: no tracked file is inside one, so no baseline entry may be FROM one. (`worker-fleet` and `lab` are laid there at build time, untracked, #3504, #3505.) */
+/** The layers whose directory is not in the tree at all: no tracked file is inside one, so no baseline entry may be FROM one. (`lab` is laid there at build time, untracked, #3505; `worker-fleet` was until ADR 0045 cut 4, #5082, and a checkout that laid it keeps the directory, #3504.) */
 const DEPARTED_LAYERS = [...FIRST_LAYERS, "worker-fleet", "lab", "control"];
 /** One x.ts and one own.ts per layer, and the other package's x.ts. */
 const THREE_LAYERS_CLEAN_FILES = 7;
@@ -178,13 +181,13 @@ test("a declared layer of moves 2-4 that reaches across by path is REFUSED, nami
   const edges = edgesOf("three-layers");
   assert.deepEqual(edges, [
     { from: "packages/other/src/y.ts", to: "packages/control/src/own.ts", kind: "import", direction: "in" },
-    { from: `${LAB_DIR}/src/x.ts`, to: "packages/worker-fleet/src/own.ts", kind: "import", direction: "out" },
-    { from: "packages/worker-fleet/src/x.ts", to: "packages/other/src/x.ts", kind: "import", direction: "out" },
+    { from: `${LAB_DIR}/src/x.ts`, to: `${FLEET_DIR}/src/own.ts`, kind: "import", direction: "out" },
+    { from: `${FLEET_DIR}/src/x.ts`, to: "packages/other/src/x.ts", kind: "import", direction: "out" },
     { from: "packages/control/src/x.ts", to: `${LAB_DIR}/src/own.ts`, kind: "path-literal", direction: "out" },
   ]);
   const message = describeVerdict(judgeEdges(edges, [])).join("\n");
-  assert.match(message, /NEW EDGE out: packages\/worker-fleet\/src\/x\.ts -> packages\/other\/src\/x\.ts/);
-  assert.match(message, /NEW EDGE out: packages\/lab\/src\/x\.ts -> packages\/worker-fleet\/src\/own\.ts/, "an edge between two layers is named by both");
+  assert.match(message, new RegExp(`NEW EDGE out: ${FLEET_DIR}/src/x\\.ts -> packages/other/src/x\\.ts`));
+  assert.match(message, new RegExp(`NEW EDGE out: ${LAB_DIR}/src/x\\.ts -> ${FLEET_DIR}/src/own\\.ts`), "an edge between two layers is named by both");
   assert.match(message, /NEW EDGE out: packages\/control\/src\/x\.ts -> packages\/lab\/src\/own\.ts/);
   assert.equal(cli("--check", `--root=${fixture("three-layers")}`).status, 1, "and the command refuses it too");
 });
@@ -198,9 +201,9 @@ test("the same three layers importing only themselves and a package by NAME PASS
 });
 
 test("a `packages/<name>` token in a launcher whose <name> is no package is not a reach: a URL's path PASSES, the real token beside it is REFUSED", () => {
-  assert.match(textOf("token-not-a-package", "packages/worker-fleet/src/bootstrap.sh"), /cli\.github\.com\/packages\/githubcli-archive-keyring\.gpg/, "CONTROL: the URL is really there");
+  assert.match(textOf("token-not-a-package", `${FLEET_DIR}/src/bootstrap.sh`), /cli\.github\.com\/packages\/githubcli-archive-keyring\.gpg/, "CONTROL: the URL is really there");
   assert.deepEqual(edgesOf("token-not-a-package"), [
-    { from: "packages/worker-fleet/src/bootstrap.sh", to: TARGET, kind: "launcher", direction: "out" },
+    { from: `${FLEET_DIR}/src/bootstrap.sh`, to: TARGET, kind: "launcher", direction: "out" },
   ]);
 });
 
@@ -308,8 +311,10 @@ test("the real baseline is NON-EMPTY and records the deploy path, so a guard tha
   // The layer's own `launcher-reach.cmd` left with it (#3447); the stand-in beside the stamp's walk is what records that reach until the layer carries one.
   assert.ok(froms.includes("scripts/test-support/launcher-reach.stand-in.cmd"), "the declaration of what the worker's launchers reach is recorded");
   // The fleet's own reaches left with it (#3504), control's with it (#3506); what is recorded now is the reaches INTO the directories they are laid at, by the root and by the tests.
-  const intoTheFleet = baseline.filter((e: { to: string }) => e.to.startsWith("packages/worker-fleet"));
-  assert.ok(intoTheFleet.some((e: { from: string }) => e.from.startsWith("package.json")), "the root scripts that run it by path are recorded");
+  // The root stopped reaching into the fleet's directory with ADR 0045 cut 4 (#5082): its scripts run the installed bins, so no `package.json` entry may remain, and `layers.json` still declares the path.
+  const intoTheFleet = baseline.filter((e: { to: string }) => e.to.startsWith(FLEET_DIR));
+  assert.ok(intoTheFleet.some((e: { from: string }) => e.from === "layers.json"), "the declaration of where the fleet is laid is recorded");
+  assert.deepEqual(intoTheFleet.filter((e: { from: string }) => e.from === "package.json"), [], "no root script runs the fleet by path any more");
   const intoControl = baseline.filter((e: { to: string }) => e.to.startsWith("packages/control"));
   assert.ok(intoControl.some((e: { from: string }) => e.from === "package.json"), "the root scripts that run control by path are recorded");
 });
@@ -319,8 +324,8 @@ const insideALayerThatLeft = (entries: { from: string }[]) => entries.filter((e)
 
 test("done-when 1, after #3447, #3504 and #3505: no file inside a layer that left is in the baseline, because none is in the tree", () => {
   // THE CONTROL, over the same function: before the delete this loop refused every launcher the worker reached out by, so it is shown to SEE one.
-  const planted = [{ from: "packages/nvda-worker/src/launcher-reach.cmd" }, { from: "packages/nvda-speech/nvda_speech/x.py" }, { from: "packages/worker-fleet/src/doctor.ts" }, { from: `${LAB_DIR}/src/a.ts` }];
-  assert.deepEqual(insideALayerThatLeft(planted).map((e) => e.from), ["packages/nvda-worker/src/launcher-reach.cmd", "packages/nvda-speech/nvda_speech/x.py", "packages/worker-fleet/src/doctor.ts", `${LAB_DIR}/src/a.ts`]);
+  const planted = [{ from: "packages/nvda-worker/src/launcher-reach.cmd" }, { from: "packages/nvda-speech/nvda_speech/x.py" }, { from: `${FLEET_DIR}/src/doctor.ts` }, { from: `${LAB_DIR}/src/a.ts` }];
+  assert.deepEqual(insideALayerThatLeft(planted).map((e) => e.from), ["packages/nvda-worker/src/launcher-reach.cmd", "packages/nvda-speech/nvda_speech/x.py", `${FLEET_DIR}/src/doctor.ts`, `${LAB_DIR}/src/a.ts`]);
   assert.deepEqual(insideALayerThatLeft(readBaseline(ROOT)), []);
 });
 
@@ -354,9 +359,11 @@ test("every baseline entry carries a disposition and a reason, and the word `cut
 });
 
 test("`moves-with` is a TEST's disposition: it names a path a test lives at, and a declared layer", () => {
-  const moving = readBaseline(ROOT).filter((e: { disposition: string }) => e.disposition.startsWith("moves-with:"));
-  assert.ok(moving.length > 0, "POSITIVE CONTROL: tests are recorded as moving with the code they read");
-  for (const entry of moving) {
+  const movingOf = <T extends { disposition: string }>(entries: T[]) => entries.filter((e) => e.disposition.startsWith("moves-with:"));
+  // THE CONTROL, over the same filter: the baseline holds no such entry since ADR 0045 cut 4 (#5082) removed the last (a `cli` test that imported the fleet's
+  // source), so a planted pair shows the filter SEES one, and the loop below is not passing over nothing for want of a filter that matches nothing.
+  assert.equal(movingOf([{ disposition: "moves-with:worker-fleet" }, { disposition: "checkout-path" }]).length, 1, "POSITIVE CONTROL: tests are recorded as moving with the code they read");
+  for (const entry of movingOf(readBaseline(ROOT))) {
     assert.match(entry.from, TEST_PATH, `${entry.from} is code, and code does not move with a test: cut it, name the checkout or give it a row`);
     assert.ok(LAYER_PACKAGES.includes(entry.disposition.slice("moves-with:".length)), `${entry.disposition} names no declared layer`);
   }
@@ -368,7 +375,7 @@ const backEdgesOf = (entries: { from: string; to: string }[]) => entries.filter(
 
 test("done-when 4, after #3505: no code edge leaves worker-fleet or lab for another layer in the baseline, because neither has a file in the tree", () => {
   // THE CONTROL, over the same function: it is shown to SEE one of each kind, so an empty answer over the baseline is not a filter that matches nothing.
-  const planted = [{ from: "packages/worker-fleet/src/a.ts", to: "packages/control/src/b.ts" }, { from: `${LAB_DIR}/src/a.ts`, to: "packages/control/src/b.ts" },
+  const planted = [{ from: `${FLEET_DIR}/src/a.ts`, to: "packages/control/src/b.ts" }, { from: `${LAB_DIR}/src/a.ts`, to: "packages/control/src/b.ts" },
     { from: `${LAB_DIR}/src/a.test.ts`, to: "packages/control/src/b.ts" }, { from: "packages/control/src/a.ts", to: `${LAB_DIR}/src/b.ts` }];
   assert.equal(backEdgesOf(planted).length, 2, "the worker-fleet edge and the lab code edge, and neither the lab TEST's nor control's own");
   assert.deepEqual(backEdgesOf(readBaseline(ROOT)), []);

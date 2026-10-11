@@ -445,7 +445,7 @@ export function classify(files: string[], allPackages: string[] = knownPackages(
 
   // ISSUE #132: the regex `changeset-check.yml` used before this file existed asked "is this file UNDER
   // a published package's src/python/models/bin", which answers a different question than the one the
-  // gate means -- "CAN this file reach a consumer". `packages/worker-fleet/src/lab-job.test.ts` matched
+  // gate means -- "CAN this file reach a consumer". the fleet's `src/lab-job.test.ts` matched
   // that regex and blocked a real PR, measured: `npm pack --dry-run --json` on `worker-fleet` ships 153
   // files and that is not one of them. Derived from what npm actually packs instead, per-package, memoised
   // so a PR touching several files in one package still calls `npm pack` once for it.

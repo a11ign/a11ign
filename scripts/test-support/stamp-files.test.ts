@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { stampEnvironmentFiles } from "./stamp-files.ts";
+import { declaredLayerPath, stampEnvironmentFiles } from "./stamp-files.ts";
 
 const ENTRIES = 5;
 
@@ -13,7 +13,7 @@ $ENVIRONMENT_FILES = @(
     $FOREGROUND_LOCK
     'packages/control/ansible/roles/worker/defaults/main.yml'
     # a comment line is not an entry
-    'packages/worker-fleet/src/provisioning/set-display-mode.ps1'
+    'scripts/provisioning/set-display-mode.ps1'
 )
 `;
 
@@ -21,11 +21,11 @@ test("the Get-LayerFile entry stays in the list, in its position, resolved from 
   const files = stampEnvironmentFiles(STAMP);
   assert.equal(files.length, ENTRIES);
   assert.deepEqual(files, [
-    "packages/worker-fleet/src/provisioning/provision-nvda-worker.ps1",
+    `${declaredLayerPath("screenreader-fleet")}/src/provisioning/provision-nvda-worker.ps1`,
     "packages/nvda-worker/src/run-server.cmd",
     files[2],
     "packages/control/ansible/roles/worker/defaults/main.yml",
-    "packages/worker-fleet/src/provisioning/set-display-mode.ps1",
+    "scripts/provisioning/set-display-mode.ps1",
   ]);
   assert.ok(files[2], "the foreground-lock entry resolved to a path");
 });

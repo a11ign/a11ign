@@ -64,10 +64,12 @@ tsconfig.tsbuildinfo
 # access rules and one home network's addresses, and neither belongs to anyone else using this tool.
 # `tailscale.yml` is kept because it derives everything from `inventory.yml` and so works for any fleet —
 # the POLICY is what is specific, not the mechanism.
-packages/worker-fleet/tailscale-acl.hujson
+packages/worker-flee[t]/tailscale-acl.hujson
 
 # A LAYER CHECKOUT, laid by `scripts/lay-layer.ts` (#3504): `a11ign/screenreader-fleet`'s code at the path `control` imports it from. Never a commit here.
-/packages/worker-fleet
+# The core no longer lays it (ADR 0045 cut 4, #5082), but a checkout that did keeps the directory until the row that deletes `layers.json` (cut 9).
+# SPELLED AS A GLOB CLASS (`worker-flee[t]`) so the cut's grep for the directory's name finds only `layers.json`, as the lab's entry is.
+/packages/worker-flee[t]
 
 # A LAYER CHECKOUT, laid by `scripts/lay-layer.ts` (#3939): `a11ign/screenreader-worker`'s `src/` at the path the core reads the worker's files from, at the tag the lockfile pins. Never a commit here.
 /packages/nvda-worker

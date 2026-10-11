@@ -44,6 +44,14 @@ test("a set backend is honoured, lower-cased", () => {
   assert.equal(withEnv("Anthropic", () => judgeBackend()), "anthropic");
 });
 
+/**
+ * The fleet's laid directory is another repository's code and never this repository's to read (ADR 0045 cut 4, #5082). `doctor` in
+ * `@a11ign/screenreader-fleet` keeps its own read of JUDGE_BACKEND because the package must not depend on the judge; this file used to open that
+ * laid `doctor.ts` and pin its `|| "local"`, and that pin is the fleet repository's to hold now. A checkout laid before the cut still has the
+ * directory, so the walk below skips it by name rather than reporting the one copy that was always allowed.
+ */
+const LAID_FLEET = join("packages", "worker-fleet");
+
 /** Every non-test source file under packages/, as [path, text]. */
 function sources(): [string, string][] {
   const out: [string, string][] = [];
@@ -51,7 +59,7 @@ function sources(): [string, string][] {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const path = join(dir, entry.name);
       if (entry.isDirectory()) {
-        if (["node_modules", "dist", ".git"].includes(entry.name)) continue;
+        if (["node_modules", "dist", ".git"].includes(entry.name) || path === join(ROOT, LAID_FLEET)) continue;
         walk(path);
         continue;
       }
@@ -63,41 +71,12 @@ function sources(): [string, string][] {
   return out;
 }
 
-/**
- * The one copy that cannot be deleted, and why.
- *
- * `doctor` is in `@a11ign/screenreader-fleet`, whose only dependency is `@a11ign/screenreader-worker`.
- * Importing the judge would invert the layering and pull the judge/evidence/scorer graph into a fleet
- * health check — the narrow import graph `control-plane-isolation.test.ts` and `no-win32-imports.test.ts`
- * exist to protect. So it keeps its own read, and the test below pins the BEHAVIOUR equal instead, which
- * is the remedy for a fact stated twice when neither copy can go.
- *
- * That line has already been wrong once: its default was `codex`, a backend `judge.ts` does not implement,
- * so `doctor` told operators to run `codex login` for something the product cannot use.
- */
-const EXEMPT = new Map([[
-  "packages/worker-fleet/src/doctor.ts",
-  "worker-fleet must not depend on the judge package; behaviour is pinned by the test below",
-]]);
-
-test("the one exempt copy defaults the SAME WAY the resolver does", () => {
-  const [path] = [...EXEMPT.keys()];
-  const text = readFileSync(join(ROOT, path), "utf8");
-  const read = text.split("\n").find((line) => /process\.env\.JUDGE_BACKEND/.test(line.replace(/\/\/.*$/, "")));
-  assert.ok(read, `${path} no longer reads JUDGE_BACKEND — remove it from EXEMPT rather than leaving a `
-    + "guard that examines nothing");
-  assert.match(read ?? "", /\|\|\s*"local"/,
-    `${path} must default with \`|| "local"\`. \`??\` only defaults on nullish, and an empty JUDGE_BACKEND `
-    + "is how CI passes 'unset' — the exact drift this whole test exists for");
-});
-
 test("nothing else resolves JUDGE_BACKEND itself", () => {
   // The SHAPE, discovered rather than listed: a second reader of this env var is a second place for the
   // default and the empty-string rule to be got wrong, which is exactly what happened.
   const offenders: string[] = [];
   for (const [path, text] of sources()) {
     if (path.endsWith("packages/judge/src/index.ts")) continue; // the one place it may live
-    if (EXEMPT.has(path)) continue;
     // A comment mentioning the variable is fine; a read of it is not.
     for (const line of text.split("\n")) {
       const code = line.replace(/\/\/.*$/, "").replace(/^\s*\*.*$/, "");

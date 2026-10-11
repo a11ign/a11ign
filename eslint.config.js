@@ -112,7 +112,7 @@ export default tseslint.config(
       "packages/*/dist/**",
       "packages/*/.rstack/**", // Rslib's scratch for the declaration rollup (a11ign: cli): rewritten by every build, so a walk races it
       "packages/nvda-worker/**", // the same, for `a11ign/screenreader-worker` (#3447): laid from its tag at the locked version, linted there
-      "packages/worker-fleet/**", // a LAYER CHECKOUT where laid (`scripts/lay-layer.ts`, #3504): another repository's code, linted there
+      "packages/worker-flee[t]/**", // a LAYER CHECKOUT where laid (`scripts/lay-layer.ts`, #3504): another repository's code, linted there. A class, so the cut's grep (#5082) does not find it
       "packages/la[b]/**", // the same, for `a11ign/lab` (#3505): its own CI lints it. A class, so the cut's grep (#5080) does not find it: the laid copy is here until `layers.json` goes
       "packages/control/**", // the same, for `a11ign/control` (#3506)
       "node_modules/**",

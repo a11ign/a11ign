@@ -84,8 +84,8 @@
 # that time; lint and typecheck alone are `npm run --silent lint`/`typecheck`'s own per-package
 # `tsc --build`, which this hook was never trying to avoid.
 #
-# ONE test file survives, by name, not as a package suite: `mjs-parses.test.ts` (packages/worker-fleet/
-# src/) is the check CLAUDE.md itself names as "the only real check" for a `.mjs` file that lint and
+# ONE test file survives, by name, not as a package suite: `mjs-parses.test.ts` (the fleet's
+# `src/`, in its own repository since #3504) is the check CLAUDE.md itself names as "the only real check" for a `.mjs` file that lint and
 # `tsc --noEmit` cannot see fail -- a backtick inside a template literal holding PowerShell or shell
 # script, which broke TWICE in one session before this test existed. CI's `ci.yml` runs the FULL suite
 # (which includes this file) on every PR, so on a branch WITH an open PR it is redundant there too -- but

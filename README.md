@@ -297,11 +297,11 @@ reasonable way to try the tool on a machine that is not part of any fleet.
 
 | you have | do this | what you get |
 |---|---|---|
-| a Windows box | [`src/provisioning/bootstrap-windows-worker.ps1`](https://github.com/a11ign/screenreader-fleet/blob/main/packages/worker-fleet/src/provisioning/bootstrap-windows-worker.ps1) in `a11ign/screenreader-fleet` | One idempotent script, then `A11Y_WORKER=http://host:8765` — the same script the bare-metal fleet's own boxes provision from |
+| a Windows box | [`src/provisioning/bootstrap-windows-worker.ps1`](https://github.com/a11ign/screenreader-fleet/blob/main/src/provisioning/bootstrap-windows-worker.ps1) in `a11ign/screenreader-fleet` | One idempotent script, then `A11Y_WORKER=http://host:8765` — the same script the bare-metal fleet's own boxes provision from |
 | neither a Windows box nor a Mac to spare | [`capture-regression.yml`](./.github/workflows/capture-regression.yml) | Real NVDA on a GitHub-hosted runner, so a contributor needs no infrastructure at all |
 | a Mac, and nothing else, for a quick trial only | [`docs/local-worker-vm.md`](./docs/local-worker-vm.md) — **deprecated** | A scripted Windows VM: ISO build, unattended install, auto-logon, NVDA provisioning, capture verified — no GUI clicking. Fine for trying the CLI once; not how this project runs its own captures |
 
-Because a Windows guest is never genuinely idle, the pipeline manages it **on demand**: with a local VM and no `A11Y_WORKER` set, a run starts it, captures, and **puts it back exactly as it found it** — stopped stays stopped, paused re-paused, and one you had already started is left running, so a run never shuts down a worker someone else is using. Cold start is 12–15 s. Override with `--after stop|pause|leave|restore`; naming a worker opts out entirely. Between runs, [`worker-ctl.sh`](./packages/worker-fleet/src/local-worker/worker-ctl.sh) does `up | pause | stop | status | idle-pause`.
+Because a Windows guest is never genuinely idle, the pipeline manages it **on demand**: with a local VM and no `A11Y_WORKER` set, a run starts it, captures, and **puts it back exactly as it found it** — stopped stays stopped, paused re-paused, and one you had already started is left running, so a run never shuts down a worker someone else is using. Cold start is 12–15 s. Override with `--after stop|pause|leave|restore`; naming a worker opts out entirely. Between runs, [`worker-ctl.sh`](https://github.com/a11ign/screenreader-fleet/blob/main/src/local-worker/worker-ctl.sh) (`pnpm run worker:ctl`) does `up | pause | stop | status | idle-pause`.
 
 **This project's own corpus is no longer captured this way.** Everything below in this section — the
 cloned VM pool, the scaling measurements — is the DEPRECATED default for a contributor with no
@@ -315,10 +315,10 @@ more machines. For this project's own fleet that means more bare-metal boxes (`p
 the commands below are the deprecated UTM equivalent, kept for a contributor's own local trial pool:
 
 ```bash
-./packages/worker-fleet/src/local-worker/clone-worker.sh          # add a worker (handles a MAC-copying trap)
-./packages/worker-fleet/src/local-worker/worker-ctl.sh pool       # what have I got
+./node_modules/@a11ign/screenreader-fleet/src/local-worker/clone-worker.sh  # add a worker (handles a MAC-copying trap)
+pnpm run worker:ctl pool                       # what have I got
 pnpm run training:capture                        # uses them all, then puts them back
-./packages/worker-fleet/src/local-worker/worker-ctl.sh pool-stop  # or release them yourself
+pnpm run worker:ctl pool-stop                  # or release them yourself
 ```
 
 Measured: **1.90x on two workers, 2.36x on three**, with byte-identical evidence at each step —
@@ -340,7 +340,7 @@ Throughput scales by running more workers, not more threads ([ADR 0001](./docs/a
 It also means a second shell or agent driving the same worker will see your restarts as
 breakage; `worker-ctl.sh status` is the arbiter.
 
-When a worker breaks, the error messages lie — `"NVDA not installed"` usually means a version mismatch, not a missing install. [`docs/nvda-worker-runbook.md`](./docs/nvda-worker-runbook.md) maps error string to actual cause, and [`src/provisioning/diagnose-nvda-worker.ps1`](https://github.com/a11ign/screenreader-fleet/blob/main/packages/worker-fleet/src/provisioning/diagnose-nvda-worker.ps1) in `a11ign/screenreader-fleet` applies that table automatically across six layers.
+When a worker breaks, the error messages lie — `"NVDA not installed"` usually means a version mismatch, not a missing install. [`docs/nvda-worker-runbook.md`](./docs/nvda-worker-runbook.md) maps error string to actual cause, and [`src/provisioning/diagnose-nvda-worker.ps1`](https://github.com/a11ign/screenreader-fleet/blob/main/src/provisioning/diagnose-nvda-worker.ps1) in `a11ign/screenreader-fleet` applies that table automatically across six layers.
 
 ## How we know it works
 
@@ -381,8 +381,8 @@ installs `@a11ign/screenreader-worker` from the registry.
 
 The host-side fleet (lease, health and capacity; provisioning; the `a11ign-doctor` and `a11y-worker-*` bins) lives in
 [`a11ign/screenreader-fleet`](https://github.com/a11ign/screenreader-fleet), installed as `@a11ign/screenreader-fleet`.
-`pnpm run build` lays its `src/` at `packages/worker-fleet/` (untracked), at the release the lockfile pins, for the
-scripts below and `control` that run it by path.
+The scripts below run its installed bins (`a11ign-doctor`, `a11ign-guest-run`, `a11ign-normalise-fleet`, `a11ign-worker-*`) from `node_modules`; the core
+lays none of its source (ADR 0045 cut 4).
 
 docs/             guides, runbooks, and the ADRs.  Start at docs/README.md
 scripts/          repo-level tooling — the isolation gate, git hooks
