@@ -21,6 +21,10 @@ Mutation: README fence comment reworded without regenerating turns the Acceptanc
 
 Not in this diff, for the row: `.github/dependabot.yml:49` still cites `consumer-gate.test.ts` as a comparer of the pin sites.
 
+History: full
+
+The `History: full` line is there because this test file's #4153 "real tree" case runs `git diff <pin> origin/main -- action.yml`, and the pin of a regenerated `consumer-gate.yml` is a commit of the branch. The `acceptance` job's default depth-1 clone does not hold it (`fatal: bad object 0ba4d4e5b...`, run 38123306098); `git fetch --unshallow origin main` does. Reproduced in a depth-1 clone of this branch: `bad object` before the unshallow fetch, exit 0 after.
+
 Acceptance:
 ```bash
 pnpm exec rstest run --config=scripts/rstest/rstest.config.ts --include packages/guards/src/generate-consumer-gate.test.ts
