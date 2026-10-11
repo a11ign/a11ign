@@ -150,7 +150,18 @@ on:
   workflow_run:
     workflows: [ci]
     types: [completed]
+  # #4969: an APPROVING review is the event on which a PR's wait ends, a draft's included. `pull_request_review` runs the file as it is on the
+  # PR's merge ref, i.e. the BRANCH'S copy (the `pull_request` shape #4191 measured), so no minting job may ride it and the policy cannot bind
+  # it to `main`. It carries ONE job, `relay`, which mints nothing and dispatches `main`'s copy with the PR number; `arm-approved` is the
+  # `workflow_dispatch` half, which the policy already accepts on `main`.
+  pull_request_review:
+    types: [submitted]
   workflow_dispatch:
+    inputs:
+      pr:
+        description: "Pull request number to ready (if still a draft) and arm, when it is approved. Empty runs `sweep` and `stalled` only (#4969)"
+        required: false
+        type: string
 
 permissions:
   pull-requests: write
@@ -243,6 +254,92 @@ jobs:
           GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
         run: agent-org arm-pr --pr="${{ github.event.pull_request.number }}" --repo="${{ github.repository }}"
 
+  # ## An approving review marks a draft ready and arms it, with no worker turn (#4969, chairman 2026-10-11)
+  #
+  # Measured on the last 40 merged PRs: approval to queue is 0-1 minute when the PR is ready, and a draft approved while still a draft waited
+  # until a worker marked it ready (19-34 minutes on 10-10 night), each wait a worker turn spent on a flip. `arm` ignores drafts and no
+  # event of its own fires on a review, so the review itself is the trigger.
+  #
+  # TWO JOBS, BECAUSE THE EVENT RUNS THE BRANCH'S FILE. `relay` is the only job `pull_request_review` runs: it holds `actions: write` on
+  # `GITHUB_TOKEN`, mints nothing and sends the PR number to `main`'s copy (`gh workflow run --ref main`; a dispatch made with `GITHUB_TOKEN` is
+  # one of the two events that DOES start a run). A branch that edits `relay` gains nothing it did not have: any branch workflow could already
+  # dispatch. `arm-approved` then runs as `workflow_dispatch` on `refs/heads/main`, which the policy already accepts, so `auto-arm.sts.yaml`
+  # needs no new claim in this repository and the #4287 binding is untouched.
+  #
+  # THE DISPATCH IS NOT TRUSTED FOR THE DECISION. `arm-approved` re-reads the PR as the minted token and acts only on `reviewDecision ==
+  # APPROVED` (what branch protection itself waits on, so a stale or forged dispatch can ask for nothing the review state does not grant), an
+  # open PR against `main`, a head in this repository and no `hold:` label (`pr-hold-state`'s prefix, mirrored as `arm`'s sibling in
+  # agent-org does). A `CHANGES_REQUESTED` or `COMMENTED` review never reaches it (`relay` needs `approved`), and a held or fork-headed PR is
+  # left untouched: nothing marks it ready either.
+  relay:
+    if: github.event_name == 'pull_request_review' && github.event.review.state == 'approved' && github.event.pull_request.base.ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      actions: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hand the approved pull request to `main`'s copy of this workflow (#4969)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PULL_REQUEST: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          # `main` declares no `pr` input until this change has landed, and GitHub then answers 422 "Unexpected inputs provided": there is
+          # nothing to hand the number to yet, which is not this pull request's failure. Any OTHER refusal stays red.
+          if ! out=$(gh workflow run auto-arm.yml --repo "$REPOSITORY" --ref main -f pr="$PULL_REQUEST" 2>&1); then
+            case "$out" in
+              *"Unexpected inputs provided"*) echo "::notice::main's copy of auto-arm.yml declares no pr input yet, so there is nothing to hand #${PULL_REQUEST} to"; exit 0 ;;
+            esac
+            echo "$out" >&2
+            exit 1
+          fi
+
+  arm-approved:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.inputs.pr != ''
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with: { node-version: 22 }
+      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
+      - name: Mint the arming token (Octo STS, `auto-arm.sts.yaml`) -- no fallback to `GITHUB_TOKEN`, see the header (#4198)
+        id: octo-sts
+        uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05 # v1.1.1
+        with:
+          scope: ${{ github.repository }}
+          identity: auto-arm
+      - name: Mark an approved draft ready and arm it -- unless held, forked, closed or not against main (#4969)
+        env:
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
+          PULL_REQUEST: ${{ github.event.inputs.pr }}
+          REPOSITORY: ${{ github.repository }}
+          HOLD_PREFIX: "hold:"
+        run: |
+          case "$PULL_REQUEST" in ''|*[!0-9]*) echo "::error::AUTO-ARM: pr input '$PULL_REQUEST' is not a pull request number"; exit 1;; esac
+          # An approval is readable a moment after the review event, so a dispatch that outruns it asks again before it refuses.
+          for attempt in 1 2 3; do
+            pr=$(gh pr view "$PULL_REQUEST" --repo "$REPOSITORY" --json state,baseRefName,isCrossRepository,reviewDecision,isDraft,labels)
+            [ "$(jq -r .reviewDecision <<<"$pr")" = APPROVED ] && break
+            sleep 5
+          done
+          verdict=$(jq -r --arg prefix "$HOLD_PREFIX" '
+            [.labels[].name | select(startswith($prefix))] as $holds
+            | if .state != "OPEN" then "skip: the pull request is " + .state
+              elif .baseRefName != "main" then "skip: its base is " + .baseRefName + ", not main"
+              elif .isCrossRepository then "skip: its head is in a fork"
+              elif .reviewDecision != "APPROVED" then "skip: reviewDecision is \(.reviewDecision | if . == "" then "empty" else . end), not APPROVED"
+              elif ($holds | length) > 0 then "skip: held by " + ($holds | join(", "))
+              elif .isDraft then "ready"
+              else "arm" end' <<<"$pr")
+          case "$verdict" in
+            skip:*) echo "AUTO-ARM: leaving #${PULL_REQUEST} in ${REPOSITORY} untouched -- ${verdict#skip: }"; exit 0;;
+            ready) echo "AUTO-ARM: #${PULL_REQUEST} is an approved draft: marking it ready"; gh pr ready "$PULL_REQUEST" --repo "$REPOSITORY";;
+          esac
+          agent-org arm-pr --pr="$PULL_REQUEST" --repo="$REPOSITORY"
+
   sweep:
     # ARM EVERY PR THE `arm` JOB ABOVE CANNOT SEE -- the ones already open, #344.
     #
@@ -317,7 +414,7 @@ jobs:
     # the triggering PR either -- and it stays exit 2 from the script, so every other caller still sees it.
     # `pull_request` (the branch's copy of this file) is excluded: the sweep arms every open PR, so it has no business on a branch event, and
     # it is the minting job. `pull_request_target`, `push` and `workflow_dispatch` all run `main`'s copy.
-    if: github.event_name != 'workflow_run' && github.event_name != 'pull_request'
+    if: github.event_name != 'workflow_run' && github.event_name != 'pull_request' && github.event_name != 'pull_request_review' && github.event.inputs.pr == ''
     continue-on-error: true
     # Reduced to checkout plus the OIDC request, as `arm` is; the writes come from the minted token (#4198).
     permissions:
@@ -391,7 +488,7 @@ jobs:
     # front. This row follows the identical order -- merge on the code and mutation evidence below, then
     # name the first real run on #1633 once it fires.
     # The `pull_request_target` copy of this event belongs to `arm` and `sweep`; running the report twice per PR event would be noise.
-    if: github.event_name != 'pull_request_target'
+    if: github.event_name != 'pull_request_target' && github.event_name != 'pull_request_review' && github.event.inputs.pr == ''
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
