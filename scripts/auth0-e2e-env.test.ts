@@ -148,7 +148,7 @@ test("a malformed line is reported by number, never by content", () => {
 });
 
 test("usage errors: --apply-secrets without --repo, a malformed repo, and an unknown flag exit 2 and read nothing", () => {
-  for (const args of [["--apply-secrets"], ["--apply-secrets", "--repo", "no-slash"], ["--nope"]]) {
+  for (const args of [["--apply-secrets"], ["--apply-secrets", "--repo", "no-slash"], ["--apply-secrets", "--repo", "x a11ign/example"], ["--apply-secrets", "--repo"], ["--nope"]]) {
     const result = run([...args, "--file", envFile(SENTINELS)]);
     assert.equal(result.status, 2, args.join(" "));
     assert.deepEqual(calls(result.record), []);
@@ -166,6 +166,10 @@ const SEED_CASES: [string, string, boolean][] = [
   ["jbswy3dpehpk3pxp", "lowercase", true],
   ["JBSWY3DPEHPK3PXPJB======", "padded to a multiple of eight", true],
   ["JBSWY3DPEHPK3PXPJB====", "padding that does not reach a multiple of eight", false],
+  ["JBSWY3DPEHPK3PXPJ", "17 characters: remainder 1 mod 8 cannot be whole bytes", false],
+  ["JBSWY3DPEHPK3PXPJBS", "19 characters: remainder 3 mod 8", false],
+  ["JBSWY3DPEHPK3PXPJBSWYD", "22 characters: remainder 6 mod 8", false],
+  ["JBSWY3DPEHPK3PXPJBSW", "20 characters: remainder 4 mod 8 is whole bytes", true],
   ["JBSWY3DPEHPK3P", "too short to be a seed", false],
   ["JBSWY3DPEHPK3P1X", "1 is not in the alphabet", false],
   ["JBSW=Y3DPEHPK3PXP", "padding mid-value", false],

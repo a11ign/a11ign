@@ -37,6 +37,7 @@ const PERMISSION_BITS = 0o777;
 const OCTAL = 8;
 const BASE32_BLOCK = 8;
 const MIN_SEED_CHARACTERS = 16;
+const IMPOSSIBLE_REMAINDERS = [1, 3, 6];
 const REPO_SHAPE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const BASE32_BODY = /^[A-Z2-7]+={0,6}$/i;
 const LINE_SHAPE = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$/;
@@ -72,7 +73,9 @@ export function isBase32Seed(value: string): boolean {
   if (!BASE32_BODY.test(value)) return false;
   const padded = value.includes("=");
   if (padded && value.length % BASE32_BLOCK !== 0) return false;
-  return value.replace(/=+$/, "").length >= MIN_SEED_CHARACTERS;
+  const characters = value.replace(/=+$/, "").length;
+  // 1, 3 and 6 characters past a block of eight cannot come from whole bytes: RFC 4648 unpadded lengths are 0, 2, 4, 5 or 7 mod 8.
+  return characters >= MIN_SEED_CHARACTERS && !IMPOSSIBLE_REMAINDERS.includes(characters % BASE32_BLOCK);
 }
 
 export interface Report {
