@@ -12,7 +12,7 @@
 //     newest tag). `toolRoot()` and `toolExport()` are for a script or a test that imports a declared export of the tool.
 //   - in CI, where no tool checkout exists: `node scripts/agent-org-newest-tag.ts --dest=<dir>` reads the tags of the tool's repository NOW,
 //     takes the newest STABLE one, clones it into `<dir>`, installs what it imports FROM THE TAG'S OWN `pnpm-lock.yaml` (the tree agent-org's CI
-//     tested; a fresh resolution crashed npm on v0.155.0, a11ign#4988), and exports `AGENT_ORG_TOOL` (and an `agent-org` on PATH) to the steps
+//     tested, by the pnpm it pins; a fresh resolution crashed npm on v0.155.0, a11ign#4988), and exports `AGENT_ORG_TOOL` (and an `agent-org` on PATH) to the steps
 //     below it. Nothing is cached between runs, so a release at ANY minor is what the next run executes, with no change here.
 //
 // A tag list with no stable tag REFUSES; it never falls back to a branch, because `main` is not a release and a run would then execute code
@@ -24,7 +24,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { sandboxGitEnv } from "../packages/guards/src/git-env.ts";
 // A relative path, not the workspace name: the tool-only CI jobs run this file with no `pnpm install`, so no workspace link exists yet.
-import { npmCliInvocation, pnpmCliInvocation } from "./npm-cli-executable.ts";
+import { npmCliInvocation } from "./npm-cli-executable.ts";
 import { refuseUnknownFlags } from "./cli-flags.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -144,16 +144,6 @@ function runInstall(invocation: Invocation, cwd: string) {
   execFileSync(invocation.command, invocation.args, { cwd, stdio: "inherit", env: { ...process.env, CI: "true" } });
 }
 
-/** The pnpm this job has, or `null` when it has neither `pnpm` nor `corepack`; the refusal names what was tried, so it is logged and not dropped. */
-function pnpmOnThisJob(args: string[]): Invocation | null {
-  try {
-    return pnpmCliInvocation(args);
-  } catch (cause) {
-    console.log(`agent-org-newest-tag: ${cause instanceof Error ? cause.message : String(cause)}`);
-    return null;
-  }
-}
-
 /** Which way the tool's dependencies were installed. */
 export type ToolInstallPath = "pnpm-frozen-lockfile" | "npm-fresh-resolution";
 
@@ -163,15 +153,17 @@ export type ToolInstallPath = "pnpm-frozen-lockfile" | "npm-fresh-resolution";
  * A tag with a `pnpm-lock.yaml` is installed `pnpm install --frozen-lockfile --ignore-scripts`: agent-org's own CI and release install from that
  * lockfile and pass, so the consumer runs the tree they ran. `npm install --no-package-lock` was a FRESH resolution by whatever npm the runner had
  * against whatever the registry served that minute, and it crashed (`edgesOut` on Node 22's npm, `ERESOLVE` on Node 24's) on v0.155.0 and then
- * installed the same tree minutes later (a11ign#4988). The tool-only CI jobs may have no pnpm, so then it is `npx pnpm@<TOOL_PNPM_VERSION>`.
- * An older tag with no lockfile keeps the npm path. Which path ran is logged, and returned for a test that injects `run`.
- * `run`, `log`, `pnpm` and `npmCli` are for a test, so that choosing the path reaches no network.
+ * installed the same tree minutes later (a11ign#4988).
+ *
+ * The pnpm is ALWAYS `npx pnpm@<TOOL_PNPM_VERSION>`, never the job's own: the clone has no `packageManager`, so `corepack pnpm` resolved the newest
+ * pnpm (12.11.2 on the first CI run of this change), whose default `minimumReleaseAge` refused the lockfile's `@a11ign/toolchain` for being a day
+ * old (`ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`). An older tag with no lockfile keeps the npm path. Which path ran is logged, and returned for a
+ * test that injects `run`.
  */
-export function installToolDependencies({ dest, run = runInstall, log = console.log, pnpm = pnpmOnThisJob, npmCli = npmCliInvocation }: {
+export function installToolDependencies({ dest, run = runInstall, log = console.log, npmCli = npmCliInvocation }: {
   dest: string;
   run?: (invocation: Invocation, cwd: string) => void;
   log?: (line: string) => void;
-  pnpm?: (args: string[]) => Invocation | null;
   npmCli?: (name: "npx" | "npm", args: string[]) => Invocation;
 }): ToolInstallPath {
   if (!existsSync(join(dest, TOOL_LOCKFILE))) {
@@ -179,10 +171,8 @@ export function installToolDependencies({ dest, run = runInstall, log = console.
     run(npmCli("npm", NPM_FRESH_INSTALL), dest);
     return "npm-fresh-resolution";
   }
-  const local = pnpm(PNPM_FROZEN_INSTALL);
-  log(`agent-org-newest-tag: install path: pnpm --frozen-lockfile from the tag's ${TOOL_LOCKFILE} `
-    + (local === null ? `(no pnpm or corepack on this job: npx pnpm@${TOOL_PNPM_VERSION})` : "(pnpm on this job)"));
-  run(local ?? npmCli("npx", [`pnpm@${TOOL_PNPM_VERSION}`, ...PNPM_FROZEN_INSTALL]), dest);
+  log(`agent-org-newest-tag: install path: npx pnpm@${TOOL_PNPM_VERSION} --frozen-lockfile from the tag's ${TOOL_LOCKFILE}`);
+  run(npmCli("npx", [`pnpm@${TOOL_PNPM_VERSION}`, ...PNPM_FROZEN_INSTALL]), dest);
   return "pnpm-frozen-lockfile";
 }
 
