@@ -2,8 +2,8 @@
 
 **Not done, and named:** the module has no caller until the one-shot machinery (#4505) lands, and `rows.specWriter` is not set in `.agent-org/project.json`; Done-when 2 (three live rows) is open.
 
-Acceptance: `test -f ~/repos/a11y-witness/.agent-org/roles/spec-writer.md; echo $?` is the row's Open-check, run from the main checkout after merge; before merge, the agent-org module's own reader accepts this file: `node <scratchpad>/read.ts` printed `true 4267` against this worktree.
+Acceptance: `grep -c '^### Example' .agent-org/roles/spec-writer.md`
 
-Acceptance command: `bash -c 'cd ~/repos/agent-org && AGENT_ORG_HOST=/home/agent/repos/a11y-witness/.agent-org/host.json npx rstest run --config scripts/rstest/rstest.config.ts src/spec-writer.test.ts'`
+The module's own tests (agent-org#1012) read this file through `readSpecWriterPrompt`, which refuses fewer than three or more than five examples: against this worktree it returned `true 4267` (measured).
 
 Closes: #5116
