@@ -739,7 +739,7 @@ test("#1388: a row with no nodes (an older result) cannot be told, and is not ma
 
 /** A real capture's pair: the tutorial disclosure the lab's eval corpus records as GOOD. */
 const DISCLOSURE_GOOD = (() => {
-  const file = new URL("../../../lab/src/eval/fixtures/tutorials/disclosure-good.json", import.meta.url);
+  const file = new URL("../../../judge/src/fitness/fixtures/tutorials/disclosure-good.json", import.meta.url);
   const [pair] = (JSON.parse(readFileSync(file, "utf8")) as { interaction: { stateChanges: { control: string; after: string }[] } })
     .interaction.stateChanges;
   return pair;
