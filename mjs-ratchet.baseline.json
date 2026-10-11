@@ -10,6 +10,14 @@
       "why": "ESLint reads a TypeScript config only through `jiti`, which this repository does not install, so the flat config stays `.js` (#4274)"
     },
     {
+      "path": "packages/cli/src/auth/fixtures/auth0-spa/app.js",
+      "why": "the test page's own script, which `serve.ts` hands to a BROWSER unchanged: a browser cannot load `.ts` (no type stripping, and this fixture has no build step), so it is served as `.js`; the page's `index.html` names it by this path (#5011, #4084)"
+    },
+    {
+      "path": "packages/cli/src/auth/fixtures/auth0-spa/vendor/auth0-spa-js.production.js",
+      "why": "a THIRD-PARTY build, not our source: `@auth0/auth0-spa-js` 2.28.3 (MIT), the package's `dist/auth0-spa-js.production.js` byte for byte after one added first-line eslint-disable directive (sha256 pinned in `serve.test.ts`); it is minified, browser-loaded and cannot be `.ts`, and vendoring it means the page has no CDN dependency (#5011, #4084)"
+    },
+    {
       "path": "scripts/isolation-fixtures/dangling-bin/index.mjs",
       "why": "a PACKAGE FILE of an isolation fixture: `packages/guards/src/isolation-gate.ts` packs the fixture and installs the tarball into a throwaway consumer, so this file runs from that consumer's `node_modules/`. Node refuses it: `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING` (\"Stripping types is currently unsupported for files under node_modules\"), measured 2026-10-09 on Node 24.21.0 with a `.ts` package entry installed under a consumer's `node_modules/`; #4393"
     },
