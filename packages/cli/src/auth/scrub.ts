@@ -20,6 +20,7 @@
  * PURE apart from the `write` callback `writeScrubbed` is handed. No file reads and no environment.
  */
 import { credentialForms, findContiguousLeaks, findLeaks, type Credential, type LeakHit } from "./leak-detector.js";
+import { DEFAULT_PERIOD_SECONDS, totpCode, type TotpOptions } from "./totp.js";
 
 /** What replaces a value. Not a word a page says, and outside ASCII so it cannot be typed by accident. */
 export const MARKER = "‹credential›";
@@ -308,4 +309,28 @@ export function stateScrubNotices({ skippedShort, skippedPublic }: StateCredenti
     ...(skippedPublic > 0 ? [`${values(skippedPublic)} in your saved state ${skippedPublic === 1 ? "appears" : "appear"} in your URLs or task and ${skippedPublic === 1 ? "is" : "are"} not hidden from the output: `
       + "you supplied that text yourself."] : []),
   ];
+}
+
+/**
+ * **A TOTP code is never recorded, and is not scrubbed.** Six digits sit below `MIN_SCRUBBED_LENGTH` on purpose:
+ * replacing them would rewrite the page's own numbers. So this is a proof of absence instead: it throws,
+ * naming the artifact and never the code, when the previous, current or next window's code occurs in `text` as a
+ * whole digit token. A longer digit run that merely contains the code is not a hit. It fails loud on a coincidence
+ * rather than rewrite a page.
+ */
+export function assertNoTotpCode(
+  text: string,
+  seed: string,
+  nowMs: number,
+  context: { artifact: string; options?: TotpOptions },
+): void {
+  const stepMs = (context.options?.periodSeconds ?? DEFAULT_PERIOD_SECONDS) * 1000;
+  const codes = new Set([-stepMs, 0, stepMs].map((delta) => totpCode(seed, nowMs + delta, context.options)));
+  for (const code of codes) {
+    if (new RegExp(`(?<!\\d)${code}(?!\\d)`).test(text)) {
+      throw new ScrubError("auth-credential-in-artifact",
+        `${context.artifact} holds a digit token equal to an authenticator code from the window the run used (or the one before or after). `
+        + "Nothing was written. A code is never recorded; if this is a coincidence on the page, re-run so the next window's code differs.");
+    }
+  }
 }
