@@ -11,6 +11,9 @@
  *   4. THE JOB THE GATE WRAPS IS THE ACTION'S, never the first one listed (#1305), and a job line the `needs:` splice cannot anchor is
  *      refused (#1304).
  *   5. A DIRTY GENERATION INPUT IS REFUSED, including a rename in or out of one (#1721), and an unrelated dirty file is not.
+ *   6. THE COMMITTED `consumer-gate.yml` IS WHAT README.md GENERATES, sha aside (#4959). A pull request that edits README's fence and does
+ *      not run `node scripts/run.ts consumer-gate` fails HERE, on the pull request, rather than at `release.yml`'s `guards` step after
+ *      the merge (#4556, #4938). The real README and the real file are read; the comparison is `--check`'s own `consumerGateIsStale`.
  *
  * Every refusal has a clean counterpart in the same test, so an always-throwing function would fail here.
  */
@@ -28,6 +31,7 @@ const gen = await import("../../../scripts/generate-consumer-gate.ts");
 const {
   README_PATH, OUT, ACTION_DEFINITION, extractDocumentedJobsBlock, pinActionRef, substituteTarget, extractJobName, extractPinnedSha,
   buildConsumerGateWorkflow, generate, refuseDirtyGenerationInputs, currentHeadSha, actionPinVerdict, PIN_COMMENT, restatePinComment,
+  consumerGateIsStale,
 } = gen;
 
 
@@ -349,4 +353,37 @@ test("actionPinVerdict (#4153): the refusal says what the release's own check-pi
       assert.ok(message.includes(phrase), `the pull-request refusal no longer says "${phrase}"`);
     }
   });
+});
+
+// ---- #4959: the committed file against the committed README ------------------------------------------------------------------------
+
+/** A trailing comment on one line of README's fence, which a README-only edit can reword without touching any key. */
+const FENCE_COMMENT = /^( +timeout-minutes: \d+ +# )(.+)$/m;
+
+test("consumer-gate.yml is what README.md's Quickstart fence generates: regenerate with `node scripts/run.ts consumer-gate`", () => {
+  const readme = readFileSync(README_PATH, "utf8");
+  const committed = readFileSync(OUT, "utf8");
+  assert.equal(
+    consumerGateIsStale(committed, generate(readme, SHA)),
+    false,
+    `${OUT} does not match README.md's documented workflow. A change to README's fence needs the file regenerated in the same pull `
+      + "request: run `node scripts/run.ts consumer-gate` and commit .github/workflows/consumer-gate.yml.",
+  );
+});
+
+test("consumer-gate.yml vs README.md, positive control: ONE reworded comment in README's fence reports the committed file STALE", () => {
+  const readme = readFileSync(README_PATH, "utf8");
+  const committed = readFileSync(OUT, "utf8");
+  assert.match(readme, FENCE_COMMENT, "the control edits a comment in README's fence, so it has to find one: re-point FENCE_COMMENT");
+  const reworded = readme.replace(FENCE_COMMENT, "$1$2 (reworded)");
+  assert.notEqual(reworded, readme);
+  assert.equal(consumerGateIsStale(committed, generate(reworded, SHA)), true);
+  assert.equal(consumerGateIsStale(committed, generate(readme, SHA)), false, "the unedited README is the clean counterpart");
+});
+
+test("consumer-gate.yml vs README.md, a different pin sha alone is NOT stale: the pin is check-pin's question, not this one's", () => {
+  const readme = readFileSync(README_PATH, "utf8");
+  const committed = readFileSync(OUT, "utf8");
+  assert.equal(consumerGateIsStale(committed, generate(readme, OTHER_SHA)), false);
+  assert.notEqual(generate(readme, SHA), generate(readme, OTHER_SHA), "the two generations differ in the pin, so this is not comparing a file to itself");
 });
