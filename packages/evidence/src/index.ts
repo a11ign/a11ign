@@ -440,4 +440,62 @@ export type { LeftSite, ProbePhase, SiteBoundCapture } from "./left-site.js";
 /** Whether a form change was a form SUBMIT, measured or named (#1918). */
 export { isSubmitActivation } from "./submit-activation.js";
 
-/** Whether the capture examined enough of a channel to support a finding on it. */
+/**
+ * The declared type alone, off the rest of its line: an inline object through its closing brace and array suffix,
+ * anything else up to the next `;`. An inline object's own `;` separators are why it cannot simply stop at the first.
+ */
+function shapeOf(rest: string): string {
+  if (!rest.startsWith("{")) return rest.split(";")[0].trim();
+  const close = rest.indexOf("}");
+  if (close < 0) return rest;
+  return rest.slice(0, close + 1) + (/^\s*\[\]/.exec(rest.slice(close + 1))?.[0].trim() ?? "");
+}
+
+/** The change lists of `CaptureInteraction` a consumer restates as `<field>: <shape>`: a property typed inline, as `unknown[]` or as a same-file alias, or a cast. */
+function restatedChangeLists(text: string): string[] {
+  const found: string[] = [];
+  for (const match of text.matchAll(/\b(stateChanges|formChanges)\??:\s*([^\n]+)/g)) {
+    const type = shapeOf(match[2].trim().replace(/^\(+/, ""));
+    const local = /^(\w+)\[\]/.exec(type);
+    const localShape = local !== null
+      && new RegExp(`\\b(?:interface\\s+${local[1]}\\b|type\\s+${local[1]}\\s*=\\s*\\{)`).test(text);
+    if (type.startsWith("{") || /^unknown\b/.test(type) || localShape) found.push(`${match[1]}: ${type}`);
+  }
+  for (const match of text.matchAll(/\b(stateChanges|formChanges)\s+as\s+(\{[^}]*\}\[\])/g)) {
+    found.push(`${match[1]} as ${match[2]}`);
+  }
+  return found;
+}
+
+/** The sweeps of `CaptureStructure`, which an inline `structure` object restates when it names three or more of them. */
+const STRUCTURE_SWEEPS = ["headings", "landmarks", "formFields", "links", "graphics", "lists", "tableCells"];
+
+/** One or two sweeps is a local shape (a fixture, a narrow argument); three or more restates the wire type, which is what drifted. */
+const STRUCTURE_RESTATEMENT_FLOOR = 3;
+
+/** The places one file's text spells `structure` inline as an object naming the sweeps, as `structure: {<sweeps>}`. */
+function restatedStructures(text: string): string[] {
+  const found: string[] = [];
+  for (const match of text.matchAll(/structure\??:\s*\{([^}]*)\}/g)) {
+    const names = STRUCTURE_SWEEPS.filter((sweep) => new RegExp(`\\b${sweep}\\??\\s*:`).test(match[1]));
+    if (names.length >= STRUCTURE_RESTATEMENT_FLOOR) found.push(`structure: {${names.join(", ")}}`);
+  }
+  return found;
+}
+
+/**
+ * Every place one file's TEXT restates a capture's wire type rather than deriving it from this package, as a list of
+ * `<field>: <shape>` strings (empty when it derives). It reads `CaptureInteraction`'s `stateChanges` and `formChanges`
+ * (a property typed as an inline object, as `unknown[]`, or as an array of an interface or object-literal alias declared
+ * in the same file; or a cast to an inline object) and `CaptureStructure`'s `structure` (an inline object naming three
+ * or more sweeps). A derived form -- `CaptureInteraction[...]`, `Pick<>`, `Partial<>` -- is none of these, and neither
+ * is a string value that merely names a field.
+ *
+ * Exported so a repository that holds a capture type can scan its OWN tree for a second spelling of it without copying
+ * the scan (ADR 0045 rule 2: the producer exports it). The caller walks its files and decides which are exempt: this
+ * file, which declares the wire type, is the caller's to skip. A reading of text, not of types, so `tsc` stays the
+ * check that a derived declaration names real keys.
+ */
+export function restatesWireType(text: string): string[] {
+  return [...restatedChangeLists(text), ...restatedStructures(text)];
+}
