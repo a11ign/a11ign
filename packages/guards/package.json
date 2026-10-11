@@ -47,6 +47,6 @@
     "src"
   ],
   "dependencies": {
-    "@a11ign/screenreader-fleet": "^0.7.3"
+    "@a11ign/screenreader-fleet": "^0.9.0"
   }
 }

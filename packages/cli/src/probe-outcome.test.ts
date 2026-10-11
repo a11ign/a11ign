@@ -2,14 +2,14 @@
  * THE ENTRIES THAT PROBE A WORKER FROM THE PUBLISHED SIDE AND BY HAND SAY "DID NOT ANSWER", NEVER "DOWN", AND WAIT
  * LONG ENOUGH FOR THE SLOWEST HEALTHY BOX (#2683, split from #2655).
  *
- * Three entries reach a worker without being able to wake it (ADR 0012): `witness` (`worker-probe.ts`),
- * `auth:leak-check` (`scripts/auth-leak-worker-probe.ts`) and `worker:compare` (`measure-guard.mjs`: its busy guard
- * and its vitals read). Each is tested THROUGH ITS OWN DEFAULT TIMEOUT, so putting an old number back in any one of
- * them fails that entry's test and no other's. Offline: every probe is a stub that models a worker as "answers after D
- * ms, but only if the caller waited that long".
+ * Two entries here reach a worker without being able to wake it (ADR 0012): `witness` (`worker-probe.ts`) and
+ * `auth:leak-check` (`scripts/auth-leak-worker-probe.ts`). Each is tested THROUGH ITS OWN DEFAULT TIMEOUT, so putting an old number back in
+ * either fails that entry's test and no other's. Offline: every probe is a stub that models a worker as "answers after D ms, but only if
+ * the caller waited that long". The third entry, `worker:compare`'s busy guard and vitals read, is the fleet's own code: its two tests read
+ * the fleet's source by a relative path and left with ADR 0045 cut 4 (#5082), because a repository never reads another's source.
  *
- * Kept out of the `corpus` closure: this file imports `worker-probe.ts` and the two `.mjs` modules, none of which
- * import `cli.ts`, and never `cli.ts` itself.
+ * Kept out of the `corpus` closure: this file imports `worker-probe.ts` and the one script, neither of which
+ * imports `cli.ts`, and never `cli.ts` itself.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -17,7 +17,6 @@ import assert from "node:assert/strict";
 import { WAKE_HINT, WORKER_PROBE_TIMEOUT_MS, describeProbe, probeHealth } from "@a11ign/screenreader-fleet/probe-outcome";
 import { refuseIfNothingListening } from "./worker-probe.js";
 import { workerProblem } from "../../../scripts/auth-leak-worker-probe.ts";
-import { refuseIfBusy, sampleVitals } from "../../worker-fleet/src/measure-guard.ts";
 
 /** The slowest healthy first-after-idle answer on the real fleet (a11y-worker-13/-14/-16, read by `orchestrator`, #2671). */
 const SLOW_HEALTHY_MS = 3_090;
@@ -147,42 +146,4 @@ test("auth:leak-check: a healthy box slower than the OLD 8 s and inside the new 
   assert.doesNotMatch(refused ?? "", /did not answer/);
   // Answered, busy or not ready: not stopped here, the capture path's own recovery handles them, as before.
   assert.equal(await workerProblem(WORKER, { request: slowWorker({ delayMs: 0, json: { busy: true } }).request }), null);
-});
-
-// ---- worker:compare: `refuseIfBusy` and `sampleVitals` ----
-
-test("worker:compare busy guard: a box answering after the OLD 10 s and inside the new number is free; silence refuses in words", async () => {
-  const slow = slowWorker({ delayMs: LOADED_MS + 1_000, json: READY });
-  await refuseIfBusy([WORKER], { what: "a throughput comparison", request: slow.request });
-  assert.deepEqual(slow.seen, [WORKER_PROBE_TIMEOUT_MS]);
-  assert.ok(LOADED_MS + 1_000 > OLD_TIMEOUTS_MS[2], "past the old 10 s, or it proves nothing");
-
-  await assert.rejects(() => refuseIfBusy([WORKER], { what: "a throughput comparison", request: slowWorker(SILENT).request }),
-    (error: Error) => {
-      assert.match(error.message, /REFUSING to measure a throughput comparison: 1 of 1 worker\(s\) are not free/);
-      assert.match(error.message, /did not answer within 12 s/);
-      assert.doesNotMatch(error.message, NOT_DOWN);
-      assert.match(error.message, /npm run fleet:wake -- <name>/);
-      return true;
-    });
-  await assert.rejects(() => refuseIfBusy([WORKER], { what: "x", request: failing({ code: "ECONNREFUSED" }) }),
-    (error: Error) => /machine is up/.test(error.message) && !/did not answer/.test(error.message));
-  await assert.rejects(() => refuseIfBusy([WORKER], { what: "x", request: slowWorker({ delayMs: 0, json: { ready: false, reason: "warming" } }).request }),
-    (error: Error) => /is up and answered/.test(error.message) && /warming/.test(error.message));
-});
-
-test("worker:compare vitals: read from a loaded box inside the timeout; a silent one yields null AND a stated reason", async () => {
-  const loaded = slowWorker({ delayMs: LOADED_MS, json: READY });
-  assert.deepEqual(await sampleVitals(WORKER, { request: loaded.request }), READY.vitals);
-  assert.ok(loaded.seen[0] >= 20_000, `the vitals read waits ${loaded.seen[0]} ms, and its reading is that it is sampled after a capture`);
-
-  const lines: string[] = [];
-  assert.equal(await sampleVitals(WORKER, { request: slowWorker(SILENT).request, warn: (l) => lines.push(l) }), null);
-  assert.equal(lines.length, 1, "the empty column has a reason, where it used to have none");
-  assert.match(lines[0], /did not answer within 20 s/);
-  assert.doesNotMatch(lines[0], NOT_DOWN);
-
-  const refused: string[] = [];
-  assert.equal(await sampleVitals(WORKER, { request: failing({ code: "ECONNREFUSED" }), warn: (l) => refused.push(l) }), null);
-  assert.match(refused[0], /machine is up/);
 });

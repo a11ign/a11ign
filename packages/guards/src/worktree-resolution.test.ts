@@ -171,7 +171,7 @@ test("#2218 THE CALLER: `assert-glob-not-empty --run` refuses in a mis-wired tre
     mkdirSync(join(tree, "packages", "x"), { recursive: true });
     writeFileSync(join(tree, "packages", "x", "a.test.ts"), "");
     // The floor imports `@a11ign/screenreader-fleet/cli-flags`, which the real package serves from `dist/`. So the OTHER checkout is
-    // constructed too, with the one entry the import needs copied from the installed package (a path, not `import.meta.resolve`, which rstest stubs): `packages/worker-fleet/src` no longer
+    // constructed too, with the one entry the import needs copied from the installed package (a path, not `import.meta.resolve`, which rstest stubs): the fleet's `src` no longer
     // exists in this repository (the package is consumed from the registry, #3447), so reading it there threw ENOENT.
     const other = join(base, "other-checkout", "packages", "worker-fleet");
     mkdirSync(join(other, "dist"), { recursive: true });

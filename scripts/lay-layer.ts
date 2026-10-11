@@ -2,7 +2,7 @@
 // @ts-check
 // command: lay a layer's code at the path this repository's readers expect, from the release the lockfile pins (#3504)
 //
-// WHY THIS EXISTS. `packages/worker-fleet/` left the workspace for `a11ign/screenreader-fleet` (#3504), and `control` imports its source by
+// WHY THIS EXISTS. The fleet's directory left the workspace for `a11ign/screenreader-fleet` (#3504), and `control` imports its source by
 // relative path and CANNOT import it by name: it runs from a raw checkout with no `node_modules` (ADR 0012, `control-has-no-dependencies.test.ts`).
 // ADR 0039 item 6 answers that with a declared second checkout at the path the monorepo used, `layers.json` at the root. A host gets it
 // from `fleet:deploy`; a CI runner and an agent's worktree get it from THIS, so `control`'s imports, and the tests that read the fleet's files,
