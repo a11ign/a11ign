@@ -365,9 +365,12 @@ function budgetEnd(state: LoopState): LoopResult {
 export async function runLoop(options: LoopOptions): Promise<LoopResult> {
   const started = options.now();
   const state: LoopState = { branches: [], lastActed: undefined, unmatched: undefined, unmatchedKey: "", unmatchedStreak: 0 };
-  while (options.now() - started < options.budgetMillis) {
+  const withinBudget = (): boolean => options.now() - started < options.budgetMillis;
+  while (withinBudget()) {
     const observation = await options.observe();
     if (observation.signedIn) return { outcome: "signed-in", branches: state.branches };
+    // An observation can itself take the rest of the budget; a screen read after the deadline is not acted on.
+    if (!withinBudget()) break;
     const result = await step(observation, options, state);
     if (result) return result;
     await options.pause(POLL_MILLIS);

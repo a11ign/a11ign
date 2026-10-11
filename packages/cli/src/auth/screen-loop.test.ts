@@ -251,6 +251,29 @@ describe("runLoop: the screens it must not act on, and the ends it must not retr
     assert.equal(result.outcome, "signed-in-check-never-matched");
   });
 
+});
+
+describe("runLoop: the budget is enforced around observation too", () => {
+  test("NEGATIVE CONTROL: an observation that spends the budget is not acted on", async () => {
+    let clock = 0;
+    const acted: Action[] = [];
+    const result = await runLoop({
+      observe: async () => {
+        clock = 5_000;
+        return IDENTIFIER;
+      },
+      act: async (action) => {
+        acted.push(action);
+      },
+      pause: async () => {},
+      now: () => clock,
+      budgetMillis: 1_000,
+      config: CONFIG,
+    });
+    assert.equal(acted.length, 0, "the deadline passed during observe, so nothing may be typed");
+    assert.equal(result.outcome, "signed-in-check-never-matched");
+  });
+
   test("a spent budget ends the loop without a further observation", async () => {
     const r = rig();
     const result = await r.run([IDENTIFIER], { budgetMillis: 0 });
