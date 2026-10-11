@@ -22,7 +22,7 @@
     "auth:artifact-scan": "tsx scripts/auth-artifact-scan.ts",
     "worker": "node \"$(node -p \"require('node:fs').realpathSync('node_modules/@a11ign/screenreader-worker/dist/server.mjs')\")\"",
     "eval": "A11Y_PYTHON=.venv/bin/python tsx packages/lab/src/eval/run.ts",
-    "rules-check": "tsx packages/lab/src/eval/rules-check.ts",
+    "rules-check": "tsx packages/judge/src/fitness/rules-check.ts",
     "test": "node scripts/pnpm.ts run test:ts && node scripts/pnpm.ts run test:python",
     "test:ts": "node packages/guards/src/assert-glob-not-empty.ts \"packages/{evidence,judge,scorer,cli}/src/**/*.test.ts\" --min=95 --run --runner=rstest ${A11Y_TEST_CONCURRENCY:+--test-concurrency=$A11Y_TEST_CONCURRENCY}",
     "test:nightly": "node packages/guards/src/assert-glob-not-empty.ts \"packages/*/nightly/**/*.test.ts\" --min=1 --run",

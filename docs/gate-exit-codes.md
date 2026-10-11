@@ -111,7 +111,7 @@ is the finding, not an omission.
 | `judge-sample.ts` | 0 ran; 1 `judge()` threw. A one-off demo tool with no verdict concept |
 | `page-identity-rate.mjs` | 0 no wrong-page reads; 1 `wrong > 0`, a real gate failure; 2 malformed `--worker` (usage); **3 "MEASURED NOTHING"** — no capture ever navigated a reused window, so the fault under test structurally could not occur, explicitly documented as "not evidence" (i.e. this script's own INCONCLUSIVE, spelled 3 rather than `verdict.ts`'s 2) |
 | `run-spike.ts` | 0 ran; 1 no URL argument (usage) OR any thrown error. One-off spike tool |
-| `eval/rules-check.ts` | 0 no false positives on conformant fixtures — **including when every fixture is pending/uncaptured, so 0 fixtures examined still reports success**; 1 `cleanFP > 0` |
+| `eval/rules-check.ts` | 0 no false positives on conformant fixtures — **including when every fixture is pending/uncaptured, so 0 fixtures examined still reports success**; 1 `cleanFP > 0` — **the lab's copy; the core's `rulesFitness` runs `packages/judge/src/fitness/rules-check.ts` (#4936), which also exits 1 on a fixture that is absent and not declared `pendingCapture`, and on 0 cases examined** |
 | `eval/run.ts` | 0 by default, always, unless `EVAL_GATE` is set AND fitness fails (then `exitCode=1`) — **by default this cannot fail on judge quality at all**, only on a thrown error (also 1). A caller reading a bare `pnpm run eval`'s exit code as a quality verdict is reading something this script does not compute unless asked to |
 
 ### `packages/lab/src/training/`
