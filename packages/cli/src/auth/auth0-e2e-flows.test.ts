@@ -203,7 +203,7 @@ test("NEGATIVE CONTROL: neither the workflow nor the flows file carries a tenant
   assert.doesNotMatch(workflowText, /^\s*-\s*name:.*allow[- ]?list/im, "no allow-list step");
   // CONTROL: the patterns see what they are meant to.
   assert.match("https://t.us.auth0.com", /\.auth0\.com/i);
-  assert.deepEqual("10.0.0.7 127.0.0.1".match(/\b\d{1,3}(?:\.\d{1,3}){3}\b/g)?.filter((a) => a !== "127.0.0.1"), ["10.0.0.7"]);
+  assert.deepEqual("203.0.113.7 127.0.0.1".match(/\b\d{1,3}(?:\.\d{1,3}){3}\b/g)?.filter((a) => a !== "127.0.0.1"), ["203.0.113.7"]);
 });
 
 // ---- 4. no value anywhere -----------------------------------------------------------------------------------------------------
