@@ -17,11 +17,13 @@
 // chain, so the guard written for a dropped probe flag did not cover the path a user runs. That is
 // "a gate that does not exercise what ships", which this repo has now paid for five times.
 //
-// Source-level on both sides deliberately: `capture-real-pages.mjs` reaches the fleet at import.
+// The CLI side is READ from `a11ign`'s export, not scraped from `cli.ts` (ADR 0045). The lab side stays
+// source-level: `capture-real-pages.mjs` reaches the fleet at import.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { DEFAULT_PROBE_FLAGS } from "./index.js";
 
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");
 
@@ -35,13 +37,9 @@ function probeDefaults(source: string): Map<string, boolean> {
   return found;
 }
 
-/** `defaultArgs()`'s body -- the CLI's answer, before any user flag overrides it. */
+/** The CLI's answer, before any user flag overrides it -- read from the package's export, as a consumer would. */
 function cliDefaults(): Map<string, boolean> {
-  const source = read("packages/cli/src/cli.ts");
-  const start = source.indexOf("function defaultArgs(): Args {");
-  assert.notEqual(start, -1, "defaultArgs() not found -- this test is reading the wrong shape");
-  const end = source.indexOf("\n}", start);
-  return probeDefaults(source.slice(start, end));
+  return new Map(Object.entries(DEFAULT_PROBE_FLAGS));
 }
 
 /** The `body:` the lab sends for a real page -- the same question, asked on the other path. */
