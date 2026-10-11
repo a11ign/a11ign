@@ -327,6 +327,13 @@
       "guard": "The work gate in a11ign/agent-org (`readChairmanPriority` in `src/work-gate.ts`, recorded by `src/failure-recorders.ts`, #730 and #4437) reads who added the label from the row's history: a label added by any login other than the chairman's is IGNORED (the row is offered as its other labels say and nothing is started for it), the incident is recorded once per row and actor under the failure-ledger kind `chairman-label-not-chairman`, and `ceo` is ordered to take the label off if it should not stand.",
       "guardNote": "The guard removes the effect, not the act: nothing stops a login putting the label on, and the label stays until someone removes it. The ledger holds seven rows from one login (`a11ign-ai-leads`) between 20:11Z and 20:27Z on 2026-10-10 (a11ign/a11ign#4874, #4877, #4879+#4883, #4880, #4882, #4885, #4887), so it is a repeat; why that login added it, and whether a session was doing so on purpose, has not been read. Instances are ledger lines, not closed rows.",
       "seed": []
+    },
+    {
+      "id": "route-costlier-than-fallback",
+      "name": "Model routing through the provider costs more than the deterministic fallback it replaced: over the last 20 routes that name the fallback's would-be route, the provider's mean rung is above the fallback's.",
+      "guard": null,
+      "guardNote": "The detector is in force and the class is not stopped. `routeCostReading` and `routeCostEvents` in a11ign/agent-org `src/engineer-route.ts` (a11ign#4764) compare the last `GUARD_DECISIONS` (20) `via jev` routes with the route the fallback would have taken and, when the provider's mean rung is strictly dearer, record one `route-costlier-than-fallback` line a day in the failure ledger; it reads and does not switch the provider off. The ledger holds two distinct refs (`model-routing-vs-fallback@2026-10-10` at 09:40Z, `@2026-10-11` at 00:06Z), so this is a repeat. Both predate agent-org v0.151.0 (cut 2026-10-11T00:42Z), the first release carrying the route as one choice put to Jev with uneven thresholds (a11ign#4904), so whether that change closes the class has not been read: the next ledger line after v0.151.0 is the reading. Whether the provider should be switched off while it reads dearer has not been decided. Instances are ledger lines, not closed rows.",
+      "seed": []
     }
   ]
 }
