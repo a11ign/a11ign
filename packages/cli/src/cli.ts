@@ -43,7 +43,7 @@ import {
 import { LOGIN_EXIT_CODES, LOGIN_OUTCOMES, retryDecision, type LoginOutcome } from "./auth/login-outcomes.js";
 import { keepLastAttempt, recordStep, startAttempt, writeArtifact, type ArtifactIo, type Attempt, type ObservedStep } from "./auth/login-artifact.js";
 import { LoginBlockError, loginBlockPlan, parseLoginBlock } from "./auth/login-block.js";
-import { loginVerdict, validateCheck, type PageObservation, type SignedInCheck } from "./auth/signed-in-check.js";
+import { loginVerdict, pageDecision, validateCheck, type PageObservation, type ScanLoss, type SignedInCheck } from "./auth/signed-in-check.js";
 import { classifyScreen, type Classification, type ScreenObservation } from "./auth/screen-loop.js";
 import { openPlaywrightDriver } from "./auth/playwright-driver.js";
 import { parse as parseYaml } from "yaml";
@@ -576,7 +576,7 @@ async function runPages(args: Args): Promise<void> {
       return lease;
     },
     capturePage: (url, lease) => capturePageStates({ args, url, worker: lease.worker, states }),
-  });
+  }).then(markNotAudited);
   // Only an authenticated run has logins to report; the floor is the one the run stated before it started.
   const logins = args.logins && loginReport({ tally: args.logins, minimum: minimumLogins({
     captures: captureCount({ pages: args.urls.length, states: states.length }), axe: args.axe, auth: args.auth }) });
@@ -584,6 +584,8 @@ async function runPages(args: Args): Promise<void> {
   else for (const line of rollUpLines(pages, logins)) console.log(line);
   // A page that could not be captured is a failed run even though the other pages were reported.
   if (pages.some((page) => page.status === "failed")) process.exitCode = 1;
+  // A lost session is its own exit code, ABOVE "a page failed": a green-looking CI step must not read a signed-out scan as one that merely failed.
+  if (pages.some((page) => page.notAudited)) process.exitCode = LOGIN_EXIT_CODES.sessionLost;
 }
 
 /** One page of a list: a PDF's layer, or one capture per configured form state (else one), collecting `--json` results. */
@@ -668,6 +670,8 @@ async function main(): Promise<void> {
         return runWitness({ ...args, worker: lease.worker, formState, sink });
       },
     });
+  } catch (error) {
+    reportSignedOutPage(args, error);
   } finally {
     await lease.release();
   }
@@ -1398,7 +1402,7 @@ export async function pageContext(
   }
   // An authenticated run signs in FOR ITSELF in this layer's own browser (ADR 0038): it never receives the worker's session.
   if (auth && auth.state === undefined && logins) logins.ruleLayerScans += 1;
-  return scan(url, auth ? { signIn: ruleLayerSignIn({ plan: auth, url }), ...(auth.state ? { browserIdentity: "worker" as const } : {}) } : {}).then((result) => {
+  return scan(url, auth ? { signIn: recheckedSignIn({ plan: auth, url }), ...(auth.state ? { browserIdentity: "worker" as const } : {}) } : {}).then((result) => {
     // WHICH BROWSER ANSWERED, reported rather than assumed — see `launchBrowser`. The Action skips the
     // bundled download deliberately, so seeing "msedge" there is the fallback working as designed, not a
     // warning; seeing it locally on a machine with no Edge would be the warning.
@@ -1415,6 +1419,111 @@ export async function pageContext(
     // THREW examined nothing, so nothing may be reported as examined-and-clean.
     return { findings: null, title: await titleWithoutTheRuleLayer(url, auth), coverage: {}, browserChannel: null };
   });
+}
+
+/** How many pages each scan has audited so far, keyed by the scan's own plan (`args.auth`, one object per run): only the loss's wording reads it. */
+const auditedSoFar = new WeakMap<object, number>();
+
+/**
+ * A page the scan did NOT audit because the session was gone and one re-login did not bring it back (`signed-in-check.ts`'s
+ * `pageDecision`). `auth-session-lost` is the fault the worker already raises for the same fact, so a list stops here as it does for
+ * that one: every later page would sign in with the same credentials again.
+ */
+export class PageSignedOutError extends AuthError {
+  constructor(url: string, loss: ScanLoss) {
+    const when = loss === "signed-out-at-start" ? "on the first page" : "after the scan had audited a page";
+    super("auth-session-lost", `not audited: signed out. The signed-in check did not hold on ${url} ${when}, and one re-login did not restore it, `
+      + "so nothing of this page was audited (the sign-in page is never reported as the product).");
+    this.name = "PageSignedOutError";
+  }
+}
+
+/** The page as `observationOf` would read a wall: the app's origin never matches `about:blank`, so no check can hold on it. */
+const SIGNED_OUT_PAGE = { finalUrl: "about:blank", elements: [], hasPasswordField: false } as const;
+
+/** The condition a login flow ends on (`login-final-expect` makes every real flow end on one): the signed-in check the adopter named. */
+function signedInConditionOf(login: AuthRequest["login"]): PageCondition | undefined {
+  const last = login.at(-1);
+  return last !== undefined && "expect" in last ? last.expect : undefined;
+}
+
+/** What the page shows once a sign-in has arrived: its accessibility tree and where it ended. A seam, so the decision runs without a browser. */
+export type ReadPage = (page: Page) => Promise<{ nodes: readonly AxNode[]; url: string }>;
+
+const readThroughTheDriver: ReadPage = async (page) => {
+  const driver = await openPlaywrightDriver(page);
+  try {
+    return { nodes: await driver.axNodes(), url: page.url() };
+  } finally {
+    await driver.close();
+  }
+};
+
+/**
+ * One sign-in, then what the page shows. A sign-in that ends on the login form again (`auth-session-lost`: the session did not hold
+ * on the requested page) is a FAILED check, read as a wall whatever the tree says; any other failure is not the session's and goes on.
+ */
+async function observeAfterSignIn(
+  { page, signInOnce, read, stop, at }: {
+    page: Page; signInOnce: (page: Page) => Promise<void>; read: ReadPage; stop: PageCondition; at: { appOrigin: string; idpOrigins: readonly string[] };
+  },
+): Promise<{ check: SignedInCheck; observation: PageObservation }> {
+  let lost = false;
+  try {
+    await signInOnce(page);
+  } catch (error) {
+    if (!(error instanceof AuthError) || error.fault !== "auth-session-lost") throw error;
+    lost = true;
+  }
+  const seen = await read(page);
+  const observation = lost ? { ...at, ...SIGNED_OUT_PAGE } : observationOf(seen.nodes, { ...at, url: seen.url });
+  return { check: checkOn(stop, seen.nodes), observation };
+}
+
+/**
+ * The rule layer's sign-in with the signed-in check run BEFORE the page is audited (#4996, #4084): the same login `ruleLayerSignIn`
+ * performs, then `pageDecision`. A failed check logs in once more on the same page; a second failure throws `PageSignedOutError`, so
+ * `scanWithAxe` never reaches `analyze()` on the login page and the page has no findings to report. A hard navigation to each scan URL
+ * is what sends a single-page app's SDK through its restore path, which is why the check is made after EVERY arrival and not once.
+ */
+export function recheckedSignIn(
+  { plan, url, signInOnce = ruleLayerSignIn({ plan, url }), read = readThroughTheDriver }:
+  { plan: AuthRequest; url: string; signInOnce?: (page: Page) => Promise<void>; read?: ReadPage },
+): (page: Page) => Promise<void> {
+  const stop = signedInConditionOf(plan.login);
+  if (stop === undefined) return signInOnce;
+  const at = { appOrigin: new URL(url).origin, idpOrigins: plan.idpOrigins ?? [] };
+  return async (page) => {
+    for (let relogins = 0; ; relogins += 1) {
+      const { check, observation } = await observeAfterSignIn({ page, signInOnce, read, stop, at });
+      const pagesAudited = auditedSoFar.get(plan) ?? 0;
+      const decision = pageDecision(check, observation, { loginsSoFar: relogins, pagesAudited });
+      if (decision.decision === "audit") { auditedSoFar.set(plan, pagesAudited + 1); return; }
+      if (decision.decision === "not-audited-signed-out") throw new PageSignedOutError(url, decision.loss);
+    }
+  };
+}
+
+/** Is this the fault for a page that was signed out, whichever layer raised it? */
+const isSessionLost = (error: unknown): boolean => error instanceof AuthError && error.fault === "auth-session-lost";
+
+/** The entry a signed-out page has in the report: failed (so every reader of `failed` keeps its reading), and named "not audited". */
+const notAuditedEntry = (page: PageEntry): PageEntry & { notAudited: true } => ({
+  ...page, notAudited: true,
+  error: page.error?.startsWith("not audited") ? page.error : `not audited: signed out. ${page.error ?? ""}`.trim(),
+});
+
+/** Marks, in a list's entries, the pages that were signed out (not the ones a signed-out page stopped, which were never tried). */
+export function markNotAudited(pages: readonly PageEntry[]): (PageEntry & { notAudited?: true })[] {
+  return pages.map((page) => (page.fault === "auth-session-lost" && !page.notAttempted ? notAuditedEntry(page) : page));
+}
+
+/** A single URL that was signed out ends as a one-page list would: recorded not audited, in `--json` too, with the lost-session code. */
+function reportSignedOutPage(args: Args, error: unknown): void {
+  if (!isSessionLost(error)) throw error;
+  const message = error instanceof Error ? error.message : String(error);
+  recordUnmeasured(args)(notAuditedEntry({ url: args.url, status: "failed", results: [], fault: "auth-session-lost", error: message }));
+  process.exitCode = LOGIN_EXIT_CODES.sessionLost;
 }
 
 /**
