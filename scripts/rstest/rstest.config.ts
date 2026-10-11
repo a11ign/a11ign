@@ -46,6 +46,7 @@ const READ_DIRECTORY_TRIGGERS = [
   "docs/adr/**",
   "docs/board/**",
   "packages/cli/src/fixtures/**",
+  "packages/judge/src/fitness/fixtures/**",
   "packages/scorer/models/screenreader-scorer/**",
   "packages/scorer/python/**",
   "packages/scorer/tests/**",
