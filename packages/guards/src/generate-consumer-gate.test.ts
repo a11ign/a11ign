@@ -11,6 +11,9 @@
  *   4. THE JOB THE GATE WRAPS IS THE ACTION'S, never the first one listed (#1305), and a job line the `needs:` splice cannot anchor is
  *      refused (#1304).
  *   5. A DIRTY GENERATION INPUT IS REFUSED, including a rename in or out of one (#1721), and an unrelated dirty file is not.
+ *   6. THE COMMITTED `consumer-gate.yml` IS WHAT README.md GENERATES, sha aside (#4959). A pull request that edits README's fence and does
+ *      not run `node scripts/run.ts consumer-gate` fails HERE, on the pull request, rather than at `release.yml`'s `guards` step after
+ *      the merge (#4556, #4938). The real README and the real file are read; the comparison is `--check`'s own `consumerGateIsStale`.
  *
  * Every refusal has a clean counterpart in the same test, so an always-throwing function would fail here.
  */
@@ -28,6 +31,7 @@ const gen = await import("../../../scripts/generate-consumer-gate.ts");
 const {
   README_PATH, OUT, ACTION_DEFINITION, extractDocumentedJobsBlock, pinActionRef, substituteTarget, extractJobName, extractPinnedSha,
   buildConsumerGateWorkflow, generate, refuseDirtyGenerationInputs, currentHeadSha, actionPinVerdict, PIN_COMMENT, restatePinComment,
+  consumerGateIsStale,
 } = gen;
 
 
@@ -349,4 +353,38 @@ test("actionPinVerdict (#4153): the refusal says what the release's own check-pi
       assert.ok(message.includes(phrase), `the pull-request refusal no longer says "${phrase}"`);
     }
   });
+});
+
+// ---- #4959: the committed file against the committed README ------------------------------------------------------------------------
+
+test("consumer-gate.yml is what README.md's Quickstart fence generates: regenerate with `node scripts/run.ts consumer-gate`", () => {
+  const readme = readFileSync(README_PATH, "utf8");
+  const committed = readFileSync(OUT, "utf8");
+  assert.equal(
+    consumerGateIsStale(committed, generate(readme, SHA)),
+    false,
+    `${OUT} does not match README.md's documented workflow. A change to README's fence needs the file regenerated in the same pull `
+      + "request: run `node scripts/run.ts consumer-gate` and commit .github/workflows/consumer-gate.yml.",
+  );
+});
+
+/**
+ * The controls run over the fixture fence, never the real README or file, so a stale tree turns ONLY the test above red and the
+ * predicate's own behaviour is pinned independently of whatever state the working tree is in.
+ */
+const COMMENTED_FENCE = FENCE.replace("    runs-on: windows-2022", "    runs-on: windows-2022   # NVDA needs Windows");
+
+test("consumerGateIsStale, positive control: ONE reworded comment in the documented fence reports the committed file STALE", () => {
+  const committed = generate(markdownAround(COMMENTED_FENCE), SHA) as string;
+  const reworded = COMMENTED_FENCE.replace("# NVDA needs Windows", "# NVDA needs Windows (reworded)");
+  assert.notEqual(reworded, COMMENTED_FENCE, "the control has to change something, or it proves nothing");
+  assert.equal(consumerGateIsStale(committed, generate(markdownAround(reworded), SHA)), true);
+  assert.equal(consumerGateIsStale(committed, generate(markdownAround(COMMENTED_FENCE), SHA)), false, "the unedited fence is the clean counterpart");
+});
+
+test("consumerGateIsStale: a different pin sha alone is NOT stale -- the pin is check-pin's question, not this one's", () => {
+  const committed = generate(markdownAround(COMMENTED_FENCE), SHA) as string;
+  const regenerated = generate(markdownAround(COMMENTED_FENCE), OTHER_SHA) as string;
+  assert.notEqual(committed, regenerated, "the two generations differ in the pin, so this is not comparing a file to itself");
+  assert.equal(consumerGateIsStale(committed, regenerated), false);
 });
