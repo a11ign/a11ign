@@ -656,10 +656,10 @@ if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.arg
   }
   if (targets.length === 0) {
     // Says so rather than reporting success over nothing. The gate's own correctness is asserted separately
-    // by `packages/lab/src/packaging/isolation-gate.test.ts` against three fixtures, so an empty run here is honest
+    // by `a11ign/lab/src/packaging/isolation-gate.test.ts` against three fixtures, so an empty run here is honest
     // rather than unverified: there is genuinely nothing published yet (PLAN.md M1, zero moves).
     process.stdout.write("no packages under packages/ yet — nothing to gate (PLAN.md M1 is scaffolding only)\n");
-    process.stdout.write("the gate itself is verified by packages/lab/src/packaging/isolation-gate.test.ts\n");
+    process.stdout.write("the gate itself is verified by a11ign/lab/src/packaging/isolation-gate.test.ts\n");
     process.exit(0);
   }
   // WHICH TOOL DID WHICH HALF, said in the run's own output (#2301): a dry run's log is what a reviewer reads

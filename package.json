@@ -111,7 +111,6 @@
     "scorer:retired-heads": "node scripts/check-retired-heads.ts",
     "scorer:shortcuts": "node scripts/pnpm.ts run --silent corpus:unclosable-map && PYTHONDONTWRITEBYTECODE=1 .venv/bin/python packages/lab/scripts/audit-scorer-shortcuts.py --data runs/screenreader-dataset/with-realism.jsonl",
     "promote:model": "node packages/lab/scripts/promote-model.ts",
-    "docs:coverage": "tsx packages/lab/scripts/generate-coverage-doc.ts",
     "docs:known-gaps-index": "node scripts/known-gaps-index.ts",
     "corpus:starvation": "node packages/lab/scripts/audit-corpus-starvation.ts",
     "corpus:unclosable-map": "node packages/lab/scripts/emit-unclosable-vetoes.ts",

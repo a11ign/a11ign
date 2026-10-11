@@ -46,7 +46,7 @@ const OBJECT_REPLACEMENT = /￼/g; // ￼ — strip the empty-name marker for cl
  * Not simply widened to `RULE_CRITERIA`, because that list is the wrong source: it contains 2.4.4, whose
  * ownership is `overlap` — the rules cover a deliberate subset and the head owns the rest — so dropping
  * the model's 2.4.4 would discard the half nothing else supplies. The right source is the
- * `decidedBy: "rules"` set, which lives in `packages/lab/rule-ownership.json` and is not importable from
+ * `decidedBy: "rules"` set, which lives in `a11ign/lab/rule-ownership.json` and is not importable from
  * this package.
  *
  * Reachable only on a path nobody runs by default: `applyGate` is called for the GENERATIVE backends only,
@@ -70,7 +70,7 @@ const OBJECT_REPLACEMENT = /￼/g; // ￼ — strip the empty-name marker for cl
  *
  * ## Kept in step
  *
- * `packages/lab/rule-ownership.json` is the single declaration of the boundary and this package cannot
+ * `a11ign/lab/rule-ownership.json` is the single declaration of the boundary and this package cannot
  * import it — the lab depends on the judge, not the reverse. So the set is written out here and
  * `rules-owned-criteria.test.ts` in the LAB, which can read both, derives it from that file and refuses
  * any difference. Same remedy as `name-normalisation.test.ts`: when neither copy can be deleted, pin

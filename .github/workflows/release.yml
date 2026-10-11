@@ -93,7 +93,7 @@ name: release
 on:
   # `paths` keeps this off the ordinary merge: a release is due when a changeset arrives, and a changeset is a file under
   # `.changeset/`. What a tag has not yet consumed is subtracted by the called workflow, so a changeset whose release failed is
-  # released by the next run that reaches the call, never twice. `push-trigger-allowlist.test.ts` was in `packages/lab`, which left this tree with #3505 (0a5f6ca61), and no tracked file here
+  # released by the next run that reaches the call, never twice. `push-trigger-allowlist.test.ts` was in `a11ign/lab`, which left this tree with #3505 (0a5f6ca61), and no tracked file here
   # pins that no catch-all is: `paths` above is the whole of it.
   push:
     branches: [main]

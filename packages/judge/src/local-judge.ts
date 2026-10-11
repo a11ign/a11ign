@@ -460,7 +460,7 @@ export function findingsFromScores(
     // `score.py`: a subtype only appears here when the rule reports it under the SAME criterion the
     // model would. `3.3.2:unnamed-form-field` is rule-decided and reported as 4.1.2, so it is absent
     // and the model's 3.3.2 stands -- otherwise the criterion would be suppressed here and supplied by
-    // nobody. `packages/lab/rule-ownership.json` is where that mapping is declared, once.
+    // nobody. `a11ign/lab/rule-ownership.json` is where that mapping is declared, once.
     //
     // So a prediction is the model's to make unless EVERY subtype behind it is rule-owned.
     const firedSubtypes = Object.entries(subtypePredictions)

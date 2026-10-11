@@ -22,11 +22,12 @@ const ROOT = join(import.meta.dirname, "../../..");
 const WIRE = "packages/evidence/src/index.ts";
 
 /**
- * The directories `layers.json` LAYS into this checkout: another repository's source at its locked tag (`lay-layer.ts`), so
- * a change to the layer's version changes what this walk reads, and its restatements are that repository's to fix, not this one's.
+ * The directories `layers.json` LAYS into this checkout, held (`layers`) or only laid (`pinned`, the lab): another repository's source at its locked
+ * tag (`lay-layer.ts`), so a change to the layer's version changes what this walk reads, and its restatements are that repository's to fix, not this
+ * one's. The lab's is `a11ign/lab`'s `wire-type-declarations.test.ts` (ADR 0045 cut 2, #5080).
  */
-const LAID_LAYERS = new Set(Object.values(JSON.parse(readFileSync(join(ROOT, "layers.json"), "utf8")).layers as { path: string }[])
-  .map(({ path }) => path));
+const manifest = JSON.parse(readFileSync(join(ROOT, "layers.json"), "utf8")) as { layers: Record<string, { path: string }>; pinned?: Record<string, { path: string }> };
+const LAID_LAYERS = new Set(Object.values({ ...manifest.layers, ...manifest.pinned }).map(({ path }) => path));
 
 /** Every non-test TypeScript source file under packages/, as [path, text] -- the §15 test's walk, minus the laid layers. */
 function sources(): [string, string][] {
@@ -65,6 +66,7 @@ function offendersIn(entries: [string, string][]): string[] {
 /**
  * THE DECLARATIONS #1603 DERIVED, named with the text that proves each reaches the wire type -- the §15 test's second
  * half. Named rather than discovered, because a derived type is not greppable by field; `tsc` proves the keys.
+ * `a11ign/lab`'s one consumer, `src/harnesses/judge-file.ts`, is checked by that repository's `wire-type-declarations.test.ts` (ADR 0045 cut 2, #5080).
  */
 const DERIVED = [
   ["packages/evidence/src/left-site.ts", 'Pick<CaptureInteraction["stateChanges"][number], "control">'],
@@ -75,7 +77,6 @@ const DERIVED = [
   ["packages/judge/src/local-judge.ts", 'Omit<CaptureInteraction["formChanges"][number], "after">'],
   ["packages/judge/src/rules.ts", 'stateChanges?: CaptureInteraction["stateChanges"];'],
   ["packages/judge/src/rules.ts", 'Omit<CaptureInteraction["formChanges"][number], "after">'],
-  ["packages/lab/src/harnesses/judge-file.ts", 'Pick<CaptureInteraction, "controls" | "stateChanges">'],
   ["packages/scorer/src/evidence-units.ts", 'Omit<CaptureInteraction["stateChanges"][number], "after">'],
 ] as const;
 

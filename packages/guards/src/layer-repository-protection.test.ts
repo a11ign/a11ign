@@ -1425,9 +1425,9 @@ jobs:
 `;
 
 test("#3962: typecheck -- `tsc --noEmit` inside the required job reads OK, directly or through the scripts it calls", () => {
-  const direct = standardOf({ ci: gateWith("pnpm exec tsc -p packages/lab/tsconfig.json --noEmit", "pnpm test") })[TYPECHECK_COLUMN];
+  const direct = standardOf({ ci: gateWith("pnpm exec tsc -p packages/example/tsconfig.json --noEmit", "pnpm test") })[TYPECHECK_COLUMN];
   assert.equal(stateOf(direct), "OK", "lab's and control's form: the flag after the project");
-  assert.match(direct?.detail ?? "", /job `gate` runs `pnpm exec tsc -p packages\/lab\/tsconfig\.json --noEmit`, and is the required check/);
+  assert.match(direct?.detail ?? "", /job `gate` runs `pnpm exec tsc -p packages\/example\/tsconfig\.json --noEmit`, and is the required check/);
   assert.equal(stateOf(standardOf({ ci: gateWith("pnpm exec tsc --noEmit -p tsconfig.control.json") })[TYPECHECK_COLUMN]), "OK", "control's form: the flag before the project");
   assert.equal(stateOf(standardOf({ ci: gateWith("pnpm run typecheck") })[TYPECHECK_COLUMN]), "OK", "through the `typecheck` script");
   // `documents`' form: the gate runs only `pnpm test`; `pretest` runs the root `typecheck`, which hands it to the package.

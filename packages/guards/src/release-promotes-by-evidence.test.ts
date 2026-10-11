@@ -95,7 +95,7 @@ const TABLE: Row[] = [
     history: [{ sha: SHA, changedPaths: ["docs/x.md"], statuses: [] }, { sha: OLDER_SHA, changedPaths: [], statuses: [{ state: "success" }] }],
     outcome: "proceed", promotes: specs(...BOTH), rows: [] },
   { name: "success on an earlier commit, but a read path changed since: not inherited", released: BOTH,
-    history: [{ sha: SHA, changedPaths: [], statuses: [] }, { sha: OLDER_SHA, changedPaths: ["packages/lab/src/x.ts"], statuses: [{ state: "success" }] }],
+    history: [{ sha: SHA, changedPaths: [], statuses: [] }, { sha: OLDER_SHA, changedPaths: ["packages/example/src/x.ts"], statuses: [{ state: "success" }] }],
     outcome: "wait", promotes: [], rows: [] },
   { name: "a release of runner-only packages needs no fleet stage: the decider's own rule", released: [RUNNER_ONLY], history: history(),
     outcome: "proceed", promotes: specs(RUNNER_ONLY), rows: [] },

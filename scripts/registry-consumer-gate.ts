@@ -27,7 +27,7 @@
  * `npx a11ign --version` printed, what each entry point's `import()` did, and what the registry says about
  * each layer -- and returns what it refuses. The reading is the only impure part, so every refusal has a
  * fixture that trips it and a clean one that passes, and the tests need no network
- * (`packages/lab/src/packaging/registry-consumer-gate.test.ts`).
+ * (`a11ign/lab/src/packaging/registry-consumer-gate.test.ts`).
  *
  * ## Unchecked is never clean
  *

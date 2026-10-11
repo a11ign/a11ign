@@ -300,7 +300,7 @@ test("a fixture tree with a TRACKED package-lock.json is REFUSED, and so is a sh
     sandbox.run(["add", "-f", "--", "package-lock.json", "npm-shrinkwrap.json"]);
     assert.deepEqual(trackedIn(sandbox.dir), ["npm-shrinkwrap.json", "package-lock.json"]);
   });
-  assert.deepEqual(trackedLockfiles("packages/lab/package-lock.json\npnpm-lock.yaml\n"), ["packages/lab/package-lock.json"]);
+  assert.deepEqual(trackedLockfiles("packages/example/package-lock.json\npnpm-lock.yaml\n"), ["packages/example/package-lock.json"]);
 });
 
 test("the same lock merely UNTRACKED is not refused, and pnpm-lock.yaml and look-alike names are never", () => {
@@ -336,7 +336,7 @@ function ignoredByRealGitignore(path: string): boolean {
 test("package-lock.json and npm-shrinkwrap.json are ignored, at the root and in a package", () => {
   for (const name of LOCKFILES) {
     assert.equal(ignoredByRealGitignore(name), true, `${name} is not ignored`);
-    assert.equal(ignoredByRealGitignore(`packages/lab/${name}`), true, `packages/lab/${name} is not ignored`);
+    assert.equal(ignoredByRealGitignore(`packages/cli/${name}`), true, `packages/cli/${name} is not ignored`);
   }
 });
 
@@ -372,6 +372,6 @@ test("the control for the line above: a directory under a manifest, and a direct
   assert.ok(manifestsAtOrAbove(join(REPO, "packages", "lab")).includes(join(REPO, "package.json")));
 });
 
-// A nested package is its own npm project (#2962) was pinned here for `packages/lab`, the one private package with dependencies: `npm install` inside it never
+// A nested package is its own npm project (#2962) was pinned here for `a11ign/lab`, the one private package with dependencies: `npm install` inside it never
 // reads the root's `preinstall`, `engines` or `.npmrc`, so its manifest carries `engines.npm` and its `.npmrc` the switch. It left with the lab (#3505): that is a
 // claim about the lab's own manifest, `a11ign/lab` holds that test beside the manifest, and nothing in this workspace is left that it would describe.

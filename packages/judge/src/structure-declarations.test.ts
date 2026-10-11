@@ -23,6 +23,10 @@ import { restatesWireType } from "@a11ign/evidence";
  */
 const ROOT = join(import.meta.dirname, "../../..");
 
+/** The directories `layers.json` lays into this checkout, held or pinned: another repository's source, which this walk does not read (ADR 0045 rule 2). */
+const manifest = JSON.parse(readFileSync(join(ROOT, "layers.json"), "utf8")) as { layers: Record<string, { path: string }>; pinned?: Record<string, { path: string }> };
+const LAID_LAYERS = new Set(Object.values({ ...manifest.layers, ...manifest.pinned }).map(({ path }) => path));
+
 /** Every non-test source file under packages/, as [path, text]. */
 function sources(): [string, string][] {
   const out: [string, string][] = [];
@@ -31,6 +35,7 @@ function sources(): [string, string][] {
       const path = join(dir, entry.name);
       if (entry.isDirectory()) {
         if (["node_modules", "dist", ".git"].includes(entry.name)) continue;
+        if (LAID_LAYERS.has(path.slice(ROOT.length + 1))) continue;
         walk(path);
         continue;
       }
@@ -65,10 +70,10 @@ test("every declaration is reachable from the wire type", () => {
     ["packages/judge/src/rules.ts", "Pick<CaptureStructure"],
     ["packages/judge/src/local-judge.ts", "Partial<CaptureStructure>"],
     ["packages/evidence/src/verify.ts", "Pick<CaptureStructure"],
-    // The gap listed five declarations. There were SEVEN — these three were found only by running the
-    // discovery test above, which is the argument for discovering rather than listing.
+    // The gap listed five declarations. There were SEVEN — the ones below the first four were found only by running the
+    // discovery test above, which is the argument for discovering rather than listing. The seventh, `a11ign/lab`'s
+    // `judge-file.ts`, is that repository's `wire-type-declarations.test.ts` to check (ADR 0045 cut 2, #5080).
     ["packages/cli/src/cli.ts", "Pick<CaptureStructure"],
-    ["packages/lab/src/harnesses/judge-file.ts", "Pick<CaptureStructure"],
     ["packages/scorer/src/evidence-units.ts", "Pick<CaptureStructure"],
   ] as const;
   for (const [file, needle] of derived) {

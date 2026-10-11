@@ -51,12 +51,12 @@ test("cleanLine strips the runner timestamp (with or without a BOM) and ANSI col
 
 test("failingFiles lists each FAIL test file once, in order of appearance, through colour and timestamps", () => {
   const log = [
-    `${stamp}${ESC}[1m${ESC}[31m FAIL ${ESC}[0m packages/lab/src/b.test.ts > a case`,
+    `${stamp}${ESC}[1m${ESC}[31m FAIL ${ESC}[0m packages/example/src/b.test.ts > a case`,
     `${stamp}  FAIL  packages/guards/src/a.test.ts`,
-    `${stamp}  FAIL  packages/lab/src/b.test.ts`,
+    `${stamp}  FAIL  packages/example/src/b.test.ts`,
     `${stamp}  FAIL  scripts/c.test.mjs`,
   ].join("\n");
-  assert.deepEqual(failingFiles(log), ["packages/lab/src/b.test.ts", "packages/guards/src/a.test.ts", "scripts/c.test.mjs"]);
+  assert.deepEqual(failingFiles(log), ["packages/example/src/b.test.ts", "packages/guards/src/a.test.ts", "scripts/c.test.mjs"]);
 });
 
 test("failingFiles ignores lines that only mention FAIL, and an empty log", () => {
@@ -140,11 +140,11 @@ const failLog = (...files: string[]) => files.map((f) => `${stamp}FAIL  ${f}`).j
 
 /** A reader over canned data. Anything a test does not override reads as "a head that holds the policy, with this affected set". */
 function reader(overrides: Record<string, unknown> = {}): Reader {
-  const jobs = { 1: failLog("packages/lab/src/a.test.ts") } as Record<number, string>;
+  const jobs = { 1: failLog("packages/example/src/a.test.ts") } as Record<number, string>;
   return {
     failedJobs: () => [{ id: 1, name: "ts" }],
     log: (id: number) => jobs[id] ?? "",
-    affected: () => ({ set: ["packages/lab/src/other.test.ts"], changed: ["src/changed.ts"], treeWide: [] }),
+    affected: () => ({ set: ["packages/example/src/other.test.ts"], changed: ["src/changed.ts"], treeWide: [] }),
     exists: () => true,
     hasPolicy: () => true,
     ...overrides,
@@ -155,19 +155,19 @@ test("traceRed: a failing file outside the affected set is YES, and carries the 
   const trace = traceRed(run({ id: 9 }), reader());
   assert.deepEqual(trace, {
     runId: 9, jobs: ["ts"], answer: "yes", why: "", changed: ["src/changed.ts"],
-    files: [{ file: "packages/lab/src/a.test.ts", answer: "yes" }],
+    files: [{ file: "packages/example/src/a.test.ts", answer: "yes" }],
   });
 });
 
 test("traceRed: the same file inside the affected set is NO, with no diff carried", () => {
-  const trace = traceRed(run(), reader({ affected: () => ({ set: ["packages/lab/src/a.test.ts"], changed: ["src/x.ts"], treeWide: [] }) }));
+  const trace = traceRed(run(), reader({ affected: () => ({ set: ["packages/example/src/a.test.ts"], changed: ["src/x.ts"], treeWide: [] }) }));
   assert.equal(trace.answer, "no");
   assert.deepEqual(trace.changed, []);
 });
 
 test("traceRed: a file the head does not hold is GONE, and a tree-wide guard is CI-ONLY, never YES", () => {
   assert.equal(traceRed(run(), reader({ exists: () => false })).answer, "gone");
-  const treeWide = traceRed(run(), reader({ affected: () => ({ set: [], changed: ["x"], treeWide: ["packages/lab/src/a.test.ts"] }) }));
+  const treeWide = traceRed(run(), reader({ affected: () => ({ set: [], changed: ["x"], treeWide: ["packages/example/src/a.test.ts"] }) }));
   assert.equal(treeWide.answer, "ci-only");
   assert.deepEqual(treeWide.changed, []);
 });

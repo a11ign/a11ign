@@ -13,13 +13,13 @@ commit time is a fact.
 **Why:** 2026-09-06 this cost two wrong instructions in one ruling. `orchestrator` told a worker
 to build an mtime-based corpus guard and "not use the progress file", quoting
 `audit-rule-coverage.ts`'s comment about not asking systemd whether a unit is up. That comment
-was true when written. `packages/lab/src/training/corpus-settled.mjs` had since been added, it
+was true when written. `a11ign/lab/src/training/corpus-settled.mjs` had since been added, it
 **addresses that objection by name in its own header**, and it carries a third state
 (`abandoned`) for exactly the died-mid-write worry the instruction was defending against. So
 "use mtime, not the progress file" would have regressed a decision already argued and tested.
 The same ruling also said to extract-and-share a helper that already existed.
 
-I made the sibling mistake in the same hour: `ls packages/lab/src/*corpus-settled*` searches one
+I made the sibling mistake in the same hour: `ls a11ign/lab/src/*corpus-settled*` searches one
 directory level, found nothing, and I told a worker a peer's map was wrong. The file was in
 `src/training/`. A check that answers correctly about the wrong population —
 see [[a-fix-reaching-the-instance-not-the-class]].

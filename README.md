@@ -354,12 +354,12 @@ unit-tested, since a real screen reader on a real desktop is the thing under tes
 | `pnpm run lint` / `pnpm run typecheck` | mechanical; both gate CI |
 | `pnpm run eval` | judge quality against **34 labelled fixtures** — W3C tutorial pages and paired good/bad cases. Runs against our own scorer by default; needs the Python venv, so it cannot run in CI |
 | `pnpm run rules-check` | the deterministic rules in isolation. Exits non-zero on **any** false positive against a conformant page — precision is the entire point of a rule |
-| `pnpm run capture:check --worker=<url>` | the capture half, against a live worker (`packages/lab/src/harnesses/capture-check.ts`). Asserts probe *values*, not just that a probe fired — a check that only asserts "it ran" stays green while the evidence is garbage |
+| `pnpm run capture:check --worker=<url>` | the capture half, against a live worker (`a11ign/lab/src/harnesses/capture-check.ts`). Asserts probe *values*, not just that a probe fired — a check that only asserts "it ran" stays green while the evidence is garbage |
 | `capture-regression.yml` | real NVDA on a GitHub-hosted Windows runner |
 
 **On the numbers.** The suite currently reports full recall on the observable failure cases with a small number of false positives, concentrated in the subjective link-purpose (2.4.4) and descriptive-heading (2.4.6) criteria. Treat that as *promising, not validated*, and read [`docs/METHODOLOGY.md`](./docs/METHODOLOGY.md) before quoting it anywhere: the guards were iteratively tuned against these cases, scoring is single-run with no test-retest interval, and **there is no expert human-agreement baseline yet**. That document sets the bar for "trustworthy enough" *before* measuring against it, and lists what is still missing — deliberately, so the goalposts cannot move.
 
-The strongest evidence so far is structural rather than a number: the judge sees the **transcript, not the page**, so it cannot recall a well-known page's documented issues — it has to point at something that was announced. A page authored fresh and never published ([`packages/lab/src/eval/pages/contamination-test.html`](./packages/lab/src/eval/pages/contamination-test.html)) was caught correctly on all four planted violation categories with no false positives on the correct controls, which is evidence that recall is genuine judging rather than memorisation. One page is not a suite.
+The strongest evidence so far is structural rather than a number: the judge sees the **transcript, not the page**, so it cannot recall a well-known page's documented issues — it has to point at something that was announced. A page authored fresh and never published (`a11ign/lab`'s `src/eval/pages/contamination-test.html`) was caught correctly on all four planted violation categories with no false positives on the correct controls, which is evidence that recall is genuine judging rather than memorisation. One page is not a suite.
 
 ## Repository map
 
@@ -446,7 +446,7 @@ There is a concrete reason this needs its own dataset. Link purpose (2.4.4) is a
 
 ### Building the training set
 
-`packages/lab/src/training/` collects screen-reader-only evidence from a source matrix of controlled page
+`a11ign/lab/src/training/` collects screen-reader-only evidence from a source matrix of controlled page
 pairs — **1,645 defined today** (`CASES.length` in `case-matrix.mjs`, up from the 1,126 this section long
 quoted; how many of those are currently captured needs the lab to answer and was not checked here), each a
 known-good page and a mutated one that breaks a single criterion, so a label comes from the contrast rather
@@ -478,7 +478,7 @@ updates go cold past one capture timeout it exits 3. Exit codes are the contract
 **1** finished with failures, **2** no run recorded, **3** wedged. Both commands emit a
 `next_command` field, so a script never has to infer the next step.
 
-`training:status` reports progress and separately asks the worker whether it is still capturing, so *finished*, *working* and *wedged* are distinguishable. A stale run reports `running: false`, `stale: true`, and no misleading ETA. `--resume` picks up only captures whose page identity and provenance still match. See [`packages/lab/src/training/README.md`](./packages/lab/src/training/README.md).
+`training:status` reports progress and separately asks the worker whether it is still capturing, so *finished*, *working* and *wedged* are distinguishable. A stale run reports `running: false`, `stale: true`, and no misleading ETA. `--resume` picks up only captures whose page identity and provenance still match. See `a11ign/lab`'s `src/training/README.md`.
 
 **The breakdown below is what grew the matrix from its original 836 to the 1,645 pairs defined today, and
 the shape of it — calibration pairs for individual failure modes, two-defect pages, excluded structural
@@ -496,7 +496,7 @@ The scorer combines channel-tagged screen-reader evidence with 28 screen-reader-
 more, pending the schema migration in progress), including field-name/role and table-header relationships,
 then uses one head per violation subtype and max-pools those subtype scores into a criterion score. Thresholds are selected from grouped out-of-fold development predictions rather than in-sample scores, and splits are grouped by page family, template and source so a good and bad version of the same template never straddle train and test — repeated captures of one page do not count as independent examples.
 
-`docs/local-model.md` sets out the planning bands honestly: roughly 100–200 violation and 100–200 clean captures per criterion for a first useful baseline, and 500–1,000+ each for release quality. Training weights are handled under an allowlist policy — safetensors only, pinned revision, recorded licence and hash, no pickle formats, no `trust_remote_code` — enforced by [`packages/lab/scripts/verify-safetensors.mjs`](./packages/lab/scripts/verify-safetensors.mjs).
+`docs/local-model.md` sets out the planning bands honestly: roughly 100–200 violation and 100–200 clean captures per criterion for a first useful baseline, and 500–1,000+ each for release quality. Training weights are handled under an allowlist policy — safetensors only, pinned revision, recorded licence and hash, no pickle formats, no `trust_remote_code` — enforced by `a11ign/lab/scripts/verify-safetensors.mjs`.
 
 ### Later, and unproven: predicting the announcement
 
@@ -528,7 +528,7 @@ you are trying to do. The four you are most likely to want:
 | [`docs/getting-started.md`](./docs/getting-started.md) | **start here**: install, set up a worker by whichever route fits, run your first report, and what to do when it fails |
 | [`docs/adr/README.md`](./docs/adr/README.md) | 37 architecture decision records, indexed — the *why*, including the alternatives that were rejected |
 | [`docs/METHODOLOGY.md`](./docs/METHODOLOGY.md) | how the numbers were produced, the biases we are exposed to, and why the eval figures must not be quoted as a headline |
-| `docs/coverage.md` | **every WCAG 2.2 A/AA criterion and whether we detect it** — each partial one names the gap. Generated from the code, deliberately not committed (issue #158: two branches regenerating the same tracked page produced conflicts in a file neither author wrote), so it is not a link — run `pnpm run docs:coverage` to read it |
+| the coverage page | **every WCAG 2.2 A/AA criterion and whether we detect it** — each partial one names the gap. Generated from the code, deliberately not committed (issue #158: two branches regenerating the same tracked page produced conflicts in a file neither author wrote), so it is not a link — `a11ign/lab` generates it (`pnpm run docs:coverage` there, from `a11ign/lab/scripts/generate-coverage-doc.ts`) |
 | [`docs/screenreader-coverage.md`](./docs/screenreader-coverage.md) | every behaviour we drive — and **what we do not drive yet**, which bounds what this tool can claim |
 
 For contributors: [`CONTRIBUTING.md`](./CONTRIBUTING.md) and [`SECURITY.md`](./SECURITY.md). Read the second

@@ -283,7 +283,7 @@ jobs:
           fi
           # #2389 review: THE SAME BATTERY AS `trunkBuildTest`, in the same order (reusable-build-test.yml with
           # `run-lint-typecheck`, `run-ts-tests`, `run-python-tests`). This step ran `npm test`,
-          # whose `test:ts` glob EXCLUDES packages/agent-org and packages/lab, so a red there re-checked
+          # whose `test:ts` glob EXCLUDES packages/agent-org and a11ign/lab, so a red there re-checked
           # green at the parent and an inherited failure was recorded as this merge's own. `trunk-revert.test.ts`
           # pins that each command below is one the red job runs. A failure that is not a `not ok` line (lint,
           # typecheck, pytest) summarises as `unknown`, which is honest: nobody can name a test.

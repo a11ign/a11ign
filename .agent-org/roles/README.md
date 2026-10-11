@@ -208,7 +208,7 @@ primary checkout ignored for 22 h, a leftover branch blocking a respawn, a flag 
 flag and logging "NOT RELEASED" every tick for days, rows filed `backlog` and never promoted, an order to a
 nonexistent session retried for 18 h. The text below is the ONE copy; every `live` brief in
 `sessions.json`, plus `reviewer.md` and `tracker-auditor.md`, carries it verbatim, and
-`packages/lab/src/packaging/boy-scout-rule.test.ts` compares each brief to this section, so edit it here and
+`a11ign/lab/src/packaging/boy-scout-rule.test.ts` compares each brief to this section, so edit it here and
 copy it out.
 
 > **Boy Scout rule (chairman, 2026-10-01).** Leave every place better than you found it. A fault met on your
@@ -416,7 +416,7 @@ meant to test is the worst possible version of this bug, because it would look l
 
 Then, for each row in the roster table above: open its linked file, confirm it exists and states its own
 lane/reporter/ban, and copy its "first message" from the section above. **Run
-`pnpm exec tsx --test packages/lab/src/packaging/roles-readme.test.ts`** to have the same check done
+`pnpm exec tsx --test a11ign/lab/src/packaging/roles-readme.test.ts`** to have the same check done
 mechanically — it asserts every agent named in this table has a working link, and that every linked file
 declares its own name, its lane, its reporter, and the ban.
 

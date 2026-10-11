@@ -112,7 +112,7 @@ Read all four, because they drift independently and each is a separate copy of t
 | where | what to check |
 |---|---|
 | `packages/judge/src/criterion-coverage.ts` | the `status`, the `needs`, the `channels`, and whether the `note` still describes the criterion you just read |
-| `packages/lab/rule-ownership.json` | `decidedBy` per subtype, and whether the `note` argues from the real criterion |
+| `a11ign/lab/rule-ownership.json` | `decidedBy` per subtype, and whether the `note` argues from the real criterion |
 | `packages/judge/src/act-rules.ts` | applicability and expectation against the SC text and the ACT rule |
 | `packages/judge/src/rules.ts` | what the rule actually fires on |
 

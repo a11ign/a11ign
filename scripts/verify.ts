@@ -423,7 +423,7 @@ export async function runFailuresFirst({ name, files, dropped }: ReturnType<type
  * `ts` must not block the event loop: a `spawnSync` here freezes
  * every one of them until `ts` returns, which made the two run one after the other with the step merely STARTED early
  * (#3333). `run` is a parameter so a test can see that every command goes through the non-blocking runner. THE FAILURES-FIRST LEG
- * IS FIRST, before `docs:coverage`, lint and typecheck, because what it is for is seconds to the red an author is fixing (#3574).
+ * IS FIRST, before lint and typecheck, because what it is for is seconds to the red an author is fixing (#3574).
  * @param {{ base: string }} ctx
  * @param {(command: string, args: string[], where: { cwd: string, stdio: import("node:child_process").StdioOptions, env?: Record<string, string> }) => Promise<{ status: number | null }>} [run]
  * @param {(file: string) => ReturnType<typeof readRunSummary>} [readSummary]
@@ -437,7 +437,6 @@ export function runTs({ base }: { base: string; }, run: (command: string, args: 
   };
   return inOrderAsync([
     () => runFailuresFirst(lastRun(), run),
-    () => pnpmAsync(["run", "docs:coverage"]),
     () => pnpmAsync(["run", "lint"]),
     () => pnpmAsync(["run", "typecheck"]),
     () => runAffectedSet({ base }, run, readSummary),

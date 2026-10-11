@@ -8,7 +8,7 @@
 |---|---|
 | [`packages/control/CLAUDE.md`](packages/control/CLAUDE.md) | the fleet: `fleet:deploy`, `fleet:provision`, Ansible, lab jobs |
 | [`screenreader-worker`'s `CLAUDE.md`](https://github.com/a11ign/screenreader-worker/blob/main/CLAUDE.md) | the worker and NVDA: `doctor`, readiness, the capture cache. **Moved to the layer repository (#3447)** |
-| [`packages/lab/CLAUDE.md`](packages/lab/CLAUDE.md) | the corpus: `gate:stability`, and who may report a gate reading `runs/` |
+| [`a11ign/lab`'s `CLAUDE.md`](https://github.com/a11ign/lab/blob/main/CLAUDE.md) | the corpus: `gate:stability`, and who may report a gate reading `runs/` |
 | [`.github/CLAUDE.md`](.github/CLAUDE.md) | verifying changes, the hooks, sharing this checkout |
 
 This file is for working ON the repo: **rules only, each linking to its incident in `docs/`**. These came first and are not duplicated here:

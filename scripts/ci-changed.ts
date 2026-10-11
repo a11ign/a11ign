@@ -97,7 +97,7 @@ export const DOC_ROOT_FILES = new Set(["README.md", "CLAUDE.md", "CONTRIBUTING.m
  * chairman's direction, 2026-09-06, the product manager's single largest recurring cost that night.
  * `docs/board/summaries/*.md` and `docs/board/reported.json` are edited far more often than anything else
  * under `docs/`, and every such edit used to pay the full `docs` job (a build, then the whole
- * `packages/lab/src/packaging/` directory) for a change no rule outside the board guards could possibly
+ * `a11ign/lab/src/packaging/` directory) for a change no rule outside the board guards could possibly
  * react to. Exported separately from `classify` so the pre-push hook's board-only fast path can ask the
  * identical question `ci.yml`'s `board` job asks, rather than a second copy of the same two regexes.
  *

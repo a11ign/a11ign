@@ -2,7 +2,7 @@
  * THE PRODUCT'S OWN CASES FOR THE RULES-FITNESS CHECK (#4936, epic #4425, `ceo`'s option 3).
  *
  * `rules-check.ts` runs the deterministic rules (`../rules.ts`) over one captured transcript per case and fails on any criterion the rules assert
- * on a page that conforms. It used to read its cases out of the lab's tree (`packages/lab/src/eval/cases.ts`, laid at a pinned tag), which made the
+ * on a page that conforms. It used to read its cases out of the lab's tree (`src/eval/cases.ts` in `a11ign/lab`, laid at a pinned tag), which made the
  * core's `rulesFitness` job depend on another repository's source. It reads THIS file and `./fixtures/` instead.
  *
  * WHAT MOVED IS WHAT `rules-check` OPENED, and nothing more (measured at #4936, not grepped): an `id`, a `fixture` and the criteria the rules should
@@ -17,9 +17,9 @@
  * fixtures are in the repository and in no tarball. `rules-fitness-cases.test.ts` pins that.
  *
  * THE FIXTURES ARE ALSO THE LAB'S, so each lives in two places: `run.ts` scores the same transcripts and the lab keeps them (a copy by version from a
- * published package was ruled out above: nothing here ships). `rules-fitness-cases.test.ts` pins the pair byte for byte against the laid lab at
- * the tag `layers.json` declares. It is the `cross-repo-copies` shape, and it is removed in the pull request that moves the tag to a lab that no
- * longer carries them.
+ * published package was ruled out above: nothing here ships). The two copies were pinned byte for byte by a test that read the lab's laid tree;
+ * ADR 0045 cut 2 (#5080) deleted it, because a repository does not read another's source, so NOTHING NOW
+ * PINS THE PAIR: a fixture edited on one side is not noticed on the other.
  */
 
 /** One captured transcript the rules are run over. */

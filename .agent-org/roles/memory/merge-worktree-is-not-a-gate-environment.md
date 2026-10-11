@@ -10,7 +10,7 @@ valid environment for running merge gates, because 13 discovery guards failed th
 the primary checkout. **That conclusion was wrong and the real cause is worse.**
 
 `scripts/git-hooks/pre-push` runs `npm test`. **Git exports `GIT_DIR` into every hook's
-environment.** `packages/lab/src/packaging/promotion-refuses-dirty.test.ts` shells `git init` /
+environment.** `a11ign/lab/src/packaging/promotion-refuses-dirty.test.ts` shells `git init` /
 `git config user.email t@example.com` / `git add` / `git commit -qm base` using
 `cwd: mkdtempSync(tmpdir())` — and **`cwd` does not isolate a git command when `GIT_DIR` is set;
 `GIT_DIR` wins.** So every `git push` ran those commands against the real repository.

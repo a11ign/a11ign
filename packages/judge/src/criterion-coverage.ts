@@ -23,14 +23,14 @@
  *
  * **A SECOND boundary this file did not record until 2026-08-22, and it cuts across every entry below.**
  *
- * Where a subtype is decided by a deterministic RULE (`packages/lab/rule-ownership.json`), the answer is
+ * Where a subtype is decided by a deterministic RULE (`a11ign/lab/rule-ownership.json`), the answer is
  * exact and the trained head is suppressed for it. Where the head decides alone, the answer inherits the
  * head's blind spots — and those are measured: `npm run scorer:shortcuts` counts **225 features a head
  * penalises for free**, because they are 0 on every one of its training positives and therefore cost
  * nothing to learn. A page carrying such a feature can go silent on a criterion it genuinely fails.
  *
  * So `status: "assessed"` means "we have evidence and a decider", never "this answer is exact". Which it
- * is depends on the owner, and **`packages/lab/rule-ownership.json` is where that is declared** — read it
+ * is depends on the owner, and **`a11ign/lab/rule-ownership.json` is where that is declared** — read it
  * there rather than here.
  *
  * This paragraph used to enumerate them, and by 2026-08-29 the list said "the nine subtypes the head

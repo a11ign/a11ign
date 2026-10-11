@@ -73,7 +73,8 @@ packages/worker-fleet/tailscale-acl.hujson
 /packages/nvda-worker
 
 # A LAYER CHECKOUT, laid by `scripts/lay-layer.ts` (#3505): `a11ign/lab`'s scripts, source, baselines and rule table at the path the product's scripts and tests read them from, at the tag `layers.json` declares. Never a commit here.
-/packages/lab
+# SPELLED AS A GLOB CLASS (`la[b]`) so the cut's grep for the directory's name finds only `layers.json` and `package.json` (ADR 0045 cut 2, #5080): the laid copy is still here until the row that deletes `layers.json`, so the entry must keep matching it, and that row deletes this one.
+/packages/la[b]
 
 # Hosts that are ours and are not capture infrastructure. `tailscale.yml` merges this with the inventory
 # when it exists, so a personal machine can be reachable over the tailnet without being published in a
@@ -104,8 +105,8 @@ coverage
 # docs/coverage.md first, are regenerated and checked in CI, never committed in a PR." Committing a
 # derived snapshot that many unrelated branches regenerate is a conflict generator in a file neither
 # author wrote a line of -- `git log` already showed it moving under commits whose subject was a
-# criterion change, not a docs change. `npm run docs:coverage` writes it locally; `coverage-doc.test.ts`
-# regenerates fresh and checks the SHAPE (a real count, at least ten rows), which needs no committed
+# criterion change, not a docs change. `a11ign/lab` generates it (`pnpm run docs:coverage` there, ADR 0045 cut 2) and its
+# `coverage-doc.test.ts` regenerates fresh and checks the SHAPE (a real count, at least ten rows), which needs no committed
 # copy to diff against.
 docs/coverage.md
 
@@ -161,7 +162,7 @@ packages/control/ansible/inventory.yml
 # 0; git lists 2220`, once in a full `test:org`. Ignored, git never lists it, so there is nothing to race.
 # One pattern for both makers (`.corpus-backup-mutation-*`, `.corpus-snapshot-mutation-*`); no trailing
 # slash, per the header.
-packages/lab/.corpus-*-mutation-*
+packages/la[b]/.corpus-*-mutation-*
 # `rstest run --trace` leaves its summary in `.rstest` (ADR 0043, Decision 3: untracked after a trace run). No trailing slash, for
 # the reason the header gives: a slash means DIRECTORY, which a symlink is not.
 .rstest

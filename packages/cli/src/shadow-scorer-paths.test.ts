@@ -4,7 +4,7 @@
  *
  * `SHADOW_PYTHON` defaulted to `packages/cli/.venv/bin/python`, a path this checkout never creates —
  * so even the documented `A11Y_SHADOW_MODEL=1 npm run witness -- <url>` workflow
- * (docs/local-model.md, packages/lab/src/training/README.md) could never run without an operator first
+ * (docs/local-model.md, a11ign/lab/src/training/README.md) could never run without an operator first
  * discovering and setting `A11Y_SHADOW_PYTHON` themselves. `local-judge.paths.test.ts` is the model:
  * assert existence only, never run Python, because CI has no venv and a test that needed one would be
  * skipped exactly where it matters.

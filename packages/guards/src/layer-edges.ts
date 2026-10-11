@@ -628,7 +628,7 @@ function reachesOf(path: string, text: string): Reach[] {
 }
 
 /**
- * The longest existing prefix of a launcher/workflow token: `packages/lab/src/x.mjs` if it exists, else
+ * The longest existing prefix of a launcher/workflow token: `a11ign/lab/src/x.mjs` if it exists, else
  * the directory above, down to `packages/<pkg>` -- a path that has moved is still a reach. `null` when `packages/<pkg>` is neither in
  * this tree nor a declared layer: a URL's `/packages/githubcli-archive-keyring.gpg` names no directory, and reading it as a reach would
  * put an edge into the baseline that nothing can cut (#3501). A declared layer that has LEFT (`agent-org`, #2976) stays a reach, which is

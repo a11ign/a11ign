@@ -4,7 +4,7 @@
  *
  * Run: pnpm run rules-check
  *
- * This was `packages/lab/src/eval/rules-check.ts`, which read its cases out of the lab's tree; #4936 moved the check and the cases it reads here
+ * This was `src/eval/rules-check.ts` in `a11ign/lab`, which read its cases out of the lab's tree; #4936 moved the check and the cases it reads here
  * (see `./cases.ts` for what moved and what did not).
  */
 import { existsSync, readFileSync } from "node:fs";

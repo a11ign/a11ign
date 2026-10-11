@@ -11,4 +11,4 @@ Two decisions already made in this shape, so nobody re-discovers them as bugs:
 
 **Mappings are a first-class question, not an afterthought.** A rule's `mapping` argument must reflect what its evidence can actually prove: a referral (`secondary`) and an assertion are different claims, and collapsing them has cost this repo before (the 3.2.1/3.2.2 downgrade in `docs/backlog.md`; ADR 0021 for 4.1.2). Only the layer that READS a fact may assert it; a rule that INFERS maps `secondary`. `asserting-subtypes.test.ts` pins which subtypes assert, so a new one moves that test deliberately, in the same change.
 
-**A finding for another area goes to its own row**, not into this diff, and a measurement that needs the authoritative corpus is handed to the agent that drives the fleet and the lab (`packages/lab/CLAUDE.md`): a local `runs/` run is a pre-check here, never a result.
+**A finding for another area goes to its own row**, not into this diff, and a measurement that needs the authoritative corpus is handed to the agent that drives the fleet and the lab (`a11ign/lab/CLAUDE.md`): a local `runs/` run is a pre-check here, never a result.

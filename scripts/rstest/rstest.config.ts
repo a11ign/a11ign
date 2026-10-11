@@ -14,7 +14,7 @@
  * which a `--changed` run cannot see (#3572). The eight recorded decisions the config makes travel with the package, in
  * `a11ign/toolchain`'s `src/rstest-config.ts`.
  *
- * THE BY-PATH HALF IS DERIVED, NOT TRUSTED: `packages/lab/src/packaging/verify-affected-set.test.ts` (in `a11ign/lab` since #3505, run there over this repository's tree) finds every non-source file
+ * THE BY-PATH HALF IS DERIVED, NOT TRUSTED: `a11ign/lab/src/packaging/verify-affected-set.test.ts` (in `a11ign/lab` since #3505, run there over this repository's tree) finds every non-source file
  * and every data directory a non-tree-wide test names in a string literal, outside its own import closure, and fails on one that no
  * pattern here covers. A new such read therefore fails that test until a line is added here; the test is the maintainer of this list.
  * A tree-wide guard (a test about the repository) is not in that population: it does not ride on `--changed` and runs in CI.
@@ -34,7 +34,7 @@ const walkScope = fileURLToPath(new URL("../../packages/guards/src/walk-scope.ts
 const A11IGN_LOADED_TRIGGERS = ["scripts/rstest/**", "pnpm-lock.yaml", "packages/guards/src/walk-scope*.ts", "scripts/private-tmp.ts"];
 
 /**
- * #3572: data directories a non-tree-wide test reads by path, whole, because a file added to one is read too. NONE IS UNDER `packages/lab/` (#3505) OR `packages/control/` (#3506): those
+ * #3572: data directories a non-tree-wide test reads by path, whole, because a file added to one is read too. NONE IS UNDER `a11ign/lab/` (#3505) OR `packages/control/` (#3506): those
  * directories are laid and untracked, so a change to it is never in a diff and a trigger naming it would select nothing.
  */
 const READ_DIRECTORY_TRIGGERS = [

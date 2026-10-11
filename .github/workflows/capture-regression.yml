@@ -3,7 +3,7 @@ name: capture-regression
 # Phase 1 (ADR 0003): the capture half's regression gate. Drives the real
 # capture worker (NVDA on a Windows runner via guidepup/setup-action) over the
 # bundled tutorial pages and asserts the stable raw signals each should yield
-# (see packages/lab/src/harnesses/capture-check.ts).
+# (see `a11ign/lab`'s `src/harnesses/capture-check.ts`, which `pnpm run capture:check` runs).
 #
 # RELEASE-TIME ONLY, AND NOTHING ELSE — chairman's direction, 2026-09-06, same reasoning as
 # `action-smoke.yml`'s identical change: this used to be path-filtered to fire on a push to `main`
@@ -12,7 +12,7 @@ name: capture-regression
 # calls this as a job (`workflow_call`) against the exact sha about to ship, rather than trusting a
 # separately-triggered push to have covered it. `workflow_dispatch` keeps the on-demand case. No `paths:`
 # filter is possible or needed under either trigger — this does not run on a diff at all now, so a probe
-# and its signal being coupled (the reason the old filter had to reach `packages/lab/src/training/**` as
+# and its signal being coupled (the reason the old filter had to reach the lab's `src/training/**` as
 # well as the capture package) is no longer this workflow's problem to solve by naming files.
 #
 # Also this repo's answer for a capture machine an outside contributor cannot self-host (#41):
@@ -81,4 +81,6 @@ jobs:
           Set-ItemProperty -Path $key -Name "HideFirstRunExperience" -Value 1 -Type DWord
           Set-ItemProperty -Path $key -Name "BrowserSignin" -Value 0 -Type DWord
       - name: Capture-regression checks (real NVDA)
-        run: node packages/lab/src/harnesses/capture-check.ts
+        # Through the script and not by path (ADR 0045 cut 2, #5080): the harness is `a11ign/lab`'s, laid here by `pnpm install`'s `prepare`, and the
+        # script is the one name for it that the cut that deletes `layers.json` renames. `tsx` runs it, as `capture:check` does everywhere else.
+        run: pnpm run capture:check

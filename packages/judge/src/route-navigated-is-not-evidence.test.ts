@@ -15,8 +15,8 @@ import { join } from "node:path";
  * this guard first shipped covering only `rules.ts`. That is exactly the shape this scan exists to stop
  * recurring: a hand-maintained file list is the thing that goes stale, not the pattern.
  *
- * **`packages/judge/src/rules.ts` and `packages/lab/src/training/signal-predicates.mjs` are now the
- * documented exceptions (#1867).** `addStaleRouteTitle`'s own heading-equality guard read a held-steady
+ * **`packages/judge/src/rules.ts` is now the documented exception (#1867), and so is the lab's
+ * `signal-predicates.mjs`, whose own scan is `a11ign/lab`'s `route-navigated-is-not-evidence.test.ts` (ADR 0045 cut 2, #5080).** `addStaleRouteTitle`'s own heading-equality guard read a held-steady
  * SITE-CHROME heading as "nothing navigated" even when the title differed and NVDA's own document-change
  * confirmation said otherwise -- the guard needed *some* signal a navigation happened before comparing
  * titles, and `navigated` is that signal for this one rule now that it has been measured against it
@@ -42,13 +42,15 @@ import { join } from "node:path";
  * in-scope for when it does.
  */
 const ROOT = join(import.meta.dirname, "../../..");
+
+/** The directories `layers.json` lays into this checkout, held or pinned: another repository's source, which this walk does not read (ADR 0045 rule 2). */
+const manifest = JSON.parse(readFileSync(join(ROOT, "layers.json"), "utf8")) as { layers: Record<string, { path: string }>; pinned?: Record<string, { path: string }> };
+const LAID_LAYERS = new Set(Object.values({ ...manifest.layers, ...manifest.pinned }).map(({ path }) => path));
 const PY_FEATURIZER = { path: "packages/scorer/python/screenreader_features.py", sentinel: "def all_evidence" };
 /** The files this guard's own design says a future row removes coverage for -- see the doc comment above. */
 const NAVIGATED_EXCEPTIONS = new Map([
   ["packages/judge/src/rules.ts", "#1867: addStaleRouteTitle now reads it as the corroborating signal a "
     + "held-steady heading needs before it can still say nothing navigated"],
-  ["packages/lab/src/training/signal-predicates.mjs", "#1867 (Region widened): routeTitleIsStale mirrors "
-    + "addStaleRouteTitle's fix -- the same corroborating signal for the same held-steady-heading shape"],
 ]);
 
 /** Every non-test .ts/.mjs source file under packages/, as [path, text]. */
@@ -59,6 +61,7 @@ function jsSources(): [string, string][] {
       const path = join(dir, entry.name);
       if (entry.isDirectory()) {
         if (["node_modules", "dist", ".git"].includes(entry.name)) continue;
+        if (LAID_LAYERS.has(path.slice(ROOT.length + 1))) continue;
         walk(path);
         continue;
       }
@@ -87,7 +90,7 @@ test("every TS/JS source that mentions routeChange is free of `.navigated` reads
   // shape CLAUDE.md records against `SIGNAL_TYPES`'s source scrape, applied to a discovered population
   // rather than a hand-listed one.
   const paths = consumers.map(([path]) => path);
-  for (const known of ["packages/judge/src/rules.ts", "packages/lab/src/training/signal-predicates.mjs"]) {
+  for (const known of ["packages/judge/src/rules.ts"]) {
     assert.ok(paths.includes(known),
       `discovery did not find ${known}, which is known to mention routeChange today -- the walk root or `
         + "file-extension filter moved, and the scan below would otherwise pass having examined nothing");
@@ -130,10 +133,9 @@ test("the Python featurizer stays free of it too, checked against a known-presen
 
 test("the guard does not forbid the fields that carry real evidence", () => {
   // `titleBefore`/`titleAfter`/`headingBefore`/`headingAfter` are read via destructuring (bare
-  // identifiers, no leading dot) in rules.ts, and as `route.<field>` in signal-predicates.mjs. Both
-  // shapes, and `route.control`, must survive -- a guard that forbids a field is one over-broad edit
+  // identifiers, no leading dot) in rules.ts. That shape, and `route.control`, must survive -- a guard that forbids a field is one over-broad edit
   // away from silently deleting the evidence it protects.
-  for (const path of ["packages/judge/src/rules.ts", "packages/lab/src/training/signal-predicates.mjs"]) {
+  for (const path of ["packages/judge/src/rules.ts"]) {
     const code = withoutComments(path, readFileSync(join(ROOT, path), "utf8"));
     for (const field of ["titleBefore", "titleAfter", "headingBefore", "headingAfter"]) {
       assert.match(code, new RegExp(`\\b${field}\\b`), `${path} should still read ${field}`);

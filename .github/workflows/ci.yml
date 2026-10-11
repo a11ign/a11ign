@@ -47,7 +47,7 @@ name: ci
 #
 # Unit tests run the WHOLE suite (#3573, chairman via ceo, 2026-10-04). They used to run over `testPackages` (touched packages
 # plus every workspace dependent) and then a hand-built selection of test files, to keep a one-package PR near a 60s budget
-# (#212 measured ~90s on a leaf `packages/lab` PR and accepted it). The selection is deleted: `rstest run --changed` is the one
+# (#212 measured ~90s on a leaf `a11ign/lab` PR and accepted it). The selection is deleted: `rstest run --changed` is the one
 # selector left, runs locally in `pnpm run verify`, and a PR's own CI run answers the whole-suite question. What a PR now pays in wall
 # time is measured on the row (#3573), not argued here.
 #
@@ -267,14 +267,13 @@ jobs:
     uses: ./.github/workflows/reusable-build-test.yml
     with:
       run-lint-typecheck: true
-      run-docs-coverage: true
       run-ts-tests: true
       run-coverage: true
 
   # A1 (#452): CALLS `reusable-build-test.yml` for the one thing this job ever needed from it -- a real
   # `dist/`, since `@a11ign/screenreader-fleet/cli-flags` resolves through `package.json`'s `exports` map and a
-  # handful of Python tests (`test_grants_map_is_current.py`, `test_unclosable_map_is_current.py`) shell
-  # out to a `node` script that imports it. No lint, no typecheck, no TS tests, no docs:coverage --
+  # handful of Python tests shelled out to a `node` script that imports it; those three left for `a11ign/lab` with ADR 0045 cut 2 (#5080), and
+  # no Python test of this tree names `node` now, so whether this job still needs a build is a question that row left open. No lint, no typecheck, no TS tests --
   # this job never ran any of those, and the reusable file's defaults are
   # deliberately "off" for exactly this reason: opting IN to extra work, never opting OUT of it.
   python:
