@@ -1,7 +1,7 @@
 /**
  * The rule layer's `AuthDriver`: the browser protocol through a Playwright CDP session (ADR 0038, PR 5).
  *
- * The same protocol calls the worker's own driver makes (`packages/nvda-worker/src/auth-flow.mjs`), for the same
+ * The same protocol calls the worker's own driver makes (`a11ign/screenreader-worker`'s `src/auth-flow.mjs`), for the same
  * reason: controls are bound by ACCESSIBLE NAME from the accessibility tree, so the flow that reaches a control for the
  * screen reader reaches it for axe, and text goes in by `Input.insertText`. Every action is a fixed protocol call or a
  * FIXED function declaration handed its arguments as data (`Runtime.callFunctionOn`'s `arguments`); nothing a flow says

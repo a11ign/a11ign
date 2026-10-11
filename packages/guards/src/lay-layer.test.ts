@@ -26,6 +26,8 @@ const { pinnedVersion, layingPlan, lay, REF_FILE } = await import(pathToFileURL(
 const NAME = "@a11ign/screenreader-fleet";
 /** Where the fleet is laid by a host that still lays it: built from its name so the core's live files do not spell the path (ADR 0045 cut 4, #5082). */
 const FLEET_DIR = `packages/${"worker-fleet"}`;
+/** The worker layer, the same way (ADR 0045 cut 6, #5084): `lay-layer.ts` still lays it for a host whose `layers.json` declares it, until the row that deletes that file. */
+const WORKER_DIR = `packages/${"nvda-worker"}`;
 
 /** A root importer block as pnpm writes it, with `version` as the lockfile would hold it. */
 const lockfileWith = (version: string) => `importers:\n\n  .:\n    dependencies:\n      '${NAME}':\n        specifier: ^0.3.0\n        version: ${version}\n      '@anthropic-ai/sdk':\n        specifier: ^0.131.0\n        version: 0.131.0\n`;
@@ -53,7 +55,7 @@ test("POSITIVE CONTROL: the version is read past the peers pnpm appends, and a l
 });
 
 test("#3939: a layer's DECLARED package names the tag, not its key; no declaration still means @a11ign/<key>; a declared package the lockfile lacks is REFUSED naming it", () => {
-  const worker = { path: "packages/nvda-worker", package: "screenreader-worker", remote: "https://example.invalid/screenreader-worker.git" };
+  const worker = { path: WORKER_DIR, package: "screenreader-worker", remote: "https://example.invalid/screenreader-worker.git" };
   const lockfile = `importers:\n\n  .:\n    dependencies:\n      '@a11ign/screenreader-worker':\n        specifier: 0.2.0\n        version: 0.2.0\n`;
   const manifest = { layers: { "nvda-worker": worker } };
   assert.equal(layingPlan(manifest, lockfile, "nvda-worker").tag, "@a11ign/screenreader-worker@0.2.0");
@@ -71,7 +73,7 @@ test("#3939: a layer's DECLARED package names the tag, not its key; no declarati
 });
 
 test("#4119: the worker lays `<package>@<version>` below 0.3.0 and `v<version>` from it; the fleet does the same from 0.5.3 (the flat release, #4224)", () => {
-  const worker = { path: "packages/nvda-worker", package: "screenreader-worker", remote: "https://example.invalid/screenreader-worker.git" };
+  const worker = { path: WORKER_DIR, package: "screenreader-worker", remote: "https://example.invalid/screenreader-worker.git" };
   const manifest = { layers: { "nvda-worker": worker, "screenreader-fleet": MANIFEST.layers["screenreader-fleet"] } };
   const lockfile = (name: string, version: string) => `importers:\n\n  .:\n    dependencies:\n      '${name}':\n        specifier: ${version}\n        version: ${version}\n`;
   const workerTag = (version: string) => layingPlan(manifest, lockfile("@a11ign/screenreader-worker", version), "nvda-worker").tag;
@@ -86,13 +88,13 @@ test("#4119: the worker lays `<package>@<version>` below 0.3.0 and `v<version>` 
 });
 
 test("#4119: `source` is where the layer is in ITS repository and `path` stays where it is laid; without it the two are one; the real worker declares the root", () => {
-  const worker = { path: "packages/nvda-worker", package: "screenreader-worker", remote: "https://example.invalid/screenreader-worker.git" };
+  const worker = { path: WORKER_DIR, package: "screenreader-worker", remote: "https://example.invalid/screenreader-worker.git" };
   const lockfile = `importers:\n\n  .:\n    dependencies:\n      '@a11ign/screenreader-worker':\n        specifier: 0.4.0\n        version: 0.4.0\n`;
   assert.equal(layingPlan({ layers: { "nvda-worker": { ...worker, source: "." } } }, lockfile, "nvda-worker").source, ".");
   assert.ok(!("source" in layingPlan({ layers: { "nvda-worker": worker } }, lockfile, "nvda-worker")), "no declaration, no key: the plan is the one every layer had");
   const real = JSON.parse(readFileSync(join(REPO_ROOT, "layers.json"), "utf8"));
   const plan = layingPlan(real, readFileSync(join(REPO_ROOT, "pnpm-lock.yaml"), "utf8"), "nvda-worker");
-  assert.equal(plan.path, "packages/nvda-worker");
+  assert.equal(plan.path, WORKER_DIR);
   assert.equal(plan.source, ".", "v0.3.0 and later hold the package at the repository root");
 });
 
@@ -106,11 +108,11 @@ test("#4119: lay reads the layer from `source` in the repository and lays it at 
     sandbox.run(["tag", "v0.4.0"]);
     const root = mkdtempSync(join(tmpdir(), "lay-layer-root-"));
     try {
-      const plan = { remote: pathToFileURL(sandbox.dir).href, tag: "v0.4.0", path: "packages/nvda-worker", lays: ["src"] };
-      // CONTROL: without `source` the plan looks for packages/nvda-worker/src in the repository, which is not there.
-      assert.throws(() => lay(root, plan), /holds no packages\/nvda-worker\/src/);
-      assert.equal(lay(root, { ...plan, source: "." }), "laid v0.4.0 at packages/nvda-worker");
-      assert.deepEqual(walk(join(root, "packages/nvda-worker")), [REF_FILE, "src/index.mjs"]);
+      const plan = { remote: pathToFileURL(sandbox.dir).href, tag: "v0.4.0", path: WORKER_DIR, lays: ["src"] };
+      // CONTROL: without `source` the plan looks for the layer's `src` at its own path in the repository, which is not there.
+      assert.throws(() => lay(root, plan), new RegExp(`holds no ${WORKER_DIR}/src`));
+      assert.equal(lay(root, { ...plan, source: "." }), `laid v0.4.0 at ${WORKER_DIR}`);
+      assert.deepEqual(walk(join(root, WORKER_DIR)), [REF_FILE, "src/index.mjs"]);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

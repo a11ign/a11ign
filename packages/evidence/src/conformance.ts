@@ -302,7 +302,7 @@ export function sweepCoverage(input: ConformanceScopeInput): TypeCoverage[] {
  * the element-key list positively off `browser-session.mjs`'s own `structuralCensus()` literal would
  * close this properly, but `packages/evidence` depends on nothing by design — `censusFromDiagnostics`
  * below already states why ("capture-core bars the accessibility tree from becoming a model feature") —
- * and `packages/nvda-worker` is the package that already depends on `@a11ign/evidence`, never the
+ * and `@a11ign/screenreader-worker` is the package that already depends on `@a11ign/evidence`, never the
  * reverse. That fix belongs in `browser-session.mjs`, not here, and is out of this row's scope.
  *
  * `graphicUnnamed`/`graphicExempted` are NOT excluded: they are genuine sub-counts `reachableCountOf` and

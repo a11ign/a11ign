@@ -46,7 +46,7 @@ question "did this change what we capture" is answered by the gate. If it report
 `CAPTURE_PROTOCOL_VERSION` bump and a recapture, not a puzzle to argue away.
 
 **A held branch costs minutes; a merged interaction costs a corpus.** Anything touching
-`packages/nvda-worker/src` waits for a running capture to finish.
+the worker's `src/` (`a11ign/screenreader-worker`) waits for a running capture to finish.
 
 **Ask HOW a number was obtained, not whether it is right.** Applied to peers, to tools, and hardest to this
 role's own output. Four wrong answers on 2026-09-06 were each a correct method against the wrong

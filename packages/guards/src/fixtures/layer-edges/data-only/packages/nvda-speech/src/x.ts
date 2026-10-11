@@ -1,4 +1,4 @@
-const REGION_BODY = "packages/other/src/x.ts\npackages/nvda-worker/src/own.ts\n";
+const REGION_BODY = "packages/other/src/x.ts\npackages/nvda-speech/src/own.ts\n";
 const FIXTURE_PATHS = ["packages/other/src/x.ts", "../../other/src/x.ts"];
 
 /** Splits a Region body into paths. It names them and never opens one. */

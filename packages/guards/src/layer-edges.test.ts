@@ -47,7 +47,10 @@ const TSX = pathToFileURL(createRequire(import.meta.url).resolve("tsx")).href;
 const cli = (...args: string[]) => spawnSync(process.execPath, ["--import", TSX, GUARD, ...args], { encoding: "utf8" });
 
 const TARGET = "packages/other/src/x.ts";
-const LAYER_FILE = "packages/nvda-worker/src/x.ts";
+/** The worker layer's directory, built from its name (ADR 0045 cut 6, #5084): the guard under test still knows `nvda-worker` as a layer until `layers.json` goes. The fixtures use `nvda-speech`, the other layer that left first, so no tracked file spells the worker's path. */
+const WORKER_LAYER = "nvda-worker";
+const WORKER_DIR = `packages/${WORKER_LAYER}`;
+const LAYER_FILE = "packages/nvda-speech/src/x.ts";
 /** The lab layer's directory, built from the layer's name as `lab-delete.test.ts` builds it: the guard under test still knows `lab` as a layer until `layers.json` goes. */
 const LAB_LAYER = "lab";
 const LAB_DIR = `packages/${LAB_LAYER}`;
@@ -73,7 +76,7 @@ const TEST_PATH = /\.test\.|\/fixtures\/|\/test-support\/|\/tests?\/|(?:^|\/)tes
 
 test("the layer packages are DECLARED, all six, and packageOf reads the directory under packages/", () => {
   assert.deepEqual([...LAYER_PACKAGES], [...FIRST_LAYERS, ...SPLIT_LAYERS]);
-  assert.equal(packageOf("packages/nvda-worker/src/server.ts"), "nvda-worker");
+  assert.equal(packageOf(`${WORKER_DIR}/src/server.ts`), WORKER_LAYER);
   assert.equal(packageOf("packages/nvda-speech"), "nvda-speech");
   assert.equal(packageOf("scripts/x.ts"), null, "the repository root and scripts/ are in no package");
 });
@@ -83,7 +86,7 @@ test("the layer packages are DECLARED, all six, and packageOf reads the director
 test("a clean layer package PASSES: its own imports, a bare package import, and another package reaching it by NAME", () => {
   const scanned = trackedFiles(fixture("clean")).filter((path) => isScanned(path));
   assert.deepEqual(scanned.sort(), [
-    "packages/nvda-worker/src/own.ts", "packages/nvda-worker/src/x.ts", "packages/other/src/x.ts", "packages/other/src/y.ts",
+    "packages/nvda-speech/src/own.ts", "packages/nvda-speech/src/x.ts", "packages/other/src/x.ts", "packages/other/src/y.ts",
   ], "POSITIVE CONTROL: the clean fixture is scanned, so no edges is a scan that found none");
   assert.deepEqual(edgesOf("clean"), []);
 });
@@ -94,7 +97,7 @@ test("an import that leaves the layer is REFUSED, naming both ends", () => {
   const edges = edgesOf("imports-across");
   assert.deepEqual(edges, [{ from: LAYER_FILE, to: TARGET, kind: "import", direction: "out" }]);
   const message = describeVerdict(judgeEdges(edges, [])).join("\n");
-  assert.match(message, /NEW EDGE out: packages\/nvda-worker\/src\/x\.ts -> packages\/other\/src\/x\.ts/);
+  assert.match(message, /NEW EDGE out: packages\/nvda-speech\/src\/x\.ts -> packages\/other\/src\/x\.ts/);
 });
 
 test("a `new URL(..., import.meta.url)` read that leaves the layer is REFUSED", () => {
@@ -103,7 +106,7 @@ test("a `new URL(..., import.meta.url)` read that leaves the layer is REFUSED", 
 
 test("a `.cmd` launcher naming another package's path is REFUSED", () => {
   assert.deepEqual(edgesOf("launcher"), [
-    { from: "packages/nvda-worker/src/run.cmd", to: TARGET, kind: "launcher", direction: "out" },
+    { from: "packages/nvda-speech/src/run.cmd", to: TARGET, kind: "launcher", direction: "out" },
   ]);
 });
 
@@ -138,14 +141,14 @@ test("a `const` that is only handed to a function that does not read PASSES: a p
   assert.match(source, /mentions\("see packages\/other\/src\/x\.ts", PATH\)/, "and the const is passed to a call");
   assert.match(source, /LIST\.map\(\(entry\) => entry\.toUpperCase\(\)\)/, "and a list of paths is walked by a callback that reads nothing");
   const scanned = trackedFiles(fixture("const-parsed")).filter((path) => isScanned(path));
-  assert.ok(scanned.includes(LAYER_FILE) && scanned.includes("packages/nvda-worker/src/y.ts"), "POSITIVE CONTROL: both files are scanned");
+  assert.ok(scanned.includes(LAYER_FILE) && scanned.includes("packages/nvda-speech/src/y.ts"), "POSITIVE CONTROL: both files are scanned");
   assert.deepEqual(edgesOf("const-parsed"), []);
   assert.equal(cli("--check", `--root=${fixture("const-parsed")}`).status, 0);
 });
 
 test("the property a read takes is the property that is read: `expect` holds another package's path as DATA and `file` is the layer's own", () => {
-  const source = textOf("const-parsed", "packages/nvda-worker/src/y.ts");
-  assert.match(source, /file: "packages\/nvda-worker\/src\/own\.ts", expect: "packages\/other\/src\/x\.ts"/);
+  const source = textOf("const-parsed", "packages/nvda-speech/src/y.ts");
+  assert.match(source, /file: "packages\/nvda-speech\/src\/own\.ts", expect: "packages\/other\/src\/x\.ts"/);
   assert.match(source, /readFileSync\(join\(ROOT, file\)/);
   assert.deepEqual(edgesOf("const-parsed").filter((e) => e.from.endsWith("y.ts")), [], "the destructured `file` is judged, not every string in the list");
   const swapped = viaOf("const-array").filter((e) => e.file === "z.ts");
@@ -158,15 +161,15 @@ test("a path in a list `const` that is walked into a read is REFUSED: for-of int
     { file: "y.ts", via: { declaredLine: 3, readLine: 7 } },
     { file: "z.ts", via: { declaredLine: 4, readLine: 7 } },
   ]);
-  assert.match(textOf("const-array", "packages/nvda-worker/src/y.ts"), /const ALL = \[\.\.\.A, \.\.\.B\];/, "CONTROL: the list is built by spreading two");
+  assert.match(textOf("const-array", "packages/nvda-speech/src/y.ts"), /const ALL = \[\.\.\.A, \.\.\.B\];/, "CONTROL: the list is built by spreading two");
   assert.ok(edgesOf("const-array").every((e) => e.to === TARGET), "the layer's own path in B is not a reach");
 });
 
 test("a `const` shadowed in an inner scope is judged on the value that reaches the read, on both sides of the block", () => {
   for (const file of ["x.ts", "y.ts"]) {
-    assert.match(textOf("const-shadowed", `packages/nvda-worker/src/${file}`), /const P = "\.\/own\.ts"|const P = "\.\.\/\.\.\/other\/src\/x\.ts"/);
+    assert.match(textOf("const-shadowed", `packages/nvda-speech/src/${file}`), /const P = "\.\/own\.ts"|const P = "\.\.\/\.\.\/other\/src\/x\.ts"/);
   }
-  assert.ok(existsSync(join(fixture("const-shadowed"), "packages/nvda-worker/src/own.ts")), "CONTROL: `./own.ts` exists, so an unresolved read is not why one read is clean");
+  assert.ok(existsSync(join(fixture("const-shadowed"), "packages/nvda-speech/src/own.ts")), "CONTROL: `./own.ts` exists, so an unresolved read is not why one read is clean");
   assert.deepEqual(viaOf("const-shadowed"), [
     // the INNER const names the other package and is declared BEFORE a file-level const that names the layer's own file
     { file: "x.ts", via: { declaredLine: 3, readLine: 4 } },
@@ -209,7 +212,7 @@ test("a `packages/<name>` token in a launcher whose <name> is no package is not 
 
 test("the OTHER direction: a package that imports into the layer by path is REFUSED", () => {
   assert.deepEqual(edgesOf("reach-in"), [
-    { from: "packages/other/src/y.ts", to: "packages/nvda-worker/src/own.ts", kind: "import", direction: "in" },
+    { from: "packages/other/src/y.ts", to: "packages/nvda-speech/src/own.ts", kind: "import", direction: "in" },
   ]);
 });
 
@@ -225,8 +228,8 @@ test("a workflow and a config file naming a layer path are REFUSED, as `in` edge
 
 test("a path mentioned ONLY in a comment PASSES, with the real target and the comment both present", () => {
   assert.ok(existsSync(join(fixture("comment-only"), TARGET)), "CONTROL: the target exists, so this passes because it is a comment");
-  assert.match(textOf("comment-only", "packages/nvda-worker/src/x.ts"), /\/\/ import \{ X \} from "\.\.\/\.\.\/other\/src\/x\.ts"/);
-  assert.match(textOf("comment-only", "packages/nvda-worker/src/run.cmd"), /^rem node "packages\\other\\src\\x\.ts"/m);
+  assert.match(textOf("comment-only", "packages/nvda-speech/src/x.ts"), /\/\/ import \{ X \} from "\.\.\/\.\.\/other\/src\/x\.ts"/);
+  assert.match(textOf("comment-only", "packages/nvda-speech/src/run.cmd"), /^rem node "packages\\other\\src\\x\.ts"/m);
   assert.deepEqual(edgesOf("comment-only"), []);
 });
 
@@ -255,7 +258,7 @@ test("an edge the baseline names is not new, and the same baseline over a tree w
   assert.deepEqual(judgeEdges(edges, [ENTRY]), { unlisted: [], stale: [], malformed: [] });
   const stale = judgeEdges(edgesOf("clean"), [ENTRY]);
   assert.deepEqual(stale.stale, [ENTRY]);
-  assert.match(describeVerdict(stale).join("\n"), /STALE ENTRY: packages\/nvda-worker\/src\/x\.ts -> packages\/other\/src\/x\.ts/);
+  assert.match(describeVerdict(stale).join("\n"), /STALE ENTRY: packages\/nvda-speech\/src\/x\.ts -> packages\/other\/src\/x\.ts/);
 });
 
 test("an entry the baseline cannot honour is MALFORMED: no disposition, no reason, a bare owned-by, a retired word, or not a list", () => {
@@ -324,8 +327,8 @@ const insideALayerThatLeft = (entries: { from: string }[]) => entries.filter((e)
 
 test("done-when 1, after #3447, #3504 and #3505: no file inside a layer that left is in the baseline, because none is in the tree", () => {
   // THE CONTROL, over the same function: before the delete this loop refused every launcher the worker reached out by, so it is shown to SEE one.
-  const planted = [{ from: "packages/nvda-worker/src/launcher-reach.cmd" }, { from: "packages/nvda-speech/nvda_speech/x.py" }, { from: `${FLEET_DIR}/src/doctor.ts` }, { from: `${LAB_DIR}/src/a.ts` }];
-  assert.deepEqual(insideALayerThatLeft(planted).map((e) => e.from), ["packages/nvda-worker/src/launcher-reach.cmd", "packages/nvda-speech/nvda_speech/x.py", `${FLEET_DIR}/src/doctor.ts`, `${LAB_DIR}/src/a.ts`]);
+  const planted = [{ from: `${WORKER_DIR}/src/launcher-reach.cmd` }, { from: "packages/nvda-speech/nvda_speech/x.py" }, { from: `${FLEET_DIR}/src/doctor.ts` }, { from: `${LAB_DIR}/src/a.ts` }];
+  assert.deepEqual(insideALayerThatLeft(planted).map((e) => e.from), [`${WORKER_DIR}/src/launcher-reach.cmd`, "packages/nvda-speech/nvda_speech/x.py", `${FLEET_DIR}/src/doctor.ts`, `${LAB_DIR}/src/a.ts`]);
   assert.deepEqual(insideALayerThatLeft(readBaseline(ROOT)), []);
 });
 
@@ -396,7 +399,7 @@ test("`--check` exits 0 over the real tree, and non-zero, naming both ends, over
   assert.equal(cli("--check", `--root=${fixture("clean")}`).status, 0, "CONTROL: a clean tree is not refused");
   const crossing = cli("--check", `--root=${fixture("imports-across")}`);
   assert.equal(crossing.status, 1);
-  assert.match(crossing.stderr, /NEW EDGE out: packages\/nvda-worker\/src\/x\.ts -> packages\/other\/src\/x\.ts/);
+  assert.match(crossing.stderr, /NEW EDGE out: packages\/nvda-speech\/src\/x\.ts -> packages\/other\/src\/x\.ts/);
 });
 
 test("`--check` over a tree whose only baseline entry names an edge that is gone exits non-zero as STALE", () => {
@@ -405,7 +408,7 @@ test("`--check` over a tree whose only baseline entry names an edge that is gone
   assert.deepEqual(edgesOf("stale-baseline"), [], "and the fixture's tree no longer has it");
   const stale = cli("--check", `--root=${fixture("stale-baseline")}`);
   assert.equal(stale.status, 1);
-  assert.match(stale.stderr, /STALE ENTRY: packages\/nvda-worker\/src\/x\.ts -> packages\/other\/src\/x\.ts/);
+  assert.match(stale.stderr, /STALE ENTRY: packages\/nvda-speech\/src\/x\.ts -> packages\/other\/src\/x\.ts/);
 });
 
 test("a mistyped flag is refused rather than run as the default, and no mode is a usage error", () => {

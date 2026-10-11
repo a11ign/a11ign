@@ -2,7 +2,7 @@
 # (.github/workflows/ci.yml's `deliberateRefusals`, retired 2026-09-15) for the one lane
 # docs/lane-ownership.json currently defines: "the pipeline", owner `ceo`, over `.github/workflows/`.
 #
-# This is NOT docs/owned-path-facts.json's corpus-invalidating list (packages/nvda-worker/ and friends) --
+# This is NOT docs/owned-path-facts.json's corpus-invalidating list (the capture pipeline's paths and friends) --
 # that mechanism stays a PR-body fact sign-off (the `ownedPaths` CI job) by ceo's own 2026-09-07 ruling
 # (packages/agent-org/src/owned-path-signoff.mjs's header): every session here pushes as one of a small
 # number of shared accounts, so a review would have caught none of the failures those paths have actually

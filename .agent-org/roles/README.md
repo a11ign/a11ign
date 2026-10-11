@@ -14,7 +14,7 @@ pipeline decides what merges; no person or agent is the merge step. A worker own
 merge: the PR body carries `Closes #N`, an `Acceptance: <command>` line and a `Mutation: <command>` line,
 the pipeline runs them, a green gate merges (merge commits only), a merge that turns `main` red is reverted
 by the pipeline, and every green `main` publishes to npm under `next`. A person approves only on the owned
-paths: `packages/nvda-worker`, every cache-key input, `packages/scorer/models` and the gates, where
+paths: the worker's pin (`@a11ign/screenreader-worker`), every cache-key input, `packages/scorer/models` and the gates, where
 `orchestrator` is code owner.
 
 The chairman speaks to `ceo` and to nobody else. `ceo` decides and reports to the chairman; routine

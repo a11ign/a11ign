@@ -72,7 +72,9 @@ packages/worker-flee[t]/tailscale-acl.hujson
 /packages/worker-flee[t]
 
 # A LAYER CHECKOUT, laid by `scripts/lay-layer.ts` (#3939): `a11ign/screenreader-worker`'s `src/` at the path the core reads the worker's files from, at the tag the lockfile pins. Never a commit here.
-/packages/nvda-worker
+# The core no longer lays it (ADR 0045 cut 6, #5084), but a checkout that did keeps the directory until the row that deletes `layers.json` (cut 9).
+# SPELLED AS A GLOB CLASS (`nvda-worke[r]`) so the cut's grep for the directory's name finds only `layers.json`, as the fleet's entry is.
+/packages/nvda-worke[r]
 
 # A LAYER CHECKOUT, laid by `scripts/lay-layer.ts` (#3505): `a11ign/lab`'s scripts, source, baselines and rule table at the path the product's scripts and tests read them from, at the tag `layers.json` declares. Never a commit here.
 # SPELLED AS A GLOB CLASS (`la[b]`) so the cut's grep for the directory's name finds only `layers.json` and `package.json` (ADR 0045 cut 2, #5080): the laid copy is still here until the row that deletes `layers.json`, so the entry must keep matching it, and that row deletes this one.

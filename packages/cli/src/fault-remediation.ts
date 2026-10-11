@@ -5,8 +5,8 @@ import type { AuthFault } from "./auth/auth-faults.js";
  * that knowledge lives in `docs/nvda-worker-runbook.md` and in the heads of whoever has debugged this
  * before. An error a user cannot act on is a support request, and there is nobody to answer it.
  *
- * Every fault code the worker can report over the wire (`packages/nvda-worker/src/capture-faults.mjs`'s
- * `FAULT`) gets an entry here naming three things: WHAT happened, WHAT TO TRY, and WHERE TO LOOK for
+ * Every fault code the worker can report over the wire (`FAULT` in `a11ign/screenreader-worker`'s
+ * `src/capture-faults.mjs`) gets an entry here naming three things: WHAT happened, WHAT TO TRY, and WHERE TO LOOK for
  * more. #81 extended this table to a JUDGE-layer fault too — `packages/scorer/python/score.py`'s
  * `ArtifactSchemaMismatch.FAULT`, which reaches this table via `local-judge.ts`'s `scoreCapture` reading
  * a parseable line the Python process prints on stdout, not over HTTP — the shape differs but the reason

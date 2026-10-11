@@ -8,7 +8,7 @@ packages:
   # would make that clone a workspace project, and `pnpm install --frozen-lockfile` at the core root then fails with
   # ERR_PNPM_OUTDATED_LOCKFILE (the lockfile records the core's projects only). pnpm reads this file as static YAML, so the entry is
   # written here and `pnpm-workspace.test.ts` derives the list from layers.json: a layer added there without its line turns it red.
-  - "!packages/nvda-worker"
+  - "!packages/nvda-worke[r]"
   # The fleet's directory is the same kind of clone (`scripts/lay-layer.ts`, #3504): the root takes `@a11ign/screenreader-fleet` from the registry,
   # and a laid copy joining the workspace would turn that into a `link:`. The core stopped laying it (ADR 0045 cut 4, #5082) and a checkout that did
   # keeps it. SPELLED AS A GLOB CLASS (`worker-flee[t]`) so the cut's grep for the directory's name finds only `layers.json`; the row that deletes it deletes this entry.

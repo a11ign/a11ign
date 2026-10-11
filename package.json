@@ -30,9 +30,9 @@
     "eval:capture": "A11Y_PYTHON=.venv/bin/python node packages/lab/src/harnesses/capture-fixtures.ts",
     "eval:gate": "A11Y_PYTHON=.venv/bin/python EVAL_GATE=1 EVAL_RUNS=3 tsx packages/lab/src/eval/run.ts",
     "typecheck": "tsc --noEmit",
-    "build": "node scripts/lay-layer.ts control && node scripts/lay-layer.ts nvda-worker && node scripts/lay-layer.ts lab && node scripts/pnpm.ts -r run build",
+    "build": "node scripts/lay-layer.ts control && node scripts/lay-layer.ts lab && node scripts/pnpm.ts -r run build",
     "preinstall": "node scripts/refuse-other-installers.ts",
-    "prepare": "node scripts/install-git-hooks.ts && node scripts/lay-layer.ts control && node scripts/lay-layer.ts nvda-worker && node scripts/lay-layer.ts lab && node scripts/pnpm.ts -r run build",
+    "prepare": "node scripts/install-git-hooks.ts && node scripts/lay-layer.ts control && node scripts/lay-layer.ts lab && node scripts/pnpm.ts -r run build",
     "lint": "eslint .",
     "scan": "tsx packages/cli/src/scan/run-axe.ts",
     "training:generate": "node packages/lab/src/training/generate-screenreader-dataset.mjs",
@@ -170,7 +170,7 @@
     "@a11ign/judge": "0.2.3",
     "@a11ign/scorer": "0.2.1",
     "@a11ign/screenreader-fleet": "^0.9.0",
-    "@a11ign/screenreader-worker": "^0.12.0",
+    "@a11ign/screenreader-worker": "^0.13.0",
     "@anthropic-ai/sdk": "^0.131.0",
     "@guidepup/guidepup": "^0.31.0",
     "a11ign": "0.2.7"
@@ -201,7 +201,7 @@
   ],
   "pnpm": {
     "overrides": {
-      "@a11ign/screenreader-worker": "0.12.0"
+      "@a11ign/screenreader-worker": "0.13.0"
     }
   }
 }

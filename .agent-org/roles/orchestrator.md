@@ -88,7 +88,7 @@ question "did this change what we capture" is answered by the gate. If it report
 `CAPTURE_PROTOCOL_VERSION` bump and a recapture, not a puzzle to argue away.
 
 **A held branch costs minutes; a merged interaction costs a corpus.** Anything touching
-`packages/nvda-worker/src` waits for a running capture to finish.
+the worker's `src/` (`a11ign/screenreader-worker`) waits for a running capture to finish.
 
 **A reproduction carries three fields: what you ran, what it said, and as of which commit.** Added
 2026-09-06 after the most expensive version of this role's recurring defect. A gate reported 80 false

@@ -237,7 +237,7 @@ export interface RuleInput {
    * #869 writes the rule against the declared shape rather than repeating that deferral, because #89's
    * own chosen shape (declare the field, hold the rule, land it "together with #170's worker-side
    * census") is exactly what let 1.3.5 sit unreachable with #79 closed as though it were done. #170 (a
-   * worker-side census mirroring `mediaCensus`, `packages/nvda-worker/src/browser-session.mjs`) is what
+   * worker-side census mirroring `mediaCensus`, `a11ign/screenreader-worker`'s `src/browser-session.mjs`) is what
    * makes this field non-empty on a real capture — fleet-touching, and not this row's region. Absent
    * means NOT CHECKED, exactly as `media`'s own comment states, and is true of every capture that exists
    * today.

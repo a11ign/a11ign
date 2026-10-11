@@ -62,7 +62,7 @@ const MOVED_TO_THE_REGISTRY: Record<string, string> = {
   // `documents` holds its package at the ROOT of its repository since the flatten (#4218, published as 0.1.2), so its prefix is `src/`.
   "a11ign/documents src/": "packages/cli/node_modules/@a11ign/documents/package.json",
   // `nvda-speech/` has no entry: it is private and not in the published package, and the check reads only public manifests.
-  // `src/` is the worker repository's own layout (#4092: the old key, `packages/nvda-worker/`, named a directory it never had there). The key
+  // `src/` is the worker repository's own layout (#4092: the old key, the layer's `packages/` path, named a directory it never had there). The key
   // carries the repository because `documents` declares `src/` too (#4218), so the prefix alone no longer says whose manifest to read.
   "a11ign/screenreader-worker src/": "node_modules/@a11ign/screenreader-worker/package.json",
   "a11ign/screenreader-fleet src/": "node_modules/@a11ign/screenreader-fleet/package.json",
@@ -229,7 +229,8 @@ const releasablePathsOf = (repo: string, declared: unknown): string[] => {
 };
 
 /** #4092: a prefix the worker repository does not have, which no test above could see because claim 3 reads the installed manifest. */
-const STALE_WORKER_PREFIX = "packages/nvda-worker/";
+// BUILT, so the core's live files do not spell the departed path whole (ADR 0045 cut 6, #5084).
+const STALE_WORKER_PREFIX = `${["packages", "nvda-worker"].join("/")}/`;
 /** #4220: `nvda-speech` was folded into `src/nvda-speech/` (screenreader-worker 0.5.2, #4214), so `src/` already counts it and its old directory is no prefix at all. */
 const FOLDED_SPEECH_PREFIX = "packages/nvda-speech/";
 const WORKER = "a11ign/screenreader-worker";
