@@ -43,6 +43,7 @@ entry names what is missing, what it would cost, and what would tell you it is f
 - [§58](#58-the-liaison-shares-the-host-and-the-account-the-do-it-for-me-queue-cannot-see-his-session-and-a-walk-through-verifies-only-what-a-read-can-see-open-by-design-3409-3429-3430) THE LIAISON SHARES THE HOST AND THE ACCOUNT, THE DO-IT-FOR-ME QUEUE CANNOT SEE HIS SESSION, AND A WALK-THROUGH VERIFIES ONLY WHAT A READ CAN SEE — OPEN, by design (#3409, #3429, #3430)
 - [§59](#59-the-first-real-use-of-the-drained-kernel-reboot-is-unmeasured-open-until-the-next-kernel-apt-installs-4046) THE FIRST REAL USE OF THE DRAINED KERNEL REBOOT IS UNMEASURED — OPEN, until the next kernel apt installs (#4046)
 - [§60](#60-the-nine-repositories-settings-table-is-hand-run-not-scheduled-open-by-design-4486-3705-3708) THE NINE REPOSITORIES' SETTINGS TABLE IS HAND-RUN, NOT SCHEDULED — OPEN, by design (#4486, #3705, #3708)
+- [§61](#61-a-run-against-an-auth0-tenant-with-bot-detection-set-to-always-is-untested-and-bot-challenge-is-a-fixture-only-outcome-known-in-the-code-as-auth-challenge-detected-open-by-design-4084) A RUN AGAINST AN AUTH0 TENANT WITH BOT DETECTION SET TO ALWAYS IS UNTESTED, and bot-challenge IS A FIXTURE-ONLY OUTCOME, KNOWN IN THE CODE AS auth-challenge-detected — OPEN, by design (#4084)
 <!-- known-gaps-index:end -->
 
 ## The order these should be done in
@@ -3892,3 +3893,15 @@ whether a repository has drifted since the last scheduled run. *The command:* `A
 --include packages/guards/src/layer-repository-protection.test.ts --disableConsoleIntercept`, as an identity that reads the nine repositories (with no `gh` login and
 no `GH_TOKEN` it refuses by name and reads nothing). *Cost:* a repository that drifts waits for a person to run it. *Fixed when:* a new row, with the app's actual
 installation permissions measured by an admin, puts the read back on an Octo STS token.
+
+---
+
+## 61. A RUN AGAINST AN AUTH0 TENANT WITH BOT DETECTION SET TO ALWAYS IS UNTESTED, and `bot-challenge` IS A FIXTURE-ONLY OUTCOME, KNOWN IN THE CODE AS `auth-challenge-detected` — OPEN, by design (#4084)
+
+**No run has signed in against an Auth0 tenant with Bot Detection set to Always.** That is not done, and the reason is the plan, not a defect: Bot Detection is an Enterprise add-on, and the org's tenant is on the Free plan, which carries only Basic Attack Protection (brute-force and suspicious-IP throttling). The chairman ruled on #4084 (2026-10-11T09:23Z) that the nightly matrix drops the Bot Detection "Always" case, and that this gap is recorded here instead.
+
+**What covers it instead, read from the code and not from a login:** a login that stops at a challenge fails as `auth-challenge-detected`, naming the vendor and the step (`packages/cli/src/auth/interpreter.ts`, `auth-faults.ts`). The chairman's name for that outcome is `bot-challenge`, and the string is not emitted anywhere in the code. Its fixture is `interpreter.test.ts`: reCAPTCHA, hCaptcha and Cloudflare Turnstile widgets each fail as `auth-challenge-detected` in both interpreters, and a challenge that replaces the login form does too. **No Auth0 Bot Detection page is among those fixtures**, so they show the outcome for three vendors' widgets and say nothing about how Auth0 presents its own.
+
+**What it does not show:** that Auth0's Bot Detection presents a widget this tool recognises. The test pins that a source the vendor list does not name is not treated as a challenge (`interpreter.test.ts`, the positive control near line 366), so an unnamed challenge is not reported as `auth-challenge-detected`.
+
+**What would settle it:** a tenant on a plan that carries Bot Detection, one run against it with Bot Detection set to Always, and the outcome that run printed. Until then the Auth0 case is untested, not passing.
