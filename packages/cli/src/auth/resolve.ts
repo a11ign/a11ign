@@ -3,7 +3,9 @@
  * page is captured, so a refused run spends nothing.
  *
  * `--flows <file> --login-flow <name>` (and the Action's `flows:` and `login-flow:`) become an `AuthRequest`: the login
- * flow's steps, whose secrets are environment-variable NAMES. Resolution is where, in this order:
+ * flow's steps, whose secrets are environment-variable NAMES. **`--flows <file>` alone signs in by the file's `login:` block**
+ * (v3 login phase 2, #4084), as `a11ign login --check` does: the request then carries the block's three variable NAMES and
+ * no steps, and the worker's screen loop signs in. Resolution is where, in this order:
  *
  * 1. **A repository that is not private is refused whole** (amendment 3), when the run is inside GitHub Actions and the
  *    event says so. Read from `GITHUB_EVENT_PATH`; "could not read it" is "not private", because "I could not tell" is
@@ -22,8 +24,11 @@
  */
 import { resolve as resolvePath } from "node:path";
 
-import { FlowsError, parseFlowsFile, refuseIfWrongOrigin, resolveLoginFlow } from "./flows.js";
-import { assertCredentialsPresent, type AuthPlan } from "./interpreter.js";
+import {
+  EXPECT_DEFAULT_SECONDS, FlowsError, flowsErrorFrom, parseFlowsFile, refuseIfWrongOrigin, resolveLoginFlow, type Flow, type FlowsFile,
+} from "./flows.js";
+import { assertCredentialsPresent, readCredential, type AuthPlan } from "./interpreter.js";
+import { LoginBlockError, loginBlockPlan, loginBlockWire, type LoginBlock } from "./login-block.js";
 import { judgeBackendDecision, refuseAuthOnPublicRepository, type AuthRequest } from "./refusals.js";
 import { MAX_CAPTURE_ATTEMPTS, minimumLogins, refuseAboveLoginCap, worstCaseLogins } from "../multi-page.js";
 import type { Credential } from "./leak-detector.js";
@@ -67,6 +72,14 @@ export interface ResolvedAuth {
 
 export const PRESSING_OFF_NOTICE = "authenticated run: automatic pressing and link-following are off; "
   + "this run will press only what your flows and forms config name.";
+
+/** A block names no control, so the list above is not the whole account: the loop presses the sign-in controls the screens offer. */
+export const LOGIN_BLOCK_NOTICE = "authenticated run: signing in by the flows file's login: block. The sign-in loop types the "
+  + "username, password and one-time code the block names and presses the sign-in controls each screen offers, "
+  + "and presses nothing else.";
+
+/** Both a named flow and a block: the flow is what the run signs in by, and a block left unused is said, not silently ignored. */
+export const BLOCK_UNUSED_NOTICE = "authenticated run: --login-flow names a flow, so the file's login: block is not used.";
 
 /**
  * WHAT THIS RUN PRESSED (ADR 0038, Constraint 7, "how a user is told", place 2): the controls its own files name, by
@@ -141,7 +154,10 @@ async function readFlows(readText: ResolveRequest["readText"], path: string): Pr
   }
 }
 
-/** Was any authentication asked for at all? Both flags, or neither — one alone is a mistake named as such. */
+/**
+ * Was any authentication asked for at all? `--login-flow` needs the file it names a flow in. `--flows` alone is asked for: the
+ * file may carry a `login:` block, which only the file can say, so `signInOf` refuses it once the file is read.
+ */
 function asked({ flows, loginFlow, authState, sendAuthenticatedTranscriptToJudgeVendor }: AuthArguments): boolean {
   if (flows === null && loginFlow === null) {
     if (authState !== null) {
@@ -152,10 +168,40 @@ function asked({ flows, loginFlow, authState, sendAuthenticatedTranscriptToJudge
     }
     return false;
   }
-  if (flows === null || loginFlow === null) {
-    throw new FlowsError("login-flow-missing", `${flows === null ? "--login-flow" : "--flows"} needs ${flows === null ? "--flows" : "--login-flow"} beside it: a login flow is a named flow in a flows file`);
+  if (flows === null) {
+    throw new FlowsError("login-flow-missing", "--login-flow needs --flows beside it: a login flow is a named flow in a flows file");
+  }
+  // A saved state stands in for a NAMED flow, whose final expect: decides that it still signs in; a block has no such flow.
+  if (loginFlow === null && authState !== null) {
+    throw new FlowsError("login-flow-missing", "--flows needs --login-flow beside it: a login flow is a named flow in a flows file");
   }
   return true;
+}
+
+/** What the run signs in by: the flow `--login-flow` names, or, with none named, the file's `login:` block. */
+type SignIn = { flow: Flow; blockUnused: boolean } | { block: LoginBlock };
+
+function signInOf(file: FlowsFile, loginFlow: string | null): SignIn {
+  if (loginFlow !== null) return { flow: resolveLoginFlow(file, loginFlow), blockUnused: file.login !== undefined };
+  if (file.login === undefined) {
+    throw new FlowsError("login-flow-missing", "--flows needs --login-flow beside it: a login flow is a named flow in a flows file, "
+      + "and this file has no login: block to sign in by instead");
+  }
+  return { block: file.login };
+}
+
+/** What a sign-in decides for the run: the request, what must be set, what to hide and what to say. Every field is names, never a value. */
+interface Planned {
+  auth: AuthRequest;
+  /** The plan whose variables are checked before anything is leased. */
+  reads: AuthPlan;
+  /** Variables the loop reads that `reads` does not name, so a run without one is refused here and not after a lease. */
+  alsoRequired: string[];
+  /** The variables whose VALUES the run hides. */
+  names: string[];
+  stateCredentials: Credential[];
+  countNotice: (run: { captures: number; axe: boolean }) => string;
+  notices: string[];
 }
 
 /**
@@ -192,6 +238,47 @@ export function stateNotice({ captures, axe }: { captures: number; axe: boolean 
     + "The state is a credential: keep the file private.";
 }
 
+/** The names of the variables a login flow's `fill:` steps read, once each. */
+const flowVariableNames = (steps: AuthPlan["login"]): string[] =>
+  [...new Set(steps.flatMap((step) => ("fill" in step && step.fill.fromEnv !== undefined ? [step.fill.fromEnv] : [])))];
+
+async function planFlow(request: ResolveRequest, file: FlowsFile, flow: Flow, blockUnused: boolean): Promise<Planned> {
+  const stated = await resolveState(request, file.origin);
+  const auth = planFrom(flow.steps, stated?.state, file.idpOrigins);
+  return {
+    auth, reads: auth, alsoRequired: [],
+    names: stated === undefined ? flowVariableNames(flow.steps) : [], // a state run performs no login, so no login variable is read and none needs hiding
+    stateCredentials: stated?.credentials ?? [],
+    countNotice: stated === undefined ? loginNotice : stateNotice,
+    notices: [...(stated?.notices ?? []), ...(blockUnused ? [BLOCK_UNUSED_NOTICE] : [])],
+  };
+}
+
+/**
+ * A block run: the wire shape, the plan the rule layer signs in by (the one `login --check` builds, so a `url:` check is refused
+ * here by the same rule), and all THREE variables required. The worker reads the seed only when a code screen appears, but a
+ * block names one on purpose, and a run that cannot answer the code screen is better refused here than ended there.
+ */
+function planBlock(block: LoginBlock): Planned {
+  let built: ReturnType<typeof loginBlockPlan>;
+  try {
+    built = loginBlockPlan(block, { expectSeconds: EXPECT_DEFAULT_SECONDS });
+  } catch (error) {
+    if (error instanceof LoginBlockError) throw flowsErrorFrom(error);
+    throw error;
+  }
+  const auth: AuthRequest = {
+    login: [], loginBlock: loginBlockWire(block), ...(block.idpOrigins.length === 0 ? {} : { idpOrigins: block.idpOrigins }),
+  };
+  return {
+    auth, reads: built.plan, alsoRequired: [block.totp], names: [...built.credentialNames, block.totp], stateCredentials: [],
+    countNotice: loginNotice, notices: [LOGIN_BLOCK_NOTICE],
+  };
+}
+
+const planSignIn = (request: ResolveRequest, file: FlowsFile, signIn: SignIn): Promise<Planned> | Planned =>
+  "block" in signIn ? planBlock(signIn.block) : planFlow(request, file, signIn.flow, signIn.blockUnused);
+
 /**
  * Resolve authentication, or `null` when the run asked for none. Throws a `FlowsError` or an `AuthError` naming what
  * refused; never a stack trace a person must read.
@@ -200,35 +287,28 @@ export async function resolveAuthentication(request: ResolveRequest): Promise<Re
   const { args, urls, env, readText } = request;
   if (!asked(args)) return null;
   const flowsPath = args.flows as string;
-  const loginFlow = args.loginFlow as string;
   const privacy = await repositoryPrivacy(env, readText);
-  const auth = planFrom([]);
-  if (privacy.onGithubActions) refuseAuthOnPublicRepository({ auth, repositoryPrivate: privacy.isPrivate, requestedExits: [] });
+  if (privacy.onGithubActions) refuseAuthOnPublicRepository({ auth: planFrom([]), repositoryPrivate: privacy.isPrivate, requestedExits: [] });
   const file = parseFlowsFile(await readFlows(readText, flowsPath), flowsPath);
-  const login = resolveLoginFlow(file, loginFlow);
+  const signIn = signInOf(file, args.loginFlow);
   for (const url of urls) {
     if (request.isPdf(url)) throw new FlowsError("origin-pinned", `${url} is a PDF, which has no login to perform; an authenticated run is for pages`);
     refuseIfWrongOrigin(file, url);
   }
-  const stated = await resolveState(request, file.origin);
-  const plan = planFrom(login.steps, stated?.state, file.idpOrigins);
+  const planned = await planSignIn(request, file, signIn);
   const captures = await request.countCaptures();
   // Before anything is leased or captured, beside the other refusals: a run that asks a real account for more logins than
   // the bound is refused whole (PageListError, exit 2), and a single URL with many form states is caught here too.
   refuseAboveLoginCap({ captures, axe: request.axe });
-  assertCredentialsPresent(plan, env);
-  const names = stated === undefined
-    ? [...new Set(login.steps.flatMap((step) => ("fill" in step && step.fill.fromEnv !== undefined ? [step.fill.fromEnv] : [])))]
-    : []; // a state run performs no login, so no login variable is read and none needs hiding
-  const scrubSet = buildScrubSet([...names.map((name) => ({ name, value: env[name] as string })), ...(stated?.credentials ?? [])]);
+  assertCredentialsPresent(planned.reads, env);
+  for (const name of planned.alsoRequired) readCredential(name, env);
+  const scrubSet = buildScrubSet([...planned.names.map((name) => ({ name, value: env[name] as string })), ...planned.stateCredentials]);
   refuseIfAnArgumentCarriesAValue({ urls, task: request.task }, scrubSet);
-  const judgeNotice = judgeBackendDecision({ auth: plan, sendTranscriptToJudgeVendor: args.sendAuthenticatedTranscriptToJudgeVendor });
+  const judgeNotice = judgeBackendDecision({ auth: planned.auth, sendTranscriptToJudgeVendor: args.sendAuthenticatedTranscriptToJudgeVendor });
   return {
-    auth: plan,
+    auth: planned.auth,
     scrubSet,
-    notices: [PRESSING_OFF_NOTICE, (stated === undefined ? loginNotice : stateNotice)({ captures, axe: request.axe }), ...(stated?.notices ?? []),
-      ...(judgeNotice ? [judgeNotice] : [])],
+    notices: [PRESSING_OFF_NOTICE, planned.countNotice({ captures, axe: request.axe }), ...planned.notices, ...(judgeNotice ? [judgeNotice] : [])],
     overrides: { probeForms: false, probeNavigation: false },
   };
 }
-

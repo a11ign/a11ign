@@ -31,7 +31,7 @@ import {
   formatFaultMessage, formatAuthFaultMessage, formatDoubtMessage, formatEarlyContainmentNotice,
 } from "./fault-remediation.js";
 import { AuthError, isAuthFault } from "./auth/auth-faults.js";
-import { refuseAuthOnRemoteWorker, requireAuthApplied, type AuthRequest } from "./auth/refusals.js";
+import { onTheWire, refuseAuthOnRemoteWorker, requireAuthApplied, type AuthRequest } from "./auth/refusals.js";
 import { ruleLayerSignIn } from "./auth/rule-layer.js";
 import { pressedByThisRun, resolveAuthentication } from "./auth/resolve.js";
 import { buildScrubSet, redactionNotice, scrubArtifact, type ScrubSet } from "./auth/scrub.js";
@@ -42,7 +42,7 @@ import {
 } from "./auth/interpreter.js";
 import { LOGIN_EXIT_CODES, LOGIN_OUTCOMES, retryDecision, type LoginOutcome } from "./auth/login-outcomes.js";
 import { keepLastAttempt, recordStep, startAttempt, writeArtifact, type ArtifactIo, type Attempt, type ObservedStep } from "./auth/login-artifact.js";
-import { LoginBlockError, parseLoginBlock } from "./auth/login-block.js";
+import { LoginBlockError, loginBlockPlan, parseLoginBlock, ruleLayerPlanOf } from "./auth/login-block.js";
 import { loginVerdict, pageDecision, validateCheck, type PageObservation, type ScanLoss, type SignedInCheck } from "./auth/signed-in-check.js";
 import { classifyScreen, type Classification, type ScreenObservation } from "./auth/screen-loop.js";
 import { openPlaywrightDriver } from "./auth/playwright-driver.js";
@@ -1490,7 +1490,9 @@ export function recheckedSignIn(
   { plan, url, signInOnce = ruleLayerSignIn({ plan, url }), read = readThroughTheDriver }:
   { plan: AuthRequest; url: string; signInOnce?: (page: Page) => Promise<void>; read?: ReadPage },
 ): (page: Page) => Promise<void> {
-  const stop = signedInConditionOf(plan.login);
+  // The condition is read off the steps the rule layer actually runs: a block request's own `login` is `[]`, and reading that
+  // would skip the check on exactly the runs that sign in by a block (#5054).
+  const stop = signedInConditionOf(ruleLayerPlanOf(plan, { expectSeconds: EXPECT_DEFAULT_SECONDS }).login);
   if (stop === undefined) return signInOnce;
   const at = { appOrigin: new URL(url).origin, idpOrigins: plan.idpOrigins ?? [] };
   return async (page) => {
@@ -1688,7 +1690,7 @@ export async function captureViaWorker(
         // Omitted rather than sent as null when absent: an older worker reads known fields only, so an
         // absent key is the same "no configured form" it has always understood. Additive, like `fault`.
         ...(formState ? { formState } : {}),
-        ...(auth ? { auth } : {}) },
+        ...(auth ? { auth: onTheWire(auth) } : {}) },
       timeoutMs: CAPTURE_CLIENT_TIMEOUT_MS,
       onProgress: earlyContainmentWatcher(),
     });
@@ -1801,23 +1803,7 @@ function planFromFlow(file: FlowsFile, name: string): LoginCheckPlan {
   };
 }
 
-function planFromBlock(raw: unknown): LoginCheckPlan {
-  const block = parseLoginBlock(raw);
-  if (!("role" in block.check)) {
-    throw new LoginCheckError("login --check cannot run a login: block whose check is a url: yet. Name an element as the check "
-      + "(role and name), which the signed-out page can be asked about before anything is typed.");
-  }
-  const url = new URL(block.url);
-  const stop: FinalExpect = { kind: block.check.role === "heading" ? "heading" : "control", name: block.check.name, timeoutSeconds: EXPECT_DEFAULT_SECONDS };
-  return {
-    plan: {
-      login: [{ goto: `${url.pathname}${url.search}` }, { auto: true }, { expect: stop }],
-      auto: { username: block.username, password: block.password, totp: block.totp, organization: block.organization },
-      idpOrigins: block.idpOrigins,
-    },
-    startUrl: url.href, appOrigin: url.origin, stop, credentialNames: [block.username, block.password], totpName: block.totp,
-  };
-}
+const planFromBlock = (raw: unknown): LoginCheckPlan => loginBlockPlan(parseLoginBlock(raw), { expectSeconds: EXPECT_DEFAULT_SECONDS });
 
 async function loadLoginCheckPlan(request: LoginCheckRequest, readText: (path: string) => Promise<string>): Promise<LoginCheckPlan> {
   const text = await readText(request.flows);
