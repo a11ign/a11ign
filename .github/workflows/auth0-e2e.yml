@@ -1,0 +1,405 @@
+# THE END-TO-END SIGN-IN (#4975, v3 outcome 1 under #4084): a real NVDA worker signs in to a hosted provider, through Auth0
+# Universal Login and the authenticator-code step, and reads the page it reaches.
+#
+# WHAT THIS ASKS THAT NO OTHER WORKFLOW DOES. Every fixture sign-in passes against a fake provider, and `login --check` opens a
+# local browser and never reaches a worker, so NVDA would read nothing. Providers change their pages without telling anyone, so
+# the only honest statement that sign-in with MFA works is a run against the real tenant, repeated. This is that run.
+#
+# THE RUN IS THE SCAN FORM, `a11ign http://localhost:4173/ --flows <file>`, and not `login --check`. The flows file carries a
+# `login:` block of three environment-variable NAMES and ONE signed-in check; the CLI sends that block to the worker as
+# `auth.loginBlock` (#5054), and the worker reads the values from ITS OWN process environment, which is why the five `AUTH0_*`
+# values are in the `env:` of the one step that starts the worker. The wire carries names and never a value.
+#
+# WHERE EACH TRIGGER LIVES, as `registry-consumer-gate.yml` places its own, and for the same reason: `release.yml` is not touched.
+#   - `workflow_run`      after `release` completes, and only when it SUCCEEDED (a failed publish changed nothing to sign in to).
+#   - `schedule`          daily, off the hour (GitHub's cron queue is worst at :00, #965).
+#   - `workflow_dispatch` on demand, and the only way to run the FALSIFIER (below).
+#
+# THE FALSIFIER IS PART OF THE PROOF (Done-when 2). A sign-in that reads the signed-in heading proves nothing unless the same run
+# with a WRONG authenticator seed does not. `falsifier: true` replaces the seed with a random one for the run, and then the
+# workflow requires the opposite of the ordinary run: the sign-in must END in `auth-login-failed` and the heading must NOT be
+# heard. A falsifier that signs in is a failed check, because it would mean the seed is not what lets the run through.
+#
+# NO SECRET VALUE IS WRITTEN HERE, IN A LOG, OR IN AN ARTIFACT (Done-when 4). The only reference to a value is
+# `${{ secrets.NAME }}` in an `env:` block below. Logs are masked by GitHub, artifacts are not, so a file is kept for upload only
+# after it is searched for each value (`keep`), and the tenant's origin is written into a COPY of the flows file in
+# `$RUNNER_TEMP` and never into the committed one.
+#
+# THE FREE PLAN IS ITS OWN STOP (chairman, 2026-10-11). The tenant is on Auth0's Free plan, where MFA is for testing only, and a
+# plan refusal is not a rejected code. A run that ends so is reported as `mfa-unavailable-on-plan` with the plan named as the
+# cause, because the wrong name here sends a person to fix a seed that is fine. `planStop` (`auth0-matrix.ts`) decides it from a
+# recorded response and is tested; this workflow reads the NAME the run printed, and does not decide it a second time.
+name: auth0-e2e
+
+on:
+  schedule:
+    - cron: "37 6 * * *"
+  workflow_run:
+    workflows: [release]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      falsifier:
+        description: 'Replace the authenticator seed with a random one: the run must end `auth-login-failed` and must NOT hear the signed-in heading.'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# One tenant, one test user, one authenticator seed: two runs together would fight over the same account and its one-time codes,
+# and a lockout there is the provider punishing the repository. The second waits, and cancels nothing.
+concurrency:
+  group: auth0-e2e
+  cancel-in-progress: false
+
+env:
+  PAGE: http://localhost:4173/
+  HEADING: Signed in to the a11y-witness test page
+
+jobs:
+  e2e:
+    # A publish that FAILED published nothing new, so the daily run already read what there is.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    # NVDA is Windows-only; GitHub hosts these. Never a fleet worker.
+    runs-on: windows-2022
+    timeout-minutes: 45
+    outputs:
+      outcome: ${{ steps.scan.outputs.outcome }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with: { node-version: 22 }
+
+      # Playwright's own browser download is skipped: the rule layer falls back to the system Edge, which a Windows runner has and
+      # which is the engine the capture drives (`launchBrowser`, the Action's own install says the same).
+      - name: Install
+        shell: bash
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+        run: pnpm install --frozen-lockfile
+
+      # The installer is this repository's own pinned `@guidepup/setup`, so it reads the NVDA build this checkout's guidepup names.
+      - name: Set up NVDA
+        shell: pwsh
+        run: |
+          pnpm exec guidepup setup
+          pnpm exec guidepup install nvda
+
+      - name: Disable the NVDA Speech Viewer
+        shell: pwsh
+        run: |
+          $cacheRoot = if ($env:GUIDEPUP_SCREEN_READERS_PATH) { $env:GUIDEPUP_SCREEN_READERS_PATH }
+                       else { Join-Path $env:LOCALAPPDATA 'guidepup' }
+          $inis = Get-ChildItem (Join-Path $cacheRoot 'nvda') -Recurse -Filter 'nvda.ini' -ErrorAction SilentlyContinue
+          if (-not $inis) { throw "No NVDA config found under $cacheRoot - the install step failed." }
+          foreach ($ini in $inis) {
+            $body = Get-Content $ini.FullName -Raw
+            Set-Content -Path $ini.FullName -NoNewline `
+              -Value ($body -replace 'showSpeechViewerAtStartup = True', 'showSpeechViewerAtStartup = False')
+          }
+          if ($inis | Select-String 'showSpeechViewerAtStartup = True') { throw 'Speech Viewer still enabled.' }
+
+      - name: Suppress Edge's first-run experience
+        shell: pwsh
+        run: |
+          $key = "HKLM:\SOFTWARE\Policies\Microsoft\Edge"
+          New-Item -Path $key -Force | Out-Null
+          Set-ItemProperty -Path $key -Name "HideFirstRunExperience" -Value 1 -Type DWord
+          Set-ItemProperty -Path $key -Name "BrowserSignin" -Value 0 -Type DWord
+
+      - name: Allow Edge to be forced into the foreground
+        shell: pwsh
+        run: |
+          ./node_modules/@a11ign/screenreader-fleet/src/provisioning/apply-foreground-lock-timeout.ps1
+          $v = (Get-ItemProperty 'HKCU:\Control Panel\Desktop' -Name ForegroundLockTimeout -ErrorAction SilentlyContinue).ForegroundLockTimeout
+          if ($v -ne 0) { throw "ForegroundLockTimeout is '$v', not 0 - the capture would return 0 phrases with no error." }
+
+      # The judge is the local trained scorer, as in every other run: no rented model sees a transcript from behind a login.
+      - name: Set up the local scorer
+        shell: bash
+        run: |
+          python -m pip install --quiet --upgrade pip
+          pins=$(grep -E '^(onnxruntime|transformers|safetensors|numpy)==' packages/scorer/requirements.txt)
+          count=$(echo "$pins" | grep -c .)
+          if [ "$count" -ne 4 ]; then
+            echo "::error::expected 4 pinned packages in packages/scorer/requirements.txt, found $count: $pins" >&2
+            exit 1
+          fi
+          python -m pip install --quiet $pins
+          python packages/scorer/python/fetch-encoder.py
+          test -f packages/scorer/models/screenreader-scorer/model.safetensors \
+            || { echo "::error::the trained scorer is missing from the checkout." >&2; exit 1; }
+
+      # The masks the CLI already emits (`maskLines`, the Action's own): a repository secret is masked by GitHub in its raw form
+      # only, and these are the other forms a value takes once something encodes it (a URL, base64).
+      - name: Mask the credential forms
+        shell: bash
+        env:
+          AUTH0_TEST_USER: ${{ secrets.AUTH0_TEST_USER }}
+          AUTH0_TEST_PASSWORD: ${{ secrets.AUTH0_TEST_PASSWORD }}
+          AUTH0_TOTP_SEED: ${{ secrets.AUTH0_TOTP_SEED }}
+        run: |
+          masks="$RUNNER_TEMP/mask-credential-forms.mts"
+          cat > "$masks" <<'MASKS'
+          import { join } from "node:path";
+          import { pathToFileURL } from "node:url";
+          const workspace = process.env.GITHUB_WORKSPACE ?? process.cwd();
+          const { maskLines } = await import(pathToFileURL(join(workspace, "packages/cli/src/action/auth-masks.ts")).href);
+          const values = ["AUTH0_TEST_USER", "AUTH0_TEST_PASSWORD", "AUTH0_TOTP_SEED"].map((name) => process.env[name] ?? "").filter((value) => value !== "");
+          for (const line of maskLines(values)) console.log(line);
+          MASKS
+          pnpm exec tsx "$masks"
+
+      # ONE step starts the page, the worker and the scan, because the values must be in the environment of the worker (which reads
+      # them by name) and of the CLI's own rule-layer sign-in, and a background process does not outlive its step.
+      - name: Sign in through Auth0 with NVDA and read the page
+        id: scan
+        shell: bash
+        env:
+          AUTH0_DOMAIN: ${{ secrets.AUTH0_DOMAIN }}
+          AUTH0_CLIENT_ID: ${{ secrets.AUTH0_CLIENT_ID }}
+          AUTH0_TEST_USER: ${{ secrets.AUTH0_TEST_USER }}
+          AUTH0_TEST_PASSWORD: ${{ secrets.AUTH0_TEST_PASSWORD }}
+          AUTH0_TOTP_SEED: ${{ secrets.AUTH0_TOTP_SEED }}
+          A11Y_WORKER: http://127.0.0.1:8765
+          A11Y_PYTHON: python
+          # The local scorer, named rather than left to a default: a vendor here would be REFUSED for a run that logs in
+          # (`auth-refused-judge-backend`), and the transcript behind a login never leaves the runner.
+          JUDGE_BACKEND: local
+          FALSIFIER: ${{ inputs.falsifier }}
+        run: |
+          set -uo pipefail
+          evidence="$RUNNER_TEMP/auth0-e2e-evidence"
+          mkdir -p "$evidence"
+          flows="$RUNNER_TEMP/auth0-e2e-flows.yml"
+          result="$RUNNER_TEMP/a11ign-result.json"
+          scan_err="$RUNNER_TEMP/scan.err"
+          reader="$RUNNER_TEMP/read-transcript.mjs"
+          PLACEHOLDER="https://tenant.auth0-e2e.invalid"
+
+          # THE VALUES A KEPT FILE MUST NOT HOLD, taken BEFORE a falsifier replaces the seed. Names are printed, values never.
+          real_seed="$AUTH0_TOTP_SEED"
+          for name in AUTH0_DOMAIN AUTH0_CLIENT_ID AUTH0_TEST_USER AUTH0_TEST_PASSWORD AUTH0_TOTP_SEED; do
+            if [ -z "${!name}" ]; then
+              echo "::error::the repository secret $name is not set (or is empty), so no sign-in was attempted."
+              echo "outcome=secret-missing" >> "$GITHUB_OUTPUT"
+              exit 1
+            fi
+          done
+          case "$AUTH0_DOMAIN" in
+            *[!A-Za-z0-9.-]*) echo "::error::AUTH0_DOMAIN is not a bare host (letters, digits, dots and hyphens)."; echo "outcome=secret-malformed" >> "$GITHUB_OUTPUT"; exit 1 ;;
+          esac
+
+          # A file goes into the upload directory only when it holds no secret's value: logs are masked, artifacts are not.
+          keep() {
+            local file="$1" value
+            [ -f "$file" ] || return 0
+            for value in "$AUTH0_DOMAIN" "$AUTH0_CLIENT_ID" "$AUTH0_TEST_USER" "$AUTH0_TEST_PASSWORD" "$real_seed"; do
+              if grep -F -q -- "$value" "$file"; then
+                echo "::warning::$(basename "$file") holds a repository secret's value and is NOT kept."
+                return 0
+              fi
+            done
+            cp "$file" "$evidence/"
+          }
+
+          # The tenant's origin goes into a COPY of the committed file, in place of the placeholder that stands for it there.
+          template=$(cat packages/cli/src/auth/auth0-e2e-flows.yml)
+          case "$template" in
+            *"$PLACEHOLDER"*) ;;
+            *) echo "::error::the flows file carries no $PLACEHOLDER to put the tenant's origin in." ; echo "outcome=flows-file-drift" >> "$GITHUB_OUTPUT"; exit 1 ;;
+          esac
+          printf '%s\n' "${template//"$PLACEHOLDER"/"https://$AUTH0_DOMAIN"}" > "$flows"
+
+          if [ "$FALSIFIER" = "true" ]; then
+            # A random base32 string is a seed the tenant has never enrolled, whatever form the real one is in.
+            AUTH0_TOTP_SEED=$(node -p "const a='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'; [...require('node:crypto').randomBytes(32)].map((b) => a[b % 32]).join('')")
+            export AUTH0_TOTP_SEED
+            echo "::notice::FALSIFIER run: the authenticator seed is replaced by a random one, so the sign-in must fail."
+          fi
+
+          # What reads the transcript: the heading must be a phrase NVDA ANNOUNCED, in a `transcript` field, and not merely a string
+          # the report echoes from the flows file's own `check` (which a notice or a finding would also carry).
+          cat > "$reader" <<'READER'
+          import { readFileSync } from "node:fs";
+          const [file, heading] = process.argv.slice(2);
+          const transcripts = [];
+          const walk = (value) => {
+            if (Array.isArray(value)) return value.forEach(walk);
+            if (value === null || typeof value !== "object") return;
+            for (const [key, inner] of Object.entries(value)) {
+              if (key === "transcript" && Array.isArray(inner)) transcripts.push(...inner.filter((phrase) => typeof phrase === "string"));
+              else walk(inner);
+            }
+          };
+          walk(JSON.parse(readFileSync(file, "utf8")));
+          const heard = transcripts.filter((phrase) => phrase.includes(heading));
+          if (heard.length === 0) {
+            console.error(`NVDA did not announce "${heading}" (${transcripts.length} phrases read).`);
+            process.exit(1);
+          }
+          console.log(heard[0]);
+          READER
+
+          # The test page: it reads AUTH0_DOMAIN and AUTH0_CLIENT_ID and nothing else, and is started WITHOUT the other three so
+          # that a page is never handed what it does not read.
+          env -u AUTH0_TEST_USER -u AUTH0_TEST_PASSWORD -u AUTH0_TOTP_SEED \
+            node packages/cli/src/auth/fixtures/auth0-spa/serve.ts > "$RUNNER_TEMP/spa.log" 2>&1 &
+          spa=$!
+          worker_js=$(node -p "require('node:fs').realpathSync('node_modules/@a11ign/screenreader-worker/dist/server.mjs')")
+          node "$worker_js" > "$RUNNER_TEMP/worker.log" 2> "$RUNNER_TEMP/worker.err" &
+          worker=$!
+          trap 'kill $spa $worker 2>/dev/null || true' EXIT
+
+          ready=""
+          for _ in $(seq 1 60); do
+            curl -fsS --max-time 5 http://127.0.0.1:4173/ > /dev/null 2>&1 && { ready=1; break; }
+            kill -0 "$spa" 2>/dev/null || break
+            sleep 0.5
+          done
+          if [ -z "$ready" ]; then
+            keep "$RUNNER_TEMP/spa.log"
+            echo "::error::the test page never answered at $PAGE. Its log is in the evidence."
+            echo "outcome=page-not-served" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+          ready=""
+          for _ in $(seq 1 360); do
+            health=$(curl -fsS --max-time 5 "$A11Y_WORKER/health" 2>/dev/null || true)
+            case "$health" in *'"ready":true'*) ready=1; break ;; esac
+            kill -0 "$worker" 2>/dev/null || break
+            sleep 0.5
+          done
+          if [ -z "$ready" ]; then
+            keep "$RUNNER_TEMP/worker.log"; keep "$RUNNER_TEMP/worker.err"
+            echo "::error::the worker never became ready. Last /health: $health"
+            echo "outcome=worker-not-ready" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+          status=0
+          pnpm exec tsx packages/cli/src/cli.ts "$PAGE" --json --flows "$flows" > "$result" 2> "$scan_err" || status=$?
+
+          # The outcome NAME the run printed, on stderr or in the result's own fault. `mfa-unavailable-on-plan` is tested FIRST: a plan refusal is not a rejected code, and a
+          # message that mentions the plan must never be read as the code's.
+          outcome="none"
+          if [ "$status" -ne 0 ]; then
+            outcome="unrecognised"
+            for name in mfa-unavailable-on-plan totp-rejected mfa-required-no-seed mfa-enrollment-required credentials-rejected \
+                        account-blocked bot-challenge rate-limited consent-required organization-required unknown-screen \
+                        signed-in-check-never-matched signed-in-check-matches-signed-out; do
+              if grep -q -- "$name" "$scan_err" "$result"; then outcome="$name"; break; fi
+            done
+          fi
+          echo "outcome=$outcome" >> "$GITHUB_OUTPUT"
+
+          heard=""
+          heard_status=0
+          heard=$(node "$reader" "$result" "$HEADING" 2> "$RUNNER_TEMP/reader.err") || heard_status=$?
+
+          for file in "$result" "$scan_err" "$RUNNER_TEMP/worker.log" "$RUNNER_TEMP/worker.err" "$RUNNER_TEMP/spa.log" "$RUNNER_TEMP/reader.err"; do
+            keep "$file"
+          done
+          [ -f "$evidence/scan.err" ] && tail -n 40 "$evidence/scan.err"
+
+          mode="sign-in"
+          [ "$FALSIFIER" = "true" ] && mode="falsifier"
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          {
+            echo "### auth0-e2e: $mode"
+            echo "- run: $run_url"
+            echo "- scan exit status: $status, outcome: \`$outcome\`"
+            if [ "$heard_status" -eq 0 ]; then echo "- NVDA read: \`$heard\`"; else echo "- NVDA did **not** read \`$HEADING\`"; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$FALSIFIER" = "true" ]; then
+            # The opposite of the ordinary run, and the only way this proof means anything.
+            if [ "$outcome" = "mfa-unavailable-on-plan" ]; then
+              echo "::error::the falsifier could not run: the tenant's PLAN refused MFA (mfa-unavailable-on-plan), so a wrong seed was never tested."
+              exit 1
+            fi
+            if [ "$status" -ne 0 ] && [ "$heard_status" -ne 0 ] && grep -q -- "auth-login-failed" "$scan_err" "$result"; then
+              echo "::notice::FALSIFIER HELD: a wrong seed ended auth-login-failed (outcome $outcome) and the heading was not read."
+              exit 0
+            fi
+            echo "::error::THE FALSIFIER DID NOT HOLD: with a wrong seed the run ended with exit status $status and the heading was heard=$([ "$heard_status" -eq 0 ] && echo yes || echo no). The check is not what lets the sign-in through."
+            exit 1
+          fi
+
+          if [ "$status" -eq 0 ] && [ "$heard_status" -eq 0 ]; then
+            echo "::notice::NVDA read the signed-in heading after Universal Login and the authenticator-code step: $heard"
+            exit 0
+          fi
+          if [ "$outcome" = "mfa-unavailable-on-plan" ]; then
+            echo "::error::mfa-unavailable-on-plan: the tenant's PLAN refused MFA. The authenticator code and seed are not the cause; this is a decision about the plan."
+          else
+            echo "::error::the sign-in did not end with NVDA reading the heading: scan exit status $status, outcome $outcome, heading heard: $([ "$heard_status" -eq 0 ] && echo yes || echo no)."
+          fi
+          exit 1
+
+      - name: Keep the run's evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: auth0-e2e-evidence
+          path: ${{ runner.temp }}/auth0-e2e-evidence
+          if-no-files-found: ignore
+
+  # A FAILURE FILES AN INCIDENT, because providers change their pages and nobody is watching a daily run. ONE open row at a time:
+  # a run that fails while one is open adds itself to it, so a tenant that stays broken is one row and a count of days, never a row
+  # a day. Its own job, because it must report when `e2e` is red and needs `issues: write`, which a job that reads five secrets and
+  # starts a worker must not hold.
+  incident:
+    needs: [e2e]
+    if: ${{ !cancelled() && needs.e2e.result == 'failure' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: File the incident, or add this run to the one already open
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          OUTCOME: ${{ needs.e2e.outputs.outcome }}
+          EVENT: ${{ github.event_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          LABEL: auth0-e2e
+        run: |
+          set -euo pipefail
+          outcome="${OUTCOME:-did-not-reach-the-scan}"
+          case "$outcome" in
+            mfa-unavailable-on-plan) cause="The tenant's PLAN refused MFA (Auth0's Free plan allows it for testing only). The authenticator seed and the code are NOT the cause, and a plan is a decision for whoever pays for it." ;;
+            totp-rejected) cause="Auth0 refused the one-time code. Check that the seed in AUTH0_TOTP_SEED is the one enrolled for the test user. Do not re-run in a loop: ten wrong codes lock the user." ;;
+            credentials-rejected|account-blocked|rate-limited|bot-challenge) cause="The provider stopped the sign-in before the code (\`$outcome\`). Look at the tenant's logs before running again: a retry adds to a lockout." ;;
+            secret-missing|secret-malformed) cause="A repository secret the run needs is not usable (\`$outcome\`). Nothing was attempted against the tenant." ;;
+            *) cause="The run ended \`$outcome\`. A provider changing its page is the usual cause: read the evidence artifact of the run before changing anything." ;;
+          esac
+          body=$(printf '%s\n' \
+            "The scheduled end-to-end sign-in through Auth0 Universal Login with an authenticator code (v3 MFA, #4084) failed." \
+            "" \
+            "- outcome: \`$outcome\`" \
+            "- trigger: \`$EVENT\`" \
+            "- run: $RUN_URL" \
+            "" \
+            "$cause" \
+            "" \
+            "The run's evidence (the scan's stderr, the worker's logs, the transcript JSON) is the run's \`auth0-e2e-evidence\` artifact. Each file in it was searched for the secrets' values and one holding a value was dropped.")
+
+          # Ask for the ONE label by name: a list is capped, so a label past the cap reads as missing and `create` fails (#4466).
+          # Only a 404 means missing; any other failure stops the step rather than guessing.
+          if ! looked=$(gh api "repos/$GH_REPO/labels/$LABEL" --silent 2>&1); then
+            if grep -q 'HTTP 404' <<<"$looked"; then gh label create "$LABEL" --description "The end-to-end Auth0 sign-in with MFA failed (auth0-e2e.yml)"; else echo "$looked" >&2; exit 1; fi
+          fi
+
+          open=$(gh issue list --state open --label "$LABEL" --limit 1 --json number --jq '.[0].number // empty')
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body "$body"
+            echo "added this run to #$open"
+          else
+            gh issue create --label "$LABEL" --title "The Auth0 end-to-end sign-in with MFA is failing" --body "$body"
+          fi
