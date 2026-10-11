@@ -2,9 +2,9 @@ name: layer
 on:
   pull_request:
     paths:
-      - "packages/nvda-worker/**"
+      - "packages/nvda-speech/**"
 jobs:
   run:
     runs-on: ubuntu-latest
     steps:
-      - run: node packages/nvda-worker/src/own.ts
+      - run: node packages/nvda-speech/src/own.ts

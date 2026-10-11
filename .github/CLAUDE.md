@@ -65,7 +65,7 @@ The stale-`dist` defect exists in Python too via `__pycache__` — `test:python`
   but the pure functions can be, and these are them. Add to them when you touch a pure function.
 - **Pre-release, not covered by CI:** `pnpm run eval:gate` (judge quality) and `verify.corpus.test.ts` (capture gates) — neither can run in CI. `pnpm run eval [-- <substring>]` needs the Python venv; do not quote its numbers as a headline (single-run, no expert baseline). [Full detail →](docs/capture-integrity-plan.md#eval-and-evalgate-what-cannot-run-in-ci)
 
-- **`packages/nvda-worker/src/capture-core.mjs` only runs against NVDA on the Windows VM** — it has no local test.
+- **`a11ign/screenreader-worker`'s `src/capture-core.mjs` only runs against NVDA on the Windows VM** — it has no local test.
   After changing it, deploy (above) and then:
 
   ```bash

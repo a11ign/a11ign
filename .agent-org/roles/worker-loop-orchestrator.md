@@ -67,7 +67,7 @@ and keeps that pipeline honest rather than standing in the loop it used to run b
 **The escalation language below this point (the three triggers, "hands up to `orchestrator`") describes
 the PRE-pipeline shape of this role and is due its own pass** — flagged rather than silently rewritten,
 since `dispatcher` owns this file's wording. What is current: `ceo` is the reporting line; `orchestrator`
-remains code owner and required approver for `packages/nvda-worker`, cache keys, `packages/scorer/models`
+remains code owner and required approver for the worker's pin, cache keys, `packages/scorer/models`
 and the gates, which is a narrower, PATH-scoped authority than "hands up every escalation to orchestrator."
 
 **Created 2026-09-06, because one agent was the serial step and the measurement said which part.**
@@ -220,7 +220,7 @@ was written:
 
 **Rebuild the primary after merges** — `pnpm run build` — or every worktree inherits whatever it last built.
 Verified safe during a live capture: a build writes `dist/` only, `nvda-worker` has no build step at all
-(plain `.mjs`, ADR 0031), and `workerSourceDirty()` reads `git status -- packages/nvda-worker/src`. Measured
+(plain `.mjs`, ADR 0031), and `workerSourceDirty()` reads `git status` over the worker's laid `src/` (laid until ADR 0045 cut 6, #5084). Measured
 worker source 0 dirty either side and `worker:code` 10/10 after.
 
 **And when a tool reads stale code, resolve the module and print the PATH, not the link type.** The check

@@ -6,7 +6,7 @@
  * token 's', "sessionid=…" is not valid JSON"), so it is never repeated; a shape problem names a list and an index, never a
  * name or a value.
  *
- * The worker reads the same file with its own copy (`packages/nvda-worker/src/auth-flow.mjs`, `stateShapeProblem`), because it
+ * The worker reads the same file with its own copy (`a11ign/screenreader-worker`'s `src/auth-flow.mjs`, `stateShapeProblem`), because it
  * cannot import this package; `interpreter.test.ts` runs one table of files through both and requires the same sentence.
  */
 import { FlowsError } from "./flows.js";

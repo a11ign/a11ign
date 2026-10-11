@@ -1,7 +1,7 @@
 /**
  * `gate:isolation` does not pack a layer's CHECKOUT (#3830).
  *
- * On the lab `/opt/a11y/packages/nvda-worker` is the layer's clone, so it holds a `package.json`, and the gate packed it:
+ * On the lab the `nvda-worker` layer's clone, under `/opt/a11y/packages/`, holds a `package.json`, and the gate packed it:
  * its `prepack` runs `pnpm`, which the lab does not have by design (#3141), so stage 5 of `release:gate` failed and the
  * nine stages behind it were never read. A layer publishes from its own repository (ADR 0040), so the core's gate has no
  * business packing it. `layers.json` already says which directories those are; discovery now asks it, and says how many it left out.

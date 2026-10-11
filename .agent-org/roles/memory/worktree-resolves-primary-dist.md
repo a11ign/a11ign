@@ -34,7 +34,7 @@ readlink node_modules                                           # the whole tree
 **And rebuild the PRIMARY after merges**, or every worktree sharing its `node_modules` inherits whatever it
 last built. Verified safe to run during a live capture: `pnpm run build` writes only `dist/`, `nvda-worker`
 has no build step at all (plain `.mjs`, ADR 0031), and `workerSourceDirty()` reads
-`git status -- packages/nvda-worker/src`, which a build cannot touch. Confirmed by measurement — worker
+`git status` over the worker's laid `src/` (laid by `prepare` until ADR 0045 cut 6, #5084), which a build cannot touch. Confirmed by measurement — worker
 source 0 dirty before and after, `worker:code` 10/10 matching afterwards.
 
 This is CLAUDE.md's own stale-`dist` rule one layer out: that file warns cross-package imports resolve to

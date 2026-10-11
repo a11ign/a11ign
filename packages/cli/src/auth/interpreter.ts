@@ -9,7 +9,7 @@
  * storage state the PERSON made (`signIn`'s `state`, ADR 0038 amendment 7): read from their own file by this process, loaded
  * over the same protocol calls the worker makes, and never sent anywhere.**
  *
- * It is a PORT of `packages/nvda-worker/src/auth-flow.mjs`'s interpreter, function for function and in the same
+ * It is a PORT of the interpreter in `a11ign/screenreader-worker`'s `src/auth-flow.mjs`, function for function and in the same
  * order, and the two are held equal by `interpreter.test.ts`, which drives one table of scenarios through both
  * over one fake browser. They are two copies because they cannot be one: the worker is plain `.mjs` with no build step
  * (ADR 0031) and is not a dependency of this package, and this package must not import it (`isolation-smoke.ts`).

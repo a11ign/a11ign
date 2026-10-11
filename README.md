@@ -139,7 +139,7 @@ opt-in per capture. **[`docs/screenreader-coverage.md`](./docs/screenreader-cove
 map of what we drive and what we do not** — a behaviour missing from that table is not a missing
 feature, it is a claim this project cannot yet make.
 
-- **Capture worker** (Windows): drives **NVDA** via [Guidepup](https://github.com/guidepup/guidepup) through real navigation and returns the announcement transcript over HTTP. Speech is read over NVDA's Remote Access channel, not audio, so the machine needs no sound device. See [`packages/nvda-worker/src/`](./packages/nvda-worker/src/).
+- **Capture worker** (Windows): drives **NVDA** via [Guidepup](https://github.com/guidepup/guidepup) through real navigation and returns the announcement transcript over HTTP. Speech is read over NVDA's Remote Access channel, not audio, so the machine needs no sound device. See [`src/` in `a11ign/screenreader-worker`](https://github.com/a11ign/screenreader-worker/tree/main/src).
 - **Control plane** (anywhere): the `witness` CLI runs the capture and — if the optional axe layer is installed — axe-core concurrently, then judges the transcript and prints the report. Architecture rationale: [`docs/adr/0001-capture-architecture.md`](./docs/adr/0001-capture-architecture.md) and [`0002-layered-coverage.md`](./docs/adr/0002-layered-coverage.md).
 
 ### The judge is a hybrid

@@ -1,5 +1,5 @@
 /**
- * #3447 (move 1 of #69, step 5): THE DELETE'S OWN TEST. `packages/nvda-worker` and `packages/nvda-speech` left the workspace for
+ * #3447 (move 1 of #69, step 5): THE DELETE'S OWN TEST. The worker's and the speech package's directories left the workspace for
  * `a11ign/screenreader-worker` (ADR 0040, M1; ADR 0039 finding 1), and this repository consumes `@a11ign/screenreader-worker` from
  * the registry. Before the delete this file proved the layer could stand alone (licence division, boundary scan, leak scan: #2701,
  * recoverable from commit `d8952882f`, where it sat in the lab's `src/packaging/`); those were claims about a
@@ -8,7 +8,7 @@
  *   1. Neither package is in the workspace: `pnpm-workspace.yaml`'s globs match no directory of either name, and no workspace manifest
  *      carries either package's name (so a copy under a different directory is caught too).
  *   2. `pnpm-lock.yaml` holds no `link:` to either, and no importer under their old paths.
- *   3. The `@a11ign/screenreader-worker` entry is a REGISTRY entry: `version: 0.12.0` under every importer that declares it, and a
+ *   3. The `@a11ign/screenreader-worker` entry is a REGISTRY entry: `version: 0.13.0` under every importer that declares it, and a
  *      `packages:` entry whose `resolution` carries an `integrity`. A version with no integrity is a version nobody verified.
  *   4. No pending changeset names either package. `.changeset/README.md` is prose and may name them; an entry's frontmatter may not,
  *      because `changeset version` would then try to version a package this workspace does not have.
@@ -32,9 +32,11 @@ import { parse } from "yaml";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const CONSUMED = "@a11ign/screenreader-worker";
-const CONSUMED_VERSION = "0.12.0";
+const CONSUMED_VERSION = "0.13.0";
 /** The two directories that left, and every name either has been published or reserved under. */
 const DEPARTED_DIRECTORIES = ["nvda-worker", "nvda-speech"] as const;
+/** The worker's directory, built from its name so the core's live files do not spell it (ADR 0045 cut 6, #5084): the guard still knows it until `layers.json` goes. */
+const DEPARTED_PATH = `packages/${DEPARTED_DIRECTORIES[0]}`;
 // BUILT, NOT WRITTEN: `package-rename-nvda-worker.test.ts` refuses any non-document file that spells the old name whole.
 const DEPARTED_NAMES = [["@a11ign", "nvda-worker"].join("/"), "@a11ign/nvda-speech", "@a11ign/screenreader-speech"] as const;
 /** What a pnpm integrity looks like: an algorithm, a dash and base64. Not a hash of anything: a SHAPE, so a placeholder is refused. */
@@ -106,22 +108,22 @@ test("neither package is in the workspace, by directory or by name", () => {
 test("POSITIVE CONTROL: a workspace holding either directory, or either name under another directory, is refused naming it", () => {
   const files = {
     "pnpm-workspace.yaml": 'packages:\n  - "packages/*"\n',
-    "packages/nvda-worker/package.json": `{ "name": "${CONSUMED}" }`,
+    [`${DEPARTED_PATH}/package.json`]: `{ "name": "${CONSUMED}" }`,
     "packages/renamed/package.json": '{ "name": "@a11ign/nvda-speech" }',
     "packages/fine/package.json": '{ "name": "@a11ign/evidence" }',
   };
   withFixture(files, (root) => {
     assert.deepEqual(workspaceRefusals(root), [
-      "packages/nvda-worker is still a workspace directory",
-      `packages/nvda-worker still carries the name ${CONSUMED}`,
+      `${DEPARTED_PATH} is still a workspace directory`,
+      `${DEPARTED_PATH} still carries the name ${CONSUMED}`,
       "packages/renamed still carries the name @a11ign/nvda-speech",
     ]);
   });
-  withFixture({ ...files, "packages/nvda-worker/package.json": "{}", "packages/renamed/package.json": "{}" }, (root) => {
-    assert.deepEqual(workspaceRefusals(root), ["packages/nvda-worker is still a workspace directory"], "the directory alone is enough");
+  withFixture({ ...files, [`${DEPARTED_PATH}/package.json`]: "{}", "packages/renamed/package.json": "{}" }, (root) => {
+    assert.deepEqual(workspaceRefusals(root), [`${DEPARTED_PATH} is still a workspace directory`], "the directory alone is enough");
   });
-  // The other direction (#3760): the layer's clone sits at that path and `!packages/nvda-worker` keeps it out, so it is not a member.
-  withFixture({ ...files, "pnpm-workspace.yaml": 'packages:\n  - "packages/*"\n  - "!packages/nvda-worker"\n' }, (root) => {
+  // The other direction (#3760): the layer's clone sits at that path and `!<its path>` keeps it out, so it is not a member.
+  withFixture({ ...files, "pnpm-workspace.yaml": `packages:\n  - "packages/*"\n  - "!${DEPARTED_PATH}"\n` }, (root) => {
     assert.deepEqual(workspaceRefusals(root), ["packages/renamed still carries the name @a11ign/nvda-speech"], "an excluded directory is not a member");
   });
 });
@@ -170,7 +172,7 @@ test("pnpm-lock.yaml holds no link: to either package and no importer under eith
   assert.deepEqual(linkRefusals(read(REPO_ROOT, "pnpm-lock.yaml")), []);
 });
 
-test("pnpm-lock.yaml holds @a11ign/screenreader-worker at version 0.12.0 with an integrity, under every importer that declares it", () => {
+test("pnpm-lock.yaml holds @a11ign/screenreader-worker at version 0.13.0 with an integrity, under every importer that declares it", () => {
   const lockfile = read(REPO_ROOT, "pnpm-lock.yaml");
   assert.deepEqual(registryEntryRefusals(lockfile), []);
   // Derived a second way: the manifests that declare it are the importers the lockfile must resolve, so a lockfile that lost one is not "enough".

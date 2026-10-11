@@ -10,7 +10,7 @@ on what you want to change. Read the section that matches.
 |---|---|---|
 | the deterministic rules, the judge, the CLI report | no | `pnpm test` |
 | a WCAG criterion's boundary, coverage claims | no | `pnpm test`, then `pnpm run rules:gate` |
-| the capture pipeline (`packages/nvda-worker/`) | **yes** | `pnpm run capture:check --worker=<url>` |
+| the capture pipeline (`a11ign/screenreader-worker`) | **yes** | `pnpm run capture:check --worker=<url>` |
 | the training corpus (`a11ign/lab/src/training/`) | **yes**, for the recapture | `pnpm run training:check-signals` |
 | the trained scorer | no worker, but the Python venv | `pnpm run eval` |
 | docs, ADRs | no | read them back |
