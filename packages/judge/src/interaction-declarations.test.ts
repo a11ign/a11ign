@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
+import { restatesWireType } from "@a11ign/evidence";
+
 /**
  * ONE DECLARATION OF WHAT A CAPTURE'S STATE AND FORM CHANGES ARE -- known-gaps §15's defect, one field over (#1603).
  *
@@ -47,35 +49,11 @@ function sources(): [string, string][] {
 }
 
 /**
- * The declared type alone, off the rest of its line: an inline object through its closing brace and array suffix,
- * anything else up to the next `;`. An inline object's own `;` separators are why it cannot simply stop at the first.
+ * The change lists `@a11ign/evidence` names as restated in one file's text: the producer exports the scan (ADR 0045 rule 2), so this
+ * file holds no second copy of it. Its structure half is `structure-declarations.test.ts`'s.
  */
-function shapeOf(rest: string): string {
-  if (!rest.startsWith("{")) return rest.split(";")[0].trim();
-  const close = rest.indexOf("}");
-  if (close < 0) return rest;
-  return rest.slice(0, close + 1) + (/^\s*\[\]/.exec(rest.slice(close + 1))?.[0].trim() ?? "");
-}
-
-/**
- * Every place one file's text restates a change list rather than deriving it: a property typed as an inline object,
- * as `unknown[]`, or as an array of an interface or object-literal alias declared in the same file; or a cast to an
- * inline object. A derived form -- `CaptureInteraction[...]`, `Pick<>`, `Partial<>`, a parenthesised intersection
- * starting from one -- is none of these, and neither is a string value that merely names a field.
- */
-export function restatements(text: string): string[] {
-  const found: string[] = [];
-  for (const match of text.matchAll(/\b(stateChanges|formChanges)\??:\s*([^\n]+)/g)) {
-    const type = shapeOf(match[2].trim().replace(/^\(+/, ""));
-    const local = /^(\w+)\[\]/.exec(type);
-    const localShape = local !== null
-      && new RegExp(`\\b(?:interface\\s+${local[1]}\\b|type\\s+${local[1]}\\s*=\\s*\\{)`).test(text);
-    if (type.startsWith("{") || /^unknown\b/.test(type) || localShape) found.push(`${match[1]}: ${type}`);
-  }
-  for (const match of text.matchAll(/\b(stateChanges|formChanges)\s+as\s+(\{[^}]*\}\[\])/g)) {
-    found.push(`${match[1]} as ${match[2]}`);
-  }
-  return found;
+function restatements(text: string): string[] {
+  return restatesWireType(text).filter((shape) => !shape.startsWith("structure:"));
 }
 
 /** The files among `entries` that restate a change list, each with what it wrote. */

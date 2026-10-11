@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
+import { restatesWireType } from "@a11ign/evidence";
+
 /**
  * ONE DECLARATION OF WHAT A CAPTURE'S `structure` IS — known-gaps §15.
  *
@@ -44,19 +46,12 @@ function sources(): [string, string][] {
 }
 
 test("no TypeScript declaration spells out the sweep fields inline", () => {
-  // The signature of a sixth copy: `structure?: {` followed by a brace-list naming the sweeps, rather
-  // than a reference to `CaptureStructure`. `index.ts` is where the wire type itself lives.
+  // The signature of a sixth copy: `structure?: {` followed by a brace-list naming the sweeps, rather than a reference to
+  // `CaptureStructure`. The scan is `@a11ign/evidence`'s (ADR 0045 rule 2); `index.ts` is where the wire type itself lives.
   const offenders: string[] = [];
   for (const [path, text] of sources()) {
     if (path.endsWith("packages/evidence/src/index.ts")) continue;
-    for (const match of text.matchAll(/structure\??:\s*\{([^}]*)\}/g)) {
-      const body = match[1];
-      const names = ["headings", "landmarks", "formFields", "links", "graphics", "lists", "tableCells"]
-        .filter((f) => new RegExp(`\\b${f}\\??\\s*:`).test(body));
-      // One or two fields is a local shape (a test fixture, a narrow argument); three or more is a
-      // restatement of the wire type, which is what drifted.
-      if (names.length >= 3) offenders.push(`${path}: {${names.join(", ")}}`);
-    }
+    for (const shape of restatesWireType(text)) if (shape.startsWith("structure:")) offenders.push(`${path}: ${shape.slice("structure: ".length)}`);
   }
   assert.deepEqual(offenders, [], "these restate the capture's structure inline instead of deriving from "
     + `CaptureStructure, which is how five declarations came to disagree:\n  ${offenders.join("\n  ")}`);
@@ -80,4 +75,12 @@ test("every declaration is reachable from the wire type", () => {
     const text = readFileSync(join(ROOT, file), "utf8");
     assert.ok(text.includes(needle), `${file} must derive its structure from the wire type (${needle})`);
   }
+});
+
+test("CONTROL: an inline `structure` naming three sweeps is caught, and a derived or narrow one is not", () => {
+  // The scan above passes on an empty list, so this is where it is shown to be able to fail (the shape is the export's, `@a11ign/evidence`).
+  assert.deepEqual(restatesWireType("structure?: { headings: string[]; landmarks: string[]; links: string[] };"),
+    ["structure: {headings, landmarks, links}"]);
+  assert.deepEqual(restatesWireType("structure?: { headings: string[]; links: string[] };"), []);
+  assert.deepEqual(restatesWireType('structure?: Pick<CaptureStructure, "headings" | "links" | "lists">;'), []);
 });
