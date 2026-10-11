@@ -19,8 +19,13 @@
  * NEVER RECORDS A VALUE: an error or a mark names a step, a verb and an accessible name, and never what was typed.
  */
 import { AuthError, type LoginFailureReason } from "./auth-faults.js";
-import { assertLiteralIsNotSecret, type FlowStep } from "./flows.js";
+import { assertLiteralIsNotSecret, STEP_MODIFIERS, type FlowStep, type PageCondition } from "./flows.js";
+import { parseTotpSecret } from "./otpauth.js";
 import type { StateCookie, StateEntries } from "./scrub.js";
+import {
+  runLoop, type Action, type LoopOptions, type LoopResult, type ScreenControl, type ScreenObservation, type FieldSource,
+} from "./screen-loop.js";
+import { codeForUse } from "./totp.js";
 
 /** How long a control may take to appear before it is `unbindable-field`. A bound, never a sleep. */
 export const BIND_TIMEOUT_MS = 10_000;
@@ -70,12 +75,32 @@ export interface AuthDriver {
  */
 export interface AuthPlan {
   readonly login: readonly FlowStep[];
+  /** What an `auto: true` step needs to type for itself: the NAMES of environment variables, never a value. Absent: an `auto:` step cannot run. */
+  readonly auto?: AutoSettings;
   readonly flow?: readonly FlowStep[];
   readonly upTo?: number;
   readonly state?: { readonly path: string };
   /** The flows file's `idp-origins:` (exact origins, never the app's own): the pages a LOGIN may be on besides the app's. Absent means none. */
   readonly idpOrigins?: readonly string[];
 }
+
+/**
+ * What the screen loop may type, as NAMES. `username` and `password` are required once a plan has an `auto:` step; `totp` is
+ * optional because without a seed a code screen ends the login as `mfa-required-no-seed`, which is the outcome a person needs.
+ */
+export interface AutoSettings {
+  readonly username: string;
+  readonly password: string;
+  readonly totp?: string;
+  /** The name an organization picker is answered with: a name from the flow, not a secret. */
+  readonly organization?: string;
+}
+
+/** How the loop is paced. Injected so a test need not wait out `POLL_MILLIS`, and so a one-time code is made from the same clock. */
+export type LoopPacing = Pick<LoopOptions, "pause" | "now" | "budgetMillis">;
+
+/** One `auto:` step may spend this long across every screen it meets: a bound, as `expect`'s timeout is, and never a sleep. */
+export const AUTO_BUDGET_MS = 60_000;
 
 export type Environment = Readonly<Record<string, string | undefined>>;
 export type Mark = (event: string, detail: Record<string, unknown>) => void;
@@ -178,7 +203,9 @@ export function requiredEnvNames(plan: AuthPlan): string[] {
   // A state run never executes the login's steps (only its final `expect:`), so it reads none of the login's variables.
   const steps = plan.state === undefined ? [...plan.login, ...flow] : flow;
   const names = steps.flatMap((step) => ("fill" in step && step.fill.fromEnv !== undefined ? [step.fill.fromEnv] : []));
-  return [...new Set(names)];
+  // The loop types the username and the password itself; the seed is read only when a code screen appears, so it is not required here.
+  const loopNames = steps.some((step) => "auto" in step) && plan.auto !== undefined ? [plan.auto.username, plan.auto.password] : [];
+  return [...new Set([...names, ...loopNames])];
 }
 
 export function assertCredentialsPresent(plan: AuthPlan, env: Environment): void {
@@ -186,6 +213,8 @@ export function assertCredentialsPresent(plan: AuthPlan, env: Environment): void
 }
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+const REAL_PACING: LoopPacing = { pause: sleep, now: Date.now, budgetMillis: AUTO_BUDGET_MS };
 
 /** Poll until `attempt` returns something other than undefined, or the bound passes: a wait for a CONDITION, never a sleep. */
 async function until<T>(attempt: () => Promise<T | undefined>, boundMs: number): Promise<T | undefined> {
@@ -304,6 +333,8 @@ interface RunContext {
   phase: "login" | "flow";
   bindTimeoutMs: number;
   idpOrigins: readonly string[];
+  auto?: AutoSettings;
+  pacing: LoopPacing;
 }
 
 /**
@@ -315,7 +346,40 @@ function allowedOrigins(run: RunContext, index: number): readonly string[] {
   return run.phase === "login" && index < run.steps.length ? run.idpOrigins : [];
 }
 
-const verbOf = (step: FlowStep): string => Object.keys(step)[0];
+/** The step's verb: the one key that is not a modifier, so `when:` written first does not become the verb. */
+const verbOf = (step: FlowStep): string => Object.keys(step).find((key) => !(STEP_MODIFIERS as readonly string[]).includes(key)) as string;
+
+interface BindingQuery { roles: string[]; name: string; within?: string; nth?: number }
+
+/** The control a step acts on, for the verbs that bind one. `goto`, `expect`, `capture` and `auto` have none. */
+function bindingQuery(step: FlowStep): BindingQuery | undefined {
+  if ("fill" in step) return { roles: FILL_ROLES, name: step.fill.field, within: step.fill.within, nth: step.fill.nth };
+  if ("choose" in step) return { roles: CHOOSE_ROLES, name: step.choose.field, within: step.choose.within, nth: step.choose.nth };
+  if ("check" in step) return { roles: CHECK_ROLES, name: step.check.field, within: step.check.within, nth: step.check.nth };
+  const target = "press" in step ? step.press : "dismiss-if-shown" in step ? step["dismiss-if-shown"] : undefined;
+  return target && { roles: PRESS_ROLES, name: target.control, within: target.within, nth: target.nth };
+}
+
+/** Is the control on the page now? An unqualified name that two controls share is present: binding it then says "ambiguous", not "absent". */
+const controlPresent = (nodes: readonly AxNode[], query: BindingQuery): boolean => {
+  const found = controlsNamed(nodes, query).length;
+  return query.nth === undefined ? found > 0 : found >= query.nth;
+};
+
+/**
+ * Why a step does not run, or undefined when it does. **`when:` and `dismiss-if-shown:` read the page ONCE** and never wait:
+ * a skipped step costs one read. `optional:` waits as long as a bind would, because a control that is about to render is not
+ * absent yet, and it skips ONLY when no control of that name ever appeared; two of them is still the ambiguity error, and an
+ * `expect:` has no `optional:` effect at all, since "its target never appeared" is exactly the timeout that must fail.
+ */
+async function skipReason(step: FlowStep, run: RunContext): Promise<"when" | "optional" | "not-shown" | undefined> {
+  const query = bindingQuery(step);
+  if (step.when !== undefined && !expectationMet(await run.driver.axNodes(), step.when)) return "when";
+  if ("dismiss-if-shown" in step) return controlPresent(await run.driver.axNodes(), query as BindingQuery) ? undefined : "not-shown";
+  if (step.optional !== true || query === undefined) return undefined;
+  const appeared = await until(async () => (controlPresent(await run.driver.axNodes(), query) ? true : undefined), run.bindTimeoutMs);
+  return appeared ? undefined : "optional";
+}
 
 async function runFill(step: Extract<FlowStep, { fill: unknown }>, run: RunContext, { where, index }: { where: string; index: number }): Promise<void> {
   // Only a flow that declares an identity provider can have a fill meet a page that is not the app's, and then it is asked BEFORE
@@ -336,18 +400,19 @@ async function runStep(step: FlowStep, run: RunContext, { where, index }: { wher
   } else if ("fill" in step) {
     await runFill(step, run, { where, index });
   } else if ("choose" in step) {
-    const { field, within, nth, option } = step.choose;
-    const handle = await bindControl(driver, { roles: CHOOSE_ROLES, name: field, within, nth }, where, bindTimeoutMs);
-    if (!await driver.choose(handle, option)) throw new LoginFailedError("unbindable-field", where, `"${field}" has no option "${option}"`);
+    const handle = await bindControl(driver, bindingQuery(step) as BindingQuery, where, bindTimeoutMs);
+    if (!await driver.choose(handle, step.choose.option)) {
+      throw new LoginFailedError("unbindable-field", where, `"${step.choose.field}" has no option "${step.choose.option}"`);
+    }
   } else if ("check" in step) {
-    const { field, within, nth, checked } = step.check;
-    const handle = await bindControl(driver, { roles: CHECK_ROLES, name: field, within, nth }, where, bindTimeoutMs);
-    if (await driver.isChecked(handle) !== checked) await driver.click(handle);
-  } else if ("press" in step) {
-    const { control, within, nth } = step.press;
-    await driver.click(await bindControl(driver, { roles: PRESS_ROLES, name: control, within, nth }, where, bindTimeoutMs));
+    const handle = await bindControl(driver, bindingQuery(step) as BindingQuery, where, bindTimeoutMs);
+    if (await driver.isChecked(handle) !== step.check.checked) await driver.click(handle);
+  } else if ("press" in step || "dismiss-if-shown" in step) {
+    await driver.click(await bindControl(driver, bindingQuery(step) as BindingQuery, where, bindTimeoutMs));
   } else if ("expect" in step) {
     await expectMet(step.expect, run, { where, index });
+  } else if ("auto" in step) {
+    await runAuto(run, { where, index });
   }
 }
 
@@ -364,8 +429,81 @@ async function expectMet(
 
 /** The step's accessible NAME for a mark, never a value. */
 function nameForMark(step: FlowStep): string | undefined {
-  const body = Object.values(step)[0] as string | { field?: string; control?: string; name?: string };
-  return typeof body === "string" ? undefined : body.field ?? body.control ?? body.name;
+  const body = (step as Record<string, unknown>)[verbOf(step)] as string | boolean | { field?: string; control?: string; name?: string };
+  return typeof body === "string" || typeof body === "boolean" ? undefined : body.field ?? body.control ?? body.name;
+}
+
+/** What the loop sees of a page: interactive controls and alerts by accessible name, headings apart, and whether the next `expect:` holds. */
+const SCREEN_ROLES = new Set([...FILL_ROLES, ...CHECK_ROLES, ...PRESS_ROLES, "password", "alert"]);
+
+async function observeScreen(driver: AuthDriver, stop: PageCondition): Promise<ScreenObservation> {
+  const nodes = await driver.axNodes();
+  const live = nodes.filter((node) => !node.ignored && normalise(node.name) !== "");
+  return {
+    controls: live.filter((node) => SCREEN_ROLES.has(node.role)).map((node) => ({ role: node.role, name: normalise(node.name) })),
+    headings: live.filter((node) => node.role === "heading").map((node) => normalise(node.name)),
+    signedIn: expectationMet(nodes, stop),
+  };
+}
+
+/** The value a field's source names. A code is made now, from the seed, and is never held; a missing seed ends the login before this is reached. */
+async function valueFor(source: FieldSource, action: Extract<Action, { kind: "type" }>, run: RunContext): Promise<string> {
+  const settings = run.auto as AutoSettings;
+  if (source === "identifier") return readCredential(settings.username, run.env);
+  if (source === "password") return readCredential(settings.password, run.env);
+  if (source === "organization") return String(action.organization);
+  const secret = parseTotpSecret(readCredential(settings.totp as string, run.env));
+  return codeForUse(secret.seed, run.pacing.now, run.pacing.pause, secret);
+}
+
+const clickNamed = async (control: ScreenControl, run: RunContext, where: string): Promise<void> =>
+  run.driver.click(await bindControl(run.driver, { roles: PRESS_ROLES, name: control.name }, where, run.bindTimeoutMs));
+
+/** Type into each field the loop named and press its submit. With no submit button there is nothing the driver can press, so it ends rather than guess. */
+async function typeScreen(action: Extract<Action, { kind: "type" }>, run: RunContext, where: string): Promise<void> {
+  for (const field of action.fields) {
+    const handle = await bindControl(run.driver, { roles: FILL_ROLES, name: field.target.name }, where, run.bindTimeoutMs);
+    await run.driver.fill(handle, await valueFor(field.source, action, run));
+  }
+  if (action.submit === undefined) {
+    throw new LoginFailedError("unbindable-field", where, "the screen has no button to submit it with, and nothing here presses a key");
+  }
+  await clickNamed(action.submit, run, where);
+}
+
+/** One action of the loop, after the origin is checked: **nothing is typed or pressed on a page that is not the app's or a declared provider's**. */
+async function actOnScreen(action: Action, run: RunContext, { where, index }: { where: string; index: number }): Promise<void> {
+  if (action.kind === "stop") return;
+  await assertStillOnOrigin(run.driver, run.origin, where, allowedOrigins(run, index));
+  if (action.kind === "type") await typeScreen(action, run, where);
+  else await clickNamed(action.target, run, where);
+}
+
+/** An ended loop as the fault the login ends with: the outcome, its remedy, and for an unrecognised screen the step that would handle it. */
+function loopEnded(result: LoopResult, where: string): AuthError {
+  return new AuthError("auth-login-failed", `the login did not complete (${result.outcome}) at ${where}: ${result.remedy ?? "the loop ended"}`
+    + (result.flowsStep === undefined ? "" : ` ${result.flowsStep}`));
+}
+
+/**
+ * `auto: true`: the built-in loop takes the screen until the `expect:` that follows it holds (the flows rules guarantee one
+ * does), then the flow resumes at that `expect:`, which still runs, so a loop that stopped early is not believed. The loop
+ * has no secret of its own: it names where a value comes from and this file supplies it at the moment of typing.
+ */
+async function runAuto(run: RunContext, { where, index }: { where: string; index: number }): Promise<void> {
+  const next = run.steps[index];
+  if (run.auto === undefined || next === undefined || !("expect" in next)) {
+    throw new AuthError("auth-login-failed", `the login did not complete at ${where}: auto: needs the loop's credential variables and an expect: after it`);
+  }
+  const { totp } = run.auto;
+  const result = await runLoop({
+    observe: () => observeScreen(run.driver, next.expect),
+    act: (action) => actOnScreen(action, run, { where, index }),
+    ...run.pacing,
+    config: { organization: run.auto.organization, totpSeedConfigured: totp !== undefined && (run.env[totp] ?? "") !== "" },
+  });
+  run.mark("authLoop", { phase: run.phase, index, outcome: result.outcome, branches: result.branches.map(({ screen, kind }) => ({ screen, kind })) });
+  if (result.outcome !== "signed-in") throw loopEnded(result, where);
 }
 
 /** One step, numbered as a person counts: marked by verb and accessible name only, with the origin re-checked after any step that can move the page. */
@@ -373,6 +511,8 @@ async function runNumbered(step: FlowStep, index: number, run: RunContext): Prom
   const verb = verbOf(step);
   const where = `${run.phase} step ${index} (${verb})`;
   if (verb === "capture") return; // a capture point is where the caller stops; it acts on nothing
+  const skipped = await skipReason(step, run);
+  if (skipped !== undefined) return run.mark("authStepSkipped", { phase: run.phase, index, verb, name: nameForMark(step), because: skipped });
   run.mark("authStep", { phase: run.phase, index, verb, name: nameForMark(step) });
   await runStep(step, run, { where, index });
   if (verb !== "expect") await assertStillOnOrigin(run.driver, run.origin, where, allowedOrigins(run, index));
@@ -464,13 +604,13 @@ async function loadRequestedPage({ driver, url, idpOrigins }: { driver: AuthDriv
  * **With `state` (and `plan.state` naming its file) the saved state signs in instead of the login's steps**: `signInFromState`.
  */
 export async function signIn(
-  { plan, url, driver, env, mark, bindTimeoutMs = BIND_TIMEOUT_MS, state }:
-  { plan: AuthPlan; url: string; driver: AuthDriver; env: Environment; mark: Mark; bindTimeoutMs?: number; state?: StateEntries },
+  { plan, url, driver, env, mark, bindTimeoutMs = BIND_TIMEOUT_MS, state, pacing = REAL_PACING }:
+  { plan: AuthPlan; url: string; driver: AuthDriver; env: Environment; mark: Mark; bindTimeoutMs?: number; state?: StateEntries; pacing?: LoopPacing },
 ): Promise<void> {
   if ((plan.state === undefined) !== (state === undefined)) throw new Error("a plan that names a saved state needs its entries, and entries need a plan that names one");
   const origin = new URL(url).origin;
   const flow = (plan.flow ?? []).slice(0, plan.upTo ?? plan.flow?.length ?? 0);
-  const run = (steps: readonly FlowStep[], phase: RunContext["phase"]): RunContext => ({ steps, origin, driver, env, mark, phase, bindTimeoutMs, idpOrigins: plan.idpOrigins ?? [] });
+  const run = (steps: readonly FlowStep[], phase: RunContext["phase"]): RunContext => ({ steps, origin, driver, env, mark, phase, bindTimeoutMs, idpOrigins: plan.idpOrigins ?? [], auto: plan.auto, pacing });
   if (state === undefined) await runSteps(run(plan.login, "login"));
   else await signInFromState(state, run(plan.login, "login"), url);
   await runSteps(run(flow, "flow"));

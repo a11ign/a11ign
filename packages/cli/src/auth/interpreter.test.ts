@@ -26,7 +26,7 @@ import {
 } from "@a11ign/screenreader-worker/auth-flow";
 import {
   challengeVendor, controlsNamed, cookieParam, expectationMet, FRAME_SOURCES_EXPRESSION, requiredEnvNames, SET_LOCAL_STORAGE_FUNCTION,
-  signIn as cliSignIn, type AuthDriver, type AuthPlan, type AxNode,
+  signIn as cliSignIn, type AuthDriver, type AuthPlan, type AxNode, type LoopPacing,
 } from "./interpreter.js";
 import type { FlowStep } from "./flows.js";
 import { stateEntriesFor, type StateCookie, type StorageState } from "./scrub.js";
@@ -702,4 +702,288 @@ test("THE HELPERS, through both: requiredEnvNames finds the same variables, and 
   // A state run performs no login, so it reads none of the login's variables, but still reads the flow's.
   assert.deepEqual(requiredEnvNames({ login: LOGIN, state: { path: STATE_PATH } }), []);
   assert.deepEqual(requiredEnvNames({ login: LOGIN, flow: [{ fill: { field: "PIN", fromEnv: "APP_PIN" } }], upTo: 1, state: { path: STATE_PATH } }), ["APP_PIN"]);
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// THE FOUR KEYS (#4994): `when:`, `optional:`, `dismiss-if-shown:` and `auto:`.
+//
+// CLI ONLY, and on purpose: the worker's `auth-flow.mjs` lives in the layer repository and does not know these keys, so a
+// scenario here run "through both" would pin a disagreement and not a parity. The row that teaches the worker them adds
+// its half of this table; until then a plan that uses one of the keys must not be sent to a worker.
+//
+// The site is a SCRIPT: named screens, each with the controls it shows and where a click on one goes. Reads of the
+// accessibility tree are COUNTED, because "at no timeout cost" is a claim about reads and not about a clock.
+// ---------------------------------------------------------------------------------------------------------------------
+import { parseFlowsFile } from "./flows.js";
+import { totpCode } from "./totp.js";
+
+interface ScriptedScreen {
+  nodes: Array<[role: string, name: string]>;
+  /** The screen a click on the named control goes to. A control with no entry does nothing. */
+  goes?: Record<string, string>;
+  /** Where the page is, or a function of how many times it has been asked (a page that moves on its own, after a step's check). */
+  origin?: string | ((asked: number) => string);
+}
+
+function scriptedSite(screens: Record<string, ScriptedScreen>, start: string) {
+  let current = start;
+  const typed: Array<{ field: string; text: string }> = [];
+  const clicks: string[] = [];
+  let reads = 0;
+  let asked = 0;
+  const ids = new Map<number, string>();
+  const nodes = (): AxNode[] => screens[current].nodes.map(([role, name], index) => {
+    const backendId = index + 1;
+    ids.set(backendId, name);
+    return { id: String(backendId), role, name, backendId, ignored: false };
+  });
+  const driver: AuthDriver = {
+    navigate: async (url) => { current = new URL(url).pathname === "/login" ? "login" : current; return { ok: true }; },
+    origin: async () => {
+      asked += 1;
+      const where = screens[current].origin ?? ORIGIN;
+      return typeof where === "function" ? where(asked) : where;
+    },
+    axNodes: async () => { reads += 1; return nodes(); },
+    frameSources: async () => [],
+    inputType: async () => "text",
+    fill: async (handle, text) => { typed.push({ field: ids.get(handle) as string, text }); },
+    choose: async () => true,
+    isChecked: async () => false,
+    click: async (handle) => {
+      const name = ids.get(handle) as string;
+      clicks.push(name);
+      current = screens[current].goes?.[name] ?? current;
+    },
+    setCookies: async () => undefined,
+    setLocalStorage: async () => undefined,
+    close: async () => undefined,
+  };
+  return { driver, typed, clicks, reads: () => reads, screen: () => current };
+}
+
+const SEED = "JBSWY3DPEHPK3PXP";
+/** 10 s before a TOTP window closes, so `codeForUse` hands back the code it was asked for rather than waiting for the next. */
+const CLOCK = 1_700_000_000_000;
+/**
+ * A clock that moves only when the loop PAUSES, by the pause: a run costs no real time, and a loop that stops making progress
+ * (a mutant that types into a page it should not) reaches its budget instead of hanging the file.
+ */
+function virtualPacing(): LoopPacing {
+  let clock = CLOCK;
+  return { pause: async (ms) => { clock += ms; }, now: () => clock, budgetMillis: 60_000 };
+}
+const FOUR_KEY_ENV = { ...ENV, APP_TOTP: SEED };
+const AUTO = { username: "APP_USER", password: "APP_PASSWORD", totp: "APP_TOTP" } as const;
+
+type Marks = Array<{ event: string; detail: Record<string, unknown> }>;
+
+async function runCli(options: {
+  site: ReturnType<typeof scriptedSite>; login: FlowStep[]; flow?: FlowStep[]; env?: Record<string, string>; auto?: typeof AUTO | undefined;
+  idpOrigins?: string[]; pacing?: LoopPacing; bindTimeoutMs?: number;
+}): Promise<{ marks: Marks; error?: Error & { fault?: string; reason?: string } }> {
+  const marks: Marks = [];
+  try {
+    await cliSignIn({
+      plan: { login: options.login, flow: options.flow, auto: options.auto, idpOrigins: options.idpOrigins },
+      url: URL_UNDER_TEST, driver: options.site.driver, env: options.env ?? FOUR_KEY_ENV,
+      mark: (event, detail) => { marks.push({ event, detail }); }, bindTimeoutMs: options.bindTimeoutMs ?? BIND_MS, pacing: options.pacing ?? virtualPacing(),
+    });
+    return { marks };
+  } catch (error) {
+    return { marks, error: error as Error & { fault?: string; reason?: string } };
+  }
+}
+
+const press = (control: string, extra: Partial<FlowStep> = {}): FlowStep => ({ press: { control }, ...extra }) as FlowStep;
+const skipped = (marks: Marks) => marks.filter((m) => m.event === "authStepSkipped").map((m) => `${m.detail.verb}:${m.detail.because}`);
+
+const NOTICE_SITE = {
+  login: { nodes: [["heading", "Sign in"], ["button", "Sign in"], ["dialog", "Cookie notice"], ["button", "Accept cookies"]], goes: { "Sign in": "home", "Accept cookies": "login" } },
+  home: { nodes: [["heading", "Dashboard"], ["link", "Sign out"]] },
+} satisfies Record<string, ScriptedScreen>;
+
+test("POSITIVE CONTROL: a when: step whose target is present runs, and one whose target is absent is skipped in ONE read, without waiting", async () => {
+  const present = scriptedSite(NOTICE_SITE, "login");
+  const ran = await runCli({ site: present, bindTimeoutMs: 5_000, login: [
+    { goto: "/login" }, press("Accept cookies", { when: { kind: "control", name: "Accept cookies" } }), press("Sign in"), expectDashboard,
+  ] });
+  assert.equal(ran.error, undefined);
+  assert.deepEqual(present.clicks, ["Accept cookies", "Sign in"]);
+
+  const absent = scriptedSite(NOTICE_SITE, "login");
+  const started = Date.now();
+  const skippedRun = await runCli({ site: absent, bindTimeoutMs: 5_000, login: [
+    { goto: "/login" }, press("Sign in"), press("Accept cookies", { when: { kind: "control", name: "Accept cookies" } }), expectDashboard,
+  ] });
+  // Skipped: the dashboard has no such control. It cost the reads of the two other steps and ONE for the condition, and no poll.
+  assert.equal(skippedRun.error, undefined);
+  assert.deepEqual(absent.clicks, ["Sign in"]);
+  assert.deepEqual(skipped(skippedRun.marks), ["press:when"]);
+  assert.ok(Date.now() - started < 1_000, `a when: that is not met must not wait (took ${Date.now() - started} ms against a 5 s bind bound)`);
+  // `when:` conditions on a heading as well, and a condition that is not met on another page is a skip and never a failure.
+  const byHeading = scriptedSite(NOTICE_SITE, "login");
+  const headed = await runCli({ site: byHeading, login: [
+    { goto: "/login" }, press("Accept cookies", { when: { kind: "heading", name: "Welcome back" } }), press("Sign in"), expectDashboard,
+  ] });
+  assert.equal(headed.error, undefined);
+  assert.deepEqual(byHeading.clicks, ["Sign in"]);
+});
+
+test("POSITIVE CONTROL: dismiss-if-shown clicks a present dialog's button, and passes with nothing to dismiss, without waiting", async () => {
+  const shown = scriptedSite(NOTICE_SITE, "login");
+  const dismissed = await runCli({ site: shown, login: [{ goto: "/login" }, { "dismiss-if-shown": { control: "Accept cookies" } }, press("Sign in"), expectDashboard] });
+  assert.equal(dismissed.error, undefined);
+  assert.deepEqual(shown.clicks, ["Accept cookies", "Sign in"]);
+
+  const absent = scriptedSite(NOTICE_SITE, "login");
+  const started = Date.now();
+  const passed = await runCli({ site: absent, bindTimeoutMs: 5_000, login: [
+    { goto: "/login" }, press("Sign in"), { "dismiss-if-shown": { control: "Accept cookies" } }, expectDashboard,
+  ] });
+  assert.equal(passed.error, undefined);
+  assert.deepEqual(absent.clicks, ["Sign in"]);
+  assert.deepEqual(skipped(passed.marks), ["dismiss-if-shown:not-shown"]);
+  assert.ok(Date.now() - started < 1_000, "an absent dialog is not waited for");
+});
+
+test("NEGATIVE CONTROL: dismiss-if-shown and when: never swallow ambiguity: two controls of the name is still unbindable-field", async () => {
+  const twins = { login: { nodes: [["button", "Close"], ["button", "Close"], ["button", "Sign in"]] } } satisfies Record<string, ScriptedScreen>;
+  const dismissed = await runCli({ site: scriptedSite(twins, "login"), login: [{ goto: "/login" }, { "dismiss-if-shown": { control: "Close" } }, expectDashboard] });
+  assert.equal(dismissed.error?.reason, "unbindable-field");
+  const conditional = await runCli({ site: scriptedSite(twins, "login"), login: [
+    { goto: "/login" }, press("Close", { when: { kind: "control", name: "Close" } }), expectDashboard,
+  ] });
+  assert.equal(conditional.error?.reason, "unbindable-field");
+});
+
+test("POSITIVE CONTROL: an optional step whose control never appears is skipped, after the bind bound and not before; a present one runs", async () => {
+  const absent = scriptedSite(NOTICE_SITE, "login");
+  const started = Date.now();
+  const run = await runCli({ site: absent, bindTimeoutMs: BIND_MS, login: [
+    { goto: "/login" }, press("Sign in"), press("Remember this device", { optional: true }), expectDashboard,
+  ] });
+  assert.equal(run.error, undefined);
+  assert.deepEqual(absent.clicks, ["Sign in"]);
+  assert.deepEqual(skipped(run.marks), ["press:optional"]);
+  assert.ok(Date.now() - started >= BIND_MS, "optional: waits as long as a bind would, because a control about to render is not absent");
+
+  const present = scriptedSite(NOTICE_SITE, "login");
+  const ran = await runCli({ site: present, login: [{ goto: "/login" }, press("Accept cookies", { optional: true }), press("Sign in"), expectDashboard] });
+  assert.equal(ran.error, undefined);
+  assert.deepEqual(present.clicks, ["Accept cookies", "Sign in"]);
+});
+
+test("NEGATIVE CONTROL: optional swallows ONLY an absent target: an optional expect that TIMES OUT still fails, and so does an ambiguous control", async () => {
+  // THE MUTATION in the PR: let `optional` swallow the expect's timeout and THIS test goes red, by name.
+  const site = scriptedSite(NOTICE_SITE, "login");
+  const timedOut = await runCli({ site, login: [
+    { goto: "/login" }, { expect: { kind: "heading", name: "Dashboard", timeoutSeconds: 0.3 }, optional: true },
+  ] });
+  assert.equal(timedOut.error?.fault, "auth-login-failed");
+  assert.equal(timedOut.error?.reason, "expect-not-met");
+  assert.deepEqual(skipped(timedOut.marks), [], "an optional expect: is never reported as skipped");
+
+  const twins = { login: { nodes: [["button", "Next"], ["button", "Next"]] } } satisfies Record<string, ScriptedScreen>;
+  const ambiguous = await runCli({ site: scriptedSite(twins, "login"), login: [
+    { goto: "/login" }, press("Next", { optional: true }), expectDashboard,
+  ] });
+  assert.equal(ambiguous.error?.reason, "unbindable-field");
+
+  // And a required step with the same absent control still fails: `optional:` is on the step and nowhere else.
+  const required = await runCli({ site: scriptedSite(NOTICE_SITE, "login"), login: [{ goto: "/login" }, press("Remember this device"), expectDashboard] });
+  assert.equal(required.error?.reason, "unbindable-field");
+});
+
+// An Auth0-shaped sign-in: one form for both fields, a code prompt, a passkey nudge, the app.
+const AUTH0_SITE = {
+  login: { nodes: [["heading", "Log in"], ["textbox", "Email address"], ["textbox", "Password"], ["button", "Continue"]], goes: { Continue: "mfa" } },
+  mfa: { nodes: [["heading", "Verify your identity"], ["textbox", "Verification code"], ["button", "Continue"]], goes: { Continue: "passkey" } },
+  passkey: { nodes: [["heading", "Create a passkey"], ["button", "Create passkey"], ["button", "Not now"]], goes: { "Not now": "home" } },
+  home: { nodes: [["heading", "Dashboard"], ["link", "Sign out"]] },
+} satisfies Record<string, ScriptedScreen>;
+
+test("POSITIVE CONTROL: auto: hands control to the loop, which types the credentials and a fresh code, and the flow RESUMES after it", async () => {
+  const site = scriptedSite(AUTH0_SITE, "login");
+  const run = await runCli({ site, auto: AUTO, login: [{ goto: "/login" }, { auto: true }, expectDashboard], flow: [press("Sign out")] });
+  assert.equal(run.error, undefined);
+  assert.deepEqual(site.typed, [
+    { field: "Email address", text: FAKE_USER },
+    { field: "Password", text: FAKE_SECRET },
+    { field: "Verification code", text: totpCode(SEED, CLOCK) },
+  ]);
+  // The loop's clicks, then the flow's own: it resumed and ran what came after.
+  assert.deepEqual(site.clicks, ["Continue", "Continue", "Not now", "Sign out"]);
+  const loop = run.marks.find((m) => m.event === "authLoop");
+  assert.equal(loop?.detail.outcome, "signed-in");
+  assert.deepEqual(loop?.detail.branches, [
+    { screen: "identifier-and-password", kind: "type" }, { screen: "one-time-code", kind: "type" }, { screen: "passkey-nudge", kind: "skip" },
+  ]);
+  assert.ok(run.marks.some((m) => m.event === "authApplied"));
+  // A mark names screens and verbs and never a value.
+  for (const secret of [FAKE_USER, FAKE_SECRET, SEED, totpCode(SEED, CLOCK)]) assert.ok(!JSON.stringify(run.marks).includes(secret));
+});
+
+test("NEGATIVE CONTROL: auto: ends the login on a rejected credential, a missing seed and an unrecognised screen, each with its remedy, and types nothing more", async () => {
+  const rejected = scriptedSite({
+    ...AUTH0_SITE,
+    login: { ...AUTH0_SITE.login, goes: { Continue: "bad" } },
+    bad: { nodes: [["heading", "Log in"], ["alert", "Wrong email or password"], ["textbox", "Email address"], ["textbox", "Password"], ["button", "Continue"]] },
+  }, "login");
+  const refused = await runCli({ site: rejected, auto: AUTO, login: [{ goto: "/login" }, { auto: true }, expectDashboard] });
+  assert.equal(refused.error?.fault, "auth-login-failed");
+  assert.match(refused.error?.message ?? "", /credentials-rejected/);
+  assert.equal(rejected.typed.length, 2, "a refused password is typed once and never again");
+
+  const noSeed = await runCli({ site: scriptedSite(AUTH0_SITE, "login"), auto: AUTO, env: ENV, login: [{ goto: "/login" }, { auto: true }, expectDashboard] });
+  assert.match(noSeed.error?.message ?? "", /mfa-required-no-seed/);
+
+  const strange = scriptedSite({ login: { nodes: [["heading", "Tell us about your day"], ["button", "Tell us"]] } }, "login");
+  const unknown = await runCli({ site: strange, auto: AUTO, login: [{ goto: "/login" }, { auto: true }, expectDashboard] });
+  assert.match(unknown.error?.message ?? "", /unknown-screen/);
+  // The exact step that would handle the screen is in the message, and it is a step this file's own parser accepts.
+  const printed = /- (press|expect): .+$/m.exec(unknown.error?.message ?? "")?.[0];
+  assert.ok(printed, unknown.error?.message ?? "no message");
+  assert.ok(parseFlowsFile(`version: 1\norigin: ${ORIGIN}\nflows:\n  login:\n    steps:\n      ${printed}\n`).flows[0].steps.length === 1, printed);
+});
+
+test("NEGATIVE CONTROL: auto: types nothing into a page that is not the app's, and a declared provider's page is the one exception", async () => {
+  const idp = { login: { nodes: [["textbox", "Email address"], ["textbox", "Password"], ["button", "Continue"]], origin: "https://idp.example.test" } } satisfies Record<string, ScriptedScreen>;
+  const off = scriptedSite(idp, "login");
+  const refused = await runCli({ site: off, auto: AUTO, login: [{ goto: "/login" }, { auto: true }, expectDashboard] });
+  assert.equal(refused.error?.reason, "left-origin");
+  assert.deepEqual(off.typed, []);
+
+  // The page is the app's when the `goto` is checked and the provider's by the time the loop would type: the loop's own check catches it.
+  const drifts = { login: { ...idp.login, origin: (asked: number) => (asked <= 1 ? ORIGIN : "https://idp.example.test") } };
+  const drifted = scriptedSite(drifts, "login");
+  const caught = await runCli({ site: drifted, auto: AUTO, login: [{ goto: "/login" }, { auto: true }, expectDashboard] });
+  assert.equal(caught.error?.reason, "left-origin");
+  assert.match(caught.error?.message ?? "", /auto/);
+  assert.deepEqual(drifted.typed, [], "nothing is typed once the page has left the origin");
+
+  const declared = scriptedSite({ ...idp, login: { ...idp.login, goes: { Continue: "home" } }, home: AUTH0_SITE.home }, "login");
+  const allowed = await runCli({ site: declared, auto: AUTO, idpOrigins: ["https://idp.example.test"], login: [{ goto: "/login" }, { auto: true }, expectDashboard] });
+  assert.equal(allowed.error, undefined);
+  assert.deepEqual(declared.typed.map((t) => t.field), ["Email address", "Password"]);
+});
+
+test("auto: with no credential variables declared, or a variable unset, ends before a browser is asked anything", async () => {
+  const plan = { login: [{ goto: "/login" }, { auto: true }, expectDashboard] as FlowStep[], auto: AUTO };
+  assert.deepEqual(requiredEnvNames(plan).sort(), ["APP_PASSWORD", "APP_USER"], "the seed is read only when a code screen appears");
+  assert.deepEqual(requiredEnvNames({ login: plan.login }), [], "no settings, nothing to read");
+  const unset = await runCli({ site: scriptedSite(AUTH0_SITE, "login"), auto: AUTO, env: { APP_USER: FAKE_USER }, login: plan.login });
+  assert.equal(unset.error?.fault, "auth-credential-missing");
+  assert.match(unset.error?.message ?? "", /APP_PASSWORD/);
+  const undeclared = await runCli({ site: scriptedSite(AUTH0_SITE, "login"), auto: undefined, login: plan.login });
+  assert.equal(undeclared.error?.fault, "auth-login-failed");
+});
+
+test("the loop's budget is bounded: a page that never changes ends the step as a named outcome and not as a hang", async () => {
+  let clock = CLOCK;
+  const pacing = { ...virtualPacing(), now: () => (clock += 20_000) };
+  const stuck = scriptedSite({ login: { nodes: [["heading", "Log in"], ["textbox", "Email address"], ["textbox", "Password"], ["button", "Continue"]] } }, "login");
+  const run = await runCli({ site: stuck, auto: AUTO, pacing, login: [{ goto: "/login" }, { auto: true }, expectDashboard] });
+  assert.equal(run.error?.fault, "auth-login-failed");
+  assert.deepEqual(stuck.typed.map((t) => t.field), ["Email address", "Password"], "a form that comes back unchanged is never typed into twice");
 });
