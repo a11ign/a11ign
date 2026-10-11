@@ -24,7 +24,7 @@
 //
 // A FAILURE IS NEVER SOFTENED by an older success: the NEAREST commit that carries a status decides.
 //
-// ONLY THE LAB'S IDENTITY WRITES IT (#3969): a status of that context counts when its `creator.login` is `QUALIFICATION_WRITER`, and one from
+// ONLY THE LAB'S IDENTITIES WRITE IT (#3969): a status of that context counts when its `creator.login` is in `QUALIFICATION_WRITERS`, and one from
 // anyone else is ignored and named in the log, in either direction (a forged `success` and a forged `failure` alike).
 import { realpathSync, appendFileSync, readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
@@ -45,10 +45,14 @@ export const QUALIFICATION_CONTEXT = "qualification";
 
 // WHO MAY SAY `qualification` (#3969). A commit status is writable by anyone holding `repo:status` here, and the context is only a name, so
 // reading by context alone made every such holder a source of the fleet's verdict: harmless while a verdict gated a publish to `next`, and
-// not once it moves `latest`. The lab's poster runs on the agents host and posts as that host's routed account, which #3289 measured as this
-// login (`creator` of status 55536724380, read back on 2026-10-04). If the host is ever routed to another account the release WAITS, which
-// is the safe state, and the log below names whose status it ignored; moving this constant is the one change that restores it.
+// not once it moves `latest`. The lab's poster runs on the agents host and posts as that host's routed account: `a11ign-ai-leads`, which #3289
+// measured (`creator` of status 55536724380, read back on 2026-10-04), and `a11ign-managers[bot]`, the managers App the host moves to since
+// a11ign#4911 (#5057). The user account stays until a live status from the App has been read; removing it is a later one-line change.
+// If the host is routed to any other account the release WAITS, which is the safe state, and the log below names whose status it ignored.
+// Requirements compose and exemptions do not: adding an entry widens who may say `qualification`, so each one is a reviewed change here.
 export const QUALIFICATION_WRITER = "a11ign-ai-leads";
+export const QUALIFICATION_WRITER_APP = "a11ign-managers[bot]";
+export const QUALIFICATION_WRITERS: readonly string[] = [QUALIFICATION_WRITER, QUALIFICATION_WRITER_APP];
 
 // Outcome 4's table, consumed as DATA from #3132 (reading 3, derived from what each stage reads; posted on #3136 by
 // `orchestrator`). Directories under `packages/`. A package named in NEITHER list is treated as GATED: a new package
@@ -238,8 +242,8 @@ export function qualificationStatusesFrom(listing: { context: string; state: str
   for (const status of listing) {
     if (status.context !== QUALIFICATION_CONTEXT) continue;
     const login = status.creator?.login;
-    if (login === QUALIFICATION_WRITER) kept.push({ state: status.state, description: status.description ?? undefined });
-    else report(`release-reads-qualification: IGNORED a ${QUALIFICATION_CONTEXT} status "${status.state}" on ${sha} from ${login ?? "a creator that could not be read"}: only ${QUALIFICATION_WRITER} writes it`);
+    if (login !== undefined && QUALIFICATION_WRITERS.includes(login)) kept.push({ state: status.state, description: status.description ?? undefined });
+    else report(`release-reads-qualification: IGNORED a ${QUALIFICATION_CONTEXT} status "${status.state}" on ${sha} from ${login ?? "a creator that could not be read"}: only ${QUALIFICATION_WRITERS.join(" or ")} write it`);
   }
   return kept;
 }
