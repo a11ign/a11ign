@@ -9,7 +9,7 @@ The release-pin guard (`docs-release-pin-currency.real-tree.test.ts`) reads the 
 
 ## Evidence
 
-- `node --test packages/guards/src/docs-release-pin-currency.real-tree.test.ts` locally: pass 2, skipped 0. With `GITHUB_EVENT_NAME=merge_group` and a payload whose `base_sha` is `HEAD` (an empty diff): pass 1, skipped 1, with the reason printed.
+- `node --test packages/guards/src/docs-release-pin-currency.real-tree.test.ts` locally: pass 2, skipped 0. The acceptance command runs the scope case alone (`--test-name-pattern`): the acceptance job's checkout carries no `v0` tag, and the real-tree case fails closed there by design (CANNOT TELL), so it runs in the guard's own job, which fetches tags. With `GITHUB_EVENT_NAME=merge_group` and a payload whose `base_sha` is `HEAD` (an empty diff): pass 1, skipped 1, with the reason printed.
 - `npx eslint packages/guards/src/docs-release-pin-currency.real-tree.test.ts`: 0 errors, 0 warnings.
 
 Mutation: (M1) a diff that touches a doc never runs the guard -- the scope case fails; (M2) the guard never skips -- the scope case fails; (M3) an unreadable diff skips -- the scope case fails. Each was run against this head and the file restored from a copy (`cp` back, byte-identical); each reddens only the scope case.
@@ -19,7 +19,7 @@ Not done: `.github/workflows/release.yml` is untouched. The row also asked the r
 ## Acceptance
 
 ```bash
-bash -c 'node --test packages/guards/src/docs-release-pin-currency.real-tree.test.ts'
+bash -c 'node --test --test-name-pattern="^the scope:" packages/guards/src/docs-release-pin-currency.real-tree.test.ts'
 ```
 
 Closes: none -- first half of a11ign/a11ign#5125; a11ign/agent-org#1029 finishes the row and closes it
