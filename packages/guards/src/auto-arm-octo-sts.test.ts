@@ -55,6 +55,8 @@ test("#4198: the policy mints for the three runs of main's copy of this workflow
     ["a dispatch on another branch", { sub: sub("ref:refs/heads/agent/x"), job_workflow_ref: `${WORKFLOW}@refs/heads/agent/x`, event_name: "workflow_dispatch" }],
     // THE GAP #4287's REVIEW CLOSED: a branch's own copy of the file must not mint, whatever its sub says.
     ["pull_request, the branch's copy of the file", { sub: sub("pull_request"), job_workflow_ref: `${WORKFLOW}@refs/pull/4226/merge`, event_name: "pull_request" }],
+    // #4969: an approving review runs the branch's copy too, which is why `relay` mints nothing and hands the number to a dispatch on main.
+    ["pull_request_review, the branch's copy of the file", { sub: sub("pull_request"), job_workflow_ref: `${WORKFLOW}@refs/pull/4226/merge`, event_name: "pull_request_review" }],
     ["pull_request_target claims carrying a branch's workflow ref", { sub: sub("pull_request"), job_workflow_ref: `${WORKFLOW}@refs/pull/4226/merge`, event_name: "pull_request_target" }],
     ["another repository's id", { sub: "repo:a11ign@320310787/other@1:ref:refs/heads/main", job_workflow_ref: `${WORKFLOW}@refs/heads/main`, event_name: "push" }],
     ["the name-form subject, which never matches (#4191)", { sub: "repo:a11ign/a11ign:ref:refs/heads/main", job_workflow_ref: `${WORKFLOW}@refs/heads/main`, event_name: "push" }],
@@ -71,9 +73,9 @@ test("#4198 POSITIVE CONTROL for the matcher: a policy widened to any subject mi
 });
 
 const jobs = () => (parseYaml(read(".github/workflows/auto-arm.yml")) as { jobs: Record<string, Job> }).jobs;
-const MINTING_JOBS = ["arm", "sweep"] as const;
+const MINTING_JOBS = ["arm", "sweep", "arm-approved"] as const;
 
-test("#4198: arm and sweep mint the token for this identity, before the step that uses it, and hold no other write", () => {
+test("#4198: arm, sweep and arm-approved mint the token for this identity, before the step that uses it, and hold no other write", () => {
   for (const name of MINTING_JOBS) {
     const job = jobs()[name]!;
     const mint = job.steps.findIndex((s) => s.uses?.startsWith("octo-sts/action@"));
@@ -107,4 +109,45 @@ test("#4198 (#4287 review): the minting jobs never run the branch's copy of the 
     const uses = jobs()[name]!.steps.find((s) => s.uses?.startsWith("octo-sts/action@"))!.uses!;
     assert.match(uses, /^octo-sts\/action@[0-9a-f]{40}$/, `${name}: pin the commit, not the movable tag`);
   }
+});
+
+type Gated = Job & { if: string };
+const gated = (name: string) => jobs()[name] as Gated;
+
+test("#4969: an approving review reaches arming only through `relay`, which mints nothing, and `arm-approved`, which runs as main's dispatch", () => {
+  const doc = parseYaml(read(".github/workflows/auto-arm.yml")) as { on: Record<string, { types?: string[] }> };
+  assert.deepEqual(doc.on.pull_request_review?.types, ["submitted"]);
+
+  const relay = gated("relay");
+  assert.deepEqual(relay.permissions, { actions: "write" }, "relay runs the branch's copy of the file: no id-token, no write beyond dispatching");
+  assert.ok(!relay.steps.some((s) => s.uses?.startsWith("octo-sts/action@")), "relay must not mint: it runs on the branch's merge ref");
+  assert.match(relay.if, /github\.event\.review\.state == 'approved'/, "a CHANGES_REQUESTED or COMMENTED review must do nothing");
+  assert.match(relay.if, /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/, "a fork head must do nothing");
+  const handOff = relay.steps.map((s) => s.run ?? "").join("\n");
+  assert.match(handOff, /gh workflow run auto-arm\.yml .*--ref main/, "the hand-off must name main's copy");
+  // Before this lands `main` declares no `pr` input and the dispatch answers 422; that is no failure of the pull request, and the only one forgiven.
+  assert.match(handOff, /\*"Unexpected inputs provided"\*\) .*exit 0 ;;/, "a main that does not declare the input yet is a notice, not a red check");
+  assert.match(handOff, /esac\n\s*echo "\$out" >&2\n\s*exit 1/, "every OTHER refusal of the dispatch stays red");
+
+  const armApproved = gated("arm-approved");
+  assert.match(armApproved.if, /github\.event_name == 'workflow_dispatch'/);
+  assert.match(armApproved.if, /github\.ref == 'refs\/heads\/main'/, "the policy pins main, and the job must say so before it fails a mint");
+  for (const other of ["arm", "sweep", "stalled"]) {
+    assert.doesNotMatch(gated(other).if, /event_name == 'pull_request_review'/, `${other} must not run on the branch's copy because of a review`);
+  }
+  for (const other of ["sweep", "stalled"]) {
+    assert.match(gated(other).if, /github\.event_name != 'pull_request_review'/, `${other} must refuse pull_request_review`);
+    assert.match(gated(other).if, /github\.event\.inputs\.pr == ''/, `${other} must not run on a dispatch that names a pull request`);
+  }
+});
+
+test("#4969: arm-approved acts on the API's reviewDecision, never on the dispatch, and leaves a held, forked or CHANGES_REQUESTED PR untouched", () => {
+  const run = jobs()["arm-approved"]!.steps.map((s) => s.run ?? "").join("\n");
+  const ready = run.indexOf("gh pr ready");
+  assert.ok(ready >= 0, "an approved draft must be marked ready");
+  assert.ok(run.indexOf(".reviewDecision != \"APPROVED\"") >= 0 && run.indexOf(".reviewDecision != \"APPROVED\"") < ready, "reviewDecision is read before the PR is touched");
+  assert.ok(run.indexOf("startswith($prefix)") >= 0 && run.indexOf("startswith($prefix)") < ready, "a hold label is read before the PR is touched");
+  assert.ok(run.indexOf(".isCrossRepository") >= 0 && run.indexOf(".isCrossRepository") < ready, "a fork head is refused before the PR is touched");
+  assert.ok(run.indexOf("agent-org arm-pr") > ready, "arming goes through the one predicate (`arm-pr`) and follows the ready flip");
+  assert.equal(jobs()["arm-approved"]!.steps.find((s) => s.env?.HOLD_PREFIX !== undefined)?.env?.HOLD_PREFIX, "hold:");
 });
