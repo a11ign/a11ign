@@ -1,6 +1,8 @@
 Adds `packages/cli/src/auth/auth0-matrix.ts` (pure: `MATRIX_CASES`, `BASELINE`, `planStop`) and its test. Six cases (identifier-first on/off, MFA always with OTP, progressive enrollment, consent on a localhost callback, an organizations prompt), each with the settings it flips and the outcome/branches it must end in; `BASELINE` restores every field a case sets. No attack-protection case.
 
-**Measured at this head:** 7 tests, all pass (`rstest`, the command below).
+**Rework (reviewer-5031):** `mfa_policies` is now the raw array `PUT /guardian/policies` takes, `guardian_factors` is keyed by the factor-name path segment with the body as value, and `passkey_options` nests under the connection's `options`; a new test pins those shapes.
+
+**Measured at this head:** 8 tests, all pass (`rstest`, the command below).
 
 **Mutations** (applied to `auth0-matrix.ts`, run, restored byte-identical with `diff`):
 - drop `guardian_factors` from `BASELINE`: turns red `POSITIVE CONTROL: every field a case sets has a matching entry in BASELINE`, and no other.

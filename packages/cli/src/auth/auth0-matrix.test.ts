@@ -32,8 +32,8 @@ test("POSITIVE CONTROL: the six cases are present with their settings and expect
     ["identifier-first-on", "identifier-first-off", "mfa-always-otp", "progressive-enrollment-on", "consent-on-localhost-callback", "organizations-prompt"],
   );
   assert.deepEqual(byName("identifier-first-on").settings, { prompts: { identifier_first: true } });
-  assert.deepEqual(byName("mfa-always-otp").settings.mfa_policies, { policy: ["all-applications"] });
-  assert.deepEqual(byName("consent-on-localhost-callback").settings.clients?.callbacks, ["http://localhost:3000/callback"]);
+  assert.deepEqual(byName("mfa-always-otp").settings.mfa_policies, ["all-applications"]);
+  assert.deepEqual(byName("consent-on-localhost-callback").settings.clients, { is_first_party: false, callbacks: ["http://localhost:3000/callback"] });
   for (const c of MATRIX_CASES) assert.equal(c.expect.ends, "signed-in", `${c.name} ends on a named outcome or signed-in`);
 });
 
@@ -50,6 +50,17 @@ test("POSITIVE CONTROL: every field a case sets has a matching entry in BASELINE
   const set = MATRIX_CASES.flatMap((c) => paths(c.settings));
   assert.ok(set.length >= CASE_COUNT, "the control saw the cases' fields");
   for (const path of set) assert.ok(baselinePaths.has(path), `BASELINE does not restore ${path}`);
+});
+
+// POSITIVE CONTROL: the payloads are the request bodies Auth0 documents, not a wrapper of our own.
+test("POSITIVE CONTROL: MFA and connection payloads have the shape of Auth0's request bodies", () => {
+  const mfa = byName("mfa-always-otp").settings;
+  assert.ok(Array.isArray(mfa.mfa_policies), "PUT /guardian/policies takes the raw array");
+  assert.deepEqual(mfa.guardian_factors, { otp: { enabled: true } });
+  assert.deepEqual(BASELINE.mfa_policies, []);
+  const connection = byName("progressive-enrollment-on").settings.connections as { options?: { passkey_options?: unknown }; passkey_options?: unknown };
+  assert.ok(connection.options?.passkey_options, "PATCH /connections/{id} nests passkey_options under options");
+  assert.equal(connection.passkey_options, undefined);
 });
 
 test("POSITIVE CONTROL: a recorded plan refusal is mfa-unavailable-on-plan", () => {

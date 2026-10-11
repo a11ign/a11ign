@@ -18,8 +18,12 @@ import type { LoginOutcome } from "./login-outcomes.js";
 export const MATRIX_AREAS = ["tenant_settings", "prompts", "guardian_factors", "mfa_policies", "clients", "connections", "organizations"] as const;
 export type MatrixArea = (typeof MATRIX_AREAS)[number];
 
-/** One area's payload as the Management API takes it. Keys are the fields the case flips. */
-export type MatrixSettings = Partial<Record<MatrixArea, Readonly<Record<string, unknown>>>>;
+/**
+ * One area's request body as the Management API takes it, so a runner sends the value as written. Two areas are keyed
+ * by a path segment rather than a body field: `guardian_factors` by the factor name (`PUT /guardian/factors/{name}`,
+ * whose body is the value), and `mfa_policies` is the raw array `PUT /guardian/policies` takes.
+ */
+export type MatrixSettings = Partial<Record<MatrixArea, unknown>>;
 
 /** A branch the screen loop must list: the screen it met and, when it matters, text its note must contain. */
 export interface ExpectedBranch {
@@ -55,13 +59,14 @@ export const MATRIX_CASES: readonly MatrixCase[] = [
   {
     // "Always" is the `all-applications` policy; OTP is the authenticator-app factor. Push, SMS and keys are not in v3.
     name: "mfa-always-otp",
-    settings: { guardian_factors: { otp: { enabled: true } }, mfa_policies: { policy: ["all-applications"] } },
+    settings: { guardian_factors: { otp: { enabled: true } }, mfa_policies: ["all-applications"] },
     expect: { ends: "signed-in", branches: [{ screen: "one-time-code" }] },
   },
   {
-    // Progressive enrollment is what makes Auth0 offer a passkey after a password login.
+    // Progressive enrollment is what makes Auth0 offer a passkey after a password login. `PATCH /connections/{id}`
+    // takes it under `options`; the runner must merge it into the connection's current options, as PATCH replaces them.
     name: "progressive-enrollment-on",
-    settings: { connections: { passkey_options: { progressive_enrollment_enabled: true } } },
+    settings: { connections: { options: { passkey_options: { progressive_enrollment_enabled: true } } } },
     expect: { ends: "signed-in", branches: [{ screen: "passkey-nudge", noteIncludes: "passkey" }] },
   },
   {
@@ -83,14 +88,14 @@ export const MATRIX_CASES: readonly MatrixCase[] = [
 export const BASELINE: Readonly<Required<Pick<MatrixSettings, "prompts" | "guardian_factors" | "mfa_policies" | "clients" | "connections">>> = {
   prompts: { identifier_first: false },
   guardian_factors: { otp: { enabled: false } },
-  mfa_policies: { policy: [] },
+  mfa_policies: [],
   clients: {
     is_first_party: true,
     callbacks: [LOCALHOST_CALLBACK],
     organization_usage: "deny",
     organization_require_behavior: "no_prompt",
   },
-  connections: { passkey_options: { progressive_enrollment_enabled: false } },
+  connections: { options: { passkey_options: { progressive_enrollment_enabled: false } } },
 };
 
 /** A recorded Management API or login response, reduced to what a classifier may read. */
