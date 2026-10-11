@@ -91,3 +91,20 @@ test("NEGATIVE CONTROL: a block that is not a mapping, or misses a name, is logi
   refusedBy("login-block-shape", "https://app.example.test");
   refusedBy("login-block-shape", { ...SIX_LINES, totp: undefined });
 });
+
+test("NEGATIVE CONTROL: a credential inside the start URL or an idp origin is login-literal and is not echoed", () => {
+  refusedBy("login-literal", { ...SIX_LINES, url: "https://alice:hunter2x@app.example.test/login" }, "hunter2x");
+  refusedBy("login-literal", { ...SIX_LINES, "idp-origins": ["https://alice:hunter2x@idp.example.test"] }, "hunter2x");
+});
+
+test("NEGATIVE CONTROL: an idp origin with a path, query, fragment, wildcard or the app's own origin is refused", () => {
+  for (const entry of ["https://idp.example.test/path", "https://idp.example.test/?x=1", "https://idp.example.test/#f",
+    "https://*.example.test", "https://app.example.test"]) {
+    refusedBy("login-block-shape", { ...SIX_LINES, "idp-origins": [entry] });
+  }
+});
+
+test("POSITIVE CONTROL: an idp origin is kept as URL.origin and a repeat is collapsed", () => {
+  const b = parseLoginBlock({ ...SIX_LINES, "idp-origins": ["https://IDP.example.test", "https://idp.example.test/"] });
+  assert.deepEqual(b.idpOrigins, ["https://idp.example.test"]);
+});

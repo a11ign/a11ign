@@ -62,6 +62,10 @@ function httpUrl(key: string, value: unknown): string {
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     fail("login-url-not-http", `login: "${key}" must be an http: or https: URL.`);
   }
+  // Same boundary as flows.ts: a credential does not belong in a file that is committed, and the key is named, never the value.
+  if (parsed.username !== "" || parsed.password !== "") {
+    fail("login-literal", `login: "${key}" carries a username or password. Credentials are never written in the file: name the variable that holds them.`);
+  }
   return value;
 }
 
@@ -100,9 +104,21 @@ function parseFields(value: unknown): Record<string, string> {
   return out;
 }
 
-function parseIdpOrigins(value: unknown): string[] {
+/** One identity-provider origin, exact and nothing wider, as flows.ts reads it; returned as `URL.origin`. */
+function idpOrigin(key: string, value: unknown, appOrigin: string): string {
+  const text = httpUrl(key, value);
+  if (text.includes("*")) return fail("login-block-shape", `login: "${key}" holds a wildcard; list each origin exactly.`);
+  const parsed = new URL(text);
+  if (parsed.pathname !== "/" || parsed.search !== "" || parsed.hash !== "") {
+    fail("login-block-shape", `login: "${key}" carries a path, query or fragment; an origin is a scheme, a host and a port.`);
+  }
+  if (parsed.origin === appOrigin) fail("login-block-shape", `login: "${key}" is the start URL's own origin, which needs no allowance.`);
+  return parsed.origin;
+}
+
+function parseIdpOrigins(value: unknown, appOrigin: string): string[] {
   if (!Array.isArray(value)) return fail("login-block-shape", "login: \"idp-origins\" must be a list of origins.");
-  return value.map((origin, i) => httpUrl(`idp-origins[${i}]`, origin));
+  return [...new Set(value.map((origin, i) => idpOrigin(`idp-origins[${i}]`, origin, appOrigin)))];
 }
 
 /** Parse the already-parsed YAML of a `login:` mapping; throws a `LoginBlockError` naming the rule. */
@@ -120,6 +136,6 @@ export function parseLoginBlock(value: unknown): LoginBlock {
     block.organization = value.organization as string;
   }
   if (value.fields !== undefined) block.fields = parseFields(value.fields);
-  if (value["idp-origins"] !== undefined) block.idpOrigins = parseIdpOrigins(value["idp-origins"]);
+  if (value["idp-origins"] !== undefined) block.idpOrigins = parseIdpOrigins(value["idp-origins"], new URL(url).origin);
   return block;
 }
