@@ -692,6 +692,76 @@ jobs:
           printf '%s' "$BODY" > /tmp/body.txt
           agent-org owned-path-signoff --diff=/tmp/changed.txt --body=/tmp/body.txt
 
+  # A PULL REQUEST THAT CHANGES HOW THIS TREE INSTALLS DRY-RUNS THE RELEASE'S VERSION STEP (a11ign/agent-org#970, the refile of #969; chairman, a11ign/agent-org#885 class 3 and #888).
+  # a11ign/agent-org#871 changed that tree's install, passed its `suite`, and the first sign of the break was five failed releases on `main`: nothing on the pull request ran the path
+  # the release takes. `release.yml` here calls `release-per-merge.yml`, whose `version` job (with a lockfile) runs `pnpm install --frozen-lockfile`, the repository's OWN
+  # `changeset version`, then `pnpm install --lockfile-only`. This job runs those commands in a scratch clone of the candidate tree and writes nothing: `contents: read`, no
+  # credential kept by the checkout, no push, no token. Copied from a11ign/agent-org's `release-dry-run` (a11ign/agent-org#967) and adapted to THIS repository's toolchain.
+  #
+  # IT RUNS ON EVERY CODE EVENT AND DOES ITS WORK ONLY WHEN THE CHANGE TOUCHES `package.json`, `pnpm-lock.yaml`, `.npmrc` OR `.github/workflows/`. GitHub filters `paths:` per WORKFLOW and
+  # not per job, and a workflow-wide filter would skip `gate` with it, so the job reads the paths itself and the steps after `touched` are conditional on it: an untouched change is a
+  # `success` here, never a skip. A body or label event skips the job by name, as `ts` does (the three types above), and `gate` reads that skip as passing. The paths are judged against
+  # the first parent of the checked-out commit: the merge ref of a pull request or a merge-queue entry (this workflow has no `push` trigger).
+  #
+  # THE TOOLS ARE THE RELEASE'S, NOT THIS FILE'S. `release.yml`'s call passes none of `pnpm-version`, `changesets-version` or `node-version`, so the release runs what the called workflow
+  # (pinned there by SHA) defaults to, and so does this job: pnpm is read from `package.json`'s `packageManager`, which is what the called workflow's `setup` step hands
+  # `pnpm/action-setup` where it is set; `changesets-version` (`3.0.3`) is used only where there is NO lockfile, which is the `else` below; and Node is the default `22`. When Dependabot moves
+  # the called workflow's SHA, read those three defaults again.
+  #
+  # THERE IS NO SECOND STEP, DELIBERATELY. a11ign/agent-org's job also runs the consumer's install of the candidate tag (`pnpm install --frozen-lockfile --ignore-scripts`), because
+  # this repository's `scripts/agent-org-newest-tag.ts` clones and installs a11ign/agent-org's tags (its `TOOL_REPO_URL`). No clone of a tag of THIS repository that is then installed was found
+  # (a11ign/agent-org#970 searched this tree, `control` and `lab`): a consumer of `a11ign` installs the published packages from the npm registry. Add the step if one appears.
+  #
+  # THE CHECKOUT AND THE CLONE ARE FULL-DEPTH (a11ign/agent-org#967's review: the first run hung 29 minutes in the version step). `changeset version` reads git history and DEEPENS a
+  # shallow clone, and on a `--depth=1` one it spins. The release's own checkout is `fetch-depth: 0` for the same reason.
+  release-dry-run:
+    if: ${{ !contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      CHANGESETS_VERSION: 3.0.3
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The WHOLE history, not two commits: `touched` needs only HEAD and its first parent, but the version step clones this checkout and `changeset version` deepens a shallow clone and hangs.
+          # No credential is kept: nothing here pushes.
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Does the change touch what the release installs from?
+        id: touched
+        run: |
+          set -euo pipefail
+          changed=$(git diff --name-only HEAD^1 HEAD)
+          echo "changed paths:"
+          echo "$changed"
+          if grep -q -E '^(package\.json|pnpm-lock\.yaml|\.npmrc)$|^\.github/workflows/' <<<"$changed"; then
+            echo "touched=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "touched=false" >> "$GITHUB_OUTPUT"
+            echo "no install-affecting path changed: the release dry run is not needed"
+          fi
+      # No `version`: the action reads `packageManager`, as the called workflow's `setup` step makes it do.
+      - uses: pnpm/action-setup@v6
+        if: steps.touched.outputs.touched == 'true'
+      - uses: actions/setup-node@v7
+        if: steps.touched.outputs.touched == 'true'
+        with: { node-version: 22 }
+      - name: The release's version step, dry-run on a scratch clone -- install, changeset version, lockfile refresh
+        if: steps.touched.outputs.touched == 'true'
+        run: |
+          set -euo pipefail
+          scratch="$RUNNER_TEMP/release-dry-run"
+          git clone --quiet "file://$GITHUB_WORKSPACE" "$scratch"
+          cd "$scratch"
+          if [ -f pnpm-lock.yaml ]; then
+            pnpm install --frozen-lockfile
+            pnpm exec changeset version
+            pnpm install --lockfile-only
+          else
+            pnpm dlx "@changesets/cli@$CHANGESETS_VERSION" version
+          fi
+
   # #902, step 2 of the CI Reset (chairman-approved): THE REQUIRED CHECK IS THE PRODUCT, NOT THE PROCESS.
   # Of the last forty red `ci` runs on pull requests, 13 were `ts` -- a real test, lint or typecheck
   # failure -- and the rest were the process jobs: `acceptance` 10, `mergeSafety` 10, `docs` 9,
@@ -733,7 +803,7 @@ jobs:
   # watched the body) from a queue stall into an edit -- the condition that made blocking unsafe then
   # does not hold now.
   gate:
-    needs: [bodyEdit, changed, ts, python, changeset, rulesFitness, guardSweep, deliberateRefusals, acceptance, ownedPaths]
+    needs: [bodyEdit, changed, ts, python, changeset, rulesFitness, guardSweep, deliberateRefusals, acceptance, ownedPaths, release-dry-run]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     # `actions: read` for the one lookup below, and nothing else: this job checks nothing out and writes nothing.
@@ -752,7 +822,8 @@ jobs:
             "${{ needs.guardSweep.result }}" \
             "${{ needs.deliberateRefusals.result }}" \
             "${{ needs.acceptance.result }}" \
-            "${{ needs.ownedPaths.result }}"
+            "${{ needs.ownedPaths.result }}" \
+            "${{ needs.release-dry-run.result }}"
           do
             if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
               echo "::error::a job reported '$result', which is neither success nor skipped"
