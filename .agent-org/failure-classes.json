@@ -214,9 +214,19 @@
           "ref": "a11ign/a11ign#4627",
           "basis": "chairman-named",
           "note": "comment 6089585564 (2026-10-09 21:30:40Z): the chairman-verified direction that a use's row is not done until the project's switch is on and a live start is quoted"
+        },
+        {
+          "ref": "a11ign/a11ign#4906",
+          "basis": "chairman-named",
+          "note": "the github.identity option merged as agent-org#770 at 2026-10-10T21:58:51Z and changed nothing until a11ign's host.json row and a wrapper re-render; the row closed 2026-10-10T22:18:32Z"
+        },
+        {
+          "ref": "a11ign/a11ign#4904",
+          "basis": "chairman-named",
+          "note": "routing.question merged as agent-org#782 at 2026-10-11T00:41:19Z and #4904 closed at 00:41:20Z while a11ign's .agent-org/project.json had no routing key; 76 routes ran in traits mode until a11ign/a11ign#4953"
         }
       ],
-      "guardNote": "none in force. The verify-row rule of 2026-10-09 20:05Z applies row by row, but nothing refuses the close. Set guard to the rule's reference when a rule that refuses the close is in force."
+      "guardNote": "none in force. Ordered, both OPEN in agent-org as of 2026-10-11 and neither in force: agent-org#838 (a pull request that declares a `Consumer-declaration:` line in its acceptance file is refused a `Closes` while the consumer's file lacks the value) and agent-org#839 (a detector: a merged option the consumer never set is an incident two hours after the merge, as a ledger line of this kind). Neither covers an author who writes no `Consumer-declaration:` line. The verify-row rule of 2026-10-09 20:05Z applies row by row, but nothing refuses the close. Set guard to the rule's reference, or to #838 or #839, only once it is merged and a live reading is quoted."
     },
     {
       "id": "answer-label-without-question",
