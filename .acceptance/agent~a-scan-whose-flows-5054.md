@@ -15,6 +15,8 @@ The markers were `canaryuser6d3f2a`, `canarysecretb81c94`, `canarytotp4e7a10c2`;
 - `fields` is not sent: the worker refuses it, and `login --check` ignores it too.
 - The worker treats an unset `totpEnv` variable as "no MFA"; this row's Acceptance requires all three to be set, so a missing totp refuses before the lease. Stricter than the worker, on purpose, and said here.
 - `login --check`'s message for a `url:` check is now the shared `login-check-url` rule's text, not its old wording.
+- **Per-page check (reviewer-5055, fixed at this head):** `recheckedSignIn` now reads its signed-in condition off `ruleLayerPlanOf(plan).login`, the steps the rule layer runs, not the request's own empty `login`; a block run is re-logged in once and then NOT AUDITED, as a named flow is.
+- Not changed, and not this row's: the report's "What this run pressed" says `(nothing: automatic pressing ... off)` for a block run, exactly as it already does for a flow that uses `auto: true`, though the screen loop presses the sign-in control. `pressedByThisRun` (resolve.ts) reads only `press:` steps; the honest wording is a report change, left for its own row.
 - Not changed: a bare base32 seed passes the env-name regex (an existing gap, outside this row).
 
 Outside-Region: packages/cli/src/cli.ts — `planFromBlock` there now calls the shared `loginBlockPlan`, and `captureViaWorker` serialises through `onTheWire`; both are one-line call-site changes the shared plan and the dropped `login` key require.
@@ -30,7 +32,7 @@ git grep -q "NEGATIVE CONTROL" -- packages/cli/src/auth/login-block-wire.test.ts
 npx rstest run --config scripts/rstest/rstest.config.ts --include packages/cli/src/auth/login-block-wire.test.ts
 ```
 
-Mutation: five, each caught by its own test and restored byte-identical (`diff` empty) from a `cp` backup, 18 pass again: (A) `onTheWire` returning `auth` unchanged fails the wire-shape and HTTP-body tests; (B) `names` in `planBlock` dropping `totp` fails the missing-variable test for it alone; (C) letting a block beat a named flow fails the flow-wins test; (D) the rule layer ignoring `loginBlock` fails the plan-parity test; (E) accepting a `url:` check fails the `login-check-url` test.
+Mutation: six, each caught by its own test and restored byte-identical (`diff` empty) from a `cp` backup, 21 pass again: (A) `onTheWire` returning `auth` unchanged fails the wire-shape and HTTP-body tests; (B) `names` in `planBlock` dropping `totp` fails the missing-variable test for it alone; (C) letting a block beat a named flow fails the flow-wins test; (D) the rule layer ignoring `loginBlock` fails the plan-parity test; (E) accepting a `url:` check fails the `login-check-url` test; (F) `recheckedSignIn` reading `plan.login` instead of the rule layer's plan (the blocker reviewer-5055 found: a block request's `login` is `[]`, so the per-page signed-in check was skipped and a signed-out page was audited) fails 3 tests, the two block-run controls and the recover case.
 
 Closes #5054
 

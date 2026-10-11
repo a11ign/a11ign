@@ -42,7 +42,7 @@ import {
 } from "./auth/interpreter.js";
 import { LOGIN_EXIT_CODES, LOGIN_OUTCOMES, retryDecision, type LoginOutcome } from "./auth/login-outcomes.js";
 import { keepLastAttempt, recordStep, startAttempt, writeArtifact, type ArtifactIo, type Attempt, type ObservedStep } from "./auth/login-artifact.js";
-import { LoginBlockError, loginBlockPlan, parseLoginBlock } from "./auth/login-block.js";
+import { LoginBlockError, loginBlockPlan, parseLoginBlock, ruleLayerPlanOf } from "./auth/login-block.js";
 import { loginVerdict, pageDecision, validateCheck, type PageObservation, type ScanLoss, type SignedInCheck } from "./auth/signed-in-check.js";
 import { classifyScreen, type Classification, type ScreenObservation } from "./auth/screen-loop.js";
 import { openPlaywrightDriver } from "./auth/playwright-driver.js";
@@ -1490,7 +1490,9 @@ export function recheckedSignIn(
   { plan, url, signInOnce = ruleLayerSignIn({ plan, url }), read = readThroughTheDriver }:
   { plan: AuthRequest; url: string; signInOnce?: (page: Page) => Promise<void>; read?: ReadPage },
 ): (page: Page) => Promise<void> {
-  const stop = signedInConditionOf(plan.login);
+  // The condition is read off the steps the rule layer actually runs: a block request's own `login` is `[]`, and reading that
+  // would skip the check on exactly the runs that sign in by a block (#5054).
+  const stop = signedInConditionOf(ruleLayerPlanOf(plan, { expectSeconds: EXPECT_DEFAULT_SECONDS }).login);
   if (stop === undefined) return signInOnce;
   const at = { appOrigin: new URL(url).origin, idpOrigins: plan.idpOrigins ?? [] };
   return async (page) => {

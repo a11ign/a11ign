@@ -21,7 +21,8 @@ import { EXPECT_DEFAULT_SECONDS, FlowsError, parseFlowsFile } from "./flows.js";
 import { loginBlockPlan, parseLoginBlock, ruleLayerPlanOf } from "./login-block.js";
 import { onTheWire, type AuthRequest } from "./refusals.js";
 import { BLOCK_UNUSED_NOTICE, LOGIN_BLOCK_NOTICE, resolveAuthentication, type ResolveRequest } from "./resolve.js";
-import { captureViaWorker } from "../cli.js";
+import { captureViaWorker, PageSignedOutError, recheckedSignIn } from "../cli.js";
+import type { Page } from "playwright";
 
 const ORIGIN = "https://app.example.test";
 const HTTP_OK = 200;
@@ -260,4 +261,47 @@ test("the block's own refusals reach a flows file as the rule that refused", () 
 test("a request with no block is its own rule-layer plan", () => {
   const plain: AuthRequest = { login: [{ goto: "/login" }] };
   assert.equal(ruleLayerPlanOf(plain, { expectSeconds: EXPECT_DEFAULT_SECONDS }), plain);
+});
+
+// ---- the per-page signed-in check on a block run (reviewer-5055's blocker on #5055): `login` is `[]` there, so the check's
+// condition must come from the block's own plan, or a signed-out page is audited. ----
+
+const DASHBOARD_TREE = [{ id: "1", role: "heading", name: "Dashboard", ignored: false }];
+const WALL_TREE = [{ id: "1", role: "heading", name: "Sign in", ignored: false }];
+
+/** A page that shows `arrivals[n]` after the nth sign-in, read through `recheckedSignIn`'s own seam, with no browser. */
+function scriptedBlockScan(arrivals: readonly boolean[]) {
+  let signIns = 0;
+  let signedIn = true;
+  const read = async () => ({ nodes: signedIn ? DASHBOARD_TREE : WALL_TREE, url: `${ORIGIN}${signedIn ? "/orders" : "/login"}` });
+  const signInOnce = async (): Promise<void> => { signedIn = arrivals[signIns] ?? true; signIns += 1; };
+  return { signIns: () => signIns, read, signInOnce };
+}
+
+test("POSITIVE CONTROL: a block run whose page arrives signed in is audited, after one sign-in and one read", async () => {
+  const { auth } = await resolved(FLOWS_BLOCK);
+  const run = scriptedBlockScan([true]);
+  let reads = 0;
+  const read = async () => { reads += 1; return run.read(); };
+  await recheckedSignIn({ plan: auth, url: `${ORIGIN}/orders`, signInOnce: run.signInOnce, read })({} as Page);
+  assert.equal(run.signIns(), 1);
+  assert.equal(reads, 1, "the page was READ: the check ran, it was not skipped");
+});
+
+test("NEGATIVE CONTROL: a block run whose page arrives signed out is re-logged in once and then NOT AUDITED, as a named flow's is", async () => {
+  const { auth } = await resolved(FLOWS_BLOCK);
+  assert.deepEqual(auth.login, [], "the request's own login is empty, which is what the check used to read");
+  const run = scriptedBlockScan([false, false]);
+  await assert.rejects(
+    recheckedSignIn({ plan: auth, url: `${ORIGIN}/orders`, signInOnce: run.signInOnce, read: run.read })({} as Page),
+    (error: unknown) => error instanceof PageSignedOutError,
+  );
+  assert.equal(run.signIns(), 2, "one sign-in and one re-login, and no more");
+});
+
+test("NEGATIVE CONTROL: a block run that arrives signed out and recovers on the re-login is audited", async () => {
+  const { auth } = await resolved(FLOWS_BLOCK);
+  const run = scriptedBlockScan([false, true]);
+  await recheckedSignIn({ plan: auth, url: `${ORIGIN}/orders`, signInOnce: run.signInOnce, read: run.read })({} as Page);
+  assert.equal(run.signIns(), 2);
 });
