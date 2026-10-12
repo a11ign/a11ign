@@ -42,7 +42,10 @@
 #      2026-09-14 (#1530), and a scoped `@a11ign/*` package cannot publish under anything else at all.
 #   5. `action-smoke` must SUCCEED, run HERE, against the exact sha this workflow ran at. It drives the published Action the
 #      way a consumer does — `uses: ./`, inputs only, no repo knowledge.
-#   6. `capture-regression` must SUCCEED, run HERE, against the same sha. It drives real NVDA over the bundled tutorial pages.
+#   6. `capture-regression` must SUCCEED, but it is READ, not run here (ADR 0045 cut 9, #5087; ceo's ruling (b) on #5179). The harness that
+#      drives real NVDA over the bundled tutorial pages belongs to `a11ign/lab`, whose own `capture-check` workflow runs it on a Windows
+#      runner; this job reads that workflow's newest decisive run on the lab's `main` and passes only if it is green. It is therefore a
+#      reading of the lab at ITS head, not of this sha, and says so in the run's summary.
 #   7. `consumer-gate` must SUCCEED, run HERE (#494). `consumer-gate.yml` is generated from README.md's own Quickstart fence and
 #      its workspace starts empty: the ONE check here that exercises the path a first reader actually takes.
 #
@@ -127,15 +130,57 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # GUARDS 5, 6 AND 7, RUN AS JOBS AGAINST THE EXACT SHA THIS WORKFLOW RAN AT. `uses:` a local workflow path calls it as a
+  # GUARDS 5 AND 7, RUN AS JOBS AGAINST THE EXACT SHA THIS WORKFLOW RAN AT (guard 6 is a reading, below). `uses:` a local workflow path calls it as a
   # reusable workflow (`workflow_call`); GitHub runs a called workflow at THIS workflow's own ref.
   action-smoke:
     if: github.event_name != 'status' && inputs.action-tag-version == ''
     uses: ./.github/workflows/action-smoke.yml
 
+  # GUARD 6, READ RATHER THAN RUN (a11ign#5179, ceo's ruling (b); the lab's workflow is a11ign/lab#101 and the check a11ign#4425 required
+  # green there first). The harness is the lab's, and running it from here measured something else than the lab's own pins do, so the
+  # lab runs it and this job reads the answer. THE NEWEST DECISIVE RUN, NOT THE NEWEST GREEN ONE: a green run older than a red one
+  # on `main` would otherwise pass for as long as nobody fixed the red. `cancelled` and `skipped` say nothing and are passed over;
+  # every other conclusion that is not `success` stops the release, and so does finding no run or not being able to ask (absence is not
+  # a pass). Only `push` and `workflow_dispatch` runs count: a `pull_request` run from a fork branch named `main` carries
+  # `head_branch: main` and is not the lab's `main`. The lab is public, so `github.token` with `contents: read` reads it.
+  #
+  # NOT BOUNDED IN AGE, AND SAYS SO: the run is the lab's at its head, whenever that was, and the NVDA build it installs is the one
+  # thing that moves with no commit (the lab's workflow has no `schedule` for that reason). The summary names the run, its sha and its
+  # age so a reader can judge it; a bound would be a number nobody has ruled on.
   capture-regression:
     if: github.event_name != 'status' && inputs.action-tag-version == ''
-    uses: ./.github/workflows/capture-regression.yml
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Read the newest decisive capture-check run on the lab's main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LAB: a11ign/lab
+        run: |
+          set -euo pipefail
+          fail() { echo "::error title=capture-regression::$1"; exit 1; }
+          runs=$(gh api "repos/$LAB/actions/workflows/capture-check.yml/runs?branch=main&status=completed&per_page=50") \
+            || fail "CANNOT_TELL: the API did not answer for $LAB's capture-check runs"
+          newest=$(jq -c '[.workflow_runs[]
+              | select(.head_branch == "main" and (.event == "push" or .event == "workflow_dispatch"))
+              | select(.conclusion != "cancelled" and .conclusion != "skipped")]
+              | sort_by(.created_at) | last // empty' <<<"$runs") \
+            || fail "CANNOT_TELL: the answer for $LAB's capture-check runs could not be read"
+          [ -n "$newest" ] || fail "CANNOT_TELL: $LAB has no completed capture-check run on main (push or workflow_dispatch), and no run is not a pass"
+          conclusion=$(jq -r .conclusion <<<"$newest")
+          url=$(jq -r .html_url <<<"$newest")
+          sha=$(jq -r .head_sha <<<"$newest")
+          created=$(jq -r .created_at <<<"$newest")
+          age_days=$(( ( $(date -u +%s) - $(date -u -d "$created" +%s) ) / 86400 ))
+          {
+            echo "### capture-regression: a reading of the lab, not a run"
+            echo "- run: $url"
+            echo "- lab sha: \`$sha\`, conclusion: \`$conclusion\`, started $created ($age_days days ago)"
+            echo "- This is $LAB's \`capture-check\` on its own \`main\`, not this sha."
+          } >> "$GITHUB_STEP_SUMMARY"
+          [ "$conclusion" = "success" ] || fail "the lab's newest decisive capture-check run on main is $conclusion, not success: $url"
+          echo "capture-check on $LAB main at $sha: success ($url)"
 
   # #494. `consumer-gate.yml`'s own `check-pin` job (#558) compares its pinned sha against `${{ github.sha }}`, which under
   # `workflow_call` is THIS release's own sha, so a stale pin fails here on ubuntu-latest before the Windows job starts.
