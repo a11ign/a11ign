@@ -15,9 +15,14 @@
 # sibling policies measured. If a `workflow_run` run presents anything but `ref:refs/heads/main`, the mint is refused and the job is red
 # naming the step, which is the safe direction; the first `release` success after this lands is the reading.
 #
-# WHAT IT HOLDS: `contents: write` (push the one `automation/docs-pin-write` branch) and `pull_requests: write` (open and update the pull
-# request), on THIS repository only. It does NOT hold `workflows`: the re-pin writes `README.md`, `docs/*.md` and `docs/adr/*.md`, never
-# anything under `.github/workflows/`. It is not a merge identity: the pull request needs the approving review `main` requires (#2022).
+# WHAT IT HOLDS: `contents: write` (push the one `automation/docs-pin-write` branch), `pull_requests: write` (open and update the pull request)
+# and, since #5291, `workflows: write`, on THIS repository only. `workflows` is there for ONE file: the re-pin regenerates
+# `.github/workflows/consumer-gate.yml`, which copies README's Quickstart fence and so goes stale with every re-pin (`ceo`, #5283), and GitHub
+# refuses a write under `.github/workflows/` for a token without it. The job that holds the token has NO checkout, install or node, and its
+# shape check writes only an exact allowlist of paths (`README.md`, `docs/*.md`, `docs/adr/*.md`, `scripts/outsider/outsider-job.yml` and that
+# one workflow file), each refused unless it differs from its base by shas and versions alone. The same grant, on the same terms, is
+# `consumer-gate-pin-write.sts.yaml`'s, and the installation already holds it (#5210 was written by `octo-sts[bot]` under it). It is not a merge
+# identity: the pull request needs the approving review `main` requires (#2022).
 issuer: https://token.actions.githubusercontent.com
 subject: repo:a11ign@320310787/a11ign@1280353940:ref:refs/heads/main
 claim_pattern:
@@ -26,3 +31,4 @@ claim_pattern:
 permissions:
   contents: write
   pull_requests: write
+  workflows: write

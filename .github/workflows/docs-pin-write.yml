@@ -8,13 +8,14 @@ name: docs-pin-write
 #   decide   reads `v0` and the `a11ign@<x.y.z>` tags in a full clone of `main`, plans the rewrite with `planRepin`
 #            (`packages/guards/src/docs-release-pin-currency.ts`, the guard's own reader and population), and hands on the changed docs plus
 #            three strings. It holds `contents: read` and NO `id-token`. A pin the rewrite cannot match is a RED job naming file and line.
-#   regenerate  applies those docs to a checkout of the same commit and runs `node scripts/outsider/generate.ts --sha=<the pin's commit>
-#            --version=<x.y.z>` (#5291), because `scripts/outsider/outsider-job.yml` is generated from README's Quickstart fence and the
-#            re-pin alone left `outsider-job-fresh.test.ts` red on every release (#4918, #5119, #5283): a person regenerated it by hand each
-#            time. It holds `contents: read` and NO `id-token`, because it is the job that installs and runs repository code. It hands on
-#            the one regenerated file, and only when it differs.
+#   regenerate  applies those docs to a checkout of the same commit and regenerates the two files generated from README's Quickstart fence
+#            (#5291, `ceo` on #5283): `scripts/outsider/outsider-job.yml` by `node scripts/outsider/generate.ts --sha=<the pin's commit>
+#            --version=<x.y.z>`, and `.github/workflows/consumer-gate.yml` by `generate()` of `scripts/generate-consumer-gate.ts`, with ITS
+#            COMMITTED PIN KEPT. A re-pin alone left `outsider-job-fresh.test.ts` and `generate-consumer-gate.test.ts` red on every release (#4918,
+#            #5119, #5283): a person regenerated them by hand each time. It holds `contents: read` and NO `id-token`, because it is the job that
+#            installs and runs repository code. It hands on the files that differ, and only those.
 #   write    mints the token, shape-checks what was handed against the commit it was read at, writes ONE commit of the changed docs, the
-#            regenerated outsider job and its own `.acceptance/` file onto ONE branch (`automation/docs-pin-write`, so a later release updates the open pull request and never
+#            regenerated generated files and its own `.acceptance/` file onto ONE branch (`automation/docs-pin-write`, so a later release updates the open pull request and never
 #            opens a second), and opens the pull request as a DRAFT if none is open. It has no checkout, no install and no node.
 #
 # ## Why a separate workflow, not two jobs in `release.yml` (`ceo`, #5224)
@@ -27,7 +28,8 @@ name: docs-pin-write
 # ## What the pull request is, and is not
 #
 # A DRAFT, which `auto-arm.yml` never arms: an approving review marks it ready and arms it (#4969), so a person reads it first. The body says
-# the prose beside each pin is UNREAD: only a pin's own commit and the `a11ign@<x.y.z>` label on that same line move. Nothing is merged here.
+# the prose beside each pin is MOSTLY UNREAD: a pin's own commit and the `a11ign@<x.y.z>` label on that same line move, and so do exactly the two
+# sentences that restate the release in words (#5291, `restateRelease`). Nothing is merged here.
 # The real-tree guard STAYS as it is: it is what notices a re-pin that was never merged. FLAG: none. REVERT: `git revert` this file, its policy
 # and the guard change; a pull request already open is closed by hand.
 #
@@ -116,9 +118,11 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # Runs repository code (`pnpm install`, the generator), so it holds NO `id-token`: it cannot ask for the token `write` mints. The shape of
-  # `consumer-gate-pin.yml`'s `regenerate`. `consumer-gate.yml` is NOT regenerated here: measured at row #5291, a README pin move leaves
-  # `generate-consumer-gate.ts --check` green, and a write under `.github/workflows/` would need the `workflows` grant this policy withholds.
+  # Runs repository code (`pnpm install`, the generators), so it holds NO `id-token`: it cannot ask for the token `write` mints. The shape of
+  # `consumer-gate-pin.yml`'s `regenerate`. `consumer-gate.yml`'s pin is KEPT, not re-baked at HEAD: its prose copies README's fence (so a
+  # re-pin stales it, measured at row #5291) but its pin answers a different question, whether it contains `action.yml` at the commit, which a
+  # docs re-pin does not change and `consumer-gate-pin.yml` repairs when `action.yml` does. Keeping it also leaves `generate-consumer-gate.ts`'s
+  # own refusal of a dirty README (#1721) with nothing to guard: that refusal is about a pin baked from `git rev-parse HEAD`, and none is.
   regenerate:
     needs: [decide]
     if: ${{ !cancelled() && needs.decide.result == 'success' && needs.decide.outputs.action == 'write' }}
@@ -126,7 +130,7 @@ jobs:
     permissions:
       contents: read
     outputs:
-      outsider: ${{ steps.stage.outputs.outsider }}
+      regenerated: ${{ steps.stage.outputs.regenerated }}
     steps:
       # The commit `decide` planned on, not whatever `main` is by now: the docs handed on are that commit's docs with their pins moved.
       - uses: actions/checkout@v7
@@ -146,7 +150,7 @@ jobs:
         with:
           name: docs-repinned
           path: ${{ github.workspace }}
-      - name: Regenerate the outsider job at the promoted commit and version, and hand on that one file if it changed
+      - name: Regenerate the outsider job and the consumer gate from the re-pinned README, and hand on the files that differ
         id: stage
         env:
           VERSION: ${{ needs.decide.outputs.version }}
@@ -155,30 +159,41 @@ jobs:
           set -euo pipefail
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::'$VERSION' is not an x.y.z"; exit 1; }
           [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::'$COMMIT' is not a full commit sha"; exit 1; }
-          # WITHOUT `--sha` the generator pins the checkout's HEAD, which is `main` and not the release: the wrong file, and green (#5283).
+          script="$RUNNER_TEMP/regenerate-consumer-gate.ts"
+          cat > "$script" <<'GATE'
+          import { readFileSync, writeFileSync } from "node:fs";
+          import { join } from "node:path";
+          import { pathToFileURL } from "node:url";
+
+          const gate = await import(pathToFileURL(join(process.env.GITHUB_WORKSPACE, "scripts/generate-consumer-gate.ts")).href);
+          const committed = readFileSync(gate.OUT, "utf8");
+          writeFileSync(gate.OUT, gate.generate(readFileSync(gate.README_PATH, "utf8"), gate.extractPinnedSha(committed)));
+          GATE
+          # The docs were staged, so what is unstaged or untracked after the generators is what they wrote and nothing else.
           git add -A
+          # WITHOUT `--sha` the outsider generator pins the checkout's HEAD, which is `main` and not the release: the wrong file, and green (#5283).
           node scripts/outsider/generate.ts --sha="$COMMIT" --version="$VERSION"
           node scripts/outsider/generate.ts --check
-          # The docs were staged above, so what is unstaged or untracked now is what the generator wrote and nothing else.
+          node "$script"
+          node scripts/generate-consumer-gate.ts --check
           changed="$({ git diff --name-only; git ls-files --others --exclude-standard; })"
           if [ -z "$changed" ]; then
-            echo "the outsider job already matches README's re-pinned fence at a11ign@${VERSION}; nothing to hand on"
-            echo "outsider=same" >> "$GITHUB_OUTPUT"
+            echo "both generated files already match README's re-pinned fence at a11ign@${VERSION}; nothing to hand on"
+            echo "regenerated=none" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if [ "$changed" != "scripts/outsider/outsider-job.yml" ]; then
-            echo "::error::regeneration must change scripts/outsider/outsider-job.yml and nothing else; it changed:"
-            echo "$changed"
-            exit 1
-          fi
-          mkdir -p "$RUNNER_TEMP/regenerated/scripts/outsider"
-          cp scripts/outsider/outsider-job.yml "$RUNNER_TEMP/regenerated/scripts/outsider/outsider-job.yml"
-          echo "outsider=changed" >> "$GITHUB_OUTPUT"
-      - name: Hand on the regenerated outsider job
-        if: steps.stage.outputs.outsider == 'changed'
+          while IFS= read -r path; do
+            [[ "$path" == ".github/workflows/consumer-gate.yml" || "$path" == "scripts/outsider/outsider-job.yml" ]] || {
+              echo "::error::regeneration must change the consumer gate and the outsider job and nothing else; it changed '$path'"; exit 1; }
+            mkdir -p "$RUNNER_TEMP/regenerated/$(dirname "$path")"
+            cp "$path" "$RUNNER_TEMP/regenerated/$path"
+          done <<<"$changed"
+          echo "regenerated=some" >> "$GITHUB_OUTPUT"
+      - name: Hand on the regenerated files
+        if: steps.stage.outputs.regenerated == 'some'
         uses: actions/upload-artifact@v7
         with:
-          name: outsider-job-regenerated
+          name: files-regenerated
           path: ${{ runner.temp }}/regenerated
           if-no-files-found: error
           retention-days: 1
@@ -204,12 +219,12 @@ jobs:
         with:
           name: docs-repinned
           path: ${{ runner.temp }}/repinned
-      # Into the same tree: the loop below shape-checks it like a doc, so a regenerated file that differs by more than the pin is refused.
-      - name: Take the regenerated outsider job
-        if: needs.regenerate.outputs.outsider == 'changed'
+      # Into the same tree: the loop below shape-checks them like docs, so a regenerated file that differs by more than shas and versions is refused.
+      - name: Take the regenerated files
+        if: needs.regenerate.outputs.regenerated == 'some'
         uses: actions/download-artifact@v8
         with:
-          name: outsider-job-regenerated
+          name: files-regenerated
           path: ${{ runner.temp }}/repinned
       - name: Move the re-pin branch onto main, write the docs onto it, and open the pull request unless one is open
         env:
@@ -224,11 +239,11 @@ jobs:
           set -euo pipefail
           fail() { echo "::error::$1. Nothing was written."; exit 1; }
           [ -n "${GH_TOKEN:-}" ] || fail "the Octo STS token (step octo-sts) is empty"
-          # What the previous job handed over is data: it is written only if it is the guarded docs at BASE, and the outsider job regenerated, with their pins moved and nothing else.
+          # What the previous job handed over is data: it is written only if it is the guarded docs at BASE, and the two generated files regenerated, with their pins moved and nothing else.
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "'$VERSION' is not an x.y.z"
           [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || fail "'$COMMIT' is not a full commit sha"
           [[ "$BASE" =~ ^[0-9a-f]{40}$ ]] || fail "'$BASE' is not a full commit sha"
-          guarded='^(README\.md|docs/[^/]+\.md|docs/adr/[^/]+\.md|scripts/outsider/outsider-job\.yml)$'
+          guarded='^(README\.md|docs/[^/]+\.md|docs/adr/[^/]+\.md|scripts/outsider/outsider-job\.yml|\.github/workflows/consumer-gate\.yml)$'
           mapfile -t paths < <(cd "$HANDED" && find . -type f | sed 's|^\./||' | LC_ALL=C sort)
           [ "${#paths[@]}" -gt 0 ] || fail "the artifact holds no file"
           scratch="$(mktemp -d)"
@@ -240,7 +255,7 @@ jobs:
           echo '[]' > "$entries"
           add_entry() { jq -c --arg p "$1" --rawfile c "$2" '. + [{path: $p, mode: "100644", type: "blob", content: $c}]' "$entries" > "$entries.next" && mv "$entries.next" "$entries"; }
           for path in "${paths[@]}"; do
-            [[ "$path" =~ $guarded ]] || fail "'$path' is not a guarded doc or the outsider job (README.md, docs/*.md, docs/adr/*.md, scripts/outsider/outsider-job.yml)"
+            [[ "$path" =~ $guarded ]] || fail "'$path' is not a guarded doc or a generated file (README.md, docs/*.md, docs/adr/*.md, scripts/outsider/outsider-job.yml, .github/workflows/consumer-gate.yml)"
             gh api "repos/$REPO/contents/$path?ref=$BASE" --jq .content | base64 -d > "$scratch/base" || fail "$path at $BASE could not be read"
             handed="$HANDED/$path"
             [ "$(wc -l < "$scratch/base")" = "$(wc -l < "$handed")" ] || fail "$path changed its number of lines"
@@ -248,12 +263,13 @@ jobs:
             added="$(diff --old-line-format='' --new-line-format='%L' --unchanged-line-format='' "$scratch/base" "$handed" || true)"
             [ -n "$added" ] || fail "$path is handed on but differs from $BASE in no line"
             [ "$(mask <<<"$removed")" = "$(mask <<<"$added")" ] || fail "$path differs from $BASE in more than the shas and versions of its pin lines"
-            # An action pin must name the promoted commit itself; an install pin has no commit and must name the promoted version.
+            # An action pin must name the promoted commit itself; every other changed line must name the promoted version, as a label
+          # (`a11ign@x.y.z`) or in the one sentence that restates a pin's release (`commit of release x.y.z`, #5291).
             while IFS= read -r line; do
               if [[ "$line" =~ uses:[[:space:]]*a11ign/a11ign@([0-9a-f]{40}) ]]; then
                 [ "${BASH_REMATCH[1]}" = "$COMMIT" ] || fail "a changed line of $path pins ${BASH_REMATCH[1]}, not the promoted commit $COMMIT"
               else
-                [[ "$line" == *"a11ign@$VERSION"* ]] || fail "a changed line of $path is neither an action pin nor names a11ign@$VERSION: $line"
+                [[ "$line" == *"a11ign@$VERSION"* || "$line" == *"commit of release $VERSION"* ]] || fail "a changed line of $path is neither an action pin nor names a11ign@$VERSION: $line"
               fi
             done <<<"$added"
             add_entry "$path" "$handed"
@@ -267,7 +283,7 @@ jobs:
           Moves the guarded docs' release pins to a11ign@${VERSION} (commit ${COMMIT}), the release \`v0\` points at. Written by \`docs-pin-write.yml\` (#5224); the file is generated, never edited by hand.
 
           Acceptance:
-          pnpm exec rstest run --config scripts/rstest/rstest.config.ts packages/guards/src/docs-release-pin-currency.test.ts packages/guards/src/outsider-job-fresh.test.ts
+          pnpm exec rstest run --config scripts/rstest/rstest.config.ts packages/guards/src/docs-release-pin-currency.test.ts packages/guards/src/outsider-job-fresh.test.ts packages/guards/src/generate-consumer-gate.test.ts
           EOF
           add_entry "$acceptance_path" "$acceptance_file"
           # ONE commit on BASE's own tree with exactly those entries, its only parent BASE, and the branch moved straight onto it: a branch holding
@@ -301,9 +317,9 @@ jobs:
           cat > "$body_file" <<EOF
           Moves the guarded docs' release pins to a11ign@${VERSION} (commit ${COMMIT}), which \`v0\` points at. Opened by \`docs-pin-write.yml\` (#5224, #5121 option A) after a \`release\` run succeeded.
 
-          **The prose beside each pin is UNREAD.** Only a pin's own commit and the \`a11ign@x.y.z\` label on that same line were rewritten; a sentence that says "since 0.9.0" or describes what that release does was not checked. Read the neighbours of each changed line before approving.
+          **The prose beside each pin is MOSTLY UNREAD.** A pin's own commit and the \`a11ign@x.y.z\` label on that same line were rewritten, and so were exactly two sentences that restate the release in words (\`commit of release x.y.z, so your CI ...\` and \`a11ign@x.y.z is the tag the pin above names\`, #5291). A sentence that says "since 0.9.0", "\`latest\` read 0.9.0 on <date>" or describes what that release does was not checked: read the neighbours of each pin, and \`git grep\` the previous version in the docs this changes, before approving.
 
-          \`scripts/outsider/outsider-job.yml\`, when it is listed below, was regenerated by \`node scripts/outsider/generate.ts --sha=${COMMIT} --version=${VERSION}\` from the re-pinned README (#5291), so \`outsider-job-fresh.test.ts\` is green without a hand commit.
+          \`scripts/outsider/outsider-job.yml\` and \`.github/workflows/consumer-gate.yml\`, when listed below, were regenerated from the re-pinned README (#5291): the first by \`node scripts/outsider/generate.ts --sha=${COMMIT} --version=${VERSION}\`, the second with its committed pin kept, so \`outsider-job-fresh.test.ts\` and \`generate-consumer-gate.test.ts\` are green without a hand commit.
 
           This is a draft and does not arm itself: an approving review marks it ready and arms it (#4969).
 
