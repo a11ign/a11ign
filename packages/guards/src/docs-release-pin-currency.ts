@@ -159,10 +159,10 @@ function versionLabel(from: string): RegExp {
 
 /**
  * One line, moved to `promoted` when it carries a pin to an OLDER release. Only the pin's own commit and the `a11ign@<its version>` label
- * on that line move: the prose beside a pin is never read, which is why the pull request that carries the result says so.
+ * on that line move here: the prose beside a pin is `restateRelease`'s, and only the two sentences it names (#5291).
  * A pin newer than `promoted`, or already on it, is left alone (the re-pin never moves a doc backwards).
  */
-function repinLine(line: string, tags: ReleaseTag[], promoted: Promoted): { line: string; fault?: string } {
+function repinLine(line: string, tags: ReleaseTag[], promoted: Promoted): { line: string; from?: string; fault?: string } {
   const found = pinOnLine(line, tags);
   if (!found) return { line };
   if (found.version === undefined) {
@@ -171,12 +171,28 @@ function repinLine(line: string, tags: ReleaseTag[], promoted: Promoted): { line
   }
   if (found.written === promoted.commit || !isOlder(found.version, promoted.version)) return { line };
   const commitMoved = COMMIT.test(found.written) ? line.replace(found.written, promoted.commit) : line;
-  return { line: commitMoved.replace(versionLabel(found.version), `a11ign@${promoted.version}`) };
+  return { line: commitMoved.replace(versionLabel(found.version), `a11ign@${promoted.version}`), from: found.version };
+}
+
+/**
+ * THE TWO SENTENCES THAT RESTATE A PIN'S RELEASE IN WORDS (#5291, `ceo` on #5283's review): the comment under a pin, `# Pinned to the full
+ * 40-character commit of release X, so your CI ...`, and the one after the Quickstart fence, `(\`a11ign@X\` is the tag the pin above
+ * names)`. #5283 re-pinned README to 0.10.2 and both still said 0.9.0 until a reviewer caught it. EXACT TEMPLATES, and only for a release a
+ * pin in the same doc moved away from: a doc also says "`latest` read 0.9.0 on 2026-10-11" or "the 0.9.0 source accepts", dated or
+ * behavioural claims that are TRUE of 0.9.0 and that a rewrite would falsify, so the rest of the prose stays unread and the pull request says so.
+ */
+function restateRelease(text: string, { from, to }: { from: string; to: string }): string {
+  const dotted = from.replace(/\./g, "\\.");
+  return text
+    .replace(new RegExp(`(commit of release )${dotted}(?=, so your CI)`, "g"), (_, before: string) => `${before}${to}`)
+    .replace(new RegExp(`(\`a11ign@)${dotted}(\` is the tag the pin above names)`, "g"), (_, before: string, after: string) => `${before}${to}${after}`);
 }
 
 function repinDoc(doc: Doc, tags: ReleaseTag[], promoted: Promoted): { doc: Doc; changed: boolean; faults: string[] } {
   const moved = doc.text.split("\n").map((text, index) => ({ ...repinLine(text, tags, promoted), where: `${doc.path}:${index + 1}` }));
-  const text = moved.map((m) => m.line).join("\n");
+  const movedFrom = new Set(moved.flatMap((m) => (m.from === undefined ? [] : [m.from])));
+  const joined = moved.map((m) => m.line).join("\n");
+  const text = [...movedFrom].reduce((acc, from) => restateRelease(acc, { from, to: promoted.version }), joined);
   const faults = moved.flatMap((m) => (m.fault === undefined ? [] : [`${m.where} ${m.fault}`]));
   return { doc: { path: doc.path, text }, changed: text !== doc.text, faults };
 }

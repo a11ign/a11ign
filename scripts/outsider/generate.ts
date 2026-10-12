@@ -23,7 +23,9 @@
 //
 // THE PIN IS A LITERAL, AND THAT IS THE OPEN SEAM. `uses:` takes no expression, so the sha this file pins is
 // baked at generation, and a new release needs the file regenerated with `--sha=<the tag's commit>` and committed
-// to the outside repository. IT IS BAKED ONCE (#3221): the `uses:` line. The `pin` job reads that line out of the
+// to the outside repository. THIS REPOSITORY'S COPY is regenerated at each re-pin by `docs-pin-write.yml`'s `regenerate` job with
+// the pin's own `--sha` and `--version` (#5291): README's fence carries the release's tag, so a re-pin alone stales this file.
+// Without `--sha` the generator pins the checkout's HEAD, which is not the release. IT IS BAKED ONCE (#3221): the `uses:` line. The `pin` job reads that line out of the
 // checked-out workflow file instead of carrying its own `pinned=` copy, and the summary does not restate it, because
 // Dependabot's bump rewrites the `uses:` line and its `# v` comment and nothing else (#3182 found the other two
 // copies left behind, so the first merged bump turned the `pin` job red for the release it had just refreshed). Nothing here can do that without a stored token (`workflows` is not a `GITHUB_TOKEN`
