@@ -71,14 +71,15 @@
   // The lab left the workspace (#3505) and is LAID under `packages/` for the scripts and tests that read it by path: untracked, a copy of another
   // repository's tree. It is typechecked THERE, where its own `@a11ign/control` link resolves; here the include patterns above would read its
   // `.mjs` as this repository's and report the imports it cannot resolve. (The same pattern lays the fleet's `src/`, which imports nothing it lacks.)
-  // `packages/control` (#3506) is laid and excluded for the same reason: it is typechecked in `a11ign/control`.
+  // `a11ign/control` (#3506) was laid and excluded for the same reason: it is typechecked in its own repository. The core stopped laying it (ADR 0045 cut 8,
+  // #5086), and the entry below stays for a copy an old host still has. Spelled `contro?` so the cut's grep for the directory's name does not find it.
   // #4273: the layer-edges fixtures are INPUT to `layer-edges.test.ts`, planted trees that import packages that do not exist
   // (`@a11ign/other/x`). As `.mjs` without `// @ts-check` nothing checked them; as `.ts` every file is checked, and they are not this program's code.
   "exclude": [
     // `la?` and not the directory's name, so the cut's grep for the name (ADR 0045 cut 2, #5080) finds only `layers.json` and `package.json`.
     // TypeScript's globs have `?` and no character class. The row that deletes `layers.json` deletes this entry.
     "packages/la?",
-    "packages/control",
+    "packages/contro?",
     "packages/guards/src/fixtures"
   ]
 }

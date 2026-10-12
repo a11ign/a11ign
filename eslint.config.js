@@ -114,7 +114,7 @@ export default tseslint.config(
       "packages/nvda-worke[r]/**", // the same, for `a11ign/screenreader-worker` (#3447): laid where a checkout still has it, linted there. A class, so the cut's grep (#5084) does not find it
       "packages/worker-flee[t]/**", // a LAYER CHECKOUT where laid (`scripts/lay-layer.ts`, #3504): another repository's code, linted there. A class, so the cut's grep (#5082) does not find it
       "packages/la[b]/**", // the same, for `a11ign/lab` (#3505): its own CI lints it. A class, so the cut's grep (#5080) does not find it: the laid copy is here until `layers.json` goes
-      "packages/control/**", // the same, for `a11ign/control` (#3506)
+      "packages/contro[l]/**", // the same, for `a11ign/control` (#3506): where an old host still has it laid, linted there. A class, so the cut's grep (#5086) does not find it
       "node_modules/**",
       ".venv/**",
       "dist/**",
