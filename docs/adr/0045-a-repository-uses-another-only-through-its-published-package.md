@@ -121,6 +121,28 @@ Also: the git hooks `prepare` installs are opt-in and never block normal git use
 short and opens with "what changes and why"; `CONTRIBUTING.md` describes every check a contributor can meet. Anyone, human or AI, can contribute
 by following `CONTRIBUTING.md` alone.
 
+## How a host launches and the core reads a layer
+
+**Ruled by `ceo` on a11ign#5075 (2026-10-11), and landed in the order it names.** Each answer is Decision 1 rule 2 with no exception: a
+repository reads another only through its published package, and where the package lacks what a consumer needs, the producer exports it.
+Where that meets ADR 0039 item 6's host-side second checkout, this section overtakes item 6. Each answer names the cut that made it true.
+
+1. **Worker.** The host launches the published worker bin, `a11ign-nvda-worker`, and the core lays nothing from `screenreader-worker`: the
+   root `worker` script runs the installed `node_modules/@a11ign/screenreader-worker/dist/server.mjs` (`package.json`), and the provision
+   stamp hashed the published `launcher/run-server.cmd` instead of the laid `src/run-server.cmd` (cut 6, #5084, `959ebfe0e`). The helper
+   that computed the stamp went with `layers.json` in cut 9 (#5087, `23a179418`).
+2. **Fleet.** `guest-run` and `normalise-fleet` are bins of `@a11ign/screenreader-fleet`, and the core runs the installed
+   `a11ign-guest-run` and `a11ign-normalise-fleet` through `guest:run` and `fleet:normalise` (`package.json`); it lays none of the fleet's
+   `src/` (cut 4, #5082, `cc4dd7e09`).
+3. **Control and lab.** The core reads neither and adds no edge into either. `docs:coverage` left the core with lab's source (cut 2, #5080,
+   `7d1bb7b04`); the lab-held gates are refused by `gate:lab-held` (`package.json`), which says to run them from the lab's checkout, so the
+   core reads nothing there. Control stays private, deployed from its own checkout on the control plane, and the core names no path into it
+   (cut 8, #5086, `13c279d8d`). The ruling's first draft moved `rules-check` to lab's CI; #4936 moved the product's own cases into the core
+   instead, so `rules-check` runs from `packages/judge/src/fitness/rules-check.ts` and needs no edge.
+4. **Order, each cut one row with one revert:** lab (cut 2), fleet (cut 4), worker (cut 6), control (cut 8), then the row that makes
+   `prepare` lay nothing and deletes `layers.json` (cut 9). `control` deploys published versions and could not be cut before the fleet and
+   the worker exported what it needs, which is why it came after them.
+
 ## Consequences
 
 1. **Every producer's export surface becomes a contract.** What a consumer reads out of another repository's tree today (the fleet's `src/`
