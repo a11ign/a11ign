@@ -522,8 +522,8 @@ jobs:
   # #902: WHAT SURVIVES OF `mergeSafety`, AND WHY IT IS STILL REQUIRED -- TWO CHECKS A PERSON'S OWN
   # DECISION DRIVES, and nothing else. What it lost is its authority over the five process jobs, which is
   # the trim itself. What it keeps, none of it process noise -- NONE of the last forty red `ci` runs was any
-  # of these. (A third lived here -- a crossing into another session's lane -- until #916 replaced it with
-  # CODEOWNERS; see that retirement note further down.)
+  # of these. (A third lived here -- a crossing into another session's lane -- until #916 retired it;
+  # see that retirement note further down.)
   #
   #   * A HELD PR MUST NOT MERGE. `hold:` is the one control a person reaches for to stop a specific pull
   #     request. `pr-hold.mjs` disarms auto-merge when it takes a hold and `auto-arm.yml` will not arm a
@@ -539,10 +539,10 @@ jobs:
   #     only ASSIGNED crossings. An UNASSIGNED one would merge silently, and the record ceo relied on was
   #     the line this check enforced. Its 2026-09-15 retirement date passed with no replacement built, so
   #     it was retired anyway -- accepting the gap rather than blocking every PR forever on a rule nobody
-  #     could satisfy. #916 is that replacement: `CODEOWNERS` at the repo root now requests ceo's review
-  #     (`@DanBeckDev`) on any PR touching `.github/workflows/`, GitHub-native rather than a CI job, so a
-  #     merge with `required_pull_request_reviews` off still SHOWS the crossing even though it cannot yet
-  #     block one -- see the file's own header for what would have to change to make it block.)
+  #     could satisfy. #916 built a replacement: `CODEOWNERS` requested ceo's review on any PR touching
+  #     `.github/workflows/`. It is gone (#5044 step 2): a code-owner review cannot be met by an App
+  #     (a11ign#4981), `require_code_owner_review` is false on the merge queue's ruleset so it never
+  #     blocked a merge, and the root `CODEOWNERS` now names no owner -- see its own header.)
   #
   # The hold refusal arrives through `merge-guard.mjs --ci-gate`, which also carries #294's head-vs-tip race
   # (does this head match what GitHub recorded for the branch). That is NOT #277's "behind main", which
@@ -595,16 +595,16 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: agent-org closes-mismatch-check ${{ github.event.pull_request.number }}
       # THE LANE CHECK WAS HERE, AND IS RETIRED (#916's date, 2026-09-15, passed without its CODEOWNERS
-      # replacement being built -- built afterward, in #916 itself). It refused any PR touching
+      # replacement being built -- built afterward, in #916 itself, and removed again by #5044 step 2). It refused any PR touching
       # `.github/workflows/` unless it came from a `ceo/` branch or carried a `Lane-exception:` line naming
       # an assigner -- which an outside contributor cannot produce, and it was the only guard in `gate`'s
       # needs that they could not satisfy.
       # `docs/lane-ownership.json` survives as DATA: `row-file.mjs` still derives a row's `lane:<owner>`
       # label from it through `packages/agent-org/src/lane-ownership.mjs`. A lane is still a recorded fact
-      # about who owns a path -- it is no longer a wall in CI, but the root `CODEOWNERS` file now reads the
-      # same fact (the pipeline lane's owner and its `except` carve-out) so a PR touching `.github/workflows/`
-      # requests review rather than passing unnoticed. `codeowners-lane-sync.test.ts` pins the two against
-      # each other so they cannot drift back apart the way #939 warned about for the check this replaced.
+      # about who owns a path -- it is no longer a wall in CI, and no longer a CODEOWNERS request either
+      # (#5044 step 2): a code-owner review cannot be met by an App (a11ign#4981), and the chairman named
+      # the org's own owned-path check as the guard in its place. (That is not the `ownedPaths` job below, which
+      # reads `docs/owned-path-facts.json` and lists no workflow path.)
 
   # #353 (pipeline unit 2): NOTHING HAS EVER RUN A ROW'S ACCEPTANCE COMMAND. Every PR body carries an
   # `Acceptance:` line and argues its own case; the only thing that has ever executed it is the author,
