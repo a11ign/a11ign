@@ -247,7 +247,7 @@ test("#4331: the regeneration runs the generator, refuses any change but consume
  * #5212: why the pull request carries its own `.acceptance/` file. The reader reads the body only for an exempt author and `octo-sts[bot]` is not
  * one, so a body-only `Acceptance:` was `ACCEPTANCE: MISSING` on a11ign#5210. It counts only a file ADDED against `main` (`--diff-filter=A`), and
  * the previous repair's file stays on `main` until the sweep: a FIXED name is added once and never again, so the name must carry the commit.
- * Returns the first thing the script gets wrong, or null; the real script is read through it and so are three broken ones, so a reader that always
+ * Returns the first thing the script gets wrong, or null; the real script is read through it and so are five broken ones, so a reader that always
  * answers null (or always a fault) fails here.
  */
 function acceptanceFileFault(script: string): string | null {

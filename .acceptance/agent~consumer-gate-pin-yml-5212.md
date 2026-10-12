@@ -12,6 +12,6 @@ pnpm exec rstest run --config=scripts/rstest/rstest.config.ts --include packages
 
 History: full
 
-Mutation: in `consumer-gate-pin-needed.test.ts`, `acceptanceFileFault` is run over the real repair script (null) and over four broken copies, each asserted to be applied and refused: the PUT of the acceptance file pointed at `$FILE_PATH` (no write), a second `git/commits` POST (two commits), the sha dropped from the name (fixed name), the `[ "$changed" = ... ]` check replaced by `true`, and the body's `Acceptance file:` line replaced by an `Acceptance:` block (the old workflow's body).
+Mutation: in `consumer-gate-pin-needed.test.ts`, `acceptanceFileFault` is run over the real repair script (null) and over five broken copies, each asserted to be applied and refused: the acceptance file's tree entry removed (no write), a second `git/commits` POST (two commits), the sha dropped from the name (fixed name), the `[ "$changed" = ... ]` check replaced by `true`, and the body's `Acceptance file:` line replaced by an `Acceptance:` block (the old workflow's body).
 
 Closes a11ign/a11ign#5212
