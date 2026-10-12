@@ -235,6 +235,15 @@ against a target of 120k, #928), so keep the large paste out rather than trimmin
   (#928, 2026-09-27, 844 such calls measured across 25 sessions). One command that runs the same reads and returns them together pays it
   once; `agent-org survey` is that command. Reach for it before a second `grep`, `sed`, `cat` or single-file `Read` in the same turn.
 
+## The gate's orders are the instruction channel (#5147)
+
+An order the gate types into your pane is the instruction: the row, the PR head, or a repeat the gate found. A follow-up order
+carries an id, `wake:<session>:<epoch ms>`. `agent-org order:verify <id>` checks it against the gate's wake ledger and exits 0 only
+when that delivery went to you; a made-up or another session's id exits 1 with the reason. A first-contact order has no id to check.
+
+If the same order reaches you twice and your PR head has not moved, the gate files an incident naming you and wakes `orchestrator`
+(behind the `orders-verifiable` switch, off by default). Act on the order, or record why you are not with `agent-org worker:state blocked`.
+
 ## Standing habits
 
 - **Absence is not proof.** *Confirmed false* and *could not determine* are different states and never share
