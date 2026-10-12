@@ -1,0 +1,3 @@
+The `closeRows` job of `.github/workflows/trunk.yml` sets `SWEEP_RETRY_TRANSIENT: "1"` in the env of the `Close the rows the merged PR declared` step, the only place agent-org's `retryTransientOn` (`src/close-rows-sweep.ts:112`) reads it (row #5226, agent-org#1175 and #1188, class a11ign#928). `closeRows` clones the newest agent-org release tag, `v0.181.20` at the row's reading, which contains #1188, so the variable acts on the next run. Nothing else in `trunk.yml` changes; `permissions` stay as they were. Revert: remove the variable.
+
+Acceptance: bash -c 'awk "/^  closeRows:/{f=1;next} f&&/^  [A-Za-z#]/{f=0} f" .github/workflows/trunk.yml | grep -q "SWEEP_RETRY_TRANSIENT: \"1\""'

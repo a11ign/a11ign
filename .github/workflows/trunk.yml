@@ -96,6 +96,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           DISPATCH_PR: ${{ github.event.inputs.pr }}
+          # Retries a transient 5xx on the sweep's merged-PR read, so a GitHub 502 does not put main red
+          # (agent-org#1175, #1188; row #5226). Remove the line to revert.
+          SWEEP_RETRY_TRANSIENT: "1"
         run: |
           if [ -n "$DISPATCH_PR" ]; then
             agent-org close-rows-for-merged-pr "$DISPATCH_PR"
