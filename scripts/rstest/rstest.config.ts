@@ -34,7 +34,7 @@ const walkScope = fileURLToPath(new URL("../../packages/guards/src/walk-scope.ts
 const A11IGN_LOADED_TRIGGERS = ["scripts/rstest/**", "pnpm-lock.yaml", "packages/guards/src/walk-scope*.ts", "scripts/private-tmp.ts"];
 
 /**
- * #3572: data directories a non-tree-wide test reads by path, whole, because a file added to one is read too. NONE IS UNDER `a11ign/lab/` (#3505), `packages/control/` (#3506) OR the fleet's laid directory (#5082): those
+ * #3572: data directories a non-tree-wide test reads by path, whole, because a file added to one is read too. NONE IS UNDER `a11ign/lab/` (#3505), control's directory (#3506, no longer laid: #5086) OR the fleet's laid directory (#5082): those
  * directories are laid and untracked, so a change to it is never in a diff and a trigger naming it would select nothing.
  */
 const READ_DIRECTORY_TRIGGERS = [

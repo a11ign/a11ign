@@ -273,7 +273,7 @@ const FIRST_VERSION_NAME_LENGTH = 80;
 const LONGER_THAN_ANY_TEST_FILE_NAME = 200;
 
 function longestSocketPath(home: string, nameLength: number): number {
-  const testPath = `/repo/packages/control/src/${"n".repeat(nameLength)}.test.ts`;
+  const testPath = `/repo/packages/guards/src/${"n".repeat(nameLength)}.test.ts`;
   return join(home, PRIVATE_TMP_ROOT, "run-XXXXXX", fileDirectoryName(testPath), RPC_SOCKET_SUFFIX).length;
 }
 

@@ -53,9 +53,6 @@ export function documentation(root: string): string {
     }
   };
   walk(resolve(root, "docs"));
-  // The ansible playbooks are where the lab jobs are defined, and their headers are real documentation —
-  // `lab-job.yml`'s catalogue explains every job it can run, with the reason each exists.
-  walk(resolve(root, "packages/control/ansible"));
   return parts.join("\n");
 }
 
