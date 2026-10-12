@@ -150,7 +150,6 @@ const READ_FILE_TRIGGERS = [
   "docs/weekly-review.md",
   "examples/nightly-workflow.yml",
   "examples/workflow.yml",
-  "layers.json",
   "packages/README.md",
   "packages/cli/README.md",
   "packages/cli/src/auth/fixtures/spelled-out-transcript.json",
@@ -165,7 +164,6 @@ const READ_FILE_TRIGGERS = [
   "scripts/fixtures/release-before-3717.yml",
   "scripts/history-purge-replacements.txt",
   "scripts/outsider/outsider-job.yml",
-  "scripts/test-support/launcher-reach.stand-in.cmd",
 ];
 
 const toolchain = defineToolchainConfig({

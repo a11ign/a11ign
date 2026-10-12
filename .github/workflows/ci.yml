@@ -312,9 +312,8 @@ jobs:
       - run: pnpm run rules-check
 
   # THE CROSS-REPOSITORY REACH REPORT, NON-BLOCKING (epic #4425 phase 2, #4434). `boundary-check` (`@a11ign/toolchain`, #4432) lists the
-  # places this tree reaches into another repository's source, against `packages/guards/layer-edges.baseline.json`: the crossings
-  # ACCEPTED as they stand (the epic's item 7: baselined, not removed), the NEW ones a pull request adds, and the STALE baseline lines
-  # that no longer match anything (delete them: the baseline only shrinks). It is a report, never a red: `continue-on-error` here, and
+  # places this tree reaches across a package boundary, WITH NO BASELINE (ADR 0045 cut 9, #5087): every crossing it finds is listed as found and none
+  # is accepted, because nothing records an accepted one any more (`layer-edges.ts` refuses a reach into another repository's tree outright). It is a report, never a red: `continue-on-error` here, and
   # the job is deliberately NOT in `gate`'s `needs` (`boundary-report-job.test.ts` refuses it there), so it can never hold a merge.
   # The toolchain release is read from `package.json`'s `config.boundaryCheckToolchain` (0.4.0 is the first carrying the bin). It is NOT the
   # `@a11ign/toolchain` devDependency: `toolchain-package.test.ts` pins that to one version across the root, cli, judge and scorer, and they build
@@ -327,11 +326,11 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with: { node-version: 22 }
-      - name: boundary-check against the committed baseline
+      - name: boundary-check, with no baseline
         run: |
           version="$(node -p "require('./package.json').config.boundaryCheckToolchain")"
-          npx --yes --package "@a11ign/toolchain@${version}" boundary-check --root=. --baseline=packages/guards/layer-edges.baseline.json --out=boundary-report.json
-      - name: The accepted, new and stale counts, in the job summary
+          npx --yes --package "@a11ign/toolchain@${version}" boundary-check --root=. --out=boundary-report.json
+      - name: The crossings found, in the job summary
         if: always()
         run: |
           if [ ! -f boundary-report.json ]; then
@@ -341,9 +340,7 @@ jobs:
           fi
           {
             echo "## Boundary report (non-blocking)"
-            echo "- accepted: $(jq '[.crossings[] | select(.status == "accepted")] | length' boundary-report.json)"
-            echo "- new: $(jq '[.crossings[] | select(.status != "accepted")] | length' boundary-report.json)"
-            echo "- stale baseline lines: $(jq '.stale | length' boundary-report.json)"
+            echo "- found: $(jq '.crossings | length' boundary-report.json)"
           } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
         if: always()

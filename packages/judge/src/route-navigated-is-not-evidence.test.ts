@@ -43,9 +43,6 @@ import { join } from "node:path";
  */
 const ROOT = join(import.meta.dirname, "../../..");
 
-/** The directories `layers.json` lays into this checkout, held or pinned: another repository's source, which this walk does not read (ADR 0045 rule 2). */
-const manifest = JSON.parse(readFileSync(join(ROOT, "layers.json"), "utf8")) as { layers: Record<string, { path: string }>; pinned?: Record<string, { path: string }> };
-const LAID_LAYERS = new Set(Object.values({ ...manifest.layers, ...manifest.pinned }).map(({ path }) => path));
 const PY_FEATURIZER = { path: "packages/scorer/python/screenreader_features.py", sentinel: "def all_evidence" };
 /** The files this guard's own design says a future row removes coverage for -- see the doc comment above. */
 const NAVIGATED_EXCEPTIONS = new Map([
@@ -61,7 +58,6 @@ function jsSources(): [string, string][] {
       const path = join(dir, entry.name);
       if (entry.isDirectory()) {
         if (["node_modules", "dist", ".git"].includes(entry.name)) continue;
-        if (LAID_LAYERS.has(path.slice(ROOT.length + 1))) continue;
         walk(path);
         continue;
       }

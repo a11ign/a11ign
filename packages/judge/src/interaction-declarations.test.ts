@@ -21,15 +21,7 @@ import { restatesWireType } from "@a11ign/evidence";
 const ROOT = join(import.meta.dirname, "../../..");
 const WIRE = "packages/evidence/src/index.ts";
 
-/**
- * The directories `layers.json` LAYS into this checkout, held (`layers`) or only laid (`pinned`, the lab): another repository's source at its locked
- * tag (`lay-layer.ts`), so a change to the layer's version changes what this walk reads, and its restatements are that repository's to fix, not this
- * one's. The lab's is `a11ign/lab`'s `wire-type-declarations.test.ts` (ADR 0045 cut 2, #5080).
- */
-const manifest = JSON.parse(readFileSync(join(ROOT, "layers.json"), "utf8")) as { layers: Record<string, { path: string }>; pinned?: Record<string, { path: string }> };
-const LAID_LAYERS = new Set(Object.values({ ...manifest.layers, ...manifest.pinned }).map(({ path }) => path));
-
-/** Every non-test TypeScript source file under packages/, as [path, text] -- the §15 test's walk, minus the laid layers. */
+/** Every non-test TypeScript source file under packages/, as [path, text] -- the §15 test's walk. */
 function sources(): [string, string][] {
   const out: [string, string][] = [];
   const walk = (dir: string) => {
@@ -37,7 +29,6 @@ function sources(): [string, string][] {
       const path = join(dir, entry.name);
       if (entry.isDirectory()) {
         if (["node_modules", "dist", ".git"].includes(entry.name)) continue;
-        if (LAID_LAYERS.has(path.slice(ROOT.length + 1))) continue;
         walk(path);
         continue;
       }
@@ -84,12 +75,6 @@ test("#1603: no TypeScript source outside the wire type restates a state or form
   const offenders = offendersIn(sources());
   assert.deepEqual(offenders, [], "these restate a capture's change list instead of deriving from CaptureInteraction, "
     + `which is how eleven declarations came to disagree with the wire:\n  ${offenders.join("\n  ")}`);
-});
-
-test("#1603 CONTROL: the laid-layer skip is read from layers.json and really skips something", () => {
-  // A skip set that came out empty would make the exclusion above a no-op, and a walk that skipped the whole tree would pass vacuously.
-  assert.ok(LAID_LAYERS.size > 0, "layers.json declares no layers -- the laid-layer skip is reading nothing");
-  for (const laid of LAID_LAYERS) assert.ok(!sources().some(([path]) => path.startsWith(`${laid}/`)), `${laid} is laid, yet the walk still reads it`);
 });
 
 test("#1603 CONTROL: every derived declaration is in the scanned population and reaches the wire type", () => {

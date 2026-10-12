@@ -3,7 +3,7 @@ name: capture-regression
 # Phase 1 (ADR 0003): the capture half's regression gate. Drives the real
 # capture worker (NVDA on a Windows runner via guidepup/setup-action) over the
 # bundled tutorial pages and asserts the stable raw signals each should yield
-# (see `a11ign/lab`'s `src/harnesses/capture-check.ts`, which `pnpm run capture:check` runs).
+# (see `a11ign/lab`'s `src/harnesses/capture-check.ts`, which this job ran as `pnpm run capture:check` until ADR 0045 cut 9, #5087: see the step).
 #
 # RELEASE-TIME ONLY, AND NOTHING ELSE — chairman's direction, 2026-09-06, same reasoning as
 # `action-smoke.yml`'s identical change: this used to be path-filtered to fire on a push to `main`
@@ -81,6 +81,12 @@ jobs:
           Set-ItemProperty -Path $key -Name "HideFirstRunExperience" -Value 1 -Type DWord
           Set-ItemProperty -Path $key -Name "BrowserSignin" -Value 0 -Type DWord
       - name: Capture-regression checks (real NVDA)
-        # Through the script and not by path (ADR 0045 cut 2, #5080): the harness is `a11ign/lab`'s, laid here by `pnpm install`'s `prepare`, and the
-        # script is the one name for it that the cut that deletes `layers.json` renames. `tsx` runs it, as `capture:check` does everywhere else.
-        run: pnpm run capture:check
+        # FAILS CLOSED, AND SAYS WHY (ADR 0045 cut 9, #5087). This step ran `pnpm run capture:check`, which ran `a11ign/lab`'s harness from the copy `prepare` laid under
+        # `packages/` at the tag `layers.json` pinned. Nothing lays it now and the core holds no such script, so the call would end in a missing-script error that
+        # names neither the lab nor the cut. The harness belongs to the lab, and running it from the lab's checkout resolves the lab's OWN dependency pins (its worker
+        # and fleet ranges are older than this repository's), which is a different measurement from the one this gate has made until now: that is a decision for the
+        # row that moves this job (it is `release.yml`'s gate 6), not a substitution to make unverified in a cut that only deletes. Until it lands, a release stops here.
+        shell: bash
+        run: |
+          echo "::error title=capture-regression has no harness::a11ign/lab's capture:check is no longer laid by prepare (ADR 0045 cut 9, a11ign#5087); this job must run the harness from the lab's checkout, which is its own row."
+          exit 1

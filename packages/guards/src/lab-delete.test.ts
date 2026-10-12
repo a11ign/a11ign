@@ -1,31 +1,28 @@
 /**
  * #3505 (move 3 of #69, the delete step): THE DELETE'S OWN TEST. The lab's directory left the workspace for `a11ign/lab` (ADR 0040, M3), and this repository
- * takes it as a PINNED TAG: `layers.json` declares the tag, and `scripts/lay-layer.ts` lays the lab's scripts, source, baselines and
- * rule table at the departed path (untracked, never a workspace member) for the scripts, tests and workflows that read them by path. It lives in
+ * took it as a PINNED TAG, laid at the departed path for the scripts, tests and workflows that read it by path; nothing lays it since ADR 0045 cut 9
+ * (#5087), and the lab's own repository is the only place its code is read from. It lives in
  * `packages/guards`, not in the directory it proves gone: that directory cannot hold the test that says it is not there.
  *
  * WHY A PINNED TAG AND NOT A REGISTRY RELEASE, as the fleet and the worker are taken: `@a11ign/lab` is `private: true` and two of its dependencies
  * (`@a11ign/control`, `@a11ign/nvda-speech`) are not on any registry (#2703: no registry, no token), so there is no lockfile entry to read and the
- * declaration carries the pin itself. `lay-layer.test.ts` pins the mechanism; this file pins that the tree uses it and that nothing still treats the
- * directory as a package.
+ * declaration carried the pin itself. This file pins that nothing lays it, declares it or still treats the directory as a package.
  *
  * Seven claims, each with a fixture beside it:
  *
- *   1. No tracked file is under the departed directory, and `pnpm-workspace.yaml` matches no member of that name or carrying `@a11ign/lab`. The laid copy is
- *      EXCLUDED (the `!` entry for it), and that exclusion is what the second half reads.
+ *   1. No tracked file is under the departed directory, and `pnpm-workspace.yaml` matches no member of that name or carrying `@a11ign/lab`.
  *   2. `pnpm-lock.yaml` holds no importer under the departed path, no `link:` to it and no `@a11ign/lab` entry.
  *   3. No `test:*` script's glob names it: neither as a path nor as a member of a brace list (`packages/{a,lab,b}/src/**`). A glob that names a directory
  *      with no tracked file selects nothing and `assert-glob-not-empty` would blame the floor, so a stale name is refused HERE, by name.
  *   4. No pending changeset versions the package, and `.changeset/config.json` has no entry for it.
- *   5. The pin: `layers.json` declares `lab` with its own repository, a `tag` that is a `v<semver>` (never a branch), and the parts to lay; `build` and
- *      `prepare` both lay it, and `.gitignore` keeps the laid copy out of a commit.
+ *   5. Nothing lays it: no root script runs `lay-layer`, `scripts/lay-layer.ts` and `layers.json` are not tracked, and `.gitignore` does not keep a laid copy.
  *   6. Every workflow, hook and script that RUNS a test file of the old directory by path names a file that is tracked. Those tests were relocated by NAME,
  *      below, and an unplaced one is a pin that silently stops running.
  *   7. The tree-wide guards the product keeps (ADR 0040 decision 4; #2703 stated 30 in all, 3 staying and 27 leaving) still run on the product's tree and select
  *      nothing that left: every one exists, none is under the departed directory, and the three that stayed are still found.
  *
  * THE POSITIVE CONTROL is each function over a fixture: a guard glob that still names a deleted path under the departed directory is REFUSED naming it, and so is a
- * workspace holding the directory, a lockfile with an importer or a link, a changeset naming the package, a declaration with a branch for a tag, and a guard
+ * workspace holding the directory, a lockfile with an importer or a link, a changeset naming the package, a script that lays, and a guard
  * selected from the departed directory. A reader that found nothing in the real tree would otherwise be indistinguishable from one that cannot see.
  */
 import { test } from "node:test";
@@ -45,8 +42,8 @@ const DEPARTED_PATH = `packages/${DEPARTED_DIRECTORY}`;
 const PACKAGE_NAME = "@a11ign/lab";
 /**
  * `pnpm-workspace.yaml` and `.gitignore` name the laid copy as a glob class (`packages/la[b]`), so the cut that took the lab's path out of the core's live
- * files (ADR 0045 cut 2, #5080) leaves it in `layers.json` and `package.json` only, while the entries keep matching a copy that is still laid.
- * Both spellings are accepted, because a fixture that spells it out is the same claim; the row that deletes `layers.json` deletes both.
+ * files (ADR 0045 cut 2, #5080) left it in `layers.json` and `package.json` only; both are gone (cut 9, #5087) and no entry spells it either way.
+ * Both spellings are still READ, because a fixture that spells it out is the same claim.
  */
 const asClass = (path: string) => `${path.slice(0, -1)}[${path.slice(-1)}]`;
 /** Floors on what each reader SEES before an empty answer from it means anything (each is well under the reading, which is the point of a floor, not a pin). */
@@ -57,9 +54,6 @@ const MIN_WORKFLOWS = 10;
 const MIN_RELOCATED = 15;
 /** The tree-wide guards beyond the three that stayed: the leak scans and the fence, which declare themselves too. */
 const RELOCATED_GUARDS = 3;
-/** What a declared tag looks like: `v` and a semver. Spelled here as well as in `lay-layer.ts`, so a loosening in one is a failure in the other. */
-const SEMVER_TAG = /^v\d+\.\d+\.\d+$/;
-
 /**
  * Where each test of the old directory that something still depends on went, by name (the row's done-when 4). The key is the file as it was named in
  * `a11ign/lab/src/packaging/` (or `nightly/`), the value is where it is tracked now. A name here with no tracked file at the new path fails, and so does
@@ -70,7 +64,6 @@ const RELOCATED: Record<string, string> = {
   [`${DEPARTED_PATH}/src/packaging/screenreader-worker-extraction.test.ts`]: "packages/guards/src/screenreader-worker-extraction.test.ts", // #3447
   [`${DEPARTED_PATH}/src/packaging/pnpm-workspace.test.ts`]: "packages/guards/src/pnpm-workspace.test.ts", // #3447
   [`${DEPARTED_PATH}/src/packaging/dora-declaration.test.ts`]: "packages/guards/src/dora-declaration.test.ts", // #3138
-  [`${DEPARTED_PATH}/src/packaging/lay-layer.test.ts`]: "packages/guards/src/lay-layer.test.ts", // #3504, the test of the script this row changes
   [`${DEPARTED_PATH}/src/packaging/nightly-only-path.test.ts`]: "packages/guards/src/nightly-only-path.test.ts", // #1135, #1149
   [`${DEPARTED_PATH}/nightly/tenants.mjs`]: "packages/guards/nightly/tenants.ts", // the manifest nightly-only-path.test.ts pins both ways
   [`${DEPARTED_PATH}/nightly/bounded-window-reads.test.ts`]: "packages/guards/nightly/bounded-window-reads.test.ts", // a nightly tenant: a read of GitHub, not of the lab
@@ -263,54 +256,88 @@ test("POSITIVE CONTROL: an entry or a configuration naming the package is REFUSE
   });
 });
 
-// ---- 5. the pin -----------------------------------------------------------------------------------------------------
+// ---- 5. nothing lays it -----------------------------------------------------------------------------------------------------
 
-type LayerEntry = { path?: string; remote?: string; tag?: string; lays?: string[] };
-type LayersManifest = { layers: Record<string, LayerEntry>; pinned?: Record<string, LayerEntry> };
-
-/** What is wrong with `lab`'s declaration, the scripts that lay it and the ignore line that keeps the laid copy out of a commit. */
-function pinRefusals({ manifest, scripts, gitignore }: { manifest: LayersManifest; scripts: Record<string, string>; gitignore: string }): string[] {
-  const entry = manifest.pinned?.[DEPARTED_DIRECTORY];
-  if (entry === undefined) return ["layers.json declares no `lab` layer under `pinned`"];
-  // Under `layers` a guest and a lab job must hold a pinned checkout of it (`separateLayers`), and nothing on a worker runs the lab.
-  const held = Object.hasOwn(manifest.layers, DEPARTED_DIRECTORY) ? ["`lab` is declared under `layers`, which makes fleet:deploy and every lab job demand a pin for it"] : [];
-  const declaration = [
-    ...held,
-    ...(entry.path === DEPARTED_PATH ? [] : [`the layer's path is ${entry.path}, not ${DEPARTED_PATH}`]),
-    ...(/^https:\/\/github\.com\/a11ign\/lab\.git$/.test(entry.remote ?? "") ? [] : [`the layer's remote is ${entry.remote}, not a11ign/lab`]),
-    ...(SEMVER_TAG.test(entry.tag ?? "") ? [] : [`the layer's tag is ${entry.tag}: a pin is a v<semver> tag, never a branch or a sha`]),
-    ...(Array.isArray(entry.lays) && entry.lays.length > 0 ? [] : ["the layer names nothing to lay"]),
-  ];
-  const laid = ["build", "prepare"].filter((name) => !(scripts[name] ?? "").includes("lay-layer.ts lab")).map((name) => `\`${name}\` does not lay lab`);
-  const ignored = gitignore.split("\n").some((line) => [`/${DEPARTED_PATH}`, `/${asClass(DEPARTED_PATH)}`].includes(line.trim())) ? [] : [`.gitignore does not ignore /${DEPARTED_PATH}`];
-  return [...declaration, ...laid, ...ignored];
+/** What still lays a layer: a root script naming `lay-layer`, the script or its declaration being tracked, or an ignore line for a laid copy of the lab. */
+function layingRefusals({ scripts, tracked, gitignore }: { scripts: Record<string, string>; tracked: string[]; gitignore: string }): string[] {
+  const running = Object.entries(scripts).filter(([, command]) => /\blay-layer\b/.test(command)).map(([name]) => `\`${name}\` still runs lay-layer`);
+  const declared = ["layers.json", "scripts/lay-layer.ts"].filter((path) => tracked.includes(path)).map((path) => `${path} is tracked: something still declares or lays a layer`);
+  const ignored = gitignore.split("\n").map((line) => line.trim()).filter((line) => [`/${DEPARTED_PATH}`, `/${asClass(DEPARTED_PATH)}`].includes(line))
+    .map((line) => `.gitignore still ignores ${line}, a laid copy nothing lays any more`);
+  return [...running, ...declared, ...ignored];
 }
 
-const pinInputs = (root: string) => ({
-  manifest: JSON.parse(read(root, "layers.json")) as LayersManifest,
+const layingInputs = (root: string) => ({
   scripts: (JSON.parse(read(root, "package.json")) as { scripts: Record<string, string> }).scripts,
+  tracked: tracked(root),
   gitignore: read(root, ".gitignore"),
 });
 
-test("lab is taken as a pinned tag of a11ign/lab, laid by build and prepare, and kept out of a commit", () => {
-  const { manifest, scripts, gitignore } = pinInputs(REPO_ROOT);
-  assert.deepEqual(pinRefusals({ manifest, scripts, gitignore }), []);
-  // The parts to lay are what the rest of the tree reads by path, so a part dropped from the declaration is a read that stops resolving.
-  assert.deepEqual([...(manifest.pinned?.lab.lays ?? [])].sort(), ["CLAUDE.md", "baselines", "rule-ownership.json", "scripts", "src"]);
+test("nothing lays the lab, or any layer: no root script runs lay-layer, neither it nor layers.json is tracked, and the laid copy is not ignored (ADR 0045 cut 9, #5087)", () => {
+  const inputs = layingInputs(REPO_ROOT);
+  assert.ok(inputs.tracked.length > 100, "the tracked list is nearly empty: the reader is not looking at the tree");
+  assert.ok(Object.keys(inputs.scripts).length > 20, "the manifest read yielded almost no scripts: the reader is looking at the wrong file");
+  assert.deepEqual(layingRefusals(inputs), []);
 });
 
-test("POSITIVE CONTROL: a branch for a tag, a missing layer, a layer a deploy would demand a pin for, a build that does not lay it and an unignored laid copy are each REFUSED", () => {
-  const lab = { path: DEPARTED_PATH, remote: "https://github.com/a11ign/lab.git", tag: "v0.1.2", lays: ["src"] };
-  const good = { manifest: { layers: {}, pinned: { lab } },
-    scripts: { build: "node scripts/lay-layer.ts lab", prepare: "node scripts/lay-layer.ts lab && x" }, gitignore: `/${DEPARTED_PATH}\n` };
-  assert.deepEqual(pinRefusals(good), []);
-  assert.match(pinRefusals({ ...good, manifest: { layers: {}, pinned: { lab: { ...lab, tag: "main" } } } })[0], /a pin is a v<semver> tag, never a branch or a sha/);
-  assert.match(pinRefusals({ ...good, manifest: { layers: {}, pinned: { lab: { ...lab, tag: undefined } } } })[0], /a pin is a v<semver> tag/);
-  assert.deepEqual(pinRefusals({ ...good, manifest: { layers: {}, pinned: {} } }), ["layers.json declares no `lab` layer under `pinned`"]);
-  assert.deepEqual(pinRefusals({ ...good, manifest: { layers: { lab }, pinned: { lab } } }), ["`lab` is declared under `layers`, which makes fleet:deploy and every lab job demand a pin for it"]);
-  assert.deepEqual(pinRefusals({ ...good, scripts: { build: "node scripts/lay-layer.ts lab", prepare: "x" } }), ["`prepare` does not lay lab"]);
-  assert.deepEqual(pinRefusals({ ...good, gitignore: "node_modules\n" }), [`.gitignore does not ignore /${DEPARTED_PATH}`]);
-  assert.deepEqual(pinRefusals({ ...good, gitignore: `/${asClass(DEPARTED_PATH)}\n` }), [], "the glob-class spelling is the same claim");
+test("POSITIVE CONTROL: a script that lays, a tracked declaration, a tracked laying script and an ignore line for the laid copy are each REFUSED", () => {
+  const good = { scripts: { build: "node scripts/pnpm.ts -r run build", prepare: "node scripts/install-git-hooks.ts && x" }, tracked: ["package.json"], gitignore: "node_modules\n" };
+  assert.deepEqual(layingRefusals(good), []);
+  assert.deepEqual(layingRefusals({ ...good, scripts: { ...good.scripts, prepare: "node scripts/lay-layer.ts lab && x" } }), ["`prepare` still runs lay-layer"]);
+  assert.deepEqual(layingRefusals({ ...good, tracked: ["layers.json", "scripts/lay-layer.ts"] }), [
+    "layers.json is tracked: something still declares or lays a layer", "scripts/lay-layer.ts is tracked: something still declares or lays a layer"]);
+  assert.deepEqual(layingRefusals({ ...good, gitignore: `/${asClass(DEPARTED_PATH)}\n` }), [`.gitignore still ignores /${asClass(DEPARTED_PATH)}, a laid copy nothing lays any more`]);
+});
+
+// ---- 5b. no live file names any departed layer's directory ----------------------------------------------------------------
+
+/** The four directories a layer was laid at. Built from names, so this file does not spell the paths it proves absent from the live tree. */
+const LAYER_DIRECTORIES = ["lab", "control", "nvda-worker", "worker-fleet"];
+/** The row's Acceptance, as a pattern: the same alternation, with no boundary, so a longer name is found exactly as `git grep -E` finds it. */
+const LAYER_PATH = new RegExp(`packages/(?:${LAYER_DIRECTORIES.join("|")})`);
+/** Record, not live: `docs`, the acceptance files, changesets and changelogs, which the Acceptance excludes by pathspec. */
+const RECORD = /^(?:docs\/|\.acceptance\/|\.changeset\/)|(?:^|\/)CHANGELOG\.md$/;
+
+/** The same directories spelled as PATH PIECES in a Python file, which the Acceptance's pattern cannot see (a `Path` built by `/` from `packages`, then the name).
+ * Fourteen scorer tests were spelled this way, passed the Acceptance, and failed the first `merge_group` run that had no laid copy (#5175). Python only: the
+ * handful of TypeScript tests that spell a departed directory in pieces compute a path or exclude one and read nothing at it. */
+const LAYER_PIECES = new RegExp(`(?:["']packages["']\\s*/\\s*|parents\\[\\d\\]\\s*/\\s*)["'](?:${LAYER_DIRECTORIES.join("|")})["']`);
+
+function namingRefusals(files: Record<string, string>): string[] {
+  return Object.entries(files).filter(([path, text]) => !RECORD.test(path) && (LAYER_PATH.test(text) || (path.endsWith(".py") && LAYER_PIECES.test(text))))
+    .map(([path]) => `${path} names a departed layer's directory`);
+}
+
+test("no live file of the core names a layer's directory: the row's Acceptance, over every tracked file", () => {
+  const files = Object.fromEntries(tracked(REPO_ROOT).map((path) => [path, readFileSync(join(REPO_ROOT, path), "utf8")]));
+  assert.ok(Object.keys(files).length > 100, "the tracked list is nearly empty: the reader is not looking at the tree");
+  assert.deepEqual(namingRefusals(files), []);
+});
+
+test("POSITIVE CONTROL: a live file naming any of the four directories is REFUSED naming it; record and a file that names none are not", () => {
+  const [lab, control, worker, fleet] = LAYER_DIRECTORIES.map((name) => `packages/${name}`);
+  assert.deepEqual(namingRefusals({
+    "package.json": `{ "scripts": { "x": "node ${lab}/scripts/a.ts" } }`,
+    "scripts/b.ts": `// reads ${control}/ansible/\n`,
+    ".github/workflows/c.yml": `run: node ${worker}/src/x.ts\n`,
+    "packages/guards/src/d.test.ts": `const p = "${fleet}/src/doctor.ts";\n`,
+    "docs/runbook.md": `run ${lab}/scripts/a.ts\n`,
+    ".acceptance/agent~x-1.md": `${control}\n`,
+    ".changeset/a.md": `${worker}\n`,
+    "packages/other/CHANGELOG.md": `${fleet}\n`,
+    "scripts/clean.ts": "// names nothing\n",
+    "packages/scorer/tests/test_e.py": `SCRIPT = REPO / "packages" / "${LAYER_DIRECTORIES[0]}" / "scripts" / "e.py"\n`,
+    "packages/scorer/tests/test_f.py": `P = Path(__file__).resolve().parents[2] / "${LAYER_DIRECTORIES[0]}" / "scripts"\n`,
+    "scripts/g.ts": `const p = join(root, "packages", "${LAYER_DIRECTORIES[1]}");\n`,
+    "packages/scorer/tests/test_h.py": `KEY = {"control": "x"}\nS = "control"\n`,
+  }), [
+    "package.json names a departed layer's directory",
+    "scripts/b.ts names a departed layer's directory",
+    ".github/workflows/c.yml names a departed layer's directory",
+    "packages/guards/src/d.test.ts names a departed layer's directory",
+    "packages/scorer/tests/test_e.py names a departed layer's directory",
+    "packages/scorer/tests/test_f.py names a departed layer's directory",
+  ]);
 });
 
 // ---- 6. what runs a test of the old directory by path is tracked, and every relocation is real --------------------------

@@ -6,8 +6,7 @@
  * What is left to prove is that the delete is COMPLETE, in five claims, each with a fixture beside it:
  *
  *   1. No tracked file is under the fleet's directory, and `pnpm-workspace.yaml`'s globs match no directory of that name or manifest
- *      carrying the package's name. A LAYER CHECKOUT may sit at that path (`scripts/lay-layer.ts`, untracked, `src/` only): the workspace
- *      EXCLUDES it, and that exclusion is what the second half of the claim reads, so a laid copy is not a member.
+ *      carrying the package's name. Nothing lays a checkout there any more (ADR 0045 cut 9, #5087), so the workspace carries no exclusion to read.
  *   2. `pnpm-lock.yaml` holds no `link:` to the old path and no importer under it.
  *   3. The `@a11ign/screenreader-fleet` entry is a REGISTRY entry: one version under every importer that declares it, and a `packages:` entry
  *      whose `resolution` carries an `integrity`. A version with no integrity is a version nobody verified.
@@ -15,9 +14,7 @@
  *      frontmatter may not, because `changeset version` would then try to version a package this workspace does not have.
  *   5. Who reaches it, and how. Code in `lab`, `guards`, `cli` and `scripts/` never imports it by a relative path into the fleet's directory:
  *      it names it BY PACKAGE NAME, or (the root's scripts and the guards that run before `node_modules` exists, which cannot import a package
- *      at all) reads `scripts/cli-flags.ts`, the one file of the fleet those need, kept as a copy in this repository. `control` CANNOT (ADR 0012, `control-has-no-dependencies.test.ts`: it runs from a raw checkout with no `node_modules`),
- *      so it reaches the fleet by relative path through the layer `layers.json` declares at that very path, which is the only
- *      place a relative path into the directory is allowed to land. The scan of control's modules for that left with them (#3506); the declaration stays pinned here.
+ *      at all) reads `scripts/cli-flags.ts`, the one file of the fleet those need, kept as a copy in this repository. `control` is its own repository (#3506) and the core no longer lays it, so no relative path into the directory lands anywhere.
  *
  * THE POSITIVE CONTROL is each function over a fixture: a lockfile with a `link:../worker-fleet` entry is REFUSED naming it, and so is a
  * workspace that still matches the directory, a registry entry with no integrity, a changeset that names the package, and a relative import.
@@ -35,10 +32,10 @@ import { sandboxGitEnv } from "./git-env.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const DEPARTED_DIRECTORY = "worker-fleet";
-/** The directory's path, built from its name so the core's live files do not spell it (ADR 0045 cut 4, #5082): the guard still knows it until `layers.json` goes. */
+/** The directory's path, built from its name so the core's live files do not spell it (ADR 0045 cut 4, #5082): the guard still knows it as a layer. */
 const DEPARTED_PATH = `packages/${DEPARTED_DIRECTORY}`;
 const CONSUMED = "@a11ign/screenreader-fleet";
-/** The lab layer's directory, built from its name as `lab-delete.test.ts` builds it: the scan under test still treats `lab` as a layer until `layers.json` goes. */
+/** The lab layer's directory, built from its name as `lab-delete.test.ts` builds it: the scan under test still treats `lab` as a layer. */
 const LAB_LAYER = "lab";
 const LAB_DIR = `packages/${LAB_LAYER}`;
 const CONSUMED_VERSION = "0.9.0";
@@ -268,23 +265,15 @@ test("lab, guards, cli and the root scripts import the fleet by package name, ne
 
 test("POSITIVE CONTROL: a relative import of the fleet is REFUSED naming the file; the by-name form, a test and a control import are not", () => {
   assert.deepEqual(relativeImportRefusals({
-    [`${LAB_DIR}/src/training/a.mjs`]: 'import { x } from "../../../worker-fleet/src/worker-http.ts";\n',
-    "packages/guards/src/b.mjs": 'import { y } from "../../worker-fleet/src/cli-flags.ts";\n',
+    [`${LAB_DIR}/src/training/a.mjs`]: `import { x } from "../../../${DEPARTED_DIRECTORY}/src/worker-http.ts";\n`,
+    "packages/guards/src/b.mjs": `import { y } from "../../${DEPARTED_DIRECTORY}/src/cli-flags.ts";\n`,
     "scripts/c.mjs": `import { z } from "../${DEPARTED_PATH}/src/cli-flags.ts";\n`,
     [`${LAB_DIR}/src/d.mjs`]: `import { w } from "${CONSUMED}/cli-flags";\n`,
-    [`${LAB_DIR}/src/e.test.ts`]: 'import { v } from "../../worker-fleet/src/doctor.ts";\n',
-    [`packages/${"control"}/src/f.mjs`]: 'import { u } from "../../worker-fleet/src/cli-flags.ts";\n',
+    [`${LAB_DIR}/src/e.test.ts`]: `import { v } from "../../${DEPARTED_DIRECTORY}/src/doctor.ts";\n`,
+    [`packages/${"control"}/src/f.mjs`]: `import { u } from "../../${DEPARTED_DIRECTORY}/src/cli-flags.ts";\n`,
   }), [
     `${LAB_DIR}/src/training/a.mjs imports ${DEPARTED_PATH} by a relative path: name ${CONSUMED}`,
     `packages/guards/src/b.mjs imports ${DEPARTED_PATH} by a relative path: name ${CONSUMED}`,
     `scripts/c.mjs imports ${DEPARTED_PATH} by a relative path: name ${CONSUMED}`,
   ]);
-});
-
-// `control` reaches the fleet by a relative path through this declaration, and its own repository holds the scan of that (`a11ign/control`, #3506): the
-// directory is laid and untracked here, so a scan of tracked files would read nothing. What stays pinned HERE is the declaration it resolves through.
-test(`the fleet is declared as a separate layer at ${DEPARTED_PATH}, with its own repository, which is where control's relative imports land`, () => {
-  const manifest = JSON.parse(read(REPO_ROOT, "layers.json"));
-  assert.equal(manifest.layers["screenreader-fleet"]?.path, DEPARTED_PATH);
-  assert.match(manifest.layers["screenreader-fleet"]?.remote ?? "", /^https:\/\/github\.com\/a11ign\/screenreader-fleet\.git$/);
 });

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
-// command: `node packages/guards/src/layer-edges.ts --check` -- every reach across a LAYER package's boundary, by path, against a baseline (#2612)
+// command: `node packages/guards/src/layer-edges.ts --check` -- every reach across a LAYER package's boundary, by path, and refuses ALL of them (#2612, ADR 0045 Decision 1 rule 5)
 //
 // THE BOUNDARY OF A LAYER WAS NOT A THING A MACHINE COULD READ (#69, child 1). The workspace resolves
 // `../../<pkg>/src/x.mjs` without any declaration, so `nvda-worker`'s package.json says "no in-repo runtime
@@ -23,14 +23,16 @@
 // on the caller's behalf (`pathToDriver(WORKER_INDEX)`, an imported `writeSitesIn(files)`), a value returned and read
 // elsewhere, and a path assembled by concatenation or across files. A file whose brackets do not balance is read
 // with no scopes at all, which is the old file-wide reading and never a wrong scope.
-// The baseline is a floor on the boundary, never a proof there is nothing under it.
+// THERE IS NO BASELINE (ADR 0045 cut 9, #5087). A reach that was accepted was a reach that stayed: the file that recorded the
+// thirty-one was read as a debt ledger and behaved as a permission. Every edge found is refused, and the only remedy is to cut it.
+// What is still not seen (above) is a floor on the boundary, never a proof there is nothing under it.
 //
 // `stripComments` is `@a11ign/toolchain/lib/local-import-closure`'s, not a second one: two comment strippers over the same
 // tree is what drifts, and this one preserves offsets, which the message line numbers need.
 //
 // THE LAYER PACKAGES ARE DECLARED HERE, never discovered by a glob: a glob that matched nothing would read
-// as a tree with no edges. `layer-edges.test.ts` asserts both names are present and the real baseline is
-// not empty.
+// as a tree with no edges. `layer-edges.test.ts` asserts every name is present, and that a planted reach is
+// refused by each kind of reader, so an empty verdict over the real tree is not a scan that found nothing.
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, join, posix } from "node:path";
@@ -48,15 +50,13 @@ import { flagValue, refuseUnknownFlags } from "@a11ign/screenreader-fleet/cli-fl
  */
 export const LAYER_PACKAGES = Object.freeze(["nvda-worker", "nvda-speech", "agent-org", "worker-fleet", "lab", "control"]);
 
-export const BASELINE_PATH = "packages/guards/layer-edges.baseline.json";
-
 /**
- * This guard's own files, EXCLUDED IN CODE and not by an entry in the baseline it maintains. The baseline
- * names paths by design and the test names fixtures that import across on purpose; a file that matched its
+ * This guard's own files, EXCLUDED IN CODE and not by an entry in a list it maintains. The test names
+ * fixtures that import across on purpose; a file that matched its
  * own scan and listed itself would be the guard writing its own exemption. A pattern and not a list of
  * paths: `spawned-paths.test.ts` reads a quoted repo-relative program path in a file that spawns as a spawn.
  */
-const SELF = /(?:^|\/)layer-edges(?:\.test\.ts|\.mjs|\.baseline\.json)$/;
+const SELF = /(?:^|\/)layer-edges(?:\.test\.ts|\.mjs)$/;
 
 /** Calls whose ARGUMENT is a path being read, resolved, walked or launched -- the flows of "A path is an edge only where it flows". */
 const SINKS = [
@@ -81,17 +81,8 @@ const MAX_IDENTIFIER_CHARS = 64;
 const PLACEHOLDER = "\uE000";
 
 export const EDGE_KINDS = Object.freeze(["import", "path-literal", "launcher", "workflow", "config"]);
-/**
- * What an edge in the baseline is to become, and the only words the baseline may use (#3501): `cut` the reach goes; `by-name` it becomes a
- * published-package import; `checkout-path` it is resolved through `layers.json` (ADR 0039 item 6a); `moves-with:<layer>` a test that
- * goes with the code it reads; `owned-by:#<row>` a row that exists decides it. `cut` is a promise and not an exemption: when the reach is cut the
- * edge vanishes and the entry becomes STALE, which is how the cut is noticed.
- */
-const DISPOSITION = /^(?:cut|by-name|checkout-path|moves-with:([\w-]+)|owned-by:#\d+)$/;
-
 export type Via = { declaredLine: number, readLine: number };
 export type Edge = { from: string, to: string, kind: string, direction: "in" | "out", via?: Via };
-export type BaselineEntry = Edge & { disposition: string, reason: string };
 export type PathIndex = { has(path: string): boolean };
 export type Reach = { literal: string, kind: string, via?: Via };
 
@@ -631,8 +622,8 @@ function reachesOf(path: string, text: string): Reach[] {
  * The longest existing prefix of a launcher/workflow token: `a11ign/lab/src/x.mjs` if it exists, else
  * the directory above, down to `packages/<pkg>` -- a path that has moved is still a reach. `null` when `packages/<pkg>` is neither in
  * this tree nor a declared layer: a URL's `/packages/githubcli-archive-keyring.gpg` names no directory, and reading it as a reach would
- * put an edge into the baseline that nothing can cut (#3501). A declared layer that has LEFT (`agent-org`, #2976) stays a reach, which is
- * what `.github/workflows/ci.yml`'s two baselined lines are.
+ * put an edge in front of a person that nothing can cut (#3501). A declared layer that has LEFT (`agent-org`, #2976) stays a reach: a path that
+ * names its old directory is refused as a path into a tree that is no longer there.
  * @param {string} literal
  * @param {PathIndex} index
  * @param {readonly string[]} layers
@@ -680,7 +671,7 @@ function edgesOfFile(path: string, text: string, index: PathIndex, layers: reado
   return edges;
 }
 
-/** @param {Edge | undefined} e a baseline entry may be anything; `judgeEdges` reports it as malformed rather than throwing */
+/** @param {Edge | undefined} e */
 const keyOf = (e: Edge | undefined) => `${e?.direction} ${e?.kind} ${e?.from} -> ${e?.to}`;
 
 /**
@@ -704,71 +695,18 @@ export function findEdges({ root, tracked, layers = LAYER_PACKAGES }: { root: st
 }
 
 /**
- * The verdict on a set of edges against a baseline: what is new, what no longer exists, and what is malformed.
- * A stale entry is refused for the reason an allowlist the subject can join is: a list that outlives what it
- * lists reads as a boundary that is still there.
+ * The refusal, as the lines a person reads: one per edge, naming both ends and what to do. There is no list to add an edge to, so the only
+ * remedy is the reach going (ADR 0045 Decision 1 rule 2: a repository never reads another's source; if the package does not export what a
+ * consumer needs, the producer exports it).
  * @param {Edge[]} edges
- * @param {unknown} baseline
- * @returns {{ unlisted: Edge[], stale: BaselineEntry[], malformed: string[] }}
- */
-export function judgeEdges(edges: Edge[], baseline: unknown): { unlisted: Edge[]; stale: BaselineEntry[]; malformed: string[]; } {
-  if (!Array.isArray(baseline)) return { unlisted: edges, stale: [], malformed: ["the baseline is not a JSON array"] };
-  const malformed = baseline.flatMap((entry, i) => malformedReasons(entry).map((why) => `entry ${i} (${entry?.from ?? "?"}): ${why}`));
-  const listed = new Set(baseline.map((e) => keyOf(e)));
-  const present = new Set(edges.map(keyOf));
-  return {
-    unlisted: edges.filter((e) => !listed.has(keyOf(e))),
-    stale: baseline.filter((e) => !present.has(keyOf(e))),
-    malformed,
-  };
-}
-
-/**
- * What is wrong with one baseline entry, as sentences; empty when it is well-formed.
- * @param {any} entry
  * @returns {string[]}
  */
-function malformedReasons(entry: Record<string, string>): string[] {
-  const missing = ["from", "to", "kind", "direction", "disposition", "reason"]
-    .filter((f) => typeof entry?.[f] !== "string" || entry[f].trim() === "");
-  if (missing.length > 0) return [`missing ${missing.join(", ")}`];
-  const reasons = [];
-  if (!EDGE_KINDS.includes(entry.kind)) reasons.push(`kind "${entry.kind}" is not one of ${EDGE_KINDS.join(", ")}`);
-  if (entry.direction !== "in" && entry.direction !== "out") reasons.push(`direction "${entry.direction}" is not "in" or "out"`);
-  const dispositionMatch = DISPOSITION.exec(entry.disposition);
-  if (dispositionMatch === null) reasons.push(`disposition "${entry.disposition}" is not cut, by-name, checkout-path, moves-with:<layer> or owned-by:#<row>`);
-  else if (dispositionMatch[1] !== undefined && !LAYER_PACKAGES.includes(dispositionMatch[1])) {
-    reasons.push(`disposition "${entry.disposition}" moves with "${dispositionMatch[1]}", which is not a declared layer (${LAYER_PACKAGES.join(", ")})`);
-  }
-  return reasons;
-}
-
-/**
- * The refusal, as the lines a person reads: what to do about each new edge and each stale entry.
- * @param {{ unlisted: Edge[], stale: BaselineEntry[], malformed: string[] }} verdict
- * @returns {string[]}
- */
-export function describeVerdict({ unlisted, stale, malformed }: { unlisted: Edge[]; stale: BaselineEntry[]; malformed: string[]; }): string[] {
-  return [
-    ...unlisted.map((e) => `NEW EDGE ${e.direction}: ${e.from} -> ${e.to} (${e.kind}${carriedBy(e)}). Cut it, or add it to ${BASELINE_PATH} with a disposition and a reason.`),
-    ...stale.map((e) => `STALE ENTRY: ${e.from} -> ${e.to} (${e.kind}, ${e.direction}) no longer exists. Remove it from ${BASELINE_PATH}.`),
-    ...malformed.map((m) => `MALFORMED: ${m}`),
-  ];
+export function describeRefusals(edges: Edge[]): string[] {
+  return edges.map((e) => `REACH ${e.direction}: ${e.from} -> ${e.to} (${e.kind}${carriedBy(e)}). Cut it: no baseline exists to record it in.`);
 }
 
 /** Where a `const`-carried path was written and where it is read, as the words a person needs to find both. @param {Edge} edge */
 const carriedBy = ({ via }: Edge) => (via === undefined ? "" : `, through a const declared at line ${via.declaredLine} and read at line ${via.readLine}`);
-
-/** Counts by disposition, for the closing comment on the row that cuts edges: how many the move still has to cut. */
-export function countByDisposition(/** @type {BaselineEntry[]} */ baseline: BaselineEntry[]) {
-  /** @type {Record<string, number>} */
-  const counts: Record<string, number> = {};
-  for (const e of baseline) {
-    const key = `${e.direction}:${e.disposition.replace(/:#\d+$/, "")}`;
-    counts[key] = (counts[key] ?? 0) + 1;
-  }
-  return counts;
-}
 
 /**
  * The files of the tree at `root`, repo-relative: tracked, plus untracked-but-not-ignored, so a new file
@@ -779,16 +717,6 @@ export function countByDisposition(/** @type {BaselineEntry[]} */ baseline: Base
 export function trackedFiles(root: string) {
   return execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], { cwd: root, env: sandboxGitEnv(), encoding: "utf8", maxBuffer: 1 << 28 })
     .split("\0").filter(Boolean);
-}
-
-/**
- * The checked-in baseline, or `[]` when it is absent (the verdict then lists every edge as new).
- * @param {string} root
- * @returns {BaselineEntry[]}
- */
-export function readBaseline(root: string): BaselineEntry[] {
-  const file = join(root, BASELINE_PATH);
-  return existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : [];
 }
 
 // The CLI half. `realpathSync` on argv[1]: through a symlink the guard below silently does not fire, and a
@@ -802,10 +730,9 @@ if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.arg
   if (argv.includes("--list")) {
     console.log(JSON.stringify(edges, null, 2));
   } else if (argv.includes("--check")) {
-    const verdict = judgeEdges(edges, readBaseline(root));
-    const lines = describeVerdict(verdict);
+    const lines = describeRefusals(edges);
     for (const line of lines) console.error(line);
-    console.log(`layer-edges: ${edges.length} edges across ${LAYER_PACKAGES.join(", ")}; ${lines.length === 0 ? "baseline agrees" : `${lines.length} problem(s)`}.`);
+    console.log(`layer-edges: ${edges.length} edges across ${LAYER_PACKAGES.join(", ")}; ${lines.length === 0 ? "no reach" : `${lines.length} reach(es) refused`}.`);
     process.exit(lines.length === 0 ? 0 : 1);
   } else {
     console.error("usage: node packages/guards/src/layer-edges.ts --check | --list [--root=<dir>]");

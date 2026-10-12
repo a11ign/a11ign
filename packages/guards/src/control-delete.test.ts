@@ -5,8 +5,9 @@
  * used to hold exists under the same name, and a repository does not read another's source (ADR 0045 Decision 1 rule 2). It lives in `packages/guards`,
  * not in the directory it proves gone: that directory cannot hold the test that says it is not there. `lab-delete.test.ts` is the same test for the lab.
  *
- * `layers.json` still carries a `pinned.control` entry, and so does `.gitignore`'s class for a copy an existing host laid earlier: the row that deletes
- * `layers.json` (cut 9) deletes both. This file does not pin that entry, so that row does not have to edit a guard to do it.
+ * `layers.json`, its `pinned.control` entry and `.gitignore`'s blanket class for a copy an existing host laid earlier went with ADR 0045 cut 9 (#5087). What stays in
+ * `.gitignore` is the two NAMED lines that keep an operator's real `inventory.yml` and `*.local.yml` out of a commit (#54): a leftover copy's files show as untracked
+ * (host cleanup), and those two never reach a commit.
  *
  * Seven claims, each with a fixture beside it:
  *
@@ -14,10 +15,9 @@
  *   2. `pnpm-lock.yaml` holds no importer under it, no `link:` to it and no `@a11ign/control` entry.
  *   3. No `test:*` script's glob names it, as a path or in a brace list.
  *   4. No pending changeset versions the package, and `.changeset/config.json` has no entry for it.
- *   5. No root script lays it: nothing in `package.json` runs `lay-layer.ts control`, so `prepare` and `build` leave the checkout without it.
- *   6. NO LIVE FILE NAMES IT, the sentence the row's Acceptance proves: the tracked files outside `docs/`, `.acceptance/`, `.changeset/`, the changelogs,
- *      `layers.json` and the layer-edges baseline (the last two are cut 9's, and are read as record until it lands) hold no mention of the path. A laid
- *      copy an old host still has stays ignored, so the operator's real `inventory.yml` cannot reach a commit (#54).
+ *   5. No root script lays it: nothing in `package.json` runs `lay-layer`, so `prepare` and `build` leave the checkout without it.
+ *   6. NO LIVE FILE NAMES IT, the sentence the row's Acceptance proves: the tracked files outside `docs/`, `.acceptance/`, `.changeset/` and the changelogs hold no
+ *      mention of the path. The operator's real `inventory.yml` and `*.local.yml` in a leftover copy stay ignored by name, so neither can reach a commit (#54).
  *   7. Nothing runs a test of the old directory by path: those tests left with it, into `a11ign/control`'s CI.
  *
  * THE POSITIVE CONTROL is each function over a fixture: a root script naming the path, a workspace holding the directory, a lockfile with an importer or a
@@ -42,7 +42,7 @@ const PACKAGE_NAME = "@a11ign/control";
 /**
  * `pnpm-workspace.yaml`, `.gitignore` and the lint and type configs name a laid copy as a glob class (`packages/contro[l]`), so the cut that took the
  * directory's path out of the core's live files (ADR 0045 cut 8, #5086) finds none of them while the entries keep matching a copy an old host still has.
- * Both spellings are accepted, because a fixture that spells it out is the same claim; the row that deletes `layers.json` deletes the entries.
+ * Both spellings are accepted, because a fixture that spells it out is the same claim.
  */
 const asClass = (path: string) => `${path.slice(0, -1)}[${path.slice(-1)}]`;
 /** Floors on what each reader SEES before an empty answer from it means anything (each is well under the reading, which is the point of a floor, not a pin). */
@@ -51,8 +51,8 @@ const MIN_LOCKFILE_IMPORTERS = 5;
 const MIN_TEST_GLOBS = 4;
 const MIN_WORKFLOWS = 10;
 const MIN_TRACKED_FILES = 500;
-/** The pathspecs the row's Acceptance excludes: record (`docs`, `.acceptance`, changesets, changelogs) and the two files the last cut (9) owns. */
-const NOT_LIVE = [":!docs", ":!.acceptance", ":!.changeset", ":!**/CHANGELOG.md", ":!layers.json", ":!packages/guards/layer-edges.baseline.json"];
+/** The pathspecs the row's Acceptance excludes: record (`docs`, `.acceptance`, changesets, changelogs). */
+const NOT_LIVE = [":!docs", ":!.acceptance", ":!.changeset", ":!**/CHANGELOG.md"];
 
 /** Writes `files` (path -> text) under a fresh directory, runs `body` on it, and removes it however `body` ends. */
 function withFixture<T>(files: Record<string, string>, body: (root: string) => T): T {
@@ -244,24 +244,24 @@ test("POSITIVE CONTROL: an entry or a configuration naming the package is REFUSE
 
 // ---- 5. no root script lays it --------------------------------------------------------------------------------------
 
-/** The scripts that still run `lay-layer.ts control`, which is what put the directory back at the path this file proves empty. */
+/** The scripts that still run `lay-layer`, which is what put the directory back at the path this file proves empty. */
 function layingRefusals(scripts: Record<string, string>): string[] {
-  return Object.entries(scripts).filter(([, command]) => /lay-layer\.ts\s+control\b/.test(command)).map(([name]) => `\`${name}\` still lays control`);
+  return Object.entries(scripts).filter(([, command]) => /\blay-layer\b/.test(command)).map(([name]) => `\`${name}\` still lays a layer`);
 }
 
 const rootScripts = (root: string) => (JSON.parse(read(root, "package.json")) as { scripts: Record<string, string> }).scripts;
 
-test("no root script lays control: prepare and build still lay the lab, and neither lays this", () => {
+test("no root script lays a layer: prepare and build run the build and nothing before it", () => {
   const scripts = rootScripts(REPO_ROOT);
-  // The reader's own precondition: it SEES the lines that lay a layer, or "none lays control" is a statement about a manifest that lays nothing.
-  for (const name of ["prepare", "build"]) assert.match(scripts[name] ?? "", /lay-layer\.ts\s+lab\b/, `${name} no longer lays the lab: the reader is not looking at the script that lays layers`);
+  // The reader's own precondition: it SEES the two scripts that used to lay, or "none lays" is a statement about a manifest that has neither.
+  for (const name of ["prepare", "build"]) assert.match(scripts[name] ?? "", /pnpm\.ts -r run build/, `${name} is not the build: the reader is not looking at the script that used to lay layers`);
   assert.deepEqual(layingRefusals(scripts), []);
 });
 
-test("POSITIVE CONTROL: a script that still lays control is REFUSED naming it, and one that lays another layer is not", () => {
-  assert.deepEqual(layingRefusals({ build: "node scripts/lay-layer.ts lab && node scripts/pnpm.ts -r run build", prepare: "node scripts/lay-layer.ts control && x" }), ["`prepare` still lays control"]);
-  assert.deepEqual(layingRefusals({ build: "node scripts/lay-layer.ts control", prepare: "node scripts/lay-layer.ts  control" }), ["`build` still lays control", "`prepare` still lays control"]);
-  assert.deepEqual(layingRefusals({ build: "node scripts/lay-layer.ts lab", other: "echo lay-layer.ts controller-notes" }), [], "a script that merely begins with the word is not it");
+test("POSITIVE CONTROL: a script that still lays is REFUSED naming it, and one that merely contains the word is not", () => {
+  assert.deepEqual(layingRefusals({ build: "node scripts/pnpm.ts -r run build", prepare: "node scripts/lay-layer.ts control && x" }), ["`prepare` still lays a layer"]);
+  assert.deepEqual(layingRefusals({ build: "node scripts/lay-layer.ts lab", prepare: "node scripts/lay-layer.ts  control" }), ["`build` still lays a layer", "`prepare` still lays a layer"]);
+  assert.deepEqual(layingRefusals({ other: "echo relay-layers-notes" }), [], "a script that merely contains the letters is not it");
 });
 
 // ---- 6. no live file names the directory ----------------------------------------------------------------------------
@@ -290,18 +290,19 @@ function unignored(root: string, paths: string[]): string[] {
   });
 }
 
-const LAID_COPY_FILES = [`${DEPARTED_PATH}/src/x.ts`, `${DEPARTED_PATH}/ansible/inventory.yml`, `${DEPARTED_PATH}/ansible/me.local.yml`];
+/** The two files of a leftover copy that must never reach a commit: the operator's real addresses (#54). The rest of a leftover copy is host cleanup, not a secret. */
+const LAID_COPY_FILES = [`${DEPARTED_PATH}/ansible/inventory.yml`, `${DEPARTED_PATH}/ansible/me.local.yml`];
 
 test("no live file of the core names the directory (the row's Acceptance)", () => {
   assert.ok(tracked(REPO_ROOT).length >= MIN_TRACKED_FILES, "git lists almost no tracked file: the reader is not looking at the tree");
   assert.deepEqual(liveReferences(REPO_ROOT), []);
 });
 
-test("a copy an old host still has laid stays ignored, the real inventory included", () => {
+test("the operator's real inventory and local playbooks in a leftover copy stay ignored, whichever way the line is spelled", () => {
   assert.deepEqual(unignored(REPO_ROOT, LAID_COPY_FILES), []);
 });
 
-test("POSITIVE CONTROL: a live file naming the path is REFUSED naming it; record, the declaration and a longer name are not", () => {
+test("POSITIVE CONTROL: a live file naming the path is REFUSED naming it; record and a longer name are not", () => {
   const files = {
     "package.json": `{ "scripts": { "x": "node ${DEPARTED_PATH}/src/a.ts" } }\n`,
     "scripts/y.ts": `// reads ${DEPARTED_PATH}/ansible/\n`,
@@ -309,8 +310,6 @@ test("POSITIVE CONTROL: a live file naming the path is REFUSED naming it; record
     ".acceptance/agent~x-1.md": `${DEPARTED_PATH}/.layer-ref\n`,
     ".changeset/a.md": `${DEPARTED_PATH}\n`,
     "packages/other/CHANGELOG.md": `${DEPARTED_PATH}\n`,
-    "layers.json": `{ "path": "${DEPARTED_PATH}" }\n`,
-    "packages/guards/layer-edges.baseline.json": `[{ "to": "${DEPARTED_PATH}/src/b.ts" }]\n`,
     "scripts/clean.ts": "// names nothing\n",
   };
   withRepoFixture(files, (root) => assert.deepEqual(liveReferences(root), ["package.json", "scripts/y.ts"]));
