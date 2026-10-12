@@ -72,7 +72,7 @@
   "_routing": "How a new engineer is routed (#4904; chairman, 2026-10-11, #4953), read by `readRouting` in a11ign/agent-org's `src/project-config.ts`. `choice` asks the provider ONE question whose options are the routes (the Jev choice); `traits` asks the four questions and composes them. ABSENT reads as `traits`, which is what every route ran under until this key landed. Revert is the same line set to `traits`. The thresholds are #4904's defaults and are not set here.",
   "routing": { "question": "choice" },
   "_rows": "Row-template behaviour (#5109 follow-up, #5118; the check ships in a11ign/agent-org#1007). `testsFirst: true` makes `row-claim` REFUSE a row whose body carries a `Tests-first:` line naming no test file, and makes the guard hold the named tests after the row's first commit, so a test is written before the code it pins. ABSENT or `false` is the tool's default and changes nothing. Revert is the same line set to `false`.",
-  "rows": { "testsFirst": true, "specWriter": true, "specLint": true, "autoUnpark": true },
+  "rows": { "testsFirst": true, "specWriter": true, "specLint": true },
   "workers": { "haikuBrief": true },
   "_leakPatterns": "What a11ign's public prose must never carry, ON TOP OF the two the tool holds itself (a private LAN IPv4 address, a named SSH key file). Each `pattern` is a regular expression's SOURCE. #1875: the control plane's GitHub token file sits beside the fleet key and is guarded for the same reason -- where a credential sits on a real box is somebody's infrastructure written down. ADR 0013: the retired `pct exec` container-hop idiom. #2658 (child 3g of #69) split these two out of a11ign/lab/src/packaging/leak-patterns.mjs, which the product keeps.",
   "leakPatterns": [
