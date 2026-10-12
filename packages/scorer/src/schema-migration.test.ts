@@ -67,12 +67,16 @@ test("EVALUATING a candidate is allowed while a migration is open; RELEASING is 
     + "gate that cannot run is one nobody runs");
 });
 
-test("promotion runs the candidate gate FIRST", () => {
-  // Promoting IS a MAJOR release of @a11ign/scorer (ADR 0007), so the root script that promotes is gated: it tests the code and the weights together.
-  // The other half of this claim, that the `promote` job stops at an uncommitted working tree and runs no shell, was a read of `lab-job.yml`, which
-  // is `a11ign/control`'s file; a repository never reads another's tree (ADR 0045 Decision 1 rule 2, cut 8, #5086), so that read belongs in control's repository, which is where to add it if it is wanted.
+test("a chain that cannot run a stage names it and refuses, rather than leaving it out; the core has no promotion script", () => {
+  // ADR 0045 cut 9 (#5087): `promote:model` and the lab-held gates left this package.json with the lab's scripts, and the chains that called them dangled
+  // (`ERR_PNPM_NO_SCRIPT` at the first missing stage). A chain that DROPPED them would be a gate that passes without them: so each ends in `gate:lab-held`,
+  // which exits 1 naming them. Promotion itself is the lab's, so `promote:gated` has nothing left to gate; "testing the code and the weights TOGETHER" (ADR 0007)
+  // is the lab's chain to hold, and a root script naming `promote:model` here would be the dangling call again.
   const scripts = JSON.parse(readFileSync(
     fileURLToPath(new URL("../../../package.json", import.meta.url)), "utf8")).scripts;
-  assert.match(scripts["promote:gated"], /candidate:gate.*&&.*promote:model/s,
-    "promotion must be gated: testing the code and the weights TOGETHER is the whole reason this exists");
+  for (const chain of ["release:gate:ci", "release:gate", "candidate:gate"]) {
+    assert.match(scripts[chain], /run gate:lab-held -- \S/, `${chain} must end in the stage that refuses what this repository cannot run`);
+  }
+  assert.equal(scripts["promote:gated"], undefined, "promote:gated would have to name promote:model, which is the lab's");
+  assert.equal(scripts["promote:model"], undefined, "promote:model is the lab's script");
 });
