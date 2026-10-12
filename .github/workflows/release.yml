@@ -165,7 +165,7 @@ jobs:
           newest=$(jq -c '[.workflow_runs[]
               | select(.head_branch == "main" and (.event == "push" or .event == "workflow_dispatch"))
               | select(.conclusion != "cancelled" and .conclusion != "skipped")]
-              | sort_by(.created_at) | last // empty' <<<"$runs") \
+              | sort_by([.created_at, .id]) | last // empty' <<<"$runs") \
             || fail "CANNOT_TELL: the answer for $LAB's capture-check runs could not be read"
           [ -n "$newest" ] || fail "CANNOT_TELL: $LAB has no completed capture-check run on main (push or workflow_dispatch), and no run is not a pass"
           conclusion=$(jq -r .conclusion <<<"$newest")
