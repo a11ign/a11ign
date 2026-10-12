@@ -48,6 +48,6 @@ def test_the_containers_that_remain_are_the_ones_WCAG_names():
     for role in features.CONTEXT_CONTAINERS:
         assert role not in features.UNCLOSED_CONTAINERS, role
     assert features.CONTEXT_CONTAINERS <= {"list", "menu", "menu bar", "table", "grouping"}, (
-        "a new context container needs a measurement behind it — run `npm run lab:job -- "
+        "a new context container needs a measurement behind it — run control's `pnpm run lab:job -- "
         "-e job=container-exits` and check NVDA actually announces leaving it"
     )

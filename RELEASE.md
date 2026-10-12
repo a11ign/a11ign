@@ -145,7 +145,7 @@ cannot reach is a red step at the point of use.
 stages (`release:gate:ci`); the other eight need the Python venv or the corpus. **No person asserts them now, and no
 machine does yet**: `scripts/release-gate-scope.ts` says so in the publishing run's log, every time, and
 the row that reads the fleet part's verdict by commit sha is #3136. Until it lands, "the release published"
-does not imply "the lab's stages passed"; run `pnpm run lab:job -e job=release-gate` and read it if you need
+does not imply "the lab's stages passed"; run `pnpm run lab:job -e job=release-gate` from control's checkout and read it if you need
 that claim.
 
 **The release check is the outsider job's verdict, read AFTER the publish (#3184).** A job in a repository outside the organisation

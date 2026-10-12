@@ -151,8 +151,8 @@ once at next boot rather than being silently skipped), which is the same propert
 
 ## The freeze rule — never migrate during a capture
 
-**Do not begin any step of this runbook while `pnpm run fleet:status` shows a worker `busy`, or while
-`pnpm run lab:status` shows a job running.** Two independent reasons, both already established elsewhere in
+**Do not begin any step of this runbook while `fleet:status` shows a worker `busy`, or while
+`lab:status` shows a job running.** Both are `a11ign/control` scripts. Two independent reasons, both already established elsewhere in
 this repo rather than invented for this file:
 
 - **A capture in flight has no resumption of its own.** `docs/nvda-worker-runbook.md` and CLAUDE.md's
@@ -165,8 +165,8 @@ this repo rather than invented for this file:
   (ADR 0012); a migration in progress is briefly a period where that assumption may not hold, and starting
   new work into that window is how a split-brain dispatch happens.
 
-**Concretely:** before starting a migration, run `pnpm run fleet:status` and `pnpm run lab:status` and
-confirm nothing is `busy`/running. If a capture is in flight, wait for it to finish or use `pnpm run
+**Concretely:** before starting a migration, run `pnpm run fleet:status` and `pnpm run lab:status` in control's checkout and
+confirm nothing is `busy`/running. If a capture is in flight, wait for it to finish or use control's `pnpm run
 lab:stop -e job=<name>` to end it deliberately (it reports what it discards first) rather than migrating
 underneath it.
 

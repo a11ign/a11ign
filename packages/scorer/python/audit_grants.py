@@ -152,7 +152,7 @@ def main() -> int:
         print(f"\n  {stale['records']} record(s) carry no `parsed` block and cannot be featurized.")
         print(f"  {stale['why']}.")
         print("  This copy of runs/ predates the parse. Re-export, or ask the lab:")
-        print("    npm run lab:job -- -e job=grants-audit")
+        print("    control: pnpm run lab:job -- -e job=grants-audit")
         if not report:
             print("\n  REFUSING — nothing here could be examined.")
             return 2

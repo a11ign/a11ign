@@ -721,7 +721,7 @@ run_gate "$BRANCH"
 # BEGIN #911 NOT-RUN LINE -- extraction markers for pre-push-hook-scope.test.ts; keep both if edited.
 echo "  NOT RUN training:check-signals, rules:gate -- both read the corpus in runs/, and a copy here is"
 echo "          only as fresh as its last sync. The authoritative verdict comes from the lab:"
-echo "          pnpm run lab:job -- -e job=check-signals   |   pnpm run lab:job -- -e job=rules-gate"
+echo "          in control's checkout: pnpm run lab:job -- -e job=check-signals   |   pnpm run lab:job -- -e job=rules-gate"
 # END #911 NOT-RUN LINE
 
 

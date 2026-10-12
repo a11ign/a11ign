@@ -94,7 +94,7 @@ const ACTION_REMOTE = `https://github.com/${ACTION_NAME}`;
 
 /** What the job's own summary says it did not run: routes the documents describe and this job did not take. */
 export const NOT_COVERED = [
-  { document: "README.md", route: "\"Locally instead\": a capture worker you control, `pnpm run doctor`" },
+  { document: "README.md", route: "\"Locally instead\": a capture worker you control, `pnpm run doctor` from a checkout of `a11ign/control`" },
   { document: "docs/getting-started.md", route: "routes A, B and C: a worker on a Mac, on your own Windows machine, or none" },
   { document: "docs/try-it.md", route: "\"The other route: run it from the repository\", and the authenticated run behind a login" },
 ];

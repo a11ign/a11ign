@@ -81,7 +81,7 @@ test("THREE SENTENCES: only a refusal and the box's own ready:false say the box 
   assert.match(timeout, /did not answer within 12 s/);
   assert.doesNotMatch(timeout, NOT_DOWN, "silence is unknown, and 'unreachable' is a claim too");
   assert.doesNotMatch(timeout, /\bis up\b/);
-  assert.ok(timeout.includes(WAKE_HINT) && timeout.includes("npm run fleet:wake -- <name>"), "names how to wake it");
+  assert.ok(timeout.includes(WAKE_HINT) && timeout.includes("fleet:wake -- <name>"), "names how to wake it");
 
   assert.match(refusal, /machine is up/);
   assert.doesNotMatch(refusal, /did not answer/);
@@ -106,7 +106,7 @@ test("witness: silence is 'did not answer within 12 s' and names the wake comman
   await assert.rejects(() => refuseIfNothingListening(WORKER, { request: slowWorker(SILENT).request }), (error: Error) => {
     assert.match(error.message, /did not answer within 12 s/);
     assert.doesNotMatch(error.message, NOT_DOWN);
-    assert.match(error.message, /npm run fleet:wake -- <name>/);
+    assert.match(error.message, /fleet:wake -- <name>/);
     return true;
   });
   await assert.rejects(() => refuseIfNothingListening(WORKER, { request: failing({ code: "ECONNREFUSED" }) }), (error: Error) => {
@@ -138,7 +138,7 @@ test("auth:leak-check: a healthy box slower than the OLD 8 s and inside the new 
   const silent = await workerProblem(WORKER, { request: slowWorker(SILENT).request });
   assert.match(silent ?? "", /did not answer within 12 s/);
   assert.doesNotMatch(silent ?? "", NOT_DOWN);
-  assert.match(silent ?? "", /npm run fleet:wake -- <name>/);
+  assert.match(silent ?? "", /fleet:wake -- <name>/);
   assert.match(silent ?? "", /runs on the machine the worker runs on/);
 
   const refused = await workerProblem(WORKER, { request: failing({ code: "ECONNREFUSED" }) });
