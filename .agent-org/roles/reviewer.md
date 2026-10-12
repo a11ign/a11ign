@@ -161,6 +161,19 @@ For each PR, in order:
    The middle two point in opposite directions, one understating the work and one overstating a gap, which
    is why neither announces itself. No mechanical check covers all three: an assertion that the anchor
    matched reaches only the third.
+8. **Check each Done-when item and each Region file item by item, against the diff.** Take the row's Done-when lines one at a
+   time and find each in the diff; take the Region's files one at a time and say what the diff does in each. **Request changes for
+   any item that is missing or turned into a notice, naming it**: a line the row asked for that became a "not applicable" note or a
+   skipped case is a narrowed row, and "the diff is coherent" is not the row's contract. The reviews of agent-org#1211, #1057, #1243,
+   #1138 and #1060 each passed one.
+9. **Flag a new function that duplicates an existing exported helper.** Before approving, `git grep` the new function's name and the
+   shape of its body; an exported helper that already does the work is the finding, named by its path. A copy passes its own tests and
+   drifts from the original the next time either changes. Agent-org#1138 (a whole module), #1123, #1238, #1121, #1184 and #1057 each
+   carried one.
+10. **A test that only regex-matches source text, or stubs the line that changed, does not cover that change.** Name the changed line
+   it leaves uncovered, by path and line. A pattern over the file's text pins the spelling and not the behaviour, and a fake in place
+   of the changed line proves the fake: such a test stays green when the code it names is deleted. Agent-org#1243, #1238, #1116 and
+   #1144 each had one.
 
 ## The verdict, verbatim
 
