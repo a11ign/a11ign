@@ -298,8 +298,14 @@ const LAYER_PATH = new RegExp(`packages/(?:${LAYER_DIRECTORIES.join("|")})`);
 /** Record, not live: `docs`, the acceptance files, changesets and changelogs, which the Acceptance excludes by pathspec. */
 const RECORD = /^(?:docs\/|\.acceptance\/|\.changeset\/)|(?:^|\/)CHANGELOG\.md$/;
 
+/** The same directories spelled as PATH PIECES in a Python file, which the Acceptance's pattern cannot see (a `Path` built by `/` from `packages`, then the name).
+ * Fourteen scorer tests were spelled this way, passed the Acceptance, and failed the first `merge_group` run that had no laid copy (#5175). Python only: the
+ * handful of TypeScript tests that spell a departed directory in pieces compute a path or exclude one and read nothing at it. */
+const LAYER_PIECES = new RegExp(`(?:["']packages["']\\s*/\\s*|parents\\[\\d\\]\\s*/\\s*)["'](?:${LAYER_DIRECTORIES.join("|")})["']`);
+
 function namingRefusals(files: Record<string, string>): string[] {
-  return Object.entries(files).filter(([path, text]) => !RECORD.test(path) && LAYER_PATH.test(text)).map(([path]) => `${path} names a departed layer's directory`);
+  return Object.entries(files).filter(([path, text]) => !RECORD.test(path) && (LAYER_PATH.test(text) || (path.endsWith(".py") && LAYER_PIECES.test(text))))
+    .map(([path]) => `${path} names a departed layer's directory`);
 }
 
 test("no live file of the core names a layer's directory: the row's Acceptance, over every tracked file", () => {
@@ -320,11 +326,17 @@ test("POSITIVE CONTROL: a live file naming any of the four directories is REFUSE
     ".changeset/a.md": `${worker}\n`,
     "packages/other/CHANGELOG.md": `${fleet}\n`,
     "scripts/clean.ts": "// names nothing\n",
+    "packages/scorer/tests/test_e.py": `SCRIPT = REPO / "packages" / "${LAYER_DIRECTORIES[0]}" / "scripts" / "e.py"\n`,
+    "packages/scorer/tests/test_f.py": `P = Path(__file__).resolve().parents[2] / "${LAYER_DIRECTORIES[0]}" / "scripts"\n`,
+    "scripts/g.ts": `const p = join(root, "packages", "${LAYER_DIRECTORIES[1]}");\n`,
+    "packages/scorer/tests/test_h.py": `KEY = {"control": "x"}\nS = "control"\n`,
   }), [
     "package.json names a departed layer's directory",
     "scripts/b.ts names a departed layer's directory",
     ".github/workflows/c.yml names a departed layer's directory",
     "packages/guards/src/d.test.ts names a departed layer's directory",
+    "packages/scorer/tests/test_e.py names a departed layer's directory",
+    "packages/scorer/tests/test_f.py names a departed layer's directory",
   ]);
 });
 

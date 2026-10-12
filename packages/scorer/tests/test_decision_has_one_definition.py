@@ -12,7 +12,7 @@ That is `refreshBrowseBuffer` exactly — a remedy reachable from one path, conf
 part in producing — committed here while fixing something else.
 
 So: both files must route through `applicability.decide`, and neither may compare a subtype score to a
-threshold itself. Asserted on source text because the alternative is loading a model and scoring a corpus,
+threshold itself (the evaluator's half is now the lab's, see DECIDERS). Asserted on source text because the alternative is loading a model and scoring a corpus,
 and a guard that costs that much is one that does not run.
 """
 import ast
@@ -21,10 +21,13 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
 
-#: Every file that decides whether a subtype fires. A new one must be added here deliberately.
+#: Every file of THIS repository that decides whether a subtype fires. A new one must be added here deliberately.
+#:
+#: The held-out evaluator is the other decider, and it is `a11ign/lab`'s `scripts/evaluate-screenreader-acceptance.py`: it was listed here by the path `prepare`
+#: laid it at, which is gone (ADR 0045 cut 9, #5087; a repository never reads another's source). Its half of this guard, that it too routes through
+#: `applicability.decide` and compares no score to a cut itself, is the lab's to hold, against the `applicability.py` it installs from `@a11ign/scorer`.
 DECIDERS = [
     REPO / "packages" / "scorer" / "python" / "score.py",
-    REPO / "packages" / "lab" / "scripts" / "evaluate-screenreader-acceptance.py",
 ]
 
 ORDERING = (ast.Lt, ast.LtE, ast.Gt, ast.GtE)
