@@ -8,10 +8,10 @@
 Acceptance:
 ```bash
 bash -c '! git grep -q "^/.github/workflows/ @a11ign-ai-leads" -- CODEOWNERS'
-bash -c 'cd "${AGENT_ORG_TOOL:-$HOME/repos/agent-org}" && npx rstest run --config scripts/rstest/rstest.config.ts src/packaging/owned-path-signoff.test.ts'
+bash -c 'T="${AGENT_ORG_TOOL:-$HOME/repos/agent-org}"; "$T/node_modules/.bin/rstest" run --config "$T/scripts/rstest/rstest.config.ts" src/packaging/owned-path-signoff.test.ts'
 ```
 
-The second command is the row's, with ONE change of path: the row's `cd ~/repos/agent-org` names a directory a CI runner does not have (`cd: /home/runner/repos/agent-org: No such file or directory`, exit 1, run 38194136528), so it reads `$AGENT_ORG_TOOL`, the newest-tag clone CI puts the tool in, and falls back to `~/repos/agent-org` where that is unset. Same test file, same config.
+The second command is the row's, run from the PROJECT root instead of from inside the tool. The row's `cd ~/repos/agent-org` names a directory a CI runner does not have (exit 1, run 38194136528). Reading `$AGENT_ORG_TOOL` and `cd`-ing there fixed that and failed the next way (exit 1, run 38204928974): from inside the tool's own clone `resolveHomeCheckout` finds no `.agent-org/project.json` and refuses on `AGENT_ORG_HOST`, which a runner does not set. The tool's rstest config says it is meant to run from the project's root (`root` is its own repository, "not the working directory"), where this repository holds the declaration. So the command names the tool's `rstest` binary and config by `$AGENT_ORG_TOOL` (falling back to `~/repos/agent-org`) and runs from here. Same test file, same config. Reproduced under CI's condition with `env -u AGENT_ORG_HOST`: 12 tests, pass.
 
 Mutation: the first command exits 1 against `HEAD`'s `CODEOWNERS` (the line present) and 0 against this branch's. Putting the line back makes it exit 1 again, so it moves with the entry and not with the file.
 
