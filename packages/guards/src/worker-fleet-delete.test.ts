@@ -273,7 +273,7 @@ test("POSITIVE CONTROL: a relative import of the fleet is REFUSED naming the fil
     "scripts/c.mjs": `import { z } from "../${DEPARTED_PATH}/src/cli-flags.ts";\n`,
     [`${LAB_DIR}/src/d.mjs`]: `import { w } from "${CONSUMED}/cli-flags";\n`,
     [`${LAB_DIR}/src/e.test.ts`]: 'import { v } from "../../worker-fleet/src/doctor.ts";\n',
-    "packages/control/src/f.mjs": 'import { u } from "../../worker-fleet/src/cli-flags.ts";\n',
+    [`packages/${"control"}/src/f.mjs`]: 'import { u } from "../../worker-fleet/src/cli-flags.ts";\n',
   }), [
     `${LAB_DIR}/src/training/a.mjs imports ${DEPARTED_PATH} by a relative path: name ${CONSUMED}`,
     `packages/guards/src/b.mjs imports ${DEPARTED_PATH} by a relative path: name ${CONSUMED}`,

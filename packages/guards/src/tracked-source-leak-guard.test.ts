@@ -88,7 +88,7 @@
  * Running `allLeaksIn` unfiltered against this population also fires the SSH-key-filename pattern, widely
  * — `~/.ssh/a11y-pve_ed25519`, `~/.ssh/a11y-witness_ed25519` and similar appear as hardcoded fallback
  * DEFAULTS (`process.env.A11Y_PVE_KEY || "..."`, the identical shape #83's CONTROL_PLANE fix removed) in
- * roughly a dozen files across `packages/control` and the fleet's `src/`. That is real and worth
+ * roughly a dozen files across `a11ign/control` and the fleet's `src/`. That is real and worth
  * fixing, but it is a DIFFERENT class of exposure from a real fleet ADDRESS — #83's own title and
  * acceptance command are about the IPv4 pattern specifically — and each hardcoded key-path default needs
  * the same care `control-plane-host.mjs` took (confirm nothing depends on the silent fallback before
@@ -238,21 +238,23 @@ test("MUTATION: a real leak reintroduced into a currently-clean source file is c
   assert.ok(leaks.length >= 1, `expected the reintroduced address to be caught, found: ${JSON.stringify(leaks)}`);
 });
 
-test("MUTATION: the hardcoded control-plane fallback this row removed does not silently come back", () => {
+test("MUTATION: a hardcoded control-plane fallback of the shape #285 removed is caught", () => {
   // #285: `CONTROL_PLANE` stopped being a bare `= process.env.A11Y_CONTROL_HOST` at import time -- it is
   // now resolved by `requireControlPlaneHost()` inside `main()`, so a reintroduced fallback would sit on
   // THAT line instead. The detector this test proves is unchanged (`findLeaks` scans the whole collapsed
-  // file for a private-LAN IPv4 literal, not this one line specifically) -- only the fixture moved with it.
-  for (const file of ["packages/control/src/fleet-playbook.ts", "packages/control/src/lab-pipeline.ts"]) {
-    const clean = collapsedText(file);
-    const reintroduced = clean.replace(
-      "CONTROL_PLANE = requireControlPlaneHost();",
-      `CONTROL_PLANE = requireControlPlaneHost() || "${privateAddress(10, 0, 0, 7)}";`,
-    );
-    assert.notEqual(reintroduced, clean, `the replacement did not match in ${file} — the fixture text has drifted`);
-    const leaks = findLeaks(file, reintroduced);
-    assert.ok(leaks.length >= 1, `expected the reintroduced default to be caught in ${file}: ${JSON.stringify(leaks)}`);
-  }
+  // file for a private-LAN IPv4 literal, not this one line specifically).
+  // THE TEXT IS A FIXTURE: the two files that held this line are control's, which this repository no longer lays (ADR 0045 cut 8, #5086), and a
+  // repository's test never opens another's source. `a11ign/control`'s own CI holds the scan of its own tree; what stays pinned HERE is that the detector fires on the shape.
+  const file = "scripts/fixture-control-plane.ts";
+  const clean = "const CONTROL_PLANE = requireControlPlaneHost();\n";
+  assert.deepEqual(findLeaks(file, clean), [], "the fixture is clean before the mutation");
+  const reintroduced = clean.replace(
+    "CONTROL_PLANE = requireControlPlaneHost();",
+    `CONTROL_PLANE = requireControlPlaneHost() || "${privateAddress(10, 0, 0, 7)}";`,
+  );
+  assert.notEqual(reintroduced, clean, "the replacement did not match: the fixture text has drifted");
+  const leaks = findLeaks(file, reintroduced);
+  assert.ok(leaks.length >= 1, `expected the reintroduced default to be caught: ${JSON.stringify(leaks)}`);
 });
 
 /**

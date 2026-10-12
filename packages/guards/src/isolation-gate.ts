@@ -569,7 +569,7 @@ const LAYERS_JSON = "layers.json";
  * Read from the file directly, the way `scripts/lay-layer.ts` does, and NOT through `control`'s `layer-checkouts.mjs`:
  * that module holds a computed `import()` (`layerCodeVersion`), and every guard that declares a walk scope has this
  * file in its import closure, where a computed import is refused (`declared-walk-scope.test.ts`). It is still the one
- * declaration, read here and never restated. It sat in `packages/control/` until #3506 deleted that directory, and is at the root now.
+ * declaration, read here and never restated. It sat in control's directory until #3506 moved it out, and is at the root now.
  *
  * A layer with no `remote` is inside this repository's checkout, which publishes it, so it is not a layer checkout.
  * An absent or unreadable `layers.json` throws: answering "no layers" would pack them again, silently.

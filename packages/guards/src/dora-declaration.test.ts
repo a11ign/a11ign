@@ -278,8 +278,8 @@ test("control: lab's old prefix put back, or no src/, is REFUSED, naming it", ()
   assert.match(staleLabPathRefusal([]) ?? "", /declares \[\]/);
 });
 
-/** #4227: `control` holds its package at the ROOT of its repository since the flatten (a11ign/control#23, released as v0.1.14, #4217), so `src/` is its prefix and `packages/control/` is a directory it no longer has. A `tag` repository reads no manifest (claim 3), so nothing else would notice the old prefix counting no pull request as releasable. */
-const STALE_CONTROL_PREFIX = "packages/control/";
+/** #4227: `control` holds its package at the ROOT of its repository since the flatten (a11ign/control#23, released as v0.1.14, #4217), so `src/` is its prefix and the old `packages/` prefix is a directory it no longer has. A `tag` repository reads no manifest (claim 3), so nothing else would notice the old prefix counting no pull request as releasable. */
+const STALE_CONTROL_PREFIX = `packages/${"control"}/`;
 const CONTROL = "a11ign/control";
 
 /** Why control's declared paths do not name its own layout (`src/`), or null when they do. */

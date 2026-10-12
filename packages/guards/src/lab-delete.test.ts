@@ -361,7 +361,7 @@ test("every test relocated by name is tracked at its new home and not at its old
 
 // ---- 7. the tree-wide guards the product keeps still run, and select nothing that left ------------------------------
 
-/** Names the tree-wide guards outside the departed directory that must still be found: the three #2703 counted as staying, of which TWO (`fleet-layer/entry-points` and `fleet-layer/protocol-guard`) left with `packages/control` (#3506) and run in `a11ign/control`'s CI now (`docs/known-gaps.md`). */
+/** Names the tree-wide guards outside the departed directory that must still be found: the three #2703 counted as staying, of which TWO (`fleet-layer/entry-points` and `fleet-layer/protocol-guard`) left with control's directory (#3506) and run in `a11ign/control`'s CI now (`docs/known-gaps.md`). */
 const STAYING_GUARDS = [
   "packages/judge/src/criteria-counts-are-not-spelled-out.test.ts",
 ];
