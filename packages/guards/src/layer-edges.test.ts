@@ -69,8 +69,8 @@ const CONTROL_DIR = `packages/${CONTROL_LAYER}`;
 /** One x.ts and one own.ts per layer, and the other package's x.ts. */
 const THREE_LAYERS_CLEAN_FILES = 7;
 const REASON_AT_LEAST_CHARS = 40;
-/** A floor under what the baseline holds, so the loops below cannot pass over nothing. It read 30 before ADR 0045 cut 2 (#5080) took ten edges whose files no longer name the lab, and 20 after. */
-const BASELINE_AT_LEAST = 10;
+/** A floor under what the baseline holds, so the loops below cannot pass over nothing. It read 30 before ADR 0045 cut 2 (#5080) took ten edges whose files no longer name the lab, 20 after, and 10 after cut 8 (#5086) took the four root files that named control's directory: what remains is the declarations and the host files, so the floor is half of it. */
+const BASELINE_AT_LEAST = 5;
 const DIRECTED_PAIRS_AMONG_THREE = 6;
 /** A path a test lives at; `moves-with` is only ever a test's disposition. */
 const TEST_PATH = /\.test\.|\/fixtures\/|\/test-support\/|\/tests?\/|(?:^|\/)test_[^/]*\.py$/;
@@ -350,7 +350,7 @@ const pairsOf = (entries: { from: string; to: string }[]) => {
 
 test("the real baseline holds NO directed pair among worker-fleet, lab and control, because none has a file in the tree, and is not empty", () => {
   const baseline = readBaseline(ROOT);
-  assert.ok(baseline.length > BASELINE_AT_LEAST, `POSITIVE CONTROL: the fence is a baseline of dozens of edges, not ${baseline.length}`);
+  assert.ok(baseline.length > BASELINE_AT_LEAST, `POSITIVE CONTROL: the fence is a baseline of the declarations and host files, not ${baseline.length}`);
   // THE CONTROL, over the same function: it is shown to SEE every one of the six pairs, so an empty answer over the baseline is not a filter that matches nothing.
   const planted = SPLIT_LAYERS.flatMap((a) => SPLIT_LAYERS.filter((b) => b !== a).map((b) => ({ from: `packages/${a}/src/x.ts`, to: `packages/${b}/src/y.ts` })));
   assert.equal(pairsOf(planted).size, DIRECTED_PAIRS_AMONG_THREE);

@@ -13,6 +13,10 @@
 # THE STATE FILE IS WHY WorkingDirectory MATTERS: `runs/fleet-watch-state.json` is relative to it and holds
 # each worker's first-seen-non-ready time, the only memory between firings. The first firing after a
 # worker goes non-ready therefore only RECORDS it; a later one reports it once it is past the threshold.
+#
+# THE SCRIPT IS CONTROL'S, RUN FROM CONTROL'S CHECKOUT (ADR 0045 cut 8, #5086). This repository no longer holds `fleet:watch`: the unit names
+# `a11ign/control`'s `src/fleet-watch.ts` by its absolute path (`host.json` `clones.control`) and keeps THIS directory as the working one, because
+# agent-org reads the ledger from `runs/` here. Node resolves control's imports from the file, not from the working directory.
 Description=a11ign: read the fleet for stuck workers and post to #928 if any (#1815, #2230)
 After=herdr.service
 
@@ -39,15 +43,15 @@ EnvironmentFile=-%h/.config/a11ign/fleet.env
 
 ExecStartPre=-%h/.local/bin/agent-org primary:update
 
-# A CRASH BEFORE `main` MUST NOT READ AS ATTENTION (#4693). `pnpm run fleet:watch` turns an uncaught
+# A CRASH BEFORE `main` MUST NOT READ AS ATTENTION (#4693). running the script turns an uncaught
 # ERR_MODULE_NOT_FOUND into exit 1, the same number as ATTENTION, so `SuccessExitStatus=0 1` counted every hourly
 # crash from 2026-10-09T20:47Z as `Result=success` while the fleet went unread. The script cannot be told apart by
 # its code, so the load is proved FIRST: `SuccessExitStatus` governs the main process only, so this step's exit 1
 # fails the unit. The module's own `main` runs only when it is the entry point, so importing it reads nothing and
 # posts nothing. No leading `-`: that is what would swallow the failure. `fleet-watch-unit-exit.test.ts` pins it.
-ExecStartPre=%h/.local/bin/node -e "import('./packages/control/src/fleet-watch.ts')"
+ExecStartPre=%h/.local/bin/node -e "import('%h/repos/control/src/fleet-watch.ts')"
 
-ExecStart=%h/.local/bin/pnpm run fleet:watch -- --post
+ExecStart=%h/.local/bin/node %h/repos/control/src/fleet-watch.ts --post
 
 # 0 QUIET and 1 ATTENTION (already posted) are the unit doing its job; 2 CANNOT_ASK stays FAILED so a
 # fleet this could not read never looks like a healthy one. docs/gate-exit-codes.md. A crash that exits 1 is

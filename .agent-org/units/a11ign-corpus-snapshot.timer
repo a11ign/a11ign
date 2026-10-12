@@ -3,7 +3,7 @@ Description=a11ign: run the agent-host corpus snapshot daily
 Requires=a11ign-corpus-snapshot.service
 
 [Timer]
-# MIRRORS THE LAB'S OWN a11y-corpus-snapshot.timer AT 03:00 UTC (packages/control/ansible/files/) --
+# MIRRORS THE LAB'S OWN a11y-corpus-snapshot.timer AT 03:00 UTC (`a11ign/control`'s `ansible/files/`) --
 # off-peak, and a shared hour makes the two units' history easy to reason about together even though they
 # protect different roots on different hosts.
 OnCalendar=*-*-* 03:00:00 UTC
