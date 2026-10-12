@@ -6,7 +6,7 @@
 
 | | |
 |---|---|
-| [`packages/control/CLAUDE.md`](packages/control/CLAUDE.md) | the fleet: `fleet:deploy`, `fleet:provision`, Ansible, lab jobs |
+| [`a11ign/control`'s `CLAUDE.md`](https://github.com/a11ign/control/blob/main/CLAUDE.md) | the fleet: `fleet:deploy`, `fleet:provision`, Ansible, lab jobs. **Moved to the layer repository (#5086)**: run them from its checkout |
 | [`screenreader-worker`'s `CLAUDE.md`](https://github.com/a11ign/screenreader-worker/blob/main/CLAUDE.md) | the worker and NVDA: `doctor`, readiness, the capture cache. **Moved to the layer repository (#3447)** |
 | [`a11ign/lab`'s `CLAUDE.md`](https://github.com/a11ign/lab/blob/main/CLAUDE.md) | the corpus: `gate:stability`, and who may report a gate reading `runs/` |
 | [`.github/CLAUDE.md`](.github/CLAUDE.md) | verifying changes, the hooks, sharing this checkout |

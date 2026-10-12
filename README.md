@@ -306,7 +306,7 @@ Because a Windows guest is never genuinely idle, the pipeline manages it **on de
 **This project's own corpus is no longer captured this way.** Everything below in this section — the
 cloned VM pool, the scaling measurements — is the DEPRECATED default for a contributor with no
 bare-metal fleet, kept working because it is still the right path for that case. Our own training data
-comes from ten bare-metal Windows boxes managed by Ansible (`packages/control/`, private — see
+comes from ten bare-metal Windows boxes managed by Ansible (`a11ign/control`, private — see
 [ADR 0012](./docs/adr/0012-control-plane-split.md)), which is not something
 this repository can hand you; the VM route below is what a contributor without one actually gets.
 

@@ -63,11 +63,14 @@ const FIRST_LAYERS = ["nvda-worker", "nvda-speech", "agent-org"];
 const SPLIT_LAYERS = ["worker-fleet", "lab", "control"];
 /** The layers whose directory is not in the tree at all: no tracked file is inside one, so no baseline entry may be FROM one. (`lab` is laid there at build time, untracked, #3505; `worker-fleet` was until ADR 0045 cut 4, #5082, and a checkout that laid it keeps the directory, #3504.) */
 const DEPARTED_LAYERS = [...FIRST_LAYERS, "worker-fleet", "lab", "control"];
+/** Control's directory, built the same way and for the same reason (ADR 0045 cut 8, #5086): the guard under test still knows `control` as a layer until `layers.json` goes. */
+const CONTROL_LAYER = "control";
+const CONTROL_DIR = `packages/${CONTROL_LAYER}`;
 /** One x.ts and one own.ts per layer, and the other package's x.ts. */
 const THREE_LAYERS_CLEAN_FILES = 7;
 const REASON_AT_LEAST_CHARS = 40;
-/** A floor under what the baseline holds, so the loops below cannot pass over nothing. It read 30 before ADR 0045 cut 2 (#5080) took ten edges whose files no longer name the lab, and 20 after. */
-const BASELINE_AT_LEAST = 10;
+/** A floor under what the baseline holds, so the loops below cannot pass over nothing. It read 30 before ADR 0045 cut 2 (#5080) took ten edges whose files no longer name the lab, 20 after, and 10 after cut 8 (#5086) took the four root files that named control's directory: what remains is the declarations and the host files, so the floor is half of it. */
+const BASELINE_AT_LEAST = 5;
 const DIRECTED_PAIRS_AMONG_THREE = 6;
 /** A path a test lives at; `moves-with` is only ever a test's disposition. */
 const TEST_PATH = /\.test\.|\/fixtures\/|\/test-support\/|\/tests?\/|(?:^|\/)test_[^/]*\.py$/;
@@ -183,15 +186,15 @@ test("a `const` shadowed in an inner scope is judged on the value that reaches t
 test("a declared layer of moves 2-4 that reaches across by path is REFUSED, naming both ends, for each of the three", () => {
   const edges = edgesOf("three-layers");
   assert.deepEqual(edges, [
-    { from: "packages/other/src/y.ts", to: "packages/control/src/own.ts", kind: "import", direction: "in" },
+    { from: "packages/other/src/y.ts", to: `${CONTROL_DIR}/src/own.ts`, kind: "import", direction: "in" },
     { from: `${LAB_DIR}/src/x.ts`, to: `${FLEET_DIR}/src/own.ts`, kind: "import", direction: "out" },
     { from: `${FLEET_DIR}/src/x.ts`, to: "packages/other/src/x.ts", kind: "import", direction: "out" },
-    { from: "packages/control/src/x.ts", to: `${LAB_DIR}/src/own.ts`, kind: "path-literal", direction: "out" },
+    { from: `${CONTROL_DIR}/src/x.ts`, to: `${LAB_DIR}/src/own.ts`, kind: "path-literal", direction: "out" },
   ]);
   const message = describeVerdict(judgeEdges(edges, [])).join("\n");
   assert.match(message, new RegExp(`NEW EDGE out: ${FLEET_DIR}/src/x\\.ts -> packages/other/src/x\\.ts`));
   assert.match(message, new RegExp(`NEW EDGE out: ${LAB_DIR}/src/x\\.ts -> ${FLEET_DIR}/src/own\\.ts`), "an edge between two layers is named by both");
-  assert.match(message, /NEW EDGE out: packages\/control\/src\/x\.ts -> packages\/lab\/src\/own\.ts/);
+  assert.match(message, new RegExp(`NEW EDGE out: ${CONTROL_DIR}/src/x\\.ts -> ${LAB_DIR}/src/own\\.ts`));
   assert.equal(cli("--check", `--root=${fixture("three-layers")}`).status, 1, "and the command refuses it too");
 });
 
@@ -318,8 +321,10 @@ test("the real baseline is NON-EMPTY and records the deploy path, so a guard tha
   const intoTheFleet = baseline.filter((e: { to: string }) => e.to.startsWith(FLEET_DIR));
   assert.ok(intoTheFleet.some((e: { from: string }) => e.from === "layers.json"), "the declaration of where the fleet is laid is recorded");
   assert.deepEqual(intoTheFleet.filter((e: { from: string }) => e.from === "package.json"), [], "no root script runs the fleet by path any more");
-  const intoControl = baseline.filter((e: { to: string }) => e.to.startsWith("packages/control"));
-  assert.ok(intoControl.some((e: { from: string }) => e.from === "package.json"), "the root scripts that run control by path are recorded");
+  const intoControl = baseline.filter((e: { to: string }) => e.to.startsWith(CONTROL_DIR));
+  // ADR 0045 cut 8 (#5086): the root stopped reaching into control's directory, so only the declaration that says where a copy would be laid remains.
+  assert.ok(intoControl.some((e: { from: string }) => e.from === "layers.json"), "the declaration of where control is laid is recorded");
+  assert.deepEqual(intoControl.filter((e: { from: string }) => e.from === "package.json"), [], "no root script runs control by path any more");
 });
 
 /** The baseline entries whose `from` is a file INSIDE one of the layers that left first. */
@@ -345,7 +350,7 @@ const pairsOf = (entries: { from: string; to: string }[]) => {
 
 test("the real baseline holds NO directed pair among worker-fleet, lab and control, because none has a file in the tree, and is not empty", () => {
   const baseline = readBaseline(ROOT);
-  assert.ok(baseline.length > BASELINE_AT_LEAST, `POSITIVE CONTROL: the fence is a baseline of dozens of edges, not ${baseline.length}`);
+  assert.ok(baseline.length > BASELINE_AT_LEAST, `POSITIVE CONTROL: the fence is a baseline of the declarations and host files, not ${baseline.length}`);
   // THE CONTROL, over the same function: it is shown to SEE every one of the six pairs, so an empty answer over the baseline is not a filter that matches nothing.
   const planted = SPLIT_LAYERS.flatMap((a) => SPLIT_LAYERS.filter((b) => b !== a).map((b) => ({ from: `packages/${a}/src/x.ts`, to: `packages/${b}/src/y.ts` })));
   assert.equal(pairsOf(planted).size, DIRECTED_PAIRS_AMONG_THREE);
@@ -378,8 +383,8 @@ const backEdgesOf = (entries: { from: string; to: string }[]) => entries.filter(
 
 test("done-when 4, after #3505: no code edge leaves worker-fleet or lab for another layer in the baseline, because neither has a file in the tree", () => {
   // THE CONTROL, over the same function: it is shown to SEE one of each kind, so an empty answer over the baseline is not a filter that matches nothing.
-  const planted = [{ from: `${FLEET_DIR}/src/a.ts`, to: "packages/control/src/b.ts" }, { from: `${LAB_DIR}/src/a.ts`, to: "packages/control/src/b.ts" },
-    { from: `${LAB_DIR}/src/a.test.ts`, to: "packages/control/src/b.ts" }, { from: "packages/control/src/a.ts", to: `${LAB_DIR}/src/b.ts` }];
+  const planted = [{ from: `${FLEET_DIR}/src/a.ts`, to: `${CONTROL_DIR}/src/b.ts` }, { from: `${LAB_DIR}/src/a.ts`, to: `${CONTROL_DIR}/src/b.ts` },
+    { from: `${LAB_DIR}/src/a.test.ts`, to: `${CONTROL_DIR}/src/b.ts` }, { from: `${CONTROL_DIR}/src/a.ts`, to: `${LAB_DIR}/src/b.ts` }];
   assert.equal(backEdgesOf(planted).length, 2, "the worker-fleet edge and the lab code edge, and neither the lab TEST's nor control's own");
   assert.deepEqual(backEdgesOf(readBaseline(ROOT)), []);
 });

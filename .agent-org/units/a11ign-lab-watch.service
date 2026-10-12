@@ -45,7 +45,7 @@ EnvironmentFile=-%h/.config/a11ign/fleet.env
 # UPDATED FIRST, and non-fatal, as the other units that run this checkout's code do.
 ExecStartPre=-%h/.local/bin/agent-org primary:update
 
-ExecStart=%h/.local/bin/pnpm run lab:watch -- --post
+ExecStart=%h/.local/bin/node %h/repos/control/src/lab-watch.ts --post
 
 # THE EXIT CONTRACT IS THE POINT (docs/gate-exit-codes.md): 0 QUIET, 1 ATTENTION -- it found something and
 # has ALREADY posted it, so the unit did its job -- and 2 CANNOT_ASK, which must stay a FAILED unit: a clock

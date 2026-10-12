@@ -15,7 +15,7 @@ $ENVIRONMENT_FILES = @(
     (Get-LayerFile -Layer 'screenreader-fleet' -Relative 'src/provisioning/provision-nvda-worker.ps1')
     $RUN_SERVER
     $FOREGROUND_LOCK
-    'packages/control/ansible/roles/worker/defaults/main.yml'
+    'ansible/roles/worker/defaults/main.yml'
     # a comment line is not an entry
     'scripts/provisioning/set-display-mode.ps1'
 )
@@ -28,7 +28,7 @@ test("the Get-LayerFile entry stays in the list, in its position, resolved from 
     `${declaredLayerPath("screenreader-fleet")}/src/provisioning/provision-nvda-worker.ps1`,
     PUBLISHED_LAUNCHER,
     files[2],
-    "packages/control/ansible/roles/worker/defaults/main.yml",
+    "ansible/roles/worker/defaults/main.yml",
     "scripts/provisioning/set-display-mode.ps1",
   ]);
   assert.ok(files[2], "the foreground-lock entry resolved to a path");

@@ -4,7 +4,7 @@ Requires=a11ign-corpus-release-nightly.service
 
 [Timer]
 # ONE HOUR AFTER THE LAB'S OWN SNAPSHOT, not at the same instant -- `a11y-corpus-snapshot.timer`
-# (packages/control/ansible/files/) fires at 03:00 UTC on the lab and `corpus-snapshot.mjs` archives
+# (`a11ign/control`'s `ansible/files/`) fires at 03:00 UTC on the lab and `corpus-snapshot.mjs` archives
 # 2,000+ capture files plus three sibling roots (docs/operational-lessons.md records one run at several
 # minutes for a smaller corpus). Firing the fetch at the same instant risks racing a still-writing
 # archive; 04:00 UTC gives it margin the same way a11ign-fleet-gated-nightly.timer's own 01:00 UTC leaves

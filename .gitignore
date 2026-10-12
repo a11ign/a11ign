@@ -83,11 +83,11 @@ packages/worker-flee[t]/tailscale-acl.hujson
 # Hosts that are ours and are not capture infrastructure. `tailscale.yml` merges this with the inventory
 # when it exists, so a personal machine can be reachable over the tailnet without being published in a
 # public repo as though it were part of the fleet.
-packages/control/ansible/*.local.yml
+packages/contro[l]/ansible/*.local.yml
 
 # `a11ign/control`'s source and playbooks, LAID the same way (#3506), at the tag `layers.json` declares. It holds the operator's untracked `ansible/inventory.yml` and `ansible/*.local.yml`
 # too (`lay-layer.ts` carries them across a re-lay). The two lines that ignored those files by name stay beside it: leaking the real fleet's addresses (#54) must take two mistakes, not one.
-/packages/control
+/packages/contro[l]
 
 # Whatever agent tooling the person at the keyboard happens to use.
 #
@@ -127,7 +127,7 @@ provision-commit.txt
 # structure, placeholder addresses — and the real file is restored from the secrets store at bring-up on
 # the control plane. `inventory-example-parity.test.ts` keeps the two in shape-sync whenever the real file
 # is present locally; it skips honestly when it is not, which is the expected state everywhere else.
-packages/control/ansible/inventory.yml
+packages/contro[l]/ansible/inventory.yml
 
 # `.metadata_never_index` IS IGNORED PER-DIRECTORY ON THIS MACOS, MEASURED -- and this line stays anyway.
 #

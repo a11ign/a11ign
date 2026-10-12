@@ -67,19 +67,12 @@ test("EVALUATING a candidate is allowed while a migration is open; RELEASING is 
     + "gate that cannot run is one nobody runs");
 });
 
-test("promotion runs the candidate gate FIRST, and cannot commit", () => {
-  // Promoting IS a MAJOR release of @a11ign/scorer (ADR 0007). A job that can push a release is a
-  // job that can release by accident, so this one stops at an uncommitted working tree.
+test("promotion runs the candidate gate FIRST", () => {
+  // Promoting IS a MAJOR release of @a11ign/scorer (ADR 0007), so the root script that promotes is gated: it tests the code and the weights together.
+  // The other half of this claim, that the `promote` job stops at an uncommitted working tree and runs no shell, was a read of `lab-job.yml`, which
+  // is `a11ign/control`'s file; a repository never reads another's tree (ADR 0045 Decision 1 rule 2, cut 8, #5086), so that read belongs in control's repository, which is where to add it if it is wanted.
   const scripts = JSON.parse(readFileSync(
     fileURLToPath(new URL("../../../package.json", import.meta.url)), "utf8")).scripts;
   assert.match(scripts["promote:gated"], /candidate:gate.*&&.*promote:model/s,
     "promotion must be gated: testing the code and the weights TOGETHER is the whole reason this exists");
-
-  const job = readFileSync(
-    fileURLToPath(new URL("../../control/ansible/lab-job.yml", import.meta.url)), "utf8");
-  const promoteBlock = job.slice(job.indexOf("      promote:"), job.indexOf("      promote-diff:"));
-  assert.ok(!/\/bin\/sh|shell:/.test(promoteBlock),
-    "a shell here reintroduces the quoting class that sent four capture shards at http://:8765");
-  assert.ok(!/git (commit|push)/.test(promoteBlock),
-    "the promote job must not commit or push — a human reviews what it produced");
 });

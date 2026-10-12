@@ -1,7 +1,7 @@
 /**
  * EVERY WORKSPACE MUST BE IN THE LOCKFILE, or `pnpm install --frozen-lockfile` fails and ALL of CI goes red.
  *
- * Measured 2026-08-29, under npm: extracting `packages/control` without refreshing `package-lock.json` left
+ * Measured 2026-08-29, under npm: extracting control's directory without refreshing `package-lock.json` left
  * `npm ci` failing with `Missing: @a11ign/control@0.1.0 from lock file`, and that is the first
  * step of every workflow. `lint.yml` (retired 2026-09-06, folded into `.github/workflows/ci.yml`, which
  * gates lint, typecheck and the test suite the same way) and `action-smoke.yml` were both red for

@@ -5,7 +5,7 @@
 # lab: `runs/board-snapshots` accumulates only on THIS host, via `board-snapshot.mjs`'s
 # `withBoardSnapshot`, called from `row-claim.mjs`/`row-file.mjs`/`close-rows-for-merged-pr.mjs`/
 # `ready-label-audit.mjs` -- every org session, since the 2026-09-13 cutover. The lab's own
-# `a11y-corpus-snapshot.timer` (`packages/control/ansible/files/`) stays unchanged and keeps protecting
+# `a11y-corpus-snapshot.timer` (`a11ign/control`'s `ansible/files/`) stays unchanged and keeps protecting
 # `captures`/`real-page-corpus`/`screenreader-acceptance` there; this pair is the agent-host half, not a
 # replacement for it.
 Description=a11ign: snapshot the corpus roots this host actually holds (runs/board-snapshots)

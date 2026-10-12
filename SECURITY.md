@@ -239,7 +239,7 @@ trip a lockout or bot detection.
 ### The capture worker has no authentication, and binds all interfaces
 
 The Windows worker that runs NVDA serves plain HTTP on port 8765 with **no authentication of any kind** and
-no TLS. This is deliberate and documented (`packages/control/ansible/README.md`), and it is why the
+no TLS. This is deliberate and documented (`a11ign/control`'s `ansible/README.md`), and it is why the
 fleet is managed over SSH rather than by adding routes to the worker: *a mutating route there would be
 unauthenticated remote code execution on every box in the fleet.*
 

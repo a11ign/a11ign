@@ -20,8 +20,9 @@
 // checkout that did not touch it). `lays` names what to lay when it is more than `src/`: `lab`'s root scripts, its baselines, `rule-ownership.json` and `CLAUDE.md`
 // are read by path from the rest of the tree.
 //
-// `control` IS LAID THE SAME WAY, AND READS THE DECLARATION THAT LAYS IT (#3506). `layers.json` moved from `packages/control/` to the root, because
-// a file inside a directory that is laid and untracked cannot say which tag to lay it at. `control`'s own readers still open `../layers.json` from
+// A LAYER MAY READ THE DECLARATION THAT LAYS IT (#3506). `control` did, until ADR 0045 cut 8 (#5086) stopped this repository laying it; its entry
+// stays in `layers.json` until the row that deletes the file. `layers.json` is at the root, because
+// a file inside a directory that is laid and untracked cannot say which tag to lay it at. Such a layer's own readers open `../layers.json` from
 // their `src/`, so `declares` names that file and `lay` WRITES this repository's copy there, over whatever the tag holds: one declaration, never two.
 // `keeps` names the files an operator holds INSIDE the laid directory (the untracked `inventory.yml`, `*.local.yml`): a re-lay wipes the directory,
 // so it carries those across, and a layer that declares none is wiped whole as before.
