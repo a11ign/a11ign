@@ -1,0 +1,17 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Enrols a11ign/a11ign in the shared preset in a11ign/.github (#5222, epic #5153). FLAG: `enabled` below. REVERT: set it to false. The preset ships disabled, enables every built-in manager, and automerges, so this file narrows it to custom regex managers only: Dependabot already reads `uses:` in .github/workflows (dependabot.yml, #3775), and a second manager would open the same bump twice. Every `a11ign/...@<sha>` pin the tree holds is either read by a custom manager or named in ignorePaths with its reason in renovate-config.test.ts.",
+  "extends": ["local>a11ign/.github"],
+  "enabled": true,
+  "enabledManagers": ["custom.regex"],
+  "ignorePaths": [
+    ".github/workflows/consumer-gate.yml",
+    ".github/workflows/release.yml",
+    "README.md",
+    "docs/github-action.md",
+    "docs/try-it.md",
+    "examples/nightly-workflow.yml",
+    "scripts/outsider/outsider-job.yml"
+  ],
+  "customManagers": []
+}
