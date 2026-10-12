@@ -177,10 +177,17 @@ jobs:
         shell: pwsh
         working-directory: ${{ runner.temp }}/clean
         run: |
-          # BEFORE the first publish of the renamed package (#2887) `latest` still carries the fleet under its old name, so use
-          # whichever directory the install actually has. Dropped with the worker's loop below once `latest` is the new name.
-          $script = 'screenreader-fleet', 'worker-fleet' | ForEach-Object { "./node_modules/@a11ign/$_/src/provisioning/apply-foreground-lock-timeout.ps1" } | Where-Object { Test-Path $_ } | Select-Object -First 1
-          if (-not $script) { throw 'the clean install carries no fleet package: neither node_modules/@a11ign/screenreader-fleet nor its old-name directory has the script.' }
+          # The WORKER package's `launcher/` is where the script lives (ADR 0045 cut 5; `files` carries it from 0.13.0). The
+          # published `latest` is a11ign 0.10.2 -> fleet 0.9.0 -> worker 0.9.0 (measured 2026-10-12, `npm view`), which has no
+          # `launcher/` and still ships the script from the fleet package, so a hard-coded launcher path would turn this gate red
+          # against an install that works. Look in the launcher first, then for the file by name anywhere under `@a11ign`; the
+          # search drops once `latest` carries a worker with `launcher/`.
+          $script = './node_modules/@a11ign/screenreader-worker/launcher/apply-foreground-lock-timeout.ps1'
+          if (-not (Test-Path $script)) {
+            $found = Get-ChildItem './node_modules/@a11ign' -Recurse -Depth 4 -Filter 'apply-foreground-lock-timeout.ps1' | Select-Object -First 1
+            $script = if ($found) { $found.FullName } else { $null }
+          }
+          if (-not $script) { throw 'the clean install carries no foreground-lock script: not in node_modules/@a11ign/screenreader-worker/launcher, nor anywhere under node_modules/@a11ign.' }
           & $script
           $v = (Get-ItemProperty 'HKCU:\Control Panel\Desktop' -Name ForegroundLockTimeout -ErrorAction SilentlyContinue).ForegroundLockTimeout
           if ($v -ne 0) { throw "ForegroundLockTimeout is '$v', not 0 - the capture would return 0 phrases with no error." }
