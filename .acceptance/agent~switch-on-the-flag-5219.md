@@ -1,0 +1,3 @@
+`.agent-org/decisions.json` carries `"worktree.rebuildCheck": true` as a flat boolean key (row #5219, agent-org#1169 / PR agent-org#1201 merged 2026-10-12, class a11ign#928). The key is read by agent-org's `rebuildCheckOn()` (`src/wake.ts`), which tests `switches["worktree.rebuildCheck"] === true`, so a worker is no longer handed a rebuilt worktree whose `typescript` does not resolve. Parse check: agent-org's `readSwitches` accepts the edited file with no diagnostic and returns `true` for the key. Revert: set the key to `false`.
+
+Acceptance: bash -c 'grep -q "\"worktree.rebuildCheck\": *true" .agent-org/decisions.json'
