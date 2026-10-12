@@ -46,5 +46,7 @@
       "workers": { "mode": "github-apps", "slug": "a11ign-workers", "appId": 5267128, "installationId": 170075092, "keyPath": "/home/agent/.config/agent-org/apps/a11ign-workers.pem" },
       "managers": { "mode": "github-apps", "slug": "a11ign-managers", "appId": 5267143, "installationId": 170074877, "keyPath": "/home/agent/.config/agent-org/apps/a11ign-managers.pem" }
     }
-  }
+  },
+  "_emergencyPriority": "The chairman's ruling of 2026-10-11 (a11ign/agent-org#988, a11ign/agent-org#991). `priority:emergency` is honoured only while a linked org-blocking incident is open. Setters and incidentKeys are left at their defaults. REVERT: set `enabled` to `false`.",
+  "emergencyPriority": { "enabled": true }
 }
