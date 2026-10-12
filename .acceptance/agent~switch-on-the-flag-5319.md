@@ -1,0 +1,3 @@
+`.agent-org/project.json` carries `"health": { "approvedDirty": true, "approvedRequired": true }` (row #5319, agent-org#1248 merged as agent-org#1258, class a11ign#928). `health.approvedRequired` is the flag the approved-REVIEW_REQUIRED reading in agent-org's `src/org-health.ts` sits behind (`APPROVED_REQUIRED_FLAG`). Measured on agent-org's own reader, `readFlagLedger` against this checkout: before the edit it lists `APPROVED_REQUIRED_FLAG` / `health.approvedRequired` as the one unset flag of 15 shipped; after it, `unset` is empty. Revert: set the key to `false`.
+
+Acceptance: bash -c 'node -e "process.exit(require(\"./.agent-org/project.json\").health.approvedRequired===true?0:1)"'
