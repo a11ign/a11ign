@@ -46,5 +46,5 @@ worktrees every agent works in. `primary-checkout-guard.test.ts`'s two linked-wo
 ## An unmarked checkout is not guarded, and that gap is reported
 
 That is the correct default — a guard firing on machines it was never meant for is what #198 was — but
-*unmarked* and *safe* must not read the same. `pnpm run doctor` reports an unmarked primary, and the
+*unmarked* and *safe* must not read the same. control's `pnpm run doctor` reports an unmarked primary, and the
 command above is what closes it.

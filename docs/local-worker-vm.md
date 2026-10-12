@@ -392,7 +392,7 @@ swapped-out guests also produced `NVDA is running but not speaking` failures and
 blackouts, a pattern that reads as the workers dying.
 
 So the lease reads available memory and starts only what fits, leaving the rest stopped (their
-correct resting state anyway). `pnpm run doctor` shows the verdict before you start:
+correct resting state anyway). control's `pnpm run doctor` shows the verdict before you start:
 
 ```
 OK  host memory  ~12185 MB available — room for 2 of 3 worker(s)
@@ -591,7 +591,7 @@ scp packages/nvda-worker/src/capture-core.mjs user@vm:C:/Users/user/a11ign/packa
 # Prefer a REBOOT over a task restart. Stop/Start-ScheduledTask silently fails to replace the
 # running process when the guest agent is not ready, and two workers once served stale code for
 # an hour that way. `worker-ctl.sh stop && up` always picks up a pushed file, and
-# `pnpm run worker:code` proves it did.
+# control's `pnpm run worker:code` proves it did.
 ssh user@vm "powershell -NoProfile -Command \"Stop-ScheduledTask -TaskName a11ysrv; Get-Process node -EA SilentlyContinue | Stop-Process -Force; Start-ScheduledTask -TaskName a11ysrv\""
 ```
 
@@ -631,7 +631,7 @@ ignored outright; `worker-ctl.sh stop` uses a guest-agent shutdown and waits for
 **Verify through `/health`, not through `exec`.** The old advice was "hash-check both sides", but
 reading the guest's hash goes through `exec` too — so when `exec` is broken the check returns
 *empty*, not *mismatched*, and empty reads as a flaky tool rather than a failed deploy. A
-verification that shares a failure mode with the action verifies nothing. `pnpm run worker:code`
+verification that shares a failure mode with the action verifies nothing. control's `pnpm run worker:code`
 asks each worker over the channel it serves on, which is reachable exactly when it is usable.
 
 **This shell is zsh.** `for U in $UUIDS` does **not** word-split a scalar — it iterates once with

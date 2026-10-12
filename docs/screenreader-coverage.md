@@ -427,4 +427,4 @@ problem — both returned NVDA's identical "Not in a table cell". Do not spend t
    stayed green.
 5. It only runs against NVDA on the Windows worker, and there is no local test. Deploy, **reboot
    the guest** (a `utmctl exec` restart silently does nothing when the guest agent is not ready),
-   confirm with `pnpm run worker:code`, then capture a real page and read the diagnostics.
+   confirm with control's `pnpm run worker:code`, then capture a real page and read the diagnostics.

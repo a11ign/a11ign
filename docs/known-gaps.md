@@ -108,7 +108,7 @@ own rule: *"the cheap moment to pay it is bundled with any other pending bump"*.
 evidence:check` on each change first — exit 0 means the change is evidence-neutral and the cache survives,
 and neither of these is obviously one or the other.
 
-**Prove each corpus change on ONE subtype before paying for the whole corpus.** `pnpm run lab:pipeline
+**Prove each corpus change on ONE subtype before paying for the whole corpus.** control's `pnpm run lab:pipeline
 --pipeline=verify --only=<ids>` captures just those cases and runs the audits that would see the change.
 A full recapture to discover a fix did not move the number is the wrong order, and this exists to stop it.
 
@@ -321,7 +321,7 @@ would reject evidence rather than describe it.
 **It did not fix the Met Office page**, which is what proved settling is necessary and not sufficient, and
 what §5's DOM count is for.
 
-**DONE.** `npm run worker:code` reports all five workers at `56a39c9a18aeb5c6`, matching this checkout,
+**DONE.** control's `npm run worker:code` reports all five workers at `56a39c9a18aeb5c6`, matching this checkout,
 so the fleet runs both changes; `evidence:check` reported **48 compared, 48 same, 0 drift, 0 changed**.
 Both are evidence-neutral and the 2,122 cached captures survive.
 
@@ -2904,7 +2904,7 @@ same page read `tabs 2, revealedAt 1` from one path and `tabs 8, revealedAt −1
   the reset being offline-proven only, as §43's "BOTH HALVES BUILT" paragraph says.
 - **Answered — `rules:coverage` reporting `1.4.13 … 1 real` rather than `0`.** It was read as
   `15 corpus / 1 real` on 2026-09-10, before the reset fix landed, and #31's merge (#2263) recorded it as not
-  re-read. `orchestrator` then read it after the fix, on the lab (`npm run lab:job -- -e job=rules-coverage`,
+  re-read. `orchestrator` then read it after the fix, on the lab (control's `npm run lab:job -- -e job=rules-coverage`,
   exit 0, at `c7ec09dbfaee`, over 4,564 corpus and 119 real captures), so
   **rules:coverage read 1 real on 2026-09-24** ([#31, 2026-09-24T08:11Z](https://github.com/a11ign/a11ign/issues/31#issuecomment-5810389692)):
 
@@ -3272,7 +3272,7 @@ The one comparison that survives inside a single build is `heading` on the after
 **How many captures this actually costs, across the corpus:**
 
 ```bash
-pnpm run lab:job -e job=full-page-claims      # the VERDICT, on the lab, which owns the corpus
+cd ~/repos/control && pnpm run lab:job -e job=full-page-claims      # the VERDICT, on the lab, which owns the corpus
 pnpm run lab:full-page-claims                    # the same script locally -- a PRE-CHECK only
 ```
 

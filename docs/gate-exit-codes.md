@@ -129,7 +129,7 @@ is the finding, not an omission.
 
 ### `packages/lab/src/gates/dispatch.mjs` (shared infrastructure, not a gate of its own)
 
-`dispatchUnlessLocal` hands a gate to the lab via `pnpm run lab:job` and exits with whatever that returns —
+`dispatchUnlessLocal` hands a gate to the lab via control's `pnpm run lab:job` and exits with whatever that returns —
 **except that a spawn error or a killed child also produces 2**, with its own honest comment ("INCONCLUSIVE
 is the honest verdict for a dispatch that was killed"). So a bare `2` from any gate using this helper is
 ambiguous between three things: the dispatched job's own INCONCLUSIVE (if it happens to use `verdict.ts`),

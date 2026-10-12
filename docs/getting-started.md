@@ -147,7 +147,7 @@ for a working example to copy.
 ## 4. Check you are ready
 
 ```bash
-pnpm run doctor
+cd ~/repos/control && pnpm run doctor
 ```
 
 **A stopped worker is not a problem.** Runs start what they need and stop it again, so
@@ -157,7 +157,7 @@ than trying to get everything running first.
 **If you changed anything under `packages/nvda-worker/src/`, check the workers are running it:**
 
 ```bash
-pnpm run worker:code    # each worker's /health.code vs this checkout; exits 1 if any is stale
+cd ~/repos/control && pnpm run worker:code    # each worker's /health.code vs this checkout; exits 1 if any is stale
 ```
 
 Deploying is push-then-restart and both halves can fail silently — a `utmctl exec` restart does
@@ -236,5 +236,5 @@ enough that the table is faster than reasoning from first principles.
   a run uses as many local workers as the host can hold and puts each one back afterwards.
   Measured 1.90x on two workers, 2.36x on three *on a quiet host* — but a worker VM costs ~7 GB
   of host memory, so three do not fit on a 36 GB Mac that is also your desktop, and
-  over-committing causes failed captures rather than just slow ones. `pnpm run doctor` prints how
+  over-committing causes failed captures rather than just slow ones. control's `pnpm run doctor` prints how
   many will fit. See [`local-worker-vm.md`](./local-worker-vm.md).
