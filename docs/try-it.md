@@ -207,7 +207,7 @@ gh repo view OWNER/REPO --json isPrivate --jq .isPrivate     # must print true
 
 **On a private repository those same four places are visible to everyone who can read the repository**, so keep the test account's data to things that group may see.
 
-**A workflow of your own that logs in belongs in a private repository for the same reason.** The Action refuses an authenticated run on a repository that is not private ([ADR 0038](./adr/0038-authenticated-capture.md)), but the command-line form has no such refusal, so a login workflow on a public repository is not stopped by anything in the tool. The project's own authenticated checks of the Action run in the private `a11ign/auth-capture-check` repository for that reason. The workflow itself is in [the Action's reference](./github-action.md#logging-in-flows-and-login-flow).
+**A workflow of your own that logs in belongs in a private repository for the same reason.** The Action refuses an authenticated run on a repository that is not private ([ADR 0038](./adr/0038-authenticated-capture.md)), and so does the command-line form when it runs inside GitHub Actions. A run from your own machine has no repository event to read, so on a laptop the rule is one you keep yourself. The project's own authenticated checks of the Action run in the private `a11ign/auth-capture-check` repository for that reason. The workflow itself is in [the Action's reference](./github-action.md#logging-in-flows-and-login-flow).
 
 ### 2. A test account, and the secrets
 
