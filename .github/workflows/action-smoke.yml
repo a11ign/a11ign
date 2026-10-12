@@ -1,7 +1,7 @@
 # Does the ACTION work? Nothing verified this before, and the action is the entire adoption path.
 #
-# `capture-regression.yml` runs on Windows and calls the harness directly, re-implementing the action's
-# setup by hand. So the steps in `action.yml` — NVDA install, Speech Viewer off, Edge first-run
+# `a11ign/lab`'s `capture-check.yml` runs on Windows and calls the harness directly, re-implementing the
+# action's setup by hand. So the steps in `action.yml` — NVDA install, Speech Viewer off, Edge first-run
 # suppression, the local scorer — had never once been executed as written, and the two step lists can
 # drift with nothing to notice. A consumer's first experience of this project runs code no test touches.
 #

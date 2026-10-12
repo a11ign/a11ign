@@ -92,7 +92,6 @@ const READ_FILE_TRIGGERS = [
   ".github/PULL_REQUEST_TEMPLATE.md",
   ".github/dependabot.yml",
   ".github/workflows/auto-arm.yml",
-  ".github/workflows/capture-regression.yml",
   ".github/workflows/ci-health.yml",
   ".github/workflows/ci.yml",
   ".github/workflows/consumer-gate.yml",

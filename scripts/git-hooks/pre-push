@@ -4,7 +4,7 @@
 # ## Why a hook and not a habit
 #
 # This project has eight verifications and only two ran automatically: `lint.yml` (lint, typecheck, tests)
-# and `capture-regression.yml`, which is path-filtered. The other six needed a human to remember, and the
+# and the Windows capture workflow (the core's then, `a11ign/lab`'s `capture-check.yml` now), which is path-filtered. The other six needed a human to remember, and the
 # record of what that produces is unambiguous:
 #
 #   - `capture-check.mjs` was required after any change to `capture-core.mjs` and had never been run once,

@@ -6,7 +6,7 @@
 Nothing had been published under the old name, so this is a rename, not a migration.)*
 
 [![ci](https://github.com/a11ign/a11ign/actions/workflows/ci.yml/badge.svg)](https://github.com/a11ign/a11ign/actions/workflows/ci.yml)
-[![capture-regression](https://github.com/a11ign/a11ign/actions/workflows/capture-regression.yml/badge.svg)](https://github.com/a11ign/a11ign/actions/workflows/capture-regression.yml)
+[![capture-check](https://github.com/a11ign/lab/actions/workflows/capture-check.yml/badge.svg)](https://github.com/a11ign/lab/actions/workflows/capture-check.yml)
 [![licence: AGPL-3.0-or-later](https://img.shields.io/badge/licence-AGPL--3.0--or--later-blue)](./LICENSE)
 
 **a11ign drives a real screen reader (NVDA) through a web page and reports the barriers a screen-reader user would hit.** Every finding cites a WCAG criterion and quotes the announcement it rests on, so you can check it yourself.
@@ -298,7 +298,7 @@ reasonable way to try the tool on a machine that is not part of any fleet.
 | you have | do this | what you get |
 |---|---|---|
 | a Windows box | [`src/provisioning/bootstrap-windows-worker.ps1`](https://github.com/a11ign/screenreader-fleet/blob/main/src/provisioning/bootstrap-windows-worker.ps1) in `a11ign/screenreader-fleet` | One idempotent script, then `A11Y_WORKER=http://host:8765` — the same script the bare-metal fleet's own boxes provision from |
-| neither a Windows box nor a Mac to spare | [`capture-regression.yml`](./.github/workflows/capture-regression.yml) | Real NVDA on a GitHub-hosted runner, so a contributor needs no infrastructure at all |
+| neither a Windows box nor a Mac to spare | [`capture-check.yml`](https://github.com/a11ign/lab/blob/main/.github/workflows/capture-check.yml) in `a11ign/lab` | Real NVDA on a GitHub-hosted runner, so a contributor needs no infrastructure at all |
 | a Mac, and nothing else, for a quick trial only | [`docs/local-worker-vm.md`](./docs/local-worker-vm.md) — **deprecated** | A scripted Windows VM: ISO build, unattended install, auto-logon, NVDA provisioning, capture verified — no GUI clicking. Fine for trying the CLI once; not how this project runs its own captures |
 
 Because a Windows guest is never genuinely idle, the pipeline manages it **on demand**: with a local VM and no `A11Y_WORKER` set, a run starts it, captures, and **puts it back exactly as it found it** — stopped stays stopped, paused re-paused, and one you had already started is left running, so a run never shuts down a worker someone else is using. Cold start is 12–15 s. Override with `--after stop|pause|leave|restore`; naming a worker opts out entirely. Between runs, [`worker-ctl.sh`](https://github.com/a11ign/screenreader-fleet/blob/main/src/local-worker/worker-ctl.sh) (`pnpm run worker:ctl`) does `up | pause | stop | status | idle-pause`.
@@ -355,7 +355,7 @@ unit-tested, since a real screen reader on a real desktop is the thing under tes
 | `pnpm run eval` | judge quality against **34 labelled fixtures** — W3C tutorial pages and paired good/bad cases. Runs against our own scorer by default; needs the Python venv, so it cannot run in CI |
 | `pnpm run rules-check` | the deterministic rules in isolation. Exits non-zero on **any** false positive against a conformant page — precision is the entire point of a rule |
 | `pnpm run capture:check --worker=<url>` | the capture half, against a live worker (`a11ign/lab/src/harnesses/capture-check.ts`). Asserts probe *values*, not just that a probe fired — a check that only asserts "it ran" stays green while the evidence is garbage |
-| `capture-regression.yml` | real NVDA on a GitHub-hosted Windows runner |
+| [`capture-check.yml`](https://github.com/a11ign/lab/blob/main/.github/workflows/capture-check.yml) (in `a11ign/lab`) | real NVDA on a GitHub-hosted Windows runner |
 
 **On the numbers.** The suite currently reports full recall on the observable failure cases with a small number of false positives, concentrated in the subjective link-purpose (2.4.4) and descriptive-heading (2.4.6) criteria. Treat that as *promising, not validated*, and read [`docs/METHODOLOGY.md`](./docs/METHODOLOGY.md) before quoting it anywhere: the guards were iteratively tuned against these cases, scoring is single-run with no test-retest interval, and **there is no expert human-agreement baseline yet**. That document sets the bar for "trustworthy enough" *before* measuring against it, and lists what is still missing — deliberately, so the goalposts cannot move.
 
