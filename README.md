@@ -211,11 +211,11 @@ expect from a long marketing page (consent banners, forms), and the four questio
 ### Locally instead
 
 Local runs need a capture worker: a Windows machine running NVDA that you control. Check what you have —
-every failure names its own fix:
+every failure names its own fix. `doctor` is a script of [`a11ign/control`](https://github.com/a11ign/control), so run it from a checkout of that repository:
 
 ```bash
-pnpm run doctor              # VM, worker, page server, judge, unfinished runs
-pnpm run doctor --json    # same, machine-readable
+cd control && pnpm run doctor              # VM, worker, page server, judge, unfinished runs
+cd control && pnpm run doctor --json    # same, machine-readable
 ```
 
 ```bash
@@ -290,8 +290,8 @@ This is not a footnote to the interesting work — it *is* some of the work. Scr
 
 **This project's own worker fleet is bare metal, not a UTM VM.** The local UTM path below was the
 original testing setup and is deprecated for anything beyond a quick single-worker trial — "The UTM is
-deprecated, that was a testing thing" (repository owner, 2026-09-05). See `pnpm run fleet:status`,
-`pnpm run fleet:deploy` and the [`a11ign/screenreader-fleet` README](https://github.com/a11ign/screenreader-fleet#readme) for how
+deprecated, that was a testing thing" (repository owner, 2026-09-05). See control's `pnpm run fleet:status`,
+`pnpm run fleet:deploy` (both in a checkout of [`a11ign/control`](https://github.com/a11ign/control)) and the [`a11ign/screenreader-fleet` README](https://github.com/a11ign/screenreader-fleet#readme) for how
 the real fleet works; the table below is about getting ONE worker of your own running, which is still a
 reasonable way to try the tool on a machine that is not part of any fleet.
 
@@ -311,7 +311,7 @@ comes from ten bare-metal Windows boxes managed by Ansible (`a11ign/control`, pr
 this repository can hand you; the VM route below is what a contributor without one actually gets.
 
 **Scaling past one worker.** Because captures serialise per machine, throughput comes from
-more machines. For this project's own fleet that means more bare-metal boxes (`pnpm run fleet:status`);
+more machines. For this project's own fleet that means more bare-metal boxes (`pnpm run fleet:status` in control's checkout);
 the commands below are the deprecated UTM equivalent, kept for a contributor's own local trial pool:
 
 ```bash
@@ -331,7 +331,7 @@ correct and the conclusion drawn from it was wrong. A worker VM costs the host ~
 desktop. Over-committed, the guests get swapped out from under NVDA: the same page on the same
 worker took **44.5 s with three up against 27.4 s with one**, and the swapped-out guests also
 produced mute-NVDA failures. Ruling the host out because it had CPU to spare cost a day of
-diagnosis, so the pool now sizes itself from `vm_stat`, `pnpm run doctor` prints what will fit, and
+diagnosis, so the pool now sizes itself from `vm_stat`, control's `pnpm run doctor` prints what will fit, and
 `A11Y_MAX_WORKERS=N` overrides it.
 
 **A worker serves one capture at a time.** One machine has one desktop, one foreground window

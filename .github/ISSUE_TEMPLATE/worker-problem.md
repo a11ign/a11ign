@@ -7,7 +7,7 @@ labels: worker
 
 **Check the runbook first.** `docs/nvda-worker-runbook.md` has an error-string → real-cause table, and the
 messages are genuinely misleading — `"NVDA not installed"` usually means a version mismatch, not a missing
-install. `npm run doctor` names its own fix for most environment problems.
+install. `pnpm run doctor`, run in a checkout of `a11ign/control`, names its own fix for most environment problems.
 
 **Two states that look broken and are not:**
 
@@ -15,7 +15,7 @@ install. `npm run doctor` names its own fix for most environment problems.
 - **Every capture returning 429** means the worker is *wedged*, not dead — a previous capture hung. It
   recovers itself on the hard timeout.
 
-**What `npm run doctor` says:**
+**What `pnpm run doctor` says (in a checkout of `a11ign/control`):**
 
 ```
 paste here
