@@ -4,5 +4,6 @@
   "unclaimed-blocker-cleared": "run",
   "row-call-count-signal": "run",
   "ready-rows-untiered": "run",
-  "ready-queue-empty": "run"
+  "ready-queue-empty": "run",
+  "row-off-board": "run"
 }
