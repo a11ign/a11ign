@@ -15,7 +15,7 @@
   "_triage": "Jev (TypeSafe) as an OPTIONAL reader of wake orders (#4384): `provider` is `jev` or `none`, and an absent block, `none`, or a key file that cannot be read all behave as before. `keyPath` is a path, never the key. It routes nothing yet: the wake path is row B's.",
   "triage": { "provider": "jev", "keyPath": "/home/agent/.config/typesafe/key", "minConfidence": 0.7 },
   "_workers": "The spawned-seat flags (a11ign#5145). `haikuBrief` is read by `haikuBriefEnabled` in a11ign/agent-org's `src/haiku-brief.ts` from THIS file only, not from `project.json`, so a Haiku seat's first order carries the brief only when it is set here. Revert: set it `false`.",
-  "workers": { "haikuBrief": true },
+  "workers": { "haikuBrief": true, "orchestratorOneShot": true, "ceoOneShot": false },
   "_events": "How the gate learns of changes (a11ign#5043), and the last mile of the feed (a11ign#5197). `source` stays `poll` until a11ign#5168 flips it: the funnel and the receiver run FIRST, so the feed is proven live before the gate reads it. `tunnel: tailscale-funnel` serves the receiver's loopback `port` at `publicUrl` over Tailscale Funnel, as the `a11ign-event-tunnel` unit `host:install` writes; the scheduler App's webhook (a11ign-scheduler) posts there, signed with the secret in `secretPath` (mode 600, created by `node src/event-tunnel.ts register`, never printed). Funnel's port 443 serves ONE path here; the trace pages stay on 8443, tailnet-only. REVERT: `\"tunnel\": \"none\"` and `agent-org host:install` (the unit is removed and its path leaves Funnel), then the chairman sets the App's webhook inactive in its settings.",
   "events": {
     "source": "poll",
