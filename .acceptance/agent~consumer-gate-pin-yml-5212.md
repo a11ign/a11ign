@@ -9,6 +9,8 @@ platform: the reader's own add-only rule and the existing sweep's dated-name idi
 Acceptance:
 pnpm exec rstest run --config=scripts/rstest/rstest.config.ts --include packages/guards/src/consumer-gate-pin-needed.test.ts
 
+History: full
+
 Mutation: in `consumer-gate-pin-needed.test.ts`, `acceptanceFileFault` is run over the real repair script (null) and over four broken copies, each asserted to be applied and refused: the PUT of the acceptance file pointed at `$FILE_PATH` (no write), the sha dropped from the name (fixed name), the `[ "$changed" = ... ]` check replaced by `true`, and the body's `Acceptance file:` line replaced by an `Acceptance:` block (the old workflow's body).
 
 Closes a11ign/a11ign#5212
