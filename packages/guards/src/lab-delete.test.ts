@@ -289,6 +289,45 @@ test("POSITIVE CONTROL: a script that lays, a tracked declaration, a tracked lay
   assert.deepEqual(layingRefusals({ ...good, gitignore: `/${asClass(DEPARTED_PATH)}\n` }), [`.gitignore still ignores /${asClass(DEPARTED_PATH)}, a laid copy nothing lays any more`]);
 });
 
+// ---- 5b. no live file names any departed layer's directory ----------------------------------------------------------------
+
+/** The four directories a layer was laid at. Built from names, so this file does not spell the paths it proves absent from the live tree. */
+const LAYER_DIRECTORIES = ["lab", "control", "nvda-worker", "worker-fleet"];
+/** The row's Acceptance, as a pattern: the same alternation, with no boundary, so a longer name is found exactly as `git grep -E` finds it. */
+const LAYER_PATH = new RegExp(`packages/(?:${LAYER_DIRECTORIES.join("|")})`);
+/** Record, not live: `docs`, the acceptance files, changesets and changelogs, which the Acceptance excludes by pathspec. */
+const RECORD = /^(?:docs\/|\.acceptance\/|\.changeset\/)|(?:^|\/)CHANGELOG\.md$/;
+
+function namingRefusals(files: Record<string, string>): string[] {
+  return Object.entries(files).filter(([path, text]) => !RECORD.test(path) && LAYER_PATH.test(text)).map(([path]) => `${path} names a departed layer's directory`);
+}
+
+test("no live file of the core names a layer's directory: the row's Acceptance, over every tracked file", () => {
+  const files = Object.fromEntries(tracked(REPO_ROOT).map((path) => [path, readFileSync(join(REPO_ROOT, path), "utf8")]));
+  assert.ok(Object.keys(files).length > 100, "the tracked list is nearly empty: the reader is not looking at the tree");
+  assert.deepEqual(namingRefusals(files), []);
+});
+
+test("POSITIVE CONTROL: a live file naming any of the four directories is REFUSED naming it; record and a file that names none are not", () => {
+  const [lab, control, worker, fleet] = LAYER_DIRECTORIES.map((name) => `packages/${name}`);
+  assert.deepEqual(namingRefusals({
+    "package.json": `{ "scripts": { "x": "node ${lab}/scripts/a.ts" } }`,
+    "scripts/b.ts": `// reads ${control}/ansible/\n`,
+    ".github/workflows/c.yml": `run: node ${worker}/src/x.ts\n`,
+    "packages/guards/src/d.test.ts": `const p = "${fleet}/src/doctor.ts";\n`,
+    "docs/runbook.md": `run ${lab}/scripts/a.ts\n`,
+    ".acceptance/agent~x-1.md": `${control}\n`,
+    ".changeset/a.md": `${worker}\n`,
+    "packages/other/CHANGELOG.md": `${fleet}\n`,
+    "scripts/clean.ts": "// names nothing\n",
+  }), [
+    "package.json names a departed layer's directory",
+    "scripts/b.ts names a departed layer's directory",
+    ".github/workflows/c.yml names a departed layer's directory",
+    "packages/guards/src/d.test.ts names a departed layer's directory",
+  ]);
+});
+
 // ---- 6. what runs a test of the old directory by path is tracked, and every relocation is real --------------------------
 
 /** Quoted or bare repo paths of tests under the departed directory that a workflow, hook or script names. */
