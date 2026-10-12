@@ -133,7 +133,7 @@ the pair that can be compared a month on is this one.
 
 ### A month on
 
-Set `Not-before: 2026-11-10` on #4449. Repeat, unchanged: the command above, `pnpm run fleet:status`, and the per-box
+Set `Not-before: 2026-11-10` on #4449. Repeat, unchanged: the command above, control's `pnpm run fleet:status`, and the per-box
 `/health` read, and write the two sets of numbers beside the ones above.
 
 | | 2026-10-10 | the month-later reading |
@@ -155,5 +155,5 @@ For the record, in the order it happened on 2026-10-10:
 - `fleet:provision --serial=0` for all 15 (stopped at the Edge step), then again with `--allow-edge-downgrade` (workers
   7, 8, 9 failed), then for the 12 that could finish.
 - `fleet:patch --apply`: worker 2, then all 15.
-- `pnpm run fleet:patch-schedule`: the `a11y-fleet-patch-window` timer is installed and enabled, next firing
+- control's `pnpm run fleet:patch-schedule`: the `a11y-fleet-patch-window` timer is installed and enabled, next firing
   2026-10-11T02:00:00Z.

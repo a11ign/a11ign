@@ -453,7 +453,7 @@ firewall or a different local setup will say something else.
 | a Windows machine already | [`docs/getting-started.md`](./getting-started.md) — about twenty minutes, then `A11Y_WORKER=http://<that-machine>:8765` |
 | neither | a Windows VM, 1.5–2 hours from scratch. **Take the Action instead** unless you specifically want the local path |
 
-`pnpm run doctor` reports what this machine has and what each gap needs. It is read-only — it never starts
+From a checkout of `a11ign/control`, `pnpm run doctor` reports what this machine has and what each gap needs. It is read-only — it never starts
 or stops anything — so it is safe to run before you have decided anything.
 
 **One target needs none of that: a PDF.** Point the CLI at a URL whose path ends in `.pdf` (any case; a `?query` or `#fragment` after it does not hide it) — `pnpm run witness https://example.com/report.pdf` — and it scans the document's accessibility tag tree, with no worker, no browser and no NVDA, so it runs on the Mac or Linux box that got `ECONNREFUSED` above. What comes back is `pdf:` findings, in a *PDF layer* section (the `pdf` field under `--json`): `pdf-untagged`, `pdf-missing-lang` and `pdf-figure-no-alt`. **It does not run a screen reader over the document:** it reads the tag tree, the structure a screen reader would be handed, and does not say what one would announce.

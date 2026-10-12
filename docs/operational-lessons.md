@@ -25,7 +25,7 @@ The last three are the same rule pointed at three different sources, and the thi
 indistinguishable, from inside, from somebody else's job.
 
 ```bash
-pnpm run lab:status -e job=<name>       # ONE run: systemd's view, the journal bounded by
+cd ~/repos/control && pnpm run lab:status -e job=<name>       # ONE run: systemd's view, the journal bounded by
                                         # InvocationID, and the run's own progress file
 ```
 
@@ -462,7 +462,7 @@ Two corollaries earned the same day:
 
 **And this is what the promotion gate is for.** Held-out acceptance said 90/90, 0 FP, 0 FN. Grouped
 development said precision 0.841 over 2,419 records. Both true: acceptance is 104 records and cannot resolve
-a 1.4% false-positive rate. `npm run lab:job -- -e job=promote` runs the candidate gate where the weights
+a 1.4% false-positive rate. control's `npm run lab:job -- -e job=promote` runs the candidate gate where the weights
 and the code both live, refuses on the candidate's own reports, and writes nothing when it refuses.
 
 **CONFIRMED by the retrain, and it cost nothing.** Removing `vague_link_present` as a model input took
@@ -1030,7 +1030,7 @@ theoretical; a second session able to dispatch one of its own (#1817) makes it a
 mid-capture on, through the one guard built to bypass the capturing-worker check. `recover.yml` and
 `restart.yml` each now refuse in their own first task unless resolved to exactly one host
 (`ansible_play_hosts_all | length == 1`, the same shape `os-rollback.yml` already used for a different
-reason); `fleet-playbook.mjs`'s `osRollbackRefusal` refuses `npm run fleet:recover` upstream of that for the
+reason); `fleet-playbook.mjs`'s `osRollbackRefusal` refuses control's `npm run fleet:recover` upstream of that for the
 same reason, but `restart.yml` has no JS entry point to refuse it upstream at all — it is dispatched as a
 bare `ansible-playbook restart.yml`, so the in-play assert is the only guard that sees every call.
 

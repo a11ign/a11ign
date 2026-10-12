@@ -9,6 +9,10 @@ where you should read first. This file is the other half: the complete surface, 
 each command refuses. Nothing here is a second copy of a behaviour — where a command can describe itself,
 this file tells you to ask it rather than restating an answer that could drift.
 
+**Where the commands run.** The `lab:*` and `fleet:*` scripts, `worker:code` and `doctor` left this repository's
+`package.json` for `a11ign/control` (#5170, #5086): run them from a checkout of it (`cd ~/repos/control`). In the
+blocks below, a line starting `control$ ` is that prompt; a line without it still runs from this checkout.
+
 ## The one rule
 
 **There is no shell.** `ssh root@…`, `pct exec` and `scp` are not how this is operated, and were the source
@@ -25,9 +29,9 @@ command, because any one of them missing sends you back to the shell.
 ## Run something on the lab
 
 ```bash
-pnpm run lab:job -e job=<name> [-e <param>=<value> …] [-e ref=<git-ref>]
-pnpm run lab:job                                  # no job: refuses, and names every one it has
-pnpm run lab:job -e job=<name> -e describe=1   # what this job runs, and what it takes
+control$ pnpm run lab:job -e job=<name> [-e <param>=<value> …] [-e ref=<git-ref>]
+control$ pnpm run lab:job                                  # no job: refuses, and names every one it has
+control$ pnpm run lab:job -e job=<name> -e describe=1   # what this job runs, and what it takes
 ```
 
 `-e ref=` runs the job at a named commit. It is **refused before anything expensive starts** if the ref is
@@ -41,7 +45,7 @@ A job takes only the parameters its own command reads, and the gate derives that
 than from a list beside it. **Ask the job:**
 
 ```bash
-$ pnpm run lab:job -e job=capture-only -e describe=1
+control$ pnpm run lab:job -e job=capture-only -e describe=1
 capture-only — reads only; REQUIRES only. Budget 3600s.
 Runs /usr/bin/npm run training:capture -- --only={{ only }}
 ```
@@ -69,7 +73,7 @@ any other route to the box, which an in-process flag could not.
 
 ### The catalogue
 
-36 jobs. `pnpm run lab:job` with no arguments prints the current list; these are the groups.
+36 jobs. control's `pnpm run lab:job` with no arguments prints the current list; these are the groups.
 
 | | |
 |---|---|
@@ -85,12 +89,12 @@ any other route to the box, which an in-process flag could not.
 ## Watch it, read it, stop it
 
 ```bash
-pnpm run lab:status                      # every a11y-job-* unit and its state
-pnpm run lab:status -e job=<name>     # systemd's view + the journal + the run's own progress file
-pnpm run lab:log    -e job=<name>     # the job's OWN OUTPUT, unwrapped — bytes, not YAML
-pnpm run lab:fetch  -e artifact=<name> [-e out=<model>]   # a report, as a file
-pnpm run lab:stop   -e job=<name>     # end one deliberately; reports what it discards first
-pnpm run lab:reset  [-e ref=<git-ref>] [-e remove=<path>]    # unblock a pull the lab's own output blocks
+control$ pnpm run lab:status                      # every a11y-job-* unit and its state
+control$ pnpm run lab:status -e job=<name>     # systemd's view + the journal + the run's own progress file
+control$ pnpm run lab:log    -e job=<name>     # the job's OWN OUTPUT, unwrapped — bytes, not YAML
+control$ pnpm run lab:fetch  -e artifact=<name> [-e out=<model>]   # a report, as a file
+control$ pnpm run lab:stop   -e job=<name>     # end one deliberately; reports what it discards first
+control$ pnpm run lab:reset  [-e ref=<git-ref>] [-e remove=<path>]    # unblock a pull the lab's own output blocks
 ```
 
 **`lab:status` is the authoritative source, and hand-rolling `journalctl` instead of running it is itself a
@@ -126,8 +130,8 @@ it **reports** rather than aborting on, and `-e remove=<path>` is the deliberate
 ## Run several in order
 
 ```bash
-pnpm run lab:pipeline --list
-pnpm run lab:pipeline --pipeline=<name> [--ref=<git-ref>] [--only=<case-ids>]
+control$ pnpm run lab:pipeline --list
+control$ pnpm run lab:pipeline --pipeline=<name> [--ref=<git-ref>] [--only=<case-ids>]
 ```
 
 | pipeline | fleet? | what |
@@ -161,12 +165,13 @@ the full run, so nothing it produces is thrown away when you commit to `full`.
 ## The fleet
 
 ```bash
-pnpm run fleet:status                    # what every box is doing, right now
-pnpm run fleet:deploy                    # pull + install + restart + PROVE it
-pnpm run fleet:provision [--serial=0]    # the ROLE: NVDA, the Edge pin, policies, the provision stamp
-pnpm run worker:code                     # each worker's /health.code vs this checkout
+control$ pnpm run fleet:status                    # what every box is doing, right now
+control$ pnpm run fleet:deploy                    # pull + install + restart + PROVE it
+control$ pnpm run fleet:provision [--serial=0]    # the ROLE: NVDA, the Edge pin, policies, the provision stamp
+control$ pnpm run worker:code                     # each worker's /health.code vs this checkout
 eval "$(pnpm run --silent fleet:env)"    # A11Y_WORKERS from inventory.yml
-pnpm run fleet:sleep / fleet:wake / fleet:tailscale / fleet:normalise / fleet:discover
+control$ pnpm run fleet:sleep / fleet:wake / fleet:tailscale / fleet:discover
+pnpm run fleet:normalise
 ```
 
 The fleet is defined **once**, in `inventory.yml`. Three things are worth knowing before you type any of
@@ -196,7 +201,7 @@ reader to run `--write-baseline` when the flag is `--update-baseline`, and `--on
 covered 1 of that family's 7 cases. Neither produced an error; both produced a plausible wrong answer.
 
 ```
-$ pnpm run lab:pipeline --pipeline=gates --refs=main
+control$ pnpm run lab:pipeline --pipeline=gates --refs=main
   npm run lab:pipeline: unknown flag --refs — did you mean --ref?
   It takes: --list --only --pipeline --ref
   Refusing rather than ignoring it: an ignored flag runs the default and reports success.
@@ -216,12 +221,12 @@ that is neither guarded nor on it fails that test, so the gap stays countable ra
 play succeeded, **2** a task failed — which includes every refusal above. `lab:pipeline` exits **0** on a
 clean run, **2** on a refused or failed stage, and names the stage.
 
-**Never pipe a command whose exit status you intend to read.** `pnpm run lab:pipeline … | tail` reports
+**Never pipe a command whose exit status you intend to read.** control's `pnpm run lab:pipeline … | tail` reports
 `tail`'s status, and a real `ANSIBLE_EXIT=2` has read as success here twice. Redirect to a file, then read
 both the file and the status:
 
 ```bash
-pnpm run lab:pipeline --pipeline=gates > /tmp/gates.log 2>&1; echo "EXIT=$?"
+control$ pnpm run lab:pipeline --pipeline=gates > /tmp/gates.log 2>&1; echo "EXIT=$?"
 ```
 
 And **read the echoed value** — appending `; echo "EXIT=$?"` makes the compound command's status the
@@ -240,7 +245,7 @@ run as exit 0, because the shell's last statement had succeeded.
 ### What state is the CORPUS in — `lab:inventory`
 
 ```bash
-pnpm run lab:job -e job=inventory     # the authoritative answer, on the box that holds the corpus
+control$ pnpm run lab:job -e job=inventory     # the authoritative answer, on the box that holds the corpus
 pnpm run lab:inventory                   # against a local copy; it SAYS it is a copy
 pnpm run lab:inventory --json
 ```
@@ -282,7 +287,7 @@ reproducible: `browserVersion` is a cache key precisely because Edge announces d
 releases, so evidence taken under Edge 151 cannot be recreated now 152 ships.
 
 ```bash
-pnpm run lab:job -e job=corpus-snapshot        # archive ON THE LAB, beside the corpus
+control$ pnpm run lab:job -e job=corpus-snapshot        # archive ON THE LAB, beside the corpus
 pnpm run lab:fetch -e artifact=corpus-archive  # bring the newest one to the control plane
 pnpm run corpus:release --archive=runs/fetched/<name>.tar.gz   # upload, then DOWNLOAD IT BACK
 pnpm run corpus:release --verify=corpus-<stamp>               # is an old release still restorable
@@ -310,11 +315,11 @@ one disk converts a known risk into an assumed safety.
 Three commands answer "what happened", and the third was missing for months:
 
 ```bash
-pnpm run lab:status -e job=<name>   # systemd's view, the journal, and the run's own progress file
-pnpm run lab:log -e job=<name>      # the job's OWN OUTPUT, unwrapped — bytes, not YAML
-pnpm run lab:fetch -e artifact=<name>   # a report, as a file
-pnpm run lab:reset                         # what is dirty in the lab checkout, and is it safe to discard
-pnpm run lab:reset -e apply=true        # discard it — ONLY files origin already has
+control$ pnpm run lab:status -e job=<name>   # systemd's view, the journal, and the run's own progress file
+control$ pnpm run lab:log -e job=<name>      # the job's OWN OUTPUT, unwrapped — bytes, not YAML
+control$ pnpm run lab:fetch -e artifact=<name>   # a report, as a file
+control$ pnpm run lab:reset                         # what is dirty in the lab checkout, and is it safe to discard
+control$ pnpm run lab:reset -e apply=true        # discard it — ONLY files origin already has
 ```
 
 **`lab:reset` exists because promoting leaves the lab dirty and every later job then refuses to pull.**

@@ -135,7 +135,7 @@ once the primary is done. `.pnpmfile.cjs`, which refused a pnpm install through 
 revert, and the link resolves to the npm tree.
 
 **The lab** (`tasks/run-job.yml`): after the revert it runs `npm ci` again on a changed pull. `npm ci` removes
-the old tree itself, so no manual step. Confirm with a `lab:job` that installs (`npm run lab:status`).
+the old tree itself, so no manual step. Confirm with a `lab:job` that installs (control's `npm run lab:status`).
 *Not rehearsed on the lab host* (this row has Fleet: No); the mechanism is the `npm ci` row above.
 
 **A Windows worker** (`deploy.yml` and the role's `nvda.yml`): the reverted step is

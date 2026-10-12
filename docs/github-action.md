@@ -195,7 +195,7 @@ path is now the opt-in one.
 ## Testing it without spending runner minutes
 
 ```bash
-pnpm run doctor                  # whatever worker you have — fleet, or a local VM
+cd ~/repos/control && pnpm run doctor                  # whatever worker you have — fleet, or a local VM
 ./packages/lab/scripts/action-dry-run.sh https://example.com "Complete the checkout"
 FAIL_ON=blocker ./packages/lab/scripts/action-dry-run.sh ...      # check the exit contract
 ```

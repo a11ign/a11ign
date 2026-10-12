@@ -8,8 +8,8 @@ was fixed — counted into the "captures this scored" spread, where they made a 
 Measured on the authoritative corpus, 2026-09-07: **24 orphans** against 99 declared pages.
 
 ```bash
-pnpm run lab:job -e job=prune-orphan-captures                  # report; deletes nothing
-pnpm run lab:job -e job=prune-orphan-captures -e apply=true    # delete the RETIRED ones only
+cd ~/repos/control && pnpm run lab:job -e job=prune-orphan-captures                  # report; deletes nothing
+cd ~/repos/control && pnpm run lab:job -e job=prune-orphan-captures -e apply=true    # delete the RETIRED ones only
 pnpm run corpus:prune-orphans                                     # against a local copy; it is only as
                                                                  # fresh as your last sync
 ```

@@ -6,7 +6,7 @@ context assumed.
 
 > **`utmctl` appears throughout, and UTM is DEPRECATED — a testing path, not the fleet.** This project
 > captures on ten bare-metal Windows machines (`inventory.yml`), which have no `utmctl` and are reached by
-> SSH; `pnpm run fleet:status` is the equivalent of every `utmctl` status command below, and `fleet:deploy`
+> SSH; control's `pnpm run fleet:status` is the equivalent of every `utmctl` status command below, and `fleet:deploy`
 > — never `worker:deploy` — is how code reaches them. **The `utmctl` procedures are kept and are still
 > correct for a local VM**, which remains a reasonable option for a single contributor on a Mac. What has
 > changed is which one this project exercises daily, and therefore which one is likely to be right when
@@ -144,7 +144,7 @@ Cheapest first — stop at the first failure.
 ```bash
 # 1. is it up?
 curl http://<worker>:8765/health   # -> includes code and environment versions
-#   `code` identifies the DEPLOYED code. `pnpm run worker:code` compares it against your checkout
+#   `code` identifies the DEPLOYED code. control's `pnpm run worker:code` compares it against your checkout
 #   and exits 1 on a mismatch — the only deploy check that does not go through `utmctl exec`.
 #   `environment` is reported by the worker itself: NVDA, Edge, guidepup, Node, Windows,
 #   and workerCode. Capture responses carry the same object for dataset provenance.
@@ -222,7 +222,7 @@ The error text is often actively misleading. This table is the shortcut.
 | `NVDA not installed` | **rarely** a missing install. Thrown by `NVDAClient.connect` when the speech-channel cert is absent — usually guidepup too old for this NVDA | upgrade guidepup ≥0.29.2 |
 | `NVDA is not supported` | `getNVDAInstallationPath()` found nothing at guidepup's cache path | `npx @guidepup/setup install nvda` from the repo |
 | `NVDA is running but not speaking` | **should now be rare — the speech channel is probed before every capture.** The cause: guidepup reaches NVDA over a TLS socket (NVDA Remote, 127.0.0.1:6837) and speech is *pushed* back over it, so when that socket goes half-open every keystroke still succeeds and nothing is ever spoken. Guidepup reconnects only on a socket `error`, which a half-open connection never raises — no keepalive, no read timeout, no `reconnect()`. Previously NVDA answers keystrokes but its speech channel has died. It is stochastic: across the corpus ~45% of NVDA instances survive to the 25-capture recycle, while in a tight loop on a swapping host lifespans of 5-9 were measured. Reuse is causal (with `reuseScreenReader:false`, 8 of 8 ran clean) | **nothing to do.** The worker retries once itself on a fresh NVDA before answering, so the caller never sees it. Do **not** reboot the guest, and do **not** lower `MAX_CAPTURES_PER_NVDA` — most instances reach 25, so recycling early costs more than it saves. Watch `/health.vitals.recoveries`: if it climbs, suspect host memory first |
-| every capture on a worker slow (~45s) *and* mute failures *and* `/health` blackouts | **the host is out of memory, not the worker degrading.** A worker VM costs the host ~7 GB, not its configured 4096 MB; guests get swapped out from under NVDA. This exact pattern was misread as "the workers are dying" for a day | `pnpm run doctor` prints what the host can hold. Run fewer workers, or `A11Y_MAX_WORKERS=N`. Note the host's own load counts — a `pnpm test` on the Mac competes with the guests |
+| every capture on a worker slow (~45s) *and* mute failures *and* `/health` blackouts | **the host is out of memory, not the worker degrading.** A worker VM costs the host ~7 GB, not its configured 4096 MB; guests get swapped out from under NVDA. This exact pattern was misread as "the workers are dying" for a day | control's `pnpm run doctor` prints what the host can hold. Run fewer workers, or `A11Y_MAX_WORKERS=N`. Note the host's own load counts — a `pnpm test` on the Mac competes with the guests |
 | 0 phrases, `afterStart.lastSpoken` empty, no error | Three candidates, in order of likelihood: **`ForegroundLockTimeout` is not 0 in the live session** (Edge cannot take focus, so there is nothing to read); no interactive desktop; or a modal dialog freezing the session | run `packages/worker-fleet/src/provisioning/apply-foreground-lock-timeout.ps1` **in the interactive session** and re-capture; otherwise log in at the console and dismiss the dialog *there* — it never surfaces over SSH |
 | every probe `after` is `"NVDA Speech Viewer"` | Speech Viewer enabled; probes record that window, not the page | patch `nvda.ini` |
 | phantom `"Welcome to Microsoft Edge"` / `"Sign in to sync data"` | fresh Edge profile; quick-nav escaped an empty document into browser UI | Edge policies + durable profile dir |
@@ -504,7 +504,7 @@ The signal is now acted on, not just printed:
 
 - `/health.vitals.recoveries` — faults the worker papered over. The one number that rises while
   everything still appears to work.
-- `pnpm run doctor` reports `DEGRADED` with the repair command.
+- control's `pnpm run doctor` reports `DEGRADED` with the repair command.
 - **A run retires a degraded worker automatically** (`shouldRetireWorker`): it stops taking cases, nothing
   is requeued (its captures were fine), and the run summary names it. Never the last worker standing —
   a slow run beats no run.
@@ -623,7 +623,7 @@ Two related facts worth not rediscovering:
   `exec` is silent, the guest has not finished logging on; wait rather than diagnose.
 - **`server.log` persists on the guest**, and it is the record of a worker's death — still there after
   it comes back, which is the only way to read a fault that killed it.
-  - **On the bare-metal fleet, pull it while the worker is down: `pnpm run fleet:logs`.** Ansible reaches
+  - **On the bare-metal fleet, pull it while the worker is down: control's `pnpm run fleet:logs`.** Ansible reaches
     the box over SSH whether or not the worker process is running, and `collect-logs.yml` takes
     `server.log`, one rotation back, and NVDA's two logs into `runs/worker-logs/`. **`/diagnostics`
     cannot serve this case** — it is an endpoint ON the worker, so it answers only when the worker does.

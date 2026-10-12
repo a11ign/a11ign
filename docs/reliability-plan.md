@@ -498,7 +498,7 @@ at 0.2.0, and the 2026-10-03 version commit then wrote the changelogs: each of t
 version of …"* line (`grep -c`), under its `0.2.x` heading, and none has a `## 0.1.0` section. **What a first changelog says was a call about
 what it says, not a tidy-up** — the same reason the original item 3 was a decision — and the changelogs now say what #3347 chose.
 
-**Before a real publish, run the full gate on the lab** — `pnpm run lab:job -e job=release-gate`. The
+**Before a real publish, run the full gate on the lab** — control's `pnpm run lab:job -e job=release-gate`. The
 workflow can only prove 5 of its 13 stages, and since #3131 nobody asserts the other eight on a publish
 (`release-gate-scope.ts` says so in the log; #3136 reads them by commit sha): they pass somewhere a corpus and
 a venv exist, or nobody has looked.
@@ -537,7 +537,7 @@ and it is the same conversation. Flagged so it is not discovered mid-publish. **
 made it: one entry, with the lineage folded in as a table.** See item 3 of the decision list above for
 what is live now.
 
-**Before a real publish, run the full gate on the lab** — `pnpm run lab:job -e job=release-gate`. The
+**Before a real publish, run the full gate on the lab** — control's `pnpm run lab:job -e job=release-gate`. The
 workflow can only prove 5 of its 13 stages; since #3131 nobody asserts the other eight on a publish
 (`release-gate-scope.ts` says so in the log; #3136 reads them by commit sha), so they pass somewhere a corpus
 and a venv exist, or nobody has looked.
