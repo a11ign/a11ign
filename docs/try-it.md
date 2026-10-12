@@ -207,6 +207,8 @@ gh repo view OWNER/REPO --json isPrivate --jq .isPrivate     # must print true
 
 **On a private repository those same four places are visible to everyone who can read the repository**, so keep the test account's data to things that group may see.
 
+**A workflow of your own that logs in belongs in a private repository for the same reason.** The Action refuses an authenticated run on a repository that is not private ([ADR 0038](./adr/0038-authenticated-capture.md)), but the command-line form has no such refusal, so a login workflow on a public repository is not stopped by anything in the tool. The project's own authenticated checks of the Action run in the private `a11ign/auth-capture-check` repository for that reason. The workflow itself is in [the Action's reference](./github-action.md#logging-in-flows-and-login-flow).
+
 ### 2. A test account, and the secrets
 
 Make a **dedicated account** on a staging copy of the app, with **no MFA**. (A site that publishes a demo account for trying things, with no MFA, can stand in for a trial: its published username and password are used the same way. Measured: `tomsmith`, `standard_user` and `secret_sauce` each passed the length and ordinary-word checks.) Its username and its password must each be **at least 8 characters and not an ordinary word** (`a11y-audit-7f3c`, not `admin` or `test`): a shorter value is refused (`auth-credential-too-short`), because hiding it from the output would rewrite your page's own words.
