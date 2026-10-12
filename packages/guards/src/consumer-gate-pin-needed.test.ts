@@ -241,7 +241,44 @@ test("#4331: the regeneration runs the generator, refuses any change but consume
   const pushStep = workflow.jobs.repair.steps.find((s) => s.env?.BRANCH !== undefined);
   assert.equal(pushStep?.env?.BRANCH, REGENERATION_BRANCH, "the workflow and the in-flight reading name different branches");
   assert.match(pushStep?.run ?? "", /Closes: none -- /, "the pull request it opens declares Closes");
-  assert.match(pushStep?.run ?? "", /^\s*Acceptance:$/m, "and an Acceptance section");
+});
+
+/**
+ * #5212: why the pull request carries its own `.acceptance/` file. The reader reads the body only for an exempt author and `octo-sts[bot]` is not
+ * one, so a body-only `Acceptance:` was `ACCEPTANCE: MISSING` on a11ign#5210. It counts only a file ADDED against `main` (`--diff-filter=A`), and
+ * the previous repair's file stays on `main` until the sweep: a FIXED name is added once and never again, so the name must carry the commit.
+ * Returns the first thing the script gets wrong, or null; the real script is read through it and so are three broken ones, so a reader that always
+ * answers null (or always a fault) fails here.
+ */
+function acceptanceFileFault(script: string): string | null {
+  const name = script.match(/acceptance_path="(\.acceptance\/[^"]+\.md)"/)?.[1];
+  if (name === undefined) return "no acceptance_path under .acceptance/ is written";
+  if (!name.includes("${PIN") || !name.startsWith(".acceptance/automation~consumer-gate-pin-")) return `the name '${name}' does not carry the commit, so it is added once and never again`;
+  if (!/gh api -X PUT "repos\/\$REPO\/contents\/\$acceptance_path"[\s\S]*?-f branch="\$BRANCH"/.test(script)) return "the file is never written onto the repair branch";
+  if (!/compare\/\$\{PIN\}\.\.\.\$\{BRANCH\}[\s\S]*?\[ "\$changed" = "\$acceptance_path \$FILE_PATH" \]/.test(script)) return "the branch is not checked to differ by those two paths alone";
+  if (!/^\s*Acceptance file: \$\{acceptance_path\}$/m.test(script)) return "the pull request body does not point at the file";
+  return null;
+}
+
+test("#5212: the repair writes its own .acceptance/ file, named for the commit, checks the branch differs by that file and consumer-gate.yml alone, and the body points at it", () => {
+  const script = workflow.jobs.repair.steps.find((s) => s.env?.BRANCH !== undefined)?.run ?? "";
+  assert.equal(acceptanceFileFault(script), null);
+  assert.match(script, /cat > "\$acceptance_file" <<EOF\n\s*[^\n]*\n\n\s*Acceptance:\n\s*pnpm exec rstest run [^\n]*generate-consumer-gate\.test\.ts\n\s*EOF/, "the file holds the Acceptance: command the body used to");
+  const body = script.slice(script.indexOf('cat > "$body_file"'));
+  assert.doesNotMatch(body, /^\s*Acceptance:$/m, "an Acceptance: block in the body is the deprecated fallback (ADR 0044), and a second source");
+  assert.match(body, /Closes: none -- /, "the body keeps Closes");
+});
+
+test("#5212: THE OLD WORKFLOW FAILS IT -- a repair that writes only consumer-gate.yml, one with a fixed name, and one that never checks the paths are each refused", () => {
+  const script = workflow.jobs.repair.steps.find((s) => s.env?.BRANCH !== undefined)?.run ?? "";
+  const withoutWrite = script.replace(/gh api -X PUT "repos\/\$REPO\/contents\/\$acceptance_path"/, 'gh api -X PUT "repos/$REPO/contents/$FILE_PATH"');
+  const fixedName = script.replace("consumer-gate-pin-${PIN:0:12}.md", "consumer-gate-pin.md");
+  const unchecked = script.replace('[ "$changed" = "$acceptance_path $FILE_PATH" ]', "true");
+  const oldBody = script.replace("Acceptance file: ${acceptance_path}", "Acceptance:");
+  for (const [broken, variant] of [[withoutWrite, "no write"], [fixedName, "fixed name"], [unchecked, "no path check"], [oldBody, "body without the pointer"]] as const) {
+    assert.notEqual(broken, script, `${variant}: the mutation did not apply, so it proves nothing`);
+    assert.notEqual(acceptanceFileFault(broken), null, `${variant}: accepted`);
+  }
 });
 
 test("#4374: what the minting job was handed is shape-checked before it is written, and the write is the contents API on the repair branch", () => {

@@ -13,8 +13,10 @@ name: consumer-gate-pin
 #   regenerate  runs `node scripts/generate-consumer-gate.ts`, REFUSES the run unless `consumer-gate.yml` is the only file that changed, and
 #               uploads that one file. It holds no `id-token`: it is the job that runs repository and third-party code (see below).
 #   repair      mints the token, shape-checks the uploaded file, force-moves ONE branch (`automation/consumer-gate-pin`, so a second `action.yml`
-#               change updates the open repair and never opens a second) to this commit, writes the file onto it and opens the pull request if
-#               none is open. `auto-arm.yml` arms it like any other non-draft pull request: it meets the queue, the approving review and the
+#               change updates the open repair and never opens a second) to this commit, writes the file onto it AND ITS OWN `.acceptance/` FILE
+#               (#5212: `octo-sts[bot]` is not an exempt author, so a body-only `Acceptance:` read as `ACCEPTANCE: MISSING`), checks the branch
+#               differs from this commit by those two paths alone, and opens the pull request if none is open.
+#               `auto-arm.yml` arms it like any other non-draft pull request: it meets the queue, the approving review and the
 #               `Closes` declaration a person's would. Nothing is merged here.
 #   release     the repair carries no changeset, so it starts no release run, and the run the stale pin failed leaves its changesets
 #               unreleased. When this push is the repair merging (the pin is current), and the newest release run on `main` died in
@@ -180,6 +182,26 @@ jobs:
             echo "::error::the write of ${BRANCH} was refused; if the response says 'Resource not accessible by integration', the Octo STS App installation lacks the 'workflows' permission on ${REPO} (the policy grants it): a person must accept it in the installation's settings (#4374)."
             exit 1
           fi
+          # THE PULL REQUEST CARRIES ITS OWN ACCEPTANCE FILE (#5212, ADR 0044). The reader takes the commands from the file a pull request ADDS under
+          # `.acceptance/` and reads the body only for an exempt author, which the Octo STS app is not: a body-only repair is `ACCEPTANCE: MISSING`
+          # and nobody can merge it (a11ign#5210). The name carries this commit, because the reader counts only a file ADDED against `main` and a
+          # file merged by the previous repair stays there until the sweep (`acceptance-sweep.yml`, 14 days): one fixed name is added once and then never.
+          acceptance_path=".acceptance/automation~consumer-gate-pin-${PIN:0:12}.md"
+          acceptance_file="$scratch/acceptance.md"
+          cat > "$acceptance_file" <<EOF
+          Regenerates \`consumer-gate.yml\`'s pin to the commit that last changed \`action.yml\`. Written by \`consumer-gate-pin.yml\` (#4331, #5212); the file is generated, never edited by hand.
+
+          Acceptance:
+          pnpm exec rstest run --config=scripts/rstest/rstest.config.ts --include packages/guards/src/generate-consumer-gate.test.ts
+          EOF
+          if ! response="$(gh api -X PUT "repos/$REPO/contents/$acceptance_path" -f message="${acceptance_path}: the acceptance of the regenerated pin (#5212)" \
+            -f content="$(base64 -w0 "$acceptance_file")" -f branch="$BRANCH" 2>&1)"; then
+            printf '%s\n' "$response"
+            fail "the write of $acceptance_path on ${BRANCH} was refused, and a pull request without it is red on acceptance"
+          fi
+          # The shape check, extended to the second file: the branch differs from this commit by those two paths and by nothing else.
+          changed="$(gh api "repos/${REPO}/compare/${PIN}...${BRANCH}" --jq '[.files[].filename] | sort | join(" ")')"
+          [ "$changed" = "$acceptance_path $FILE_PATH" ] || fail "${BRANCH} differs from ${PIN} by '${changed}', not by ${acceptance_path} and ${FILE_PATH} alone; no pull request was opened"
           open="$(gh api "repos/${REPO}/pulls?state=open&head=${REPO%%/*}:${BRANCH}" --jq '.[0].number // empty')"
           if [ -n "$open" ]; then
             echo "::notice::updated the open repair pull request #${open}"
@@ -189,8 +211,7 @@ jobs:
           cat > "$body_file" <<EOF
           Regenerates \`consumer-gate.yml\`'s pin at ${PIN}, which contains the latest \`action.yml\` change. Opened by \`consumer-gate-pin.yml\` (#4331): the merge that staled the pin started this repair.
 
-          Acceptance:
-          pnpm exec rstest run --config=scripts/rstest/rstest.config.ts --include packages/guards/src/generate-consumer-gate.test.ts
+          Acceptance file: ${acceptance_path}
 
           Closes: none -- automated regeneration of consumer-gate.yml's pin (#4331)
           EOF
