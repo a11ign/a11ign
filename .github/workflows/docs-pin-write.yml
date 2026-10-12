@@ -8,8 +8,13 @@ name: docs-pin-write
 #   decide   reads `v0` and the `a11ign@<x.y.z>` tags in a full clone of `main`, plans the rewrite with `planRepin`
 #            (`packages/guards/src/docs-release-pin-currency.ts`, the guard's own reader and population), and hands on the changed docs plus
 #            three strings. It holds `contents: read` and NO `id-token`. A pin the rewrite cannot match is a RED job naming file and line.
-#   write    mints the token, shape-checks what was handed against the commit it was read at, writes ONE commit of the changed docs and its own
-#            `.acceptance/` file onto ONE branch (`automation/docs-pin-write`, so a later release updates the open pull request and never
+#   regenerate  applies those docs to a checkout of the same commit and runs `node scripts/outsider/generate.ts --sha=<the pin's commit>
+#            --version=<x.y.z>` (#5291), because `scripts/outsider/outsider-job.yml` is generated from README's Quickstart fence and the
+#            re-pin alone left `outsider-job-fresh.test.ts` red on every release (#4918, #5119, #5283): a person regenerated it by hand each
+#            time. It holds `contents: read` and NO `id-token`, because it is the job that installs and runs repository code. It hands on
+#            the one regenerated file, and only when it differs.
+#   write    mints the token, shape-checks what was handed against the commit it was read at, writes ONE commit of the changed docs, the
+#            regenerated outsider job and its own `.acceptance/` file onto ONE branch (`automation/docs-pin-write`, so a later release updates the open pull request and never
 #            opens a second), and opens the pull request as a DRAFT if none is open. It has no checkout, no install and no node.
 #
 # ## Why a separate workflow, not two jobs in `release.yml` (`ceo`, #5224)
@@ -111,9 +116,76 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  write:
+  # Runs repository code (`pnpm install`, the generator), so it holds NO `id-token`: it cannot ask for the token `write` mints. The shape of
+  # `consumer-gate-pin.yml`'s `regenerate`. `consumer-gate.yml` is NOT regenerated here: measured at row #5291, a README pin move leaves
+  # `generate-consumer-gate.ts --check` green, and a write under `.github/workflows/` would need the `workflows` grant this policy withholds.
+  regenerate:
     needs: [decide]
     if: ${{ !cancelled() && needs.decide.result == 'success' && needs.decide.outputs.action == 'write' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      outsider: ${{ steps.stage.outputs.outsider }}
+    steps:
+      # The commit `decide` planned on, not whatever `main` is by now: the docs handed on are that commit's docs with their pins moved.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.decide.outputs.base }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      # `generate.ts` imports `generate-consumer-gate.ts`, which imports `repo-identity.ts` and does `await toolModule(...)` at import: on a
+      # runner no tool exists until this has cloned one (#3534, #4373).
+      - name: The tool at the newest release tag, cloned for this run, with `agent-org` on PATH (#3534)
+        run: node scripts/agent-org-newest-tag.ts --dest="$RUNNER_TEMP/agent-org"
+      - name: Take the changed docs
+        uses: actions/download-artifact@v8
+        with:
+          name: docs-repinned
+          path: ${{ github.workspace }}
+      - name: Regenerate the outsider job at the promoted commit and version, and hand on that one file if it changed
+        id: stage
+        env:
+          VERSION: ${{ needs.decide.outputs.version }}
+          COMMIT: ${{ needs.decide.outputs.commit }}
+        run: |
+          set -euo pipefail
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::'$VERSION' is not an x.y.z"; exit 1; }
+          [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::'$COMMIT' is not a full commit sha"; exit 1; }
+          # WITHOUT `--sha` the generator pins the checkout's HEAD, which is `main` and not the release: the wrong file, and green (#5283).
+          git add -A
+          node scripts/outsider/generate.ts --sha="$COMMIT" --version="$VERSION"
+          node scripts/outsider/generate.ts --check
+          # The docs were staged above, so what is unstaged or untracked now is what the generator wrote and nothing else.
+          changed="$({ git diff --name-only; git ls-files --others --exclude-standard; })"
+          if [ -z "$changed" ]; then
+            echo "the outsider job already matches README's re-pinned fence at a11ign@${VERSION}; nothing to hand on"
+            echo "outsider=same" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$changed" != "scripts/outsider/outsider-job.yml" ]; then
+            echo "::error::regeneration must change scripts/outsider/outsider-job.yml and nothing else; it changed:"
+            echo "$changed"
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/regenerated/scripts/outsider"
+          cp scripts/outsider/outsider-job.yml "$RUNNER_TEMP/regenerated/scripts/outsider/outsider-job.yml"
+          echo "outsider=changed" >> "$GITHUB_OUTPUT"
+      - name: Hand on the regenerated outsider job
+        if: steps.stage.outputs.outsider == 'changed'
+        uses: actions/upload-artifact@v7
+        with:
+          name: outsider-job-regenerated
+          path: ${{ runner.temp }}/regenerated
+          if-no-files-found: error
+          retention-days: 1
+
+  write:
+    needs: [decide, regenerate]
+    if: ${{ !cancelled() && needs.decide.result == 'success' && needs.decide.outputs.action == 'write' && needs.regenerate.result == 'success' }}
     runs-on: ubuntu-latest
     # NO checkout, install, node or pnpm in this job (the header says why): `gh`, `jq`, `base64`, `sed`, `diff` only. The writes come from the
     # minted token, whose grant is `docs-pin-write.sts.yaml`'s; the job's own `GITHUB_TOKEN` is reduced to the artifact read plus the OIDC request.
@@ -132,6 +204,13 @@ jobs:
         with:
           name: docs-repinned
           path: ${{ runner.temp }}/repinned
+      # Into the same tree: the loop below shape-checks it like a doc, so a regenerated file that differs by more than the pin is refused.
+      - name: Take the regenerated outsider job
+        if: needs.regenerate.outputs.outsider == 'changed'
+        uses: actions/download-artifact@v8
+        with:
+          name: outsider-job-regenerated
+          path: ${{ runner.temp }}/repinned
       - name: Move the re-pin branch onto main, write the docs onto it, and open the pull request unless one is open
         env:
           GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
@@ -145,11 +224,11 @@ jobs:
           set -euo pipefail
           fail() { echo "::error::$1. Nothing was written."; exit 1; }
           [ -n "${GH_TOKEN:-}" ] || fail "the Octo STS token (step octo-sts) is empty"
-          # What the previous job handed over is data: it is written only if it is the guarded docs at BASE with their pins moved and nothing else.
+          # What the previous job handed over is data: it is written only if it is the guarded docs at BASE, and the outsider job regenerated, with their pins moved and nothing else.
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "'$VERSION' is not an x.y.z"
           [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || fail "'$COMMIT' is not a full commit sha"
           [[ "$BASE" =~ ^[0-9a-f]{40}$ ]] || fail "'$BASE' is not a full commit sha"
-          guarded='^(README\.md|docs/[^/]+\.md|docs/adr/[^/]+\.md)$'
+          guarded='^(README\.md|docs/[^/]+\.md|docs/adr/[^/]+\.md|scripts/outsider/outsider-job\.yml)$'
           mapfile -t paths < <(cd "$HANDED" && find . -type f | sed 's|^\./||' | LC_ALL=C sort)
           [ "${#paths[@]}" -gt 0 ] || fail "the artifact holds no file"
           scratch="$(mktemp -d)"
@@ -161,7 +240,7 @@ jobs:
           echo '[]' > "$entries"
           add_entry() { jq -c --arg p "$1" --rawfile c "$2" '. + [{path: $p, mode: "100644", type: "blob", content: $c}]' "$entries" > "$entries.next" && mv "$entries.next" "$entries"; }
           for path in "${paths[@]}"; do
-            [[ "$path" =~ $guarded ]] || fail "'$path' is not a guarded doc (README.md, docs/*.md, docs/adr/*.md)"
+            [[ "$path" =~ $guarded ]] || fail "'$path' is not a guarded doc or the outsider job (README.md, docs/*.md, docs/adr/*.md, scripts/outsider/outsider-job.yml)"
             gh api "repos/$REPO/contents/$path?ref=$BASE" --jq .content | base64 -d > "$scratch/base" || fail "$path at $BASE could not be read"
             handed="$HANDED/$path"
             [ "$(wc -l < "$scratch/base")" = "$(wc -l < "$handed")" ] || fail "$path changed its number of lines"
@@ -188,7 +267,7 @@ jobs:
           Moves the guarded docs' release pins to a11ign@${VERSION} (commit ${COMMIT}), the release \`v0\` points at. Written by \`docs-pin-write.yml\` (#5224); the file is generated, never edited by hand.
 
           Acceptance:
-          pnpm exec rstest run --config scripts/rstest/rstest.config.ts packages/guards/src/docs-release-pin-currency.test.ts
+          pnpm exec rstest run --config scripts/rstest/rstest.config.ts packages/guards/src/docs-release-pin-currency.test.ts packages/guards/src/outsider-job-fresh.test.ts
           EOF
           add_entry "$acceptance_path" "$acceptance_file"
           # ONE commit on BASE's own tree with exactly those entries, its only parent BASE, and the branch moved straight onto it: a branch holding
@@ -223,6 +302,8 @@ jobs:
           Moves the guarded docs' release pins to a11ign@${VERSION} (commit ${COMMIT}), which \`v0\` points at. Opened by \`docs-pin-write.yml\` (#5224, #5121 option A) after a \`release\` run succeeded.
 
           **The prose beside each pin is UNREAD.** Only a pin's own commit and the \`a11ign@x.y.z\` label on that same line were rewritten; a sentence that says "since 0.9.0" or describes what that release does was not checked. Read the neighbours of each changed line before approving.
+
+          \`scripts/outsider/outsider-job.yml\`, when it is listed below, was regenerated by \`node scripts/outsider/generate.ts --sha=${COMMIT} --version=${VERSION}\` from the re-pinned README (#5291), so \`outsider-job-fresh.test.ts\` is green without a hand commit.
 
           This is a draft and does not arm itself: an approving review marks it ready and arms it (#4969).
 
