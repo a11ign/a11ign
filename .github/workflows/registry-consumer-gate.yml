@@ -227,12 +227,17 @@ jobs:
         run: |
           # BEFORE the first publish of the renamed package (#2885) `latest` still carries the worker under its old name,
           # so start whichever directory the install actually has. A follow-up drops the fallback once `latest` is the new name.
+          # Within a directory the script is `dist/server.mjs` (worker >= 0.13.0 publishes `dist` and `launcher` and has NO `src/`,
+          # #5317), and `src/server.mjs` only for a worker that predates it: `latest` is a11ign 0.10.2 -> fleet 0.9.0 -> worker
+          # 0.9.0 (measured 2026-10-12, `npm view`), which still ships `src/`. Preferring `dist` keeps this green on both.
           server=""
           for d in screenreader-worker nvda-worker; do
-            if [ -f "node_modules/@a11ign/$d/src/server.mjs" ]; then server="node_modules/@a11ign/$d/src/server.mjs"; break; fi
+            for f in dist/server.mjs src/server.mjs; do
+              if [ -f "node_modules/@a11ign/$d/$f" ]; then server="node_modules/@a11ign/$d/$f"; break 2; fi
+            done
           done
           if [ -z "$server" ]; then
-            echo "::error::the clean install carries no worker package: neither node_modules/@a11ign/screenreader-worker nor its old-name directory has src/server.mjs." >&2
+            echo "::error::the clean install carries no worker package: neither node_modules/@a11ign/screenreader-worker nor its old-name directory has dist/server.mjs or src/server.mjs." >&2
             exit 1
           fi
           node "$server" > "$RUNNER_TEMP/worker.log" 2> "$RUNNER_TEMP/worker.err" &
