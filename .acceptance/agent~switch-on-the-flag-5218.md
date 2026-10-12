@@ -1,0 +1,3 @@
+`.agent-org/project.json` carries `"health": { "approvedDirty": true }` (row #5218, agent-org#1168, class a11ign#928). The key is read by agent-org at main: `flag-switch-ledger` counts `health.approvedDirty` decided once it is a boolean in this file, and agent-org PR #1186 merged the flag's three readings shipped OFF. Parse check: agent-org's `parseProjectDeclaration` accepts the edited file, and `readFlagLedger` no longer lists `health.approvedDirty` as unset. Revert: set the key to `false`.
+
+Acceptance: bash -c 'node -e "process.exit(/\"approvedDirty\":true/.test(JSON.stringify(require(\"./.agent-org/project.json\")))?0:1)"'
