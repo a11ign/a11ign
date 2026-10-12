@@ -206,8 +206,8 @@ action's own bash for the steps that carry the logic, with `RUNNER_TEMP`, `GITHU
 exits with the status the check would.
 
 It cannot cover the Windows-only setup (NVDA, Speech Viewer, Edge policy, starting the worker) or
-`gh pr comment`. Those setup steps are the least speculative part: `capture-regression.yml` already runs the
-same commands on a real Windows runner for the same reasons.
+`gh pr comment`. Those setup steps are the least speculative part: `a11ign/lab`'s `capture-check.yml` already
+runs the same commands on a real Windows runner for the same reasons.
 
 One trap worth recording: run the action's snippets under **bash**, not zsh. `status` is a read-only
 variable in zsh, so `status=0` fails with "read-only variable: status" — an artefact of the shell, not of

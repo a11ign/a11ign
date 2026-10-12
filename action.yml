@@ -562,8 +562,8 @@ runs:
     # burned the full 180 s poll and threw "The capture worker never became ready" while the worker's own
     # log said "NVDA is up and answering; the worker is ready". The worker was right.
     #
-    # Nothing caught it because nothing had ever run this action: capture-regression.yml re-implements the
-    # setup by hand and calls the harness directly, so the copy a consumer's first run uses was untested.
+    # Nothing caught it because nothing had ever run this action: the core's capture-regression workflow (now
+    # `a11ign/lab`'s `capture-check.yml`) re-implements the setup by hand and calls the harness directly, so the copy a consumer's first run uses was untested.
     #
     # A registry write alone is not enough — the value is cached per session and Windows does not reliably
     # consume it at logon either. The script uses SystemParametersInfo, which is the supported live route,

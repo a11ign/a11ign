@@ -5,7 +5,7 @@ From nothing to your first report — **this is the local path, which needs a Wi
 **No machine to spare? The GitHub Action needs no worker of your own at all** — it runs on a
 GitHub-hosted Windows runner, at no cost to try. See "Route C — no machine to spare" under
 step 3 below, or go straight to
-[`.github/workflows/capture-regression.yml`](../.github/workflows/capture-regression.yml)
+[`capture-check.yml`](https://github.com/a11ign/lab/blob/main/.github/workflows/capture-check.yml) in `a11ign/lab`
 for a working example to copy.
 
 **Time, if you want a worker on your own machine:** about 5 minutes if you already have one.
@@ -141,7 +141,7 @@ curl $A11Y_WORKER/health
 ### Route C — no machine to spare
 
 Real NVDA runs on a GitHub-hosted Windows runner. See
-[`.github/workflows/capture-regression.yml`](../.github/workflows/capture-regression.yml)
+[`capture-check.yml`](https://github.com/a11ign/lab/blob/main/.github/workflows/capture-check.yml) in `a11ign/lab`
 for a working example to copy.
 
 ## 4. Check you are ready

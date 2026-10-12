@@ -31,7 +31,7 @@ layers, the WCAG criteria list, the report, the capture cache, the run's accept/
 All of it is unit-tested and runs anywhere.
 
 What you cannot do locally is change `capture-core.mjs`, because it only runs against NVDA on Windows. CI
-has a Windows runner (`.github/workflows/capture-regression.yml`) — a ~10-minute loop, which should be the
+has a Windows runner ([`capture-check.yml`](https://github.com/a11ign/lab/blob/main/.github/workflows/capture-check.yml) in `a11ign/lab`, which owns the capture layer) — a ~10-minute loop, which should be the
 fallback rather than the habit. `docs/getting-started.md` builds a local worker VM in about 1.5–2 hours,
 almost all of it downloading Windows.
 
