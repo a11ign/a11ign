@@ -1,4 +1,6 @@
-# The flows file `.github/workflows/auth0-e2e.yml` scans with (#4975, under #4084 outcome 1):
+# The flows file the nightly `auth0-e2e.yml` scans with (#4975, under #4084 outcome 1). That workflow lives in the PRIVATE
+# `a11ign/auth-capture-check` (#5114), which checks this repository out at its latest release; a run that logs in is refused in a
+# public repository, so it cannot live here:
 #
 #   a11ign http://localhost:4173/ --flows packages/cli/src/auth/auth0-e2e-flows.yml
 #
