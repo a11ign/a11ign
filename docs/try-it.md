@@ -224,7 +224,7 @@ gh secret set APP_TEST_PASSWORD --repo OWNER/REPO
 
 ### 3. The flows file
 
-Save this as `.github/a11y-flows.yml` (any path inside the repository works; the workflow names it). It says how to sign in, in a closed vocabulary of steps: `goto`, `fill`, `choose`, `check`, `press`, `expect` and `capture`. The 0.9.0 source also accepts `dismiss-if-shown` and `auto`, and `when:` and `optional:` modifiers, but the changelog says the worker does not know those keys, so leave them out of this file. There is no script step and no sleep.
+Save this as `.github/a11y-flows.yml` (any path inside the repository works; the workflow names it). It says how to sign in, in a closed vocabulary of steps: `goto`, `fill`, `choose`, `check`, `press`, `expect` and `capture`. The 0.10.2 source also accepts `dismiss-if-shown` and `auto`, and `when:` and `optional:` modifiers, but the changelog says the worker does not know those keys, so leave them out of this file. There is no script step and no sleep.
 
 ```yaml
 version: 1

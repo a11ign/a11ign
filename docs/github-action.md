@@ -139,7 +139,7 @@ gh api "repos/<owner>/<repo>/actions/artifacts/$artifact_id/zip" > result.zip
 ```
 
 Either way what comes back is a directory holding the file
-`result-json` names (and, where the pinned release has the `summary-md` output, as `0.9.0` does, `a11ign-summary.md`, the exact rendered
+`result-json` names (and, where the pinned release has the `summary-md` output, as `0.10.2` does, `a11ign-summary.md`, the exact rendered
 report the job summary carries, once the upload step lists it), the schema below (`verdict.findings`, `verdict.taskCompletable`,
 `captureVerified`, ...) — the transcript behind every finding. Neither needs a browser or
 `pull-requests: write` permission.
@@ -520,7 +520,7 @@ flows:
       - expect: { heading: "Dashboard" }       # REQUIRED as the last step of a login flow
 ```
 
-**Steps** are `goto`, `fill`, `choose`, `check`, `press`, `expect` and `capture`, and nothing else in a file a worker runs (the 0.9.0 source also accepts `dismiss-if-shown` and `auto`, and `when:` and `optional:` modifiers, which the changelog says the worker does not know): no script step, no
+**Steps** are `goto`, `fill`, `choose`, `check`, `press`, `expect` and `capture`, and nothing else in a file a worker runs (the 0.10.2 source also accepts `dismiss-if-shown` and `auto`, and `when:` and `optional:` modifiers, which the changelog says the worker does not know): no script step, no
 evaluated expression, no fixed sleep (`expect` waits for a condition, and its wait is bounded). A control is named by the
 name a screen reader announces, never by selector, and `within:` and `nth:` tell two of the same name apart. **A login's
 `fill` takes `from-env:` only**; a literal in the login flow is refused, and so is a literal typed into a password field in
