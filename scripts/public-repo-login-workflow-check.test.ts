@@ -1,4 +1,4 @@
-// no-token: pure over workflow text and a stand-in `readFile`; the one filesystem read is the real `.github/workflows` tree, which is read, never written
+// no-token: workflowRefusals -- pure over workflow text and a stand-in `readFile`; the one filesystem read is the real `.github/workflows` tree, which is read, never written, and no `gh` or network is reached
 /**
  * #5274 (from #5114): a workflow in this public repository that passes login secrets to an authenticated capture is refused at review.
  *
