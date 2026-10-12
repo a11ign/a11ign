@@ -15,9 +15,9 @@ The nightly Auth0 end-to-end sign-in with MFA was built in `a11ign/a11ign`, whic
 - `test ! -e .github/workflows/auth0-e2e.yml` and the flows-file test below pass at this head. The row's own Acceptance, `gh run list -R a11ign/auth-capture-check --workflow auth0-e2e.yml --limit 1 ... | grep -qx success`, prints `failure` today, so **#5114's Done-when 1 is OPEN** and this change does not meet it.
 - `pnpm run lint`, `pnpm run typecheck` and the flows-file test: 0 errors, 7 of 7.
 
-## Not a Closes of #5114's Done-when 1
+## What remains, and where it is filed
 
-This change makes Done-when 2 true and carries Done-when 3 (the row for the first reading is #5278). Done-when 1, a green dispatch run and a falsifier read once, waits on #5278's fix being released. A claimed row's branch cannot say `Closes: none`, so `Closes #5114` is written because the form allows nothing else, and the PR is a DRAFT so that the merge does not close the row while its first sentence is false. The ruling on whether #5114 closes here (its Done-when 1 moving to #5278) is product-manager's.
+This change makes Done-when 2 true and carries Done-when 3 (the row for the first reading is #5278). Done-when 1, a green dispatch run and a falsifier read once, waits on #5278's fix being released, so the row's own Acceptance prints `failure` at this head. The PR that is a row's deliverable closes the row (agent-org#744), so this one declares the row it delivers and the merge files the verify row, which reads that Acceptance again. Whether #5114's Done-when 1 moves to #5278 is product-manager's, and is asked on the row.
 
 Outside-Region: packages/cli/src/auth/auth0-e2e-flows.test.ts — the test read the deleted workflow's text, so it stops reading it here
 Outside-Region: packages/cli/src/auth/auth0-e2e-flows.yml — its header named the workflow as living in this repository
