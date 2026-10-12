@@ -1,5 +1,6 @@
 {
   "answer-owed": "run",
   "org-health": "run",
-  "unclaimed-blocker-cleared": "run"
+  "unclaimed-blocker-cleared": "run",
+  "row-call-count-signal": "run"
 }
