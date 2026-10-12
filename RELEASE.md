@@ -243,7 +243,7 @@ Moved out of the two lists above when they stopped being true, each with the run
   must press something. `action.yml` has changed once since that sha, in a description string only
   (`git diff 06ec4559a origin/main -- action.yml`, #4355). **Not shown by it:** any page beyond those two, `windows-2025` or a later
   runner image, a consumer's own `runs-on`, and what the report SAYS (the outsider job's question).
-  `act` still cannot help: it is Docker/Linux and NVDA needs Windows. Do not read the run list of the core's `capture-regression` workflow (deleted by #5179) for this: its newest
+  `act` still cannot help: it is Docker/Linux and NVDA needs Windows. Do not read the run list of the core's `capture-regression` workflow (superseded by `a11ign/lab`'s `capture-check.yml`, #5179) for this: its newest
   entries (2026-09-18) are `push` runs that failed, on a trigger the workflow's header says was removed on 2026-09-06, and I did not establish why they exist.
 - **The 418 stale captures — CLOSED, read 2026-09-24 and again 2026-10-10.** The lab's `a11y-job-retrain.service` recaptured the corpus
   (`Capture complete: 1743 captured, 0 failed, 0 skipped, of 1743 cases across 10 workers`) and `check-signals` then read
