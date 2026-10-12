@@ -154,18 +154,35 @@ test("#4331: the REGENERATE side of the same property, in a fixture where an unr
   });
 });
 
+/**
+ * The live-tree reading of `cwd`'s `head`, as `consumer-gate-pin.yml`'s push-to-main run sees it (#5225). A push to `main` has HEAD = base, so
+ * a stale pin there reads REGENERATE at both the branch point and HEAD, and the reading must then be excused by the same condition the sibling
+ * test in `generate-consumer-gate.test.ts` uses: a repair open on origin and carrying a pin current against the base. Without the excuse, the
+ * merge that staled the pin reds `main` for the 24 minutes its repair takes, which is the race the repair exists to close.
+ */
+function liveTreeReading({ cwd, base, head }: { cwd: string; base: string; head: string }): { green: boolean; reason: string } {
+  const branchPoint = gitIn(cwd, ["merge-base", head, base]).trim();
+  const at = (commit: string) => decideAtCommit({ commit, cwd }).action;
+  const current = at(branchPoint) === NOTHING_TO_DO || at(head) === NOTHING_TO_DO;
+  if (current) return { green: true, reason: "the committed pin is current at the branch point or at HEAD" };
+  const stale = `stale at the branch point (${at(branchPoint)}) and at HEAD (${at(head)})`;
+  const repair = regenerationInFlight({ base, cwd });
+  return repair.inFlight
+    ? { green: true, reason: `${stale}, and the repair is open: ${repair.reason}` }
+    : { green: false, reason: `${stale}, and no repair is on its way (${repair.reason}): regenerate consumer-gate.yml with node scripts/generate-consumer-gate.ts` };
+}
+
 test("#4331: the live tree -- the committed pin is current where this branch left main, so a dispatch on main today answers 'nothing to do'", () => {
   // Read at the BRANCH POINT, not at HEAD: a pull request that changes action.yml cannot carry a pin containing its own change (the header of
   // consumer-gate-pin-needed.ts, #558), so at HEAD it would answer REGENERATE and every such pull request would be red for the property it
   // exists to hand to the merge. On `main` itself the branch point is HEAD, so the reading there is unchanged.
   //
   // The other way round (#4373): when `main`'s own pin is stale, the branch point reads REGENERATE and the pull request that carries the repair
-  // could never be green, which is the fault being repaired. So a branch whose HEAD reads current also passes. Stale at BOTH is still the failure:
-  // a branch that does not repair a stale `main`, or one that repairs it and then changes action.yml again, is red.
-  const branchPoint = gitIn(REPO_ROOT, ["merge-base", "HEAD", "origin/main"]).trim();
-  const at = (commit: string) => decideAtCommit({ commit, cwd: REPO_ROOT }).action;
-  assert.ok(at(branchPoint) === NOTHING_TO_DO || at("HEAD") === NOTHING_TO_DO,
-    `stale at the branch point (${at(branchPoint)}) and at HEAD (${at("HEAD")}): regenerate consumer-gate.yml with node scripts/generate-consumer-gate.ts`);
+  // could never be green, which is the fault being repaired. So a branch whose HEAD reads current also passes. Stale at BOTH is still the failure
+  // unless the repair is open (#5225, `liveTreeReading`): a branch that does not repair a stale `main`, or one that repairs it and then changes
+  // action.yml again, is red.
+  const reading = liveTreeReading({ cwd: REPO_ROOT, base: "origin/main", head: "HEAD" });
+  assert.ok(reading.green, reading.reason);
 });
 
 // --- 3. the workflow and its policy --------------------------------------------------------------------------------------------------
@@ -389,5 +406,27 @@ test("regenerationInFlight: a remote it cannot reach throws -- not being able to
     const base = commitFiles(sandbox, { "action.yml": "v1\n" });
     sandbox.run(["remote", "add", "origin", join(tmpdir(), "consumer-gate-pin-no-such-remote")]);
     assert.throws(() => regenerationInFlight({ base, cwd: sandbox.dir }), /ls-remote.*failed/);
+  });
+});
+
+test("#5225: a push to main with a stale pin and its repair open is green on the live-tree reading, and red without one", () => {
+  withRemote((sandbox) => {
+    const { pinned, unrelated, repaired } = staleFixture(sandbox);
+    // HEAD = base on a push to main: the stale commit is the one the live-tree reading is taken at.
+    const read = () => liveTreeReading({ cwd: sandbox.dir, base: unrelated, head: unrelated });
+    assert.equal(decideAtCommit({ commit: unrelated, cwd: sandbox.dir }).action, REGENERATE,
+      "the defect's shape: the commit alone reads REGENERATE, so the old test was red here");
+    assert.equal(read().green, false, "the negative control: with no repair open, the push is red");
+    sandbox.run(["push", "-q", "origin", `${repaired}:refs/heads/${REGENERATION_BRANCH}`]);
+    assert.equal(read().green, true, `the positive control: ${read().reason}`);
+    sandbox.run(["push", "-q", "--force", "origin", `${pinned}:refs/heads/${REGENERATION_BRANCH}`]);
+    assert.equal(read().green, false, "a repair that is itself stale excuses nothing");
+  });
+});
+
+test("#5225: a current pin is green on the live-tree reading with no repair at all, so the excuse is never needed for a current main", () => {
+  withRemote((sandbox) => {
+    const { repaired } = staleFixture(sandbox);
+    assert.equal(liveTreeReading({ cwd: sandbox.dir, base: repaired, head: repaired }).green, true);
   });
 });
