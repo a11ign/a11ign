@@ -340,9 +340,9 @@ MODEL_INPUT_VERSION = 2
 #: How to rebuild each dataset, by the path it lives at. Named rather than inferred: a reader who has just
 #: been refused needs the command, and "re-export something" is the kind of instruction that gets ignored.
 REBUILD_COMMAND = {
-    "with-realism": "npm run lab:job -- -e job=build-realism",
-    "screenreader-evidence": "npm run lab:job -- -e job=export",
-    "repeat-": "npm run lab:job -- -e job=export-acceptance   (exports EVERY repeat)",
+    "with-realism": "control: pnpm run lab:job -- -e job=build-realism",
+    "screenreader-evidence": "control: pnpm run lab:job -- -e job=export",
+    "repeat-": "control: pnpm run lab:job -- -e job=export-acceptance   (exports EVERY repeat)",
 }
 
 

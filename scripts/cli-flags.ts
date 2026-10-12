@@ -93,7 +93,7 @@ export function flagValue(argv: readonly string[], name: string): string | undef
  *
  * This read `startsWith("--")`, on the reasoning that only long flags are ever this repo's own. But an
  * ANSIBLE-shaped argument is single-dash, and several of these commands wrap `ansible-playbook` — so
- * `npm run fleet:provision -- -e worker_edge_allow_downgrade=true` passed straight through the guard,
+ * `npm run fleet:provision -- -e worker_edge_allow_downgrade=true` (control's script today) passed straight through the guard,
  * was never forwarded by the wrapper, and the whole fleet was provisioned WITHOUT the authorisation the
  * operator believed they had given. Measured 2026-09-05. The role then refused, correctly, with a message
  * telling the operator to pass the very flag they had just passed.

@@ -12,7 +12,7 @@ small sample once already — a capture gate validated on six hand-picked cases,
 in a live run.
 
 So the sweep is a plain function here, with two entry points and one implementation: pytest calls `sweep`,
-and `npm run lab:job -- -e job=applicability-audit` runs `main` with the interpreter the lab actually has.
+and control's `pnpm run lab:job -- -e job=applicability-audit` runs `main` with the interpreter the lab actually has.
 """
 from __future__ import annotations
 

@@ -134,7 +134,7 @@ jobs:
           Ran README.md's Quickstart job as written. Judged: it completed, and `a11ign-result.json` has the documented shape.
 
           ### Not covered by this run
-          - README.md: "Locally instead": a capture worker you control, `pnpm run doctor`
+          - README.md: "Locally instead": a capture worker you control, `pnpm run doctor` from a checkout of `a11ign/control`
           - docs/getting-started.md: routes A, B and C: a worker on a Mac, on your own Windows machine, or none
           - docs/try-it.md: "The other route: run it from the repository", and the authenticated run behind a login
 

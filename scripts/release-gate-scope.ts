@@ -53,7 +53,7 @@ function main() {
     + `The other ${skipped.length} need the Python`);
   console.log(`::warning::venv or the corpus and cannot run on a runner (${skipped.join(", ")}). Run `
     + "them on the lab BEFORE");
-  console.log("::warning::publishing for real:  pnpm run lab:job -- -e job=release-gate");
+  console.log("::warning::publishing for real, from control's checkout:  pnpm run lab:job -- -e job=release-gate");
 }
 
 // REALPATH'D, per `entry-points.test.ts` (#1086): reached through a symlink, the plain form skips main() and exits 0 silently.
