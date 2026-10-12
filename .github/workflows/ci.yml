@@ -432,7 +432,21 @@ jobs:
         run: |
           number="${PULL_NUMBER:-$(printf '%s\n' "$QUEUE_MESSAGE" | sed -nE '1s/^Merge pull request #([0-9]+) from .*/\1/p')}"
           if [ -z "$number" ]; then echo "no pull request number to read a body from: the changeset check decides"; exit 0; fi
-          PR_BODY=$(gh api "repos/$REPO/pulls/$number" --jq '.body // ""') node scripts/ci-changed.ts --no-release
+          # #5229: A 5xx here used to leave PR_BODY EMPTY, which reads as "no no-release line" and sent a PR that said no-release to a red
+          # changeset check. Retried on a 5xx or a transport error only; a 4xx fails at once. The pattern is the gate step's `gh_read`.
+          err=$(mktemp)
+          for attempt in 1 2 3 4 5; do
+            status=0
+            PR_BODY=$(gh api "repos/$REPO/pulls/$number" --jq '.body // ""' 2>"$err") || status=$?
+            [ "$status" = 0 ] && break
+            if ! grep -Eqi 'HTTP 5[0-9][0-9]|error connecting to|i/o timeout|timed out|connection (reset|refused)|TLS handshake|no such host|unexpected EOF' "$err" || [ "$attempt" = 5 ]; then
+              cat "$err" >&2
+              exit "$status"
+            fi
+            echo "GitHub unavailable, will read the body again: $(head -c 200 "$err")" >&2
+            sleep 10
+          done
+          PR_BODY="$PR_BODY" node scripts/ci-changed.ts --no-release
       # #3584: A QUEUE ENTRY IS DIFFED AGAINST ITS OWN PARENT, as the `deps:` step above does. Up to 5 entries are built and
       # entry 2 contains entry 1, while `needs.changed.outputs.base` is `origin/main`, which does not yet hold the entry
       # ahead: behind the version-packages entry, its consumed bumps of `package.json` and `CHANGELOG.md` read as this
@@ -894,21 +908,50 @@ jobs:
               | if ($jobs | length) == 0 or any($jobs[]; .status != "completed" or .conclusion == "cancelled") then "pending"
                 else ([$jobs[] | .conclusion | select(. != "success" and . != "skipped")] | first // "success") end'
           }
+          # #5229: ONE GITHUB 5xx IS NOT AN ANSWER ABOUT THE WORK. Prints the body of one `gh api` read. Returns 75 when GitHub 5xx'd or the
+          # transport failed (the caller reads `pending` and polls again inside ATTEMPTS), and gh's own status for anything else: a 4xx
+          # (403 rate limit, 404) is GitHub's answer and fails at once. Under `bash -e` a bare `x=$(gh api ...)` aborted the step on the
+          # first 502 with 179 polls unspent (a11ign#5227, run 38249729992). THE PATTERN IS COPIED into the `noRelease` step above, and
+          # `ci-poll-retries-5xx.test.ts` pins the two identical.
+          ERR_FILE=$(mktemp)
+          gh_read() {
+            local body status=0
+            body=$(gh api "$@" 2>"$ERR_FILE") || status=$?
+            if [ "$status" = 0 ]; then printf '%s' "$body"; return 0; fi
+            if grep -Eqi 'HTTP 5[0-9][0-9]|error connecting to|i/o timeout|timed out|connection (reset|refused)|TLS handshake|no such host|unexpected EOF' "$ERR_FILE"; then
+              echo "GitHub unavailable, will poll again: $(head -c 200 "$ERR_FILE")" >&2
+              return 75
+            fi
+            cat "$ERR_FILE" >&2
+            return "$status"
+          }
           verdict=none
+          unavailable=0
           for _ in $(seq 1 "$ATTEMPTS"); do
-            runs=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$HEAD_SHA&event=pull_request&per_page=100")
-            other=$(printf '%s' "$runs" | other_run)
-            if [ "$other" = none ]; then
-              # No meta run after this code run: nothing to agree with. No code run yet for a meta run: pending.
-              if [ "$KIND" = code ]; then
-                echo "no body or label run followed this code run (cancelled, not counted: '$(printf '%s' "$runs" | other_run cancelled)')"
-                exit 0
+            rc=0
+            runs=$(gh_read "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$HEAD_SHA&event=pull_request&per_page=100") || rc=$?
+            if [ "$rc" = 0 ]; then
+              other=$(printf '%s' "$runs" | other_run)
+              if [ "$other" = none ]; then
+                # No meta run after this code run: nothing to agree with. No code run yet for a meta run: pending.
+                if [ "$KIND" = code ]; then
+                  echo "no body or label run followed this code run (cancelled, not counted: '$(printf '%s' "$runs" | other_run cancelled)')"
+                  exit 0
+                fi
+                verdict=none
+              elif [ "$KIND" = meta ]; then
+                verdict=$(printf '%s' "$runs" | jq -c --arg id "$other" '.workflow_runs[] | select((.id | tostring) == $id)' | run_verdict)
+              else
+                jobs=$(gh_read "repos/$REPO/actions/runs/$other/jobs?per_page=100") || rc=$?
+                if [ "$rc" = 0 ]; then verdict=$(printf '%s' "$jobs" | jobs_verdict); fi
               fi
-              verdict=none
-            elif [ "$KIND" = meta ]; then
-              verdict=$(printf '%s' "$runs" | jq -c --arg id "$other" '.workflow_runs[] | select((.id | tostring) == $id)' | run_verdict)
-            else
-              verdict=$(gh api "repos/$REPO/actions/runs/$other/jobs?per_page=100" | jobs_verdict)
+            fi
+            if [ "$rc" = 75 ]; then
+              verdict=pending
+              unavailable=$((unavailable + 1))
+            elif [ "$rc" != 0 ]; then
+              echo "::error::GitHub refused a read this step needs (exit $rc, not a 5xx), so it is not retried"
+              exit "$rc"
             fi
             case "$verdict" in
               success) echo "the other kind of run on $HEAD_SHA ($other) concluded success"; exit 0 ;;
@@ -917,5 +960,5 @@ jobs:
             esac
           done
           skipped=$(printf '%s' "$runs" | other_run cancelled)
-          echo "::error::the other kind of run on $HEAD_SHA has no conclusion ('$verdict') after $ATTEMPTS polls; this run is not green on work it did not see${skipped:+ (cancelled by concurrency or by hand, and not a verdict: $skipped; re-run the newest of them)}"
+          echo "::error::the other kind of run on $HEAD_SHA has no conclusion ('$verdict') after $ATTEMPTS polls; this run is not green on work it did not see${skipped:+ (cancelled by concurrency or by hand, and not a verdict: $skipped; re-run the newest of them)}${unavailable:+ (GitHub answered 5xx or did not answer on $unavailable of them)}"
           exit 1
