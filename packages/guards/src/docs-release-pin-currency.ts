@@ -131,3 +131,100 @@ function faultOf(pin: Pin, v0Release: string): string[] {
   if (minorsBehind(pin.version, v0Release) <= MINORS_ALLOWED_BEHIND) return [];
   return [`${where} pins release ${pin.version} (${pin.written}); v0 points at a11ign@${v0Release}, more than ${MINORS_ALLOWED_BEHIND} minor behind`];
 }
+
+// ── the re-pin (#5224, #5121 option A) ─────────────────────────────────────────────────────────────────────────────────────────────────
+
+/** The release `v0` was promoted to, the one every guarded doc's pin is moved to: its version and the commit its tag names. */
+export interface Promoted {
+  version: string;
+  commit: string;
+}
+export interface RepinPlan {
+  /** `current`: no guarded pin trails the promoted release. `rewrite`: `files` change. `refused`: `faults` say why nothing may be written. */
+  status: "current" | "rewrite" | "refused";
+  /** What the docs are moved to; `undefined` only when `v0` could not be read. */
+  promoted: Promoted | undefined;
+  /** ONLY the docs that change, with their rewritten text; empty unless `status` is `rewrite`. */
+  files: Doc[];
+  faults: string[];
+}
+
+const isOlder = (version: string, than: string) => newerFirst(version, than) > 0;
+const COMMIT = /^[0-9a-f]{40}$/;
+
+/** `a11ign@<from>` as a label or an install pin, never the tail of a scoped name or a path, and not the prefix of a longer version. */
+function versionLabel(from: string): RegExp {
+  return new RegExp(`(?<![\\w/@.-])a11ign@${from.replace(/\./g, "\\.")}(?!\\d)`, "g");
+}
+
+/**
+ * One line, moved to `promoted` when it carries a pin to an OLDER release. Only the pin's own commit and the `a11ign@<its version>` label
+ * on that line move: the prose beside a pin is never read, which is why the pull request that carries the result says so.
+ * A pin newer than `promoted`, or already on it, is left alone (the re-pin never moves a doc backwards).
+ */
+function repinLine(line: string, tags: ReleaseTag[], promoted: Promoted): { line: string; fault?: string } {
+  const found = pinOnLine(line, tags);
+  if (!found) return { line };
+  if (found.version === undefined) {
+    const fault = `pins commit ${found.written}, which no \`a11ign@<x.y.z>\` tag points at, so the rewrite cannot tell which release it is and moved nothing (v0's release: ${promoted.version})`;
+    return { line, fault };
+  }
+  if (found.written === promoted.commit || !isOlder(found.version, promoted.version)) return { line };
+  const commitMoved = COMMIT.test(found.written) ? line.replace(found.written, promoted.commit) : line;
+  return { line: commitMoved.replace(versionLabel(found.version), `a11ign@${promoted.version}`) };
+}
+
+function repinDoc(doc: Doc, tags: ReleaseTag[], promoted: Promoted): { doc: Doc; changed: boolean; faults: string[] } {
+  const moved = doc.text.split("\n").map((text, index) => ({ ...repinLine(text, tags, promoted), where: `${doc.path}:${index + 1}` }));
+  const text = moved.map((m) => m.line).join("\n");
+  const faults = moved.flatMap((m) => (m.fault === undefined ? [] : [`${m.where} ${m.fault}`]));
+  return { doc: { path: doc.path, text }, changed: text !== doc.text, faults };
+}
+
+/**
+ * THE DOCS' PINS, MOVED TO THE RELEASE `v0` POINTS AT, for the pull request `docs-pin-write.yml` opens after a promotion. The same reader as
+ * `pinFaults`, so a fixture drives both, and the same `GUARDED_DOC` population. ALL OR NOTHING: a pin the rewrite cannot match (a commit no
+ * release tag names) refuses the whole plan and names the file and line, because a half-moved set is a state a reviewer could approve and
+ * the guard would still fail on. `CANNOT TELL` is a refusal too, never a `current`.
+ */
+export function planRepin(reader: Reader): RepinPlan {
+  const tags = reader.tags();
+  const refused = (fault: string, promoted?: Promoted): RepinPlan => ({ status: "refused", promoted, files: [], faults: [fault] });
+  if (releaseVersions(tags).length === 0) return refused(CANNOT_TELL);
+  const commit = reader.v0Commit();
+  const version = releaseV0Points(commit, tags);
+  if (commit === undefined || version === undefined) return refused(CANNOT_TELL_V0);
+  const promoted = { version, commit };
+  const docs = reader.docs().filter((doc) => GUARDED_DOC.test(doc.path)).map((doc) => repinDoc(doc, tags, promoted));
+  const faults = docs.flatMap((d) => d.faults);
+  if (faults.length > 0) return { status: "refused", promoted, files: [], faults };
+  const files = docs.filter((d) => d.changed).map((d) => d.doc);
+  return { status: files.length === 0 ? "current" : "rewrite", promoted, files, faults: [] };
+}
+
+/**
+ * The reader over a git checkout, for the workflow that has one. `git` runs one command and returns its stdout; `read` returns a tracked
+ * file's text. Neither is `node:child_process` nor `node:fs` here, so a fixture stands in for both. `for-each-ref` answers an absent `v0`
+ * with nothing, which is the `CANNOT TELL` verdict and not an exception; `%(*objectname)` is the peeled commit of an annotated tag.
+ */
+export function repoReader(git: (args: string[]) => string, read: (path: string) => string): Reader {
+  return {
+    tags: () =>
+      git(["for-each-ref", "refs/tags/a11ign@*", "--format=%(refname:short) %(objectname) %(*objectname)"])
+        .split("\n")
+        .filter(Boolean)
+        .map((row) => {
+          const [name, object, peeled] = row.split(" ");
+          return { name, commit: peeled || object };
+        }),
+    v0Commit: () => {
+      const [object, peeled] = git(["for-each-ref", "refs/tags/v0", "--format=%(objectname) %(*objectname)"]).trim().split(" ");
+      return peeled || object || undefined;
+    },
+    docs: () =>
+      git(["ls-files"])
+        .split("\n")
+        .filter((path) => GUARDED_DOC.test(path))
+        .map((path) => ({ path, text: read(path) })),
+  };
+}

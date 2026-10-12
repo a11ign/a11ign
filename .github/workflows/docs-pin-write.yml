@@ -1,0 +1,242 @@
+name: docs-pin-write
+
+# A PROMOTION OF `v0` OPENS THE PULL REQUEST THAT RE-PINS THE DOCS TO IT (#5224, #5121 option A, `ceo` 2026-10-11). The docs pins were re-pinned
+# by hand and the real-tree guard (`docs-release-pin-currency.real-tree.test.ts`) failed unrelated merges whenever `v0` moved: three red mains in
+# two days (#4918, #5069, #5119). A release commit cannot carry the pin that names it and never reaches `main` (`release.yml` builds it detached
+# and tags it), so the pin can only be written AFTER the tag exists, and `main` requires an approving review (#2022), so it is a pull request.
+#
+#   decide   reads `v0` and the `a11ign@<x.y.z>` tags in a full clone of `main`, plans the rewrite with `planRepin`
+#            (`packages/guards/src/docs-release-pin-currency.ts`, the guard's own reader and population), and hands on the changed docs plus
+#            three strings. It holds `contents: read` and NO `id-token`. A pin the rewrite cannot match is a RED job naming file and line.
+#   write    mints the token, shape-checks what was handed against the commit it was read at, writes ONE commit of the changed docs and its own
+#            `.acceptance/` file onto ONE branch (`automation/docs-pin-write`, so a later release updates the open pull request and never
+#            opens a second), and opens the pull request as a DRAFT if none is open. It has no checkout, no install and no node.
+#
+# ## Why a separate workflow, not two jobs in `release.yml` (`ceo`, #5224)
+#
+# `release.yml`'s header (item 3) says nothing in it opens a pull request and `promote-action-tag` alone holds a ref-write token. A docs edit
+# does not widen the publish path. `decide-outsider-pin` and `refresh-outsider-pin` in `release.yml` are the SHAPE copied here (a read-only job
+# decides, an `id-token: write` job with no checkout writes through Octo STS), not the file this lives in. This workflow reads NOTHING from the
+# `release` run but its conclusion: it checks out `main` itself, so what a `workflow_run` hands a privileged job from an untrusted run is not here.
+#
+# ## What the pull request is, and is not
+#
+# A DRAFT, which `auto-arm.yml` never arms: an approving review marks it ready and arms it (#4969), so a person reads it first. The body says
+# the prose beside each pin is UNREAD: only a pin's own commit and the `a11ign@<x.y.z>` label on that same line move. Nothing is merged here.
+# The real-tree guard STAYS as it is: it is what notices a re-pin that was never merged. FLAG: none. REVERT: `git revert` this file, its policy
+# and the guard change; a pull request already open is closed by hand.
+#
+# ## What the Octo STS installation holds (read 2026-10-12, row #5224 Change 3)
+#
+# `pull_requests` write on THIS repository: the installation's bot (`octo-sts[bot]`) authored #5210 on this repository on 2026-10-12 through
+# `consumer-gate-pin-write.sts.yaml`, whose policy grants `pull_requests: write`, and `acceptance-sweep` and `auto-arm` hold the same grant. `contents`
+# write is the one `promote-action-tag` uses for the tag writes. This policy asks for those two and nothing else, `workflows` included. A refusal of
+# the write that says `Resource not accessible by integration` is an installation fault a person must read, and the step says so.
+on:
+  workflow_run:
+    workflows: [release]
+    types: [completed]
+  workflow_dispatch:
+
+permissions: {}
+
+# One re-pin at a time. Never cancelled: a cancelled run could stop between the push and the pull request.
+concurrency:
+  group: docs-pin-write
+  cancel-in-progress: false
+
+jobs:
+  decide:
+    # A `release` run that did not succeed promoted nothing. A dispatch is a person's live reading and always runs.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      action: ${{ steps.plan.outputs.action }}
+      version: ${{ steps.plan.outputs.version }}
+      commit: ${{ steps.plan.outputs.commit }}
+      base: ${{ steps.plan.outputs.base }}
+    steps:
+      # A full clone: `v0` and the release tags are not reachable from `main`'s history alone, and `v0` moves.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # No `pnpm install`: the planner imports nothing, and Node strips the types of the one file it imports, so no dependency code runs here.
+      - uses: actions/setup-node@v7
+        with: { node-version: 24 }
+      - name: Plan the re-pin at the commit `v0` names, and stage the docs that change
+        id: plan
+        run: |
+          set -euo pipefail
+          script="$RUNNER_TEMP/repin-plan.ts"
+          cat > "$script" <<'PLAN'
+          import { execFileSync } from "node:child_process";
+          import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+          import { dirname, join } from "node:path";
+          import { pathToFileURL } from "node:url";
+
+          const guard = join(process.env.GITHUB_WORKSPACE, "packages/guards/src/docs-release-pin-currency.ts");
+          const { planRepin, repoReader } = await import(pathToFileURL(guard).href);
+          const git = (args) => execFileSync("git", args, { encoding: "utf8" });
+          const emit = (pairs) => appendFileSync(process.env.GITHUB_OUTPUT, Object.entries(pairs).map(([key, value]) => `${key}=${value}\n`).join(""));
+
+          const plan = planRepin(repoReader(git, (path) => readFileSync(path, "utf8")));
+          if (plan.status === "refused") {
+            for (const fault of plan.faults) console.log(`::error::${fault}`);
+            console.log("::error::No re-pin was written.");
+            process.exit(1);
+          }
+          if (plan.status === "current") {
+            console.log(`every guarded doc already pins a11ign@${plan.promoted.version} (${plan.promoted.commit}) or newer; nothing to move`);
+            emit({ action: "keep", version: plan.promoted.version, commit: plan.promoted.commit });
+            process.exit(0);
+          }
+          for (const file of plan.files) {
+            const out = join(process.env.RUNNER_TEMP, "repinned", file.path);
+            mkdirSync(dirname(out), { recursive: true });
+            writeFileSync(out, file.text);
+            console.log(`re-pinned ${file.path} to a11ign@${plan.promoted.version}`);
+          }
+          emit({ action: "write", version: plan.promoted.version, commit: plan.promoted.commit, base: git(["rev-parse", "HEAD"]).trim() });
+          PLAN
+          node "$script"
+      - name: Hand on the changed docs
+        if: steps.plan.outputs.action == 'write'
+        uses: actions/upload-artifact@v7
+        with:
+          name: docs-repinned
+          path: ${{ runner.temp }}/repinned
+          if-no-files-found: error
+          retention-days: 1
+
+  write:
+    needs: [decide]
+    if: ${{ !cancelled() && needs.decide.result == 'success' && needs.decide.outputs.action == 'write' }}
+    runs-on: ubuntu-latest
+    # NO checkout, install, node or pnpm in this job (the header says why): `gh`, `jq`, `base64`, `sed`, `diff` only. The writes come from the
+    # minted token, whose grant is `docs-pin-write.sts.yaml`'s; the job's own `GITHUB_TOKEN` is reduced to the artifact read plus the OIDC request.
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Mint a token that may push a branch and open a pull request, for this workflow as it is on main (no fallback to GITHUB_TOKEN)
+        id: octo-sts
+        uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05 # v1.1.1
+        with:
+          scope: ${{ github.repository }}
+          identity: docs-pin-write
+      - name: Take the changed docs
+        uses: actions/download-artifact@v8
+        with:
+          name: docs-repinned
+          path: ${{ runner.temp }}/repinned
+      - name: Move the re-pin branch onto main, write the docs onto it, and open the pull request unless one is open
+        env:
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: automation/docs-pin-write
+          VERSION: ${{ needs.decide.outputs.version }}
+          COMMIT: ${{ needs.decide.outputs.commit }}
+          BASE: ${{ needs.decide.outputs.base }}
+          HANDED: ${{ runner.temp }}/repinned
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1. Nothing was written."; exit 1; }
+          [ -n "${GH_TOKEN:-}" ] || fail "the Octo STS token (step octo-sts) is empty"
+          # What the previous job handed over is data: it is written only if it is the guarded docs at BASE with their pins moved and nothing else.
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "'$VERSION' is not an x.y.z"
+          [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || fail "'$COMMIT' is not a full commit sha"
+          [[ "$BASE" =~ ^[0-9a-f]{40}$ ]] || fail "'$BASE' is not a full commit sha"
+          guarded='^(README\.md|docs/[^/]+\.md|docs/adr/[^/]+\.md)$'
+          mapfile -t paths < <(cd "$HANDED" && find . -type f | sed 's|^\./||' | LC_ALL=C sort)
+          [ "${#paths[@]}" -gt 0 ] || fail "the artifact holds no file"
+          scratch="$(mktemp -d)"
+          # A line is a pin line when it differs from BASE; it may differ ONLY in the 40-hex shas and the x.y.z versions, and must now name the
+          # promoted commit (an action pin) or version (an install pin). A changed byte anywhere else, an added line or a removed one is refused.
+          mask() { sed -E 's/[0-9a-f]{40}/SHA/g; s/[0-9]+\.[0-9]+\.[0-9]+/VER/g'; }
+          # The entries live in a FILE, never in an argument: a doc's text passed through `--argjson` is past the kernel's limit on one argument.
+          entries="$scratch/entries.json"
+          echo '[]' > "$entries"
+          add_entry() { jq -c --arg p "$1" --rawfile c "$2" '. + [{path: $p, mode: "100644", type: "blob", content: $c}]' "$entries" > "$entries.next" && mv "$entries.next" "$entries"; }
+          for path in "${paths[@]}"; do
+            [[ "$path" =~ $guarded ]] || fail "'$path' is not a guarded doc (README.md, docs/*.md, docs/adr/*.md)"
+            gh api "repos/$REPO/contents/$path?ref=$BASE" --jq .content | base64 -d > "$scratch/base" || fail "$path at $BASE could not be read"
+            handed="$HANDED/$path"
+            [ "$(wc -l < "$scratch/base")" = "$(wc -l < "$handed")" ] || fail "$path changed its number of lines"
+            removed="$(diff --old-line-format='%L' --new-line-format='' --unchanged-line-format='' "$scratch/base" "$handed" || true)"
+            added="$(diff --old-line-format='' --new-line-format='%L' --unchanged-line-format='' "$scratch/base" "$handed" || true)"
+            [ -n "$added" ] || fail "$path is handed on but differs from $BASE in no line"
+            [ "$(mask <<<"$removed")" = "$(mask <<<"$added")" ] || fail "$path differs from $BASE in more than the shas and versions of its pin lines"
+            # An action pin must name the promoted commit itself; an install pin has no commit and must name the promoted version.
+            while IFS= read -r line; do
+              if [[ "$line" =~ uses:[[:space:]]*a11ign/a11ign@([0-9a-f]{40}) ]]; then
+                [ "${BASH_REMATCH[1]}" = "$COMMIT" ] || fail "a changed line of $path pins ${BASH_REMATCH[1]}, not the promoted commit $COMMIT"
+              else
+                [[ "$line" == *"a11ign@$VERSION"* ]] || fail "a changed line of $path is neither an action pin nor names a11ign@$VERSION: $line"
+              fi
+            done <<<"$added"
+            add_entry "$path" "$handed"
+          done
+          # THE PULL REQUEST CARRIES ITS OWN ACCEPTANCE FILE (#5212, ADR 0044): the reader takes the commands from the file a pull request ADDS
+          # under `.acceptance/` and reads the body only for an exempt author, which the Octo STS app is not. The name carries the commit because
+          # only a file ADDED against `main` counts, and a file a previous re-pin merged stays until `acceptance-sweep.yml` removes it.
+          acceptance_path=".acceptance/automation~docs-pin-write-${COMMIT:0:12}.md"
+          acceptance_file="$scratch/acceptance.md"
+          cat > "$acceptance_file" <<EOF
+          Moves the guarded docs' release pins to a11ign@${VERSION} (commit ${COMMIT}), the release \`v0\` points at. Written by \`docs-pin-write.yml\` (#5224); the file is generated, never edited by hand.
+
+          Acceptance:
+          pnpm exec rstest run --config scripts/rstest/rstest.config.ts packages/guards/src/docs-release-pin-currency.test.ts
+          EOF
+          add_entry "$acceptance_path" "$acceptance_file"
+          # ONE commit on BASE's own tree with exactly those entries, its only parent BASE, and the branch moved straight onto it: a branch holding
+          # the docs without their acceptance file (or the reverse) is a state this job must never leave behind. The branch belongs to this
+          # workflow alone, so a newer re-pin replaces an older one. Called under `if !`, where `set -e` does not apply: every step answers itself.
+          write_branch() {
+            local base_tree tree commit
+            base_tree="$(gh api "repos/$REPO/git/commits/$BASE" --jq .tree.sha)" || return 1
+            tree="$(jq -n --arg base "$base_tree" --slurpfile entries "$entries" '{base_tree: $base, tree: $entries[0]}' \
+              | gh api -X POST "repos/$REPO/git/trees" --input - --jq .sha)" || return 1
+            commit="$(jq -n --arg tree "$tree" --arg parent "$BASE" --arg message "docs: re-pin the release pins to a11ign@${VERSION} (docs-pin-write.yml, #5224)" \
+              '{message: $message, tree: $tree, parents: [$parent]}' | gh api -X POST "repos/$REPO/git/commits" --input - --jq .sha)" || return 1
+            [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || { echo "the commit API answered '$commit', not a sha"; return 1; }
+            if gh api "repos/$REPO/git/ref/heads/$BRANCH" > /dev/null 2>&1; then
+              gh api -X PATCH "repos/$REPO/git/refs/heads/$BRANCH" -f sha="$commit" -F force=true > /dev/null || return 1
+            else
+              gh api -X POST "repos/$REPO/git/refs" -f ref="refs/heads/$BRANCH" -f sha="$commit" > /dev/null || return 1
+            fi
+          }
+          if ! response="$(write_branch 2>&1)"; then
+            printf '%s\n' "$response"
+            echo "::error::the write of ${BRANCH} was refused; if the response says 'Resource not accessible by integration', the Octo STS App installation lacks 'contents' or 'pull_requests' write on ${REPO} (the policy asks for both): a person must accept it in the installation's settings."
+            exit 1
+          fi
+          # The shape check, on the branch itself: it differs from BASE by the handed docs and the acceptance file, and by nothing else.
+          changed="$(gh api "repos/${REPO}/compare/${BASE}...${BRANCH}" --jq '[.files[].filename] | sort | join(" ")')"
+          expected="$(printf '%s\n' "${paths[@]}" "$acceptance_path" | LC_ALL=C sort | paste -sd' ')"
+          [ "$changed" = "$expected" ] || { echo "::error::${BRANCH} differs from ${BASE} by '${changed}', not by '${expected}'. No pull request was opened."; exit 1; }
+          title="docs: re-pin the release pins to a11ign@${VERSION}"
+          body_file="$(mktemp)"
+          cat > "$body_file" <<EOF
+          Moves the guarded docs' release pins to a11ign@${VERSION} (commit ${COMMIT}), which \`v0\` points at. Opened by \`docs-pin-write.yml\` (#5224, #5121 option A) after a \`release\` run succeeded.
+
+          **The prose beside each pin is UNREAD.** Only a pin's own commit and the \`a11ign@x.y.z\` label on that same line were rewritten; a sentence that says "since 0.9.0" or describes what that release does was not checked. Read the neighbours of each changed line before approving.
+
+          This is a draft and does not arm itself: an approving review marks it ready and arms it (#4969).
+
+          Files: ${paths[*]}
+
+          Acceptance file: ${acceptance_path}
+
+          Closes: none — automated re-pin of the docs' release pins to a11ign@${VERSION} (#5224)
+          EOF
+          open="$(gh api "repos/${REPO}/pulls?state=open&head=${REPO%%/*}:${BRANCH}" --jq '.[0].number // empty')"
+          if [ -n "$open" ]; then
+            gh api -X PATCH "repos/${REPO}/pulls/${open}" -f title="$title" -F body=@"$body_file" > /dev/null
+            echo "::notice::updated the open re-pin pull request #${open} to a11ign@${VERSION}"
+            exit 0
+          fi
+          gh api --method POST "repos/${REPO}/pulls" -f title="$title" -f head="$BRANCH" -f base=main -F draft=true -F body=@"$body_file" \
+            --jq '"::notice::opened re-pin pull request #\(.number) (draft)"'

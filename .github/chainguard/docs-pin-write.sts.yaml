@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/octo-sts/app/refs/heads/main/pkg/octosts/octosts.TrustPolicy.json
+#
+# THE TOKEN `docs-pin-write.yml` PUSHES THE RE-PIN BRANCH AND OPENS ITS PULL REQUEST WITH (#5224, #5121 option A, `ceo` 2026-10-11). Octo STS
+# v0.11.2 syntax; a repository policy reaches only the repository it sits in. Every pattern is matched against the WHOLE claim, so none is anchored.
+#
+# WHY AN INSTALLATION TOKEN AT ALL: `GITHUB_TOKEN` writes fire no workflow, so the re-pin pull request would have no `ci.yml` run and never
+# become mergeable (#416).
+#
+# WHAT BINDS IT TO `main`: `subject` is the EXACT `sub` of a run on the `main` ref, which both triggers present (`workflow_run` runs the
+# workflow file as it is on the default branch, and `workflow_dispatch` on `main`); a dispatch on another branch presents that branch's ref and
+# is refused. `job_workflow_ref` pinned to `@refs/heads/main` closes the other door: a branch that edits `docs-pin-write.yml` cannot mint.
+# No `pull_request*` event is named. `sub` carries IMMUTABLE ids, never names (#4191).
+#
+# UNMEASURED WHEN WRITTEN, STATED RATHER THAN ASSUMED: the `sub` of a `workflow_run` run. The `workflow_dispatch` half is the same shape the
+# sibling policies measured. If a `workflow_run` run presents anything but `ref:refs/heads/main`, the mint is refused and the job is red
+# naming the step, which is the safe direction; the first `release` success after this lands is the reading.
+#
+# WHAT IT HOLDS: `contents: write` (push the one `automation/docs-pin-write` branch) and `pull_requests: write` (open and update the pull
+# request), on THIS repository only. It does NOT hold `workflows`: the re-pin writes `README.md`, `docs/*.md` and `docs/adr/*.md`, never
+# anything under `.github/workflows/`. It is not a merge identity: the pull request needs the approving review `main` requires (#2022).
+issuer: https://token.actions.githubusercontent.com
+subject: repo:a11ign@320310787/a11ign@1280353940:ref:refs/heads/main
+claim_pattern:
+  job_workflow_ref: a11ign/a11ign/\.github/workflows/docs-pin-write\.yml@refs/heads/main
+  event_name: workflow_run|workflow_dispatch
+permissions:
+  contents: write
+  pull_requests: write
