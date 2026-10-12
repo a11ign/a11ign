@@ -399,7 +399,7 @@ test("jobsFor: the job names classify set true, in the workflow's order, for a f
   withGitSandbox((sandbox) => {
     trackFixtureRepo(sandbox);
     assert.deepEqual(jobsFor(["packages/judge/src/rules.ts"], sandbox.dir), ["ts", "rulesFitness"]);
-    assert.deepEqual(jobsFor(["layers.json", "packages/scorer/python/x.py"], sandbox.dir), ["ts", "python"]);
+    assert.deepEqual(jobsFor(["tsconfig.json", "packages/scorer/python/x.py"], sandbox.dir), ["ts", "python"]);
     assert.deepEqual(jobsFor(["scripts/x.mjs"], sandbox.dir), ["ts"]);
     assert.deepEqual(jobsFor([], sandbox.dir), []);
   });
@@ -493,7 +493,7 @@ test("CLI: a diff is classified and printed as key=value lines when not inside A
 
 test("CLI: under Actions the outputs are APPENDED to $GITHUB_OUTPUT, not printed, for a merge_group event too", () => {
   withGitSandbox((sandbox) => {
-    branchEditing(sandbox, "layers.json");
+    branchEditing(sandbox, "tsconfig.json");
     const outFile = join(sandbox.dir, "github-output.txt");
     writeFileSync(outFile, "earlier=1\n");
     const run = runCli(["--event=merge_group", `--base=${BASE_REF}`, `--repo=${sandbox.dir}`], { GITHUB_OUTPUT: outFile });

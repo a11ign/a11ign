@@ -26,5 +26,4 @@
 export const NIGHTLY_TENANTS = Object.freeze([
   "packages/guards/nightly/bounded-window-reads.test.ts",
   "packages/guards/nightly/isolation-gate-real-consumer.test.ts",
-  "packages/guards/nightly/launcher-reach-drift.test.ts",
 ]);

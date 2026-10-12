@@ -34,7 +34,14 @@ Environment=NODE_COMPILE_CACHE=%h/.cache/node-compile-cache
 # one (the workers account); a future `gh` write the workers account lacks is the moment to pick `leads/gh`.
 Environment=GH_CONFIG_DIR=/home/agent/workers/gh
 
-ExecStart=%h/.local/bin/pnpm run corpus:snapshot
+# THE SCRIPT IS THE LAB'S, RUN FROM THE LAB'S CHECKOUT (ADR 0045 cut 9, #5087). This repository no longer holds `corpus:snapshot` or lays the lab: the unit names
+# `a11ign/lab`'s `scripts/corpus-snapshot.ts` by its absolute path and keeps THIS directory as the working one, because the script reads `runs/` and writes
+# `backups` relative to the working directory and what it protects is `runs/board-snapshots` HERE. Node resolves the script's imports from the file, not from
+# the working directory. The load is proved FIRST for the reason `a11ign-fleet-watch.service` gives (#4693): a crash before `main` must fail the unit and not
+# vanish as a quiet one. The module's own `main` runs only as the entry point, so importing it reads nothing.
+ExecStartPre=%h/.local/bin/node -e "import('%h/repos/lab/scripts/corpus-snapshot.ts')"
+
+ExecStart=%h/.local/bin/node %h/repos/lab/scripts/corpus-snapshot.ts
 
 [Install]
 WantedBy=default.target

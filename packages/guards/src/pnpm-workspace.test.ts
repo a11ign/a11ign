@@ -113,21 +113,10 @@ test("yaml AND axe-core are hoisted to the root, because no manifest declares th
   assert.match(lock, /^ {2}axe-core@\d+\.\d+\.\d+:/m);
 });
 
-/** The layers `layers.json` declares, held (`layers`) or only laid (`pinned`, #3505), as `[name, path]`. Read as the file, not through `control`. */
-function declaredLayers(): [string, string][] {
-  const manifest = JSON.parse(readFileSync(join(ROOT, "layers.json"), "utf8")) as { layers: Record<string, { path: string }>; pinned?: Record<string, { path: string }> };
-  return Object.entries({ ...manifest.layers, ...manifest.pinned }).map(([name, { path }]) => [name, path]);
-}
-
-test("EVERY LAYER layers.json DECLARES IS EXCLUDED FROM THE WORKSPACE, because its clone is not a member of the core", () => {
-  const layers = declaredLayers();
-  // The positive control for the emptiness below: a manifest that yielded no layers would pass over nothing.
-  assert.ok(layers.length > 0, "layers.json yielded no layers -- the read broke, or the split was undone");
+test("THE WORKSPACE EXCLUDES NOTHING: no layer is laid under packages/, so every directory there is the core's own (ADR 0045 cut 9, #5087)", () => {
   const { packages } = parse(readFileSync(join(ROOT, "pnpm-workspace.yaml"), "utf8")) as { packages: string[] };
-  // The laid lab is excluded as a glob class (`la[b]`, ADR 0045 cut 2, #5080), so the cut's grep for its path finds only `layers.json` and `package.json`.
-  const asClass = (path: string) => `${path.slice(0, -1)}[${path.slice(-1)}]`;
-  const missing = layers.filter(([, path]) => !packages.includes(`!${path}`) && !packages.includes(`!${asClass(path)}`)).map(([name, path]) => `${name}: !${path}`);
-  assert.deepEqual(missing, [],
-    "a layer is cloned at its `path` on a guest, the lab host and an operator worktree, and `packages/*` makes that clone a workspace "
-    + "member, so `pnpm install --frozen-lockfile` fails with ERR_PNPM_OUTDATED_LOCKFILE; add `- \"!<path>\"` after `packages/*`");
+  // The positive control for the emptiness below: a workspace that listed no `packages/*` would have no exclusions to find either.
+  assert.ok(packages.includes("packages/*"), "pnpm-workspace.yaml lists no packages/* -- the read broke");
+  assert.deepEqual(packages.filter((entry) => entry.startsWith("!")), [],
+    "an exclusion is a laid clone this checkout still expects; nothing lays one any more, so the entry hides a directory that is not the core's");
 });

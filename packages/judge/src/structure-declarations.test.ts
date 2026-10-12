@@ -23,10 +23,6 @@ import { restatesWireType } from "@a11ign/evidence";
  */
 const ROOT = join(import.meta.dirname, "../../..");
 
-/** The directories `layers.json` lays into this checkout, held or pinned: another repository's source, which this walk does not read (ADR 0045 rule 2). */
-const manifest = JSON.parse(readFileSync(join(ROOT, "layers.json"), "utf8")) as { layers: Record<string, { path: string }>; pinned?: Record<string, { path: string }> };
-const LAID_LAYERS = new Set(Object.values({ ...manifest.layers, ...manifest.pinned }).map(({ path }) => path));
-
 /** Every non-test source file under packages/, as [path, text]. */
 function sources(): [string, string][] {
   const out: [string, string][] = [];
@@ -35,7 +31,6 @@ function sources(): [string, string][] {
       const path = join(dir, entry.name);
       if (entry.isDirectory()) {
         if (["node_modules", "dist", ".git"].includes(entry.name)) continue;
-        if (LAID_LAYERS.has(path.slice(ROOT.length + 1))) continue;
         walk(path);
         continue;
       }
