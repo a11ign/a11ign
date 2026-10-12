@@ -19,8 +19,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: a11ign/a11ign@ccd21d9d0b6088caeff375fa91d3efe0897cb839   # the commit of the release tagged a11ign@0.10.2
-        # Pinned to the full 40-character commit of release 0.9.0 (`npm view a11ign dist-tags` read `latest`
-        # 0.9.0 on 2026-10-11; `next` moved from 0.9.0 to 0.10.1 that day), so your CI does not move when a
+        # Pinned to the full 40-character commit of release 0.10.2 (`npm view a11ign dist-tags` read `latest`
+        # 0.10.2 on 2026-10-12; `next` was 0.10.2 too), so your CI does not move when a
         # newer one is published -- GitHub
         # refuses an abbreviated SHA outright, it does not just discourage it.
         id: a11ign
@@ -46,13 +46,13 @@ no log and no artifact, and any diagnostic step you add with `if: always()` does
 [the account of one, and what to do about it](./try-it.md#the-fastest-route-a-github-actions-run) in
 `docs/try-it.md`.
 
-> **This pins release `0.9.0`, by its commit.** The release is tagged `a11ign@0.9.0` and the commit is the one the tag
+> **This pins release `0.10.2`, by its commit.** The release is tagged `a11ign@0.10.2` and the commit is the one the tag
 > names; every `0.x` release is a deliberate step ADR 0007 commits this project to until `1.0.0` (a breaking change
 > costs a minor bump, not a major-version apology). The full 40-character commit is the pin because it cannot move,
 > and GitHub refuses an abbreviated one outright rather than merely discouraging it
 > (`uses: a11ign/a11ign@<sha>`); it is what GitHub itself recommends for third-party actions. **Do not write
 > `a11ign/a11ign@v0`:** that tag exists (`git ls-remote --tags https://github.com/a11ign/a11ign refs/tags/v0`
-> printed the `0.9.0` commit on 2026-10-11) but it moves, so a workflow on it takes a newer release unasked. To take a newer release, read its number from `npm view a11ign dist-tags` and its
+> printed the `0.10.2` commit on 2026-10-12) but it moves, so a workflow on it takes a newer release unasked. To take a newer release, read its number from `npm view a11ign dist-tags` and its
 > commit from `git ls-remote https://github.com/a11ign/a11ign 'refs/tags/a11ign@*'`. See
 > [ADR 0007](./adr/0007-versioning-and-release.md).
 
@@ -354,7 +354,7 @@ error handling most needs reviewing. On such a page 3.3.1, 3.3.3 and 4.1.3 are n
 
 ```yaml
 - uses: a11ign/a11ign@ccd21d9d0b6088caeff375fa91d3efe0897cb839   # the commit of the release tagged a11ign@0.10.2
-  # Pinned to the full 40-character commit of release 0.9.0, so your CI does not move when a newer one
+  # Pinned to the full 40-character commit of release 0.10.2, so your CI does not move when a newer one
   # is published -- GitHub refuses an abbreviated SHA outright, it does not just discourage it.
   with:
     url: https://staging.example.com/signup
@@ -624,7 +624,7 @@ browsers. [The reading, with run ids →](adr/0038-authenticated-capture.md)
 | `findings` | Count of lived-experience findings (summed over the captured pages, for `urls`). |
 | `task-completable` | Whether the judge thinks a screen-reader user could finish the stated task. On the default `local` backend this only means nothing scored as a blocker, a coarse proxy. |
 | `result-json` | Path to the full result, including the transcript. Worth uploading as an artifact — the transcript is the evidence behind every finding. |
-| `summary-md` | Path to the rendered report — the same markdown written to the job summary. **Not in `v0.1.0`**: a workflow pinned to that tag reads it as an empty string, and an artifact upload that lists it silently drops it. Release `0.3.0` has it (#1369), and so does the `0.9.0` pin here. Where the pinned ref has it, upload it alongside `result-json`: it is the route a CI-only consumer, with no access to the job summary, has to the human-readable report. |
+| `summary-md` | Path to the rendered report — the same markdown written to the job summary. **Not in `v0.1.0`**: a workflow pinned to that tag reads it as an empty string, and an artifact upload that lists it silently drops it. Release `0.3.0` has it (#1369), and so does the `0.10.2` pin here. Where the pinned ref has it, upload it alongside `result-json`: it is the route a CI-only consumer, with no access to the job summary, has to the human-readable report. |
 | `evidence-pack` | Path to the [evidence pack](./evidence-pack.md): the per-criterion outcomes with the NVDA announcements behind them, as one Markdown file for an assessor to attach to a conformance report. It is evidence and not a VPAT or ACR, and states no conformance. **Empty** for a run of a `urls` list, a `forms` config or a PDF, which write none, so guard an upload on it. Upload it alongside `result-json`: `path: ${{ steps.a11ign.outputs.evidence-pack }}`. Not in any release before the one that carries this row. |
 
 `findings` counts every lived-experience finding, referred ones included; `fail-on` counts only the asserted ones. The log's count line splits them:
