@@ -211,7 +211,7 @@ test("#4374: THE JOB HOLDING id-token RUNS NO REPOSITORY CODE: no checkout, no i
   // A heredoc body is text the job WRITES (the pull request's Acceptance names `pnpm exec rstest`), not a command it runs.
   const scripts = steps.map((step) => (step.run ?? "").replace(/<<EOF\n[\s\S]*?\n\s*EOF\n/g, "")).join("\n");
   assert.doesNotMatch(scripts, /\b(pnpm|npm|npx|node|tsx|yarn)\b|scripts\//, "a run step of the minting job reaches repository code or a package manager");
-  assert.match(scripts, /gh api -X PUT/, "positive control: the scan reads the step that writes");
+  assert.match(scripts, /gh api -X POST "repos\/\$REPO\/git\/commits"/, "positive control: the scan reads the step that writes");
   // The control the scan must not miss: the job that hands the file on DOES run them, and holds no id-token.
   const regenerateText = JSON.stringify(workflow.jobs.regenerate.steps);
   assert.match(regenerateText, /actions\/checkout/);
@@ -254,7 +254,11 @@ function acceptanceFileFault(script: string): string | null {
   const name = script.match(/acceptance_path="(\.acceptance\/[^"]+\.md)"/)?.[1];
   if (name === undefined) return "no acceptance_path under .acceptance/ is written";
   if (!name.includes("${PIN") || !name.startsWith(".acceptance/automation~consumer-gate-pin-")) return `the name '${name}' does not carry the commit, so it is added once and never again`;
-  if (!/gh api -X PUT "repos\/\$REPO\/contents\/\$acceptance_path"[\s\S]*?-f branch="\$BRANCH"/.test(script)) return "the file is never written onto the repair branch";
+  const tree = script.match(/'\{base_tree: [^']*\}'/)?.[0] ?? "";
+  if (!/path: \$pin_path[^}]*\}, \{path: \$acceptance_path/.test(tree)) return "the acceptance file is not an entry of the same tree as consumer-gate.yml";
+  if (!/'\{message: \$message, tree: \$tree, parents: \[\$parent\]\}'/.test(script) || !/--arg parent "\$PIN"/.test(script)) return "the commit is not one commit on this commit";
+  const posts = (path: string) => script.split(`-X POST "repos/$REPO/git/${path}"`).length - 1;
+  if (posts("trees") !== 1 || posts("commits") !== 1) return `${posts("trees")} trees and ${posts("commits")} commits are created, not one of each: the two files do not land together`;
   if (!/compare\/\$\{PIN\}\.\.\.\$\{BRANCH\}[\s\S]*?\[ "\$changed" = "\$acceptance_path \$FILE_PATH" \]/.test(script)) return "the branch is not checked to differ by those two paths alone";
   if (!/^\s*Acceptance file: \$\{acceptance_path\}$/m.test(script)) return "the pull request body does not point at the file";
   return null;
@@ -271,11 +275,12 @@ test("#5212: the repair writes its own .acceptance/ file, named for the commit, 
 
 test("#5212: THE OLD WORKFLOW FAILS IT -- a repair that writes only consumer-gate.yml, one with a fixed name, and one that never checks the paths are each refused", () => {
   const script = workflow.jobs.repair.steps.find((s) => s.env?.BRANCH !== undefined)?.run ?? "";
-  const withoutWrite = script.replace(/gh api -X PUT "repos\/\$REPO\/contents\/\$acceptance_path"/, 'gh api -X PUT "repos/$REPO/contents/$FILE_PATH"');
+  const withoutWrite = script.replace(/, \{path: \$acceptance_path, mode: "100644", type: "blob", content: \$acceptance_text\}/, "");
+  const twoCommits = `${script}\n gh api -X POST "repos/$REPO/git/commits" --input -\n`;
   const fixedName = script.replace("consumer-gate-pin-${PIN:0:12}.md", "consumer-gate-pin.md");
   const unchecked = script.replace('[ "$changed" = "$acceptance_path $FILE_PATH" ]', "true");
   const oldBody = script.replace("Acceptance file: ${acceptance_path}", "Acceptance:");
-  for (const [broken, variant] of [[withoutWrite, "no write"], [fixedName, "fixed name"], [unchecked, "no path check"], [oldBody, "body without the pointer"]] as const) {
+  for (const [broken, variant] of [[withoutWrite, "no write"], [twoCommits, "a second commit"], [fixedName, "fixed name"], [unchecked, "no path check"], [oldBody, "body without the pointer"]] as const) {
     assert.notEqual(broken, script, `${variant}: the mutation did not apply, so it proves nothing`);
     assert.notEqual(acceptanceFileFault(broken), null, `${variant}: accepted`);
   }
@@ -287,8 +292,9 @@ test("#4374: what the minting job was handed is shape-checked before it is writt
   assert.match(script, /\[0-9a-f\]\{40\}/, "shas are shape-checked");
   assert.match(script, /find "\$HANDED" -type f \| wc -l\)" = 1/, "the artifact holds exactly one file");
   assert.match(script, /sed "s\/\$old\/\$PIN\/g" .* \| cmp - "\$HANDED\/consumer-gate\.yml"/, "the file is the one on this commit with only its pin moved");
-  assert.match(script, /gh api -X PATCH "repos\/\$REPO\/git\/refs\/heads\/\$BRANCH" -f sha="\$PIN" -F force=true/, "a newer repair replaces an older one");
-  assert.match(script, /gh api -X PUT "repos\/\$REPO\/contents\/\$FILE_PATH".* -f branch="\$BRANCH"/s);
+  assert.match(script, /gh api -X PATCH "repos\/\$REPO\/git\/refs\/heads\/\$BRANCH" -f sha="\$commit" -F force=true/, "a newer repair replaces an older one");
+  assert.match(script, /gh api -X POST "repos\/\$REPO\/git\/trees" --input -/, "the files are written as a tree on this commit's own tree");
+  assert.match(script, /--arg parent "\$PIN"/, "whose commit has this commit as its one parent, so the branch is a single commit ahead");
   assert.doesNotMatch(script, /\bgit (push|commit|switch|add)\b/, "no repository checkout to commit in");
 });
 
@@ -311,7 +317,7 @@ test("#4373: every job that runs a script reaching repo-identity.ts resolves the
 
 test("#4374: a write refused for the 'workflows' permission names the App installation, the one step outside this repository", () => {
   const script = workflow.jobs.repair.steps.find((s) => s.env?.BRANCH !== undefined)?.run ?? "";
-  assert.match(script, /if ! response="\$\(gh api -X PUT .*2>&1\)"; then/s, "the response is captured, not left to a bare 403");
+  assert.match(script, /if ! response="\$\(write_branch 2>&1\)"; then/, "the response is captured, not left to a bare 403");
   assert.match(script, /::error::the write of \$\{BRANCH\} was refused;.*Octo STS App installation lacks the 'workflows' permission/, "and the error names where to look");
   assert.equal(policy.permissions.workflows, "write", "the policy asks for the permission the write needs");
 });
