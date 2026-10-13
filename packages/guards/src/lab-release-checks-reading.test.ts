@@ -72,7 +72,7 @@ function verdictOf(runs: Run[] | "api-down", { lastChange = LAST_CHANGE }: { las
     const result = spawnSync("bash", ["-c", stepOfTheJob()], {
       cwd: dir,
       encoding: "utf8",
-      env: { PATH: `${bin}:${process.env.PATH}`, GH_TOKEN: "x", LAB: "a11ign/lab", GITHUB_STEP_SUMMARY: join(dir, "summary.md"), HOME: dir },
+      env: { PATH: `${bin}:${process.env.PATH}`, LAB: "a11ign/lab", GITHUB_STEP_SUMMARY: join(dir, "summary.md"), HOME: dir },
     });
     return { code: result.status, out: `${result.stdout}${result.stderr}` };
   } finally {
