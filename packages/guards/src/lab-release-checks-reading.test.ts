@@ -18,6 +18,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
+import { sandboxGitEnv } from "@a11ign/toolchain/lib/git-sandbox";
 
 const REPO = fileURLToPath(new URL("../../..", import.meta.url));
 const JOB = "lab-release-checks";
@@ -39,7 +40,7 @@ function stepOfTheJob(): string {
 function inRepository(commitDate: string | null): { dir: string; bin: string } {
   const dir = mkdtempSync(join(tmpdir(), "lab-release-checks-"));
   const dated = commitDate ? { GIT_COMMITTER_DATE: commitDate, GIT_AUTHOR_DATE: commitDate } : {};
-  const git = (...args: string[]) => spawnSync("git", args, { cwd: dir, encoding: "utf8", env: { ...process.env, ...dated } });
+  const git = (...args: string[]) => spawnSync("git", args, { cwd: dir, encoding: "utf8", env: { ...sandboxGitEnv(), ...dated } });
   git("init", "-q", "-b", "main");
   git("config", "user.email", "t@example.invalid");
   git("config", "user.name", "t");
