@@ -7,6 +7,7 @@
  *  2. Never `rm` a variable or a glob target: a literal path, or `"${VAR:?}/name"`.
  *  3. Do not clean the scratchpad: it is per-session and swept.
  *  4. A denial by the built-in safety check is taken: the command is rewritten and the same removal is never retried.
+ *  5. (a11ign#5285) Never a nested `bash -c` / `sh -c` with a `$` in or beside its string: five of the six denied commands held no removal.
  *
  * Each rule is read as the SENTENCE that carries it, as `engineer-declared-state.test.ts` does, so a rule's facts must sit in one sentence.
  * Positive control: the shipped file passes. Negative controls: each load-bearing word replaced in a copy fails ITS rule, one case per word,
@@ -50,18 +51,23 @@ const retryNeverDenial: Rule = (text) =>
     "only a person may approve one",
   );
 
+/** A nested shell carrying a `$` is run directly or from a file, never inline: the shape five of the six denials share. */
+const noNestedShellWithExpansion: Rule = (text) =>
+  hasSentence(text, "Never write a nested `bash -c` or `sh -c`", "with a `$` in or beside its string", "run the commands directly", "run that file");
+
 const RULES: Array<[string, Rule]> = [
   ["scripts in files", scriptsInFiles],
   ["never remove a variable", neverRemoveVariable],
   ["leave the scratchpad", leaveScratchpad],
   ["take the denial", retryNeverDenial],
+  ["no nested shell with an expansion", noNestedShellWithExpansion],
 ];
 
-test("the shipped engineer.md states all four rules", () => {
+test("the shipped engineer.md states all five rules", () => {
   for (const [name, rule] of RULES) assert.ok(rule(ENGINEER), `engineer.md lost the ${name} rule`);
 });
 
-test("negative control: the section removed entirely fails all four rules", () => {
+test("negative control: the section removed entirely fails all five rules", () => {
   const section = /\n## Removal commands the safety check cannot read[\s\S]*?(?=\n## )/;
   assert.ok(section.test(ENGINEER), "the section heading moved, so the removal below proves nothing");
   const without = ENGINEER.replace(section, "");
@@ -81,6 +87,9 @@ const MUTATIONS: Array<[string, string, string, Rule]> = [
   ["the :? form", '"${VAR:?}/name"', '"${VAR}/name"', neverRemoveVariable],
   ["do not clean", "Do not clean the scratchpad", "Clean the scratchpad", leaveScratchpad],
   ["per-session and swept", "it is per-session and swept", "it is shared and kept", leaveScratchpad],
+  ["the nested shell", "Never write a nested `bash -c` or `sh -c`", "Prefer a nested `bash -c` or `sh -c`", noNestedShellWithExpansion],
+  ["the expansion", "with a `$` in or beside its string", "with a quote in its string", noNestedShellWithExpansion],
+  ["run directly or from a file", "run the commands directly", "run the commands nested", noNestedShellWithExpansion],
   ["the denial's wording", "denied by a built-in Claude Code safety check", "denied by the harness", retryNeverDenial],
   ["take the denial", "take the denial", "argue with the denial", retryNeverDenial],
   ["rewrite the command", "rewrite the command", "rerun the command", retryNeverDenial],
