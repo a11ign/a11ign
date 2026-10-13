@@ -16,7 +16,8 @@
  *
  * THE CREDENTIAL IS PART OF THE BEHAVIOUR: the fake `gh` answers 401 unless `GH_TOKEN` is set, and the child environment is built from the
  * step's own `env:` as parsed (a value of exactly `${{ github.token }}` becomes the fake token), so a step that stops declaring `GH_TOKEN`, or
- * misspells it, loses every read here instead of passing on a variable the test supplied itself.
+ * misspells it, loses every read here instead of passing on a variable the test supplied itself. The same holds for every other variable a step
+ * reads: one the test supplies and the step does not declare under `env:` never reaches the shell, so deleting a declaration fails a test.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -31,14 +32,17 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const CI_YML = join(REPO_ROOT, ".github/workflows/ci.yml");
 
 interface Step { id?: string; name?: string; run?: string; env?: Record<string, unknown> }
-const workflow = parseYaml(readFileSync(CI_YML, "utf8")) as { jobs: Record<string, { steps?: Step[] }> };
+const workflow = parseYaml(readFileSync(CI_YML, "utf8")) as { env?: Record<string, unknown>; jobs: Record<string, { env?: Record<string, unknown>; steps?: Step[] }> };
 
-/** What each step declares under `env:`, by its script, so `run` can build the child environment from the step and not from the test. */
+/**
+ * What each step is given under `env:` (its own, over its job's and the workflow's), by its script, so `run` builds the child environment from
+ * the step and not from the test: a variable the test supplies but the step does not declare never reaches the shell.
+ */
 const DECLARED_ENV = new Map<string, Record<string, unknown>>();
 function stepScript(job: string, pick: (step: Step) => boolean): string {
   const step = workflow.jobs[job]?.steps?.find(pick);
   assert.ok(step?.run, `ci.yml job ${job} has no step the test can find; the test would be reading nothing`);
-  DECLARED_ENV.set(step.run, step.env ?? {});
+  DECLARED_ENV.set(step.run, { ...workflow.env, ...workflow.jobs[job]?.env, ...step.env });
   return step.run;
 }
 const FAKE_TOKEN = "fake-job-token";
@@ -105,14 +109,18 @@ function run(script: string, scenario: Scenario, env: Record<string, string>) {
   }
   const file = join(dir, "step.sh");
   writeFileSync(file, script);
-  const declared: Record<string, string> = {};
-  for (const [name, value] of Object.entries(DECLARED_ENV.get(script) ?? {})) if (value === JOB_TOKEN) declared[name] = FAKE_TOKEN;
+  const declaredEnv = DECLARED_ENV.get(script);
+  assert.ok(declaredEnv, "the script under test is a step's, taken by stepScript");
+  const supplied: Record<string, string> = { REPO: "a11ign/a11ign", HEAD_SHA: "head1", ...env };
+  const given: Record<string, string> = {};
+  for (const [name, value] of Object.entries(declaredEnv)) {
+    if (value === JOB_TOKEN) given[name] = FAKE_TOKEN;
+    else if (name in supplied) given[name] = supplied[name]!;
+  }
+  if ("GH_TOKEN" in supplied && "GH_TOKEN" in given) given.GH_TOKEN = supplied.GH_TOKEN!;
   const result = spawnSync("bash", ["-e", file], {
     encoding: "utf8",
-    env: {
-      PATH: `${join(dir, "bin")}:${process.env.PATH}`, FIXTURES: dir, FAKE_TOKEN, REPO: "a11ign/a11ign", HEAD_SHA: "head1",
-      RUNNER_TEMP: dir, GITHUB_OUTPUT: join(dir, "github-output"), ...declared, ...env,
-    },
+    env: { PATH: `${join(dir, "bin")}:${process.env.PATH}`, FIXTURES: dir, FAKE_TOKEN, RUNNER_TEMP: dir, GITHUB_OUTPUT: join(dir, "github-output"), ...given },
   });
   const calls = (key: string) => readFileSync(join(dir, `calls-${key}`), "utf8").split("\n").filter(Boolean).length;
   const read = (name: string) => (existsSync(join(dir, name)) ? readFileSync(join(dir, name), "utf8") : null);
