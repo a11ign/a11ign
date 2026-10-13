@@ -148,7 +148,11 @@ const RESTATEMENTS: Array<{ movable: boolean; re: RegExp }> = [
   { movable: true, re: /(?<=pins\s+release\s+`)\d+\.\d+\.\d+(?!\d)(?=`)/g },
   { movable: false, re: /(?<=commit\s+of\s+release\s+(?:a11ign@)?)\d+\.\d+\.\d+(?!\d)(?!,\s+so your CI)/g },
   { movable: false, re: /(?<=`)\d+\.\d+\.\d+(?!\d)(?=`\s+does\b)/g },
-  { movable: false, re: /(?<=`latest`\s+(?:read\s+)?`?)\d+\.\d+\.\d+(?!\d)/g },
+  // A DATED READ OF THE REGISTRY, in either order: `On <date> ... read \`latest\` \`X\`` or `\`latest\` read X on <date>`. Both the `read` and
+  // the date are required, so history that only names a label beside a release (`The \`latest\` \`0.4.0\` label is historical.`) is not one
+  // (#5474's second verdict).
+  { movable: false, re: /(?<=\b[Oo]n\s+\d{4}-\d{2}-\d{2}\b[^.]*\bread\s+`latest`\s+`?)\d+\.\d+\.\d+(?!\d)/g },
+  { movable: false, re: /(?<=`latest`\s+read\s+`?)\d+\.\d+\.\d+(?!\d)(?=`?\s+on\s+\d{4}-\d{2}-\d{2}\b)/g },
 ];
 
 interface Restatement {

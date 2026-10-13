@@ -300,7 +300,9 @@ test("a dated read of `latest` wrapped across a comment line is one restatement:
 });
 
 test("history is not a fault: a changelog and a `since` sentence beside a current pin stay, and a re-pin leaves them as written", () => {
-  const history = ["Changed since 0.3.0.", "- 0.4.0: first public release", "The `a11ign@0.3.0` label is history."].join("\n");
+  const history = ["Changed since 0.3.0.", "- 0.4.0: first public release", "The `a11ign@0.3.0` label is history.",
+    // #5474's second verdict: a `latest` label named beside a release, with no dated read of the registry, is history too.
+    "The `latest` `0.4.0` label is historical.", "Read `latest` `0.4.0` in the old changelog."].join("\n");
   const text = `${history}\n${usesLine(sha("5"))}`;
   const verdict = pinFaults(fixture(text));
   assert.equal(verdict.pins.length, 1, "the positive control: the current pin was found");
