@@ -22,8 +22,8 @@ jobs:
           fetch-depth: 0
       - name: Refuse a pin that is not an ancestor of the commit this run is executing at
         run: |
-          if ! git merge-base --is-ancestor 0fcd572d6d1d56a83d8741ac043dd2de05c7928f "${{ github.sha }}"; then
-            echo "::error::consumer-gate.yml's uses: step is pinned to 0fcd572d6d1d56a83d8741ac043dd2de05c7928f, which is not an"
+          if ! git merge-base --is-ancestor b18b4faad6bc076e0f5e9193c958956bf11f4d8c "${{ github.sha }}"; then
+            echo "::error::consumer-gate.yml's uses: step is pinned to b18b4faad6bc076e0f5e9193c958956bf11f4d8c, which is not an"
             echo "::error::ancestor of the commit this run is executing at, ${{ github.sha }} (ref"
             echo "::error::${{ github.ref_name }}, ${{ github.event_name }}) -- regenerate (node"
             echo "::error::scripts/generate-consumer-gate.ts) against a commit in this history"
@@ -31,11 +31,11 @@ jobs:
           fi
       - name: Refuse a pin that predates a change to the Action's own definition
         run: |
-          if ! git diff --quiet 0fcd572d6d1d56a83d8741ac043dd2de05c7928f "${{ github.sha }}" -- action.yml; then
-            echo "::error::action.yml changed between the pin, 0fcd572d6d1d56a83d8741ac043dd2de05c7928f, and the commit"
+          if ! git diff --quiet b18b4faad6bc076e0f5e9193c958956bf11f4d8c "${{ github.sha }}" -- action.yml; then
+            echo "::error::action.yml changed between the pin, b18b4faad6bc076e0f5e9193c958956bf11f4d8c, and the commit"
             echo "::error::this run is executing at, ${{ github.sha }}: the a11y job would run the OLD Action --"
             echo "::error::regenerate (node scripts/generate-consumer-gate.ts) at a commit containing the change"
-            git diff --stat 0fcd572d6d1d56a83d8741ac043dd2de05c7928f "${{ github.sha }}" -- action.yml
+            git diff --stat b18b4faad6bc076e0f5e9193c958956bf11f4d8c "${{ github.sha }}" -- action.yml
             exit 1
           fi
       - uses: pnpm/action-setup@v6
@@ -56,7 +56,7 @@ jobs:
       pull-requests: write         # for the PR comment below; omit it and the report still runs, only quieter
     steps:
       - uses: actions/checkout@v7
-      - uses: a11ign/a11ign@0fcd572d6d1d56a83d8741ac043dd2de05c7928f   # the commit this file was regenerated at, not a release tag (node scripts/generate-consumer-gate.ts)
+      - uses: a11ign/a11ign@b18b4faad6bc076e0f5e9193c958956bf11f4d8c   # the commit this file was regenerated at, not a release tag (node scripts/generate-consumer-gate.ts)
         # Pinned to the full 40-character commit of release 0.10.3, so your CI does not move when a newer
         # one is published. `v0.1.0` predates the `summary-md` output used below.
         id: a11ign
