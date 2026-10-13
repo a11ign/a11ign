@@ -23,7 +23,10 @@
 # eight attempts and not forty-eight. When the eighth fails the unit is FAILED (start limit hit), never green with nothing
 # posted, and a week with no reading is a finding for `product-manager` (docs/token-cost.md). A comment that lands after the
 # last attempt's check (about 22:19Z on the failure path, 23:53Z on the hang path) is therefore missed, and the ceiling is the
-# day boundary, not a choice (the 10-05 16:43 slot started 22:53Z, so that comment would be missed on the failure path).
+# day boundary, not a choice.
+# KNOWN GAP (product-manager ruling, #5396): a comment landing after about 22:19Z on the failure path is missed. The 10-05
+# 16:43 slot's comment came at 22:53Z, so that week would have no reading. No retry schedule covers it, because the window
+# must end inside Monday UTC; closing it needs a different window or a later read, which is a separate decision.
 #
 # A WALL-CLOCK EVENT, NOT A CHECK FOR WORK (`org-routing-and-timers.md`): one reading a week. A second run in the same
 # week appends nothing and says so, so `Persistent=true` on the timer is safe.
