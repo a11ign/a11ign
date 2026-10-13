@@ -1,3 +1,4 @@
+// no-token: Call -- every test passes injected transcript lines, pulls, targets or argv; the `gh` and `ghGet` callers in token-cost.ts (the pull, run, review and comment reads and the PATCH) are never reached, the import only defines them. Nothing reaches GitHub.
 /**
  * `scripts/token-cost.ts` reads calls and dollars per merged pull request from the host's session transcripts. Every definition is a pure
  * function over injected transcript lines and a merged-pull-request list, so this pins them with no network, no real transcript and no clock.
@@ -22,6 +23,7 @@ import { join } from "node:path";
 import type { Call, Pull, Window } from "../../../scripts/token-cost.ts";
 import type { Targets } from "../../../scripts/ci-health.ts";
 const tc = await import("../../../scripts/token-cost.ts");
+const ci = await import("../../../scripts/ci-health.ts");
 
 const MILLION = 1_000_000;
 const SONNET = "claude-sonnet-5-5";
@@ -652,4 +654,16 @@ test("unreadSection: says UNREAD and why, and carries no marker so a later run c
   assert.match(text, /Nothing was measured\.$/);
   assert.equal(text.includes(tc.MARKER), false);
   assert.equal(tc.MARKER, "<!-- token-cost -->");
+});
+
+test("windowFor: --week= reads the week of that Monday from a start after 00:00Z Tuesday, and no flag reads as today (control: the flag moves it)", () => {
+  const tuesday = new Date("2026-10-13T01:00:00Z");
+  const week = tc.windowFor(["--week=2026-10-05"], tuesday);
+  assert.deepEqual(week, { since: "2026-10-05T00:00:00Z", until: "2026-10-12T00:00:00Z" });
+  assert.equal(ci.commentHeading({ date: week.since.slice(0, "YYYY-MM-DD".length) }), "## CI health, week of 2026-10-05");
+  assert.deepEqual(tc.windowFor([], tuesday), { since: "2026-10-06T00:00:00Z", until: "2026-10-13T00:00:00Z" });
+});
+
+test("windowFor: --week= names a Monday, and a day that is not one is refused rather than read as a week", () => {
+  assert.throws(() => tc.windowFor(["--week=2026-10-06"], new Date("2026-10-13T01:00:00Z")), /--week=2026-10-06 is not a Monday/);
 });

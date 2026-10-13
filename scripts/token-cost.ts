@@ -35,6 +35,9 @@ import { toolExport } from "./agent-org-newest-tag.ts";
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const MS_PER_HOUR = 3_600_000;
 const MS_PER_DAY = 86_400_000;
+const DAYS_PER_WEEK = 7;
+const MS_PER_WEEK = DAYS_PER_WEEK * MS_PER_DAY;
+const MONDAY = 1;
 const HOURS_PER_DAY = 24;
 const TOKENS_PER_MILLION = 1_000_000;
 const PER_PAGE = 100;
@@ -616,15 +619,23 @@ export const unreadSection = (file: string) => [
   `**UNREAD**: \`${file}\` is missing, so there is no target, repository list or minimum to read the figures against. Nothing was measured.`,
 ].join("\n");
 
-/** @param {string} flag @returns {string | undefined} */
-const flagValue = (flag: string): string | undefined => process.argv.slice(2).find((arg) => arg.startsWith(`${flag}=`))?.slice(flag.length + 1);
+/** @param {string[]} argv @param {string} flag @returns {string | undefined} */
+const flagValue = (argv: string[], flag: string): string | undefined => argv.find((arg) => arg.startsWith(`${flag}=`))?.slice(flag.length + 1);
 
-/** @returns {Window} the week before today unless `--since=DATE`, `--until=ISO-UTC` and `--hours=FROM-TO` say otherwise (a reproduction reads an arbitrary window) */
-function windowFromArgv(): Window {
-  const week = weeklyWindow(new Date());
-  const since = flagValue("--since");
-  const hours = flagValue("--hours");
-  return { since: since ? `${since}T00:00:00Z` : week.since, until: flagValue("--until") ?? week.until, ...(hours ? { hours: parseHours(hours) } : {}) };
+/** A start after 00:00Z on Tuesday asks for the NEXT week's heading from `weeklyWindow(now)`, so the unit names the week with `--week=` (its own timer day, Monday). */
+function weekStarting(monday: string): Window {
+  const start = Date.parse(`${monday}T00:00:00Z`);
+  if (new Date(start).getUTCDay() !== MONDAY) throw new Error(`token-cost: --week=${monday} is not a Monday`);
+  return weeklyWindow(new Date(start + MS_PER_WEEK));
+}
+
+/** @returns {Window} the week before `now` unless `--week=MONDAY` names the week, and `--since=DATE`, `--until=ISO-UTC` and `--hours=FROM-TO` say otherwise (a reproduction reads an arbitrary window) */
+export function windowFor(argv: string[], now: Date): Window {
+  const monday = flagValue(argv, "--week");
+  const week = monday ? weekStarting(monday) : weeklyWindow(now);
+  const since = flagValue(argv, "--since");
+  const hours = flagValue(argv, "--hours");
+  return { since: since ? `${since}T00:00:00Z` : week.since, until: flagValue(argv, "--until") ?? week.until, ...(hours ? { hours: parseHours(hours) } : {}) };
 }
 
 /** The CI-health comment of this week is the door: one comment, one table, one window. @param {string} body @param {{ repository: string, issue: number }} on @param {string} date */
@@ -648,7 +659,8 @@ function appendToCiHealthComment(body: string, on: { repository: string; issue: 
 }
 
 function main() {
-  refuseUnknownFlags(["--since=", "--until=", "--hours=", "--transcripts=", "--post"], { entry: import.meta.url, command: "node scripts/token-cost.ts" });
+  refuseUnknownFlags(["--since=", "--until=", "--hours=", "--transcripts=", "--week=", "--post"], { entry: import.meta.url, command: "node scripts/token-cost.ts" });
+  const argv = process.argv.slice(2);
   const file = readTargetsFile(TARGETS_FILE);
   if ("missing" in file) {
     process.stdout.write(`${unreadSection(file.missing)}\n`);
@@ -656,8 +668,8 @@ function main() {
     return;
   }
   const { targets } = file;
-  const window = windowFromArgv();
-  const transcripts = readTranscripts(flagValue("--transcripts") ?? join(homedir(), ".claude/projects"), window);
+  const window = windowFor(argv, new Date());
+  const transcripts = readTranscripts(flagValue(argv, "--transcripts") ?? join(homedir(), ".claude/projects"), window);
   const pulls = targets.repositories.flatMap((repository) => readPulls(repository, targets.workflow, window));
   const { byPull, noPull } = attributeCalls({ calls: transcripts.calls, pulls });
   const readings = targets.repositories.map((repository) => readRepository({ repository, pulls, byPull, prices: PRICE_LIST, minimum: targets.minimumPullRequests }));
