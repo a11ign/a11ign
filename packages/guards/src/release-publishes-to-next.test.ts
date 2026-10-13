@@ -74,7 +74,7 @@ const GUARDS_THAT_STAY: readonly { name: string; present: (workflow: Workflow) =
 const GUARDS_NAMED_BY_THE_ROW = 9;
 
 /** The called workflows `release` waits for, which are guards run as jobs. */
-const JOBS_THAT_STAY = ["action-smoke", "capture-regression", "consumer-gate", "guards"] as const;
+const JOBS_THAT_STAY = ["action-smoke", "capture-regression", "consumer-gate", "guards", "lab-release-checks"] as const;
 
 function refusals(text: string): string[] {
   const workflow = parse(text) as Workflow;

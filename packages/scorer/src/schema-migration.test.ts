@@ -74,9 +74,13 @@ test("a chain that cannot run a stage names it and refuses, rather than leaving 
   // is the lab's chain to hold, and a root script naming `promote:model` here would be the dangling call again.
   const scripts = JSON.parse(readFileSync(
     fileURLToPath(new URL("../../../package.json", import.meta.url)), "utf8")).scripts;
-  for (const chain of ["release:gate:ci", "release:gate", "candidate:gate"]) {
+  for (const chain of ["release:gate", "candidate:gate"]) {
     assert.match(scripts[chain], /run gate:lab-held -- \S/, `${chain} must end in the stage that refuses what this repository cannot run`);
   }
+  // `release:gate:ci` is the part a RUNNER proves, and ends in no refusal (a11ign#5332): `scorer:verify` and `release:provenance` are READ from the lab's
+  // `release-checks` run by `release.yml`'s `lab-release-checks` job, which `release-publishes-to-next.test.ts` pins the `release` job waiting for.
+  assert.doesNotMatch(scripts["release:gate:ci"], /gate:lab-held/, "release:gate:ci names no stage it cannot run: a chain that always exits 1 stops every release");
+  assert.match(scripts["release:gate:ci"], /run gate:isolation$/, "and still ends in the packed-install check it can run");
   assert.equal(scripts["promote:gated"], undefined, "promote:gated would have to name promote:model, which is the lab's");
   assert.equal(scripts["promote:model"], undefined, "promote:model is the lab's script");
 });

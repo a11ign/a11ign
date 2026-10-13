@@ -21,7 +21,7 @@
 # `A11IGN_BOT_TOKEN`) is that commit; what it consumes is read off the tags, so the registry is no longer the state this file
 # reads. A failed release is re-run from its push run (the platform's "re-run failed jobs"): the same sha, the same release.
 #
-# SEVEN INDEPENDENT THINGS must all be true before a single byte is published. They are independent on
+# EIGHT INDEPENDENT THINGS must all be true before a single byte is published. They are independent on
 # purpose: any one of them alone would be a single point of failure, and this repo's own rule is that a
 # verification must not share a failure mode with the action it guards.
 #
@@ -48,8 +48,20 @@
 #      reading of the lab at ITS head, not of this sha, and says so in the run's summary.
 #   7. `consumer-gate` must SUCCEED, run HERE (#494). `consumer-gate.yml` is generated from README.md's own Quickstart fence and
 #      its workspace starts empty: the ONE check here that exercises the path a first reader actually takes.
+#   8. `lab-release-checks` must SUCCEED, and is READ like guard 6 (a11ign#5332, chairman on #928 2026-10-13). `scorer:verify` (the weights are
+#      safetensors, with no pickle-style checkpoint or symlink) and `release:provenance` (every weight shipped is accounted for by a changelog entry
+#      or a pending promotion changeset) are the lab's scripts since ADR 0045 cut 9, and `release:gate:ci` named them in a stage that always exited 1,
+#      so NO release shipped from 2026-10-11 until this job. The lab's `release-checks.yml` runs both on its `main`; this job reads its newest decisive
+#      run. WHAT THE READING PROVES, which is less than a run at this sha: the lab's run examined the core's `main` AT THE START OF THAT RUN, not this
+#      sha, and its first `scorer:verify` examined the registry's `@a11ign/scorer` at the lab's pin, which is not what this release publishes (the
+#      lab's second `scorer:verify` examines the core's own `packages/scorer/models`, which is). IT IS ENOUGH FOR THE SHA BEING PUBLISHED BECAUSE THE
+#      JOB REFUSES A RUN OLDER THAN THE LAST CHANGE TO WHAT THOSE TWO READ (`packages/scorer/models`, the scorer's CHANGELOG, a pending
+#      `.changeset/promote-*.md`) on this sha's first-parent history: a run that started after that change read a core that held it. Without that
+#      comparison the reading was NOT enough, since a promotion merges to the core without a push to the lab and the newest lab run would predate it.
+#      The remedy for a stale run is a `workflow_dispatch` of `release-checks` on the lab's `main`; the run takes no input, so there is nothing to
+#      give it. Not covered, and said so: a commit pushed with a committer date older than its push (the bound reads committer dates).
 #
-# Removing any of the seven is a deliberate act. Do not remove them in the same change that changes what starts this.
+# Removing any of the eight is a deliberate act. Do not remove them in the same change that changes what starts this.
 #
 # THE GUARDS ABOUT WHAT IS PUBLISHED ALL STAY, and are steps of the `guards` job that `release` NEEDS (the called workflow takes
 # no steps of the caller's, so a guard is a job it waits for): the part of `release:gate` a runner can
@@ -130,7 +142,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # GUARDS 5 AND 7, RUN AS JOBS AGAINST THE EXACT SHA THIS WORKFLOW RAN AT (guard 6 is a reading, below). `uses:` a local workflow path calls it as a
+  # GUARDS 5 AND 7, RUN AS JOBS AGAINST THE EXACT SHA THIS WORKFLOW RAN AT (guards 6 and 8 are readings, below). `uses:` a local workflow path calls it as a
   # reusable workflow (`workflow_call`); GitHub runs a called workflow at THIS workflow's own ref.
   action-smoke:
     if: github.event_name != 'status' && inputs.action-tag-version == ''
@@ -181,6 +193,59 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           [ "$conclusion" = "success" ] || fail "the lab's newest decisive capture-check run on main is $conclusion, not success: $url"
           echo "capture-check on $LAB main at $sha: success ($url)"
+
+  # GUARD 8, READ RATHER THAN RUN (a11ign#5332; the lab's workflow is `release-checks.yml` in a11ign/lab). The same reading as `capture-regression`
+  # above, of a different workflow: the newest decisive run on the lab's `main` (`cancelled` and `skipped` passed over; only `push` and
+  # `workflow_dispatch` count; no run, an unreadable answer and a stale run are `CANNOT_TELL`, never a pass), by `github.token` with
+  # `contents: read`. WHAT IT PROVES AND WHAT IT DOES NOT is in the header (guard 8): the lab's run read the core's `main` at ITS start, so this
+  # job also compares that start with the last change on THIS sha's first-parent history to the files `scorer:verify` and `release:provenance`
+  # read. That is why it checks the tree out in full: `fetch-depth: 0`, as `guards` does.
+  lab-release-checks:
+    if: github.event_name != 'status' && inputs.action-tag-version == ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with: { fetch-depth: 0 }
+      - name: Read the newest decisive release-checks run on the lab's main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LAB: a11ign/lab
+        run: |
+          set -euo pipefail
+          fail() { echo "::error title=lab-release-checks::$1"; exit 1; }
+          runs=$(gh api "repos/$LAB/actions/workflows/release-checks.yml/runs?branch=main&status=completed&per_page=50") \
+            || fail "CANNOT_TELL: the API did not answer for $LAB's release-checks runs"
+          newest=$(jq -c '[.workflow_runs[]
+              | select(.head_branch == "main" and (.event == "push" or .event == "workflow_dispatch"))
+              | select(.conclusion != "cancelled" and .conclusion != "skipped")]
+              | sort_by([.created_at, .id]) | last // empty' <<<"$runs") \
+            || fail "CANNOT_TELL: the answer for $LAB's release-checks runs could not be read"
+          [ -n "$newest" ] || fail "CANNOT_TELL: $LAB has no completed release-checks run on main (push or workflow_dispatch), and no run is not a pass"
+          conclusion=$(jq -r .conclusion <<<"$newest")
+          url=$(jq -r .html_url <<<"$newest")
+          sha=$(jq -r .head_sha <<<"$newest")
+          created=$(jq -r .created_at <<<"$newest")
+          created_epoch=$(date -u -d "$created" +%s)
+          age_days=$(( ( $(date -u +%s) - created_epoch ) / 86400 ))
+          # The last change to what the lab's two checks read of this repository, as the committer date of the commit on this sha's first-parent
+          # history (the merge, under the merge queue) that made it. No such commit is `0`: nothing has ever changed them, so any run is new enough.
+          read_paths=(packages/scorer/models packages/scorer/CHANGELOG.md '.changeset/promote-*.md')
+          changed_epoch=$(git log --first-parent -1 --format=%ct -- "${read_paths[@]}")
+          changed_epoch=${changed_epoch:-0}
+          changed_by=$(git log --first-parent -1 --format='%h %cI' -- "${read_paths[@]}")
+          {
+            echo "### lab-release-checks: a reading of the lab, not a run"
+            echo "- run: $url"
+            echo "- lab sha: \`$sha\`, conclusion: \`$conclusion\`, started $created ($age_days days ago)"
+            echo "- This is $LAB's \`release-checks\` on its own \`main\`: it read THIS repository's \`main\` as of that start, not this sha."
+            echo "- Last change on this sha's history to what it reads: \`${changed_by:-none}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          [ "$conclusion" = "success" ] || fail "the lab's newest decisive release-checks run on main is $conclusion, not success: $url"
+          [ "$created_epoch" -ge "$changed_epoch" ] \
+            || fail "CANNOT_TELL: the lab's newest release-checks run ($url, started $created) predates the last change to what it reads here (${changed_by}); run release-checks on $LAB main (workflow_dispatch) and re-run this job"
+          echo "release-checks on $LAB main at $sha: success ($url)"
 
   # #494. `consumer-gate.yml`'s own `check-pin` job (#558) compares its pinned sha against `${{ github.sha }}`, which under
   # `workflow_call` is THIS release's own sha, so a stale pin fails here on ubuntu-latest before the Windows job starts.
@@ -414,7 +479,7 @@ jobs:
   # environment `npm-publish`): the OIDC token names the CALLING file, so renaming this file breaks the publish.
   release:
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
-    needs: [action-smoke, capture-regression, consumer-gate, guards]
+    needs: [action-smoke, capture-regression, consumer-gate, guards, lab-release-checks]
     permissions:
       contents: write
       checks: read
