@@ -217,6 +217,37 @@ export function checkEntries(proposed: { package: string | null; bump: string; t
   return [...problems, ...missing.map((entry) => `no entry for ${entry.package}, whose runtime ranges this diff moves`)];
 }
 
+/** A review as GitHub's `pulls/{n}/reviews` returns it: the fields the settlement reads, and nothing else. */
+export type Review = { id: number, state: string, commit_id: string };
+/** What settles a refusal: the carried entry files that cover what the diff owes, and the approving review on the head. */
+export type Settlement = { files: string[], review: number, sha: string };
+export type Carried = { file: string, package: string | null, bump: string, text: string };
+
+/**
+ * A REFUSED derivation is settled when a human wrote the entries and a human approved the head: a carried entry for every
+ * package the diff owes one (the refusal stays when one has none; the entry's text is not checked, because a human wrote it),
+ * and an APPROVED review whose `commit_id` is the head. A review on an earlier head outlived its push and settles nothing
+ * (`.claude/rules/main-review-requirement.md`). A diff that owes no entry is never settled here: with nothing to cover, an
+ * approval would settle a refusal for a reason nobody stated.
+ * @param {{ owed: Entry[], carried: Carried[], reviews: Review[], head: string | undefined }} input
+ * @returns {Settlement | null}
+ */
+export function settleRefusal({ owed, carried, reviews, head }: { owed: Entry[]; carried: Carried[]; reviews: Review[]; head: string | undefined; }): Settlement | null {
+  if (!head || owed.length === 0) return null;
+  const covering = owed.flatMap((entry) => {
+    const carriedFor = carried.find((c) => c.package === entry.package);
+    return carriedFor ? [carriedFor.file] : [];
+  });
+  if (covering.length < owed.length) return null;
+  const approval = reviews.filter((review) => review.state === "APPROVED" && review.commit_id === head).at(-1);
+  return approval ? { files: [...new Set(covering)], review: approval.id, sha: head } : null;
+}
+
+/** The line `check` prints for a settled refusal, so it reads apart from an accepted diff and from an unexamined refusal. */
+export function settlementText(reasons: string[], settled: Settlement): string {
+  return `ACCEPTED (refused, settled by a human): the derivation was refused for ${reasons.join("; ")} and settled by carried entry ${settled.files.join(", ")} and review ${settled.review} on ${settled.sha}.`;
+}
+
 const MAX_GIT_OUTPUT_BYTES = 256 * 1024 * 1024;
 
 /** @param {string[]} args */
@@ -238,8 +269,11 @@ function manifestAt(ref: string, path: string) {
  * The check a pull request's `changeset` job runs: accept from the diff or refuse, naming why.
  * @param {string} base
  * @param {string} [since] a queue entry's own parent (`merge_group.base_sha`), which replaces `base` when given
+ * @param {string} [reviewsPath] the pull request's reviews as `pulls/{n}/reviews` returns them; a refusal is settled only by one
+ *   of them approving `head`, so without both this check refuses exactly as it did before a human could settle one
+ * @param {string} [head] the pull request's head sha
  */
-function check(base: string, since?: string) {
+export function check(base: string, since?: string, reviewsPath?: string, head?: string) {
   // A QUEUE ENTRY IS DIFFED AGAINST ITS OWN PARENT. Entry 2's head contains entry 1, so `origin/main...HEAD` lists entry 1's
   // files too, they fail `pathReasons`, and the pull request this job passed is ejected from the queue (ceo's review of
   // #3169). `merge_group.base_sha` is the entry ahead's head, or `main`'s tip when this entry is first.
@@ -252,16 +286,28 @@ function check(base: string, since?: string) {
   const manifests = Object.fromEntries(files.filter((f) => MANIFEST_PATH.test(f)).map((f) => [f, { before: manifestAt(forkPoint, f), after: manifestAt("HEAD", f) }]));
   const owned = JSON.parse(readFileSync("docs/owned-path-facts.json", "utf8")).owned;
   const derived = deriveDependencyChangeset({ files, manifests, owned });
-  const carried = files.filter((f) => ENTRY_PATH.test(f) && f !== ".changeset/README.md" && existsSync(f)).map((f) => parseEntry(readFileSync(f, "utf8")));
-  const problems = derived.verdict === "refused" ? derived.reasons : checkEntries(carried, derived);
-  report(derived, problems);
-  return problems.length === 0;
+  const carried = files.filter((f) => ENTRY_PATH.test(f) && f !== ".changeset/README.md" && existsSync(f))
+    .map((f) => ({ file: f, ...parseEntry(readFileSync(f, "utf8")) }));
+  if (derived.verdict !== "refused") {
+    const problems = checkEntries(carried, derived);
+    report(derived, problems);
+    return problems.length === 0;
+  }
+  const reviews: Review[] = reviewsPath ? JSON.parse(readFileSync(reviewsPath, "utf8")) : [];
+  const settled = settleRefusal({ owed: entriesFor(readManifests(manifests).changes), carried, reviews, head });
+  report(derived, settled ? [] : derived.reasons, settled);
+  return settled !== null;
 }
 
-/** @param {Derivation} derived @param {string[]} problems */
-function report(derived: Derivation, problems: string[]) {
+/**
+ * @param {Derivation} derived
+ * @param {string[]} problems
+ * @param {Settlement | null} [settled] a refusal a human settled: `problems` is empty then, and the line names what settled it
+ */
+function report(derived: Derivation, problems: string[], settled?: Settlement | null) {
   const lines = problems.length
     ? ["REFUSED: this dependency pull request waits for a human who looks.", ...problems.map((p) => `  - ${p}`)]
+    : settled ? [settlementText(derived.reasons, settled)]
     : [`ACCEPTED (${derived.verdict}): the entry is compiled when the version is made, from the manifests at the last release.`,
        ...derived.entries.map((e) => `  - ${e.package}: ${e.bump} -- ${e.text.replaceAll("\n", " ")}`)];
   console.log(lines.join("\n"));
@@ -302,11 +348,11 @@ export function compile({ dryRun }: { dryRun: boolean; }) {
 /** @param {string[]} argv */
 function main(argv: string[]) {
   const [command, ...rest] = argv;
-  refuseUnknownFlags(["--base", "--since", "--dry-run"], { entry: import.meta.url, command: "dependency-changeset" });
+  refuseUnknownFlags(["--base", "--since", "--reviews", "--head", "--dry-run"], { entry: import.meta.url, command: "dependency-changeset" });
   const base = flagValue(rest, "base");
-  if (command === "check" && base) process.exit(check(base, flagValue(rest, "since")) ? 0 : 1);
+  if (command === "check" && base) process.exit(check(base, flagValue(rest, "since"), flagValue(rest, "reviews"), flagValue(rest, "head")) ? 0 : 1);
   if (command === "compile") return compile({ dryRun: rest.includes("--dry-run") });
-  console.error("usage: dependency-changeset.ts check --base=<ref> [--since=<sha>] | compile [--dry-run]");
+  console.error("usage: dependency-changeset.ts check --base=<ref> [--since=<sha>] [--reviews=<file> --head=<sha>] | compile [--dry-run]");
   process.exit(2);
 }
 
