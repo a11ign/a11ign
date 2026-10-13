@@ -1,0 +1,4 @@
+Sets `guard` on the `claim-refused` failure class (#5282) to the merged agent-org guard in force (agent-org#1262: a refusal that is the claim guard working is `claim-guard-held`; agent-org#1316: a class counts its refs from `countedSince`), sets `countedSince` to 2026-10-13T11:48:00Z (just after the last pre-fix `claim-refused` line in the host ledger, 11:47:00Z), and clears `guardNote`. Hand-written: the change is one class entry in `.agent-org/failure-classes.json`.
+
+Acceptance:
+node -e "const c=JSON.parse(require('node:fs').readFileSync('.agent-org/failure-classes.json','utf8')).classes.find((c)=>c.id==='claim-refused'); const h=require('node:crypto').createHash('sha1').update(String(c.guard)).digest('hex'); process.exit(c.guard!==null&&h!=='00b3729a50e970abd9f9f7d23b21d226bd39aa7e'?0:1)"

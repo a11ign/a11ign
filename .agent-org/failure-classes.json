@@ -375,8 +375,9 @@
     {
       "id": "claim-refused",
       "name": "A row claim is refused, and the refusals repeat, so the org cannot make the claims its rows need.",
-      "guard": "`claimRefusalStormReading` (signal 26) in agent-org `src/org-health.ts` (agent-org#889) reads the `claim-refused` lines `recordClaimRefusal` in `src/row-claim.ts` writes for every refusal the claim command prints (agent-org#972). It trips when more than `CLAIM_REFUSAL_STORM_REFUSALS` refusals fall in `CLAIM_REFUSAL_STORM_MINUTES` and names the commonest reason and its count.",
-      "guardNote": "The refusal is the claim guard working: `row-claim` refuses a claim that would collide, so one `claim-refused` line is not a failed guard. The storm reading detects a run of refusals and names their commonest reason; it does not stop one. A repeat of this kind is a question of the reason named, not of the guard.",
+      "guard": "A refusal that is the claim guard working is written `claim-guard-held`, not `claim-refused`, so it is no occurrence of this class: `GUARD_HELD_REFUSALS` in agent-org `src/row-claim.ts` (agent-org#1262) names the worktree cap, a B4 overlap, an existing tree or branch, a rate-limited read and a stale rule copy, and a refusal not yet named there still counts, by design. The class counts its refs from `countedSince` (agent-org#1316, `src/class-repeat.ts`): a ref written before the guard was in force is the defect it fixed, not a repeat. The storm reading (`claimRefusalStormReading`, signal 26, agent-org `src/org-health.ts`, agent-org#889) reads the `claim-refused` lines `recordClaimRefusal` writes for each refusal the claim command prints (agent-org#972), and trips when more than `CLAIM_REFUSAL_STORM_REFUSALS` fall in `CLAIM_REFUSAL_STORM_MINUTES`.",
+      "guardNote": null,
+      "countedSince": "2026-10-13T11:48:00Z",
       "seed": []
     },
     {
