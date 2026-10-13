@@ -11,7 +11,7 @@ Description=Weekly (Monday) append of the calls-and-dollars reading to the CI-he
 OnCalendar=Mon *-*-* 12:13:00 UTC
 
 # A HOST ASLEEP AT THE HOUR STILL RUNS ON WAKING. Idempotent per week, so a late catch-up cannot post twice. A catch-up
-# AFTER MONDAY reads the NEXT week's window, whose comment does not exist, and fails visibly through its eight starts.
+# AFTER MONDAY reads the week that Monday closed (the service's `--week=`), as the timer's own run would have (#5399).
 Persistent=true
 AccuracySec=1min
 

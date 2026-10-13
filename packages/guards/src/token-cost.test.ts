@@ -1,3 +1,4 @@
+// no-token: Call -- every test passes injected transcript lines, pulls, targets or argv; the `gh` and `ghGet` callers in token-cost.ts (the pull, run, review and comment reads and the PATCH) are never reached, the import only defines them. Nothing reaches GitHub.
 /**
  * `scripts/token-cost.ts` reads calls and dollars per merged pull request from the host's session transcripts. Every definition is a pure
  * function over injected transcript lines and a merged-pull-request list, so this pins them with no network, no real transcript and no clock.
@@ -15,13 +16,15 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { Call, Pull, Window } from "../../../scripts/token-cost.ts";
 import type { Targets } from "../../../scripts/ci-health.ts";
 const tc = await import("../../../scripts/token-cost.ts");
+const ci = await import("../../../scripts/ci-health.ts");
 
 const MILLION = 1_000_000;
 const SONNET = "claude-sonnet-5-5";
@@ -574,7 +577,7 @@ test("renderSection: unattributed calls are broken down by session, the top five
   const strays = ["a", "b", "c", "d", "e", "f"].map((name, i) => call({ id: `${i}`, name }));
   const text = sectionFor({ calls: strays, pulls: [], byPull: new Map() });
   assert.match(text, /UNATTRIBUTED .*: 6 of 6 calls \(100\.0%\)/);
-  assert.match(text, /Unattributed by session: a 1, b 1, c 1, d 1, e 1\./);
+  assert.match(text, /Unattributed by session: a 1, b 1, c 1, d 1, e 1, others 1\./);
   assert.doesNotMatch(text, /f 1/);
 });
 
@@ -583,6 +586,36 @@ test("renderSection: names the biggest contributor and its share of the attribut
   const text = sectionFor({ calls: waiting, pulls: [pull({ number: 1 })], byPull: new Map([["a11ign/a11ign#1", waiting]]) });
   assert.match(text, /Biggest contributor: waits \(2 calls, 66\.7% of the attributed calls\)/);
   assert.match(text, /Counts: review rounds 0, CI red 0, waits 2, re-reads 0, none of the four 1; together 3 attributed calls\./);
+});
+
+test("renderSection: the per-repository verdict reads all calls, and the attributed figure is a comparison row", () => {
+  const attributed = call({ id: "a", tokens: { output: MILLION / 10 }, name: "worker-1" }); // $1.00, on pull 1
+  const stray = call({ id: "b", tokens: { output: MILLION }, name: "worker-9" }); // $10.00, on no pull
+  const text = sectionFor({ calls: [attributed, stray], pulls: [pull({ number: 1 }), pull({ number: 2 })], byPull: new Map([["a11ign/a11ign#1", [attributed]]]) });
+  const repository = text.slice(text.indexOf("#### a11ign/a11ign"));
+  // $11.00 over two merged pull requests is $5.50: MISSED on all calls, though the attributed $1.00 would read MET
+  assert.match(repository, /\| Dollars per merged pull request \(ALL calls, both repositories\) \| under \$2\.50 \| \$5\.50 \| 2 calls over 2 merged pull requests, both repositories \| \*\*MISSED\*\* \|/);
+  assert.match(repository, /\| Dollars per merged pull request \(attributed to this repository\) \| under \$2\.50 \| \$1\.00 \| [^\n]* \| comparison, not the verdict \|/);
+  assert.doesNotMatch(repository, /attributed to this repository[^\n]*\*\*(MET|MISSED)\*\*/);
+});
+
+test("renderSection: the unattributed line sums to the total, with the sessions past the top five counted as others", () => {
+  const strays = ["a", "b", "c", "d", "e", "f"].map((name, i) => call({ id: `${i}`, name }));
+  const text = sectionFor({ calls: strays, pulls: [], byPull: new Map() });
+  const line = text.match(/^Unattributed by session: (.*)\.$/m)?.[1] ?? "";
+  const counted = line.split(", ").map((part) => Number(part.split(" ").pop()));
+  assert.equal(counted.reduce((sum, n) => sum + n, 0), 6);
+  assert.match(text, /Unattributed by session: a 1, b 1, c 1, d 1, e 1, others 1\./);
+  const five = sectionFor({ calls: strays.slice(0, 5), pulls: [], byPull: new Map() });
+  assert.match(five, /Unattributed by session: a 1, b 1, c 1, d 1, e 1\.$/m); // control: nothing past the top five, so no `others`
+});
+
+test("renderSection: the window is stated as whole UTC days when no hours band is given (control: a band names its hours)", () => {
+  const whole = sectionFor({ calls: [], pulls: [], byPull: new Map() });
+  assert.match(whole, /Whole UTC days: every hour of each day is in the window/);
+  const band = sectionFor({ window: { ...DAY, hours: { from: 14, to: 20 } }, calls: [], pulls: [], byPull: new Map() });
+  assert.doesNotMatch(band, /Whole UTC days/);
+  assert.match(band, /and 14:00-20:00 of each day\./);
 });
 
 // ---- the host and the targets file ----------------------------------------------------------------------
@@ -652,4 +685,103 @@ test("unreadSection: says UNREAD and why, and carries no marker so a later run c
   assert.match(text, /Nothing was measured\.$/);
   assert.equal(text.includes(tc.MARKER), false);
   assert.equal(tc.MARKER, "<!-- token-cost -->");
+});
+
+test("windowFor: --week= reads the week of that Monday from a start after 00:00Z Tuesday, and no flag reads as today (control: the flag moves it)", () => {
+  const tuesday = new Date("2026-10-13T01:00:00Z");
+  const week = tc.windowFor(["--week=2026-10-05"], tuesday);
+  assert.deepEqual(week, { since: "2026-10-05T00:00:00Z", until: "2026-10-12T00:00:00Z" });
+  assert.equal(ci.commentHeading({ date: week.since.slice(0, "YYYY-MM-DD".length) }), "## CI health, week of 2026-10-05");
+  assert.deepEqual(tc.windowFor([], tuesday), { since: "2026-10-06T00:00:00Z", until: "2026-10-13T00:00:00Z" });
+});
+
+test("windowFor: --week= names a Monday, and a day that is not one is refused rather than read as a week", () => {
+  assert.throws(() => tc.windowFor(["--week=2026-10-06"], new Date("2026-10-13T01:00:00Z")), /--week=2026-10-06 is not a Monday/);
+});
+
+test("windowFor: an empty --week= is refused, not read as no flag (it would name today's week)", () => {
+  assert.throws(() => tc.windowFor(["--week="], new Date("2026-10-13T01:00:00Z")), /--week= is not a Monday/);
+});
+
+const UNIT_FILE = join(import.meta.dirname, "../../../.agent-org/units/a11ign-token-cost-weekly.service");
+const EXEC_START = "ExecStart=/usr/bin/sh -c '";
+const EXECUTABLE = 0o755;
+
+/** The unit's ExecStart with systemd's escapes undone and its node call replaced by echo, so the shell prints the argument the unit would pass. */
+// ---- the week's CI-health comment is found past the first page of #928 (#5432) -----------------------
+
+const CI_ON = { repository: "a11ign/a11ign", issue: 928 };
+const CI_WEEK = "2026-10-05";
+const CI_HEADING = "## CI health, week of 2026-10-05";
+const COMMENTS_PAGE = 100; // the endpoint's per_page, as token-cost.ts asks for it
+
+/** A page reader over `comments`, COMMENTS_PAGE to a page as the endpoint returns them; `asked` keeps each path it was given. */
+function pagedReader(comments: { id: number, body: string }[]) {
+  const asked: string[] = [];
+  const readPage = (path: string) => {
+    asked.push(path);
+    const page = Number(new URL(path, "https://api.github.com/").searchParams.get("page"));
+    return comments.slice((page - 1) * COMMENTS_PAGE, page * COMMENTS_PAGE);
+  };
+  return { asked, readPage };
+}
+const fillerComments = (count: number, from = 1) => Array.from({ length: count }, (_, i) => ({ id: from + i, body: `ordinary comment ${from + i}` }));
+
+test("findCiHealthComment: the week's heading on the SECOND page is found, and its id is the one the PATCH names (#5432)", () => {
+  const heading = { id: 9001, body: `${CI_HEADING}\n\nthe table` };
+  const { asked, readPage } = pagedReader([...fillerComments(COMMENTS_PAGE), heading]);
+  const target = tc.findCiHealthComment(CI_ON, CI_WEEK, readPage);
+  assert.equal(target.id, 9001);
+  assert.equal(asked.length, 2, "a full first page is followed by the second, and the short second page stops the read");
+  assert.match(asked[1], /page=2/);
+  assert.match(asked[0], /since=2026-10-05T00:00:00\.000Z/);
+});
+
+test("findCiHealthComment: a heading on the first page is found without a second read (control: the page loop does not over-read)", () => {
+  const { asked, readPage } = pagedReader([{ id: 7, body: `${CI_HEADING}\n\nthe table` }, ...fillerComments(3)]);
+  assert.equal(tc.findCiHealthComment(CI_ON, CI_WEEK, readPage).id, 7);
+  assert.equal(asked.length, 1);
+});
+
+test("findCiHealthComment: a heading on no page is refused, naming the issue (control: the same reader finds it when it is there)", () => {
+  const absent = pagedReader(fillerComments(COMMENTS_PAGE + 20));
+  assert.throws(() => tc.findCiHealthComment(CI_ON, CI_WEEK, absent.readPage), /is not on #928 yet/);
+  const present = pagedReader([...fillerComments(COMMENTS_PAGE + 20), { id: 5, body: CI_HEADING }]);
+  assert.equal(tc.findCiHealthComment(CI_ON, CI_WEEK, present.readPage).id, 5);
+});
+
+test("readComments: a page of exactly COMMENTS_PAGE reads on, and the first short page ends the read", () => {
+  const { asked, readPage } = pagedReader(fillerComments(COMMENTS_PAGE));
+  assert.equal(tc.readComments(CI_ON, CI_WEEK, readPage).length, COMMENTS_PAGE);
+  assert.equal(asked.length, 2, "page 2 is empty, so the read stops there");
+});
+
+function unitArgument(): string {
+  const line = readFileSync(UNIT_FILE, "utf8").split("\n").find((l) => l.startsWith(EXEC_START)) ?? "";
+  return line.slice(EXEC_START.length, -1).replace(/exec \S+\/node /, "exec echo ").replaceAll("$$", "$").replaceAll("%%", "%");
+}
+
+/** A `date` on PATH whose clock is $PINNED_NOW: a `now` argument reads that instant, and a call with no `-d` reads it too. */
+function pinnedDate(dir: string): void {
+  const real = spawnSync("/bin/sh", ["-c", "command -v date"], { encoding: "utf8" }).stdout.trim();
+  writeFileSync(join(dir, "date"), `#!/bin/sh
+case " $* " in *" -d "*) ;; *) set -- -d "$PINNED_NOW" "$@" ;; esac
+n=$#; i=0
+while [ "$i" -lt "$n" ]; do a=$1; shift; case $a in now*) a=$PINNED_NOW\${a#now} ;; esac; set -- "$@" "$a"; i=$((i + 1)); done
+exec "${real}" "$@"
+`);
+  chmodSync(join(dir, "date"), EXECUTABLE);
+}
+
+test("the weekly unit names the week its timer's day closed, under a pinned clock (#5399)", { skip: process.platform === "win32" }, () => {
+  const dir = mkdtempSync(join(tmpdir(), "token-cost-unit-"));
+  try {
+    pinnedDate(dir);
+    for (const [pinned, week] of [["2026-10-12T12:13:00Z", "2026-10-05"], ["2026-10-13T22:19:00Z", "2026-10-05"], ["2026-10-18T23:59:00Z", "2026-10-05"], ["2026-10-19T12:13:00Z", "2026-10-12"]]) {
+      const out = spawnSync("/bin/sh", ["-c", unitArgument()], { encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, PINNED_NOW: pinned } });
+      assert.equal(out.stdout.trim(), `scripts/token-cost.ts --post --week=${week}`, `pinned at ${pinned}: ${out.stderr}`);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

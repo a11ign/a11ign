@@ -35,6 +35,9 @@ import { toolExport } from "./agent-org-newest-tag.ts";
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const MS_PER_HOUR = 3_600_000;
 const MS_PER_DAY = 86_400_000;
+const DAYS_PER_WEEK = 7;
+const MS_PER_WEEK = DAYS_PER_WEEK * MS_PER_DAY;
+const MONDAY = 1;
 const HOURS_PER_DAY = 24;
 const TOKENS_PER_MILLION = 1_000_000;
 const PER_PAGE = 100;
@@ -438,15 +441,20 @@ const pct = (/** @type {number} */ part: number, /** @type {number} */ whole: nu
 const usd = (/** @type {number} */ n: number) => `$${n.toFixed(2)}`;
 const one = (/** @type {number | null} */ n: number | null) => (n === null ? "no reading" : String(Number(n.toFixed(1))));
 
-/** @param {{ measure: string, target: import("./ci-health.ts").Target, value: number | null, enough: boolean, count: string }} cells */
-function row({ measure, target, value, enough, count }: { measure: string; target: import("./ci-health.ts").Target; value: number | null; enough: boolean; count: string; }) {
+/** A comparison row names its verdict cell "comparison, not the verdict", so a MET beside a MISSED is never read as the answer. @param {{ measure: string, target: import("./ci-health.ts").Target, value: number | null, enough: boolean, count: string, verdict?: string }} cells */
+function row({ measure, target, value, enough, count, verdict }: { measure: string; target: import("./ci-health.ts").Target; value: number | null; enough: boolean; count: string; verdict?: string; }) {
   const shown = value === null ? "UNREAD" : target.unit === "dollars" ? usd(value) : one(value);
-  return `| ${measure} | ${targetText(target)} | ${shown} | ${count} | **${verdictOf({ value, target, enough })}** |`;
+  return `| ${measure} | ${targetText(target)} | ${shown} | ${count} | ${verdict ?? `**${verdictOf({ value, target, enough })}**`} |`;
 }
 
-/** @param {RepositoryReading} r @param {Record<string, import("./ci-health.ts").Target>} targets @param {number} minimum */
-function repositoryLines(r: RepositoryReading, targets: Record<string, import("./ci-health.ts").Target>, minimum: number) {
+/**
+ * The verdicts read ALL calls over both repositories, the same figure as the whole-window table: the target is one org-wide figure, and the
+ * calls of no pull request belong to no repository. The attributed rows are the breakdown beneath the verdicts, labelled as comparisons.
+ * @param {RepositoryReading} r @param {{ whole: ReturnType<typeof readWindow>, targets: Record<string, import("./ci-health.ts").Target>, enough: boolean }} input
+ */
+function repositoryLines(r: RepositoryReading, { whole, targets, enough }: { whole: ReturnType<typeof readWindow>; targets: Record<string, import("./ci-health.ts").Target>; enough: boolean; }) {
   const count = `${r.calls} attributed calls over ${r.read} of ${r.merged} merged pull requests (${r.unread.length} UNREAD)`;
+  const allIn = `${whole.calls} calls over ${whole.merged} merged pull requests, both repositories`;
   const shares = CATEGORIES.map((c) => `${c} ${r.counts[c]}`).join(", ");
   const n = r.biggest ? r.counts[r.biggest] : 0;
   const biggest = r.biggest
@@ -455,12 +463,13 @@ function repositoryLines(r: RepositoryReading, targets: Record<string, import(".
   return [
     `#### ${r.repository}`, "",
     "| Measure | Target | Reading | Count it came from | Verdict |", "|---|---|---|---|---|",
-    row({ measure: "Calls per merged pull request (attributed)", target: targets.callsPerMergedPullRequest, value: r.callsPerPull, enough: r.enough, count: count }),
-    row({ measure: "Dollars per merged pull request (attributed)", target: targets.dollarsPerMergedPullRequest, value: r.dollarsPerPull, enough: r.enough, count: count }),
-    "", "Attributed calls only: the target is read on ALL calls in the table above, and the calls of no pull request belong to no repository.", "", biggest,
+    row({ measure: "Calls per merged pull request (ALL calls, both repositories)", target: targets.callsPerMergedPullRequest, value: whole.callsPerPull, enough: enough, count: allIn }),
+    row({ measure: "Dollars per merged pull request (ALL calls, both repositories)", target: targets.dollarsPerMergedPullRequest, value: whole.dollarsPerPull, enough: enough, count: allIn }),
+    row({ measure: "Calls per merged pull request (attributed to this repository)", target: targets.callsPerMergedPullRequest, value: r.callsPerPull, enough: r.enough, count: count, verdict: "comparison, not the verdict" }),
+    row({ measure: "Dollars per merged pull request (attributed to this repository)", target: targets.dollarsPerMergedPullRequest, value: r.dollarsPerPull, enough: r.enough, count: count, verdict: "comparison, not the verdict" }),
+    "", "The verdicts read ALL calls over both repositories, as the whole-window table does; the attributed rows are a breakdown beneath them.", "", biggest,
     `Counts: ${shares}, none of the four ${r.none}; together ${r.calls} attributed calls.`,
     ...(r.unpriced > 0 ? [`${r.unpriced} attributed calls ran on a model with no price: the dollars are a floor.`] : []),
-    ...(r.enough ? [] : [`UNREAD above: ${r.merged} merged pull requests is under the ${minimum} a rate needs.`]),
     ...(r.unread.length > 0 ? [`UNREAD, no call attributed: ${r.unread.map((number) => `#${number}`).join(", ")}.`] : []), "",
   ];
 }
@@ -468,14 +477,24 @@ function repositoryLines(r: RepositoryReading, targets: Record<string, import(".
 /** The definitions, once. @param {PriceList} prices @param {Window} window */
 function definitionLines(prices: PriceList, window: Window) {
   const hours = window.hours ? ` and ${String(window.hours.from).padStart(2, "0")}:00-${String(window.hours.to).padStart(2, "0")}:00 of each day` : "";
+  // A whole-day figure is not the chairman's band, so the reading says which it is: 102 calls-per-PR read on whole days is not his 87-99.
+  const wholeDays = window.hours ? [] : ["Whole UTC days: every hour of each day is in the window. `--hours=14-20` reads the chairman's band, and a whole-day figure is not comparable to a band figure."];
   return [
     `Window: ${window.since} to ${window.until} (UTC, end exclusive)${hours}.`,
+    ...wholeDays,
     "- **Call**: one model request, counted once by its `message.id` (a request writes one transcript line per content block).",
     "- **Sessions**: every Claude Code session on the host (standing seats, spawned workers, reviewers, subagents); Claude only.",
     `- **Price**: list price per million tokens, the list read ${prices.readOn} (\`scripts/token-cost.ts\`, \`PRICE_LIST\`).`,
     "- **Attribution**: a call belongs to a merged pull request when its branch is that pull request's head, else by `reviewer-<n>` / `worker-<n>`; otherwise it belongs to NO pull request.",
     "- **Merged**: merged in the window, in either repository. Full definitions: `docs/token-cost.md`.",
   ];
+}
+
+/** The top sessions by name, then `others` for the rest, so the figures sum to the unattributed total and no count goes unnamed. @param {[string, number][]} groups */
+function unattributedBySession(groups: [string, number][]) {
+  const others = groups.slice(TOP_GROUPS).reduce((sum, [, n]) => sum + n, 0);
+  const parts = [...groups.slice(0, TOP_GROUPS).map(([name, n]) => `${name} ${n}`), ...(others > 0 ? [`others ${others}`] : [])];
+  return parts.join(", ") || "none";
 }
 
 /**
@@ -496,12 +515,13 @@ export function renderSection({ readings, whole, targets, prices, window, commit
     "| Measure | Target | Reading | Count it came from | Verdict |", "|---|---|---|---|---|",
     row({ measure: "Calls per merged pull request (ALL calls)", target: t.callsPerMergedPullRequest, value: whole.callsPerPull, enough: enough, count: allIn }),
     row({ measure: "Dollars per merged pull request (ALL calls) (verdict of record: list price as reported)", target: t.dollarsPerMergedPullRequest, value: whole.dollarsPerPull, enough: enough, count: allIn }),
-    row({ measure: "Same, cache writes priced at the 5-minute rate (the chairman's proxy; comparison, not the verdict)", target: t.dollarsPerMergedPullRequest, value: whole.dollarsPerPullFiveMinuteWrites, enough: enough, count: allIn }), "",
+    row({ measure: "Same, cache writes priced at the 5-minute rate (the chairman's proxy; comparison, not the verdict)", target: t.dollarsPerMergedPullRequest, value: whole.dollarsPerPullFiveMinuteWrites, enough: enough, count: allIn }),
+    ...(enough ? [] : [`UNREAD above: ${whole.merged} merged pull requests is under the ${minimum} a rate needs.`]), "",
     `UNATTRIBUTED (calls that belong to no merged pull request): ${whole.unattributed} of ${whole.calls} calls (${pct(whole.unattributed, whole.calls)}%), ${usd(whole.unattributedDollars)} of ${usd(whole.dollars)}.`,
-    `Unattributed by session: ${whole.groups.slice(0, TOP_GROUPS).map(([name, n]) => `${name} ${n}`).join(", ") || "none"}.`,
+    `Unattributed by session: ${unattributedBySession(whole.groups)}.`,
     `Mean context per call: ${whole.meanContext === null ? "no reading" : Math.round(whole.meanContext).toLocaleString("en-US")} tokens. Cache-write share of cost: ${whole.cacheWriteShare === null ? "no reading" : `${pct(whole.cacheWriteShare, 1)}%`}.`,
     ...(whole.unpriced > 0 ? [`${whole.unpriced} calls ran on a model with no price and are in no dollar figure.`] : []), "",
-    ...readings.flatMap((r) => repositoryLines(r, t, minimum)),
+    ...readings.flatMap((r) => repositoryLines(r, { whole, targets: t, enough })),
   ].join("\n");
 }
 
@@ -616,23 +636,50 @@ export const unreadSection = (file: string) => [
   `**UNREAD**: \`${file}\` is missing, so there is no target, repository list or minimum to read the figures against. Nothing was measured.`,
 ].join("\n");
 
-/** @param {string} flag @returns {string | undefined} */
-const flagValue = (flag: string): string | undefined => process.argv.slice(2).find((arg) => arg.startsWith(`${flag}=`))?.slice(flag.length + 1);
+/** @param {string[]} argv @param {string} flag @returns {string | undefined} */
+const flagValue = (argv: string[], flag: string): string | undefined => argv.find((arg) => arg.startsWith(`${flag}=`))?.slice(flag.length + 1);
 
-/** @returns {Window} the week before today unless `--since=DATE`, `--until=ISO-UTC` and `--hours=FROM-TO` say otherwise (a reproduction reads an arbitrary window) */
-function windowFromArgv(): Window {
-  const week = weeklyWindow(new Date());
-  const since = flagValue("--since");
-  const hours = flagValue("--hours");
-  return { since: since ? `${since}T00:00:00Z` : week.since, until: flagValue("--until") ?? week.until, ...(hours ? { hours: parseHours(hours) } : {}) };
+/** A start after 00:00Z on Tuesday asks for the NEXT week's heading from `weeklyWindow(now)`, so the unit names the week with `--week=` (its own timer day, Monday). */
+function weekStarting(monday: string): Window {
+  const start = Date.parse(`${monday}T00:00:00Z`);
+  if (new Date(start).getUTCDay() !== MONDAY) throw new Error(`token-cost: --week=${monday} is not a Monday`);
+  return weeklyWindow(new Date(start + MS_PER_WEEK));
+}
+
+/** @returns {Window} the week before `now` unless `--week=MONDAY` names the week, and `--since=DATE`, `--until=ISO-UTC` and `--hours=FROM-TO` say otherwise (a reproduction reads an arbitrary window) */
+export function windowFor(argv: string[], now: Date): Window {
+  const monday = flagValue(argv, "--week");
+  const week = monday !== undefined ? weekStarting(monday) : weeklyWindow(now);
+  const since = flagValue(argv, "--since");
+  const hours = flagValue(argv, "--hours");
+  return { since: since ? `${since}T00:00:00Z` : week.since, until: flagValue(argv, "--until") ?? week.until, ...(hours ? { hours: parseHours(hours) } : {}) };
+}
+
+/** The fields of an issue comment that this script reads. */
+type ApiComment = { id: number, body: string };
+
+/** Every comment since the week's Monday, page by page: the endpoint returns PER_PAGE at a time, and a week's heading past the first page is not on it (#5432). @param {{ repository: string, issue: number }} on @param {string} date @param {(path: string) => ApiComment[]} readPage */
+export function readComments(on: { repository: string; issue: number; }, date: string, readPage: (path: string) => ApiComment[] = ghGet) {
+  const since = new Date(Date.parse(`${date}T00:00:00Z`)).toISOString();
+  const comments: ApiComment[] = [];
+  for (let page = 1; ; page += 1) {
+    const body = readPage(`repos/${on.repository}/issues/${on.issue}/comments?per_page=${PER_PAGE}&page=${page}&since=${since}`);
+    comments.push(...body);
+    if (body.length < PER_PAGE) return comments;
+  }
+}
+
+/** The week's CI-health comment, found on any page; refused when no comment carries its heading. @param {{ repository: string, issue: number }} on @param {string} date @param {(path: string) => ApiComment[]} readPage */
+export function findCiHealthComment(on: { repository: string; issue: number; }, date: string, readPage: (path: string) => ApiComment[] = ghGet): ApiComment {
+  const heading = commentHeading({ date });
+  const target = readComments(on, date, readPage).find((c) => c.body.startsWith(heading));
+  if (!target) throw new Error(`token-cost: "${heading}" is not on #${on.issue} yet. ci-health posts it (Monday 06:43Z) and this appends to it; posting nothing of its own.`);
+  return target;
 }
 
 /** The CI-health comment of this week is the door: one comment, one table, one window. @param {string} body @param {{ repository: string, issue: number }} on @param {string} date */
 function appendToCiHealthComment(body: string, on: { repository: string; issue: number; }, date: string) {
-  const comments = ghGet<{ id: number, body: string }[]>(`repos/${on.repository}/issues/${on.issue}/comments?per_page=${PER_PAGE}&since=${new Date(Date.parse(`${date}T00:00:00Z`)).toISOString()}`);
-  const heading = commentHeading({ date });
-  const target = comments.find((c) => c.body.startsWith(heading));
-  if (!target) throw new Error(`token-cost: "${heading}" is not on #${on.issue} yet. ci-health posts it (Monday 06:43Z) and this appends to it; posting nothing of its own.`);
+  const target = findCiHealthComment(on, date);
   if (target.body.includes(MARKER)) return `token-cost: the comment for week of ${date} already carries this reading; changing nothing.`;
   const text = `${target.body}\n\n${body}\n`;
   const leak = leakRefusalReason(text);
@@ -648,7 +695,8 @@ function appendToCiHealthComment(body: string, on: { repository: string; issue: 
 }
 
 function main() {
-  refuseUnknownFlags(["--since=", "--until=", "--hours=", "--transcripts=", "--post"], { entry: import.meta.url, command: "node scripts/token-cost.ts" });
+  refuseUnknownFlags(["--since=", "--until=", "--hours=", "--transcripts=", "--week=", "--post"], { entry: import.meta.url, command: "node scripts/token-cost.ts" });
+  const argv = process.argv.slice(2);
   const file = readTargetsFile(TARGETS_FILE);
   if ("missing" in file) {
     process.stdout.write(`${unreadSection(file.missing)}\n`);
@@ -656,8 +704,8 @@ function main() {
     return;
   }
   const { targets } = file;
-  const window = windowFromArgv();
-  const transcripts = readTranscripts(flagValue("--transcripts") ?? join(homedir(), ".claude/projects"), window);
+  const window = windowFor(argv, new Date());
+  const transcripts = readTranscripts(flagValue(argv, "--transcripts") ?? join(homedir(), ".claude/projects"), window);
   const pulls = targets.repositories.flatMap((repository) => readPulls(repository, targets.workflow, window));
   const { byPull, noPull } = attributeCalls({ calls: transcripts.calls, pulls });
   const readings = targets.repositories.map((repository) => readRepository({ repository, pulls, byPull, prices: PRICE_LIST, minimum: targets.minimumPullRequests }));
