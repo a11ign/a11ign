@@ -12,6 +12,10 @@
  * agent-org#1351: the `dependency` step's read of the pull request's reviews and head is the third copy of the pattern, and the one whose
  * wrong answer is quiet: a failed read piped into `jq -s .` is `[]`, "nobody approved", so a settled pull request would read as unexamined.
  * A read that cannot be made leaves `check` WITHOUT `--reviews` and `--head` (today's refusal), and is never handed an empty file.
+ *
+ * THE CREDENTIAL IS PART OF THE BEHAVIOUR: the fake `gh` answers 401 unless `GH_TOKEN` is set, and the child environment is built from the
+ * step's own `env:` as parsed (a value of exactly `${{ github.token }}` becomes the fake token), so a step that stops declaring `GH_TOKEN`, or
+ * misspells it, loses every read here instead of passing on a variable the test supplied itself.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -25,14 +29,19 @@ import { parse as parseYaml } from "yaml";
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const CI_YML = join(REPO_ROOT, ".github/workflows/ci.yml");
 
-interface Step { id?: string; name?: string; run?: string }
+interface Step { id?: string; name?: string; run?: string; env?: Record<string, unknown> }
 const workflow = parseYaml(readFileSync(CI_YML, "utf8")) as { jobs: Record<string, { steps?: Step[] }> };
 
+/** What each step declares under `env:`, by its script, so `run` can build the child environment from the step and not from the test. */
+const DECLARED_ENV = new Map<string, Record<string, unknown>>();
 function stepScript(job: string, pick: (step: Step) => boolean): string {
   const step = workflow.jobs[job]?.steps?.find(pick);
   assert.ok(step?.run, `ci.yml job ${job} has no step the test can find; the test would be reading nothing`);
+  DECLARED_ENV.set(step.run, step.env ?? {});
   return step.run;
 }
+const FAKE_TOKEN = "fake-job-token";
+const JOB_TOKEN = "${{ github.token }}";
 const AGREEMENT = stepScript("gate", (s) => s.name?.startsWith("The other kind of run on this head agrees") === true);
 const NO_RELEASE = stepScript("changeset", (s) => s.id === "noRelease");
 const DEPENDENCY = stepScript("changeset", (s) => s.id === "dependency");
@@ -42,6 +51,10 @@ const DEPENDENCY = stepScript("changeset", (s) => s.id === "dependency");
 
 const FAKE_GH = `#!/bin/sh
 # usage: gh api <path> [--jq ...]
+if [ "$GH_TOKEN" != "$FAKE_TOKEN" ]; then
+  echo "gh: To use GitHub CLI in a GitHub Actions workflow, set the GH_TOKEN environment variable (HTTP 401)" >&2
+  exit 4
+fi
 case "$2" in
   */actions/workflows/ci.yml/runs?*) key=runs; body="$FIXTURES/runs.json" ;;
   */actions/runs/*/jobs?*) key=jobs; body="$FIXTURES/jobs.json" ;;
@@ -91,11 +104,13 @@ function run(script: string, scenario: Scenario, env: Record<string, string>) {
   }
   const file = join(dir, "step.sh");
   writeFileSync(file, script);
+  const declared: Record<string, string> = {};
+  for (const [name, value] of Object.entries(DECLARED_ENV.get(script) ?? {})) if (value === JOB_TOKEN) declared[name] = FAKE_TOKEN;
   const result = spawnSync("bash", ["-e", file], {
     encoding: "utf8",
     env: {
-      PATH: `${join(dir, "bin")}:${process.env.PATH}`, FIXTURES: dir, REPO: "a11ign/a11ign", HEAD_SHA: "head1",
-      RUNNER_TEMP: dir, GITHUB_OUTPUT: join(dir, "github-output"), ...env,
+      PATH: `${join(dir, "bin")}:${process.env.PATH}`, FIXTURES: dir, FAKE_TOKEN, REPO: "a11ign/a11ign", HEAD_SHA: "head1",
+      RUNNER_TEMP: dir, GITHUB_OUTPUT: join(dir, "github-output"), ...declared, ...env,
     },
   });
   const calls = (key: string) => readFileSync(join(dir, `calls-${key}`), "utf8").split("\n").filter(Boolean).length;
@@ -252,6 +267,18 @@ test("dependency: a read that cannot be made leaves check WITHOUT the flags (tod
   const noHead = run(DEPENDENCY, { reviews: [APPROVAL], script: { head: ["404"] } }, QUEUE_ENV);
   assert.equal(noHead.calls("reviews"), 0, "with no head to judge by, the reviews are not read for nothing");
   assert.ok(noSettlement(noHead.nodeArgs), `${noHead.nodeArgs}`);
+});
+
+test("dependency: the reads carry the job's token, taken from the step's own env, and a read without it is a 4xx, so no flags", () => {
+  const result = run(DEPENDENCY, { reviews: [APPROVAL] }, PULL_REQUEST_ENV);
+  assert.ok(DECLARED_ENV.get(DEPENDENCY)?.GH_TOKEN === JOB_TOKEN, "the step declares GH_TOKEN as the job's token");
+  assert.equal(result.code, 0, result.out);
+  assert.equal(result.calls("reviews"), 1, "the fake gh served the read because the step's GH_TOKEN reached it");
+  assert.ok(result.nodeArgs?.includes("--head=head1"));
+  const without = run(DEPENDENCY, { reviews: [APPROVAL] }, { ...PULL_REQUEST_ENV, GH_TOKEN: "" });
+  assert.equal(without.calls("reviews"), 0, "the control: with no token the fake gh refuses before it counts a call");
+  assert.ok(noSettlement(without.nodeArgs), `${without.nodeArgs}`);
+  assert.match(without.out, /::warning::could not read pull request #7's reviews or head/);
 });
 
 test("dependency: a ref that is not a queue entry's names no pull request: the step says so and check runs as it always did", () => {
