@@ -678,6 +678,54 @@ const EXEC_START = "ExecStart=/usr/bin/sh -c '";
 const EXECUTABLE = 0o755;
 
 /** The unit's ExecStart with systemd's escapes undone and its node call replaced by echo, so the shell prints the argument the unit would pass. */
+// ---- the week's CI-health comment is found past the first page of #928 (#5432) -----------------------
+
+const CI_ON = { repository: "a11ign/a11ign", issue: 928 };
+const CI_WEEK = "2026-10-05";
+const CI_HEADING = "## CI health, week of 2026-10-05";
+const COMMENTS_PAGE = 100; // the endpoint's per_page, as token-cost.ts asks for it
+
+/** A page reader over `comments`, COMMENTS_PAGE to a page as the endpoint returns them; `asked` keeps each path it was given. */
+function pagedReader(comments: { id: number, body: string }[]) {
+  const asked: string[] = [];
+  const readPage = (path: string) => {
+    asked.push(path);
+    const page = Number(new URL(path, "https://api.github.com/").searchParams.get("page"));
+    return comments.slice((page - 1) * COMMENTS_PAGE, page * COMMENTS_PAGE);
+  };
+  return { asked, readPage };
+}
+const fillerComments = (count: number, from = 1) => Array.from({ length: count }, (_, i) => ({ id: from + i, body: `ordinary comment ${from + i}` }));
+
+test("findCiHealthComment: the week's heading on the SECOND page is found, and its id is the one the PATCH names (#5432)", () => {
+  const heading = { id: 9001, body: `${CI_HEADING}\n\nthe table` };
+  const { asked, readPage } = pagedReader([...fillerComments(COMMENTS_PAGE), heading]);
+  const target = tc.findCiHealthComment(CI_ON, CI_WEEK, readPage);
+  assert.equal(target.id, 9001);
+  assert.equal(asked.length, 2, "a full first page is followed by the second, and the short second page stops the read");
+  assert.match(asked[1], /page=2/);
+  assert.match(asked[0], /since=2026-10-05T00:00:00\.000Z/);
+});
+
+test("findCiHealthComment: a heading on the first page is found without a second read (control: the page loop does not over-read)", () => {
+  const { asked, readPage } = pagedReader([{ id: 7, body: `${CI_HEADING}\n\nthe table` }, ...fillerComments(3)]);
+  assert.equal(tc.findCiHealthComment(CI_ON, CI_WEEK, readPage).id, 7);
+  assert.equal(asked.length, 1);
+});
+
+test("findCiHealthComment: a heading on no page is refused, naming the issue (control: the same reader finds it when it is there)", () => {
+  const absent = pagedReader(fillerComments(COMMENTS_PAGE + 20));
+  assert.throws(() => tc.findCiHealthComment(CI_ON, CI_WEEK, absent.readPage), /is not on #928 yet/);
+  const present = pagedReader([...fillerComments(COMMENTS_PAGE + 20), { id: 5, body: CI_HEADING }]);
+  assert.equal(tc.findCiHealthComment(CI_ON, CI_WEEK, present.readPage).id, 5);
+});
+
+test("readComments: a page of exactly COMMENTS_PAGE reads on, and the first short page ends the read", () => {
+  const { asked, readPage } = pagedReader(fillerComments(COMMENTS_PAGE));
+  assert.equal(tc.readComments(CI_ON, CI_WEEK, readPage).length, COMMENTS_PAGE);
+  assert.equal(asked.length, 2, "page 2 is empty, so the read stops there");
+});
+
 function unitArgument(): string {
   const line = readFileSync(UNIT_FILE, "utf8").split("\n").find((l) => l.startsWith(EXEC_START)) ?? "";
   return line.slice(EXEC_START.length, -1).replace(/exec \S+\/node /, "exec echo ").replaceAll("$$", "$").replaceAll("%%", "%");
