@@ -12,6 +12,7 @@
  * POSITIVE CONTROLS, named where the emptiness assertions are: "the real tree names no closed owner" is only a reading if the reader finds an owner in it,
  * which `the real tree's gate:lab-held is found, with an owner` pins; and every `failures` assertion has its passing twin beside it on the same fixture.
  */
+// no-token: gh -- the fixture half spawns nothing: `readIssueState` takes a runner here, and the one read of GitHub is the opt-in LIVE test below
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
@@ -117,10 +118,16 @@ test("an owner two refusals name is asked about once", () => {
   assert.deepEqual(asked, [SHARED_OWNER]);
 });
 
-test("the live reader maps an unreadable endpoint to CANNOT_TELL, not to open", () => {
-  // A repository that cannot exist: `gh` answers 404 (or is absent), and either way the state is not readable.
-  const unreadable = readIssueState("a11ign/this-repository-does-not-exist-5333")(1);
-  assert.equal(unreadable.code, "CANNOT_TELL");
+test("the live reader maps what GitHub answers: open, closed, anything else and a failed call", () => {
+  const answering = (stdout: string) => readIssueState("o/r", () => stdout)(OLD_OWNER);
+  assert.equal(answering("open\n").code, "OPEN");
+  assert.equal(answering("closed\n").code, "CLOSED");
+  // Neither word: an unexpected body is not a reading in either direction.
+  assert.equal(answering("transferred").code, "CANNOT_TELL");
+  assert.equal(answering("").code, "CANNOT_TELL");
+  const failing = readIssueState("o/r", () => { throw new Error("gh: HTTP 404\nsecond line"); })(OLD_OWNER);
+  assert.equal(failing.code, "CANNOT_TELL");
+  assert.match(failing.why, /o\/r#5179 could not be read: Error: gh: HTTP 404$/, "the reason is the first line of the failure, with the repository and number");
 });
 
 test("the real tree's gate:lab-held is found, with an owner (the positive control for the live read's emptiness)", () => {

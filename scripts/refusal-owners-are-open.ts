@@ -110,13 +110,18 @@ export function describe(finding: Finding): string {
   return `${at}: ${finding.refusal.kind} names #${finding.number} as its owner, and #${finding.number} is ${finding.code}${finding.code === "CANNOT_TELL" ? ` (${finding.why})` : ""}`;
 }
 
+/** `gh` with these arguments, as its stdout. Injectable so a test reads every answer GitHub can give without spawning anything. */
+export type GhRunner = (args: string[]) => string;
+const runGh: GhRunner = (args) => execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+
 /** The live instrument: GitHub's own issue endpoint (the core pool, which `gh issue view` is not), as the asking token sees it. */
-export function readIssueState(repo: string = process.env.A11Y_REFUSAL_OWNERS_REPO ?? process.env.GITHUB_REPOSITORY ?? DEFAULT_REPO) {
+export function readIssueState(
+  repo: string = process.env.A11Y_REFUSAL_OWNERS_REPO ?? process.env.GITHUB_REPOSITORY ?? DEFAULT_REPO,
+  run: GhRunner = runGh,
+) {
   return (number: number): StateRead => {
     try {
-      const state = execFileSync("gh", ["api", `repos/${repo}/issues/${number}`, "--jq", ".state"], {
-        encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
-      }).trim();
+      const state = run(["api", `repos/${repo}/issues/${number}`, "--jq", ".state"]).trim();
       if (state === "open") return { code: "OPEN", why: `${repo}#${number} is open` };
       if (state === "closed") return { code: "CLOSED", why: `${repo}#${number} is closed` };
       return { code: "CANNOT_TELL", why: `${repo}#${number} answered state ${JSON.stringify(state)}, which is neither open nor closed` };
