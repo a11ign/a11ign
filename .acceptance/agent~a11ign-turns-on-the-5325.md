@@ -2,6 +2,6 @@ The reviewer's role file says it reviews with the `row-review` skill (installed 
 
 Acceptance: bash -c 'grep -q "row-review" .agent-org/roles/reviewer.md && grep -qi "Done-when" .agent-org/roles/reviewer.md'
 
-Mutation: `row-review` replaced by `row-rev` in `.agent-org/roles/reviewer.md`; the same two greps exit 1. Restored from a scratchpad copy, byte-identical by `diff`; the greps exit 0. At `HEAD` the file has zero `row-review` matches, so the Acceptance was red before the change.
+Mutation: the one `row-review` token, in the heading at `.agent-org/roles/reviewer.md:127`, replaced by `row-rev`; the same two greps exit 1. Restored from a scratchpad copy, byte-identical by `diff`; the greps exit 0. The token appears once in the file (the install path was taken out of that line so one occurrence cannot satisfy the grep by accident), and at `HEAD` the file has zero matches, so the Acceptance was red before the change. The grep is a presence check the row's Acceptance fixes; it does not prove the rule's wording.
 
 Closes #5325

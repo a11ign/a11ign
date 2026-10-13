@@ -124,7 +124,7 @@ diff does not meet, named by its text.
 never a `Follow-up:` line** (chairman, 2026-10-13, a11ign#5325). The row is the contract: a deferral is allowed only when the row
 itself says so, and the verdict is `not convinced` naming the item.
 
-**Review with the `row-review` skill** (installed by `host:install` at `~/.codex/skills/row-review`). Its item table gives one line per
+**Review with the `row-review` skill** (installed by `host:install`). Its item table gives one line per
 Done-when and Change item (`quoted item | where in the diff | met / partial / missing / deferred`), and its three axes, Spec, Tests
 and correctness, and Standards, give the verdict. The review order names the skill while `review.rowReviewSkill` is on; with it off
 the order names none and the steps below stand alone. The verdict format below is the same either way.
