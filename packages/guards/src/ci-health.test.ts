@@ -20,6 +20,7 @@ import type { Target, Targets } from "../../../scripts/ci-health.ts";
 const ci = await import("../../../scripts/ci-health.ts");
 
 const MINIMUM = 2;
+const FULL_PAGE = 100; // the comments endpoint returns this many at most, so a full page means "read the next"
 const RATIO_TARGET: Target = { label: "Pass", unit: "ratio", atLeast: 0.8 };
 const COUNT_TARGET: Target = { label: "Runs", unit: "count", atMost: 2 };
 const DOLLAR_TARGET: Target = { label: "Cost", unit: "dollars", below: 2.5 };
@@ -336,4 +337,30 @@ test("parseInclude: accepts bare newlines and an empty body as null", () => {
 
 test("parseInclude: a body that is not JSON throws rather than guessing", () => {
   assert.throws(() => ci.parseInclude("HTTP/2 200\nx-a: b\n\nnot json"), SyntaxError);
+});
+
+test("readCommentBodies: the already-posted read follows every page, so a heading on page 2 is found (#5441)", () => {
+  const heading = ci.commentHeading({ date: "2026-10-05" });
+  const filler = (n: number) => Array.from({ length: n }, (_, i) => ({ body: `unrelated ${i}` }));
+  const pages = [filler(FULL_PAGE), [{ body: `${heading}\n\nbody` }, ...filler(FULL_PAGE - 1)], []];
+  const paths: string[] = [];
+  const readPage = (path: string) => {
+    paths.push(path);
+    return pages[Number(new URLSearchParams(path.split("?")[1]).get("page")) - 1] ?? [];
+  };
+  const bodies = ci.readCommentBodies({ repository: "a11ign/a11ign", issue: 928 }, "2026-10-12T00:00:00Z", readPage);
+  assert.equal(ci.alreadyPosted(bodies, heading), true);
+  assert.equal(ci.alreadyPosted(pages[0].map((c) => c.body), heading), false); // the first page alone is the old, wrong read
+  assert.deepEqual(paths.map((p) => new URLSearchParams(p.split("?")[1]).get("page")), ["1", "2", "3"]);
+  assert.ok(paths.every((p) => p.endsWith("&since=2026-10-12T00:00:00Z")));
+});
+
+test("readCommentBodies: a first page that is short ends the read, with no second request", () => {
+  const paths: string[] = [];
+  const bodies = ci.readCommentBodies({ repository: "a11ign/a11ign", issue: 928 }, "2026-10-12T00:00:00Z", (path) => {
+    paths.push(path);
+    return [{ body: "only" }];
+  });
+  assert.deepEqual(bodies, ["only"]);
+  assert.equal(paths.length, 1);
 });

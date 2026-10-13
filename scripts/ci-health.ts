@@ -400,6 +400,16 @@ function windowFromArgv(): { since: string; until: string; } {
   return { since: since ? `${since}T00:00:00Z` : week.since, until: flagValue("--until") ?? week.until };
 }
 
+/** Every comment on the report issue since `since`, page by page: the endpoint returns PER_PAGE at a time, and this week's heading past the first page is not on it (#5441, the sibling of #5432). @param {{ repository: string, issue: number }} on @param {string} since @param {(path: string) => { body: string }[]} readPage */
+export function readCommentBodies(on: { repository: string; issue: number; }, since: string, readPage: (path: string) => { body: string }[] = (path) => ghGet<{ body: string }[]>(path)): string[] {
+  const bodies: string[] = [];
+  for (let page = 1; ; page += 1) {
+    const comments = readPage(`repos/${on.repository}/issues/${on.issue}/comments?per_page=${PER_PAGE}&page=${page}&since=${since}`);
+    bodies.push(...comments.map((c) => c.body));
+    if (comments.length < PER_PAGE) return bodies;
+  }
+}
+
 function main() {
   refuseUnknownFlags(["--since=", "--until=", "--post"], { entry: import.meta.url, command: "node scripts/ci-health.ts" });
   const targets = targetsFrom(JSON.parse(readFileSync(TARGETS_FILE, "utf8")));
@@ -410,8 +420,7 @@ function main() {
   process.stdout.write(`${comment}\n`);
   if (!process.argv.includes("--post")) return;
   const { repository, issue } = targets.reportOn;
-  const existing = ghGet<{ body: string }[]>(`repos/${repository}/issues/${issue}/comments?per_page=${PER_PAGE}&since=${window.until}`);
-  if (alreadyPosted(existing.map((c) => c.body), commentHeading({ date }))) {
+  if (alreadyPosted(readCommentBodies(targets.reportOn, window.until), commentHeading({ date }))) {
     process.stdout.write(`ci-health: "${commentHeading({ date })}" is already on #${issue}; posting nothing.\n`);
     return;
   }
