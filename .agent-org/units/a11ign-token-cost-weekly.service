@@ -10,24 +10,27 @@
 # exits non-zero and changes nothing while the comment is absent, and does nothing when it already carries the reading,
 # so a retry is safe.
 #
-# THE RETRY, AND WHY IT IS THIS ONE: the timer starts it Monday 12:13Z, and `Restart=on-failure` starts it again 60 minutes
-# after each failure, at most EIGHT starts in all (`StartLimitBurst`). A failed attempt runs its full 30-minute timeout, so the
-# starts are 90 minutes apart and the last is 12:13Z + 7 x 90 min = 22:43Z. At 90 minutes between restarts the eighth start
-# would land at 02:13Z Tuesday, after the week has changed. The window must END
+# THE RETRY, AND WHY IT IS THIS ONE: the timer starts it Monday 12:13Z, and `Restart=on-failure` starts it again 70 minutes
+# after each failure, at most EIGHT starts in all (`StartLimitBurst`). TWO PATHS SET THE LAST START, and they differ:
+#  - a read that hangs to the 30-minute timeout: starts are 100 minutes apart, the eighth is 12:13Z + 7 x 100 min = 23:53Z;
+#  - a read that fails at its end (the comment is absent, after the 14m29s read): starts are 84.5 minutes apart, the eighth
+#    is about 22:04Z, and its comment check is about 22:19Z.
+# 70 is the largest whole-minute restart that keeps the hang path's eighth start inside Monday (90 would put it at 02:13Z
+# Tuesday, after the week has changed). The window must END
 # INSIDE MONDAY UTC: the script reads the seven UTC days before TODAY (`weeklyWindow`) and looks for that week's heading,
 # so an attempt after 00:00Z asks for a DIFFERENT week's comment. Each failed attempt reads transcripts and the merged pull
 # requests BEFORE it looks for the comment (a few pages and one REST call per merged pull request), which is why this is
 # eight attempts and not forty-eight. When the eighth fails the unit is FAILED (start limit hit), never green with nothing
-# posted, and a week with no reading is a finding for `product-manager` (docs/token-cost.md). A comment that lands after
-# ~22:43Z is therefore missed, and the ceiling is the day boundary, not a choice (the 10-05 16:43 slot started 22:53Z).
+# posted, and a week with no reading is a finding for `product-manager` (docs/token-cost.md). A comment that lands after the
+# last attempt's check (about 22:19Z on the failure path, 23:53Z on the hang path) is therefore missed, and the ceiling is the
+# day boundary, not a choice (the 10-05 16:43 slot started 22:53Z, so that comment would be missed on the failure path).
 #
 # A WALL-CLOCK EVENT, NOT A CHECK FOR WORK (`org-routing-and-timers.md`): one reading a week. A second run in the same
 # week appends nothing and says so, so `Persistent=true` on the timer is safe.
 Description=a11ign: append the weekly calls-and-dollars reading to the CI-health comment (#3690, #3217)
 
-# THE START LIMIT IS THE RETRY BOUND. 8 starts inside 12h (the eight take 10.5h at 90-minute spacing: a 30-minute timeout
-# plus a 60-minute restart), so
-# a ninth is refused and the unit is marked failed.
+# THE START LIMIT IS THE RETRY BOUND. 8 starts inside 12h (on a hang the eight take 11h40m: seven gaps of a 30-minute
+# timeout plus a 70-minute restart, so the 12h window holds), so a ninth is refused and the unit is marked failed.
 StartLimitIntervalSec=12h
 StartLimitBurst=8
 
@@ -58,15 +61,15 @@ ExecStart=%h/.local/bin/node scripts/token-cost.ts --post
 
 # THE MEASURED READ, AND ITS HEADROOM -- #3217. `token-cost.ts --post` took 14m29s wall over the 2026-10-05..10-12 window
 # (102,882 calls, 1,005 merged pull requests; worker-3217's run, 2026-10-12). At 600s every attempt was killed before it reached
-# the comment, so none ever posted. 1800s is that read with room, and the restart below is 60 minutes so the eight starts
-# still end inside Monday (see the header).
+# the comment, so none ever posted. 1800s is that read with room, and the restart below is 70 minutes so the eight starts
+# still end inside Monday on a hang (see the header).
 TimeoutStartSec=1800
 
 # `Restart=on-failure` ON A ONESHOT restarts it after a non-zero exit only (systemd >= 244; this host has 259), which is
 # exactly "the comment is not there yet". A timeout counts as a failure too.
 Restart=on-failure
-# 60 MINUTES, NOT 90: with the 30-minute timeout above, 90 would put the eighth start at 02:13Z Tuesday (see the header).
-RestartSec=60min
+# 70 MINUTES, NOT 90: with the 30-minute timeout above, 90 would put the eighth start at 02:13Z Tuesday on a hang (see the header).
+RestartSec=70min
 
 # NO [Install] SECTION, as a11ign-lab-watch.service: `WantedBy=default.target` would run this at every boot, and the
 # timer is the only thing that may start it.
