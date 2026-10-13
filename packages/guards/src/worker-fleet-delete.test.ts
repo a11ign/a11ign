@@ -38,7 +38,7 @@ const CONSUMED = "@a11ign/screenreader-fleet";
 /** The lab layer's directory, built from its name as `lab-delete.test.ts` builds it: the scan under test still treats `lab` as a layer. */
 const LAB_LAYER = "lab";
 const LAB_DIR = `packages/${LAB_LAYER}`;
-const CONSUMED_VERSION = "0.9.0";
+const CONSUMED_VERSION = "0.11.0";
 /** Both names the package has carried; a changeset may name neither. BUILT, NOT WRITTEN: a rename test refuses a file that spells the old name whole. */
 const NAMES = [CONSUMED, ["@a11ign", "worker-fleet"].join("/")] as const;
 /** What a pnpm integrity looks like: an algorithm, a dash and base64. Not a hash of anything: a SHAPE, so a placeholder is refused. */
