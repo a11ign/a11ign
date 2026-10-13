@@ -36,15 +36,15 @@ row and stop. Do not look for a reading of this ban that lets you through, and d
 look". A gate that reads `runs/` gives a verdict only when the agent driving the fleet and the lab runs it
 (`a11ign/lab/CLAUDE.md`); anyone else may use it as a pre-check and never as a reported result.
 
-## Commands the safety check cannot read (a11ign#4957, a11ign#5285)
+## Removal commands the safety check cannot read (a11ign#4957, sixth class; a11ign#5285)
 
-Claude Code's built-in safety check refuses a command it cannot read and the refusal stops your turn until a person answers. Of six denials read from their transcripts (`scripts/fixtures/safety-check-denied-commands.json`), **five contained no removal at all**: a nested `bash -c` (double- or single-quoted) carrying `$`, `$(…)` or a heredoc. The sixth was `rm -rf "$S/$m"`. The PreToolUse hook `scripts/claude-hooks/refuse-unreadable-command.ts` (wired in `.claude/settings.json`, so it reaches every role that runs in this repository, not only engineers) refuses both shapes and prints the rewrite; the rules are what you write so it never fires.
+Claude Code's critical-path removal check reads the command it is shown, and a command it cannot read stops your turn until a person answers it. **It is not only removals.** Of six denials read from their transcripts (`scripts/fixtures/safety-check-denied-commands.json`), five contained no `rm` at all: a nested shell with `$` in or beside its string. The PreToolUse hook `scripts/claude-hooks/refuse-unreadable-command.ts`, wired in `.claude/settings.json`, refuses both shapes in every role that runs in this repository and prints the rewrite; the rules below are what you write so it never fires. Keep each rule below as the command you run.
 
-- **Never write a nested `bash -c` / `sh -c` with a `$` in or beside its string.** Run the commands directly, or put the script in a file in your session scratchpad and run that file.
-- **A script longer than one line goes in a file in your scratchpad and you run that file, never inline in `bash -c '...'`, a heredoc after a compound `&&` chain, or `node -e "..."`.**
-- **Never `rm` a variable or a glob target: use a literal path, or `"${VAR:?}/name"` (`.claude/rules/guards-and-assertions.md` has the reason).**
+- **Never write a nested `bash -c` or `sh -c` with a `$` in or beside its string: run the commands directly, or put them in a file in your scratchpad and run that file.**
+- **A script longer than one line goes in a file in your session scratchpad and you run that file, never inline in `bash -c '...'` or `node -e "..."`, because nested quoting is what stops the check from reading the removal.**
+- **Never `rm` a variable or a glob target: use a literal path, or `"${VAR:?}/name"` (`.claude/rules/guards-and-assertions.md` has the reason), because a target the check cannot resolve stops the turn.**
 - **Do not clean the scratchpad: it is per-session and swept, so a removal there gains nothing.**
-- **If the prompt appears, or a command is denied by a built-in Claude Code safety check, take the denial, rewrite the command, and never retry the same shape: only a person may approve one.**
+- **If the prompt appears, or a command is denied by a built-in Claude Code safety check, take the denial, rewrite the command, and never retry the same removal: only a person may approve one.**
 
 ## The pull loop, as it stands today
 
