@@ -18,7 +18,7 @@ jobs:
       pull-requests: write       # for the PR comment below; omit it and the report still runs, only quieter
     steps:
       - uses: actions/checkout@v7
-      - uses: a11ign/a11ign@ccd21d9d0b6088caeff375fa91d3efe0897cb839   # the commit of the release tagged a11ign@0.10.2
+      - uses: a11ign/a11ign@691322a7db0ad2a979014bfc931befecfa830df5   # the commit of the release tagged a11ign@0.10.3
         # Pinned to the full 40-character commit of release 0.10.2 (`npm view a11ign dist-tags` read `latest`
         # 0.10.2 on 2026-10-12; `next` was 0.10.2 too), so your CI does not move when a
         # newer one is published -- GitHub
@@ -353,8 +353,8 @@ error handling most needs reviewing. On such a page 3.3.1, 3.3.3 and 4.1.3 are n
 `forms` names a config that says how to operate it (ADR 0024):
 
 ```yaml
-- uses: a11ign/a11ign@ccd21d9d0b6088caeff375fa91d3efe0897cb839   # the commit of the release tagged a11ign@0.10.2
-  # Pinned to the full 40-character commit of release 0.10.2, so your CI does not move when a newer one
+- uses: a11ign/a11ign@691322a7db0ad2a979014bfc931befecfa830df5   # the commit of the release tagged a11ign@0.10.3
+  # Pinned to the full 40-character commit of release 0.10.3, so your CI does not move when a newer one
   # is published -- GitHub refuses an abbreviated SHA outright, it does not just discourage it.
   with:
     url: https://staging.example.com/signup
@@ -410,7 +410,7 @@ Give `urls` instead of `url` to test more than one page in one run. **Exactly on
 refused before any setup is billed.
 
 ```yaml
-      - uses: a11ign/a11ign@ccd21d9d0b6088caeff375fa91d3efe0897cb839   # the commit of the release tagged a11ign@0.10.2
+      - uses: a11ign/a11ign@691322a7db0ad2a979014bfc931befecfa830df5   # the commit of the release tagged a11ign@0.10.3
         with:
           urls: |
             https://example.com/
@@ -495,7 +495,7 @@ jobs:
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v7
-      - uses: a11ign/a11ign@ccd21d9d0b6088caeff375fa91d3efe0897cb839   # a full commit SHA: the commit of release a11ign@0.10.2; v0.1.0 predates the login flow
+      - uses: a11ign/a11ign@691322a7db0ad2a979014bfc931befecfa830df5   # a full commit SHA: the commit of release a11ign@0.10.3; v0.1.0 predates the login flow
         env:                                   # the credential enters HERE, from GitHub Secrets, and nowhere else
           APP_TEST_USER: ${{ secrets.APP_TEST_USER }}
           APP_TEST_PASSWORD: ${{ secrets.APP_TEST_PASSWORD }}
