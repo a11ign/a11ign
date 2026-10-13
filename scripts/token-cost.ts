@@ -638,12 +638,31 @@ export function windowFor(argv: string[], now: Date): Window {
   return { since: since ? `${since}T00:00:00Z` : week.since, until: flagValue(argv, "--until") ?? week.until, ...(hours ? { hours: parseHours(hours) } : {}) };
 }
 
+/** The fields of an issue comment that this script reads. */
+type ApiComment = { id: number, body: string };
+
+/** Every comment since the week's Monday, page by page: the endpoint returns PER_PAGE at a time, and a week's heading past the first page is not on it (#5432). @param {{ repository: string, issue: number }} on @param {string} date @param {(path: string) => ApiComment[]} readPage */
+export function readComments(on: { repository: string; issue: number; }, date: string, readPage: (path: string) => ApiComment[] = ghGet) {
+  const since = new Date(Date.parse(`${date}T00:00:00Z`)).toISOString();
+  const comments: ApiComment[] = [];
+  for (let page = 1; ; page += 1) {
+    const body = readPage(`repos/${on.repository}/issues/${on.issue}/comments?per_page=${PER_PAGE}&page=${page}&since=${since}`);
+    comments.push(...body);
+    if (body.length < PER_PAGE) return comments;
+  }
+}
+
+/** The week's CI-health comment, found on any page; refused when no comment carries its heading. @param {{ repository: string, issue: number }} on @param {string} date @param {(path: string) => ApiComment[]} readPage */
+export function findCiHealthComment(on: { repository: string; issue: number; }, date: string, readPage: (path: string) => ApiComment[] = ghGet): ApiComment {
+  const heading = commentHeading({ date });
+  const target = readComments(on, date, readPage).find((c) => c.body.startsWith(heading));
+  if (!target) throw new Error(`token-cost: "${heading}" is not on #${on.issue} yet. ci-health posts it (Monday 06:43Z) and this appends to it; posting nothing of its own.`);
+  return target;
+}
+
 /** The CI-health comment of this week is the door: one comment, one table, one window. @param {string} body @param {{ repository: string, issue: number }} on @param {string} date */
 function appendToCiHealthComment(body: string, on: { repository: string; issue: number; }, date: string) {
-  const comments = ghGet<{ id: number, body: string }[]>(`repos/${on.repository}/issues/${on.issue}/comments?per_page=${PER_PAGE}&since=${new Date(Date.parse(`${date}T00:00:00Z`)).toISOString()}`);
-  const heading = commentHeading({ date });
-  const target = comments.find((c) => c.body.startsWith(heading));
-  if (!target) throw new Error(`token-cost: "${heading}" is not on #${on.issue} yet. ci-health posts it (Monday 06:43Z) and this appends to it; posting nothing of its own.`);
+  const target = findCiHealthComment(on, date);
   if (target.body.includes(MARKER)) return `token-cost: the comment for week of ${date} already carries this reading; changing nothing.`;
   const text = `${target.body}\n\n${body}\n`;
   const leak = leakRefusalReason(text);
