@@ -1,3 +1,4 @@
+// no-token: gh -- runs the workflow's own shell behind a fake `gh` on PATH; this file never spawns the real binary, and no network or credential is reached
 /**
  * #5229: A REQUIRED CHECK DOES NOT GO RED ON ONE GITHUB 5xx. The `gate` job's agreement step (#3211) polls the other kind of run for up to
  * ATTEMPTS polls under `bash -e`, and its two `gh api` reads were bare command substitutions: one `gh: Server Error (HTTP 502)` aborted the step
