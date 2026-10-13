@@ -274,13 +274,17 @@ test("a `success` from anyone but the lab's identities is no verdict: the releas
   assert.deepEqual(got.promote, []);
 });
 
-test("a `success` from the lab's user account qualifies", () => {
-  const got = decideListing([listed("a11ign-ai-leads", "success")]);
-  assert.equal(got.decision.outcome, "proceed");
-  assert.equal(got.promote.length, BOTH.length);
+test("a `success` from the user account `a11ign-ai-leads` is no verdict: the release WAITS, promotes nothing, and names whose status it ignored (#5473)", () => {
+  const lines: string[] = [];
+  const got = decideListing([listed("a11ign-ai-leads", "success")], (line) => lines.push(line));
+  assert.equal(got.decision.outcome, "wait");
+  assert.deepEqual(got.promote, []);
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], /IGNORED/);
+  assert.match(lines[0], /a11ign-ai-leads/);
 });
 
-test("POSITIVE CONTROL: a `success` written by the managers App qualifies, as the lab's user account does (#5057)", () => {
+test("POSITIVE CONTROL: the same `success`, created by the managers App instead, qualifies (#5057, #5473)", () => {
   const got = decideListing([listed("a11ign-managers[bot]", "success")]);
   assert.equal(got.decision.outcome, "proceed");
   assert.equal(got.promote.length, BOTH.length);
@@ -292,10 +296,8 @@ test("a `failure` from the managers App is not softened by an older `success` fr
   assert.deepEqual(got.promote, []);
 });
 
-test("a forged `success` laid over the lab's own `failure` does not soften it", () => {
-  const got = decideListing([listed("someone-with-status-write", "success"), listed("a11ign-ai-leads", "failure")]);
-  assert.equal(got.decision.outcome, "rerun");
-  assert.deepEqual(got.promote, []);
+test("a `failure` from the user account `a11ign-ai-leads` is ignored as its `success` is: the identity decides, not the state (#5473)", () => {
+  assert.equal(decideListing([listed("a11ign-ai-leads", "failure"), listed("a11ign-managers[bot]", "success")]).decision.outcome, "proceed");
 });
 
 test("a forged `success` laid over the managers App's `failure` does not soften it either (#5057)", () => {
@@ -305,7 +307,7 @@ test("a forged `success` laid over the managers App's `failure` does not soften 
 });
 
 test("a forged `failure` does not stop the lab's `success` either: the identity decides, not the state", () => {
-  assert.equal(decideListing([listed("someone-with-status-write", "failure"), listed("a11ign-ai-leads", "success")]).decision.outcome, "proceed");
+  assert.equal(decideListing([listed("someone-with-status-write", "failure"), listed("a11ign-managers[bot]", "success")]).decision.outcome, "proceed");
 });
 
 test("a status from another identity is NAMED in the log: who, which state, which sha, and whose it WOULD have counted", () => {
@@ -327,13 +329,13 @@ test("NEGATIVE CONTROL: a status whose creator cannot be read is ignored and nam
 
 test("a status of another CONTEXT is not this reader's business: dropped without a word", () => {
   const lines: string[] = [];
-  const kept = qualificationStatusesFrom([listed("mallory", "success", "ci/other"), listed("a11ign-ai-leads", "pending")], SHA, (line) => lines.push(line));
+  const kept = qualificationStatusesFrom([listed("mallory", "success", "ci/other"), listed("a11ign-managers[bot]", "pending")], SHA, (line) => lines.push(line));
   assert.deepEqual(kept.map((s: Status) => s.state), ["pending"]);
   assert.deepEqual(lines, []);
 });
 
 test("the lab's statuses keep GitHub's order (newest first), whatever lies between them", () => {
-  const kept = qualificationStatusesFrom([listed("a11ign-managers[bot]", "failure"), listed("mallory", "success"), listed("a11ign-ai-leads", "success")], SHA, () => undefined);
+  const kept = qualificationStatusesFrom([listed("a11ign-managers[bot]", "failure"), listed("mallory", "success"), listed("a11ign-managers[bot]", "success")], SHA, () => undefined);
   assert.deepEqual(kept.map((s: Status) => s.state), ["failure", "success"]);
 });
 
@@ -341,8 +343,9 @@ test("the lab's statuses keep GitHub's order (newest first), whatever lies betwe
 // fail to match: `""` and a bare `[bot]` must NOT match it (the empty-login control), or a creator-less status could be counted.
 const WRITER_LOGIN = /^[A-Za-z0-9][A-Za-z0-9-]*(\[bot\])?$/;
 
-test("the lab's identities are the user account and the managers App, each a plain login, so an empty one cannot match (#5057)", () => {
-  assert.deepEqual([...QUALIFICATION_WRITERS].sort(), ["a11ign-ai-leads", "a11ign-managers[bot]"]);
+test("the lab's identity is the managers App alone, a plain login, so an empty one cannot match (#5057, #5473)", () => {
+  assert.deepEqual([...QUALIFICATION_WRITERS], ["a11ign-managers[bot]"]);
+  assert.ok(!QUALIFICATION_WRITERS.includes("a11ign-ai-leads"), "the user account no longer says `qualification`");
   for (const writer of QUALIFICATION_WRITERS) assert.match(writer, WRITER_LOGIN);
   assert.doesNotMatch("", WRITER_LOGIN, "empty-login control: a creator-less status must not match the shape");
   assert.doesNotMatch("[bot]", WRITER_LOGIN, "empty-login control: a bare suffix must not match the shape");
