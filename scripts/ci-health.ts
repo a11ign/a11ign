@@ -23,6 +23,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { refuseUnknownFlags } from "@a11ign/screenreader-fleet/cli-flags";
+import { readComments } from "./token-cost.ts";
 import { toolExport } from "./agent-org-newest-tag.ts";
 const { assertNoLeakInArgv, leakRefusalReason } = await toolExport("leak-patterns");
 
@@ -400,6 +401,11 @@ function windowFromArgv(): { since: string; until: string; } {
   return { since: since ? `${since}T00:00:00Z` : week.since, until: flagValue("--until") ?? week.until };
 }
 
+/** Already posted when this week's heading is on #928, read through every page of its comments (`readComments`, #5441 and #5432). @param {{ repository: string, issue: number }} on @param {string} date @param {(path: string) => { id: number, body: string }[]} [readPage] */
+export function alreadyPostedOn(on: { repository: string; issue: number; }, date: string, readPage?: (path: string) => { id: number, body: string }[]) {
+  return alreadyPosted(readComments(on, date, readPage).map((c) => c.body), commentHeading({ date }));
+}
+
 function main() {
   refuseUnknownFlags(["--since=", "--until=", "--post"], { entry: import.meta.url, command: "node scripts/ci-health.ts" });
   const targets = targetsFrom(JSON.parse(readFileSync(TARGETS_FILE, "utf8")));
@@ -410,8 +416,7 @@ function main() {
   process.stdout.write(`${comment}\n`);
   if (!process.argv.includes("--post")) return;
   const { repository, issue } = targets.reportOn;
-  const existing = ghGet<{ body: string }[]>(`repos/${repository}/issues/${issue}/comments?per_page=${PER_PAGE}&since=${window.until}`);
-  if (alreadyPosted(existing.map((c) => c.body), commentHeading({ date }))) {
+  if (alreadyPostedOn(targets.reportOn, date)) {
     process.stdout.write(`ci-health: "${commentHeading({ date })}" is already on #${issue}; posting nothing.\n`);
     return;
   }
