@@ -152,6 +152,41 @@ Where that meets ADR 0039 item 6's host-side second checkout, this section overt
 3. **A reach a ledger names is still refused by rule 2.** A `checkout-path` entry is a path into another repository's tree, which rule 2 forbids in a test. The entry records a debt, not a permission.
 4. **Measured, and not enforced.** Lab `origin/main` at `5e8aabd7`, read on 2026-10-13: the file held 540 entries (`grep -c '"from"'`), and 592 at the first lab commit of 2026-10-09 that touches it. Over that window 11 commits lowered the count by 95 in total and 15 raised it by 43 in total (`git log origin/main -- baselines/layer-edges.baseline.json`, each commit's count read with `git show`). Each raising commit needs its own ruling under rule 5, or its entries come out; `ceo` decides which. Nothing in the lab's test stops a raise, because the test accepts any entry that names a real edge. A reading at a moment: re-run it before quoting it.
 
+## How the core gets agent-org
+
+**Proposed on a11ign#5248 (2026-10-13); `ceo` rules on it in review, as the sections above.** It answers how the core gets agent-org at a
+declared version (epic #4425, done-when 4). Measured at a11ign `5883e11ed` and agent-org `v0.195.2` (`b7f44578`, the newest stable tag on `git ls-remote --tags`); re-run before quoting.
+The host's own checkout (`.agent-org/host.json`, `tool`, moved to the newest tag by `update-tool`) is not a repository's dependency and is
+not in these cuts: it stays until `ceo` rules on it.
+
+1. **A published package, not a tag: `@a11ign/agent-org`.** agent-org publishes that name to npm from its own release, with the
+   pattern `toolchain` already runs (`release-per-merge.yml`: changesets, trusted publishing, provenance), and the core reads it through its
+   `node_modules`. The unscoped name is not ours: `npm view agent-org` returns an unrelated Nx placeholder at `0.0.0`, and
+   `npm view @a11ign/agent-org` returns 404, so the scope is the name. agent-org's `release.yml` has no npm step today; the cut adds one.
+   Its `exports` already declares ten subpaths (`acceptance-commands` to `tree-wide-guard`), and the package's contract is those names, never `src/`.
+2. **Declared in `package.json`, bumped by Dependabot.** `package.json` names `"@a11ign/agent-org"` at an exact version, locked in
+   `pnpm-lock.yaml`. Dependabot's npm entry (`.github/dependabot.yml`, daily, one pull request per dependency, ADR 0041 decision 4) opens
+   the bump, so nobody polls for it. Renovate does not do this: `renovate.json` enables only the `custom.regex` manager, which does not read
+   `package.json`, and #5153, the epic that automated the pins, is closed. The cut also replaces the `dependabot.yml` comment that says
+   agent-org is "no dependency of this repository".
+3. **What replaces the clone steps: `scripts/agent-org-newest-tag.ts` goes.** Its 38 `run: node scripts/agent-org-newest-tag.ts --dest=…`
+   steps in 17 workflow files go with it, and `toolRoot()` (in `scripts/agent-org-newest-tag.ts`, the `$AGENT_ORG_TOOL` and `host.json` lookup)
+   resolves through `require.resolve("@a11ign/agent-org/package.json")`. The eight scripts that already call `toolExport` (`scripts/verify.ts`,
+   `weekly-review.ts`, `repo-identity.ts` and five more) keep their call shape and change only what the root resolves to. Nothing in non-test
+   code reads by path: `toolModule`, `toolPath` and `toolUrl` appear in two workflow comments and in tests, so the reach guard
+   (`packages/guards/src/agent-org-src-reach.test.ts`) and its baseline go in the last cut.
+4. **Order, each cut one row with one revert:** (a) agent-org publishes `@a11ign/agent-org` at the tag it is at, with the publish step as its
+   only change, and the revert removes the step; (b) the core declares the package in `package.json` and `pnpm-lock.yaml`, and the revert removes
+   the line; (c) `toolRoot()` falls back to the package when neither `$AGENT_ORG_TOOL` nor `host.json` names a tool, and a test resolves the
+   package in a checkout with no tool on disk; (d) the 38 clone steps in the 17 workflow files come out, one workflow family per row, each revert restoring the steps; (e)
+   `scripts/agent-org-newest-tag.ts`, its test and the reach baseline go, with the two comments that name `toolModule`. Cut (a) is agent-org's
+   and comes first, because nothing can declare a package that does not exist.
+5. **Project names in agent-org's source, counted: 17 files and 23 lines** for `a11y-witness`, outside tests, fixtures, `docs/` and `*.md`
+   (`git grep -c -i 'a11y-witness' v0.195.2 -- <the non-test paths>`). The wider pattern `a11y-witness|a11ign/a11ign|a11ign-bot|\.a11ign` is
+   **223 files** on the same filter, most in `src/messaging` (40), `src/trace` (22), `src/decision-run` (11) and `src/work-gate` (10). The names
+   move into the project's own configuration (ADR 0040 decision 3; this repository's is `.agent-org/project.json`), and each directory is one
+   cut in agent-org, after (a). (The 893 files that match the wide pattern with tests and docs included are not counted here.)
+
 ## Consequences
 
 1. **Every producer's export surface becomes a contract.** What a consumer reads out of another repository's tree today (the fleet's `src/`
