@@ -31,7 +31,7 @@ the words NVDA spoke.
   trained component only ever says *this is worth a person's look*. A referral on a page you believe is
   fine is expected behaviour, not a bug.
 - **It needs Windows**, because NVDA is Windows-only. That is the real cost of the two hours.
-- **It is published to npm, and it still needs a Windows machine.** `a11ign@0.10.2` was the registry's `latest` when this was last checked (2026-10-12, `npm view a11ign dist-tags` printed `{ latest: '0.10.2', next: '0.10.2' }`: a reading at a moment, so check it again). This guide pins `latest`, by its commit, in every workflow below. `npx a11ign <url>` saves the clone and the build, not the machine: it needs the same capture worker as a clone does. [The commands are below](#the-other-route-run-it-from-the-repository).
+- **It is published to npm, and it still needs a Windows machine.** `a11ign@0.10.3` was the registry's `latest` when this was last checked (2026-10-13, `npm view a11ign dist-tags` printed `{ next: '0.10.4', latest: '0.10.3' }`: a reading at a moment, so check it again). This guide pins `latest`, by its commit, in every workflow below. `npx a11ign <url>` saves the clone and the build, not the machine: it needs the same capture worker as a clone does. [The commands are below](#the-other-route-run-it-from-the-repository).
 
 ## The fastest route: a GitHub Actions run
 
@@ -53,8 +53,8 @@ jobs:
       pull-requests: write       # for the PR comment below; omit it and the report still runs, only quieter
     steps:
       - uses: actions/checkout@v7
-      - uses: a11ign/a11ign@ccd21d9d0b6088caeff375fa91d3efe0897cb839   # the commit of the release tagged a11ign@0.10.2
-        # Pinned to the full 40-character commit of release 0.10.2, so your CI does not move when a newer
+      - uses: a11ign/a11ign@691322a7db0ad2a979014bfc931befecfa830df5   # the commit of the release tagged a11ign@0.10.3
+        # Pinned to the full 40-character commit of release 0.10.3, so your CI does not move when a newer
         # one is published -- GitHub refuses an abbreviated SHA outright, it does not just discourage it.
         # To take a newer release, read `npm view a11ign dist-tags` for its number and
         # `git ls-remote https://github.com/a11ign/a11ign 'refs/tags/a11ign@*'` for its commit.
@@ -152,7 +152,7 @@ is stated below.
 
 ## What sign-in covers
 
-**Read this before you spend an afternoon on a login.** It is the scope in three lists; the sections after it are the how. It was read against release `a11ign@0.9.0`, the pin before the current one (`a11ign@0.10.2`) and `docs/known-gaps.md` [§51](./known-gaps.md#51-a-run-cannot-get-past-mfa-sso-or-a-captcha-and-nothing-in-the-tool-detects-the-third-out-of-v1-by-ruling-2275-2262), and where a thing was only run on a fixture it says so.
+**Read this before you spend an afternoon on a login.** It is the scope in three lists; the sections after it are the how. It was read against release `a11ign@0.9.0`, the pin before the current one (`a11ign@0.10.2`, now `0.10.3`) and `docs/known-gaps.md` [§51](./known-gaps.md#51-a-run-cannot-get-past-mfa-sso-or-a-captcha-and-nothing-in-the-tool-detects-the-third-out-of-v1-by-ruling-2275-2262), and where a thing was only run on a fixture it says so.
 
 ### Supported
 
@@ -297,7 +297,7 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v7
-      - uses: a11ign/a11ign@ccd21d9d0b6088caeff375fa91d3efe0897cb839   # the commit of the release tagged a11ign@0.10.2
+      - uses: a11ign/a11ign@691322a7db0ad2a979014bfc931befecfa830df5   # the commit of the release tagged a11ign@0.10.3
         id: a11ign
         env:                                     # the credential enters HERE, on the step that calls the Action
           APP_TEST_USER: ${{ secrets.APP_TEST_USER }}
@@ -316,7 +316,7 @@ jobs:
             ${{ steps.a11ign.outputs.summary-md }}
 ```
 
-- **Pin the Action to the full 40-character commit SHA of a release that has the login flow, as above.** The pin above is release `0.10.2` (tag `a11ign@0.10.2`, commit `ccd21d9d0b6088caeff375fa91d3efe0897cb839`), which has it; the `v0.1.0` tag predates the login flow, so a workflow pinned to it would ignore `flows` and `login-flow` and examine your login page as though it were the product. On 2026-10-12 `npm view a11ign dist-tags` read `latest` `0.10.2` (`next` `0.10.2` too), and `git ls-remote --tags https://github.com/a11ign/a11ign refs/tags/a11ign@0.10.2` printed `ccd21d9d0b6088caeff375fa91d3efe0897cb839` (readings at a moment, so look again). **Pin `latest`, not `next`.** To find the newest `latest`, run `npm view a11ign dist-tags`, then `git ls-remote --tags https://github.com/a11ign/a11ign refs/tags/a11ign@<version>` for that version's commit. The Action runs the code at the SHA you give it, not a registry version, so the SHA is what decides what you get. **Do not write `a11ign/a11ign@v0`:** that tag exists (`git ls-remote --tags https://github.com/a11ign/a11ign refs/tags/v0` printed the `0.10.2` commit on 2026-10-12) but it is a moving tag, so your CI would take a newer release without a change on your side. **What this does not claim:** the cold runs behind this section used a commit earlier than the `0.3.0` release, and the `0.10.2` commit pinned here has not been walked by a fresh reader.
+- **Pin the Action to the full 40-character commit SHA of a release that has the login flow, as above.** The pin above is release `0.10.3` (tag `a11ign@0.10.3`, commit `691322a7db0ad2a979014bfc931befecfa830df5`), which has it; the `v0.1.0` tag predates the login flow, so a workflow pinned to it would ignore `flows` and `login-flow` and examine your login page as though it were the product. On 2026-10-13 `npm view a11ign dist-tags` read `latest` `0.10.3` (`next` `0.10.4`), and `git ls-remote --tags https://github.com/a11ign/a11ign refs/tags/a11ign@0.10.3` printed `691322a7db0ad2a979014bfc931befecfa830df5` (readings at a moment, so look again). **Pin `latest`, not `next`.** To find the newest `latest`, run `npm view a11ign dist-tags`, then `git ls-remote --tags https://github.com/a11ign/a11ign refs/tags/a11ign@<version>` for that version's commit. The Action runs the code at the SHA you give it, not a registry version, so the SHA is what decides what you get. **Do not write `a11ign/a11ign@v0`:** that tag exists (`git ls-remote --tags https://github.com/a11ign/a11ign refs/tags/v0` printed the `0.10.3` commit on 2026-10-13) but it is a moving tag, so your CI would take a newer release without a change on your side. **What this does not claim:** the cold runs behind this section used a commit earlier than the `0.3.0` release, and the `0.10.3` commit pinned here has not been walked by a fresh reader.
 - **The secrets go in `env:` on the step that calls the Action**, never in `with:`: an input is interpolated into shell text, and an environment variable is not. Give `flows` and `login-flow` together or neither.
 - **A pull request from a fork gets no secrets**, so it ends in `auth-credential-missing`. Run it from a branch of the repository itself.
 - **`task` is a label for the report and a hint about what a visitor is doing.** For a run that logs in it does not choose what is pressed; your flows file does.
