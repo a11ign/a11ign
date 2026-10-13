@@ -8,6 +8,10 @@
  * WHAT IS READ. Every `REFUSED` string in `package.json` scripts, and in `.github/workflows/release.yml` every line carrying `REFUSED` or `::error`:
  * the text after the marker to the end of the string (or line) is the refusal. A bare `#<n>` in it is the owner the refusal sends a reader to.
  *
+ * A QUALIFIED `owner/repo#<n>` IS AN OWNER IN THAT REPOSITORY: `a11ign/lab`'s `gate:core-held` names `a11ign/a11ign#5179`, and a reader that saw only
+ * a bare `#n` would have passed the very string this row was filed for. A `path/to/file.md#12` reads the same way and comes back `CANNOT_TELL`:
+ * a loud false red on a path fragment, which is the direction to be wrong in.
+ *
  * A `(#<n>)` IS A CITATION, NOT AN OWNER. The refusal above also says "since ADR 0045 cut 9 (#5087)": the row that made the change, closed for good,
  * and a reader is not sent there. The parenthesised form is this repository's idiom for that and the only one exempted. The exemption has its
  * compensating control: a `REFUSED` string with NO bare owner is itself a finding, so rewording an owner into parentheses cannot make it pass.
@@ -26,19 +30,23 @@ export type RefusalKind = "REFUSED" | "::error";
 export type Refusal = { file: string; where: string; kind: RefusalKind; text: string };
 export type IssueState = "OPEN" | "CLOSED" | "CANNOT_TELL";
 export type StateRead = { code: IssueState; why: string };
+/** `repo` is `null` for a bare `#n`, which means the repository the reader is asked about. */
+export type IssueRef = { repo: string | null; number: number };
 export type Finding = {
   refusal: Refusal;
-  /** `null` only for a `REFUSED` string that names no bare owner at all. */
+  /** `null` only for a `REFUSED` string that names no owner at all. */
   number: number | null;
+  repo: string | null;
   code: IssueState | "NAMES_NO_OWNER";
   why: string;
 };
 
 const REFUSED = "REFUSED";
 const ERROR_ANNOTATION = "::error";
-const CITATION = /\(\s*#\d+(?:\s*[,;]\s*#\d+)*\s*\)/g;
-/** Not a `$#`, a path fragment or the tail of a word: those are never an issue number. */
-const ISSUE_REFERENCE = /(?<![\w$&/-])#(\d+)\b/g;
+const QUALIFIER = String.raw`(?:[\w-]+\/[\w.-]+)?`;
+const CITATION = new RegExp(String.raw`\(\s*${QUALIFIER}#\d+(?:\s*[,;]\s*${QUALIFIER}#\d+)*\s*\)`, "g");
+/** Not a `$#`, a `&#78;`, a `tag-#56` or the tail of a word: those are never an issue number. */
+const ISSUE_REFERENCE = new RegExp(String.raw`(?<![\w$&/-])([\w-]+\/[\w.-]+)?#(\d+)\b`, "g");
 const WORKFLOW_FILE = ".github/workflows/release.yml";
 const PACKAGE_FILE = "package.json";
 const DEFAULT_REPO = "a11ign/a11ign";
@@ -72,28 +80,33 @@ export function refusalsInTree(root: string): Refusal[] {
   ];
 }
 
-/** The issue numbers a refusal's text names as its owner: every bare `#<n>`, once, with `(#<n>)` citations removed first. */
-export function ownersOf(text: string): number[] {
-  const bare = text.replace(CITATION, " ");
-  return [...new Set([...bare.matchAll(ISSUE_REFERENCE)].map((match) => Number(match[1])))];
+/** The issues a refusal's text names as its owner: every `#<n>` or `owner/repo#<n>`, once, with `(#<n>)` citations removed first. */
+export function ownersOf(text: string): IssueRef[] {
+  const named = new Map<string, IssueRef>();
+  for (const match of text.replace(CITATION, " ").matchAll(ISSUE_REFERENCE)) {
+    const ref = { repo: match[1] ?? null, number: Number(match[2]) };
+    named.set(`${ref.repo ?? ""}#${ref.number}`, ref);
+  }
+  return [...named.values()];
 }
 
-function findingsOf(refusal: Refusal, readState: (number: number) => StateRead): Finding[] {
+function findingsOf(refusal: Refusal, readState: (ref: IssueRef) => StateRead): Finding[] {
   const owners = ownersOf(refusal.text);
   if (owners.length === 0) {
     // A `::error` line is mostly not a pointer to anybody; a REFUSED string is the one a person acts on, and it must send them somewhere.
     if (refusal.kind === ERROR_ANNOTATION) return [];
-    return [{ refusal, number: null, code: "NAMES_NO_OWNER", why: "the refusal names no row as its owner (a `(#n)` citation is not one)" }];
+    return [{ refusal, number: null, repo: null, code: "NAMES_NO_OWNER", why: "the refusal names no row as its owner (a `(#n)` citation is not one)" }];
   }
-  return owners.map((number) => ({ refusal, number, ...readState(number) }));
+  return owners.map((ref) => ({ refusal, ...ref, ...readState(ref) }));
 }
 
 /** One finding per owner a refusal names, read through `readState`; a state is asked for once however many refusals name the issue. */
-export function findings(refusals: Refusal[], readState: (number: number) => StateRead): Finding[] {
-  const memo = new Map<number, StateRead>();
-  const cached = (number: number): StateRead => {
-    if (!memo.has(number)) memo.set(number, readState(number));
-    return memo.get(number)!;
+export function findings(refusals: Refusal[], readState: (ref: IssueRef) => StateRead): Finding[] {
+  const memo = new Map<string, StateRead>();
+  const cached = (ref: IssueRef): StateRead => {
+    const key = `${ref.repo ?? ""}#${ref.number}`;
+    if (!memo.has(key)) memo.set(key, readState(ref));
+    return memo.get(key)!;
   };
   return refusals.flatMap((refusal) => findingsOf(refusal, cached));
 }
@@ -107,7 +120,8 @@ export function failures(all: Finding[]): Finding[] {
 export function describe(finding: Finding): string {
   const at = `${finding.refusal.file} ${finding.refusal.where}`;
   if (finding.number === null) return `${at}: ${finding.why}`;
-  return `${at}: ${finding.refusal.kind} names #${finding.number} as its owner, and #${finding.number} is ${finding.code}${finding.code === "CANNOT_TELL" ? ` (${finding.why})` : ""}`;
+  const issue = `${finding.repo ?? ""}#${finding.number}`;
+  return `${at}: ${finding.refusal.kind} names ${issue} as its owner, and ${issue} is ${finding.code}${finding.code === "CANNOT_TELL" ? ` (${finding.why})` : ""}`;
 }
 
 /** `gh` with these arguments, as its stdout. Injectable so a test reads every answer GitHub can give without spawning anything. */
@@ -119,14 +133,16 @@ export function readIssueState(
   repo: string = process.env.A11Y_REFUSAL_OWNERS_REPO ?? process.env.GITHUB_REPOSITORY ?? DEFAULT_REPO,
   run: GhRunner = runGh,
 ) {
-  return (number: number): StateRead => {
+  return (ref: IssueRef): StateRead => {
+    const { number } = ref;
+    const where = ref.repo ?? repo;
     try {
-      const state = run(["api", `repos/${repo}/issues/${number}`, "--jq", ".state"]).trim();
-      if (state === "open") return { code: "OPEN", why: `${repo}#${number} is open` };
-      if (state === "closed") return { code: "CLOSED", why: `${repo}#${number} is closed` };
-      return { code: "CANNOT_TELL", why: `${repo}#${number} answered state ${JSON.stringify(state)}, which is neither open nor closed` };
+      const state = run(["api", `repos/${where}/issues/${number}`, "--jq", ".state"]).trim();
+      if (state === "open") return { code: "OPEN", why: `${where}#${number} is open` };
+      if (state === "closed") return { code: "CLOSED", why: `${where}#${number} is closed` };
+      return { code: "CANNOT_TELL", why: `${where}#${number} answered state ${JSON.stringify(state)}, which is neither open nor closed` };
     } catch (cause) {
-      return { code: "CANNOT_TELL", why: `${repo}#${number} could not be read: ${String(cause).split("\n")[0]}` };
+      return { code: "CANNOT_TELL", why: `${where}#${number} could not be read: ${String(cause).split("\n")[0]}` };
     }
   };
 }

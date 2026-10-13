@@ -18,7 +18,7 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import {
   describe, failures, findings, ownersOf, readIssueState, refusalsInPackageJson, refusalsInTree, refusalsInWorkflow,
-  type StateRead,
+  type IssueRef, type StateRead,
 } from "./refusal-owners-are-open.ts";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -33,6 +33,12 @@ const WORKFLOW_OPEN = 333;
 const SURVIVOR = 90;
 const SHARED_OWNER = 7;
 
+/** `a11ign/lab`'s `gate:core-held` as it reads today (a11ign/lab package.json line 87, 2026-10-13): the same class, with a QUALIFIED owner. */
+const LAB_CORE_HELD =
+  'node -e "console.error(\\"REFUSED: \\" + process.argv.slice(1).join(\\", \\") + \\" are held by a11ign/a11ign (the core) and this repository cannot run them: '
+  + "this chain does not claim they passed. Run them from the core checkout; "
+  + 'whether a release may proceed without them is a11ign/a11ign#5179.\\"); process.exit(1)"';
+
 /** The string `package.json` carried on 2026-10-12 (git show 3d55b5398:package.json), as the shell command it parses to. */
 const LAB_HELD_2026_10_12 =
   'node -e "console.error(\\"REFUSED: \\" + process.argv.slice(1).join(\\", \\") + \\" are held by a11ign/lab since ADR 0045 cut 9 (#5087), '
@@ -40,10 +46,11 @@ const LAB_HELD_2026_10_12 =
   + 'whether a release may proceed without them is #5179.\\"); process.exit(1)"';
 
 const packageJson = (command: string) => JSON.stringify({ scripts: { "gate:lab-held": command, build: "tsc" } });
-const stateOf = (states: Record<number, StateRead["code"]>) => (number: number): StateRead => ({
+const stateOf = (states: Record<number, StateRead["code"]>) => ({ number }: IssueRef): StateRead => ({
   code: states[number] ?? "CANNOT_TELL",
   why: `fixture says #${number} is ${states[number] ?? "unknown"}`,
 });
+const bare = (number: number): IssueRef => ({ repo: null, number });
 const read = (command: string, states: Record<number, StateRead["code"]>) =>
   findings(refusalsInPackageJson("package.json", packageJson(command)), stateOf(states));
 
@@ -69,7 +76,7 @@ test("an owner that could not be read is CANNOT_TELL and fails, never open", () 
 });
 
 test("a (#n) citation is not an owner: an open citation cannot rescue a closed owner, a closed one cannot fail an open owner", () => {
-  assert.deepEqual(ownersOf("held since cut 9 (#5087), and (#1, #2) too. The open row is #4425."), [CURRENT_OWNER]);
+  assert.deepEqual(ownersOf("held since cut 9 (#5087), and (#1, #2) too, (a11ign/a11ign#3). The open row is #4425."), [bare(CURRENT_OWNER)]);
   const closedOwnerOpenCitation = failures(read(LAB_HELD_2026_10_12, { [CITED_CHANGE]: "OPEN", [OLD_OWNER]: "CLOSED" }));
   assert.deepEqual(closedOwnerOpenCitation.map((finding) => finding.number), [OLD_OWNER]);
 });
@@ -81,8 +88,21 @@ test("an owner reworded into parentheses is a REFUSED string with no owner, whic
   assert.match(describe(bad[0]), /package\.json script "gate:lab-held": the refusal names no row as its owner/);
 });
 
-test("`$#`, a path fragment and a word-tail are not issue numbers", () => {
-  assert.deepEqual(ownersOf("[ $# -eq 1 ] docs/x.md#12 abc#34 tag-#56 &#78; #90 and #90"), [SURVIVOR]);
+test("`$#`, a word-tail, a hyphenated tag and an HTML entity are not issue numbers", () => {
+  assert.deepEqual(ownersOf("[ $# -eq 1 ] abc#34 tag-#56 &#78; #90 and #90"), [bare(SURVIVOR)]);
+});
+
+test("a qualified owner is read in ITS repository: the lab's gate:core-held (#5179, closed) fails, and passes with the owner open", () => {
+  const refusals = refusalsInPackageJson("package.json", packageJson(LAB_CORE_HELD));
+  assert.deepEqual(refusals.flatMap((refusal) => ownersOf(refusal.text)), [{ repo: "a11ign/a11ign", number: OLD_OWNER }]);
+  const closed = failures(findings(refusals, stateOf({ [OLD_OWNER]: "CLOSED" })));
+  assert.equal(describe(closed[0]), 'package.json script "gate:lab-held": REFUSED names a11ign/a11ign#5179 as its owner, and a11ign/a11ign#5179 is CLOSED');
+  assert.deepEqual(failures(findings(refusals, stateOf({ [OLD_OWNER]: "OPEN" }))), []);
+});
+
+test("a path#n is read as a qualified reference and is CANNOT_TELL, loudly, never a silent pass", () => {
+  assert.deepEqual(ownersOf("see docs/x.md#12"), [{ repo: "docs/x.md", number: 12 }]);
+  assert.equal(readIssueState("o/r", () => { throw new Error("gh: HTTP 404"); })({ repo: "docs/x.md", number: 12 }).code, "CANNOT_TELL");
 });
 
 test("a script without REFUSED is not a refusal, and one with it is found with its text after the marker", () => {
@@ -114,20 +134,24 @@ test("release.yml: ::error and REFUSED lines are read with their line, comments 
 test("an owner two refusals name is asked about once", () => {
   const asked: number[] = [];
   const refusals = refusalsInWorkflow("release.yml", 'echo "REFUSED: a, owner #7"\necho "::error::b, owner #7"');
-  findings(refusals, (number) => { asked.push(number); return { code: "OPEN", why: "" }; });
+  findings(refusals, ({ number }) => { asked.push(number); return { code: "OPEN", why: "" }; });
   assert.deepEqual(asked, [SHARED_OWNER]);
 });
 
 test("the live reader maps what GitHub answers: open, closed, anything else and a failed call", () => {
-  const answering = (stdout: string) => readIssueState("o/r", () => stdout)(OLD_OWNER);
+  const answering = (stdout: string) => readIssueState("o/r", () => stdout)(bare(OLD_OWNER));
   assert.equal(answering("open\n").code, "OPEN");
   assert.equal(answering("closed\n").code, "CLOSED");
   // Neither word: an unexpected body is not a reading in either direction.
   assert.equal(answering("transferred").code, "CANNOT_TELL");
   assert.equal(answering("").code, "CANNOT_TELL");
-  const failing = readIssueState("o/r", () => { throw new Error("gh: HTTP 404\nsecond line"); })(OLD_OWNER);
+  const failing = readIssueState("o/r", () => { throw new Error("gh: HTTP 404\nsecond line"); })(bare(OLD_OWNER));
   assert.equal(failing.code, "CANNOT_TELL");
   assert.match(failing.why, /o\/r#5179 could not be read: Error: gh: HTTP 404$/, "the reason is the first line of the failure, with the repository and number");
+  // A qualified reference is asked of ITS repository, not the one the reader was given.
+  const asked: string[][] = [];
+  readIssueState("o/r", (args) => { asked.push(args); return "open"; })({ repo: "a11ign/lab", number: OLD_OWNER });
+  assert.deepEqual(asked, [["api", "repos/a11ign/lab/issues/5179", "--jq", ".state"]]);
 });
 
 test("the real tree's gate:lab-held is found, with an owner (the positive control for the live read's emptiness)", () => {
@@ -144,5 +168,5 @@ test("LIVE: every owner a refusal names in this tree is an OPEN issue", {
   const all = findings(refusalsInTree(REPO_ROOT), readIssueState());
   assert.ok(all.length > 0, "the reader found no owner at all, so there is nothing for this read to certify");
   assert.deepEqual(failures(all).map(describe), []);
-  for (const finding of all) console.log(`  LIVE PASS: ${finding.refusal.file} ${finding.refusal.where} names #${finding.number}: ${finding.why}`);
+  for (const finding of all) console.log(`  LIVE PASS: ${finding.refusal.file} ${finding.refusal.where} names ${finding.repo ?? ""}#${finding.number}: ${finding.why}`);
 });
