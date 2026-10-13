@@ -86,9 +86,9 @@
 #             publish with `scripts/release-reads-qualification.ts`'s decider (`proceed`, `wait`, `rerun`, `regression`), through
 #             `scripts/release-promote.ts`, and the `promote` job runs `npm dist-tag add <name>@<version> latest` by OIDC for each
 #             package of a release that `proceed`s. THE JOB HOLDING `id-token` RUNS NO CODE FROM ANOTHER REPOSITORY (#3969): the one that
-#             clones the tool and runs the decider holds none, and the verdict it reads counts only from the lab's own identities,
-#             `QUALIFICATION_WRITER` (the user account `a11ign-ai-leads`) and `QUALIFICATION_WRITER_APP` (the managers App,
-#             `a11ign-managers[bot]`), and from no other creator. It never moves `latest` backwards, and a `regression` or an
+#             clones the tool and runs the decider holds none, and the verdict it reads counts only from the lab's own identity,
+#             `QUALIFICATION_WRITER_APP` (the managers App, `a11ign-managers[bot]`), and from no other creator, the user account
+#             `a11ign-ai-leads` included (#5473). It never moves `latest` backwards, and a `regression` or an
 #             overdue `wait` files ONE row (`promotion-row`).
 #
 # WHAT STARTS THE PROMOTION: the `release` job's own push run, once the publish is done, and every `status` event, narrowed by the job's

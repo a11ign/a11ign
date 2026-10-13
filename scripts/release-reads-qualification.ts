@@ -45,14 +45,14 @@ export const QUALIFICATION_CONTEXT = "qualification";
 
 // WHO MAY SAY `qualification` (#3969). A commit status is writable by anyone holding `repo:status` here, and the context is only a name, so
 // reading by context alone made every such holder a source of the fleet's verdict: harmless while a verdict gated a publish to `next`, and
-// not once it moves `latest`. The lab's poster runs on the agents host and posts as that host's routed account: `a11ign-ai-leads`, which #3289
-// measured (`creator` of status 55536724380, read back on 2026-10-04), and `a11ign-managers[bot]`, the managers App the host moves to since
-// a11ign#4911 (#5057). The user account stays until a live status from the App has been read; removing it is a later one-line change.
+// not once it moves `latest`. The lab's poster runs on the agents host and posts as the managers App, `a11ign-managers[bot]`, which the host
+// moved to with a11ign#4911 (#5057). It first posted as that host's routed user account, `a11ign-ai-leads` (#3289 measured it), and that
+// login was kept until a live status from the App had been read: every `qualification` status on 0.10.2's commit `ccd21d9d` was created by
+// the App and none by the user account (#5473, a11ign#5044 Done-when 2), so the user account no longer counts.
 // If the host is routed to any other account the release WAITS, which is the safe state, and the log below names whose status it ignored.
 // Requirements compose and exemptions do not: adding an entry widens who may say `qualification`, so each one is a reviewed change here.
-export const QUALIFICATION_WRITER = "a11ign-ai-leads";
 export const QUALIFICATION_WRITER_APP = "a11ign-managers[bot]";
-export const QUALIFICATION_WRITERS: readonly string[] = [QUALIFICATION_WRITER, QUALIFICATION_WRITER_APP];
+export const QUALIFICATION_WRITERS: readonly string[] = [QUALIFICATION_WRITER_APP];
 
 // Outcome 4's table, consumed as DATA from #3132 (reading 3, derived from what each stage reads; posted on #3136 by
 // `orchestrator`). Directories under `packages/`. A package named in NEITHER list is treated as GATED: a new package
