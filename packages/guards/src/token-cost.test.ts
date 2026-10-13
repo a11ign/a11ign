@@ -667,3 +667,7 @@ test("windowFor: --week= reads the week of that Monday from a start after 00:00Z
 test("windowFor: --week= names a Monday, and a day that is not one is refused rather than read as a week", () => {
   assert.throws(() => tc.windowFor(["--week=2026-10-06"], new Date("2026-10-13T01:00:00Z")), /--week=2026-10-06 is not a Monday/);
 });
+
+test("windowFor: an empty --week= is refused, not read as no flag (it would name today's week)", () => {
+  assert.throws(() => tc.windowFor(["--week="], new Date("2026-10-13T01:00:00Z")), /--week= is not a Monday/);
+});

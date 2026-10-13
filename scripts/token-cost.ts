@@ -632,7 +632,7 @@ function weekStarting(monday: string): Window {
 /** @returns {Window} the week before `now` unless `--week=MONDAY` names the week, and `--since=DATE`, `--until=ISO-UTC` and `--hours=FROM-TO` say otherwise (a reproduction reads an arbitrary window) */
 export function windowFor(argv: string[], now: Date): Window {
   const monday = flagValue(argv, "--week");
-  const week = monday ? weekStarting(monday) : weeklyWindow(now);
+  const week = monday !== undefined ? weekStarting(monday) : weeklyWindow(now);
   const since = flagValue(argv, "--since");
   const hours = flagValue(argv, "--hours");
   return { since: since ? `${since}T00:00:00Z` : week.since, until: flagValue(argv, "--until") ?? week.until, ...(hours ? { hours: parseHours(hours) } : {}) };
