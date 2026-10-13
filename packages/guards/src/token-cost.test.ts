@@ -577,7 +577,7 @@ test("renderSection: unattributed calls are broken down by session, the top five
   const strays = ["a", "b", "c", "d", "e", "f"].map((name, i) => call({ id: `${i}`, name }));
   const text = sectionFor({ calls: strays, pulls: [], byPull: new Map() });
   assert.match(text, /UNATTRIBUTED .*: 6 of 6 calls \(100\.0%\)/);
-  assert.match(text, /Unattributed by session: a 1, b 1, c 1, d 1, e 1\./);
+  assert.match(text, /Unattributed by session: a 1, b 1, c 1, d 1, e 1, others 1\./);
   assert.doesNotMatch(text, /f 1/);
 });
 
@@ -586,6 +586,36 @@ test("renderSection: names the biggest contributor and its share of the attribut
   const text = sectionFor({ calls: waiting, pulls: [pull({ number: 1 })], byPull: new Map([["a11ign/a11ign#1", waiting]]) });
   assert.match(text, /Biggest contributor: waits \(2 calls, 66\.7% of the attributed calls\)/);
   assert.match(text, /Counts: review rounds 0, CI red 0, waits 2, re-reads 0, none of the four 1; together 3 attributed calls\./);
+});
+
+test("renderSection: the per-repository verdict reads all calls, and the attributed figure is a comparison row", () => {
+  const attributed = call({ id: "a", tokens: { output: MILLION / 10 }, name: "worker-1" }); // $1.00, on pull 1
+  const stray = call({ id: "b", tokens: { output: MILLION }, name: "worker-9" }); // $10.00, on no pull
+  const text = sectionFor({ calls: [attributed, stray], pulls: [pull({ number: 1 }), pull({ number: 2 })], byPull: new Map([["a11ign/a11ign#1", [attributed]]]) });
+  const repository = text.slice(text.indexOf("#### a11ign/a11ign"));
+  // $11.00 over two merged pull requests is $5.50: MISSED on all calls, though the attributed $1.00 would read MET
+  assert.match(repository, /\| Dollars per merged pull request \(ALL calls, both repositories\) \| under \$2\.50 \| \$5\.50 \| 2 calls over 2 merged pull requests, both repositories \| \*\*MISSED\*\* \|/);
+  assert.match(repository, /\| Dollars per merged pull request \(attributed to this repository\) \| under \$2\.50 \| \$1\.00 \| [^\n]* \| comparison, not the verdict \|/);
+  assert.doesNotMatch(repository, /attributed to this repository[^\n]*\*\*(MET|MISSED)\*\*/);
+});
+
+test("renderSection: the unattributed line sums to the total, with the sessions past the top five counted as others", () => {
+  const strays = ["a", "b", "c", "d", "e", "f"].map((name, i) => call({ id: `${i}`, name }));
+  const text = sectionFor({ calls: strays, pulls: [], byPull: new Map() });
+  const line = text.match(/^Unattributed by session: (.*)\.$/m)?.[1] ?? "";
+  const counted = line.split(", ").map((part) => Number(part.split(" ").pop()));
+  assert.equal(counted.reduce((sum, n) => sum + n, 0), 6);
+  assert.match(text, /Unattributed by session: a 1, b 1, c 1, d 1, e 1, others 1\./);
+  const five = sectionFor({ calls: strays.slice(0, 5), pulls: [], byPull: new Map() });
+  assert.match(five, /Unattributed by session: a 1, b 1, c 1, d 1, e 1\.$/m); // control: nothing past the top five, so no `others`
+});
+
+test("renderSection: the window is stated as whole UTC days when no hours band is given (control: a band names its hours)", () => {
+  const whole = sectionFor({ calls: [], pulls: [], byPull: new Map() });
+  assert.match(whole, /Whole UTC days: every hour of each day is in the window/);
+  const band = sectionFor({ window: { ...DAY, hours: { from: 14, to: 20 } }, calls: [], pulls: [], byPull: new Map() });
+  assert.doesNotMatch(band, /Whole UTC days/);
+  assert.match(band, /and 14:00-20:00 of each day\./);
 });
 
 // ---- the host and the targets file ----------------------------------------------------------------------
