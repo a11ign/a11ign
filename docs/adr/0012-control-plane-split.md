@@ -4,6 +4,8 @@
 
 Accepted. Supersedes nothing; it makes ADR 0001's existing boundary physical.
 
+**Amended 2026-10-13 by [ADR 0045](./0045-a-repository-uses-another-only-through-its-published-package.md) cut 9 (ceo, a11ign#5312).** The control plane is no longer "a raw checkout with no `node_modules`": `a11ign/control` declares `@a11ign/screenreader-fleet` and `@a11ign/screenreader-worker` as `dependencies` at the versions its `deploy-pins.json` names and installs them with `pnpm install --frozen-lockfile --ignore-scripts`, so those two packages and their lockfile closure now sit beside the key. What this ADR forbids is unchanged and is still asserted by `control-has-no-dependencies.test.ts`: nothing else is declared, nothing else is imported by package name, and the walk still follows relative imports across package boundaries. The line moved from "no dependency" to "exactly the two published layers, at their pins". The Context and Decision below describe the plane as it was when this was accepted.
+
 ## Context
 
 The control plane was about to become one Proxmox container doing two jobs:
