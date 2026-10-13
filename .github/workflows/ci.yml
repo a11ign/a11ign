@@ -409,7 +409,7 @@ jobs:
             echo "queue=true" >> "$GITHUB_OUTPUT"
           fi
       # agent-org#1351 (ruling (a) of agent-org#1339): A REFUSED DERIVATION IS SETTLED BY WHAT A HUMAN DID ON THIS HEAD, so `check` is handed
-      # the pull request's reviews (`--reviews`, a file: the script reads a file, never GitHub) and the head sha they must name (`--head`).
+      # the pull request's reviews (as a file: the script reads a file, never GitHub) and the head sha they must name, one flag each.
       # Without both it refuses exactly as before, which is what this step still does when it cannot read them (a warning, never a red
       # step of its own: an accepted derivation needs no review, and a refused one stays refused). A queue entry carries no review, so
       # the pull request is found by the number in `merge_group.head_ref` (`refs/heads/gh-readonly-queue/<base>/pr-<N>-<sha>`, ceo's ruling
