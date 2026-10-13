@@ -56,7 +56,7 @@ test("README's Quickstart section names the pinned release before a re-pin, and 
   assert.ok(quickstart(text).includes(`commit of release ${to}`) && quickstart(text).includes(`\`a11ign@${to}\` is the tag the pin above names`));
 });
 
-test("the prose rewrite is the two templates only: a dated mention of the previous release is left as written", () => {
+test("the prose rewrite is the movable templates only: a dated mention of the previous release is left as written", () => {
   const { from, to } = repinned();
   const dated = `      - uses: a11ign/a11ign@${"1".repeat(40)}   # the commit of the release tagged a11ign@${from}\n`
     + `        # Pinned to the full 40-character commit of release ${from} (\`latest\` read ${from} on 2026-10-11), so your CI`;

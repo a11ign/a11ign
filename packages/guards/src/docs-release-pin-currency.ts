@@ -118,9 +118,12 @@ export function pinFaults(reader: Reader): Verdict {
   if (releaseVersions(tags).length === 0) return { status: "cannot-tell", v0Release: undefined, pins: [], faults: [CANNOT_TELL] };
   const v0Release = releaseV0Points(reader.v0Commit(), tags);
   if (v0Release === undefined) return { status: "cannot-tell", v0Release, pins: [], faults: [CANNOT_TELL_V0] };
-  const pins = reader.docs().flatMap((doc) => pinsIn(doc, tags));
-  const faults = pins.flatMap((pin) => faultOf(pin, v0Release));
-  return { status: faults.length === 0 ? "ok" : "stale", v0Release, pins, faults };
+  const docs = reader.docs().map((doc) => {
+    const pins = pinsIn(doc, tags);
+    return { pins, faults: [...pins.flatMap((pin) => faultOf(pin, v0Release)), ...restatementFaults(doc, pins)] };
+  });
+  const faults = docs.flatMap((doc) => doc.faults);
+  return { status: faults.length === 0 ? "ok" : "stale", v0Release, pins: docs.flatMap((doc) => doc.pins), faults };
 }
 
 function faultOf(pin: Pin, v0Release: string): string[] {
@@ -130,6 +133,46 @@ function faultOf(pin: Pin, v0Release: string): string[] {
   }
   if (minorsBehind(pin.version, v0Release) <= MINORS_ALLOWED_BEHIND) return [];
   return [`${where} pins release ${pin.version} (${pin.written}); v0 points at a11ign@${v0Release}, more than ${MINORS_ALLOWED_BEHIND} minor behind`];
+}
+
+/**
+ * THE SENTENCES THAT RESTATE A PIN'S RELEASE IN WORDS, each matching only the version (group 0), so a rewrite moves that and nothing else.
+ * `movable`: the exact wordings the re-pin writer knows, so it may move them. The two of #5291 are the comment under a pin, `# Pinned to the
+ * full 40-character commit of release X, so your CI ...`, and `(\`a11ign@X\` is the tag the pin above names)`. Not movable: the same claim
+ * in a wording the writer does not know, a dated parenthetical (`\`latest\` read X on <date>`) or a behavioural one (`as \`X\` does`). Those are
+ * true of the release they name, and a rewrite would falsify them, so the guard fails on them and the writer names them (#5468).
+ */
+const RESTATEMENTS: Array<{ movable: boolean; re: RegExp }> = [
+  { movable: true, re: /(?<=commit of release )\d+\.\d+\.\d+(?!\d)(?=, so your CI)/g },
+  { movable: true, re: /(?<=`a11ign@)\d+\.\d+\.\d+(?!\d)(?=` is the tag the pin above names)/g },
+  { movable: true, re: /(?<=pins release `)\d+\.\d+\.\d+(?!\d)(?=`)/g },
+  { movable: false, re: /(?<=commit of release (?:a11ign@)?)\d+\.\d+\.\d+(?!\d)(?!, so your CI)/g },
+  { movable: false, re: /(?<=`)\d+\.\d+\.\d+(?!\d)(?=` does\b)/g },
+];
+
+interface Restatement {
+  /** One-based, as the guard names lines. */
+  line: number;
+  version: string;
+  movable: boolean;
+}
+
+function restatementsIn(text: string): Restatement[] {
+  return text.split("\n").flatMap((line, index) =>
+    RESTATEMENTS.flatMap(({ movable, re }) => [...line.matchAll(re)].map((match) => ({ line: index + 1, version: match[0], movable }))),
+  );
+}
+
+/**
+ * A sentence that restates the pin's release and names another release: the pin moved and the prose beside it did not (#5468). Only a doc
+ * with a readable pin is checked, because a sentence with no pin beside it to restate is history until a pin says otherwise.
+ */
+function restatementFaults(doc: Doc, pins: Pin[]): string[] {
+  const pinned = [...new Set(pins.flatMap((pin) => (pin.version === undefined ? [] : [pin.version])))];
+  if (pinned.length === 0) return [];
+  return restatementsIn(doc.text)
+    .filter((restatement) => !pinned.includes(restatement.version))
+    .map((restatement) => `${doc.path}:${restatement.line} names release ${restatement.version} in a sentence that restates the pin, but the pin is on ${pinned.map((version) => `a11ign@${version}`).join(", ")}`);
 }
 
 // ── the re-pin (#5224, #5121 option A) ─────────────────────────────────────────────────────────────────────────────────────────────────
@@ -147,6 +190,11 @@ export interface RepinPlan {
   /** ONLY the docs that change, with their rewritten text; empty unless `status` is `rewrite`. */
   files: Doc[];
   faults: string[];
+  /**
+   * Sentences that still name a release the re-pin did not move, `file:line`: the writer will not guess at their wording, so the guard fails
+   * on them and the pull request names them. Empty when every restatement now names the pinned release.
+   */
+  unmoved: string[];
 }
 
 const isOlder = (version: string, than: string) => newerFirst(version, than) > 0;
@@ -159,7 +207,7 @@ function versionLabel(from: string): RegExp {
 
 /**
  * One line, moved to `promoted` when it carries a pin to an OLDER release. Only the pin's own commit and the `a11ign@<its version>` label
- * on that line move here: the prose beside a pin is `restateRelease`'s, and only the two sentences it names (#5291).
+ * on that line move here: the prose beside a pin is `moveRestatements`', and only the movable sentences it names (#5291, #5470).
  * A pin newer than `promoted`, or already on it, is left alone (the re-pin never moves a doc backwards).
  */
 function repinLine(line: string, tags: ReleaseTag[], promoted: Promoted): { line: string; from?: string; fault?: string } {
@@ -175,26 +223,37 @@ function repinLine(line: string, tags: ReleaseTag[], promoted: Promoted): { line
 }
 
 /**
- * THE TWO SENTENCES THAT RESTATE A PIN'S RELEASE IN WORDS (#5291, `ceo` on #5283's review): the comment under a pin, `# Pinned to the full
- * 40-character commit of release X, so your CI ...`, and the one after the Quickstart fence, `(\`a11ign@X\` is the tag the pin above
- * names)`. #5283 re-pinned README to 0.10.2 and both still said 0.9.0 until a reviewer caught it. EXACT TEMPLATES, and only for a release a
- * pin in the same doc moved away from: a doc also says "`latest` read 0.9.0 on 2026-10-11" or "the 0.9.0 source accepts", dated or
- * behavioural claims that are TRUE of 0.9.0 and that a rewrite would falsify, so the rest of the prose stays unread and the pull request says so.
+ * THE MOVABLE SENTENCES THAT RESTATE A PIN'S RELEASE IN WORDS (#5291, `ceo` on #5283's review; #5470 adds `pins release X`): the comment
+ * under a pin, `# Pinned to the full 40-character commit of release X, so your CI ...`, and the one after the Quickstart fence, `(\`a11ign@X\`
+ * is the tag the pin above names)`. #5283 re-pinned README to 0.10.2 and both still said 0.9.0 until a reviewer caught it. EXACT TEMPLATES,
+ * and only for a release a pin in the same doc moved away from. A doc also says "`latest` read 0.9.0 on 2026-10-11" or "the 0.9.0 source
+ * accepts": dated or behavioural claims that are TRUE of 0.9.0 and that a rewrite would falsify. Those stay as written, and `unmoved` names them.
  */
-function restateRelease(text: string, { from, to }: { from: string; to: string }): string {
-  const dotted = from.replace(/\./g, "\\.");
-  return text
-    .replace(new RegExp(`(commit of release )${dotted}(?=, so your CI)`, "g"), (_, before: string) => `${before}${to}`)
-    .replace(new RegExp(`(\`a11ign@)${dotted}(\` is the tag the pin above names)`, "g"), (_, before: string, after: string) => `${before}${to}${after}`);
+function moveRestatements(text: string, from: string, to: string): string {
+  return RESTATEMENTS.filter(({ movable }) => movable).reduce(
+    (acc, { re }) => acc.replace(re, (version) => (version === from ? to : version)),
+    text,
+  );
 }
 
-function repinDoc(doc: Doc, tags: ReleaseTag[], promoted: Promoted): { doc: Doc; changed: boolean; faults: string[] } {
+/**
+ * The restatements the writer could not move, `file:line`: every sentence still naming a release other than the promoted one. Only a doc
+ * with a pin is read, the same condition `restatementFaults` uses, so the writer names exactly the lines the guard would fail on.
+ */
+function unmovedIn(doc: Doc, text: string, tags: ReleaseTag[], promoted: Promoted): string[] {
+  if (pinsIn({ path: doc.path, text }, tags).length === 0) return [];
+  return restatementsIn(text)
+    .filter((restatement) => restatement.version !== promoted.version)
+    .map((restatement) => `${doc.path}:${restatement.line}`);
+}
+
+function repinDoc(doc: Doc, tags: ReleaseTag[], promoted: Promoted): { doc: Doc; changed: boolean; faults: string[]; unmoved: string[] } {
   const moved = doc.text.split("\n").map((text, index) => ({ ...repinLine(text, tags, promoted), where: `${doc.path}:${index + 1}` }));
   const movedFrom = new Set(moved.flatMap((m) => (m.from === undefined ? [] : [m.from])));
   const joined = moved.map((m) => m.line).join("\n");
-  const text = [...movedFrom].reduce((acc, from) => restateRelease(acc, { from, to: promoted.version }), joined);
+  const text = [...movedFrom].reduce((acc, from) => moveRestatements(acc, from, promoted.version), joined);
   const faults = moved.flatMap((m) => (m.fault === undefined ? [] : [`${m.where} ${m.fault}`]));
-  return { doc: { path: doc.path, text }, changed: text !== doc.text, faults };
+  return { doc: { path: doc.path, text }, changed: text !== doc.text, faults, unmoved: unmovedIn(doc, text, tags, promoted) };
 }
 
 /**
@@ -205,7 +264,7 @@ function repinDoc(doc: Doc, tags: ReleaseTag[], promoted: Promoted): { doc: Doc;
  */
 export function planRepin(reader: Reader): RepinPlan {
   const tags = reader.tags();
-  const refused = (fault: string, promoted?: Promoted): RepinPlan => ({ status: "refused", promoted, files: [], faults: [fault] });
+  const refused = (fault: string, promoted?: Promoted): RepinPlan => ({ status: "refused", promoted, files: [], faults: [fault], unmoved: [] });
   if (releaseVersions(tags).length === 0) return refused(CANNOT_TELL);
   const commit = reader.v0Commit();
   const version = releaseV0Points(commit, tags);
@@ -213,9 +272,10 @@ export function planRepin(reader: Reader): RepinPlan {
   const promoted = { version, commit };
   const docs = reader.docs().filter((doc) => GUARDED_DOC.test(doc.path)).map((doc) => repinDoc(doc, tags, promoted));
   const faults = docs.flatMap((d) => d.faults);
-  if (faults.length > 0) return { status: "refused", promoted, files: [], faults };
+  if (faults.length > 0) return { status: "refused", promoted, files: [], faults, unmoved: [] };
   const files = docs.filter((d) => d.changed).map((d) => d.doc);
-  return { status: files.length === 0 ? "current" : "rewrite", promoted, files, faults: [] };
+  const unmoved = docs.flatMap((d) => d.unmoved);
+  return { status: files.length === 0 ? "current" : "rewrite", promoted, files, faults: [], unmoved };
 }
 
 /**

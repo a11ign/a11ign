@@ -238,3 +238,64 @@ test("repoReader reads tags (annotated tags peeled), v0 and the guarded tracked 
   assert.deepEqual(reader.docs(), [{ path: "README.md", text: "text of README.md" }, { path: "docs/guide.md", text: "text of docs/guide.md" }]);
   assert.equal(repoReader(() => "", () => "").v0Commit(), undefined);
 });
+
+// ── the restating sentences (#5468): a re-pin moves the sentences it can match and names the ones it cannot; the guard fails on the rest ──
+
+/** A doc whose pin sits on `pin` and whose prose beside it still says `from`: the two movable wordings, and one behavioural claim the writer must not move. */
+const restatingDoc = (pin: string, from: string) =>
+  [
+    "# Guide",
+    usesLine(sha(pin), `# Pinned to the full 40-character commit of release ${from}, so your CI keeps it`),
+    `(\`a11ign@${from}\` is the tag the pin above names)`,
+    `This pins release \`${from}\` in the Action.`,
+    `\`${from}\` does the scan.`,
+  ].join("\n");
+
+test("a re-pin rewrites the movable restatements beside the pin, and names the behavioural one it cannot move", () => {
+  const plan = planRepin(fixture(restatingDoc("4", "0.4.0")));
+  assert.equal(plan.status, "rewrite");
+  assert.deepEqual(plan.faults, []);
+  assert.deepEqual(plan.unmoved, ["docs/guide.md:5"], "the `does` sentence is named by file and line, and left as written");
+  const [, pinLine, tagLine, pinsLine, doesLine] = plan.files[0].text.split("\n");
+  assert.match(pinLine, /commit of release 0\.5\.4, so your CI keeps it$/);
+  assert.equal(tagLine, "(`a11ign@0.5.4` is the tag the pin above names)");
+  assert.equal(pinsLine, "This pins release `0.5.4` in the Action.");
+  assert.equal(doesLine, "`0.4.0` does the scan.", "a behavioural claim is true of 0.4.0 and is not rewritten");
+});
+
+test("the guard fails the re-pinned doc on the sentence the writer named, and reads the same prose as a fault when the pin alone moved", () => {
+  const plan = planRepin(fixture(restatingDoc("4", "0.4.0")));
+  const verdict = pinFaults(docsReader(plan.files.map((file) => ({ path: file.path, text: file.text }))));
+  assert.equal(verdict.pins.length, 1, "the positive control: the pin was found, so the fault is a reading");
+  assert.equal(verdict.status, "stale");
+  assert.equal(verdict.faults.length, 1);
+  assert.match(verdict.faults[0], /^docs\/guide\.md:5 names release 0\.4\.0 in a sentence that restates the pin, but the pin is on a11ign@0\.5\.4$/);
+  // The pin moved, the prose did not: the same fixture the writer had, with the restatements left alone.
+  const pinMovedOnly = restatingDoc("5", "0.4.0");
+  const bare = pinFaults(fixture(pinMovedOnly));
+  assert.equal(bare.status, "stale");
+  assert.match(bare.faults.join("\n"), /^docs\/guide\.md:2 names release 0\.4\.0 in a sentence that restates the pin, but the pin is on a11ign@0\.5\.4$/m);
+});
+
+test("the restating sentence the writer cannot move is named by the plan, not silently left", () => {
+  const plan = planRepin(fixture(restatingDoc("4", "0.4.0")));
+  assert.ok(plan.unmoved.length > 0, "the control: a sentence the writer could not move was named");
+  assert.equal(plan.status, "rewrite", "the pins still moved, so the pull request opens and names the sentence");
+});
+
+test("history is not a fault: a changelog and a `since` sentence beside a current pin stay, and a re-pin leaves them as written", () => {
+  const history = ["Changed since 0.3.0.", "- 0.4.0: first public release", "The `a11ign@0.3.0` label is history."].join("\n");
+  const text = `${history}\n${usesLine(sha("5"))}`;
+  const verdict = pinFaults(fixture(text));
+  assert.equal(verdict.pins.length, 1, "the positive control: the current pin was found");
+  assert.equal(verdict.status, "ok", "history naming older releases is not a restatement of the pin");
+  const plan = planRepin(fixture(text));
+  assert.equal(plan.status, "current");
+  assert.deepEqual(plan.unmoved, []);
+  // The same history beside a pin that does move: the pin moves, the history is not touched.
+  const moving = planRepin(fixture(`${history}\n${usesLine(sha("4"))}`));
+  assert.equal(moving.status, "rewrite");
+  assert.deepEqual(moving.unmoved, []);
+  const historyLines = history.split("\n").length;
+  assert.equal(moving.files[0].text.split("\n").slice(0, historyLines).join("\n"), history);
+});
