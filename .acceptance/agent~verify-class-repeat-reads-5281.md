@@ -1,0 +1,5 @@
+Defines the two failure-ledger kinds the class-repeat reading says are in no class, `shared-failure-held-then-released` (agent-org `SHARED_FAILURE_HELD_KIND`, `src/org-retro.ts`) and `stop-hook-bound` (agent-org `STOP_HOOK_BOUND_KIND`, `src/worker-stop-hook.ts`), as two event-kind entries in `.agent-org/failure-classes.json`. Neither label is a typo of an existing class, so nothing is corrected at its writer. The other three kinds in the row's title were defined by an earlier row (#1227) and are present.
+
+Acceptance: node -e "const ids=JSON.parse(require('node:fs').readFileSync('.agent-org/failure-classes.json','utf8')).classes.map(c=>c.id);process.exit(['shared-failure-held-then-released','stop-hook-bound'].every(i=>ids.includes(i))?0:1)"
+
+Mutation: the same command against `HEAD:.agent-org/failure-classes.json` exits 1. Against the edited file it exits 0. With either new `id` renamed in a copy of the edited file, it exits 1, so each id bites on its own. The parser the production reading uses (`parseFailureClasses` in agent-org `src/class-repeat.ts`) returns all 30 classes for the edited file.
