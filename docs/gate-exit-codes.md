@@ -154,6 +154,10 @@ it is shared machinery every guarded script above inherits, not a code any of th
 gate, and excluded from the discovery test below the same way `verdict.ts`, `dispatch.mjs` and `fleet.mjs`
 are — it is the guard, not something the guard watches.
 
+`packages/control/src/worker-fleet-carried.ts` is a carried copy of this same `cli-flags` module (its header
+says so), so its `refuseUnknownFlags` exits 2 with the same one meaning, "you mistyped a flag". Not a gate:
+excluded from the discovery test as INFRASTRUCTURE, for the same reason.
+
 ### `packages/worker-fleet/src/`
 
 | script | codes → meaning |
@@ -184,6 +188,9 @@ are — it is the guard, not something the guard watches.
 | `lab-watch.mjs` | #866, the unattended half of the row above — the same three-state shape `org-watch.mjs` uses for the identical reason (a clock that cannot read its source must not read as clean). 0 QUIET, nothing needs attention; 1 ATTENTION, a failed unit was found and named (posted to #928 only under `--post`); 2 CANNOT_ASK — `lab-status.yml`'s own JSON report task did not run or produced nothing, so this could not honestly answer either way |
 | `fleet-watch.mjs` | #1815, `lab-watch.mjs`'s identical three-state shape one subsystem over: nothing read `fleet:status` on a schedule, so a worker stuck non-`ready` for hours to days was invisible to every cause. 0 QUIET, no worker has been non-`ready` past the threshold (default 10 minutes, `--threshold-ms=`); 1 ATTENTION, at least one has, named with its own age and reason (posted to #928 only under `--post`); 2 CANNOT_ASK — `fleetStatus()` itself threw, so this could not honestly answer either way |
 | `control-unit-drift.ts` | #2800, `fleet-watch.ts`'s three-state shape for the control host's installed systemd units: nothing compared what the host RUNS with the repository's `packages/control/ansible/files/` copies, so a unit pair changed and never re-installed was invisible (#2784). **The hourly fleet-watch tick (`a11ign-fleet-watch.timer`) runs it (#4714)**, so the reading is taken once an hour and not only when someone types the command; the tick is what pages. 0 QUIET, every unit a control-plane playbook ships is installed as shipped; 1 ATTENTION, at least one `differs` or `missing-on-host` (each named, one `unit-drift: <unit> <kind>` line in the tick's ledger, posted once and cleared when the unit is re-installed); 2 CANNOT_ASK — the host could not be read (name, key, or an empty answer) or the playbooks derived no units, so this could not honestly answer either way and never reads as clean. **`not-shipped` — a unit installed on the host that no playbook ships — does NOT page:** the tick prints `unit-drift, reported and not raised: <units>` and it moves the tick's exit code nowhere. Run by hand, the command itself still counts `not-shipped` as ATTENTION |
+| `fleet-converge.ts` | 2 refused before any worker is touched — a `refusal` on the command, an empty `inventory.yml`, or a pinned-layer refusal (each prints `REFUSING: …`); 1 a converge that ran and whose recap status is not `ok` (`failed` or `unknown`); 0 a converge whose status is `ok`, and 0 for a plan-only run, which returns without an exit call |
+| `fleet-dispatch.ts` | 0 a choice was made, printed as one JSON line `{request, chosen, short, notes}` where `short` may be below the request; 2 usage — a `--request` that is neither ready nor a whole number of at least 1, or a bad `--pool`; 3 refused — a refusal from the choice, or no worker chosen. Exit 3 is `lab-job.ts`'s refusal code too, so it is not this script's alone |
+| `fleet-lock.ts` | 0 always, and the status is not the answer. `REMOTE_TAKE` and `REMOTE_END` are `node -e` strings sent over ssh by `lockWriteCommand`; each prints its outcome as JSON — `{taken:false,held}` when another operation holds the lock, `{ended:false}` when this holder does not own it. The file's own process never sets an exit code |
 
 ## Python — `packages/lab/scripts` and `packages/scorer/python`
 
