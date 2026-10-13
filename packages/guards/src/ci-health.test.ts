@@ -1,3 +1,4 @@
+// no-token: Target -- every test passes injected runs, failed runs, comment lists, page readers and targets; the one file it reads is the committed docs/ci-targets.json. The `gh` and `ghGet` callers in ci-health.ts (the default page reader and `main`) are never reached, the import only defines them. Nothing reaches GitHub.
 /**
  * `scripts/ci-health.ts` reads CI health per repository against `docs/ci-targets.json`. Its definitions are pure functions over a run list, so
  * this pins them without a network or a clock (every date is passed in).
