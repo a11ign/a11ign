@@ -45,7 +45,8 @@ const SUPERSEDED_FORM = 'import.meta.url === pathToFileURL(process.argv[1] ?? ""
 /**
  * Files still carrying the symlink-blind form. A ratchet: this list may shrink and may not grow. The last four
  * were found when this test was ported to core (#5348) and are recorded here as the baseline at that moment,
- * not as reviewed exemptions; each is a sweep candidate.
+ * not as reviewed exemptions; each is a sweep candidate. The fleet layer's own entries (its `fleet-env` and siblings) are
+ * not in core, so control's copy of this test ratchets them and stays their authority (#5358).
  */
 const KNOWN_PLAIN_ENTRY_GUARDS: readonly string[] = Object.freeze([
   "packages/cli/src/action/assert-action-report.ts",
@@ -63,14 +64,17 @@ const KNOWN_PLAIN_ENTRY_GUARDS: readonly string[] = Object.freeze([
 ]);
 
 /**
- * Entry points that run on import WITHOUT any guard. Two kinds, and the reason is the record:
- *
- * - `scripts/fleet-env.ts` calls `main()` unconditionally at module scope. A real gap, not a reviewed choice:
- *   importing it runs the command. Listed so the gap is visible and so the list cannot silently grow.
- * - `scripts/rstest/rstest.config.ts` is a config module that rstest imports for its export. Its body only
- *   computes values and exports them; nothing runs on import. An exemption by design, not by oversight.
+ * Entry points that run on import WITHOUT any guard. Empty is the goal: `scripts/fleet-env.ts` was the one real gap
+ * (it called `main()` at module scope, so importing it ran the command), and it is guarded now (#5358). The list stays
+ * so a new unguarded gap has somewhere to be recorded, and a stale entry fails below.
  */
-const KNOWN_UNGUARDED_ENTRY_POINTS: readonly string[] = Object.freeze(["scripts/fleet-env.ts"]);
+const KNOWN_UNGUARDED_ENTRY_POINTS: readonly string[] = Object.freeze([]);
+/**
+ * A reviewed exemption, not a gap: `scripts/rstest/rstest.config.ts` is a config module that rstest imports for its
+ * export. Its body only calls the toolchain's config helpers and exports the result, and it writes nothing on import
+ * (the private run directory is made in `globalSetup`, not here). It cannot take a guard, because rstest needs the
+ * default export itself.
+ */
 const IMPORT_SAFE_CONFIG_MODULES: readonly string[] = Object.freeze(["scripts/rstest/rstest.config.ts"]);
 
 function readText(path: string): string {
@@ -180,10 +184,11 @@ test("every entry point refuses to run when imported", () => {
   const unguarded = points.filter((path) => !executableSource(path).includes("import.meta.url ==="));
   const exempt = new Set([...KNOWN_UNGUARDED_ENTRY_POINTS, ...IMPORT_SAFE_CONFIG_MODULES]);
 
-  // POSITIVE CONTROL: the known gap must be detected as unguarded. Without this, the emptiness assertion
-  // below passes for as long as the detection is broken.
-  assert.ok(unguarded.includes("scripts/fleet-env.ts"),
-    "control: the known unguarded entry point must be detected, or the detection is broken");
+  // POSITIVE CONTROL: the import-safe config module is unguarded and must be detected as such. Without this, the
+  // emptiness assertion below passes for as long as the detection is broken. (It is the one unguarded file left
+  // that the detection can see; fleet-env.ts was the other and now carries the guard.)
+  assert.ok(unguarded.includes("scripts/rstest/rstest.config.ts"),
+    "control: the import-safe config module must be detected as unguarded, or the detection is broken");
 
   assert.ok(unguarded.length > 0, "control: the unguarded population must be non-empty, or the check below proves nothing");
   const newlyUnguarded = unguarded.filter((p) => !exempt.has(p));
@@ -191,11 +196,12 @@ test("every entry point refuses to run when imported", () => {
     "these run on import, so `node -e \"import(...)\"` cannot check they still load. Wrap the executable part "
     + `in a function and call it only under \`if (${RECOMMENDED_FORM})\`.`);
 
-  assert.ok(KNOWN_UNGUARDED_ENTRY_POINTS.length > 0, "control: the known-gap list must be non-empty, or the staleness check proves nothing");
-  const staleUnguarded = KNOWN_UNGUARDED_ENTRY_POINTS.filter((p) => !unguarded.includes(p));
-  assert.deepEqual(staleUnguarded, [],
-    "these are listed as unguarded but now carry a guard or no longer exist; remove them from "
-    + "KNOWN_UNGUARDED_ENTRY_POINTS");
+  // Per entry, not as a filtered list: the list is empty by design now, and `deepEqual(stale, [])` over an empty
+  // subject would pass whatever the detection did. An empty list asserts nothing here, which is the right answer.
+  for (const entry of KNOWN_UNGUARDED_ENTRY_POINTS) {
+    assert.ok(unguarded.includes(entry),
+      `${entry} is listed as unguarded but now carries a guard or no longer exists; remove it from KNOWN_UNGUARDED_ENTRY_POINTS`);
+  }
 });
 
 test("the recommended guard form passes the predicate and the superseded one does not", () => {

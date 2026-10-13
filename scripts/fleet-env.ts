@@ -8,7 +8,8 @@
 // with `process.argv[1]` WITHOUT resolving the `node_modules` symlink, so `main()` never ran and the command printed nothing and
 // exited 0 (measured at 0.9.0). An empty `export A11Y_WORKERS=` that `eval` accepts is the silent wrong answer the package's own
 // header says it exists to prevent. The inventory is the control plane's, so its files are named by the caller and not by the package.
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 import { fleetEnvOutput, inventoryPathsFor, portFromGroupVars } from "@a11ign/screenreader-fleet/fleet-env";
 import { refuseUnknownFlags } from "./cli-flags.ts";
 
@@ -46,4 +47,6 @@ function main() {
   process.stdout.write(stdout);
 }
 
-main();
+// Importing this file must not run the command. The realpath is the part that matters: a `node_modules/.bin` symlink reaches it under a
+// name `import.meta.url` does not resolve through, and the plain comparison then skips `main()` and exits 0 with no output.
+if (import.meta.url === pathToFileURL(process.argv[1] ? realpathSync(process.argv[1]) : "").href) main();
