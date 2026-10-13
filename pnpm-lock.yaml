@@ -22,13 +22,13 @@ importers:
         version: link:packages/scorer
       '@a11ign/screenreader-fleet':
         specifier: ^0.11.0
-        version: 0.11.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.5))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)
+        version: 0.11.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.133.0)(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.5))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)
       '@a11ign/screenreader-worker':
         specifier: 0.13.0
         version: 0.13.0
       '@anthropic-ai/sdk':
-        specifier: ^0.131.0
-        version: 0.131.0
+        specifier: ^0.133.0
+        version: 0.133.0
       '@guidepup/guidepup':
         specifier: ^0.31.0
         version: 0.31.0
@@ -102,7 +102,7 @@ importers:
         version: link:../scorer
       '@a11ign/screenreader-fleet':
         specifier: ^0.11.0
-        version: 0.11.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.5))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)
+        version: 0.11.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.133.0)(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.5))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)
     devDependencies:
       '@a11ign/documents':
         specifier: ^0.1.2
@@ -130,7 +130,7 @@ importers:
     dependencies:
       '@a11ign/screenreader-fleet':
         specifier: ^0.11.0
-        version: 0.11.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.5))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)
+        version: 0.11.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.133.0)(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.5))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)
 
   packages/judge:
     dependencies:
@@ -219,8 +219,8 @@ packages:
       typescript:
         optional: true
 
-  '@anthropic-ai/sdk@0.131.0':
-    resolution: {integrity: sha512-9+PepoU7qVMmM70jSahdnfcMHAvAnzhMOLv2W9WjRLO+OG/MAiBETkwKZqv7KIJ1Cj5h8eZ019bHzZaq+Mbepw==}
+  '@anthropic-ai/sdk@0.133.0':
+    resolution: {integrity: sha512-jlqUN8p8ESTJj+GJnA4KjzbEfF1waEoGzRT8jwytlYGFFgv+/DUQOxlYGvYw10UzhD1kwLqYzxvA3FrTB2YWuQ==}
     hasBin: true
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
@@ -295,8 +295,8 @@ packages:
     peerDependencies:
       playwright-core: '>= 1.0.0'
 
-  '@babel/runtime@7.29.7':
-    resolution: {integrity: sha512-Nq8OhGWiZIZGV6hLHoyAKLLcJihP/xFeBMGJoUrxTX2psI8dCifzLhZISFb+VWS3wFMRDmCGw5R+dOySCqPLhw==}
+  '@babel/runtime@7.29.10':
+    resolution: {integrity: sha512-NpugTzbKgGrNe45Ui32cN8vCFFMxVtP/9rtfwv0nP5FRDAjvYBxJcLVpYA9mr1jxP6cnIT7x9LUzuDTbWYYNRA==}
     engines: {node: '>=6.9.0'}
 
   '@cacheable/memory@2.2.0':
@@ -1945,16 +1945,16 @@ snapshots:
 
   '@a11ign/evidence@0.3.2': {}
 
-  '@a11ign/judge@0.5.1(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)':
+  '@a11ign/judge@0.5.1(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.133.0)':
     dependencies:
       '@a11ign/evidence': 0.3.2
       '@a11ign/scorer': link:packages/scorer
     optionalDependencies:
-      '@anthropic-ai/sdk': 0.131.0
+      '@anthropic-ai/sdk': 0.133.0
 
-  '@a11ign/screenreader-fleet@0.11.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.5))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)':
+  '@a11ign/screenreader-fleet@0.11.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.133.0)(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.5))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)':
     dependencies:
-      '@a11ign/judge': 0.5.1(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.131.0)
+      '@a11ign/judge': 0.5.1(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.133.0)
       '@a11ign/screenreader-worker': 0.13.0
       '@a11ign/toolchain': 0.5.0(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.5))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)
     transitivePeerDependencies:
@@ -1986,7 +1986,7 @@ snapshots:
       '@rstest/coverage-v8': 0.12.3(@rstest/core@0.12.3)
       typescript: 6.0.3
 
-  '@anthropic-ai/sdk@0.131.0':
+  '@anthropic-ai/sdk@0.133.0':
     dependencies:
       json-schema-to-ts: 3.1.1
       standardwebhooks: 1.1.1
@@ -2036,7 +2036,7 @@ snapshots:
       playwright-core: 1.64.0
     optional: true
 
-  '@babel/runtime@7.29.7': {}
+  '@babel/runtime@7.29.10': {}
 
   '@cacheable/memory@2.2.0':
     dependencies:
@@ -3219,7 +3219,7 @@ snapshots:
 
   json-schema-to-ts@3.1.1:
     dependencies:
-      '@babel/runtime': 7.29.7
+      '@babel/runtime': 7.29.10
       ts-algebra: 2.0.0
 
   json-schema-traverse@0.4.1: {}
