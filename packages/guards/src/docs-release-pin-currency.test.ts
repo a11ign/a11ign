@@ -238,3 +238,82 @@ test("repoReader reads tags (annotated tags peeled), v0 and the guarded tracked 
   assert.deepEqual(reader.docs(), [{ path: "README.md", text: "text of README.md" }, { path: "docs/guide.md", text: "text of docs/guide.md" }]);
   assert.equal(repoReader(() => "", () => "").v0Commit(), undefined);
 });
+
+// ── the restating sentences (#5468): a re-pin moves the sentences it can match and names the ones it cannot; the guard fails on the rest ──
+
+/**
+ * A doc whose pin sits on `pin` and whose prose beside it still says `from`: the seven sentences of #5468 (the docs on `main` carry all of
+ * them). Lines 2-4 are the three movable wordings, lines 5-7 are the restatements the writer names and never moves, and line 8 is history.
+ */
+const restatingLines = (pin: string, from: string): string[] => [
+  "# Guide",
+  usesLine(sha(pin), `# Pinned to the full 40-character commit of release ${from}, so your CI keeps it`),
+  `(\`a11ign@${from}\` is the tag the pin above names)`,
+  `This pins release \`${from}\` in the Action.`,
+  `The commit of release ${from}, the one its tag names, is pinned.`,
+  `\`${from}\` does the scan.`,
+  `On 2026-10-13 \`npm view a11ign dist-tags\` read \`latest\` \`${from}\`.`,
+  "Changed since 0.3.0.",
+];
+const restatingDoc = (pin: string, from: string) => restatingLines(pin, from).join("\n");
+
+test("a re-pin rewrites the three movable restatements beside the pin, and names by file and line the three it cannot move", () => {
+  const plan = planRepin(fixture(restatingDoc("4", "0.4.0")));
+  assert.equal(plan.status, "rewrite");
+  assert.deepEqual(plan.faults, []);
+  assert.deepEqual(plan.unmoved, ["docs/guide.md:5", "docs/guide.md:6", "docs/guide.md:7"], "the three the writer will not guess at, named and left as written");
+  const [, pinLine, tagLine, pinsLine, otherWording, doesLine, datedLine, history] = plan.files[0].text.split("\n");
+  assert.match(pinLine, /commit of release 0\.5\.4, so your CI keeps it$/);
+  assert.equal(tagLine, "(`a11ign@0.5.4` is the tag the pin above names)");
+  assert.equal(pinsLine, "This pins release `0.5.4` in the Action.");
+  assert.equal(otherWording, "The commit of release 0.4.0, the one its tag names, is pinned.", "another wording of the same claim is named, not moved");
+  assert.equal(doesLine, "`0.4.0` does the scan.", "a behavioural claim is true of 0.4.0 and is not rewritten");
+  assert.equal(datedLine, "On 2026-10-13 `npm view a11ign dist-tags` read `latest` `0.4.0`.", "a dated read of the registry is true of 0.4.0 and is not rewritten");
+  assert.equal(history, "Changed since 0.3.0.");
+});
+
+test("the guard names every restatement the writer left, by file and line, and reads the same prose as faults when the pin alone moved", () => {
+  const plan = planRepin(fixture(restatingDoc("4", "0.4.0")));
+  const verdict = pinFaults(docsReader(plan.files.map((file) => ({ path: file.path, text: file.text }))));
+  assert.equal(verdict.pins.length, 1, "the positive control: the pin was found, so the faults are a reading");
+  assert.equal(verdict.status, "stale");
+  assert.deepEqual(verdict.faults.map((fault) => fault.split(" ")[0]), ["docs/guide.md:5", "docs/guide.md:6", "docs/guide.md:7"]);
+  assert.match(verdict.faults[2], /^docs\/guide\.md:7 names release 0\.4\.0 in a sentence that restates the pin, but the pin is on a11ign@0\.5\.4$/);
+  // The pin moved, the prose did not: the same fixture the writer had, with every restatement left alone.
+  const bare = pinFaults(fixture(restatingDoc("5", "0.4.0")));
+  assert.equal(bare.status, "stale");
+  assert.deepEqual(bare.faults.map((fault) => fault.split(" ")[0]), ["docs/guide.md:2", "docs/guide.md:3", "docs/guide.md:4", "docs/guide.md:5", "docs/guide.md:6", "docs/guide.md:7"]);
+});
+
+test("a dated read of `latest` wrapped across a comment line is one restatement: the guard names its line, and the writer names it too", () => {
+  const wrapped = [
+    usesLine(sha("4"), "# the commit of the release tagged a11ign@0.4.0"),
+    "        # On 2026-10-13 `npm view a11ign dist-tags` read `latest`",
+    "        # `0.4.0` on that day, so CI reads the same tag.",
+  ].join("\n");
+  const plan = planRepin(fixture(wrapped));
+  assert.equal(plan.status, "rewrite");
+  assert.deepEqual(plan.unmoved, ["docs/guide.md:3"], "the version is on line 3: the wrap is read, and the line that carries the version is named");
+  const verdict = pinFaults(fixture(usesLine(sha("5"), "# the commit of the release tagged a11ign@0.5.4") + "\n" + wrapped.split("\n").slice(1).join("\n")));
+  assert.equal(verdict.pins.length, 1, "the positive control: the pin was found");
+  assert.match(verdict.faults.join("\n"), /^docs\/guide\.md:3 names release 0\.4\.0 in a sentence that restates the pin/m);
+});
+
+test("history is not a fault: a changelog and a `since` sentence beside a current pin stay, and a re-pin leaves them as written", () => {
+  const history = ["Changed since 0.3.0.", "- 0.4.0: first public release", "The `a11ign@0.3.0` label is history.",
+    // #5474's second verdict: a `latest` label named beside a release, with no dated read of the registry, is history too.
+    "The `latest` `0.4.0` label is historical.", "Read `latest` `0.4.0` in the old changelog."].join("\n");
+  const text = `${history}\n${usesLine(sha("5"))}`;
+  const verdict = pinFaults(fixture(text));
+  assert.equal(verdict.pins.length, 1, "the positive control: the current pin was found");
+  assert.equal(verdict.status, "ok", "history naming older releases is not a restatement of the pin");
+  const plan = planRepin(fixture(text));
+  assert.equal(plan.status, "current");
+  assert.deepEqual(plan.unmoved, []);
+  // The same history beside a pin that does move: the pin moves, the history is not touched.
+  const moving = planRepin(fixture(`${history}\n${usesLine(sha("4"))}`));
+  assert.equal(moving.status, "rewrite");
+  assert.deepEqual(moving.unmoved, []);
+  const historyLines = history.split("\n").length;
+  assert.equal(moving.files[0].text.split("\n").slice(0, historyLines).join("\n"), history);
+});
