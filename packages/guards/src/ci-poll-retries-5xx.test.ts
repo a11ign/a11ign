@@ -16,7 +16,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -103,7 +103,11 @@ function run(script: string, scenario: Scenario, env: Record<string, string>) {
   const calls = (key: string) => readFileSync(join(dir, `calls-${key}`), "utf8").split("\n").filter(Boolean).length;
   const read = (name: string) => (existsSync(join(dir, name)) ? readFileSync(join(dir, name), "utf8") : null);
   const nodeBody = read("node-body");
-  return { code: result.status, out: `${result.stdout}${result.stderr}`, calls, nodeBody, nodeArgs: read("node-args")?.split("\n").filter(Boolean) ?? null, nodeReviews: read("node-reviews"), output: read("github-output") };
+  // The counts are read before the directory goes: `calls` reads its file on each call, and the tests call it after this returns.
+  const callCounts = Object.fromEntries(["runs", "jobs", "pulls", "reviews", "head"].map((key) => [key, calls(key)]));
+  const outcome = { code: result.status, out: `${result.stdout}${result.stderr}`, calls: (key: string) => callCounts[key], nodeBody, nodeArgs: read("node-args")?.split("\n").filter(Boolean) ?? null, nodeReviews: read("node-reviews"), output: read("github-output") };
+  rmSync(dir, { recursive: true, force: true });
+  return outcome;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------
