@@ -1,3 +1,4 @@
+// no-token: Call -- every test passes injected transcript lines, pulls, targets or argv; the `gh` and `ghGet` callers in token-cost.ts (the pull, run, review and comment reads and the PATCH) are never reached, the import only defines them. Nothing reaches GitHub.
 /**
  * `scripts/token-cost.ts` reads calls and dollars per merged pull request from the host's session transcripts. Every definition is a pure
  * function over injected transcript lines and a merged-pull-request list, so this pins them with no network, no real transcript and no clock.
@@ -15,13 +16,15 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { Call, Pull, Window } from "../../../scripts/token-cost.ts";
 import type { Targets } from "../../../scripts/ci-health.ts";
 const tc = await import("../../../scripts/token-cost.ts");
+const ci = await import("../../../scripts/ci-health.ts");
 
 const MILLION = 1_000_000;
 const SONNET = "claude-sonnet-5-5";
@@ -652,4 +655,55 @@ test("unreadSection: says UNREAD and why, and carries no marker so a later run c
   assert.match(text, /Nothing was measured\.$/);
   assert.equal(text.includes(tc.MARKER), false);
   assert.equal(tc.MARKER, "<!-- token-cost -->");
+});
+
+test("windowFor: --week= reads the week of that Monday from a start after 00:00Z Tuesday, and no flag reads as today (control: the flag moves it)", () => {
+  const tuesday = new Date("2026-10-13T01:00:00Z");
+  const week = tc.windowFor(["--week=2026-10-05"], tuesday);
+  assert.deepEqual(week, { since: "2026-10-05T00:00:00Z", until: "2026-10-12T00:00:00Z" });
+  assert.equal(ci.commentHeading({ date: week.since.slice(0, "YYYY-MM-DD".length) }), "## CI health, week of 2026-10-05");
+  assert.deepEqual(tc.windowFor([], tuesday), { since: "2026-10-06T00:00:00Z", until: "2026-10-13T00:00:00Z" });
+});
+
+test("windowFor: --week= names a Monday, and a day that is not one is refused rather than read as a week", () => {
+  assert.throws(() => tc.windowFor(["--week=2026-10-06"], new Date("2026-10-13T01:00:00Z")), /--week=2026-10-06 is not a Monday/);
+});
+
+test("windowFor: an empty --week= is refused, not read as no flag (it would name today's week)", () => {
+  assert.throws(() => tc.windowFor(["--week="], new Date("2026-10-13T01:00:00Z")), /--week= is not a Monday/);
+});
+
+const UNIT_FILE = join(import.meta.dirname, "../../../.agent-org/units/a11ign-token-cost-weekly.service");
+const EXEC_START = "ExecStart=/usr/bin/sh -c '";
+const EXECUTABLE = 0o755;
+
+/** The unit's ExecStart with systemd's escapes undone and its node call replaced by echo, so the shell prints the argument the unit would pass. */
+function unitArgument(): string {
+  const line = readFileSync(UNIT_FILE, "utf8").split("\n").find((l) => l.startsWith(EXEC_START)) ?? "";
+  return line.slice(EXEC_START.length, -1).replace(/exec \S+\/node /, "exec echo ").replaceAll("$$", "$").replaceAll("%%", "%");
+}
+
+/** A `date` on PATH whose clock is $PINNED_NOW: a `now` argument reads that instant, and a call with no `-d` reads it too. */
+function pinnedDate(dir: string): void {
+  const real = spawnSync("/bin/sh", ["-c", "command -v date"], { encoding: "utf8" }).stdout.trim();
+  writeFileSync(join(dir, "date"), `#!/bin/sh
+case " $* " in *" -d "*) ;; *) set -- -d "$PINNED_NOW" "$@" ;; esac
+n=$#; i=0
+while [ "$i" -lt "$n" ]; do a=$1; shift; case $a in now*) a=$PINNED_NOW\${a#now} ;; esac; set -- "$@" "$a"; i=$((i + 1)); done
+exec "${real}" "$@"
+`);
+  chmodSync(join(dir, "date"), EXECUTABLE);
+}
+
+test("the weekly unit names the week its timer's day closed, under a pinned clock (#5399)", { skip: process.platform === "win32" }, () => {
+  const dir = mkdtempSync(join(tmpdir(), "token-cost-unit-"));
+  try {
+    pinnedDate(dir);
+    for (const [pinned, week] of [["2026-10-12T12:13:00Z", "2026-10-05"], ["2026-10-13T22:19:00Z", "2026-10-05"], ["2026-10-18T23:59:00Z", "2026-10-05"], ["2026-10-19T12:13:00Z", "2026-10-12"]]) {
+      const out = spawnSync("/bin/sh", ["-c", unitArgument()], { encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, PINNED_NOW: pinned } });
+      assert.equal(out.stdout.trim(), `scripts/token-cost.ts --post --week=${week}`, `pinned at ${pinned}: ${out.stderr}`);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
