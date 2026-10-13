@@ -434,7 +434,7 @@ interface Workflow {
   jobs?: Record<string, Job>;
 }
 
-const PUBLISH_PATH = ["action-smoke", "capture-regression", "consumer-gate", "guards", "release"];
+const PUBLISH_PATH = ["action-smoke", "capture-regression", "consumer-gate", "guards", "lab-release-checks", "release"];
 const stepsText = (job: Job | undefined) => (job?.steps ?? []).map((s) => s.run ?? "").join("\n");
 
 /** The job the row's Acceptance finds, the one that can mint an npm token: `npm-publish`, `id-token: write`, a `dist-tag add`. */
