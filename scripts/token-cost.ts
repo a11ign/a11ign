@@ -441,15 +441,20 @@ const pct = (/** @type {number} */ part: number, /** @type {number} */ whole: nu
 const usd = (/** @type {number} */ n: number) => `$${n.toFixed(2)}`;
 const one = (/** @type {number | null} */ n: number | null) => (n === null ? "no reading" : String(Number(n.toFixed(1))));
 
-/** @param {{ measure: string, target: import("./ci-health.ts").Target, value: number | null, enough: boolean, count: string }} cells */
-function row({ measure, target, value, enough, count }: { measure: string; target: import("./ci-health.ts").Target; value: number | null; enough: boolean; count: string; }) {
+/** A comparison row names its verdict cell "comparison, not the verdict", so a MET beside a MISSED is never read as the answer. @param {{ measure: string, target: import("./ci-health.ts").Target, value: number | null, enough: boolean, count: string, verdict?: string }} cells */
+function row({ measure, target, value, enough, count, verdict }: { measure: string; target: import("./ci-health.ts").Target; value: number | null; enough: boolean; count: string; verdict?: string; }) {
   const shown = value === null ? "UNREAD" : target.unit === "dollars" ? usd(value) : one(value);
-  return `| ${measure} | ${targetText(target)} | ${shown} | ${count} | **${verdictOf({ value, target, enough })}** |`;
+  return `| ${measure} | ${targetText(target)} | ${shown} | ${count} | ${verdict ?? `**${verdictOf({ value, target, enough })}**`} |`;
 }
 
-/** @param {RepositoryReading} r @param {Record<string, import("./ci-health.ts").Target>} targets @param {number} minimum */
-function repositoryLines(r: RepositoryReading, targets: Record<string, import("./ci-health.ts").Target>, minimum: number) {
+/**
+ * The verdicts read ALL calls over both repositories, the same figure as the whole-window table: the target is one org-wide figure, and the
+ * calls of no pull request belong to no repository. The attributed rows are the breakdown beneath the verdicts, labelled as comparisons.
+ * @param {RepositoryReading} r @param {{ whole: ReturnType<typeof readWindow>, targets: Record<string, import("./ci-health.ts").Target>, enough: boolean }} input
+ */
+function repositoryLines(r: RepositoryReading, { whole, targets, enough }: { whole: ReturnType<typeof readWindow>; targets: Record<string, import("./ci-health.ts").Target>; enough: boolean; }) {
   const count = `${r.calls} attributed calls over ${r.read} of ${r.merged} merged pull requests (${r.unread.length} UNREAD)`;
+  const allIn = `${whole.calls} calls over ${whole.merged} merged pull requests, both repositories`;
   const shares = CATEGORIES.map((c) => `${c} ${r.counts[c]}`).join(", ");
   const n = r.biggest ? r.counts[r.biggest] : 0;
   const biggest = r.biggest
@@ -458,12 +463,13 @@ function repositoryLines(r: RepositoryReading, targets: Record<string, import(".
   return [
     `#### ${r.repository}`, "",
     "| Measure | Target | Reading | Count it came from | Verdict |", "|---|---|---|---|---|",
-    row({ measure: "Calls per merged pull request (attributed)", target: targets.callsPerMergedPullRequest, value: r.callsPerPull, enough: r.enough, count: count }),
-    row({ measure: "Dollars per merged pull request (attributed)", target: targets.dollarsPerMergedPullRequest, value: r.dollarsPerPull, enough: r.enough, count: count }),
-    "", "Attributed calls only: the target is read on ALL calls in the table above, and the calls of no pull request belong to no repository.", "", biggest,
+    row({ measure: "Calls per merged pull request (ALL calls, both repositories)", target: targets.callsPerMergedPullRequest, value: whole.callsPerPull, enough: enough, count: allIn }),
+    row({ measure: "Dollars per merged pull request (ALL calls, both repositories)", target: targets.dollarsPerMergedPullRequest, value: whole.dollarsPerPull, enough: enough, count: allIn }),
+    row({ measure: "Calls per merged pull request (attributed to this repository)", target: targets.callsPerMergedPullRequest, value: r.callsPerPull, enough: r.enough, count: count, verdict: "comparison, not the verdict" }),
+    row({ measure: "Dollars per merged pull request (attributed to this repository)", target: targets.dollarsPerMergedPullRequest, value: r.dollarsPerPull, enough: r.enough, count: count, verdict: "comparison, not the verdict" }),
+    "", "The verdicts read ALL calls over both repositories, as the whole-window table does; the attributed rows are a breakdown beneath them.", "", biggest,
     `Counts: ${shares}, none of the four ${r.none}; together ${r.calls} attributed calls.`,
     ...(r.unpriced > 0 ? [`${r.unpriced} attributed calls ran on a model with no price: the dollars are a floor.`] : []),
-    ...(r.enough ? [] : [`UNREAD above: ${r.merged} merged pull requests is under the ${minimum} a rate needs.`]),
     ...(r.unread.length > 0 ? [`UNREAD, no call attributed: ${r.unread.map((number) => `#${number}`).join(", ")}.`] : []), "",
   ];
 }
@@ -471,14 +477,24 @@ function repositoryLines(r: RepositoryReading, targets: Record<string, import(".
 /** The definitions, once. @param {PriceList} prices @param {Window} window */
 function definitionLines(prices: PriceList, window: Window) {
   const hours = window.hours ? ` and ${String(window.hours.from).padStart(2, "0")}:00-${String(window.hours.to).padStart(2, "0")}:00 of each day` : "";
+  // A whole-day figure is not the chairman's band, so the reading says which it is: 102 calls-per-PR read on whole days is not his 87-99.
+  const wholeDays = window.hours ? [] : ["Whole UTC days: every hour of each day is in the window. `--hours=14-20` reads the chairman's band, and a whole-day figure is not comparable to a band figure."];
   return [
     `Window: ${window.since} to ${window.until} (UTC, end exclusive)${hours}.`,
+    ...wholeDays,
     "- **Call**: one model request, counted once by its `message.id` (a request writes one transcript line per content block).",
     "- **Sessions**: every Claude Code session on the host (standing seats, spawned workers, reviewers, subagents); Claude only.",
     `- **Price**: list price per million tokens, the list read ${prices.readOn} (\`scripts/token-cost.ts\`, \`PRICE_LIST\`).`,
     "- **Attribution**: a call belongs to a merged pull request when its branch is that pull request's head, else by `reviewer-<n>` / `worker-<n>`; otherwise it belongs to NO pull request.",
     "- **Merged**: merged in the window, in either repository. Full definitions: `docs/token-cost.md`.",
   ];
+}
+
+/** The top sessions by name, then `others` for the rest, so the figures sum to the unattributed total and no count goes unnamed. @param {[string, number][]} groups */
+function unattributedBySession(groups: [string, number][]) {
+  const others = groups.slice(TOP_GROUPS).reduce((sum, [, n]) => sum + n, 0);
+  const parts = [...groups.slice(0, TOP_GROUPS).map(([name, n]) => `${name} ${n}`), ...(others > 0 ? [`others ${others}`] : [])];
+  return parts.join(", ") || "none";
 }
 
 /**
@@ -499,12 +515,13 @@ export function renderSection({ readings, whole, targets, prices, window, commit
     "| Measure | Target | Reading | Count it came from | Verdict |", "|---|---|---|---|---|",
     row({ measure: "Calls per merged pull request (ALL calls)", target: t.callsPerMergedPullRequest, value: whole.callsPerPull, enough: enough, count: allIn }),
     row({ measure: "Dollars per merged pull request (ALL calls) (verdict of record: list price as reported)", target: t.dollarsPerMergedPullRequest, value: whole.dollarsPerPull, enough: enough, count: allIn }),
-    row({ measure: "Same, cache writes priced at the 5-minute rate (the chairman's proxy; comparison, not the verdict)", target: t.dollarsPerMergedPullRequest, value: whole.dollarsPerPullFiveMinuteWrites, enough: enough, count: allIn }), "",
+    row({ measure: "Same, cache writes priced at the 5-minute rate (the chairman's proxy; comparison, not the verdict)", target: t.dollarsPerMergedPullRequest, value: whole.dollarsPerPullFiveMinuteWrites, enough: enough, count: allIn }),
+    ...(enough ? [] : [`UNREAD above: ${whole.merged} merged pull requests is under the ${minimum} a rate needs.`]), "",
     `UNATTRIBUTED (calls that belong to no merged pull request): ${whole.unattributed} of ${whole.calls} calls (${pct(whole.unattributed, whole.calls)}%), ${usd(whole.unattributedDollars)} of ${usd(whole.dollars)}.`,
-    `Unattributed by session: ${whole.groups.slice(0, TOP_GROUPS).map(([name, n]) => `${name} ${n}`).join(", ") || "none"}.`,
+    `Unattributed by session: ${unattributedBySession(whole.groups)}.`,
     `Mean context per call: ${whole.meanContext === null ? "no reading" : Math.round(whole.meanContext).toLocaleString("en-US")} tokens. Cache-write share of cost: ${whole.cacheWriteShare === null ? "no reading" : `${pct(whole.cacheWriteShare, 1)}%`}.`,
     ...(whole.unpriced > 0 ? [`${whole.unpriced} calls ran on a model with no price and are in no dollar figure.`] : []), "",
-    ...readings.flatMap((r) => repositoryLines(r, t, minimum)),
+    ...readings.flatMap((r) => repositoryLines(r, { whole, targets: t, enough })),
   ].join("\n");
 }
 
