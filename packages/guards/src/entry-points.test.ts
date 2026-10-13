@@ -175,7 +175,9 @@ test("every entry point refuses to run when imported", () => {
   assert.ok(workflowOnly.length >= WORKFLOW_ONLY_FLOOR,
     "no entry point was found outside package.json, so the workflow and hook discovery has stopped matching");
 
-  const unguarded = points.filter((path) => !readText(path).includes("import.meta.url ==="));
+  // Executable source, not raw text: a comment that merely contains the guard is not a guard, and a raw match would
+  // count it as one.
+  const unguarded = points.filter((path) => !executableSource(path).includes("import.meta.url ==="));
   const exempt = new Set([...KNOWN_UNGUARDED_ENTRY_POINTS, ...IMPORT_SAFE_CONFIG_MODULES]);
 
   // POSITIVE CONTROL: the known gap must be detected as unguarded. Without this, the emptiness assertion
