@@ -4,7 +4,21 @@
       {
         "matcher": "clear",
         "hooks": [
-          { "type": "command", "command": "echo rehydrate-marker" }
+          {
+            "type": "command",
+            "command": "echo rehydrate-marker"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/scripts/claude-hooks/refuse-unreadable-command.ts"
+          }
         ]
       }
     ]

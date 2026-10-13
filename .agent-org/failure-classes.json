@@ -382,9 +382,9 @@
     },
     {
       "id": "safety-check-denied",
-      "name": "Claude Code's built-in safety check denies a removal an engineer ran, and the session sits idle on the denied removal.",
-      "guard": null,
-      "guardNote": "Not stopped by a detector in force. The control is the engineer brief's rule on removal commands the safety check cannot read (`.agent-org/roles/engineer.md`, a11ign/a11ign#4966), which an engineer must follow and nothing enforces. The detector is `safetyCheckDenialEvents` in agent-org `src/safety-check-denial-incident.ts`, written to the failure ledger by the retro pass in `src/org-retro.ts`, not by the tick: it counts only the denials in the transcript, so a removal the chairman approved leaves nothing to count.",
+      "name": "Claude Code's built-in safety check denies a command it cannot read (a nested `bash -c` carrying `$`, or a removal whose target is a variable), and the session sits idle on the denied command.",
+      "guard": "`scripts/claude-hooks/refuse-unreadable-command.ts`, a PreToolUse hook on Bash wired in `.claude/settings.json` (so every role that runs in this repository has it, the ceo's included), refuses the two shapes the six denied commands share and prints the rewrite; `scripts/claude-hooks/refuse-unreadable-command.test.ts` runs the six verbatim commands in `scripts/fixtures/safety-check-denied-commands.json` through it and goes red when the guard is removed or always fires.",
+      "guardNote": "Five of six denied commands contain NO removal: each is a nested `bash -c` whose string carries a `$` expansion; the sixth is `rm -rf \"$S/$m\"`. The two shapes are inferred from those six, not the check's own rule. The hook only reaches a session whose working directory is this repository or one of its worktrees; a session elsewhere (a11ign/agent-org, control, lab) keeps the engineer brief's rule and nothing else. The detector `safetyCheckDenialEvents` in agent-org `src/safety-check-denial-incident.ts` names a shape only for `rm` (every other command is `other`): adding these shapes is a change in agent-org, filed as its own row. It counts only denials left in a transcript, so a command the chairman approved leaves nothing to count.",
       "seed": []
     }
   ]
