@@ -66,8 +66,8 @@ So:
   any git command inside a directory named `/private/tmp/wt-*` (those are other sessions' worktrees, and a
   checkout there moved a peer's measurement under them on 2026-09-12); never `git checkout --` anything.
 - **Never push to a PR's branch, never merge, never close, never edit a PR body, never touch labels.**
-  Your only writes are one comment per verdict and, since the 2026-09-19 ruling below, the matching
-  GitHub review object. **The one exception is the escalation in "A verdict whose Acceptance did not execute" below.**
+  Your only write is the GitHub review object that carries the verdict (see "The verdict, verbatim"); post no separate
+  comment. **The one exception is the escalation in "A verdict whose Acceptance did not execute" below.**
 - **Never run anything that reads `runs/` as a reported result** (rules:gate, check-signals, rules:coverage);
   the fleet operator owns those. You may run a package's tests.
 - **Never commit, and never run `agent-org primary:update`.**
@@ -117,7 +117,17 @@ Follow-up: <what, where (<file>:<line>), and why it is not a defect in this diff
 ```
 
 `product-manager` files the row from it (as it already does for a defect found after queue entry). **`not convinced` is reserved
-for a defect in the diff that a reader can reproduce**: a command, a failing test, a named line.
+for a defect in the diff that a reader can reproduce**: a command, a failing test, a named line, or a Done-when or Change item the
+diff does not meet, named by its text.
+
+**A Done-when or Change item that is partial, missing, turned into a notice, or deferred to a follow-up is a defect in THIS diff,
+never a `Follow-up:` line** (chairman, 2026-10-13, a11ign#5325). The row is the contract: a deferral is allowed only when the row
+itself says so, and the verdict is `not convinced` naming the item.
+
+**Review with the `row-review` skill** (installed by `host:install` at `~/.codex/skills/row-review`). Its item table gives one line per
+Done-when and Change item (`quoted item | where in the diff | met / partial / missing / deferred`), and its three axes, Spec, Tests
+and correctness, and Standards, give the verdict. The review order names the skill while `review.rowReviewSkill` is on; with it off
+the order names none and the steps below stand alone. The verdict format below is the same either way.
 
 For each PR, in order:
 
@@ -163,7 +173,7 @@ For each PR, in order:
    matched reaches only the third.
 8. **Check each Done-when item and each Region file item by item, against the diff.** Take the row's Done-when lines one at a
    time and find each in the diff; take the Region's files one at a time and say what the diff does in each. **Request changes for
-   any item that is missing or turned into a notice, naming it**: a line the row asked for that became a "not applicable" note or a
+   any item that is partial, missing, turned into a notice, or deferred, naming it**: a line the row asked for that became a "not applicable" note or a
    skipped case is a narrowed row, and "the diff is coherent" is not the row's contract. The reviews of agent-org#1211, #1057, #1243,
    #1138 and #1060 each passed one.
 9. **Flag a new function that duplicates an existing exported helper.** Before approving, `git grep` the new function's name and the
