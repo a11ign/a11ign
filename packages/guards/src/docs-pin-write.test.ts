@@ -9,10 +9,15 @@
  * accepting every line that changed, and the workflow wiring.
  *
  * Positive controls sit beside each emptiness claim: the Quickstart section is asserted to have contained the previous release BEFORE the re-pin.
+ *
+ * #5468 added two halves. The writer DID run the consumer-gate generator and its `--check` passed, and the pull request still carried a stale
+ * `consumer-gate.yml`: `actions/upload-artifact` leaves hidden files out by default, so `.github/workflows/consumer-gate.yml` never left the
+ * `regenerate` job (run 38453561679 printed "there will be 1 file uploaded"). So the upload keeps hidden files, `write` refuses a delivery
+ * short of what `regenerate` declared, and every generator that reads README's fence is derived from the scripts and asserted RUN.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { planRepin } from "./docs-release-pin-currency.ts";
 
@@ -135,4 +140,93 @@ test("the policy that mints for docs-pin-write.yml holds `workflows`, because th
   const policy = read(".github/chainguard/docs-pin-write.sts.yaml").split("\n").filter((line) => !/^\s*#/.test(line)).join("\n");
   assert.match(policy, /^permissions:\n {2}contents: write\n {2}pull_requests: write\n {2}workflows: write$/m);
   assert.match(policy, /job_workflow_ref: a11ign\/a11ign\/\\\.github\/workflows\/docs-pin-write\\\.yml@refs\/heads\/main/);
+});
+
+/** Repo-relative paths of every non-test script under `scripts/`, with its text. */
+function scriptTexts(): Record<string, string> {
+  const found: Record<string, string> = {};
+  for (const entry of readdirSync(`${REPO}scripts`, { recursive: true, encoding: "utf8" })) {
+    if (!entry.endsWith(".ts") || entry.endsWith(".test.ts") || /(^|\/)(node_modules|fixtures)\//.test(entry)) continue;
+    found[`scripts/${entry}`] = read(`scripts/${entry}`);
+  }
+  return found;
+}
+
+/**
+ * The scripts that GENERATE a file from README's Quickstart fence: they read the ROOT README through `README_PATH` and write a file. Derived
+ * from the text of the scripts, never listed here, so a third generator is found the day it is added. `scripts/doc-checks/roles-readme.ts`
+ * also exports a `README_PATH`, of a different file and read through `resolve`, which is why the reading is matched and not the name.
+ */
+function fenceGenerators(scripts: Record<string, string>): string[] {
+  const rootReadme = /README_PATH\s*=\s*`\$\{REPO\}README\.md`|README_PATH[^;]*?\}\s*from\s*"[^"]*generate-consumer-gate\.ts"/;
+  return Object.entries(scripts)
+    .filter(([, text]) => /readFileSync\(README_PATH\b/.test(text) && rootReadme.test(text) && /\bwriteFileSync\(/.test(text))
+    .map(([path]) => path)
+    .sort();
+}
+
+/** The generators with no line in the job that RUNS them: a `--check` line proves a file fresh and writes nothing, so it does not count. */
+function generatorsNotRun(generators: string[], regenerateBody: string): string[] {
+  const lines = regenerateBody.split("\n");
+  return generators.filter((path) => !lines.some((line) => line.includes(path) && !line.includes("--check")));
+}
+
+const CONSUMER_GATE_GENERATOR = "scripts/generate-consumer-gate.ts";
+const OUTSIDER_GENERATOR = "scripts/outsider/generate.ts";
+
+test("the `regenerate` job runs every generator that reads README's Quickstart fence (#5468)", () => {
+  const generators = fenceGenerators(scriptTexts());
+  assert.ok(generators.includes(CONSUMER_GATE_GENERATOR) && generators.includes(OUTSIDER_GENERATOR),
+    `the discovery no longer finds the two known generators (found: ${generators.join(", ") || "none"}): the marker is broken, not the workflow`);
+  assert.equal(generators.includes("scripts/doc-checks/roles-readme.ts"), false, "a check of another README was taken for a generator");
+  assert.deepEqual(generatorsNotRun(generators, jobBody("regenerate")), []);
+});
+
+test("the enumeration notices a generator the workflow does not run, and a generator it only checks (positive controls for the test above)", () => {
+  const body = jobBody("regenerate");
+  const generators = [CONSUMER_GATE_GENERATOR, OUTSIDER_GENERATOR];
+  const another = "scripts/another-fence-generator.ts";
+  assert.deepEqual(generatorsNotRun([...generators, another], body), [another]);
+  const withoutRun = body.split("\n").filter((line) => !(line.includes(CONSUMER_GATE_GENERATOR) && !line.includes("--check"))).join("\n");
+  assert.ok(withoutRun.includes(`${CONSUMER_GATE_GENERATOR} --check`), "the control lost its --check line: the fixture is not the shape it claims");
+  assert.deepEqual(generatorsNotRun(generators, withoutRun), [CONSUMER_GATE_GENERATOR]);
+  const discovered = fenceGenerators({
+    ...scriptTexts(),
+    [another]: 'import { README_PATH } from "./generate-consumer-gate.ts";\nwriteFileSync(OUT, f(readFileSync(README_PATH, "utf8")));',
+  });
+  assert.ok(discovered.includes(another), "a new script that reads README's fence and writes a file was not discovered");
+});
+
+/** One step of a job of the workflow, found by the text of its `with:` or `name:`. */
+function stepWith(job: string, needle: string): string {
+  const step = jobBody(job).split(/\n(?= {6}- )/).find((candidate) => candidate.includes(needle));
+  assert.ok(step, `no step of \`${job}\` contains '${needle}'`);
+  return step;
+}
+
+test("the regenerated files leave the `regenerate` job with their hidden directories, which `upload-artifact` omits by default (#5468)", () => {
+  const generated = [gate.OUT, outsider.OUT].map((path: string) => path.slice(REPO.length));
+  const hidden = generated.filter((path: string) => path.split("/").some((segment: string) => segment.startsWith(".")));
+  assert.deepEqual(hidden, [".github/workflows/consumer-gate.yml"], "the control moved: no generated file sits under a hidden directory any more");
+  assert.match(stepWith("regenerate", "name: files-regenerated"), /^\s*include-hidden-files: true$/m);
+});
+
+test("`write` refuses a delivery short of the files `regenerate` declared, so a dropped file is a red job and not a red pull request (#5468)", () => {
+  assert.match(jobBody("regenerate"), /^\s*files: \$\{\{ steps\.stage\.outputs\.files \}\}$/m);
+  assert.match(jobBody("regenerate"), /echo "files=.*>> "\$GITHUB_OUTPUT"/);
+  const write = jobBody("write");
+  assert.match(write, /^\s*REGENERATED: \$\{\{ needs\.regenerate\.outputs\.files \}\}$/m);
+  assert.match(write, /for declared in \$REGENERATED; do\n\s*\[ -f "\$HANDED\/\$declared" \] \|\| fail /);
+});
+
+test("a re-pin leaves the consumer gate's pin comment naming the promoted release, by the generator's own staleness predicate (#5468)", () => {
+  const { text, from, to } = repinned();
+  const naming = (file: string, version: string) => file.split("\n").filter((line) => line.includes(`release ${version}`));
+  const before = naming(committedGate, from);
+  assert.ok(before.length > 0, "the committed consumer gate no longer names the pinned release in prose: the control moved");
+  const regenerated: string = gate.generate(text, gate.extractPinnedSha(committedGate));
+  assert.deepEqual(naming(regenerated, from), [], `the regenerated consumer gate still names ${from}`);
+  assert.equal(naming(regenerated, to).length, before.length);
+  assert.equal(gate.consumerGateIsStale(committedGate, regenerated), true, "the committed file is not stale for the re-pinned README: the writer has nothing to hand on");
+  assert.equal(gate.consumerGateIsStale(regenerated, gate.generate(text, "e".repeat(PROMOTED_SHA.length))), false);
 });
