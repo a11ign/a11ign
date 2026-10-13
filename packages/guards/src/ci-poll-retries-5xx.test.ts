@@ -60,6 +60,7 @@ if [ "$GH_TOKEN" != "$FAKE_TOKEN" ]; then
   echo "gh: To use GitHub CLI in a GitHub Actions workflow, set the GH_TOKEN environment variable (HTTP 401)" >&2
   exit 4
 fi
+case "$2" in repos/a11ign/a11ign/*) ;; *) echo "fake gh: not this repository's path: $2" >&2; exit 2 ;; esac
 case "$2" in
   */actions/workflows/ci.yml/runs?*) key=runs; body="$FIXTURES/runs.json" ;;
   */actions/runs/*/jobs?*) key=jobs; body="$FIXTURES/jobs.json" ;;
