@@ -53,7 +53,11 @@ ExecStartPre=-%h/.local/bin/agent-org primary:update
 # resolves it from any checkout.
 ExecStart=%h/.local/bin/node scripts/token-cost.ts --post
 
-TimeoutStartSec=600
+# THE MEASURED READ, AND ITS HEADROOM -- #3217. `token-cost.ts --post` took 14m29s wall over the 2026-10-05..10-12 window
+# (102,882 calls, 1,005 merged pull requests; worker-3217's run, 2026-10-12). At 600s every attempt was killed before it reached
+# the comment, so none ever posted. 1800s is that read with room. Eight full-length attempts put the last start near 02:13Z
+# Tuesday, not the 22:43Z in the header above, which assumes each failed attempt takes no time.
+TimeoutStartSec=1800
 
 # `Restart=on-failure` ON A ONESHOT restarts it after a non-zero exit only (systemd >= 244; this host has 259), which is
 # exactly "the comment is not there yet". A timeout counts as a failure too.
