@@ -20,7 +20,7 @@ import type { Derivation } from "../../../scripts/dependency-changeset.ts";
 import { withGitSandbox } from "@a11ign/toolchain/lib/git-sandbox";
 
 const changeset = await import("../../../scripts/dependency-changeset.ts");
-const { RUNTIME_SECTIONS, refusalFor, entriesFor, deriveDependencyChangeset, renderEntry, parseEntry, checkEntries, compile } = changeset;
+const { RUNTIME_SECTIONS, refusalFor, entriesFor, deriveDependencyChangeset, renderEntry, parseEntry, checkEntries, compile, check, settleRefusal } = changeset;
 
 type Change = {
   path: string; package: string; private: boolean; section: string; dependency: string; from: string | null; to: string | null;
@@ -247,6 +247,130 @@ test("checkEntries names a derived package the carried entries omit, only when s
   assert.deepEqual(checkEntries([carried()], derived), ["no entry for @a11ign/guards, whose runtime ranges this diff moves"]);
   // Nothing carried at all is "no entry file", which the job reports through its own channel, not this check.
   assert.deepEqual(checkEntries([], derived), []);
+});
+
+// ---- a refusal a human settled: a carried entry for every owed package, and an approval on the head -------
+
+const approved = (commit_id: string, id = 42) => ({ id, state: "APPROVED", commit_id });
+const carriedFor = (file: string, pkg: string) => ({ file, package: pkg, bump: "minor", text: "A human wrote this." });
+
+test("settleRefusal settles when a carried entry covers the owed package and an approval is on the head", () => {
+  const owed = entriesFor([change()]);
+  assert.deepEqual(
+    settleRefusal({ owed, carried: [carriedFor(".changeset/a.md", "@a11ign/lab")], reviews: [approved("h1")], head: "h1" }),
+    { files: [".changeset/a.md"], review: 42, sha: "h1" },
+  );
+});
+
+test("settleRefusal stays refused when one owed package has no carried entry, even with two entries for the other", () => {
+  const owed = entriesFor([change(), change({ package: "@a11ign/guards" })]);
+  const carried = [carriedFor(".changeset/a.md", "@a11ign/lab"), carriedFor(".changeset/b.md", "@a11ign/lab")];
+  assert.equal(settleRefusal({ owed, carried, reviews: [approved("h1")], head: "h1" }), null);
+});
+
+test("settleRefusal stays refused with no approval on the head: none, a change request, or an approval of an older head", () => {
+  const owed = entriesFor([change()]);
+  const carried = [carriedFor(".changeset/a.md", "@a11ign/lab")];
+  assert.equal(settleRefusal({ owed, carried, reviews: [], head: "h2" }), null);
+  assert.equal(settleRefusal({ owed, carried, reviews: [{ id: 7, state: "CHANGES_REQUESTED", commit_id: "h2" }], head: "h2" }), null);
+  assert.equal(settleRefusal({ owed, carried, reviews: [approved("h1")], head: "h2" }), null, "an approval outlived its push");
+});
+
+test("settleRefusal names the latest approval on the head, and stays refused with no head to compare against", () => {
+  const owed = entriesFor([change()]);
+  const carried = [carriedFor(".changeset/a.md", "@a11ign/lab")];
+  const EARLIER_REVIEW = 41;
+  const LATEST_REVIEW = 42;
+  assert.equal(settleRefusal({ owed, carried, reviews: [approved("h2", EARLIER_REVIEW), approved("h2", LATEST_REVIEW)], head: "h2" })?.review, LATEST_REVIEW);
+  assert.equal(settleRefusal({ owed, carried, reviews: [approved("h2")], head: undefined }), null);
+});
+
+test("settleRefusal never settles a diff that owes no entry, so an approval cannot settle a refusal nobody stated", () => {
+  assert.equal(settleRefusal({ owed: [], carried: [carriedFor(".changeset/a.md", "@a11ign/lab")], reviews: [approved("h1")], head: "h1" }), null);
+});
+
+// ---- check, against a throwaway repository: a 0.x minor bump, refused until a human settles it -----------------
+
+const HUMAN_ENTRY = "---\n\"@a11ign/lab\": minor\n---\n\nA 0.x minor is breaking before 1.0: a consumer must read the new range.\n";
+const REFUSAL = "yaml in packages/lab/package.json: ^0.4.0 -> ^0.5.0 is a 0.x MINOR bump, which before 1.0 is semver's breaking release (.changeset/README.md)";
+
+/** Runs `check` with the sandbox as the working directory (it reads `docs/` and the diff relative to it) and returns the verdict and the output. */
+function checkIn(dir: string, base: string, reviewsPath?: string, head?: string): { passed: boolean; printed: string } {
+  const previousCwd = process.cwd();
+  const previousLog = console.log;
+  const printed: string[] = [];
+  console.log = (...parts: unknown[]) => { printed.push(parts.join(" ")); };
+  process.chdir(dir);
+  try {
+    return { passed: check(base, undefined, reviewsPath, head), printed: printed.join("\n") };
+  } finally {
+    process.chdir(previousCwd);
+    console.log = previousLog;
+  }
+}
+
+/** A published lab on `main` with `yaml` at ^0.4.0, then a `deps:` branch that moves it to ^0.5.0. Returns the base and the head shas. */
+function refusedDependencyBranch(git: { run(args: string[]): string; commit(message: string): string; dir: string }) {
+  mkdirSync(join(git.dir, ".changeset"));
+  mkdirSync(join(git.dir, "docs"));
+  writeFileSync(join(git.dir, "docs/owned-path-facts.json"), JSON.stringify({ owned: [] }));
+  writeManifest(git.dir, "lab", { name: "@a11ign/lab", version: "1.2.3", dependencies: { yaml: "^0.4.0" } });
+  git.run(["add", "-A"]);
+  git.commit("main");
+  const base = git.run(["rev-parse", "HEAD"]).trim();
+  git.run(["checkout", "-q", "-b", "deps"]);
+  writeManifest(git.dir, "lab", { name: "@a11ign/lab", version: "1.2.3", dependencies: { yaml: "^0.5.0" } });
+  writeFileSync(join(git.dir, ".changeset/a-judge-peer-range.md"), HUMAN_ENTRY);
+  git.run(["add", "-A"]);
+  git.commit("deps: bump yaml");
+  return { base, head: git.run(["rev-parse", "HEAD"]).trim() };
+}
+
+const writeReviews = (dir: string, reviews: unknown[]) => {
+  const path = join(dir, "reviews.json");
+  writeFileSync(path, JSON.stringify(reviews));
+  return path;
+};
+
+test("check accepts a refused 0.x minor when a carried entry covers it and an approval is on the head, and says what settled it", () => {
+  withGitSandbox((git) => {
+    const { base, head } = refusedDependencyBranch(git);
+    const reviews = writeReviews(git.dir, [approved(head)]);
+    const { passed, printed } = checkIn(git.dir, base, reviews, head);
+    assert.equal(passed, true);
+    assert.equal(printed, `ACCEPTED (refused, settled by a human): the derivation was refused for ${REFUSAL} and settled by carried entry .changeset/a-judge-peer-range.md and review 42 on ${head}.`);
+  });
+});
+
+test("check stays refused with today's message when the refused bump has no approval on the head", () => {
+  withGitSandbox((git) => {
+    const { base, head } = refusedDependencyBranch(git);
+    const reviews = writeReviews(git.dir, []);
+    const { passed, printed } = checkIn(git.dir, base, reviews, head);
+    assert.equal(passed, false);
+    assert.equal(printed, `REFUSED: this dependency pull request waits for a human who looks.\n  - ${REFUSAL}`);
+  });
+});
+
+test("check stays refused when the only approval is of an earlier head that a later push outlived", () => {
+  withGitSandbox((git) => {
+    const { base, head: firstHead } = refusedDependencyBranch(git);
+    writeFileSync(join(git.dir, ".changeset/a-judge-peer-range.md"), `${HUMAN_ENTRY}\nRe-read after a push.\n`);
+    git.run(["add", "-A"]);
+    git.commit("deps: a later push");
+    const head = git.run(["rev-parse", "HEAD"]).trim();
+    const reviews = writeReviews(git.dir, [approved(firstHead)]);
+    const { passed, printed } = checkIn(git.dir, base, reviews, head);
+    assert.equal(passed, false);
+    assert.match(printed, /^REFUSED: this dependency pull request waits for a human who looks\./);
+  });
+});
+
+test("check stays refused without a reviews file, however the carried entry reads", () => {
+  withGitSandbox((git) => {
+    const { base, head } = refusedDependencyBranch(git);
+    assert.equal(checkIn(git.dir, base, undefined, head).passed, false);
+  });
 });
 
 // ---- compile, against a throwaway repository -----------------------------------------------------------
