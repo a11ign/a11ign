@@ -16,7 +16,8 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -670,4 +671,39 @@ test("windowFor: --week= names a Monday, and a day that is not one is refused ra
 
 test("windowFor: an empty --week= is refused, not read as no flag (it would name today's week)", () => {
   assert.throws(() => tc.windowFor(["--week="], new Date("2026-10-13T01:00:00Z")), /--week= is not a Monday/);
+});
+
+const UNIT_FILE = join(import.meta.dirname, "../../../.agent-org/units/a11ign-token-cost-weekly.service");
+const EXEC_START = "ExecStart=/usr/bin/sh -c '";
+const EXECUTABLE = 0o755;
+
+/** The unit's ExecStart with systemd's escapes undone and its node call replaced by echo, so the shell prints the argument the unit would pass. */
+function unitArgument(): string {
+  const line = readFileSync(UNIT_FILE, "utf8").split("\n").find((l) => l.startsWith(EXEC_START)) ?? "";
+  return line.slice(EXEC_START.length, -1).replace(/exec \S+\/node /, "exec echo ").replaceAll("$$", "$").replaceAll("%%", "%");
+}
+
+/** A `date` on PATH whose clock is $PINNED_NOW: a `now` argument reads that instant, and a call with no `-d` reads it too. */
+function pinnedDate(dir: string): void {
+  const real = spawnSync("/bin/sh", ["-c", "command -v date"], { encoding: "utf8" }).stdout.trim();
+  writeFileSync(join(dir, "date"), `#!/bin/sh
+case " $* " in *" -d "*) ;; *) set -- -d "$PINNED_NOW" "$@" ;; esac
+n=$#; i=0
+while [ "$i" -lt "$n" ]; do a=$1; shift; case $a in now*) a=$PINNED_NOW\${a#now} ;; esac; set -- "$@" "$a"; i=$((i + 1)); done
+exec "${real}" "$@"
+`);
+  chmodSync(join(dir, "date"), EXECUTABLE);
+}
+
+test("the weekly unit names the week its timer's day closed, under a pinned clock (#5399)", { skip: process.platform === "win32" }, () => {
+  const dir = mkdtempSync(join(tmpdir(), "token-cost-unit-"));
+  try {
+    pinnedDate(dir);
+    for (const [pinned, week] of [["2026-10-12T12:13:00Z", "2026-10-05"], ["2026-10-13T22:19:00Z", "2026-10-05"], ["2026-10-18T23:59:00Z", "2026-10-05"], ["2026-10-19T12:13:00Z", "2026-10-12"]]) {
+      const out = spawnSync("/bin/sh", ["-c", unitArgument()], { encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, PINNED_NOW: pinned } });
+      assert.equal(out.stdout.trim(), `scripts/token-cost.ts --post --week=${week}`, `pinned at ${pinned}: ${out.stderr}`);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
