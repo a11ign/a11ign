@@ -529,7 +529,12 @@ jobs:
           A11Y_CHECK_REFUSAL_OWNERS: "1"
           GH_TOKEN: ${{ github.token }}
         run: |
-          node --test scripts/refusal-owners-are-open.test.ts | tee "$RUNNER_TEMP/refusal-owners.out"
+          # No pipe: Actions' default `bash -e` has no `pipefail`, so `node --test | tee` took `tee`'s status and a failed fixture test beside a
+          # printed LIVE PASS exited 0 (reviewer-5352, #5333). The test's own status is kept and returned; `refusal-owners-are-open.test.ts` runs this block.
+          status=0
+          node --test scripts/refusal-owners-are-open.test.ts > "$RUNNER_TEMP/refusal-owners.out" 2>&1 || status=$?
+          cat "$RUNNER_TEMP/refusal-owners.out"
+          [ "$status" -eq 0 ] || { echo "::error::refusal-owners-are-open.test.ts exited $status"; exit "$status"; }
           grep -q "LIVE PASS: " "$RUNNER_TEMP/refusal-owners.out" || { echo "::error::the live read printed no LIVE PASS line: it was skipped or found no owner"; exit 1; }
 
   # #298 (pipeline unit 1): WITH `strict=false` (#277), branch protection no longer requires this head to

@@ -15,6 +15,10 @@
 // no-token: gh -- the fixture half spawns nothing: `readIssueState` takes a runner here, and the one read of GitHub is the opt-in LIVE test below
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   describe, failures, findings, ownersOf, readIssueState, refusalsInPackageJson, refusalsInTree, refusalsInWorkflow,
@@ -159,6 +163,48 @@ test("the real tree's gate:lab-held is found, with an owner (the positive contro
   const labHeld = refusals.find((refusal) => refusal.where === 'script "gate:lab-held"');
   assert.ok(labHeld, "package.json carries the gate:lab-held refusal this row exists for");
   assert.ok(ownersOf(labHeld.text).length > 0, "the gate:lab-held refusal names an owner, so the live read has something to read");
+});
+
+const CI_STEP_NAME = "Every owner a refusal names is an open issue";
+/** `rwxr-xr-x`: the stub `node` has to be executable. */
+const EXECUTABLE = 0o755;
+
+/** The `run:` block of `ci.yml`'s refusalOwners step, dedented: the text GitHub hands to `bash -e`, which has no `pipefail`. */
+function refusalOwnersStep(): string {
+  const lines = readFileSync(join(REPO_ROOT, ".github/workflows/ci.yml"), "utf8").split("\n");
+  const named = lines.findIndex((line) => line.includes(`name: ${CI_STEP_NAME}`));
+  const runAt = lines.findIndex((line, index) => index > named && /^\s*run: \|\s*$/.test(line));
+  assert.ok(named >= 0 && runAt > named, `ci.yml has a step named "${CI_STEP_NAME}" with a literal run block`);
+  const indent = lines[runAt].search(/\S/) + 2;
+  const body: string[] = [];
+  for (const line of lines.slice(runAt + 1)) {
+    if (line.trim() !== "" && line.search(/\S/) < indent) break;
+    body.push(line.slice(indent));
+  }
+  return body.join("\n");
+}
+
+/** Runs that step under `bash -e`, with a `node` that prints `output` and exits `code`; the step's own exit status is what a required job reports. */
+function runStepWithNode(step: string, node: { code: number; output: string }): number | null {
+  const dir = mkdtempSync(join(tmpdir(), "refusal-owners-step-"));
+  writeFileSync(join(dir, "node"), `#!/bin/sh\ncat <<'EOF'\n${node.output}\nEOF\nexit ${node.code}\n`);
+  chmodSync(join(dir, "node"), EXECUTABLE);
+  writeFileSync(join(dir, "step.sh"), step);
+  const ran = spawnSync("bash", ["-e", join(dir, "step.sh")], {
+    env: { PATH: `${dir}:${process.env.PATH ?? ""}`, RUNNER_TEMP: dir }, encoding: "utf8",
+  });
+  return ran.status;
+}
+
+test("ci.yml's refusalOwners step exits red when the test fails, even though a LIVE PASS line was printed", () => {
+  const step = refusalOwnersStep();
+  assert.match(step, /node --test scripts\/refusal-owners-are-open\.test\.ts/, "the extracted block is the one that runs this test");
+  const live = "  LIVE PASS: package.json script \"gate:lab-held\" names #4425: a11ign/a11ign#4425 is open";
+  // The reviewer's case (#5352): a fixture assertion fails (exit 1) while the opt-in live test prints its line. Under `| tee` this exited 0.
+  assert.notEqual(runStepWithNode(step, { code: 1, output: `not ok 3 - fixture\n${live}` }), 0);
+  // The passing twin on the same wrapper, and the two ways a green exit still must not pass: no line (a skipped live test).
+  assert.equal(runStepWithNode(step, { code: 0, output: `ok 1\n${live}` }), 0);
+  assert.notEqual(runStepWithNode(step, { code: 0, output: "ok 1\n# skipped 1" }), 0);
 });
 
 test("LIVE: every owner a refusal names in this tree is an OPEN issue", {
