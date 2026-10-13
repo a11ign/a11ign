@@ -292,7 +292,7 @@ test("settleRefusal never settles a diff that owes no entry, so an approval cann
 // ---- check, against a throwaway repository: a 0.x minor bump, refused until a human settles it -----------------
 
 const HUMAN_ENTRY = "---\n\"@a11ign/lab\": minor\n---\n\nA 0.x minor is breaking before 1.0: a consumer must read the new range.\n";
-const REFUSAL = "yaml in packages/lab/package.json: ^0.4.0 -> ^0.5.0 is a 0.x MINOR bump, which before 1.0 is semver's breaking release (.changeset/README.md)";
+const REFUSAL = "yaml in packages/fixture/package.json: ^0.4.0 -> ^0.5.0 is a 0.x MINOR bump, which before 1.0 is semver's breaking release (.changeset/README.md)";
 
 /** Runs `check` with the sandbox as the working directory (it reads `docs/` and the diff relative to it) and returns the verdict and the output. */
 function checkIn(dir: string, base: string, reviewsPath?: string, head?: string): { passed: boolean; printed: string } {
@@ -314,12 +314,12 @@ function refusedDependencyBranch(git: { run(args: string[]): string; commit(mess
   mkdirSync(join(git.dir, ".changeset"));
   mkdirSync(join(git.dir, "docs"));
   writeFileSync(join(git.dir, "docs/owned-path-facts.json"), JSON.stringify({ owned: [] }));
-  writeManifest(git.dir, "lab", { name: "@a11ign/lab", version: "1.2.3", dependencies: { yaml: "^0.4.0" } });
+  writeManifest(git.dir, "fixture", { name: "@a11ign/lab", version: "1.2.3", dependencies: { yaml: "^0.4.0" } });
   git.run(["add", "-A"]);
   git.commit("main");
   const base = git.run(["rev-parse", "HEAD"]).trim();
   git.run(["checkout", "-q", "-b", "deps"]);
-  writeManifest(git.dir, "lab", { name: "@a11ign/lab", version: "1.2.3", dependencies: { yaml: "^0.5.0" } });
+  writeManifest(git.dir, "fixture", { name: "@a11ign/lab", version: "1.2.3", dependencies: { yaml: "^0.5.0" } });
   writeFileSync(join(git.dir, ".changeset/a-judge-peer-range.md"), HUMAN_ENTRY);
   git.run(["add", "-A"]);
   git.commit("deps: bump yaml");
@@ -401,13 +401,13 @@ const GUARDS = { name: "@a11ign/guards", version: "1.0.0" };
 
 /** Releases both packages at their tags, then bumps `yaml` (third party) and `@a11ign/guards` (a workspace sibling) in lab. */
 function releaseThenBump(dir: string, git: { run(args: string[]): string; commit(message: string): string }) {
-  writeManifest(dir, "lab", RELEASED);
+  writeManifest(dir, "fixture", RELEASED);
   writeManifest(dir, "guards", GUARDS);
   git.run(["add", "-A"]);
   git.commit("release");
   git.run(["tag", "@a11ign/lab@1.2.3"]);
   git.run(["tag", "@a11ign/guards@1.0.0"]);
-  writeManifest(dir, "lab", { ...RELEASED, dependencies: { yaml: "^2.9.1", "@a11ign/guards": "^1.1.0" } });
+  writeManifest(dir, "fixture", { ...RELEASED, dependencies: { yaml: "^2.9.1", "@a11ign/guards": "^1.1.0" } });
 }
 
 test("compile --dry-run reports the third-party range that moved since the release tag, ignores a workspace sibling, and writes nothing", () => {
@@ -435,7 +435,7 @@ test("compile writes the rendered entry file when it is not a dry run", () => {
 test("compile says so when no third-party range moved since the tag (the positive control is the two tests above)", () => {
   withGitSandbox((git) => {
     mkdirSync(join(git.dir, ".changeset"));
-    writeManifest(git.dir, "lab", RELEASED);
+    writeManifest(git.dir, "fixture", RELEASED);
     writeManifest(git.dir, "guards", GUARDS);
     git.run(["add", "-A"]);
     git.commit("release");
@@ -448,7 +448,7 @@ test("compile says so when no third-party range moved since the tag (the positiv
 test("compile skips a package with no release tag and a private package", () => {
   withGitSandbox((git) => {
     mkdirSync(join(git.dir, ".changeset"));
-    writeManifest(git.dir, "lab", { ...RELEASED, dependencies: { yaml: "^2.9.1" } }); // published, but never tagged
+    writeManifest(git.dir, "fixture", { ...RELEASED, dependencies: { yaml: "^2.9.1" } }); // published, but never tagged
     writeManifest(git.dir, "hidden", { name: "@a11ign/hidden", version: "0.0.1", private: true, dependencies: { yaml: "^2.9.1" } });
     git.run(["add", "-A"]);
     git.commit("no tags");
