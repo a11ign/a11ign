@@ -143,6 +143,15 @@ Where that meets ADR 0039 item 6's host-side second checkout, this section overt
    `prepare` lay nothing and deletes `layers.json` (cut 9). `control` deploys published versions and could not be cut before the fleet and
    the worker exported what it needs, which is why it came after them.
 
+## The lab's own baseline of its reaches (ruling proposed on #5436)
+
+`lab` keeps `baselines/layer-edges.baseline.json`: the reaches it makes by path into this repository's tree, each with a disposition (`checkout-path`, `by-name`, `moves-with:<layer>`) and a reason. Its `layer-edges.test.ts` fails on a new edge and on a stale entry. Rule 5 says a new edge is a change to this ADR, not to a baseline, and the core deleted its own baseline at cut 9 because an accepted reach stayed. **Proposed ruling: keep the lab's baseline as Decision 3's ledger, and let it end where Decision 3 ends.** This section is the text the ruling would carry; `ceo` rules on it in review.
+
+1. **It shrinks, and nothing is added to it.** An entry goes when its reach is replaced by a published-package form (phase 3). An entry added without a change to this ADR is a breach of rule 5, whatever reason is written beside it. The file is deleted when it is empty.
+2. **Kept, not retired, because retiring it now turns the lab's cross-repo leg red.** Retiring it needs the reads cut first (phase 3), and a red test is not landed to make a point. The ledger is also the one machine-read list of what is left to cut.
+3. **A reach a ledger names is still refused by rule 2.** A `checkout-path` entry is a path into another repository's tree, which rule 2 forbids in a test. The entry records a debt, not a permission.
+4. **Measured, and not enforced.** Lab `origin/main` at `5e8aabd7`, read on 2026-10-13: the file held 540 entries (`grep -c '"from"'`), and 592 at the first lab commit of 2026-10-09 that touches it. Over that window 11 commits lowered the count by 95 in total and 15 raised it by 43 in total (`git log origin/main -- baselines/layer-edges.baseline.json`, each commit's count read with `git show`). Each raising commit needs its own ruling under rule 5, or its entries come out; `ceo` decides which. Nothing in the lab's test stops a raise, because the test accepts any entry that names a real edge. A reading at a moment: re-run it before quoting it.
+
 ## Consequences
 
 1. **Every producer's export surface becomes a contract.** What a consumer reads out of another repository's tree today (the fleet's `src/`
