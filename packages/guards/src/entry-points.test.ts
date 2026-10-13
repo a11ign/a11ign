@@ -239,6 +239,33 @@ test("the symlink-blind population may shrink and may not grow", () => {
     `these baseline entries no longer carry the plain form; remove them from KNOWN_PLAIN_ENTRY_GUARDS:\n  ${stale.join("\n  ")}`);
 });
 
+test("the two populations are counted SEPARATELY and must not overlap or lose a file", () => {
+  // WITHOUT THIS, A PATTERN THAT STOPS MATCHING READS AS "THE DEFECT IS GONE". Both derivations run over the same
+  // tracked sources but ask opposite questions, so a broken regex empties one population and not the other.
+  const sources = trackedSources().map((path) => [path, executableSource(path)] as const);
+  const plain = sources.filter(([, source]) => guardIsPlain(source)).map(([path]) => path).sort();
+  const realpathd = sources.filter(([, source]) => guardIsRealpathd(source)).map(([path]) => path).sort();
+
+  // POSITIVE CONTROLS: a known file in each population must be found, or the emptiness checks below prove nothing.
+  assert.ok(plain.includes("scripts/ci-changed.ts"),
+    "control: a known plain-form guard must be in the plain population, or the derivation is what broke");
+  assert.ok(realpathd.includes("scripts/changeset-untracked-check.ts"),
+    "control: a known realpath'd guard must be in the realpath'd population, or that pattern matches nothing");
+
+  assert.ok(plain.length > 0, "control: the plain population must be non-empty, or the overlap check below proves nothing");
+  const both = plain.filter((p) => realpathd.includes(p));
+  assert.deepEqual(both, [],
+    `a file cannot be counted in both populations; one carrying BOTH forms is FIXED, once, because the `
+    + `realpath'd guard is the one that decides: ${both.join(", ")}`);
+
+  // Every file that compares against process.argv[1] must land in exactly one population. A gap means one of
+  // the two patterns has narrowed and some file is in neither.
+  const declared = sources.filter(([, source]) => /import\.meta\.url === pathToFileURL\(\s*process\.argv\[1\]/.test(source));
+  assert.equal(plain.length + realpathd.length, declared.length,
+    `${plain.length} plain + ${realpathd.length} realpath'd should be every one of the ${declared.length} `
+    + "files whose guard compares against process.argv[1]");
+});
+
 test("every declared entry guard uses the exact comparison", () => {
   const declared = declaresAnEntryGuard();
   assert.ok(declared.length >= FORM_FLOOR,
