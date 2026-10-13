@@ -143,11 +143,12 @@ function faultOf(pin: Pin, v0Release: string): string[] {
  * true of the release they name, and a rewrite would falsify them, so the guard fails on them and the writer names them (#5468).
  */
 const RESTATEMENTS: Array<{ movable: boolean; re: RegExp }> = [
-  { movable: true, re: /(?<=commit of release )\d+\.\d+\.\d+(?!\d)(?=, so your CI)/g },
-  { movable: true, re: /(?<=`a11ign@)\d+\.\d+\.\d+(?!\d)(?=` is the tag the pin above names)/g },
-  { movable: true, re: /(?<=pins release `)\d+\.\d+\.\d+(?!\d)(?=`)/g },
-  { movable: false, re: /(?<=commit of release (?:a11ign@)?)\d+\.\d+\.\d+(?!\d)(?!, so your CI)/g },
-  { movable: false, re: /(?<=`)\d+\.\d+\.\d+(?!\d)(?=` does\b)/g },
+  { movable: true, re: /(?<=commit\s+of\s+release\s+)\d+\.\d+\.\d+(?!\d)(?=,\s+so your CI)/g },
+  { movable: true, re: /(?<=`a11ign@)\d+\.\d+\.\d+(?!\d)(?=`\s+is\s+the\s+tag\s+the\s+pin\s+above\s+names)/g },
+  { movable: true, re: /(?<=pins\s+release\s+`)\d+\.\d+\.\d+(?!\d)(?=`)/g },
+  { movable: false, re: /(?<=commit\s+of\s+release\s+(?:a11ign@)?)\d+\.\d+\.\d+(?!\d)(?!,\s+so your CI)/g },
+  { movable: false, re: /(?<=`)\d+\.\d+\.\d+(?!\d)(?=`\s+does\b)/g },
+  { movable: false, re: /(?<=`latest`\s+(?:read\s+)?`?)\d+\.\d+\.\d+(?!\d)/g },
 ];
 
 interface Restatement {
@@ -157,10 +158,18 @@ interface Restatement {
   movable: boolean;
 }
 
+/** A comment or quote marker at the start of a line, dropped so a sentence wrapped across one still reads as one sentence. */
+const LINE_MARKER = /^\s*(?:#|>)\s?/;
+
+/**
+ * Every restatement in `text`, read over the whole doc with the line markers dropped: a sentence wrapped across a comment line is one
+ * sentence (`read \`latest\`` on one line, `\`0.10.3\` on 2026-10-13` on the next), and a per-line match would miss it (#5474's verdict).
+ */
 function restatementsIn(text: string): Restatement[] {
-  return text.split("\n").flatMap((line, index) =>
-    RESTATEMENTS.flatMap(({ movable, re }) => [...line.matchAll(re)].map((match) => ({ line: index + 1, version: match[0], movable }))),
-  );
+  const flat = text.split("\n").map((line) => line.replace(LINE_MARKER, "")).join("\n");
+  return RESTATEMENTS.flatMap(({ movable, re }) =>
+    [...flat.matchAll(re)].map((match) => ({ line: flat.slice(0, match.index ?? 0).split("\n").length, version: match[0], movable })),
+  ).sort((a, b) => a.line - b.line);
 }
 
 /**
@@ -242,9 +251,10 @@ function moveRestatements(text: string, from: string, to: string): string {
  */
 function unmovedIn(doc: Doc, text: string, tags: ReleaseTag[], promoted: Promoted): string[] {
   if (pinsIn({ path: doc.path, text }, tags).length === 0) return [];
-  return restatementsIn(text)
+  const named = restatementsIn(text)
     .filter((restatement) => restatement.version !== promoted.version)
     .map((restatement) => `${doc.path}:${restatement.line}`);
+  return [...new Set(named)];
 }
 
 function repinDoc(doc: Doc, tags: ReleaseTag[], promoted: Promoted): { doc: Doc; changed: boolean; faults: string[]; unmoved: string[] } {
