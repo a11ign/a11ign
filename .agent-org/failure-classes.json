@@ -386,6 +386,20 @@
       "guard": "`scripts/claude-hooks/refuse-unreadable-command.ts`, a PreToolUse hook on Bash wired in `.claude/settings.json` (so every role that runs in this repository has it, the ceo's included), refuses the two shapes the six denied commands share and prints the rewrite; `scripts/claude-hooks/refuse-unreadable-command.test.ts` runs the six verbatim commands in `scripts/fixtures/safety-check-denied-commands.json` through it and goes red when the guard is removed or always fires. The ledger naming of the shapes is a11ign/agent-org#1275.",
       "guardNote": "Five of six denied commands contain NO removal: each is a nested `bash -c` whose string carries a `$` expansion; the sixth is `rm -rf \"$S/$m\"`. The two shapes are inferred from those six, not the check's own rule. The hook only reaches a session whose working directory is this repository or one of its worktrees; a session elsewhere (a11ign/agent-org, control, lab) keeps the engineer brief's rule and nothing else. The detector `safetyCheckDenialEvents` in agent-org `src/safety-check-denial-incident.ts` names a shape only for `rm` (every other command is `other`): adding these shapes is a change in agent-org, filed as a11ign/agent-org#1275. It counts only denials left in a transcript, so a command the chairman approved leaves nothing to count.",
       "seed": []
+    },
+    {
+      "id": "shared-failure-held-then-released",
+      "name": "The gate holds a red pull request for a shared-failure incident and then releases it, so one failure still wakes a worker for each pull request that shares it.",
+      "guard": "The gate holds the red orders of a shared failure behind one incident (`ci-shared-failure`, `src/ci-failure-class.ts` in agent-org, agent-org#997 split from #5098) and writes each hold and each release as a `ci-shared-failure:` line in its log. `sharedFailureWakes` in agent-org `src/org-retro.ts` reads those lines (`SHARED_FAILURE_HELD_KIND`): a pull request is counted once per window however many holds it had, and a release with no hold before it inside the window is not counted.",
+      "guardNote": "The count is a reading of the hold, not a stop: nothing here keeps a released pull request from waking its worker. A release is the gate's own rule (its incident closed, expired or was unrecorded). Whether a release was the same failure is read from incidents closed as not the same failure (`shared-failure-not-same`, `SHARED_FAILURE_NOT_SAME_KIND`), the retro's second count; its detector in `src/org-retro.ts` is filed as its own row, so that second count is not yet a reading of this class.",
+      "seed": []
+    },
+    {
+      "id": "stop-hook-bound",
+      "name": "A claimed worker's turn is ended on the stop hook's bound: the hook refused twice for one row with no pull request and no declared state, and the stop was then allowed.",
+      "guard": "The `Stop` hook `worker:stop-hook` (`src/worker-stop-hook.ts` in agent-org, agent-org#853, a11ign#4957 cause 4), which every claimed worker is started with (`src/worker-settings.json`), refuses a turn's end while its row has no open or merged pull request and no fresh `worker:state` declaration, and names `agent-org pr:open` and `agent-org worker:state blocked <row> <reason>`. At most `MAX_REFUSALS` (2) refusals in a row for one row, then the stop is allowed and one `stop-hook-bound` line is written to the failure ledger.",
+      "guardNote": "The bound is the hook's own give-up, so a line here reads that the refusal could not make the worker close its loose end; it is not a second guard. The hook fails OPEN when the declarations, the board or its count file cannot be read: it allows the stop and says why on stderr. Known limit in the source: the pull request is looked for in the row's own repository, so a row whose work lands in another repository is refused up to the bound and then allowed.",
+      "seed": []
     }
   ]
 }
