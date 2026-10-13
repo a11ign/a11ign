@@ -1,4 +1,4 @@
-// no-token: Target -- every test passes injected runs, failed runs, comment lists, page readers and targets; the one file it reads is the committed docs/ci-targets.json. The `gh` and `ghGet` callers in ci-health.ts (the default page reader and `main`) are never reached, the import only defines them. Nothing reaches GitHub.
+// no-token: Target -- every test passes injected runs, failed runs, comment lists, page readers and targets; the one file it reads is the committed docs/ci-targets.json. The `gh` and `ghGet` callers are never reached: the default page readers (ci-health.ts's and token-cost.ts's `readComments` default) and `main` are only defined, not run, by these imports. Nothing reaches GitHub.
 /**
  * `scripts/ci-health.ts` reads CI health per repository against `docs/ci-targets.json`. Its definitions are pure functions over a run list, so
  * this pins them without a network or a clock (every date is passed in).
@@ -340,28 +340,28 @@ test("parseInclude: a body that is not JSON throws rather than guessing", () => 
   assert.throws(() => ci.parseInclude("HTTP/2 200\nx-a: b\n\nnot json"), SyntaxError);
 });
 
-test("readCommentBodies: the already-posted read follows every page, so a heading on page 2 is found (#5441)", () => {
-  const heading = ci.commentHeading({ date: "2026-10-05" });
-  const filler = (n: number) => Array.from({ length: n }, (_, i) => ({ body: `unrelated ${i}` }));
-  const pages = [filler(FULL_PAGE), [{ body: `${heading}\n\nbody` }, ...filler(FULL_PAGE - 1)], []];
+test("alreadyPostedOn: the week's heading on page 2 is found, and the read follows the week's Monday (#5441)", () => {
+  const date = "2026-10-05";
+  const heading = ci.commentHeading({ date });
+  const filler = (n: number) => Array.from({ length: n }, (_, i) => ({ id: i, body: `unrelated ${i}` }));
+  const pages = [filler(FULL_PAGE), [{ id: 900, body: `${heading}\n\nbody` }, ...filler(FULL_PAGE - 1)], []];
   const paths: string[] = [];
   const readPage = (path: string) => {
     paths.push(path);
     return pages[Number(new URLSearchParams(path.split("?")[1]).get("page")) - 1] ?? [];
   };
-  const bodies = ci.readCommentBodies({ repository: "a11ign/a11ign", issue: 928 }, "2026-10-12T00:00:00Z", readPage);
-  assert.equal(ci.alreadyPosted(bodies, heading), true);
+  assert.equal(ci.alreadyPostedOn({ repository: "a11ign/a11ign", issue: 928 }, date, readPage), true);
   assert.equal(ci.alreadyPosted(pages[0].map((c) => c.body), heading), false); // the first page alone is the old, wrong read
   assert.deepEqual(paths.map((p) => new URLSearchParams(p.split("?")[1]).get("page")), ["1", "2", "3"]);
-  assert.ok(paths.every((p) => p.endsWith("&since=2026-10-12T00:00:00Z")));
+  assert.ok(paths.every((p) => p.endsWith("&since=2026-10-05T00:00:00.000Z")));
 });
 
-test("readCommentBodies: a first page that is short ends the read, with no second request", () => {
+test("alreadyPostedOn: a short first page ends the read, with no second request, and a week with no heading is not posted", () => {
   const paths: string[] = [];
-  const bodies = ci.readCommentBodies({ repository: "a11ign/a11ign", issue: 928 }, "2026-10-12T00:00:00Z", (path) => {
+  const posted = ci.alreadyPostedOn({ repository: "a11ign/a11ign", issue: 928 }, "2026-10-05", (path) => {
     paths.push(path);
-    return [{ body: "only" }];
+    return [{ id: 1, body: "only" }];
   });
-  assert.deepEqual(bodies, ["only"]);
+  assert.equal(posted, false);
   assert.equal(paths.length, 1);
 });

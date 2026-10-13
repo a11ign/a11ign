@@ -23,6 +23,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { refuseUnknownFlags } from "@a11ign/screenreader-fleet/cli-flags";
+import { readComments } from "./token-cost.ts";
 import { toolExport } from "./agent-org-newest-tag.ts";
 const { assertNoLeakInArgv, leakRefusalReason } = await toolExport("leak-patterns");
 
@@ -400,14 +401,9 @@ function windowFromArgv(): { since: string; until: string; } {
   return { since: since ? `${since}T00:00:00Z` : week.since, until: flagValue("--until") ?? week.until };
 }
 
-/** Every comment on the report issue since `since`, page by page: the endpoint returns PER_PAGE at a time, and this week's heading past the first page is not on it (#5441, the sibling of #5432). @param {{ repository: string, issue: number }} on @param {string} since @param {(path: string) => { body: string }[]} readPage */
-export function readCommentBodies(on: { repository: string; issue: number; }, since: string, readPage: (path: string) => { body: string }[] = (path) => ghGet<{ body: string }[]>(path)): string[] {
-  const bodies: string[] = [];
-  for (let page = 1; ; page += 1) {
-    const comments = readPage(`repos/${on.repository}/issues/${on.issue}/comments?per_page=${PER_PAGE}&page=${page}&since=${since}`);
-    bodies.push(...comments.map((c) => c.body));
-    if (comments.length < PER_PAGE) return bodies;
-  }
+/** Already posted when this week's heading is on #928, read through every page of its comments (`readComments`, #5441 and #5432). @param {{ repository: string, issue: number }} on @param {string} date @param {(path: string) => { id: number, body: string }[]} [readPage] */
+export function alreadyPostedOn(on: { repository: string; issue: number; }, date: string, readPage?: (path: string) => { id: number, body: string }[]) {
+  return alreadyPosted(readComments(on, date, readPage).map((c) => c.body), commentHeading({ date }));
 }
 
 function main() {
@@ -420,7 +416,7 @@ function main() {
   process.stdout.write(`${comment}\n`);
   if (!process.argv.includes("--post")) return;
   const { repository, issue } = targets.reportOn;
-  if (alreadyPosted(readCommentBodies(targets.reportOn, window.until), commentHeading({ date }))) {
+  if (alreadyPostedOn(targets.reportOn, date)) {
     process.stdout.write(`ci-health: "${commentHeading({ date })}" is already on #${issue}; posting nothing.\n`);
     return;
   }
