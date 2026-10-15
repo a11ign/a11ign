@@ -80,10 +80,10 @@ jobs:
           EDIT_TOKEN: ${{ steps.octo-sts.outputs.token }}
         run: |
           set -euo pipefail
-          title_pattern='^deps: bump ([@A-Za-z0-9._/-]+) from (([0-9]+)\.([0-9]+)[0-9A-Za-z.+-]*) to (([0-9]+)\.([0-9]+)[0-9A-Za-z.+-]*)( in /[A-Za-z0-9._/-]*)?$'
+          title_pattern='^deps: [Bb]ump ([@A-Za-z0-9._/-]+) from (([0-9]+)\.([0-9]+)[0-9A-Za-z.+-]*) to (([0-9]+)\.([0-9]+)[0-9A-Za-z.+-]*)( in /[A-Za-z0-9._/-]*)?$'
           allowed_files='^(package\.json|packages/[^/]+/package\.json|pnpm-lock\.yaml)$'
           if [[ ! "$PR_TITLE" =~ $title_pattern ]]; then
-            echo "::notice::not auto-declared: the title is not 'deps: bump <package> from <x.y.z> to <x.y.z>', so it waits like any other pull request"
+            echo "::notice::not auto-declared: the title is not 'deps: [Bb]ump <package> from <x.y.z> to <x.y.z>', so it waits like any other pull request"
             exit 0
           fi
           name="${BASH_REMATCH[1]}"; old="${BASH_REMATCH[2]}"; new="${BASH_REMATCH[5]}"
