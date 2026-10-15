@@ -4,6 +4,7 @@
 # `a11ign/lab`'s scripts/corpus-release-nightly.ts (run here by its absolute path from the lab's checkout, ADR 0045 cut 9) for what this does and does not decide -- it fetches the
 # newest snapshot and hands it to `corpus:release`, which is already idempotent and self-verifying; this
 # unit adds no judgment of its own, the same reason it needs no wake the way #1830's nightly batch does.
+# The control layer's playbook is found through A11Y_CONTROL_DIR below (#5501), not the working directory.
 Description=a11ign: fetch the lab's newest corpus snapshot and release it
 After=herdr.service
 Wants=herdr.service
