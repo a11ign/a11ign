@@ -1,3 +1,4 @@
+// no-token: none -- the step tests run the workflow's shell behind a fake `gh` and `node` put first on PATH, with a made-up token; nothing reaches GitHub.
 /**
  * `scripts/dependency-changeset.ts` derives what a dependency pull request owes the changelog FROM ITS MANIFESTS' DIFF (#3159). Four
  * things have to hold or a consumer-visible change ships with no entry, or a human-visible one is waved through:
