@@ -207,6 +207,35 @@ describe("runLoop: the landing screen, the app's own signed-out page", () => {
     assert.equal(r.acted[0].kind === "submit" && r.acted[0].target.name, "Sign in");
     assert.deepEqual(result.branches.map((b) => b.screen), ["landing", "identifier"]);
   });
+
+  test("NEGATIVE CONTROL: a landing that returns after the login's forms is the callback in flight, and is not pressed again (a11ign#5534)", async () => {
+    // The trail of run 38750473983: landing, identifier-and-password, one-time-code, then the SPA's callback page reads
+    // `Sign in required` with its button until the token exchange settles, and the loop pressed it a second time.
+    const r = rig();
+    const result = await r.run([LANDING, COMBINED, OTP, LANDING, LANDING, SIGNED_IN]);
+    assert.equal(result.outcome, "signed-in");
+    assert.deepEqual(result.branches.map((b) => b.screen), ["landing", "identifier-and-password", "one-time-code"]);
+    assert.equal(r.acted.filter((a) => a.kind === "submit").length, 1, "the app's Sign in is pressed once");
+  });
+
+  test("NEGATIVE CONTROL: a callback that never settles ends signed-in-check-never-matched, with Sign in pressed once", async () => {
+    const r = rig();
+    const result = await r.run([LANDING, COMBINED, OTP, LANDING], { budgetMillis: 5_000 });
+    assert.equal(result.outcome, "signed-in-check-never-matched");
+    assert.equal(r.acted.filter((a) => a.kind === "submit").length, 1);
+  });
+});
+
+describe("runLoop: a provider's button on the landing page (a11ign#5534)", () => {
+  test("NEGATIVE CONTROL: a provider's button is never a landing, and beside the app's own Sign in it is never the one pressed (a11ign#5534)", async () => {
+    const providerOnly = screen(["Sign in required"], [{ role: "button", name: "Sign in with Google" }]);
+    assert.notEqual(classifyScreen(providerOnly), "landing", "a provider-named control alone is not the app's sign-in");
+    const beside = screen(["Sign in required"], [{ role: "button", name: "Continue with Google" }, { role: "button", name: "Sign in" }]);
+    assert.equal(classifyScreen(beside), "landing");
+    const r = rig();
+    await r.run([beside, SIGNED_IN]);
+    assert.equal(r.acted[0].kind === "submit" && r.acted[0].target.name, "Sign in");
+  });
 });
 
 describe("runLoop: the screens it must not act on, and the ends it must not retry", () => {

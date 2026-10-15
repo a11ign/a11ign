@@ -386,8 +386,18 @@ async function step(o: ScreenObservation, options: LoopOptions, state: LoopState
   state.unmatchedStreak = 0;
   state.unmatchedKey = "";
   if (screen === state.lastActed) return undefined;
+  if (screen === "landing" && landingAlreadyPressed(state)) return undefined;
   return actOn(screen, o, options, state);
 }
+
+/**
+ * The app's own `Sign in` is pressed once per loop. A landing that comes back AFTER the provider's forms is not the start of
+ * a login: it is the app's callback page while its SDK is still exchanging the code, which reads `Sign in required` with the
+ * button visible until the exchange settles (`fixtures/auth0-spa/app.js`; the 2026-10-15 trail on a11ign#5534 ends
+ * `landing/submit, identifier-and-password/type, one-time-code/type, landing/submit`). Pressing it there starts a second login
+ * on top of the first and races the exchange, so the loop waits and lets the signed-in check or the budget answer.
+ */
+const landingAlreadyPressed = (state: LoopState): boolean => state.branches.some((branch) => branch.screen === "landing");
 
 /** The budget ran out: a page nobody could pick is `unknown-screen`; anything else never reached the check. */
 function budgetEnd(state: LoopState): LoopResult {
