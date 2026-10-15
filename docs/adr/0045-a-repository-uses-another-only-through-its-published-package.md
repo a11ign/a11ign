@@ -51,8 +51,10 @@ contract below says which of those stay.
 
 **A repository uses another only through its published package, at a version it declares.** Concretely:
 
-1. **Declare it.** The other repository's code arrives by an `@a11ign/*` entry in `package.json` and the lockfile, at a version the
-   consumer chose. A caret that follows a new release is a declaration; a branch, a tag cloned in CI, or "newest" is not.
+1. **Declare it.** The other repository's code arrives by a dependency declared in `package.json` and the lockfile, at a version the
+   consumer chose: an `@a11ign/*` registry entry, or a pnpm git dependency pinned to a tag or commit (`github:<owner>/<repo>#<tag>`,
+   [Amendment 2026-10-15](#amendment-2026-10-15-agent-org-is-not-published-under-a11ign-and-a11ign-stops-needing-it)). A caret that
+   follows a new release is a declaration; a branch, a tag cloned in CI, or "newest" is not.
 2. **Never read its source.** No `git clone`, `git archive`, submodule, laid copy, or relative or absolute path into another repository's
    tree, at install, in CI, or in a test. If the package does not export what a consumer needs, the **producer** exports it (a pull request
    there, then a release), and the consumer bumps.
@@ -154,6 +156,10 @@ Where that meets ADR 0039 item 6's host-side second checkout, this section overt
 
 ## How the core gets agent-org
 
+**Amended 2026-10-15: items 1 to 4 below are SUPERSEDED, and kept as the record of what was proposed.** agent-org is not published under
+`@a11ign`, and the end state is that a11ign does not need it at all: see
+[the amendment](#amendment-2026-10-15-agent-org-is-not-published-under-a11ign-and-a11ign-stops-needing-it) after item 5.
+
 **Proposed on a11ign#5248 (2026-10-13); `ceo` rules on it in review, as the sections above.** It answers how the core gets agent-org at a
 declared version (epic #4425, done-when 4). Measured at a11ign `5883e11ed` and agent-org `v0.195.2` (`b7f44578`, the newest stable tag on `git ls-remote --tags`); re-run before quoting.
 The host's own checkout (`.agent-org/host.json`, `tool`, moved to the newest tag by `update-tool`) is not a repository's dependency and is
@@ -186,6 +192,30 @@ not in these cuts: it stays until `ceo` rules on it.
    **223 files** on the same filter, most in `src/messaging` (40), `src/trace` (22), `src/decision-run` (11) and `src/work-gate` (10). The names
    move into the project's own configuration (ADR 0040 decision 3; this repository's is `.agent-org/project.json`), and each directory is one
    cut in agent-org, after (a). (The 893 files that match the wide pattern with tests and docs included are not counted here.)
+
+### Amendment 2026-10-15: agent-org is not published under `@a11ign`, and a11ign stops needing it
+
+**The chairman's direction (a11ign#928, comment 6195402434, 2026-10-15), which overtakes items 1 to 4 above.** His words: "it's a pnpm package
+so it can reference the repo and doesn't need to be published ... this org agent will live in a different org in the future and be published
+there and not this one."
+
+1. **No registry publish from this organisation.** Cut (a) is withdrawn: agent-org#1377 and its pull request agent-org#1440 are closed
+   unmerged, and a11ign#5517 (the brief for the npm registration) is closed. `@a11ign/agent-org` was never registered.
+2. **"A declared version" includes a pnpm git dependency pinned to a tag or commit** (`github:<owner>/<repo>#<tag>`), and no registry is
+   needed. Rule 1 stands as written otherwise: a branch, "newest", or a tag cloned at CI time is still not a declaration.
+3. **Nothing hard-codes `@a11ign`, or any owner, as agent-org's scope or location**, because it moves to another organisation. Wherever a
+   consumer must name it (a dependency specifier, a clone URL), that is one declared value that changes in one place on the day it moves.
+4. **The end state is stronger than a declaration: a11ign's CI runs product checks only and does not need agent-org to build, test or
+   release.** Rule 2 is met by not using the tool, not by pinning it. The 38 clone steps and `scripts/agent-org-newest-tag.ts` go, and the org
+   reaches a11ign from outside: the host gate reacting to a11ign's webhooks with its Apps, and agent-org's own scheduled workflows acting on
+   a11ign through an App token. Cuts (b) to (e) (a11ign#5459 to #5462) are re-scoped to that, in the same order:
+   (b) the product scripts that load the tool by accident stop doing so (`repo-identity.ts` first); (c) the org's per-pull-request checks
+   (`ownedPaths`, `deliberateRefusals`, `acceptance`, `guardSweep`) leave `gate`; (d) the clone steps go, and the org-process workflows
+   (`auto-arm`, board, trunk, nightly's org jobs) are deleted once their receiving side has run; (e) the script, its reach guard and the
+   tests of the tool go. **Nothing is declared in a11ign: no `package.json` entry, no lockfile line.** The inventory and the plan are on
+   a11ign#928, under the heading "ceo: inventory and plan".
+5. **Consequences 3 and 7 stand in direction:** a11ign's CI stops fetching agent-org, and "nothing to pin and nothing to clone" is the
+   end state, now reached without a registry in between.
 
 ## Consequences
 
