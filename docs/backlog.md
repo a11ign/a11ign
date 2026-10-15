@@ -1380,6 +1380,10 @@ specific, narrower slice.
 
 **What follows.** Outcome 2 is #2568 (`ready`, waiting on #3778). Outcome 1 has no row: no open work finds the outsiders, and filing one would invent the need.
 
+## The conditional trace-map reads, one week after #4097 (read 2026-10-15, #4120)
+
+Measured from the trace store: `api -H` (the conditional read) is 65,226 of the 111,551 trace-map gh calls from the #4097 merge (2026-10-08T14:21Z) to 2026-10-15 11:14Z, the store's last record, 58.5%, against none before; the per-day table is on [#4055](https://github.com/a11ign/a11ign/issues/4055#issuecomment-6191027877), and the rename `trace.mjs` to `trace.ts` on 2026-10-09 is why both names are counted.
+
 ## How an item leaves this page
 
 **CORRECTED 2026-09-06 — the rule below said "delete" while 51 closed rows sat here, struck through and
