@@ -2,3 +2,4 @@ Sets `guard` on the `tool-drift-interactive-prompt` failure class (#5476) and cl
 
 Acceptance:
 node -e "const c=JSON.parse(require('node:fs').readFileSync('.agent-org/failure-classes.json','utf8')).classes.find((c)=>c.id==='tool-drift-interactive-prompt'); const h=require('node:crypto').createHash('sha1').update(String(c.guard)).digest('hex'); process.exit(c.guard!==null&&h!=='df4857741e85f4b5bc3bb895bf770f93764c2070'?0:1)"
+node -e "const c=JSON.parse(require('node:fs').readFileSync('.agent-org/failure-classes.json','utf8')).classes.find((c)=>c.id==='tool-drift-interactive-prompt'); process.exit(c.guard!==null&&c.guardNote===null&&String(c.guard).includes('agent-org#1481')?0:1)"
