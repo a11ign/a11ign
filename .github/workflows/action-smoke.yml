@@ -170,12 +170,34 @@ jobs:
       # from the fleet. Nothing in `action.yml` changes: the file is already written, and a stamp in each name keeps the
       # three runs apart, which the single-name result above cannot.
       #
+      # ASSERTED BEFORE IT IS UPLOADED, because an upload nobody checks is the defect this step exists to close: a record
+      # that stops being written, or is written without its marks, would leave every check here green and the per-phase
+      # reading silently gone. One record per `uses: ./` above (three), each with the marks the split reads (`afterStart`
+      # and `done`) and a last `atMs` above zero. `success()` so a red run reports its own failure, not this one's.
+      - name: The capture record must hold the diagnostics a per-phase split reads
+        if: success()
+        shell: bash
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const files = fs.readdirSync("runs/witness").filter((f) => f.endsWith(".json"));
+            if (files.length !== 3) { console.error("::error::expected 3 capture records (one per run), found " + files.length + ": " + files.join(", ")); process.exit(1); }
+            for (const f of files) {
+              const d = JSON.parse(fs.readFileSync("runs/witness/" + f, "utf8")).capture?.diagnostics;
+              const events = new Set((d ?? []).map((e) => e.event));
+              const last = d?.at(-1)?.atMs;
+              if (!(last > 0) || !events.has("afterStart") || !events.has("done")) { console.error("::error::" + f + " holds no per-phase diagnostics (marks: " + events.size + ", last atMs: " + last + ")"); process.exit(1); }
+              console.log(f + ": " + d.length + " marks, last atMs " + last);
+            }
+          '
+
       # `always()`, so a red run keeps its records as well: the cost of a capture that failed is still a reading.
-      # `warn` rather than `ignore`, for the reason the step above gives: finding none is itself a finding.
+      # `error` rather than `warn`: a missing record is the thing this row exists to prevent, and a green job is now
+      # the claim that the artifact exists (on a red run that stopped before any capture, this adds a second red, which is true).
       - name: Keep the capture record, green or red
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: action-smoke-capture
           path: runs/witness/*.json
-          if-no-files-found: warn
+          if-no-files-found: error
