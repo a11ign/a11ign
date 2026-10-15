@@ -34,3 +34,5 @@ Changed lines in all: README.md 178, 179, 198; docs/github-action.md 21, 49, 356
 These are the three `unmoved` lines. They are dated or behavioural prose, which `#5468` keeps non-movable. The writer (`docs-pin-write.yml`) never reads `unmoved` and never runs the guard on its output, so nothing in the re-pin pass catches this. That is why the real-tree test asserts the writer's shape check, not `pinFaults` over the output. Closing it needs a decision on the dated prose (move it, or teach the guard to accept it), which is not this row's change.
 
 Acceptance: bash -c 'pnpm exec rstest run --config scripts/rstest/rstest.config.ts packages/guards/src/docs-release-pin-currency.test.ts'
+
+Mutation: each restored from a copy and `diff`ed byte-identical, never `git checkout --`, against `docs-release-pin-currency.test.ts` (31 tests): (A) the origin/main planner swapped in -> 2 fail, and the failure names `docs/github-action.md:49`; (B) the new `RESTATEMENTS` entry set to `movable: false` -> 2 fail (the fixture case and the real-tree case); (C) the test helper `refusalOf` made to accept every line -> 1 fails, the refusal test.
