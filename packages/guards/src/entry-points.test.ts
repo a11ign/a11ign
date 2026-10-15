@@ -7,6 +7,10 @@
  *
  * A DISCOVERY test, not a list. The population comes from `package.json`, the workflows, `action.yml` and the
  * git hooks, so a new entry point is covered the day it is added rather than the day somebody remembers.
+ *
+ * Not a tree-wide guard, so it is not on the guard sweep: the `ts` job runs every `*.test.ts` on any change to
+ * TypeScript, which is the only run it needs, since it reads no docs. Not an ESLint rule either: it reads entry
+ * points across packages, which a per-file lint cannot see.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -14,9 +18,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { basename, dirname, join } from "node:path";
 import { stripComments } from "@a11ign/toolchain/lib/source-text";
-import { declareTreeWideGuard, walkTree } from "@a11ign/toolchain/lib/tree-wide-guard";
-
-declareTreeWideGuard();
+import { walkTree } from "@a11ign/toolchain/lib/tree-wide-guard";
 
 const REPO = fileURLToPath(new URL("../../../", import.meta.url));
 

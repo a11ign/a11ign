@@ -13,6 +13,11 @@
  * None of it had a runtime effect — `conformanceScope` computes from the list it is handed, and its test
  * uses an 8-criterion FIXTURE, which is why "Assessed 8 of 55" is correct there and stale everywhere else.
  * A reader has no way to tell those apart, which is the harm.
+ *
+ * Not a tree-wide guard, so it is not on the guard sweep: the `ts` job runs every `*.test.ts` on any change to
+ * TypeScript, and this file reads no docs, which is the only thing the sweep would add. Not an ESLint rule as it
+ * stands: its first test walks two package roots against a floor, and its second asserts on the computed counts,
+ * so a per-file lint would be a new custom rule rather than a rule this repo already has.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -20,12 +25,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { assessedCriteria, SCORED_CRITERIA } from "./coverage.js";
-import { declareTreeWideGuard, walkTree } from "@a11ign/toolchain/lib/tree-wide-guard";
-
-// #716/#704: this file's own population is the whole tracked tree, not one file -- declared here
-// rather than inferred from its source, per ceo's ruling (2026-09-09) that the tree-wide-guard
-// population must be derived from a real import, never from scanning source text.
-declareTreeWideGuard();
+import { walkTree } from "@a11ign/toolchain/lib/tree-wide-guard";
 
 const ROOT = resolve(import.meta.dirname, "../../..");
 
