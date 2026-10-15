@@ -15,21 +15,42 @@
 // the next rename would split them again.
 //
 // NOT a claim about where the repository lives after any future transfer — it is what the name IS today.
-// `agent-org/src/board-data.mjs` and `agent-org/src/row-claim.mjs` import `REPO` from here rather than declaring their
-// own copy; every other reference is a literal (a `package.json` field, a workflow string, prose) that
-// cannot import anything, and `repo-identity-consolidated.test.ts` pins each one against these constants
-// instead.
+// Every reference that cannot import anything (a `package.json` field, a workflow string, prose) is a literal, and
+// `repo-identity-consolidated.test.ts` pins each one against these constants instead.
 //
-// #2616 (child 3a of #69): `REPO` IS NOW READ FROM `.agent-org/project.json` through `agent-org`'s one reader, and the reader
-// REFUSES a missing or malformed declaration rather than answering `a11ign/a11ign` (a fallback here would make the tool's
-// "project-agnostic" claim decorative). Nothing that imports this file changed: the value is a11ign's own, and every
-// importer still sees a string. The declaration's `code[0]` is the repository `gh`/git resolve.
-import { toolExport } from "./agent-org-newest-tag.ts";
+// ADR 0045 cut (b) (#5459): `REPO` LOADS NOTHING FROM THE ORG TOOL. It was read from `.agent-org/project.json` through the tool's
+// project reader (#2616), which made every product script that imports this file need a tool checkout on disk, and a runner
+// has none until a job clones one. It is now what `gh` itself resolves: `$GITHUB_REPOSITORY` in CI, else the `origin` remote of
+// this checkout. It REFUSES when neither names a repository rather than answering a literal, for the reason #2616 gave: a fallback
+// here would answer for a checkout that is not this project's.
+import { execFileSync } from "node:child_process";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { sandboxGitEnv } from "../packages/guards/src/git-env.ts";
 
-const { homeProjectDeclaration } = await toolExport("project-config");
+const CHECKOUT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const OWNER_SLASH_NAME = /^[\w.-]+\/[\w.-]+$/;
+const GITHUB_REMOTE = /github\.com[:/]([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/;
 
-const PROJECT = homeProjectDeclaration();
-export const REPO = PROJECT.repo;
+function originRemote(): string {
+  try {
+    return execFileSync("git", ["remote", "get-url", "origin"], { cwd: CHECKOUT, env: sandboxGitEnv(), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+  } catch (cause) {
+    throw new Error("repo-identity: $GITHUB_REPOSITORY is unset and this checkout has no `origin` remote to read, so there is no repository to name", { cause });
+  }
+}
+
+/** @returns {string} `owner/name`, from `$GITHUB_REPOSITORY` else the `origin` remote; throws when neither names one. */
+function resolveRepo(): string {
+  const fromRunner = process.env.GITHUB_REPOSITORY?.trim();
+  if (fromRunner && OWNER_SLASH_NAME.test(fromRunner)) return fromRunner;
+  const remote = originRemote();
+  const named = GITHUB_REMOTE.exec(remote)?.[1];
+  if (!named) throw new Error(`repo-identity: $GITHUB_REPOSITORY is unset and the \`origin\` remote (${JSON.stringify(remote)}) is not a github.com repository`);
+  return named;
+}
+
+export const REPO = resolveRepo();
 export const REPO_URL = `https://github.com/${REPO}`;
 export const REPO_GIT_URL = `${REPO_URL}.git`;
 
@@ -64,15 +85,9 @@ export const REPO_GIT_URL = `${REPO_URL}.git`;
 // from), PRODUCT_REPO is correct. See `repo-identity-consolidated.test.ts`'s own header for the full
 // reasoning and worked examples.
 //
-// PRODUCT_REPO STAYS A LITERAL (#2616), deliberately: it is the product's NAME, which the declaration does not carry --
-// the declaration says where the TOOL resolves. Computing both from one field would merge the two meanings this comment
-// exists to keep apart, and the day the project's repository moves they would be the constants that must differ.
+// PRODUCT_REPO STAYS A LITERAL, deliberately: it is the product's NAME, which no remote or runner variable carries -- they say
+// where `gh` resolves. Computing both from one value would merge the two meanings this comment exists to keep apart, and the
+// day the project's repository moves they would be the constants that must differ.
 export const PRODUCT_REPO = "a11ign/a11ign";
 export const PRODUCT_REPO_URL = `https://github.com/${PRODUCT_REPO}`;
 export const PRODUCT_GIT_URL = `${PRODUCT_REPO_URL}.git`;
-
-// #2616: THE THIRD MEANING, beside REPO and PRODUCT_REPO -- the project's TRACKERS (its boards) and its CODE repositories,
-// each a list of `{key, repo}` (a tracker also `{board}`). Both hold one entry, `a11ign/a11ign`, until #2612's layer
-// repositories exist. Nothing here reads more than the first entry yet: enumerating them is 3b and 3c.
-export const TRACKERS = PROJECT.tracker;
-export const CODE_REPOSITORIES = PROJECT.code;

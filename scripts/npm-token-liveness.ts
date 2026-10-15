@@ -36,10 +36,15 @@
 // -- the same shape #59's `mergeStatus()` uses for a `merge-base` that could not even ask the question, and
 // the same reason `evidence:check` has an INCONCLUSIVE exit distinct from both SAME and CHANGED.
 import { realpathSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { refuseUnknownFlags } from "@a11ign/screenreader-fleet/cli-flags";
-import { toolExport } from "./agent-org-newest-tag.ts";
-const { REPO, gh } = await toolExport("board-data");
+import { REPO } from "./repo-identity.ts";
+
+/** @param {string[]} args */
+function gh(args: string[]): string {
+  return execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+}
 
 const ISSUE = "73";
 const ORG = "a11ign";

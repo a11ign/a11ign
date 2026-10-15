@@ -36,13 +36,10 @@ import { changedFiles } from "../packages/guards/src/changed-files.ts";
 import { underFloor } from "../packages/guards/src/assert-glob-not-empty.ts";
 import { sandboxGitEnv } from "../packages/guards/src/git-env.ts";
 import { refuseUnknownFlags, flagValue } from "./cli-flags.ts";
-const { checkBody } = await toolExport("pr-open");
-import { acceptanceDiffOf } from "./verify-acceptance-source.ts";
 import { classify, knownPackages, packedFiles } from "./ci-changed.ts";
 import { privateRunRoot } from "./private-tmp.ts";
 // NEVER a bare `pnpm` spawn -- unsafe on Windows (CVE-2024-27980), and this repo's own guard refuses one.
 import { pnpmCliInvocation } from "./npm-cli-executable.ts";
-import { toolBin, toolExport } from "./agent-org-newest-tag.ts";
 
 const REPO = fileURLToPath(new URL("..", import.meta.url));
 const STAMP_FILE = "verify-stamp.json";
@@ -55,8 +52,7 @@ const SHORT_SHA = 9;
 
 /**
  * Every job of `ci.yml` that `gate` needs and that runs here. `runsWhen` is the `classify` key that makes CI run
- * the job, or null when CI runs it on every pull request: the body checks and the owned-path
- * sign-off carry no `changed` output, so a bare diff of a docs file still runs them (#2348), and so does this.
+ * the job, or null when CI runs it on every pull request.
  */
 export const STEPS = [
   { id: "changed", runsWhen: null },
@@ -64,8 +60,6 @@ export const STEPS = [
   { id: "python", runsWhen: "python" },
   { id: "rulesFitness", runsWhen: "rulesFitness" },
   { id: "changeset", runsWhen: "changeset" },
-  { id: "acceptance", runsWhen: null },
-  { id: "ownedPaths", runsWhen: null },
 ];
 
 /**
@@ -78,7 +72,11 @@ export const CI_ONLY = {
     + "`changed` condition for them (#3572, chairman via ceo)",
   deliberateRefusals: "needs the pull request's number and a GitHub token: it compares the head with what GitHub "
     + "recorded (#294) and the body's Closes with what GitHub will close (#549), and no pull request exists before "
-    + "pr:open (the body's own shape is checked by the `acceptance` step)",
+    + "pr:open (the org tool's own `pr:open` checks the body's shape, `acceptance` above)",
+  acceptance: "lints the pull request body against the org's `CI_BODY_REPORTS` through the org tool's `checkBody`, which `pr:open` runs "
+    + "too; the org's rehearsal of its own check is the org tool's command, and a product `verify` loads nothing from it (ADR 0045 cut (b), #5459)",
+  ownedPaths: "the org's owned-path sign-off (`agent-org owned-path-signoff`), a check of the org's own rule over the diff and the body; "
+    + "it runs from the org tool and is not a product check (ADR 0045 cut (b), #5459)",
   bodyEdit: "classifies a pull request-body edit as prose-only by comparing the body GitHub holds now with the one it held "
     + "before (`changes.body`), and the event that carried the edit; both exist only on a pull request that is already open, "
     + "and a local verify has neither the body nor the event to read (#4413)",
@@ -457,42 +455,6 @@ async function runChangeset({ base }: { base: string; }) {
   return (await pnpm(["exec", "changeset", "status", `--since=${base}`])).status === 0 ? "pass" : "fail";
 }
 
-/**
- * CI's `acceptance` job: every report in agent-org's `CI_BODY_REPORTS` over the body, through `checkBody`, the call
- * `pr:open` makes, so the two cannot be spelled apart (#3209). It takes the diff rather than reading it from a merge
- * commit as the CLI does, and a plain branch has none: the CLI would print `MUTATION: UNCHECKED` here where CI refuses.
- * No body is not a pass: there is nothing to lint. The diff names the paths the branch ADDS, so `checkBody` reads the `.acceptance/` file
- * the branch adds (ADR 0044) as `pr:open` and CI do, and falls back to the body only when it adds none (#4600).
- * @param {StepContext} ctx
- */
-function runAcceptance({ body, files, base }: StepContext) {
-  if (body === null) {
-    console.error("verify: no body to lint -- pass --draft-body=<path to the draft body>. A stamp without one is not green.");
-    return "fail";
-  }
-  // `--diff-filter=A` is agent-org's rule too: a rename is not an add (`resolveAcceptanceSource`).
-  const added = git(["diff", "--name-only", "--diff-filter=A", `${base}...HEAD`]).split("\n").filter(Boolean);
-  const diff = acceptanceDiffOf({ files, added, exists: (file) => existsSync(join(REPO, file)) });
-  const checked = checkBody(body, { diff, readFile: (path: string) => readFileSync(join(REPO, path), "utf8") });
-  for (const line of checked.lines) console.log(line);
-  return checked.ok ? "pass" : "fail";
-}
-
-/** @param {{ body: string | null, files: string[] }} ctx */
-async function runOwnedPaths({ body, files }: { body: string | null; files: string[]; }) {
-  const dir = makeScratch("verify-owned-");
-  try {
-    writeFileSync(join(dir, "changed.txt"), files.join("\n"));
-    writeFileSync(join(dir, "body.txt"), body ?? "");
-    const diff = `--diff=${join(dir, "changed.txt")}`;
-    const { status } = await shAsync(process.execPath, [toolBin(), "owned-path-signoff", diff, `--body=${join(dir, "body.txt")}`],
-      { cwd: REPO, stdio: "inherit" });
-    return status === 0 ? "pass" : "fail";
-  } finally {
-    removeScratch(dir);
-  }
-}
-
 /** Where CI's second checkout comes from, and the name of the clone `verify` makes when no checkout is to hand. */
 const AGENT_ORG_REMOTE = "a11ign/agent-org";
 const AGENT_ORG_CACHE = "verify-agent-org";
@@ -570,6 +532,20 @@ export function provisionAgentOrg({ repo = REPO, env = process.env, say = { out:
 }
 
 /**
+ * The checkout of the tool already on disk, in `agentOrgSource`'s order, or null: unlike `provisionAgentOrg` it never clones, fetches or moves one, so a machine with no tool
+ * is answered "none" and `verify` goes on to its product checks (ADR 0045 cut (b), #5459).
+ * @param {{ repo?: string, env?: Record<string, string | undefined> }} [where]
+ * @returns {string | null}
+ */
+export function presentAgentOrg({ repo = REPO, env = process.env }: { repo?: string; env?: Record<string, string | undefined>; } = {}): string | null {
+  const isCheckout = (/** @type {string} */ dir: string) => existsSync(join(dir, ".git"));
+  const commonDir = spawnSync("git", ["rev-parse", "--git-common-dir"], { cwd: repo, encoding: "utf8", env: sandboxGitEnv() }).stdout.trim();
+  const cache = resolve(repo, commonDir, AGENT_ORG_CACHE);
+  const { dir } = agentOrgSource({ env, sibling: resolve(repo, "..", "agent-org"), cache, isCheckout });
+  return isCheckout(dir) ? dir : null;
+}
+
+/**
  * A hybrid `node_modules` for a worktree that has none (`selection-skipped.ts` makes one; the `agentOrg` step that first needed it is gone, #3885): every entry links to where the author's tree gets it, and
  * `@a11ign/*` is relinked with the SAME relative targets, so inside the clone they reach the clone's own `packages/`
  * and not the author's (docs/operational-lessons.md#resolves-to-dist-does-not-say-whose). No build runs: CI's job has none.
@@ -631,8 +607,6 @@ function runStep(id: string, ctx: StepContext) {
     python: () => runPython(),
     rulesFitness: async () => ((await pnpm(["run", "rules-check"])).status === 0 ? "pass" : "fail"),
     changeset: () => runChangeset(ctx),
-    acceptance: () => runAcceptance(ctx),
-    ownedPaths: () => runOwnedPaths(ctx),
   };
   return runners[id]();
 }
@@ -700,18 +674,25 @@ export function suiteSlotsFile(dir: string): string | undefined {
  * suites ran at once on the agent host: the 1-minute load was over its 16 cores in 26 of 36 samples and one gate tick took 6 min 44 s. `verify` runs ITSELF under the slot, so the one slot
  * covers every step, and the child it starts is `verify` again with `SLOT_ENV` set so it does not queue behind itself.
  *
- * THE IMPLEMENTATION IS THE TOOL'S, ONE COPY AND ONE SLOT COUNT, read from the checkout `provisionAgentOrg` finds, never copied here and never the tool the host runs
- * (a release older than the module would have no `suite-slots.mjs`). A checkout without it is a REFUSAL naming it, and so is a missing `flock`: a limit that silently does not
- * apply is worse than none. On a runner (`CI` set) there is no slot and the tool is not even loaded, as CI is not this host.
+ * THE IMPLEMENTATION IS THE TOOL'S, ONE COPY AND ONE SLOT COUNT, read from the checkout `presentAgentOrg` finds, never copied here and never the tool the host runs
+ * (a release older than the module would have no `suite-slots.mjs`). A checkout that is present WITHOUT it is a REFUSAL naming it, and so is a missing `flock`: a limit that silently
+ * does not apply is worse than none. On a runner (`CI` set) there is no slot and the tool is not even loaded, as CI is not this host.
+ *
+ * NO CHECKOUT ON DISK IS NOT A REFUSAL, AND NOTHING IS CLONED (ADR 0045 cut (b), #5459): `verify` runs product checks, and a contributor's machine has no tool and no host to
+ * limit. The note says so aloud, so a host whose checkout went missing is not silently unlimited. It used to clone the tool into the git common dir and refuse when it could not.
  *
  * @returns {Promise<number | null>} verify's exit code when it ran (or refused) here, or null when THIS process is the one to do the work
  */
 async function underTheHostsSlot(): Promise<number | null> {
   if (process.env.CI) return null;
-  const dir = provisionAgentOrg();
-  const file = dir && suiteSlotsFile(dir);
+  const dir = presentAgentOrg();
+  if (dir === null) {
+    console.error("verify: no a11ign/agent-org checkout beside this one or named by A11Y_AGENT_ORG_REPO, so no host suite slot is taken (#3536's limit is the tool's and applies where the tool is)");
+    return null;
+  }
+  const file = suiteSlotsFile(dir);
   if (!file) {
-    console.error(`verify: ${dir ? join(dir, "src/suite-slots.{mjs,ts}") : "the agent-org checkout"} is missing, so verify is NOT run: the host-wide limit on concurrent suites (#3536) lives there, and running without it is refused. `
+    console.error(`verify: ${join(dir, "src/suite-slots.{mjs,ts}")} is missing, so verify is NOT run: the host-wide limit on concurrent suites (#3536) lives there, and running without it is refused. `
       + "Pull the latest `main` into that checkout, or set A11Y_AGENT_ORG_REPO to one that has it.");
     return 2;
   }
