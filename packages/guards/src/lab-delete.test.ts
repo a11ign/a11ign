@@ -52,8 +52,6 @@ const MIN_LOCKFILE_IMPORTERS = 5;
 const MIN_TEST_GLOBS = 4;
 const MIN_WORKFLOWS = 10;
 const MIN_RELOCATED = 15;
-/** The tree-wide guards beyond the three that stayed: the leak scans and the fence, which declare themselves too. */
-const RELOCATED_GUARDS = 3;
 /**
  * Where each test of the old directory that something still depends on went, by name (the row's done-when 4). The key is the file as it was named in
  * `a11ign/lab/src/packaging/` (or `nightly/`), the value is where it is tracked now. A name here with no tracked file at the new path fails, and so does
@@ -388,9 +386,15 @@ test("every test relocated by name is tracked at its new home and not at its old
 
 // ---- 7. the tree-wide guards the product keeps still run, and select nothing that left ------------------------------
 
-/** Names the tree-wide guards outside the departed directory that must still be found: the three #2703 counted as staying, of which TWO (`fleet-layer/entry-points` and `fleet-layer/protocol-guard`) left with control's directory (#3506) and run in `a11ign/control`'s CI now (`docs/known-gaps.md`). */
+/**
+ * Names the tree-wide guards outside the departed directory that must still be found: the layer-edge fence and the two leak scans, which declare themselves
+ * and sit in `packages/guards`. `criteria-counts-are-not-spelled-out` was on this list until #5560 made it a plain test, and `fleet-layer/entry-points` and
+ * `fleet-layer/protocol-guard` left with control's directory (#3506) and run in `a11ign/control`'s CI now (`docs/known-gaps.md`).
+ */
 const STAYING_GUARDS = [
-  "packages/judge/src/criteria-counts-are-not-spelled-out.test.ts",
+  "packages/guards/src/layer-edges.test.ts",
+  "packages/guards/src/tracked-source-leak-guard.test.ts",
+  "packages/guards/src/tracked-prose-leak-guard.test.ts",
 ];
 
 /** What is wrong with a population of selected guards: one under the departed directory, one that does not exist, or a staying guard that is not found. */
@@ -404,8 +408,8 @@ function guardRefusals({ selected, exists }: { selected: string[]; exists: (path
 test(`the tree-wide guards the product keeps are still discovered, all exist, and none is under ${DEPARTED_PATH}`, () => {
   const selected = treeWideGuardFiles();
   const present = new Set(tracked(REPO_ROOT));
-  // The population is not empty and is not just the three: the relocated leak scans and the layer-edge fence declare themselves too.
-  assert.ok(selected.length >= STAYING_GUARDS.length + RELOCATED_GUARDS, `${selected.length} guard(s) found: ${selected.join(", ")}`);
+  // The population is not empty and is not just the named three: the sweep can find more, never fewer.
+  assert.ok(selected.length >= STAYING_GUARDS.length, `${selected.length} guard(s) found: ${selected.join(", ")}`);
   assert.deepEqual(guardRefusals({ selected, exists: (path) => present.has(path) }), []);
   for (const relocated of ["layer-edges", "tracked-source-leak-guard", "tracked-prose-leak-guard"]) {
     assert.ok(selected.includes(`packages/guards/src/${relocated}.test.ts`), `${relocated} was relocated and is still a tree-wide guard`);
