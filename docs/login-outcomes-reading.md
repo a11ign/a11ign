@@ -89,7 +89,22 @@ to one the loop would act on. The trail's silence after `one-time-code` is consi
 | **(c)** the loop time budget ended before the screen was read | **Ruled out** | The loop read the one-time-code screen on every 500 ms poll (above). The budget did not end it before any read. |
 | *(not in the row's list)* no rejection was rendered at all | **Not excluded** | If Auth0 accepted the code and held the form, or showed no message, neither (a) nor (b) applies. The worker's own failure text says to check "the flow's signed-in selector against the page the login reaches", which points at the sign-in check, not at an alert. |
 
-### What the record lacks (the row's Done-when, item 1)
+### Done-when, item by item
+
+The row has three items. This reading meets part of item 1 and none of item 2. Item 3 does not apply, because the
+artifact is live and holds the branches.
+
+| Item | Status | What is missing |
+|---|---|---|
+| (1) the screen, the alert's role and name, the copy that decided, the step count and budget left, the run id and the artifact name | **Partial** | Headings and controls, the alert's role and name, and budget left are not in the artifact. `spa.log` holds one line and `worker.err` and `a11ign-result.json` are empty. The copy, step count, run id and artifact name are recorded. |
+| (2) which of (a), (b), (c) holds, the real alert text as a labelled fixture, and one fix row per faulty copy with a negative control | **Not met** | (c) is ruled out. (a) and (b) need the alert's text and role, which the record lacks. Without them there is no faulty copy to name, no real text for a fixture, and so no fix row to file. The next record is in the section below. |
+| (3) the artifact expired or lacks the branches | **Not applicable** | The artifact is live and holds the branches. |
+
+Item 2 is blocked on evidence this artifact does not hold. The row stays open until a wrong-code run records the alert.
+
+### What the record lacks
+
+The gaps behind the table above:
 
 - **Screen the loop ended on:** `one-time-code`, inferred from the last branch. Its headings and controls are not recorded.
 - **Role and accessible name of the alert:** not recorded. This is the discriminator between (a) and (b).
