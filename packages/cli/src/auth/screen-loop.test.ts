@@ -226,6 +226,18 @@ describe("runLoop: the landing screen, the app's own signed-out page", () => {
   });
 });
 
+describe("runLoop: a provider's button on the landing page (a11ign#5534)", () => {
+  test("NEGATIVE CONTROL: a provider's button is never a landing, and beside the app's own Sign in it is never the one pressed (a11ign#5534)", async () => {
+    const providerOnly = screen(["Sign in required"], [{ role: "button", name: "Sign in with Google" }]);
+    assert.notEqual(classifyScreen(providerOnly), "landing", "a provider-named control alone is not the app's sign-in");
+    const beside = screen(["Sign in required"], [{ role: "button", name: "Continue with Google" }, { role: "button", name: "Sign in" }]);
+    assert.equal(classifyScreen(beside), "landing");
+    const r = rig();
+    await r.run([beside, SIGNED_IN]);
+    assert.equal(r.acted[0].kind === "submit" && r.acted[0].target.name, "Sign in");
+  });
+});
+
 describe("runLoop: the screens it must not act on, and the ends it must not retry", () => {
   test("NEGATIVE CONTROL: an ambiguous screen is not acted on, and is acted on once it resolves", async () => {
     const both = screen(["Stay signed in?", "Authorize App"], [{ role: "button", name: "Accept" }, { role: "button", name: "No" }]);
