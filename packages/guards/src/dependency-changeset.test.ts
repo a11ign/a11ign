@@ -20,7 +20,7 @@ import type { Derivation } from "../../../scripts/dependency-changeset.ts";
 import { withGitSandbox } from "@a11ign/toolchain/lib/git-sandbox";
 
 const changeset = await import("../../../scripts/dependency-changeset.ts");
-const { RUNTIME_SECTIONS, refusalFor, entriesFor, deriveDependencyChangeset, renderEntry, parseEntry, checkEntries, compile, check, settleRefusal } = changeset;
+const { RUNTIME_SECTIONS, refusalFor, entriesFor, deriveDependencyChangeset, renderEntry, parseEntry, checkEntries, compile, check, settleRefusal, clearedBy } = changeset;
 
 type Change = {
   path: string; package: string; private: boolean; section: string; dependency: string; from: string | null; to: string | null;
@@ -348,7 +348,7 @@ test("check stays refused with today's message when the refused bump has no appr
     const reviews = writeReviews(git.dir, []);
     const { passed, printed } = checkIn(git.dir, base, reviews, head);
     assert.equal(passed, false);
-    assert.equal(printed, `REFUSED: this dependency pull request waits for a human who looks.\n  - ${REFUSAL}`);
+    assert.equal(printed, `REFUSED: this dependency pull request waits for a human who looks.\n  - ${REFUSAL}\nCleared-by: review`);
   });
 });
 
@@ -363,7 +363,42 @@ test("check stays refused when the only approval is of an earlier head that a la
     const { passed, printed } = checkIn(git.dir, base, reviews, head);
     assert.equal(passed, false);
     assert.match(printed, /^REFUSED: this dependency pull request waits for a human who looks\./);
+    assert.match(printed, /\nCleared-by: review$/, "the review outlived its head and settles nothing, so a review is still what clears it");
   });
+});
+
+test("check prints `Cleared-by: edit` when an owed entry is not carried, with or without an approval on the head", () => {
+  withGitSandbox((git) => {
+    const { base } = refusedDependencyBranch(git);
+    git.run(["rm", "-q", ".changeset/a-judge-peer-range.md"]);
+    git.commit("deps: drop the entry");
+    const head = git.run(["rev-parse", "HEAD"]).trim();
+    for (const reviews of [[], [approved(head)]]) {
+      const { passed, printed } = checkIn(git.dir, base, writeReviews(git.dir, reviews), head);
+      assert.equal(passed, false);
+      assert.match(printed, /\nCleared-by: edit$/);
+      assert.doesNotMatch(printed, /Cleared-by: review/);
+    }
+  });
+});
+
+test("check prints exactly one marker, last, and none on an accepted or a settled diff", () => {
+  withGitSandbox((git) => {
+    const { base, head } = refusedDependencyBranch(git);
+    const refused = checkIn(git.dir, base, writeReviews(git.dir, []), head).printed;
+    assert.equal(refused.match(/Cleared-by:/g)?.length, 1);
+    const settled = checkIn(git.dir, base, writeReviews(git.dir, [approved(head)]), head).printed;
+    assert.doesNotMatch(settled, /Cleared-by:/);
+  });
+});
+
+test("clearedBy answers `review` only where an approval on the head would settle, so it follows settleRefusal", () => {
+  const owed = [{ package: "@a11ign/lab", bump: "patch" as const, text: "t" }];
+  const carried = [carriedFor(".changeset/a.md", "@a11ign/lab")];
+  assert.equal(clearedBy({ owed, carried, head: "h1" }), "review");
+  assert.equal(clearedBy({ owed, carried: [], head: "h1" }), "edit");
+  assert.equal(clearedBy({ owed: [], carried, head: "h1" }), "edit", "a diff that owes no entry is not one a review settles");
+  assert.equal(clearedBy({ owed, carried, head: undefined }), "edit");
 });
 
 test("check stays refused without a reviews file, however the carried entry reads", () => {
