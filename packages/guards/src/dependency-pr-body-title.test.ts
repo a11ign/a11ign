@@ -43,8 +43,8 @@ test("a capital-B Dependabot bump title is auto-declared (a11ign#5485)", () => {
 });
 
 test("a scoped package and an ` in /dir` suffix still match in either case", () => {
-  assert.match("deps: bump @a11ign/lab from 2.9.0 to 2.9.1 in /packages/lab", pattern);
-  assert.match("deps: Bump @a11ign/lab from 2.9.0 to 2.9.1 in /packages/lab", pattern);
+  assert.match("deps: bump @scope/pkg from 2.9.0 to 2.9.1 in /packages/example", pattern);
+  assert.match("deps: Bump @scope/pkg from 2.9.0 to 2.9.1 in /packages/example", pattern);
 });
 
 test("a title that is not a bump is not auto-declared", () => {
