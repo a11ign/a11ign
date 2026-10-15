@@ -1,5 +1,265 @@
 # a11ign
 
+## 0.10.9
+
+### Patch Changes
+
+- f1544f7: A login now presses the app's `Sign in` once. The worker the lockfile installs is `@a11ign/screenreader-worker` 0.13.3, which stops the second press on the landing that ended a sign-in as `signed-in-check-never-matched` (#5534, under #5293; screenreader-worker#65).
+
+## 0.10.8
+
+### Patch Changes
+
+- f3a0ee7: The sign-in loop presses the app's own `Sign in` once per login. A landing page that returns after the provider's forms is the app's callback while its SDK exchanges the code, and pressing it again started a second login on top of the first (the Auth0 end-to-end run ended `signed-in-check-never-matched`). The loop now waits on it, and the signed-in check or the budget answers.
+- 144bd04: Locks `@a11ign/screenreader-worker` at `0.13.2`, whose screen loop never presses a provider-named control (`Continue with Google`, `Sign in with Apple`, and the other named providers) as a login form's submit (#5493, ported to the worker in a11ign/screenreader-worker#61). The login of an authenticated capture runs in the worker, so the core's fix did not reach a run until the worker had it too. Nothing else in the package changed.
+
+## 0.10.7
+
+### Patch Changes
+
+- 7613af1: A sign-in now writes its loop's trail to the file named by `A11Y_AUTH_TRAIL_FILE`, for `login --check` and for an authenticated scan: each screen the loop met and the control it pressed, with the outcome, and never a typed value (#5510, under #5495). Unset, no file is written.
+
+## 0.10.6
+
+### Patch Changes
+
+- 1abc99e: The screen loop never presses a provider-named control (`Continue with Google`, `Sign in with Apple`, and the other named providers) as a login form's submit. Among several remaining submit candidates the exact name (`Continue`, `Log in`) wins, and when none is exact the form is `ambiguous` and waits rather than pressing the first by page order (#5493). The worker's copy is #5494.
+
+## 0.10.5
+
+### Patch Changes
+
+- 82343e4: Locks `@a11ign/screenreader-worker` at `0.13.1`, whose screen loop presses the app's own sign-in button on a signed-out landing page (#5278, ported to the worker in a11ign/screenreader-worker#58). The login of an authenticated capture runs in the worker, so the CLI's fix in #5289 did not reach a run until the worker had it too. Nothing else in the package changed.
+
+## 0.10.4
+
+### Patch Changes
+
+- Updated dependencies [c44f7bc]
+  - @a11ign/judge@0.5.7
+
+## 0.10.3
+
+### Patch Changes
+
+- 23f96a1: Locks `@a11ign/screenreader-fleet` at `^0.11.0`, a release that exports `./git-safe-env`, so control's CI type-checks over the core's lockfile (#5330, blocks #5312). Nothing else in the package changed.
+- e6c1e8f: The sign-in loop presses the app's own "Sign in" button on a signed-out page that asks for nothing, so the login reaches the identity provider instead of ending `unknown-screen` (#5278). A page with two sign-in buttons is still not pressed.
+
+## 0.10.2
+
+### Patch Changes
+
+- cc4dd7e: Declares `@a11ign/screenreader-fleet` as `^0.9.0`, where it was `^0.7.3` (ADR 0045 cut 4, #5082): the core's root scripts now run that package's installed bins, `guest-run` and `normalise-fleet` among them, and `worker-fleet-delete.test.ts` holds one version of it under every importer, so `a11ign` moves with the root. `a11ign` imports the package's root and its `capture-client`, `cli-flags`, `health`, `probe-outcome` and `worker-http` exports, all of which 0.9.0 still carries.
+
+## 0.10.1
+
+### Patch Changes
+
+- Updated dependencies [2b8489a]
+  - @a11ign/evidence@0.5.0
+  - @a11ign/judge@0.5.6
+  - @a11ign/scorer@0.3.6
+
+## 0.10.0
+
+### Minor Changes
+
+- 2aa6262: `a11ign` now exports `DEFAULT_PROBE_FLAGS`, the probe defaults its CLI sends, so a consumer can compare them with its own without reading the CLI's source.
+
+## 0.9.0
+
+### Minor Changes
+
+- 6964016: A scan with `--flows <file>` and no `--login-flow` signs in by the file's `login:` block, as `a11ign login --check` does, and sends the worker the block's three variable names so NVDA signs in the same way. A file may be only a `login:` block; with a block and `--login-flow` the named flow is used and a notice says the block was not. The block's variables must all be set before anything is leased, and a `check:` that is a `url:` is refused (#5054, #4084).
+
+## 0.8.0
+
+### Minor Changes
+
+- 259edc5: An authenticated scan now re-checks it is still signed in before every audited page, using the login flow's final `expect`. A failed check signs in once more; a page that is still signed out is reported "not audited: signed out" (never an audit of the sign-in page), in the roll-up and in `--json` (`notAudited: true`), and the run exits 4, distinct from a run where pages merely failed (#4996, #4084).
+
+## 0.7.0
+
+### Minor Changes
+
+- 5b15188: `a11ign login --check --flows <file> [--login-flow <name>]` runs only the login and its verification in a real browser, with no scan. It exits 0 when signed in and 2 on any failure; a login that crossed origins prints the exact `idp-origins: [...]` line to paste, and a failed run writes a scrubbed artefact (steps, screenshots with inputs masked, trees) under the witness artefact root's `login-check` directory. A rejected password is attempted once and never retried (#4995, #4084).
+
+## 0.6.10
+
+### Patch Changes
+
+- 9c2010d: A flows file's steps may now carry `when: { heading | control: "<name>" }` (run only if that is on the page now) and `optional: true` (a missing target is skipped rather than failed; an ambiguous control or a timed-out `expect` still fails), and a flow may use `dismiss-if-shown: "<name>"` and `auto: true` (#4994). `when:` and `optional:` take a name, never a selector or a script, and are refused by the existing rules if they do. `auto:` runs the screen loop and needs credentials a plan carries (`plan.auto`), which no CLI flag supplies yet, so it is accepted in a flows file and not yet reachable from the command line. A screen the loop does not recognise now prints the exact step to add. The worker does not know these keys: do not send a flows file that uses them to a worker (#4994).
+
+## 0.6.9
+
+### Patch Changes
+
+- 77f40af: The CLI can read a TOTP secret given as a bare base32 seed or as a whole `otpauth://totp/` URI, taking algorithm, digits and period from the URI and defaulting to SHA-1, 6 and 30. An `otpauth://hotp/` URI, a missing secret and an out-of-range option are each refused by name, never quoting the value (#4992).
+
+## 0.6.8
+
+### Patch Changes
+
+- 7d2c500: The CLI can compute an RFC 6238 authenticator code (`packages/cli/src/auth/totp.ts`) and refuses a missing or malformed seed by variable name, never by value. Nothing reads it yet: the flow-file wiring is a later change.
+
+## 0.6.7
+
+### Patch Changes
+
+- Updated dependencies [0a93b2c]
+  - @a11ign/judge@0.5.5
+
+## 0.6.6
+
+### Patch Changes
+
+- 0a43c54: Moves `@a11ign/toolchain` from the exact `0.7.0` to the exact `0.7.1`, the first release whose `lib/walk-scope` lists `expectFailure` and `getTestContext` (Node 24's two new `node:test` functions) in `NOT_WRAPPED.test`, and adds the same two entries to the core's `walk-scope.ts` copy so `walk-scope-copy-matches-toolchain.test.ts` and lab's `declared-walk-scope.test.ts` enumeration are green on Node 24 (#4848). The root, `cli`, `judge` and `scorer` move together (`toolchain-package.test.ts` requires one version across the four). Nothing else in the package changed.
+
+## 0.6.5
+
+### Patch Changes
+
+- 25f0e9b: The core's guards and tests import `local-import-closure` and `tree-wide-guard` from `@a11ign/toolchain/lib/<stem>`, and the core's own copies of both are deleted, so each has one source (#4718, #4425 phase 3). `walk-scope` stays a declared copy: the toolchain's `REPO_ROOT` is the directory it is installed in, so as the rstest preload it observes no read of this repository.
+- Updated dependencies [25f0e9b]
+  - @a11ign/judge@0.5.4
+
+## 0.6.4
+
+### Patch Changes
+
+- 09851c2: `@a11ign/evidence` drops its `./source-text` subpath (`stripComments`): the helper lives in `@a11ign/toolchain/lib/source-text`, and `@a11ign/screenreader-fleet` 0.7.3, the last consumer of the subpath, imports it from there. A consumer of `@a11ign/evidence/source-text` imports it from the toolchain instead. `a11ign` raises its `@a11ign/screenreader-fleet` floor to `^0.7.3`, the first release that does not import the removed subpath (#4712, #4589, #4711, #4425 phase 3).
+- Updated dependencies [09851c2]
+  - @a11ign/evidence@0.4.0
+  - @a11ign/judge@0.5.3
+  - @a11ign/scorer@0.3.5
+
+## 0.6.3
+
+### Patch Changes
+
+- bb8dfa7: The core's tests and guards import the helpers they share with the toolchain (`fixture-symbols`, `product-home`, `sandbox-exhaustion`, `source-text`, `walk-scope-declaration`, `walk-scope-discovery`, `worktree-resolution`) from `@a11ign/toolchain/lib/<stem>`, and the core's own copies of six of them are deleted. The `@a11ign/toolchain` devDependency moves to 0.7.0 in the root, `a11ign`, `@a11ign/judge` and `@a11ign/scorer` (#4589, #4425 phase 3). `@a11ign/evidence` is unchanged: it keeps its `./source-text` subpath until the fleet stops importing it (#4712).
+- Updated dependencies [bb8dfa7]
+  - @a11ign/judge@0.5.2
+  - @a11ign/scorer@0.3.4
+
+## 0.6.2
+
+### Patch Changes
+
+- 0622a50: Locks `@a11ign/screenreader-fleet` at `^0.7.2`, the release whose `cli-flags` imports only `node:*` instead of re-exporting `@a11ign/toolchain` by package name, so control (which runs no `npm install`) can load every fleet module it imports (#4686, #4687). Nothing else in the package changed.
+
+## 0.6.1
+
+### Patch Changes
+
+- 97733c2: Locks `@a11ign/screenreader-fleet` at `^0.7.1`, the release whose `fleet-env` imports only `node:*` and `./worker-http.mjs`, so control (which runs no `npm install`) can load the laid fleet's `fleet-env.ts` without `@a11ign/toolchain` by package name (#4680, #4681). The lockfile moves the fleet's own dependencies with it: `@a11ign/judge` 0.1.0 to 0.5.1 and `@a11ign/evidence` 0.1.0 to 0.3.2. Nothing else in the package changed.
+
+## 0.6.0
+
+### Minor Changes
+
+- 173423e: **New command: `a11ign <url> --compare-axe` runs axe-core and a11ign on one page and prints what each found, keyed by WCAG criterion.** It prints three lists, **axe only**, **a11ign only (screen-reader findings axe cannot make)** and **both**, then one line stating how many of the A/AA criteria a11ign fully assesses and how many of those by a deterministic rule, read from `criterion-coverage.ts`. A criterion a11ign asserts is marked `asserted`; one it refers to a person is marked `referred`. With no capture worker the axe half still runs and the command says a11ign did not run, rather than printing an empty list as "nothing added" (and the same the other way round if axe is unavailable). It compares one page and does not sign in.
+  
+  `a11ign --help` now prints the usage on stdout and exits 0; before, it was read as a flag with no page and ended in an error.
+
+### Patch Changes
+
+- 96b9929: The README now says which channel is stable (`latest`), what a version number promises before 1.0 (a breaking change to a flag, an output field or an Action input is a minor with a Migration note; a fix is a patch), and that the changelog is the GitHub Release for each `a11ign@<version>` tag. `docs/release-policy.md` checks that rule against the last ten releases, and the README keeps SHA-pinning as the recommendation for the Action because the `v0` tag moves on every promotion (#4527).
+- a8a33fd: Documents the release tag contract: every published version is tagged `a11ign@<version>`, which is the form to look for. The `v<version>` tags are written only so Dependabot can see the Action and are not every version's. The package page and the root README say so. Nothing in the package's behaviour changed.
+- 0e08c42: `witness --worker <value>` refuses a malformed address (`http://:8765`) or a missing value before it leases or captures, with the fleet layer's own `assertWorkerUrl`, naming `--worker`, instead of passing the value on as written (#4593).
+- 96523ba: Locks `@a11ign/screenreader-fleet` at `^0.7.0`, the release whose `worker-code-check` resolves the layer clone's hasher as `code-version.ts` or `code-version.mjs`, where 0.6.0 imported only the `.mjs` the worker layer no longer ships (#4651, #4658). The fleet re-exports its flag guard from `@a11ign/toolchain/lib/cli-flags`, which first shipped in `@a11ign/toolchain` 0.5.0, so the root, `cli`, `judge` and `scorer` move from the exact `0.1.4` to the exact `0.5.0` together (`toolchain-package.test.ts` requires one version across the four). Nothing else in the package changed.
+
+## 0.5.4
+
+### Patch Changes
+
+- Updated dependencies [64b7ab0]
+  - @a11ign/scorer@0.3.3
+  - @a11ign/judge@0.5.1
+
+## 0.5.3
+
+### Patch Changes
+
+- 4206b5b: A multi-page run's Action summary says a criterion referred on at least half the run's pages, and on at least three, once: `<criterion> <name>: left to a person on N of M pages`, with the reason of its first page. A criterion below that line, every asserted outcome and a single-page run print as before; `--json` and the evidence pack are unchanged (#4377).
+
+## 0.5.2
+
+### Patch Changes
+
+- Updated dependencies [d2912d5]
+- Updated dependencies [6062ac4]
+  - @a11ign/evidence@0.3.2
+  - @a11ign/judge@0.5.0
+  - @a11ign/scorer@0.3.2
+
+## 0.5.1
+
+### Patch Changes
+
+- Updated dependencies [38d5ec9]
+  - @a11ign/evidence@0.3.1
+  - @a11ign/judge@0.4.1
+  - @a11ign/scorer@0.3.1
+
+## 0.5.0
+
+### Minor Changes
+
+- 5433de7: Adds `--evidence-pack <file.md>` to the CLI and an `evidence-pack` output to the Action: the Markdown evidence pack an assessor can attach to a conformance report is written beside the result JSON (#4252). The flag needs `--json` and takes one capture; a `urls` list, a `forms` config or a PDF writes none.
+
+### Patch Changes
+
+- Updated dependencies [aed675e]
+  - @a11ign/judge@0.4.0
+
+## 0.4.1
+
+### Patch Changes
+
+- f7236ef: Every input of the Action is now passed to its scripts through the environment (`env:`) and none is interpolated into a `run:` script with `${{ inputs.* }}`. `task`, `forms`, `judge-backend`, `anthropic-api-key`, `judge-base-url`, `probe-forms`, `probe-focus`, `probe-navigation`, `axe` and `fail-on` were still expanded into shell text, GitHub's documented script-injection pattern: a `task` filled from an issue title or a pull-request body could close its quote and run commands on the runner. A test now fails on any `${{ inputs.* }}` inside a `run:` script (#4238).
+- 0f2c191: The Action's multi-line `urls` input now scans every page it lists. With `urls: |` and one URL per line, as `examples/nightly-workflow.yml` and the docs show, a11ign 0.4.0 on a Windows runner scanned only the first page and reported success: a newline inside one argument does not survive `npx.cmd`. The list now reaches the CLI as one line, so the documented form scans every page. The `url`, `urls` and `max-pages` inputs also reach the scripts through `env:` rather than `${{ }}` inside `run:`, closing the script-injection shape (#4221).
+
+## 0.4.0
+
+### Minor Changes
+
+- 2408d4f: **The Action's `probe-forms` input now defaults to `false`.** If your workflow relied on the old default, set `probe-forms: "true"` to keep submitting your forms with no valid input and reading what the page announces; a run that leaves it off logs that success criteria 3.3.1 and 4.1.3 were not assessed. `probe-forms` presses buttons, so `SECURITY.md` has a new section on running it against a staging app rather than production (#4108).
+  
+  A flows file may now list `idp-origins:`, the identity-provider origins a login passes through. Each must be an exact `http(s)` origin: a wildcard, a path, a credential, or your app's own origin is refused when the file loads. Those origins are allowed between the login's steps and nowhere else, so a run that ends parked on the provider is still reported as `left-origin` (#4106).
+  
+  The Action summary and the terminal report now name the WCAG 2.2 criteria the run did not cover (2.4.11, 2.5.7, 3.2.6, 3.3.7 and 3.3.8 on the recorded run) and say that their absence from the findings is not a pass (#4098).
+  
+  `examples/nightly-workflow.yml` is a scheduled workflow whose timeout and monthly budget are read from `docs/capture-cost.md`. It is an example only and changes nothing in the package's code (#4096).
+
+## 0.3.2
+
+### Patch Changes
+
+- 9ff9120: The README now states the measured `next`-to-`latest` time (3.4 hours on one release), from a dated reading.
+
+## 0.3.1
+
+### Patch Changes
+
+- 22c28a4: The remediation text for `auth-login-failed` now says `expect-not-met` is also what a page that never loaded ends as, and that the message's step and `could not be loaded (...)` line say which of the two it was, so a reader is no longer sent to fix an `expect:` that was never evaluated (#4015). The set of login-failure reasons is unchanged.
+
+## 0.3.0
+
+### Minor Changes
+
+- f2e2697: `exports` and `bin` now point at `.mjs` (and `.d.ts` for types) where they pointed at `.js`, because the packages are built by Rslib instead of `tsc --build`: a deep import of `<package>/dist/<file>.js` stops resolving, and the CLI's `bin` is `./dist/cli.mjs`, so this is `minor` (a breaking change on a 0.x package) for each of the four. The CLI is also now one bundle that inlines `@a11ign/documents` (and the `pdf-lib` behind it) and `yaml`, so a consumer no longer installs them (#3580, ADR 0043).
+
+### Patch Changes
+
+- 744f3c0: Declares `@a11ign/screenreader-fleet` as `^0.3.0`, where it was the exact `0.1.4`: the fleet package is no longer a sibling in the workspace but a package released from its own repository, and the isolation gate refuses an exact pin to a non-sibling (#3504). Nothing else in the package changed.
+- 176075d: The README now states which version `npx a11ign` runs (`latest`, or `a11ign@next` for the newest) and how long a merged fix took to reach `next`, from a dated reading.
+- 6029cb6: Consumes `@a11ign/screenreader-fleet` `^0.5.1` where it held `^0.3.0` across four releases, in the root, `cli`, `guards` and `lab` manifests, with the lockfile at `0.5.1` (#3803). What each release changes for the core: 0.4.0 removes `a11ign-worker-deploy`, so the root's `worker:deploy` script, whose target `deploy-worker.mjs` is no longer laid, is removed with it (`fleet:deploy` is the deploy); 0.4.1 and 0.4.2 stop `a11ign-doctor`, `a11ign-worker-compare` and `fleet-env` resolving monorepo paths from inside an installed package, and the core runs them from the laid copy at the monorepo path, so nothing changes for it; 0.5.0 replaces `expectedWorkerCode()` with the async `resolveExpectedWorkerCode({ checkoutRoot })`, which hashes the layer clone when there is one, and `worker-code-check.test.ts`, the one consumer, asks the new function (#3781); 0.5.1 makes `doctor`'s `dist-freshness` read `missingExportTargets` instead of asking `tsc --build --dry` (#3810's fleet half).
+- Updated dependencies [f2e2697]
+  - @a11ign/evidence@0.3.0
+  - @a11ign/judge@0.3.0
+  - @a11ign/scorer@0.3.0
+
 ## 0.2.7
 
 ### Patch Changes
