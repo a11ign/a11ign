@@ -161,3 +161,21 @@ jobs:
             ${{ runner.temp }}/a11ign-result.json
             ${{ runner.temp }}/a11ign-summary.md
           if-no-files-found: warn
+
+      # THE CAPTURE RECORD, kept on a GREEN run too (a11ign#5559, #4084 outcome 6). The step above keeps the result and the
+      # summary under `if: failure()`, and neither holds `diagnostics`: `cli.ts` prints them to stderr under `--debug` only.
+      # What does hold them is the capture the CLI writes BEFORE judging, `runs/witness/<stamp>-<slug>.json`
+      # (`writeWitnessArtifact`, on by default, relative to the checkout). Its `capture.diagnostics[].atMs` is what
+      # `docs/capture-cost.md` splits into phases, so a runner's per-phase cost is read from a named run and not inferred
+      # from the fleet. Nothing in `action.yml` changes: the file is already written, and a stamp in each name keeps the
+      # three runs apart, which the single-name result above cannot.
+      #
+      # `always()`, so a red run keeps its records as well: the cost of a capture that failed is still a reading.
+      # `warn` rather than `ignore`, for the reason the step above gives: finding none is itself a finding.
+      - name: Keep the capture record, green or red
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: action-smoke-capture
+          path: runs/witness/*.json
+          if-no-files-found: warn
