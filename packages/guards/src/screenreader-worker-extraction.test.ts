@@ -8,7 +8,7 @@
  *   1. Neither package is in the workspace: `pnpm-workspace.yaml`'s globs match no directory of either name, and no workspace manifest
  *      carries either package's name (so a copy under a different directory is caught too).
  *   2. `pnpm-lock.yaml` holds no `link:` to either, and no importer under their old paths.
- *   3. The `@a11ign/screenreader-worker` entry is a REGISTRY entry: `version: 0.13.0` under every importer that declares it, and a
+ *   3. The `@a11ign/screenreader-worker` entry is a REGISTRY entry: `version: 0.13.1` under every importer that declares it, and a
  *      `packages:` entry whose `resolution` carries an `integrity`. A version with no integrity is a version nobody verified.
  *   4. No pending changeset names either package. `.changeset/README.md` is prose and may name them; an entry's frontmatter may not,
  *      because `changeset version` would then try to version a package this workspace does not have.
@@ -32,7 +32,7 @@ import { parse } from "yaml";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const CONSUMED = "@a11ign/screenreader-worker";
-const CONSUMED_VERSION = "0.13.0";
+const CONSUMED_VERSION = "0.13.1";
 /** The two directories that left, and every name either has been published or reserved under. */
 const DEPARTED_DIRECTORIES = ["nvda-worker", "nvda-speech"] as const;
 /** The worker's directory, built from its name so the core's live files do not spell it (ADR 0045 cut 6, #5084): the guard still knows it until `layers.json` goes. */
@@ -172,7 +172,7 @@ test("pnpm-lock.yaml holds no link: to either package and no importer under eith
   assert.deepEqual(linkRefusals(read(REPO_ROOT, "pnpm-lock.yaml")), []);
 });
 
-test("pnpm-lock.yaml holds @a11ign/screenreader-worker at version 0.13.0 with an integrity, under every importer that declares it", () => {
+test("pnpm-lock.yaml holds @a11ign/screenreader-worker at version 0.13.1 with an integrity, under every importer that declares it", () => {
   const lockfile = read(REPO_ROOT, "pnpm-lock.yaml");
   assert.deepEqual(registryEntryRefusals(lockfile), []);
   // Derived a second way: the manifests that declare it are the importers the lockfile must resolve, so a lockfile that lost one is not "enough".
