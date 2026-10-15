@@ -1,0 +1,6 @@
+ADR 0045 is amended on the chairman's direction (a11ign#928, comment 6195402434, 2026-10-15): agent-org is not published under `@a11ign`, "a declared version" in rule 1 now includes a pnpm git dependency pinned to a tag or commit, nothing names `@a11ign` as agent-org's scope, and the end state is that a11ign needs no agent-org at all. Items 1 to 4 of "How the core gets agent-org" are marked superseded and kept as the record; the cuts (b) to (e) are pointed at the re-scoped rows a11ign#5459 to #5462. Docs only: no code, workflow or package changes.
+
+- **Checked:** the amendment heading appears exactly once; rule 1 carries the git-dependency form; the two in-file links resolve to the amendment's own heading slug.
+- **Before the change:** the same command exits 1 at `origin/main` (no amendment heading, no git-dependency form).
+
+Acceptance: node -e "const t=require('node:fs').readFileSync('docs/adr/0045-a-repository-uses-another-only-through-its-published-package.md','utf8');const slug='#amendment-2026-10-15-agent-org-is-not-published-under-a11ign-and-a11ign-stops-needing-it';process.exit(t.split('### Amendment 2026-10-15: agent-org is not published under').length===2&&t.includes('a pnpm git dependency pinned to a tag or commit')&&t.split('('+slug+')').length===3?0:1)"
