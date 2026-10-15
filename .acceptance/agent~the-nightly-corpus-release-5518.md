@@ -8,7 +8,7 @@ Acceptance: `node --test --experimental-strip-types packages/guards/src/corpus-r
 
 The test RUNS the unit's own refresh line (the `$$` unescaped) in a temp HOME against a stub `ssh`: a good read lands at the `ANSIBLE_INVENTORY` path at mode 0600 with no `.new`; a failed read and an EMPTY read both leave yesterday's copy standing; the host comes from `A11Y_CONTROL_HOST_FILE` and the one file asked for is `/etc/a11ign/inventory.yml`; and where `ansible-inventory` is installed, Ansible resolves `a11y_lab` from the written copy. Mutation checked: removing the `test -s` empty-read guard from the unit fails the empty-read test.
 
-Outside-Region: none.
+Outside-Region: packages/guards/src/corpus-release-inventory-refresh.test.ts — the behavioural test reviewer-5519 required for the unit's inventory-refresh line; the Region names no test path, and this is the repository's guards package, where the sibling unit tests (fleet-watch-unit-exit.test.ts) live.
 
 Platform: Ansible's own `ANSIBLE_INVENTORY` (replaces `ansible.cfg`'s source list) and `ssh`; `/etc/a11ign` is root-owned and this account has no sudo, so the control layer's installed-path option is not available on this host. `fleet:inventory-install` was tried and refuses (control plane on a different commit than control's checkout), and it is a deploy-class wrapper a unit must not run.
 
