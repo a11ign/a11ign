@@ -522,7 +522,7 @@ flows:
       - expect: { heading: "Dashboard" }       # REQUIRED as the last step of a login flow
 ```
 
-**Steps** are `goto`, `fill`, `choose`, `check`, `press`, `expect` and `capture`, and nothing else in a file a worker runs (the 0.10.2 source also accepts `dismiss-if-shown` and `auto`, and `when:` and `optional:` modifiers, which the changelog says the worker does not know): no script step, no
+**Steps** are `goto`, `fill`, `choose`, `check`, `press`, `expect`, `capture` and `dismiss-if-shown`, with `when:` and `optional:` modifiers where each takes them, and nothing else in a file a worker runs. `auto` is refused by the worker by name, so leave it out. The worker the `a11ign@0.10.8` pin runs (`@a11ign/screenreader-worker` 0.13.2) reads the list this way; the key-by-key statement and its limits are in [`try-it.md`](./try-it.md#3-the-flows-file). No script step, no
 evaluated expression, no fixed sleep (`expect` waits for a condition, and its wait is bounded). A control is named by the
 name a screen reader announces, never by selector, and `within:` and `nth:` tell two of the same name apart. **A login's
 `fill` takes `from-env:` only**; a literal in the login flow is refused, and so is a literal typed into a password field in
