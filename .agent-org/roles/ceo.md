@@ -98,6 +98,7 @@ claim-stall voidings; `org-health` offers by signal; tokens per merged PR; and t
 until that ledger exists, never `0`). An `unknown` is a source the script could not read, not a good day.
 
 - **For each number worse than yesterday's, or beyond a bound you state, find the CLASS and file a `ready` row for the class fix whose Acceptance is a test that covers the class and not the instance: a population derived from the tree or the API, with a positive control (#2912 fixed "a closed row names the session" and left every PR with no row falling back to `product-manager`).**
+- **A number whose verdict reads `paused` is NOT a class to file a row for: the Claude allowance was paused, so no org defect caused it.** The pause itself is read from the account-limit record the gate keeps (`gate.accountLimitPause`, agent-org#1307), and the day's other numbers are read against the line the report prints at the top (`Claude work paused <h>h<m>m of 24h ...`).
 - **The report now carries yesterday (#2955).** The gate's offer appends one `{date, numbers}` line per UTC date to `org-retro-readings.jsonl`, and each
   number prints `better | worse | same | no baseline | unknown` against the latest earlier line, with both readings and the delta. **`worse` is your
   trigger without further judgment; `no baseline` and `unknown` are not good days** (a refused read of the file is `unknown`, a first day is `no baseline`,
