@@ -34,20 +34,28 @@ const CHECKOUT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const OWNER_SLASH_NAME = /^[\w.-]+\/[\w.-]+$/;
 const GITHUB_REMOTE = /github\.com[:/]([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/;
 
-/** @returns {string} the `origin` remote URL; throws when this checkout has none. */
-function originRemote() {
+/**
+ * @param {string} [cwd] the checkout to ask; this one by default.
+ * @returns {string} the `origin` remote URL; throws when that checkout has none.
+ */
+export function originRemote(cwd = CHECKOUT) {
   try {
-    return execFileSync("git", ["remote", "get-url", "origin"], { cwd: CHECKOUT, env: sandboxGitEnv(), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+    return execFileSync("git", ["remote", "get-url", "origin"], { cwd, env: sandboxGitEnv(), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
   } catch (cause) {
     throw new Error("repo-identity: $GITHUB_REPOSITORY is unset and this checkout has no `origin` remote to read, so there is no repository to name", { cause });
   }
 }
 
-/** @returns {string} `owner/name`, from `$GITHUB_REPOSITORY` else the `origin` remote; throws when neither names one. */
-function resolveRepo() {
-  const fromRunner = process.env.GITHUB_REPOSITORY?.trim();
+/**
+ * Exported, with its two inputs as parameters, so a test can drive every outcome without touching this checkout's environment or remote.
+ * @param {Record<string, string | undefined>} [env]
+ * @param {() => string} [readRemote]
+ * @returns {string} `owner/name`, from `$GITHUB_REPOSITORY` else the `origin` remote; throws when neither names one.
+ */
+export function resolveRepo(env = process.env, readRemote = originRemote) {
+  const fromRunner = env.GITHUB_REPOSITORY?.trim();
   if (fromRunner && OWNER_SLASH_NAME.test(fromRunner)) return fromRunner;
-  const remote = originRemote();
+  const remote = readRemote();
   const named = GITHUB_REMOTE.exec(remote)?.[1];
   if (!named) throw new Error(`repo-identity: $GITHUB_REPOSITORY is unset and the \`origin\` remote (${JSON.stringify(remote)}) is not a github.com repository`);
   return named;
