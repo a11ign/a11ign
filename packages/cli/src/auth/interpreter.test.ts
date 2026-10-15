@@ -968,6 +968,21 @@ test("NEGATIVE CONTROL: auto: types nothing into a page that is not the app's, a
   assert.deepEqual(declared.typed.map((t) => t.field), ["Email address", "Password"]);
 });
 
+test("the loop's signed-in reading is a hint: a Dashboard heading on a provider's origin is left-origin, not a signed-in run (#5534)", async () => {
+  // The loop reads `signedIn` from the page's names alone, and the signed-in check also needs the app's origin. They meet at the
+  // `expect:` that follows the loop, which re-reads the origin: a provider's page that shows the heading is not believed.
+  const site = scriptedSite({
+    login: AUTH0_SITE.login,
+    mfa: { ...AUTH0_SITE.mfa, goes: { Continue: "provider" } },
+    provider: { nodes: [["heading", "Dashboard"]], origin: "https://idp.example.test" },
+  }, "login");
+  const run = await runCli({ site, auto: AUTO, idpOrigins: ["https://idp.example.test"], login: [{ goto: "/login" }, { auto: true }, expectDashboard] });
+  const loop = run.marks.find((m) => m.event === "authLoop");
+  assert.equal(loop?.detail.outcome, "signed-in", "the loop's own reading is the hint that needs the origin to confirm it");
+  assert.equal(run.error?.reason, "left-origin");
+  assert.equal(run.marks.some((m) => m.event === "authApplied"), false, "no run is reported signed in");
+});
+
 test("auto: with no credential variables declared, or a variable unset, ends before a browser is asked anything", async () => {
   const plan = { login: [{ goto: "/login" }, { auto: true }, expectDashboard] as FlowStep[], auto: AUTO };
   assert.deepEqual(requiredEnvNames(plan).sort(), ["APP_PASSWORD", "APP_USER"], "the seed is read only when a code screen appears");
