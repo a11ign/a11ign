@@ -14,6 +14,7 @@ import { readFile } from "node:fs/promises";
 
 import type { Page } from "playwright";
 
+import { authTrailMark } from "./auth-trail.js";
 import { EXPECT_DEFAULT_SECONDS } from "./flows.js";
 import { assertCredentialsPresent, signIn, type AuthPlan, type Environment, type Mark } from "./interpreter.js";
 import { ruleLayerPlanOf, type LoginBlockWire } from "./login-block.js";
@@ -32,7 +33,7 @@ async function loadedState(plan: AuthPlan, url: string, readText: (path: string)
  * before the driver is opened, so a missing one fails before the browser is driven at all.
  */
 export function ruleLayerSignIn(
-  { plan: request, url, env = process.env, mark = () => undefined, readText = (path) => readFile(path, "utf8") }:
+  { plan: request, url, env = process.env, mark = authTrailMark(env), readText = (path) => readFile(path, "utf8") }:
   { plan: AuthPlan & { readonly loginBlock?: LoginBlockWire }; url: string; env?: Environment; mark?: Mark; readText?: (path: string) => Promise<string> },
 ): (page: Page) => Promise<void> {
   // A request carrying a `login:` block holds no steps (the worker's own loop signs in by it); this layer signs in by the same plan `login --check` builds.

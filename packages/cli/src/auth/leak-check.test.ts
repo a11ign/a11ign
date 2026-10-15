@@ -231,10 +231,15 @@ const inspected = (root: string): string[] => [
   ...WORKER_AUTH_FILES,
 ];
 
-/** The ONE writer: `leak-check.ts` writes its own scrubbed output into the temp directory it was handed, and no state. */
-const ALLOWED = [{ file: `${AUTH_DIR}/leak-check.ts`, kind: "call" }, { file: `${AUTH_DIR}/leak-check.ts`, kind: "import" }];
+/** The writers, each with its reason. `leak-check.ts` writes its own scrubbed output into the temp directory it was handed, and no state.
+ *  `auth-trail.ts` writes the sign-in loop's trail (#5510): only the file the CALLER names, holding each loop's screens, controls pressed and
+ *  outcome, never a value (its own test pins that), and nothing reads it back as state. */
+const ALLOWED = [
+  { file: `${AUTH_DIR}/leak-check.ts`, kind: "call" }, { file: `${AUTH_DIR}/leak-check.ts`, kind: "import" },
+  { file: `${AUTH_DIR}/auth-trail.ts`, kind: "call" }, { file: `${AUTH_DIR}/auth-trail.ts`, kind: "import" },
+];
 
-test("THE TOOL WRITES NO STATE FILE: every write under the auth code and the worker's login is the one allowlisted writer", () => {
+test("THE TOOL WRITES NO STATE FILE: every write under the auth code and the worker's login is an allowlisted writer, with its reason", () => {
   const files = inspected(REPO);
   // Positive control for the emptiness below: the scan really visited the population it claims to (the three files a state
   // would most plausibly be written from, and enough of the directory that an empty read cannot pass).
@@ -243,7 +248,8 @@ test("THE TOOL WRITES NO STATE FILE: every write under the auth code and the wor
   }
   assert.ok(files.length >= MIN_SCANNED_FILES, `only ${files.length} files were scanned`);
   const sites = writeSitesIn(files, REPO).map(({ file, kind }) => ({ file, kind }));
-  assert.deepEqual(sites.sort((a, b) => a.kind.localeCompare(b.kind)), [...ALLOWED].sort((a, b) => a.kind.localeCompare(b.kind)),
+  const bySite = (a: { file: string; kind: string }, b: { file: string; kind: string }) => `${a.file} ${a.kind}`.localeCompare(`${b.file} ${b.kind}`);
+  assert.deepEqual(sites.sort(bySite), [...ALLOWED].sort(bySite),
     "a new file write in the auth code: it may not be a state, and if it is legitimate it joins ALLOWED here with its reason");
   // What the one allowed write is: under the directory it was HANDED, and it is the scrubbed artifact, not an input.
   const source = readFileSync(join(REPO, `${AUTH_DIR}/leak-check.ts`), "utf8");
