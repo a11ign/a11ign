@@ -4,7 +4,11 @@ The `changeset` check's refusal now ends with one marker line, `Cleared-by: revi
 - **(b)** the same with the entry not carried prints `Cleared-by: edit`, with or without an approval on the head.
 - **(c)** an approval at the head prints the `ACCEPTED` line and no marker.
 - **(d)** an approval at an earlier head still prints `Cleared-by: review`.
+- **(e)** the `dependency` step's shell, taken out of the parsed `ci.yml` and run under `bash -e` against the real `check` in a throwaway repository, annotates `::error title=changeset::Cleared-by: review` (or `edit`) and still exits 1; a settled head annotates nothing, exits 0 and sets `settled=true`; a `check` that crashes and prints no marker is annotated with nothing and still exits non-zero.
 
 Acceptance: pnpm exec rstest run --config=scripts/rstest/rstest.config.ts --include packages/guards/src/dependency-changeset.test.ts
 
 Mutation: `clearedBy` forced to always `edit` fails 3 tests; forced to always `review` fails 2; each restored byte-identical.
+Mutation (the step, `ci.yml` restored byte-identical after each): the annotation never emitted fails 2 tests; always emitted `Cleared-by: review` fails 3; the status swallowed (`[ "$status" = 0 ] || exit "$status"` replaced by `true`) fails 3.
+
+Live read: NOT made before merge. This `feat` pull request is not a dependency pull request, so its `changeset` job is skipped; the first live annotation will be on a dependency pull request after merge (a11ign#5528 is the standing one). The step is exercised by (e) in its place.
