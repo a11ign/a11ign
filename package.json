@@ -62,7 +62,7 @@
     "@a11ign/judge": "0.2.3",
     "@a11ign/scorer": "0.2.1",
     "@a11ign/screenreader-fleet": "^0.11.0",
-    "@a11ign/screenreader-worker": "^0.13.2",
+    "@a11ign/screenreader-worker": "^0.13.3",
     "@anthropic-ai/sdk": "^0.133.0",
     "@guidepup/guidepup": "^0.31.0",
     "a11ign": "0.2.7"
@@ -93,7 +93,7 @@
   ],
   "pnpm": {
     "overrides": {
-      "@a11ign/screenreader-worker": "0.13.2"
+      "@a11ign/screenreader-worker": "0.13.3"
     }
   }
 }
