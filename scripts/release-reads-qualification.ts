@@ -249,7 +249,7 @@ export function qualificationStatusesFrom(listing: { context: string; state: str
 const MAX_GH_OUTPUT_BYTES = 33_554_432;
 
 /** A read-only `gh` call, as the other release scripts make one: a failure THROWS, because CANNOT ASK is never the same as "no status". @param {string[]} args */
-function gh(args: string[]): string {
+export function gh(args: string[]): string {
   return execFileSync("gh", args, { encoding: "utf8", env: sandboxGitEnv(), maxBuffer: MAX_GH_OUTPUT_BYTES, stdio: ["ignore", "pipe", "pipe"] });
 }
 

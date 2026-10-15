@@ -42,7 +42,7 @@ import { refuseUnknownFlags } from "@a11ign/screenreader-fleet/cli-flags";
 import { REPO } from "./repo-identity.ts";
 
 /** @param {string[]} args */
-function gh(args: string[]): string {
+export function gh(args: string[]): string {
   return execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 }
 
