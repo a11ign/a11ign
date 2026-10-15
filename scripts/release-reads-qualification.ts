@@ -32,10 +32,8 @@ import { pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
 import { refuseUnknownFlags, flagValue } from "./cli-flags.ts";
 import { REPO } from "./repo-identity.ts";
-const { gh } = await toolExport("merge-guard-lookups");
 import { sandboxGitEnv } from "../packages/guards/src/git-env.ts";
 import { changedFiles } from "../packages/guards/src/changed-files.ts";
-import { toolExport } from "./agent-org-newest-tag.ts";
 
 export type Status = { state: string, description?: string };
 export type HistoryEntry = { sha: string, changedPaths: string[], statuses: Status[] };
@@ -246,6 +244,13 @@ export function qualificationStatusesFrom(listing: { context: string; state: str
     else report(`release-reads-qualification: IGNORED a ${QUALIFICATION_CONTEXT} status "${status.state}" on ${sha} from ${login ?? "a creator that could not be read"}: only ${QUALIFICATION_WRITERS.join(" or ")} write it`);
   }
   return kept;
+}
+
+const MAX_GH_OUTPUT_BYTES = 33_554_432;
+
+/** A read-only `gh` call, as the other release scripts make one: a failure THROWS, because CANNOT ASK is never the same as "no status". @param {string[]} args */
+export function gh(args: string[]): string {
+  return execFileSync("gh", args, { encoding: "utf8", env: sandboxGitEnv(), maxBuffer: MAX_GH_OUTPUT_BYTES, stdio: ["ignore", "pipe", "pipe"] });
 }
 
 /** Newest first. A lookup failure THROWS: CANNOT ASK is never the same as "no status", which reads as `wait`.
