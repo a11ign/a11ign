@@ -55,7 +55,7 @@ trying to make sure nobody has to hunt for where to apply it.
 
 **Understanding it** · [Three parts](#three-parts) · [The testing pipeline](#part-1-the-testing-pipeline) · [Running a real screen reader](#part-2-getting-a-real-screen-reader-to-run-repeatably) · [The model we are building](#part-3-the-accessibility-model-we-are-building) · [How we know it works](#how-we-know-it-works)
 
-**Working on it** · [Repository map](#repository-map) · [Contributing](./CONTRIBUTING.md) · [Security](./SECURITY.md) · [Documentation](#documentation) · [Status and roadmap](#status-and-roadmap)
+**Working on it** · [Repository map](#repository-map) · [Contributing](./CONTRIBUTING.md) · [Security](./SECURITY.md) · [Support](./SUPPORT.md) · [Documentation](#documentation) · [Status and roadmap](#status-and-roadmap)
 
 ## What it produces
 
