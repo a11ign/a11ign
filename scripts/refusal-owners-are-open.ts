@@ -21,6 +21,9 @@
  *
  * EXPORTED so `a11ign/lab`'s CI can drive the same reader over its own `gate:core-held`: it needs only `refusalsInPackageJson`, `findings` and
  * `readIssueState` with its own repository.
+ *
+ * PUBLISHING (#5361, decision (a)): `a11ign/lab` holds a trimmed COPY (a11ign#5351) until the reader is published from `@a11ign/toolchain`, which the lab
+ * already depends on (a11ign/agent-org#1415). Until that release, a change to the rules above is made in BOTH files; this one is authoritative.
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
