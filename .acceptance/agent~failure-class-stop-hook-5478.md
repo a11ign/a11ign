@@ -1,0 +1,4 @@
+Sets `guard` on the `stop-hook-bound` failure class (#5478) to the reading the ledger supports: the bound writes one `stop-hook-bound` line when it allows a stop, and that line is the detector this entry counts. The guard does not claim the stop is prevented. It carries a `GAP, NOT CLOSED BY THIS ENTRY` clause naming a11ign/agent-org#1488, the change that would leave the row routed at the bound (agent-org `src/worker-stop-hook.ts`, outside this Region). `guardNote` keeps the measurement and the missing rule. The guard is no longer null, as product-manager's ruling on #5478 requires.
+
+Acceptance:
+node -e "const c=JSON.parse(require('node:fs').readFileSync('.agent-org/failure-classes.json','utf8')).classes.find((c)=>c.id==='stop-hook-bound'); const h=require('node:crypto').createHash('sha1').update(String(c.guard)).digest('hex'); process.exit(c.guard!==null&&h!=='f7bb6f5c1767d7660c422012ebcca3779028c479'&&String(c.guard).includes('agent-org#1488')?0:1)"
