@@ -54,6 +54,17 @@ EnvironmentFile=-%h/.config/a11ign/fleet.env
 # playbook from the working directory, so a firing failed after the load check passed. The script defaults to the checkout beside the lab's; the unit states it anyway.
 Environment=A11Y_CONTROL_DIR=%h/repos/control
 
+# THE INVENTORY THE FETCH RESOLVES `a11y_lab` FROM, NAMED (#5518). `lab-fetch.yml` refuses a run that matches no `a11y_lab` host, and the control layer's
+# `ansible/inventory.yml` is gitignored (#54): the agents host has none, and `/etc/a11ign/` is not writable by this account, so the firing of 2026-10-15 passed the load
+# check and refused at the fetch. The one source is the CONTROL PLANE's `/etc/a11ign/inventory.yml` (#3239), and this host holds a copy of it OUTSIDE every checkout,
+# beside `fleet.env`, so a pull or a worktree cannot take it. `ANSIBLE_INVENTORY` replaces `ansible.cfg`'s own source list for this unit only.
+Environment=ANSIBLE_INVENTORY=%h/.config/a11ign/inventory.yml
+
+# THE COPY IS READ FROM THE CONTROL PLANE EACH FIRING, over the key and host `fleet.env` already names (A11Y_PVE_KEY, A11Y_CONTROL_HOST_FILE). Read-only: it `cat`s one
+# file and writes beside the copy, then renames, so a refused read leaves yesterday's copy standing. The `-` is deliberate for the same reason as the update below:
+# a firing against yesterday's addresses is worth more than none, and `lab-fetch.yml` still refuses on its own if there is no copy at all. `$$` is systemd's spelling of `$`.
+ExecStartPre=-/bin/sh -c 'umask 077; f="$$HOME/.config/a11ign/inventory.yml"; ssh -i "$$A11Y_PVE_KEY" -o BatchMode=yes -o ConnectTimeout=10 "root@$$(cat "$$A11Y_CONTROL_HOST_FILE")" "cat /etc/a11ign/inventory.yml" > "$$f.new" && test -s "$$f.new" && mv "$$f.new" "$$f"; rm -f "$$f.new"'
+
 # UPDATED FIRST, same as a11ign-fleet-gated-nightly.service's own ExecStartPre -- a firing against a stale
 # checkout could release a snapshot fetched by yesterday's `lab-fetch.yml`. The `-` prefix makes a failed
 # update non-fatal: a firing against a slightly stale checkout is worth far more than no firing at all.
