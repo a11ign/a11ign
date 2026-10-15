@@ -157,16 +157,17 @@ is stated below.
 ### Supported
 
 - **A scripted form login.** A test account's username and password typed, by accessible name, into a form on one pinned `origin:`, with the values in GitHub Secrets and the repository private. It has been read once on a page that is not a fixture: one page, one runner, one afternoon (`the-internet.herokuapp.com`, #2561), a target that prints its demo credentials and has no MFA, SSO or CAPTCHA. Your login is not that page.
-- **A redirect login through a declared identity-provider origin (`idp-origins:`), shown on a fixture only.** Your sign-in page sends the browser to a provider's origin, a username and password go into a form there, and the provider sends the browser back to yours. It has been run against a local fixture with a real Chromium and a fake provider (#4086, #4088), with one NVDA reading of the signed-in page on one box (#4107). **It has not been run against a hosted provider.**
+- **A redirect login through a declared identity-provider origin (`idp-origins:`), shown on a fixture only.** Your sign-in page sends the browser to a provider's origin, a username and password go into a form there, and the provider sends the browser back to yours. It has been run against a local fixture with a real Chromium and a fake provider (#4086, #4088), with one NVDA reading of the signed-in page on one box (#4107). **The MFA item below is the one run against a hosted provider.**
+- **A login with MFA by authenticator-app seed (TOTP), on the command line, shown on one provider.** The account's authenticator factor was enrolled with a seed, the seed is in an environment variable, and the run types the six-digit code the provider asks for. A real NVDA worker signed in through Auth0 Universal Login and its authenticator-code step and read the page it reached, and the same run with a wrong seed ended `auth-login-failed` (a11ign#5293, 2026-10-15, the two runs linked [below](#a-login-with-mfa-an-authenticator-app-seed)). **One tenant and one provider; the Action does not take it yet.** Steps: [a login with MFA](#a-login-with-mfa-an-authenticator-app-seed).
 
 ### Not supported
 
-- **MFA.** An SMS code, an emailed code or a push approval has no step in the flow vocabulary, and a run waits for no person. TOTP (an authenticator-app code) is computed only by `a11ign login --check`, from a seed in its `login:` block; a scan has no way to supply one, so it cannot answer a code prompt.
+- **MFA other than an authenticator-app code.** An SMS code, an emailed code, a push approval and a security key have no step in the flow vocabulary, and a run waits for no person. An authenticator-app code (TOTP) is answered, by the command line with a `login:` block, not by the GitHub Action: see [a login with MFA](#a-login-with-mfa-an-authenticator-app-seed).
 - **SSO**, other than a username and password on a form at an origin you can name. Any other origin ends the run with `auth-login-failed`, reason `left-origin`.
 - **A CAPTCHA.** It is never solved: the run ends `auth-challenge-detected`, which names it.
-- **A hosted provider, run end to end: not yet shown.** The redirect login above is a fixture reading, so against your provider (Auth0, Okta, Entra ID or any other) a run is the first reading.
+- **A hosted provider other than Auth0, run end to end: not yet shown.** The redirect login above is a fixture reading and the MFA run above is one Auth0 tenant, so against your provider (Okta, Entra ID or any other) a run is the first reading.
 
-ADR 0038's scope line for MFA and SSO, quoted rather than paraphrased ([Constraint 6](./adr/0038-authenticated-capture.md#constraint-6-mfa-sso-and-captcha-are-out-of-v1)):
+ADR 0038's v1 scope line for MFA and SSO, quoted rather than paraphrased ([Constraint 6](./adr/0038-authenticated-capture.md#constraint-6-mfa-sso-and-captcha-are-out-of-v1)), **which amendment 10 (2026-10-15) narrows: an authenticator-app seed is in scope from v3 and everything else in the quote still is not**:
 
 > **MFA, SSO and CAPTCHA are OUT of v1, recorded as a known gap** (`docs/known-gaps.md`), with "use a dedicated test
 > account without MFA" as the stated route (the advice BrowserStack and LambdaTest give).
@@ -175,11 +176,45 @@ ADR 0038's scope line for MFA and SSO, quoted rather than paraphrased ([Constrai
 
 In the order you can actually take them today:
 
-1. **Make a test account without MFA**, the ADR's stated route: a staging environment with MFA off, a role your admin exempts, or a username and password login beside the SSO button. It needs no person at any point, which a saved state does (the one who saves it, and again when it expires).
-2. **Load a sign-in state you saved by hand, once** (`auth-state:`, [how and its limits](./github-action.md#logging-in-with-a-saved-state-auth-state)). It carries the run's own origin's cookies and `localStorage` only, so a site that keeps its session in `sessionStorage` or IndexedDB cannot be carried, and a state that no longer holds ends `auth-state-expired`. It has been read on one real site, with a state a script made rather than a person.
-3. **Assess the page your own Playwright test has already signed into and reached. This route is not built.** [#4532](https://github.com/a11ign/a11ign/issues/4532) sized it (#4084 outcome 11) in [`docs/outcomes/outcome-11-playwright-suite.md`](./outcomes/outcome-11-playwright-suite.md): the decision is one thin TypeScript fixture, the Python twin after it, and the fixture is that document's first row, not code, so there is nothing to run yet. **Its main finding is that a session held only in page memory is not carried by a storage state and ends `auth-state-expired`, so this route will not serve an app whose session lives only there.** For an app whose session is in cookies or `localStorage`, it is the route for a login that is not a scripted form, because the suite's own session is reused rather than replayed.
+1. **Sign in with an authenticator-app code**, if the account's second factor is one (an authenticator app such as Google Authenticator, 1Password or Authy). [The steps are below](#a-login-with-mfa-an-authenticator-app-seed). It works on the command line and not yet in the Action, and it has been read on one provider.
+2. **Make a test account without MFA**, the ADR's stated route: a staging environment with MFA off, a role your admin exempts, or a username and password login beside the SSO button. It needs no person at any point, which a saved state does (the one who saves it, and again when it expires).
+3. **Load a sign-in state you saved by hand, once** (`auth-state:`, [how and its limits](./github-action.md#logging-in-with-a-saved-state-auth-state)). It carries the run's own origin's cookies and `localStorage` only, so a site that keeps its session in `sessionStorage` or IndexedDB cannot be carried, and a state that no longer holds ends `auth-state-expired`. It has been read on one real site, with a state a script made rather than a person.
+4. **Assess the page your own Playwright test has already signed into and reached. This route is not built.** [#4532](https://github.com/a11ign/a11ign/issues/4532) sized it (#4084 outcome 11) in [`docs/outcomes/outcome-11-playwright-suite.md`](./outcomes/outcome-11-playwright-suite.md): the decision is one thin TypeScript fixture, the Python twin after it, and the fixture is that document's first row, not code, so there is nothing to run yet. **Its main finding is that a session held only in page memory is not carried by a storage state and ends `auth-state-expired`, so this route will not serve an app whose session lives only there.** For an app whose session is in cookies or `localStorage`, it is the route for a login that is not a scripted form, because the suite's own session is reused rather than replayed.
 
-If none of the three reaches your page, this tool cannot examine it today: say so rather than working around it.
+If none of these reaches your page, this tool cannot examine it today: say so rather than working around it.
+
+### A login with MFA: an authenticator-app seed
+
+**Use this if the test account's second factor is an authenticator-app code (TOTP).** It does not answer a push approval, an SMS or emailed code, a security key or a CAPTCHA; for those, route 2 above (an account without MFA) stands.
+
+**What it rests on.** One end-to-end run on one provider, the Auth0 tenant of the private `a11ign/auth-capture-check`, on `a11ign@0.10.8` (a11ign#5293, 2026-10-15): a real NVDA worker signed in through Universal Login and the authenticator-code step and read the page it reached ([run 38769795554](https://github.com/a11ign/auth-capture-check/actions/runs/38769795554), `success`), and the same run with a random seed ended `auth-login-failed` ([run 38770567987](https://github.com/a11ign/auth-capture-check/actions/runs/38770567987), `success` as a falsifier: the workflow requires the failure). Another provider's pages were not read, so your first run is a reading.
+
+**1. Get the seed, once.** Enrol an authenticator factor on the test account yourself. On the enrolment page that shows a QR code, the link **"Trouble scanning?"** (Auth0's wording; another provider words it differently) shows the same secret as text. Copy that text key (letters A-Z and digits 2-7, spaces allowed) or the whole `otpauth://` URI, and add it to your authenticator app too if you want to check it. The seed is shown once at enrolment; if you did not keep it, remove the factor and enrol it again. **This works only with an authenticator-app factor.**
+
+**2. Keep it in a variable, never in the file.** Put it in a secret and in an environment variable of its own, beside the username and password. A literal in the file is refused (`login-literal`) and the refusal prints no value; the file holds a variable's *name*.
+
+**3. Write a `login:` block, and give the file no flow.** This is the shipped form (`totp:` in a `login:` block; the earlier design's `totp-from-env:` does not exist):
+
+```yaml
+version: 1
+origin: https://staging.example.com
+login:
+  url: https://staging.example.com/        # the page that starts the sign-in
+  username: APP_TEST_USER                  # the NAMES of the variables, never their values
+  password: APP_TEST_PASSWORD
+  totp: APP_TOTP_SEED                      # a base32 seed or a whole otpauth:// URI
+  check: { role: heading, name: "Dashboard" }   # ONE check, something only the signed-in page shows
+  idp-origins: [https://login.example.com] # the provider's origin, exact; omit if sign-in stays on your origin
+```
+
+**4. Run it.** Without `--login-flow`, the file's `login:` block is the sign-in: `a11ign https://staging.example.com/ --flows .github/a11y-flows.yml`. The variables must be in the environment of the process that signs in. For a scan that is the worker's own process (the CLI sends the variables' names and the worker reads their values), which is why the project's workflow sets them on the one step that starts the worker. `a11ign login --check --flows <file>` runs only the sign-in and its check on your machine first, which is cheaper than a capture.
+
+**5. Know what it does not do.**
+
+- **Not the Action yet.** The Action's `flows` and `login-flow` inputs are both required and name a flow, so it does not read a `login:` block ([the Action's reference](./github-action.md#logging-in-flows-and-login-flow)). A run with the block on a GitHub runner is the command-line form, as in the project's own workflow.
+- **A private repository, for a run in CI.** An authenticated run on a repository that is not private is refused before NVDA is installed (`auth-refused-public-repository`, ADR 0038 amendment 3), because the log, the artifact and the summary carry text from behind the login. The project's test bed for this is the private `a11ign/auth-capture-check`: its `auth0-e2e` workflow is the run above, and it is the one to copy.
+- **A wrong or stale seed ends `auth-login-failed`**, which is what the second run above shows. A tenant plan that refuses MFA is a different cause with a different name in the project's workflow (`mfa-unavailable-on-plan`, Auth0's Free plan allows MFA for testing only), so a failure is not always the seed. A code is made when it is typed and never recorded.
+- **Other factors are not answered:** the run does not answer them and ends without a capture.
 
 ## Behind a login: an authenticated run on a private repository
 
@@ -192,7 +227,7 @@ this section is the order to do them in. Read [SECURITY.md](../SECURITY.md#it-ca
 
 Decide this before you spend anything, because each of these ends the path rather than slowing it:
 
-- **A site whose only sign-in is MFA, SMS or an emailed code, or that puts a CAPTCHA in front of the login, is out of scope; so is an SSO that is not a username and password on a form at an origin you can name** (one that is, see [`idp-origins:`](#a-login-through-a-separate-identity-provider-origin-idp-origins)). SMS codes, emailed codes and push approvals are a documented gap, and TOTP (an authenticator-app code) is out of reach of a scan (see the MFA item above). **If the site has a way to make a test account without them** (a staging environment with MFA off, a role your admin exempts, a separate username and password login next to the SSO button), use that. If it has none, this path cannot reach your page today: say so rather than working around it.
+- **A site whose only sign-in is SMS, an emailed code, a push approval or a security key, or that puts a CAPTCHA in front of the login, is out of scope; so is an SSO that is not a username and password on a form at an origin you can name** (one that is, see [`idp-origins:`](#a-login-through-a-separate-identity-provider-origin-idp-origins)). Those are a documented gap. An authenticator-app code (TOTP) is not: it is answered by the command line, [not by the form of this section](#a-login-with-mfa-an-authenticator-app-seed), which is the Action's. **If the site has a way to make a test account without them** (a staging environment with MFA off, a role your admin exempts, a separate username and password login next to the SSO button), use that. If it has none, this path cannot reach your page today: say so rather than working around it.
 - **A CAPTCHA is never solved.** A login step that fails on a page showing a reCAPTCHA, hCaptcha or Turnstile widget ends the run with `auth-challenge-detected`, which names the challenge and stops.
 - **Attaching to your own signed-in browser is not built.** What exists instead is loading a sign-in state you saved by hand (`auth-state:`, [#2566](https://github.com/a11ign/a11ign/issues/2566), merged): it is the route for a site behind SSO or MFA, and it is **not walked in this section**, which is the plain username-and-password path. It has its own steps, the limits of the file and one measured reading in [`docs/github-action.md`](./github-action.md#logging-in-with-a-saved-state-auth-state): read that if a form login cannot reach your page.
 - **Only what your flows file names is pressed.** `probe-forms` and `probe-navigation` are switched off for a run that logs in, whatever you set.
@@ -267,9 +302,9 @@ What release `a11ign@0.9.0` (the pin before `0.10.2`) does with it, read off `pa
 - **The declared origins are allowed only between the login's steps.** The last step is an `expect:` on the app's origin (the flows rules guarantee it), so a login that ends parked on the provider is `left-origin`; and nothing is typed into an origin that is not declared.
 - **`left-origin` is what any other origin ends in.** An origin the flow does not name, a third site the provider redirects on to, or a login that finishes parked on the provider is `auth-login-failed` with reason `left-origin`, and the message names the step and the page it was on. It is also what you get when the declaration is missing or misspelt.
 - **The in-memory-token case is what this is for.** A hosted provider whose token lives only in the page's memory (an SPA SDK's `cacheLocation: 'memory'`) leaves nothing in cookies or `localStorage` for a saved state to carry. The login therefore round-trips through the provider in the same browser as the capture. A flow that declares a provider and **ends on the requested page does not load that page again**, because a load discards a token held only in memory (measured 2026-10-08 on the #4086 fixture: the reload reads `Sign in`, the page left alone reads `Account`).
-- **It works for a test account without MFA, unattended.** It does not answer MFA, a CAPTCHA or a person present.
+- **It works for a test account without MFA, unattended.** It does not answer a CAPTCHA or a person present. An authenticator-app code is answered by a `login:` block, not by these steps ([how](#a-login-with-mfa-an-authenticator-app-seed)).
 
-**What is not shown:** `docs/known-gaps.md` [§51](./known-gaps.md#51-a-run-cannot-get-past-mfa-sso-or-a-captcha-and-nothing-in-the-tool-detects-the-third-out-of-v1-by-ruling-2275-2262) records that this was read on a local fixture (a real Chromium, a fake provider), **not on a hosted provider**, with one NVDA reading on the same fixture, and that MFA is not covered. Your provider is untested, so a run against it is the first reading.
+**What is not shown:** `docs/known-gaps.md` [§51](./known-gaps.md#51-a-run-cannot-get-past-mfa-sso-or-a-captcha-and-nothing-in-the-tool-detects-the-third-out-of-v1-by-ruling-2275-2262) records that this was read on a local fixture (a real Chromium, a fake provider), **not on a hosted provider**, with one NVDA reading on the same fixture, and that this form's redirect login was not read on a hosted provider; the one hosted-provider reading is the [MFA run](#a-login-with-mfa-an-authenticator-app-seed), which used a `login:` block. Your provider is untested, so a run against it is the first reading.
 
 ### What a v3 run shows you
 
