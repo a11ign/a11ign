@@ -28,11 +28,14 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sandboxGitEnv } from "../packages/guards/src/git-env.ts";
 
+// No TypeScript-only syntax below, the way the file was before: a worker loads this file natively, and the coverage provider parses
+// what it loaded as plain JavaScript, so a `: string` return type made `pnpm run coverage` exit 1 with every test passing.
 const CHECKOUT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const OWNER_SLASH_NAME = /^[\w.-]+\/[\w.-]+$/;
 const GITHUB_REMOTE = /github\.com[:/]([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/;
 
-function originRemote(): string {
+/** @returns {string} the `origin` remote URL; throws when this checkout has none. */
+function originRemote() {
   try {
     return execFileSync("git", ["remote", "get-url", "origin"], { cwd: CHECKOUT, env: sandboxGitEnv(), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
   } catch (cause) {
@@ -41,7 +44,7 @@ function originRemote(): string {
 }
 
 /** @returns {string} `owner/name`, from `$GITHUB_REPOSITORY` else the `origin` remote; throws when neither names one. */
-function resolveRepo(): string {
+function resolveRepo() {
   const fromRunner = process.env.GITHUB_REPOSITORY?.trim();
   if (fromRunner && OWNER_SLASH_NAME.test(fromRunner)) return fromRunner;
   const remote = originRemote();
