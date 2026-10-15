@@ -4,4 +4,4 @@ The lockfile, `package.json` and the guard that pins the consumed registry versi
 - **Real tree:** the override reads `0.13.2`, the lockfile entry reads `0.13.2` with an integrity under every importer that declares it, and no pending changeset names the package in its frontmatter.
 - **Registry:** `npm view @a11ign/screenreader-worker@0.13.2 dist.integrity` returns the same `sha512` the lockfile carries.
 
-Acceptance: grep -q '"@a11ign/screenreader-worker": "0.13.2"' package.json && node --test packages/guards/src/screenreader-worker-extraction.test.ts
+Acceptance: grep -q '"@a11ign/screenreader-worker": "0.13.2"' package.json && node --test packages/guards/src/screenreader-worker-extraction.test.ts && node -e "const p=require('./package.json'); process.exit(p.dependencies['@a11ign/screenreader-worker']==='^0.13.2' && p.pnpm.overrides['@a11ign/screenreader-worker']==='0.13.2' ? 0 : 1)"
