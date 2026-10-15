@@ -7,3 +7,5 @@ Acceptance: `git grep -q "export function ownersOf" -- scripts/refusal-owners-ar
 Mutation: none -- a comment-only change, no guard touched.
 
 platform: checked npm/pnpm workspace publishing; the toolchain is already a published `@a11ign/*` package the lab consumes, so no new package is created.
+
+Waits-on-done-when: a11ign/agent-org#1415.1
