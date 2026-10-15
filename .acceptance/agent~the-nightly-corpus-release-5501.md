@@ -2,7 +2,7 @@ The unit comment's "Until the lab's script stands alone this unit fails at the l
 
 Closes a11ign/a11ign#5501
 
-Acceptance: `node -e "import('/home/agent/repos/lab/scripts/corpus-release-nightly.ts').then(() => console.log('LOADS'))"` — prints `LOADS` once a11ign/lab#127 merges and the lab checkout updates; today it still prints ERR_MODULE_NOT_FOUND. The same import from the PR's worktree, `/home/agent/repos/wt-5501-lab`, printed `LOADS`.
+Acceptance: `node -e "import('/home/agent/repos/wt-5501-lab/scripts/corpus-release-nightly.ts').then(() => console.log('LOADS'))"` — prints `LOADS` once a11ign/lab#127 merges and the lab checkout updates; today it still prints ERR_MODULE_NOT_FOUND. The same import from the PR's worktree, `/home/agent/repos/wt-5501-lab`, printed `LOADS`.
 
 Outside-Region: none.
 
