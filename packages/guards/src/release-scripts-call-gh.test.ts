@@ -12,8 +12,8 @@ import assert from "node:assert/strict";
 import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { gh as releaseGh } from "./release-reads-qualification.ts";
-import { gh as npmTokenGh } from "./npm-token-liveness.ts";
+import { gh as releaseGh } from "../../../scripts/release-reads-qualification.ts";
+import { gh as npmTokenGh } from "../../../scripts/npm-token-liveness.ts";
 
 const FAKE_GH = `#!/bin/sh
 printf '%s\\n' "$@" > "\${FAKE_GH_ARGS:?}"

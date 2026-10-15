@@ -14,8 +14,8 @@ import { existsSync, mkdirSync, mkdtempSync, realpathSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { sandboxGitEnv } from "../packages/guards/src/git-env.ts";
-import { presentAgentOrg } from "./verify.ts";
+import { sandboxGitEnv } from "./git-env.ts";
+import { presentAgentOrg } from "../../../scripts/verify.ts";
 
 /** `root/repo` (a real repository, so `--git-common-dir` answers) and nothing else: no sibling, no cache. */
 function world() {
