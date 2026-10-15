@@ -91,16 +91,20 @@ to one the loop would act on. The trail's silence after `one-time-code` is consi
 
 ### Done-when, item by item
 
-The row has three items. This reading meets part of item 1 and none of item 2. Item 3 does not apply, because the
-artifact is live and holds the branches.
+The row has three items. **Item 3 is the one that applies**: the artifact is live, but it does not hold what items 1
+and 2 need, so this reading says so and stops. The trail writer keeps `{ screen, kind }` for each branch the loop acted
+on and nothing else (`packages/cli/src/auth/auth-trail.ts`, `loopOf`), by design ("Nothing typed is in it", a11ign#5510).
+It has no headings, controls, alert role, name or text, and the run's transcript failed. Item 1 is met only in part and
+item 2 cannot be met from this record.
 
 | Item | Status | What is missing |
 |---|---|---|
 | (1) the screen, the alert's role and name, the copy that decided, the step count and budget left, the run id and the artifact name | **Partial** | Headings and controls, the alert's role and name, and budget left are not in the artifact. `spa.log` holds one line and `worker.err` and `a11ign-result.json` are empty. The copy, step count, run id and artifact name are recorded. |
 | (2) which of (a), (b), (c) holds, the real alert text as a labelled fixture, and one fix row per faulty copy with a negative control | **Not met** | (c) is ruled out. (a) and (b) need the alert's text and role, which the record lacks. Without them there is no faulty copy to name, no real text for a fixture, and so no fix row to file. The next record is in the section below. |
-| (3) the artifact expired or lacks the branches | **Not applicable** | The artifact is live and holds the branches. |
+| (3) the artifact expired or does not hold the evidence: say so, stop, do not dispatch, name the dispatch needed | **Applies, and this reading stops here** | The artifact is not expired (id `11990569281`) but holds only the acted-on `{ screen, kind }` branches. The dispatch needed is named under "Next record needed" and filed as a11ign#5564 for `orchestrator`. No run was dispatched by this reading. |
 
-Item 2 is blocked on evidence this artifact does not hold. The row stays open until a wrong-code run records the alert.
+Item 2 cannot be answered from this artifact. Per item 3 the reading stops here and the dispatch it needs is a11ign#5564;
+no fix row is filed, because which copy to change depends on (a) or (b) and a fixture needs the real text.
 
 ### What the record lacks
 
@@ -134,8 +138,16 @@ Naming the cause needs a run that keeps the one-time-code screen's controls and 
 in the trail or transcript. The loop does not record what it reads without acting, so the trail cannot show this
 unless the record is widened. Ordering that run is a fleet action, so it belongs to `orchestrator`, not to this reading.
 
+The dispatch, in order (filed as a11ign#5564): (1) the trail or transcript records, per step, the alert nodes read (role,
+name, text) and the screen's controls; the loop that decided is the worker's, in `@a11ign/screenreader-worker`, a
+separate repository. (2) One wrong-code falsifier run on `a11ign/auth-capture-check` against that build. Only then can
+a fix row be filed per copy at fault, each with the real alert text as its fixture and a negative control that a
+timeout still ends `signed-in-check-never-matched`.
+
 ### What this reading does not verify
 
-- The row's premise that a11ign#5495 and #5510 keep the loop branches. Neither number resolves in `a11ign/a11ign` or
-  `a11ign/auth-capture-check`, so they were not read.
+- The row's premise about a11ign#5495 and #5510 holds only in part. Both resolve in `a11ign/a11ign` (#5495 "The Auth0
+  end-to-end artifact keeps the loop's branches (screen and control pressed per step, no values)", #5510 the writer),
+  and `auth-trail.ts` writes exactly that. "Per step" is the steps the loop acted on, so the row's expectation of the
+  alert Auth0 showed is not something that trail was built to carry.
 - Any behaviour of Auth0 itself. Everything above is from the worker's shipped code and this run's artifact.
