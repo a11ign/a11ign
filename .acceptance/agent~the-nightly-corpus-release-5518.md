@@ -4,7 +4,9 @@ Option 2 of the row (a copy of the inventory on the agents host, kept out of git
 
 Closes a11ign/a11ign#5518
 
-Acceptance: `node -e "const s=require('fs').readFileSync('.agent-org/units/a11ign-corpus-release-nightly.service','utf8');if(!/^Environment=ANSIBLE_INVENTORY=%h\/\.config\/a11ign\/inventory\.yml$/m.test(s)||!/^ExecStartPre=-.*cat \/etc\/a11ign\/inventory\.yml/m.test(s))process.exit(1);console.log('UNIT-DECLARES-INVENTORY')"`
+Acceptance: `node --test --experimental-strip-types packages/guards/src/corpus-release-inventory-refresh.test.ts`
+
+The test RUNS the unit's own refresh line (the `$$` unescaped) in a temp HOME against a stub `ssh`: a good read lands at the `ANSIBLE_INVENTORY` path at mode 0600 with no `.new`; a failed read and an EMPTY read both leave yesterday's copy standing; the host comes from `A11Y_CONTROL_HOST_FILE` and the one file asked for is `/etc/a11ign/inventory.yml`; and where `ansible-inventory` is installed, Ansible resolves `a11y_lab` from the written copy. Mutation checked: removing the `test -s` empty-read guard from the unit fails the empty-read test.
 
 Outside-Region: none.
 
