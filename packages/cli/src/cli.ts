@@ -30,6 +30,7 @@ import { reportLines, type Report } from "./report.js";
 import {
   formatFaultMessage, formatAuthFaultMessage, formatDoubtMessage, formatEarlyContainmentNotice,
 } from "./fault-remediation.js";
+import { authTrailMark } from "./auth/auth-trail.js";
 import { AuthError, isAuthFault } from "./auth/auth-faults.js";
 import { onTheWire, refuseAuthOnRemoteWorker, requireAuthApplied, type AuthRequest } from "./auth/refusals.js";
 import { ruleLayerSignIn } from "./auth/rule-layer.js";
@@ -1919,13 +1920,11 @@ async function snapshot(page: Page, driver: AuthDriver, { label, since }: { labe
 
 interface AttemptContext { setup: LoginCheckPlan; deps: LoginCheckDeps; scrub: ScrubSet }
 
-const noMark = (): void => undefined;
-
 /** Run the login's steps; returns the failure it ended with, or `undefined` when it ran to its last step. */
 async function runLoginSteps({ setup, deps }: AttemptContext, driver: AuthDriver): Promise<unknown> {
   try {
     await runSteps({
-      steps: setup.plan.login, origin: setup.appOrigin, driver, env: deps.env, mark: noMark, phase: "login",
+      steps: setup.plan.login, origin: setup.appOrigin, driver, env: deps.env, mark: authTrailMark(deps.env), phase: "login",
       bindTimeoutMs: BIND_TIMEOUT_MS, idpOrigins: setup.plan.idpOrigins ?? [], auto: setup.plan.auto,
       pacing: { pause: deps.pause, now: Date.now, budgetMillis: AUTO_BUDGET_MS },
     });
