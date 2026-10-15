@@ -9,7 +9,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { AUTH_TRAIL_ENV, authTrailMark } from "./auth-trail.js";
+import { AUTH_TRAIL_ENV, authTrailMark } from "./auth-trail.ts";
 
 const FAKE_USER = "trail-user@example.test";
 const FAKE_SECRET = "trail-secret-not-real";
