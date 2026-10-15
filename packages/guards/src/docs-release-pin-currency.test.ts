@@ -399,3 +399,22 @@ test("the re-pin of the real docs moves the sentence at docs/github-action.md:49
   assert.ok(changed.some((line) => line.where === "docs/github-action.md:49"), "docs/github-action.md:49 is not among the changed lines");
   assert.deepEqual(changed.map((line) => refusalOf(line, promoted)).filter((refusal) => refusal !== undefined), []);
 });
+
+test("a re-pin of the real docs to a later release leaves no sentence naming the old release, so the next re-pin's guard passes without a hand edit (#5567)", () => {
+  const docs = realDocs();
+  const pins = new Set(docs.flatMap((doc) => [...doc.text.matchAll(PIN_IN_DOCS)].map((match) => `${match[1]} ${match[2]}`)));
+  assert.equal(pins.size, 1, `the positive control: the real docs carry one pin, found ${[...pins].join(", ") || "none"}`);
+  const [pinSha, pinVersion] = [...pins][0].split(" ");
+  const promoted: Promoted = { version: nextPatch(pinVersion), commit: sha("c") };
+  const tags: ReleaseTag[] = [{ name: `a11ign@${pinVersion}`, commit: pinSha }, { name: `a11ign@${promoted.version}`, commit: promoted.commit }];
+  const readerOf = (moved: Doc[]): Reader => ({ tags: () => tags, v0Commit: () => promoted.commit, docs: () => moved });
+
+  const plan = planRepin(readerOf(docs));
+  assert.equal(plan.status, "rewrite", plan.faults.join("\n"));
+  // The planner moves only the wordings it knows. A dated read or a behavioural sentence it cannot move is named here, and a
+  // re-pin that merges with one of these leaves the guard red on the next release (the #5567 defect: the old release's commit left behind).
+  assert.deepEqual(plan.unmoved, [], "these sentences still name the old release and the planner cannot move them: reword them so they name no release");
+
+  const rewritten = docs.map((doc) => plan.files.find((file) => file.path === doc.path) ?? doc);
+  assert.deepEqual(pinFaults(readerOf(rewritten)).faults, [], "the guard reads the re-pinned docs and finds a sentence naming a release other than the pin's");
+});

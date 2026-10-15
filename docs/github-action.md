@@ -19,8 +19,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: a11ign/a11ign@b403bc726b3ba0896ba94284240fa8ba4a5ecf92   # the commit of the release tagged a11ign@0.10.8
-        # Pinned to the full 40-character commit of release 0.10.8 (`npm view a11ign dist-tags` read `latest`
-        # 0.10.8 on 2026-10-15; `next` was 0.10.9), so your CI does not move when a
+        # Pinned to the full 40-character commit of the release named on the line above (`npm view a11ign dist-tags`
+        # read `latest` as that release on 2026-10-15; `next` was one patch ahead), so your CI does not move when a
         # newer one is published -- GitHub
         # refuses an abbreviated SHA outright, it does not just discourage it.
         id: a11ign
@@ -139,7 +139,7 @@ gh api "repos/<owner>/<repo>/actions/artifacts/$artifact_id/zip" > result.zip
 ```
 
 Either way what comes back is a directory holding the file
-`result-json` names (and, where the pinned release has the `summary-md` output, as `0.10.8` does, `a11ign-summary.md`, the exact rendered
+`result-json` names (and, where the pinned release has the `summary-md` output, `a11ign-summary.md`, the exact rendered
 report the job summary carries, once the upload step lists it), the schema below (`verdict.findings`, `verdict.taskCompletable`,
 `captureVerified`, ...) — the transcript behind every finding. Neither needs a browser or
 `pull-requests: write` permission.
