@@ -46,8 +46,8 @@ importers:
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.12.0)
       '@guidepup/setup':
-        specifier: 0.29.1
-        version: 0.29.1
+        specifier: 0.29.2
+        version: 0.29.2
       '@microsoft/api-extractor':
         specifier: ^7.59.4
         version: 7.59.4(@types/node@26.6.5)
@@ -585,11 +585,11 @@ packages:
   '@guidepup/guidepup@0.31.0':
     resolution: {integrity: sha512-r3eKTep4fdSajiSGEJI0KHHjKvJ6e4wyMhHIGbr+ztW04CcE91CRMRbTaM5JQwZKvRiOfj3kFVKaYIx+CFJWMw==}
 
-  '@guidepup/record@0.2.0':
-    resolution: {integrity: sha512-wmSbuomWYNvAghgH+MlSdMkkXvSW44SvMA+D0XdMXzI6iTgMbpb4iijUtIF8moiX+wl0SbeNGsY0sXqxQm6nyQ==}
+  '@guidepup/record@0.3.0':
+    resolution: {integrity: sha512-0PyoVl9yt/k34oYCWoo3WUKy452zsJDrz1xOq0SKeQM0RDD8M1emTRNEjuFU7+/BpZHisWaNXRRGIrnGvEkizg==}
 
-  '@guidepup/setup@0.29.1':
-    resolution: {integrity: sha512-fCbLxqCIH9RW3NlcZQcDWOYwTuUshW5YIeSDvwNlQ2d4qDUBzd/o/b4cJ3P4iD6OEFAnafqJdyx81TlVQE7Aqw==}
+  '@guidepup/setup@0.29.2':
+    resolution: {integrity: sha512-RSAuCTd3LVTnxvv1+A33bu2y0h5Q6//Q+RoJI73JuVydRhpNd+jz62ElJT6oqgmzURKKEaM2tO572z33wyWcow==}
     hasBin: true
 
   '@humanfs/core@0.19.2':
@@ -2306,14 +2306,14 @@ snapshots:
     dependencies:
       plist: 4.0.0
 
-  '@guidepup/record@0.2.0':
+  '@guidepup/record@0.3.0':
     dependencies:
       ffmpeg-static: 5.3.0
     transitivePeerDependencies:
       - supports-color
     optional: true
 
-  '@guidepup/setup@0.29.1':
+  '@guidepup/setup@0.29.2':
     dependencies:
       chalk: 4.1.2
       commander: 15.0.0
@@ -2321,7 +2321,7 @@ snapshots:
       undici: 8.11.2
       unzipper: 0.12.5
     optionalDependencies:
-      '@guidepup/record': 0.2.0
+      '@guidepup/record': 0.3.0
     transitivePeerDependencies:
       - supports-color
 
