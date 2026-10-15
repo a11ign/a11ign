@@ -56,9 +56,9 @@ ExecStartPre=-%h/.local/bin/agent-org primary:update
 
 # THE SCRIPT IS THE LAB'S, RUN FROM THE LAB'S CHECKOUT (ADR 0045 cut 9, #5087). This repository no longer holds `corpus:release-nightly` or lays the lab: the
 # unit names `a11ign/lab`'s `scripts/corpus-release-nightly.ts` by its absolute path. The load is proved FIRST so a script that cannot load fails the unit with its own
-# error and not as a missing `pnpm` script (#4693). WHAT THIS DOES NOT SETTLE, and is the lab's row to settle: the script imports
-# `../../../scripts/npm-cli-executable.ts`, a path that resolved only while the lab was laid under this repository's `packages/`, and it runs `pnpm run corpus:release`
-# in the WORKING directory, which is this repository's and no longer holds that script. Until the lab's script stands alone this unit fails at the line above, by name.
+# error and not as a missing `pnpm` script (#4693). The lab's checkout holds no `node_modules` and cannot `pnpm install`, so the two scripts import nothing but `node:`
+# modules and each other (`scripts/refuse-unknown-flags.ts` replaced `@a11ign/screenreader-fleet/cli-flags`, #5501), and `corpus-release.ts` is run by the path of
+# its own directory. A new package import in either script fails this line by name: that is the check doing its job.
 ExecStartPre=%h/.local/bin/node -e "import('%h/repos/lab/scripts/corpus-release-nightly.ts')"
 
 ExecStart=%h/.local/bin/node %h/repos/lab/scripts/corpus-release-nightly.ts
