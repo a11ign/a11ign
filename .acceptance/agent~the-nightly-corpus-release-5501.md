@@ -2,7 +2,7 @@ The unit comment's "Until the lab's script stands alone this unit fails at the l
 
 Closes a11ign/a11ign#5501
 
-Acceptance: `node -e "import('/home/agent/repos/wt-5501-lab/scripts/corpus-release-nightly.ts').then(() => console.log('LOADS'))"` -- the row's own command, against the lab PR's worktree until a11ign/lab#127 merges; after it merges and `agent-org primary:update` runs, the path is `/home/agent/repos/lab/scripts/corpus-release-nightly.ts`.
+Acceptance: `node -e "const s=require('fs').readFileSync('.agent-org/units/a11ign-corpus-release-nightly.service','utf8');if(s.includes('fails at the line above')||!s.includes('A11Y_CONTROL_DIR'))process.exit(1);console.log('UNIT-NAMES-CONTROL-DIR')"` -- the host load is the row's own Done-when 1, read after a11ign/lab#127 merges.
 
 Outside-Region: none.
 
