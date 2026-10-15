@@ -12,4 +12,6 @@ Measured at this head: the command above exits 0. Measured, by mutation: appendi
 
 Mutation: (A) `toolExport` back in `repo-identity.ts` -> the first `test -z` fails; (B) `toolExport` back in `verify.ts` -> the first `test -z` fails; (C) `TRACKERS` back -> the second `test -z` fails, and the first still passes.
 
-Measured: `presentAgentOrg` answers `null` for a repository with no sibling `../agent-org`, no cache and no `A11Y_AGENT_ORG_REPO`, and the host checkout for this worktree; the 10 test files that import or read `verify.ts`, `repo-identity.ts` and `release-reads-qualification.ts` ran 201 tests, 0 failed (`node --test`).
+Measured at head `a7827739d` plus the tests: `pnpm run verify` GREEN, the affected set 11 test files / 258 tests against `origin/main` (the 9 new tests are in `packages/guards/src/verify-present-agent-org.test.ts` and `release-scripts-call-gh.test.ts`, where the gates look: `scripts/*.test.ts` is picked up by none); `node scripts/coverage.ts` exits 0 (it exited 1 at `b856b4250`, from `: string` return types in `repo-identity.ts` that the coverage provider cannot parse).
+
+Mutation, tests: `presentAgentOrg` returning `null` always, and returning the cache directory when it is absent, each exit 1; `gh` in `npm-token-liveness.ts`, and in `release-reads-qualification.ts`, swallowing a non-zero exit each exit 1; every file restored byte-identical (`cmp`). Positive controls in the same file: a sibling, an explicit `A11Y_AGENT_ORG_REPO`, and the cache are each found, and the absent case creates no cache and no `FETCH_HEAD`.
