@@ -39,7 +39,8 @@ describe("the trail file", () => {
     const dir = trailDir();
     try {
       const file = join(dir, "trail.json");
-      authTrailMark({ [AUTH_TRAIL_ENV]: file })("authLoop", LOOP);
+      // The documented name, spelled out: a caller sets this literal, so the test must not read it back from the constant it checks.
+      authTrailMark({ A11Y_AUTH_TRAIL_FILE: file })("authLoop", LOOP);
       assert.deepEqual(readTrail(file), { loops: [LOOP] });
     } finally {
       rmSync(dir, { recursive: true, force: true });
