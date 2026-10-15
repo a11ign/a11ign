@@ -191,7 +191,7 @@ If none of these reaches your page, this tool cannot examine it today: say so ra
 
 **1. Get the seed, once.** Enrol an authenticator factor on the test account yourself. On the enrolment page that shows a QR code, the link **"Trouble scanning?"** (Auth0's wording; another provider words it differently) shows the same secret as text. Copy that text key (letters A-Z and digits 2-7, spaces allowed) or the whole `otpauth://` URI, and add it to your authenticator app too if you want to check it. The seed is shown once at enrolment; if you did not keep it, remove the factor and enrol it again. **This works only with an authenticator-app factor.**
 
-**2. Keep it in a variable, never in the file.** Put it in a secret and in an environment variable of its own, beside the username and password. A literal in the file is refused (`login-literal`) and the refusal prints no value; the file holds a variable's *name*.
+**2. Keep it in a variable, never in the file.** Put it in a secret and in an environment variable of its own, beside the username and password. A literal in the file is refused (`login-literal`) and the refusal prints no value; the file holds a variable's *name*. The seed is redacted like a password: its value is hidden wherever it would appear in the run's output, and one shorter than 8 characters is refused, as a password is.
 
 **3. Write a `login:` block, and give the file no flow.** This is the shipped form (`totp:` in a `login:` block; the earlier design's `totp-from-env:` does not exist):
 

@@ -12,7 +12,7 @@ negative control refused: login: has unknown key "totp-from-env"; the keys are u
 
 The step is accepted, the wire carries variable NAMES only, and the provisional `totp-from-env:` key the row warned against is refused by the same parser.
 
-**Deviations from the row, stated:** the row asked for the seed to be described as "redacted like a password". It is not: no run prints it, so the text says it is never held in the output (read from the worker's own environment, never on the wire, a literal refused as `login-literal`, a code never recorded). And the Action does NOT take a `login:` block (`flows` and `login-flow` are both required in `action.yml`), so the section is written as the command-line form and says the Action does not read it, rather than describing a path no run has taken.
+**Deviation from the row, stated:** the Action does NOT take a `login:` block (`flows` and `login-flow` are both required in `action.yml`), so the section is written as the command-line form and says the Action does not read it, rather than describing a path no run has taken. (A first draft said the seed is not redacted like a password; the reviewer's NOT CONVINCED at `1e2b3493` was right and that was wrong: the seed is in the scrub set with the password, `packages/cli/src/auth/resolve.ts` `names: [...built.credentialNames, block.totp]` and `cli.ts` `runLoginCheck`, and `totp.test.ts` "the seed is a scrub value like a password".)
 
 Acceptance:
 git grep -q "Trouble scanning" -- docs/try-it.md
@@ -23,6 +23,9 @@ git grep -q "Amendment 10 (#4976" -- docs/adr/0038-authenticated-capture.md
 git grep -q "Amended 2026-10-15 (#4976" -- docs/known-gaps.md
 git grep -q "auth-refused-public-repository" -- docs/try-it.md
 git grep -q "a11ign/auth-capture-check" -- docs/github-action.md
+git grep -q "redacted like a password" -- docs/adr/0038-authenticated-capture.md docs/try-it.md
+bash -c '! git grep -q "not hidden in the output by the per-character" -- docs/adr/0038-authenticated-capture.md'
+git grep -q "the seed is a scrub value like a password" -- packages/cli/src/auth/totp.test.ts
 
 **Mutation:** restoring the old sentence "TOTP (an authenticator-app code) is out of reach of a scan" in `docs/try-it.md`, or removing "Trouble scanning" from either guide, turns the matching command red (exit 1); each is a one-line change.
 

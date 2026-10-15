@@ -554,8 +554,12 @@ is the v1 ruling and is kept as written; this paragraph is what changed, and a r
 - **The seed's handling is Constraint 2's, not a new rule.** It is an environment variable and never a value in the flows file
   (a literal in `totp:` is refused as `login-literal`, and the refusal prints no value); the CLI sends the variable's NAME to the
   worker, which reads the value from its own process environment, so the seed is never on the wire; and a code is made at the moment
-  it is typed and never recorded (`assertNoTotpCode`). The seed is not hidden in the output by the per-character redaction a password
-  gets, because no run prints it: it is kept out of the output by never being held there.
+  it is typed and never recorded (`assertNoTotpCode`). **The seed is redacted like a password:** its value goes into the same scrub set
+  as the username and the password (`planSignIn` names it with them, `resolveAuthentication` and `a11ign login --check` build the set
+  from those names), so every spelling of it is replaced in the output and a value that survives ends the run (Constraint 2's
+  rescan); the floor is the password's, a value under 8 characters is refused as `auth-credential-too-short`, and
+  `totp.test.ts` pins that the seed is a scrub value. What the scrub cannot hide is a six-digit code, below the floor on purpose,
+  which is why a code is never recorded rather than scrubbed.
 - **"A login that stops at a challenge fails its `expect:`" (below) now holds for every factor not named in scope.** An account
   whose factor is an authenticator code is answered by the run; a prompt for any other factor is still an unmet `expect:`.
 - **Evidence, read once, on one provider.** The Auth0 end-to-end run on `a11ign@0.10.8` in the private `a11ign/auth-capture-check`:
