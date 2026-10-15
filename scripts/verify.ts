@@ -224,15 +224,6 @@ function installExitHandlers() {
   process.on("exit", removeAllScratch);
 }
 
-/**
- * @param {string} command
- * @param {string[]} args
- * @param {import("node:child_process").SpawnSyncOptions} [options]
- */
-function sh(command: string, args: string[], options: import("node:child_process").SpawnSyncOptions = {}) {
-  return spawnSync(command, args, { cwd: REPO, stdio: "inherit", encoding: "utf8", env: sandboxGitEnv(), ...options });
-}
-
 /** @param {string[]} pnpmArgs @param {{ stdio?: import("node:child_process").StdioOptions }} [options] */
 function pnpm(pnpmArgs: string[], { stdio = "inherit" }: { stdio?: import("node:child_process").StdioOptions; } = {}) {
   const { command, args } = pnpmCliInvocation(pnpmArgs);
@@ -455,84 +446,25 @@ async function runChangeset({ base }: { base: string; }) {
   return (await pnpm(["exec", "changeset", "status", `--since=${base}`])).status === 0 ? "pass" : "fail";
 }
 
-/** Where CI's second checkout comes from, and the name of the clone `verify` makes when no checkout is to hand. */
-const AGENT_ORG_REMOTE = "a11ign/agent-org";
+/** The clone of the tool an earlier `verify` run left in the repository's common git dir. Nothing makes one now; one that is there is still read. */
 const AGENT_ORG_CACHE = "verify-agent-org";
 
 /**
  * WHICH CHECKOUT OF THE TOOL THE HOST'S SUITE SLOT (`underTheHostsSlot`) READS, in order: `A11Y_AGENT_ORG_REPO` (explicit, and never
- * replaced by a guess), a sibling `../agent-org`, and otherwise a clone `verify` makes itself in the repository's
- * common git dir, shared by every worktree and never tracked. CI clones the tool with full history too (the suite
- * reads its merge-base), so the clone is full. A normal checkout has the tool at `.agent-org/host.json`'s path (a detached
- * release checkout), which is not a clone to stage from, which is why the first of these cannot be the only way (review of #3342).
- *
- * `refresh` is true for the clone `verify` made on an EARLIER run and for nothing else: the first two are the caller's and are never fetched or moved, and a clone made
- * a moment ago is already current. An old one is what #3931 is: it ages until a module `verify` requires is newer than it, and every session sharing it is refused.
+ * replaced by a guess), a sibling `../agent-org`, and otherwise the clone in the repository's common git dir. A normal checkout has the tool
+ * at `.agent-org/host.json`'s path (a detached release checkout), which is not a clone to stage from, which is why the first of these cannot
+ * be the only way (review of #3342).
  * @param {{ env: Record<string, string | undefined>, sibling: string, cache: string, isCheckout: (dir: string) => boolean }} where
- * @returns {{ dir: string, clone: boolean, refresh: boolean }}
+ * @returns {string}
  */
-export function agentOrgSource({ env, sibling, cache, isCheckout }: { env: Record<string, string | undefined>; sibling: string; cache: string; isCheckout: (dir: string) => boolean; }): { dir: string; clone: boolean; refresh: boolean; } {
-  if (env.A11Y_AGENT_ORG_REPO) return { dir: env.A11Y_AGENT_ORG_REPO, clone: false, refresh: false };
-  if (isCheckout(sibling)) return { dir: sibling, clone: false, refresh: false };
-  const clone = !isCheckout(cache);
-  return { dir: cache, clone, refresh: !clone };
-}
-
-/** A fetch that hangs on a dead network must not hang `verify`: past this it counts as unreachable, which is said and survived. */
-const FETCH_TIMEOUT_MS = 60_000;
-
-/**
- * Brings the clone `verify` made to `origin/main` so a module `verify` requires is there when it is asked for (#3931). Two failures, two meanings: an origin that cannot be
- * reached is SAID and the clone used as it is (an offline `verify` is no worse than before this), while a clone that will not fast-forward is a refusal, because a diverged
- * clone is neither what was cloned nor what was released, and running the tool from it would be the silent use this exists to end.
- * @param {string} dir
- * @returns {{ ok: true, note: string } | { ok: false, refusal: string }}
- */
-export function refreshAgentOrgClone(dir: string): { ok: true; note: string; } | { ok: false; refusal: string; } {
-  const run = (/** @type {string[]} */ args: string[]) => spawnSync("git", args, { cwd: dir, encoding: "utf8", env: sandboxGitEnv(), timeout: FETCH_TIMEOUT_MS });
-  const fetched = run(["fetch", "origin"]);
-  if (fetched.status !== 0) {
-    return { ok: true, note: `verify: could not fetch ${AGENT_ORG_REMOTE} into ${dir} (${(fetched.stderr || "no answer").trim()}); using the clone as it is, which may predate a module verify requires` };
-  }
-  const merged = run(["merge", "--ff-only", "origin/main"]);
-  if (merged.status !== 0) {
-    return { ok: false, refusal: `verify: ${dir} cannot be fast-forwarded to origin/main (${(merged.stderr || merged.stdout).trim()}), so it is not used. Delete it so the next run clones afresh, or set A11Y_AGENT_ORG_REPO.` };
-  }
-  return { ok: true, note: "" };
+export function agentOrgSource({ env, sibling, cache, isCheckout }: { env: Record<string, string | undefined>; sibling: string; cache: string; isCheckout: (dir: string) => boolean; }): string {
+  if (env.A11Y_AGENT_ORG_REPO) return env.A11Y_AGENT_ORG_REPO;
+  if (isCheckout(sibling)) return sibling;
+  return cache;
 }
 
 /**
- * The checkout to stage the tool from: cloned once if none is to hand, and brought to `origin/main` when it is the clone an earlier run made. Null (said aloud) when it cannot be had.
- * @param {{ repo?: string, env?: Record<string, string | undefined>, say?: { out: (line: string) => void, err: (line: string) => void } }} [where]
- */
-export function provisionAgentOrg({ repo = REPO, env = process.env, say = { out: console.log, err: console.error } }: { repo?: string; env?: Record<string, string | undefined>; say?: { out: (line: string) => void; err: (line: string) => void; }; } = {}) {
-  const isCheckout = (/** @type {string} */ dir: string) => existsSync(join(dir, ".git"));
-  const commonDir = spawnSync("git", ["rev-parse", "--git-common-dir"], { cwd: repo, encoding: "utf8", env: sandboxGitEnv() }).stdout.trim();
-  const cache = resolve(repo, commonDir, AGENT_ORG_CACHE);
-  const { dir, clone, refresh } = agentOrgSource({ env, sibling: resolve(repo, "..", "agent-org"), cache, isCheckout });
-  if (clone) {
-    say.out(`verify: no a11ign/agent-org checkout beside this one; cloning ${AGENT_ORG_REMOTE} into ${dir} (once)`);
-    rmSync(dir, { recursive: true, force: true });
-    if (sh("gh", ["repo", "clone", AGENT_ORG_REMOTE, dir]).status !== 0) {
-      say.err(`verify: could not clone ${AGENT_ORG_REMOTE}; clone it yourself and set A11Y_AGENT_ORG_REPO`);
-      return null;
-    }
-  }
-  if (!isCheckout(dir)) {
-    say.err(`verify: A11Y_AGENT_ORG_REPO=${dir} is not a git checkout of ${AGENT_ORG_REMOTE}`);
-    return null;
-  }
-  const refreshed = refresh ? refreshAgentOrgClone(dir) : null;
-  if (refreshed && !refreshed.ok) {
-    say.err(refreshed.refusal);
-    return null;
-  }
-  if (refreshed?.ok && refreshed.note) say.err(refreshed.note);
-  return dir;
-}
-
-/**
- * The checkout of the tool already on disk, in `agentOrgSource`'s order, or null: unlike `provisionAgentOrg` it never clones, fetches or moves one, so a machine with no tool
+ * The checkout of the tool already on disk, in `agentOrgSource`'s order, or null: it never clones, fetches or moves one, so a machine with no tool
  * is answered "none" and `verify` goes on to its product checks (ADR 0045 cut (b), #5459).
  * @param {{ repo?: string, env?: Record<string, string | undefined> }} [where]
  * @returns {string | null}
@@ -541,7 +473,7 @@ export function presentAgentOrg({ repo = REPO, env = process.env }: { repo?: str
   const isCheckout = (/** @type {string} */ dir: string) => existsSync(join(dir, ".git"));
   const commonDir = spawnSync("git", ["rev-parse", "--git-common-dir"], { cwd: repo, encoding: "utf8", env: sandboxGitEnv() }).stdout.trim();
   const cache = resolve(repo, commonDir, AGENT_ORG_CACHE);
-  const { dir } = agentOrgSource({ env, sibling: resolve(repo, "..", "agent-org"), cache, isCheckout });
+  const dir = agentOrgSource({ env, sibling: resolve(repo, "..", "agent-org"), cache, isCheckout });
   return isCheckout(dir) ? dir : null;
 }
 
