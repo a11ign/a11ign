@@ -2,7 +2,7 @@ The unit comment's "Until the lab's script stands alone this unit fails at the l
 
 Closes a11ign/a11ign#5501
 
-Acceptance: `node -e "const s=require('fs').readFileSync('.agent-org/units/a11ign-corpus-release-nightly.service','utf8');if(s.includes('fails at the line above')||!s.includes('refuse-unknown-flags.ts'))process.exit(1);console.log('COMMENT-UPDATED')"` -- the unit comment no longer says the unit fails at its load check and names the dependency-free guard. The load itself (importing `/home/agent/repos/lab/scripts/corpus-release-nightly.ts` and printing `LOADS`) needs the host, not CI: it printed `LOADS` from `/home/agent/repos/wt-5501-lab`, and is the verify row's reading once a11ign/lab#127 merges.
+Acceptance: `node -e "import('/home/agent/repos/wt-5501-lab/scripts/corpus-release-nightly.ts').then(() => console.log('LOADS'))"` -- the row's own command, against the lab PR's worktree until a11ign/lab#127 merges; after it merges and `agent-org primary:update` runs, the path is `/home/agent/repos/lab/scripts/corpus-release-nightly.ts`.
 
 Outside-Region: none.
 
