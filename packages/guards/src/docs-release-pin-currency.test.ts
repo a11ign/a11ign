@@ -9,7 +9,10 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { GUARDED_DOC, pinFaults, planRepin, repoReader, type ReleaseTag, type Reader } from "./docs-release-pin-currency.ts";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { GUARDED_DOC, pinFaults, planRepin, repoReader, type Doc, type Promoted, type ReleaseTag, type Reader } from "./docs-release-pin-currency.ts";
 
 // ── fixtures: a tag list, a v0 commit and a doc, through the same reader the real test uses ─────────────────────────────────────────────
 
@@ -316,4 +319,83 @@ test("history is not a fault: a changelog and a `since` sentence beside a curren
   assert.deepEqual(moving.unmoved, []);
   const historyLines = history.split("\n").length;
   assert.equal(moving.files[0].text.split("\n").slice(0, historyLines).join("\n"), history);
+});
+
+// ── the re-pin of the real docs, and the writer's shape check over it (#5553) ──────────────────────────────────────────────────────────
+
+/** The sentence after a pin, `The release is tagged \`a11ign@X\` and the commit is the one the tag names`, moves with the pin: the writer refused it. */
+test("a sentence that says the pin's tag and commit moves with the re-pin, so the guard reads no old release in it (#5553)", () => {
+  const text = ["# Guide", "", usesLine(sha("3"), "# the commit of the release tagged a11ign@0.3.0"), "", "> The release is tagged `a11ign@0.3.0` and the commit is the one the tag names; a note."].join("\n");
+  const plan = planRepin(fixture(text));
+  assert.equal(plan.status, "rewrite", "the positive control: the pin is two minors behind v0, so the doc is rewritten");
+  assert.match(plan.files[0].text, /^> The release is tagged `a11ign@0\.5\.4` and the commit is the one the tag names; a note\.$/m);
+  assert.deepEqual(pinFaults(fixture(plan.files[0].text)).faults, []);
+});
+
+const REPO = fileURLToPath(new URL("../../..", import.meta.url));
+const markdownIn = (dir: string): string[] => readdirSync(join(REPO, dir)).filter((name) => name.endsWith(".md")).map((name) => `${dir}/${name}`);
+/** The guarded docs of this checkout, read from disk: the population `repoReader` hands the guard. */
+const realDocs = (): Doc[] =>
+  ["README.md", ...markdownIn("docs"), ...markdownIn("docs/adr")]
+    .filter((path) => GUARDED_DOC.test(path))
+    .map((path) => ({ path, text: readFileSync(join(REPO, path), "utf8") }));
+/** Every `uses:` pin of a doc with the release its comment names, so the one pin the re-pin moves is read off the docs themselves. */
+const PIN_IN_DOCS = /uses:\s*a11ign\/a11ign@([0-9a-f]{40})\b[^\n]*?a11ign@(\d+\.\d+\.\d+)/g;
+const nextPatch = (version: string): string => {
+  const [major, minor, patch] = version.split(".").map(Number);
+  return `${major}.${minor}.${patch + 1}`;
+};
+
+interface ChangedLine {
+  /** `path:line`, one-based, the way the guard names lines. */
+  where: string;
+  text: string;
+}
+/** The lines a re-pin changed in one doc. The planner moves text within lines, so the line counts are the same and the index lines up. */
+const changedLines = (path: string, before: string, after: string): ChangedLine[] => {
+  const was = before.split("\n");
+  return after.split("\n").flatMap((text, index) => (text === was[index] ? [] : [{ where: `${path}:${index + 1}`, text }]));
+};
+/** Why the writer's shape check (`docs-pin-write.yml`) refuses a changed line, or `undefined` when it accepts it: an action pin must name the promoted commit, any other line the promoted release. */
+const refusalOf = ({ where, text }: ChangedLine, promoted: Promoted): string | undefined => {
+  const pin = /uses:\s*a11ign\/a11ign@([0-9a-f]{40})/.exec(text);
+  if (pin) return pin[1] === promoted.commit ? undefined : `${where} pins ${pin[1]}, not the promoted commit`;
+  const names = text.includes(`a11ign@${promoted.version}`) || text.includes(`commit of release ${promoted.version}`);
+  return names ? undefined : `${where} is neither an action pin nor names a11ign@${promoted.version}: ${text}`;
+};
+
+test("the writer's shape check refuses a changed line that names another release, and accepts a pin of the promoted commit and a line naming the promoted release", () => {
+  const promoted: Promoted = { version: "0.10.8", commit: sha("b") };
+  const at = (text: string): ChangedLine => ({ where: "docs/x.md:3", text });
+  assert.match(refusalOf(at("x `a11ign@0.10.3` beside a re-pin"), promoted) ?? "", /docs\/x\.md:3 is neither/);
+  assert.match(refusalOf(at(usesLine(sha("3"))), promoted) ?? "", /pins .* not the promoted commit/);
+  assert.equal(refusalOf(at("The release is tagged `a11ign@0.10.8` and the commit is the one the tag names"), promoted), undefined);
+  assert.equal(refusalOf(at(usesLine(sha("b"))), promoted), undefined);
+});
+
+test("the re-pin of the real docs moves the sentence at docs/github-action.md:49, and every changed line passes the writer's shape check (#5553)", () => {
+  const docs = realDocs();
+  const pins = new Set(docs.flatMap((doc) => [...doc.text.matchAll(PIN_IN_DOCS)].map((match) => `${match[1]} ${match[2]}`)));
+  assert.equal(pins.size, 1, `the positive control: the real docs carry one pin, found ${[...pins].join(", ") || "none"}`);
+  const [pinSha, pinVersion] = [...pins][0].split(" ");
+  const promoted: Promoted = { version: nextPatch(pinVersion), commit: sha("b") };
+  const tags: ReleaseTag[] = [{ name: `a11ign@${pinVersion}`, commit: pinSha }, { name: `a11ign@${promoted.version}`, commit: promoted.commit }];
+  const readerOf = (moved: Doc[]): Reader => ({ tags: () => tags, v0Commit: () => promoted.commit, docs: () => moved });
+
+  const plan = planRepin(readerOf(docs));
+  assert.equal(plan.status, "rewrite", plan.faults.join("\n"));
+  assert.deepEqual(plan.promoted, promoted);
+  assert.ok(plan.files.some((file) => file.path === "docs/github-action.md"), "the positive control: the doc with line 49 is among the changed files");
+
+  // Line 49 is the sentence the writer refused: at origin/main the planner leaves it naming the old release and lists it as unmoved.
+  assert.ok(!plan.unmoved.includes("docs/github-action.md:49"), "docs/github-action.md:49 is still unmoved: its sentence still names the old release");
+
+  const before = new Map(docs.map((doc) => [doc.path, doc.text]));
+  const changed = plan.files.flatMap((file) => {
+    const was = before.get(file.path) ?? "";
+    assert.equal(file.text.split("\n").length, was.split("\n").length, `${file.path}: the re-pin added or removed a line`);
+    return changedLines(file.path, was, file.text);
+  });
+  assert.ok(changed.some((line) => line.where === "docs/github-action.md:49"), "docs/github-action.md:49 is not among the changed lines");
+  assert.deepEqual(changed.map((line) => refusalOf(line, promoted)).filter((refusal) => refusal !== undefined), []);
 });

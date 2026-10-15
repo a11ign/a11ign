@@ -146,6 +146,9 @@ const RESTATEMENTS: Array<{ movable: boolean; re: RegExp }> = [
   { movable: true, re: /(?<=commit\s+of\s+release\s+)\d+\.\d+\.\d+(?!\d)(?=,\s+so your CI)/g },
   { movable: true, re: /(?<=`a11ign@)\d+\.\d+\.\d+(?!\d)(?=`\s+is\s+the\s+tag\s+the\s+pin\s+above\s+names)/g },
   { movable: true, re: /(?<=pins\s+release\s+`)\d+\.\d+\.\d+(?!\d)(?=`)/g },
+  // The sentence after a pin in `docs/github-action.md:49` (#5553): the writer's shape check accepted no re-pin while the planner left it behind.
+  // It wraps onto a quote line (`the tag` / `> names`), and the mover reads the raw text, so the `> ` marker is allowed between the two words.
+  { movable: true, re: /(?<=The\s+release\s+is\s+tagged\s+`a11ign@)\d+\.\d+\.\d+(?!\d)(?=`\s+and\s+the\s+commit\s+is\s+the\s+one\s+the\s+tag\s+(?:[#>]\s*)?names)/g },
   { movable: false, re: /(?<=commit\s+of\s+release\s+(?:a11ign@)?)\d+\.\d+\.\d+(?!\d)(?!,\s+so your CI)/g },
   { movable: false, re: /(?<=`)\d+\.\d+\.\d+(?!\d)(?=`\s+does\b)/g },
   // A DATED READ OF THE REGISTRY, in either order: `On <date> ... read \`latest\` \`X\`` or `\`latest\` read X on <date>`. Both the `read` and
@@ -236,7 +239,8 @@ function repinLine(line: string, tags: ReleaseTag[], promoted: Promoted): { line
 }
 
 /**
- * THE MOVABLE SENTENCES THAT RESTATE A PIN'S RELEASE IN WORDS (#5291, `ceo` on #5283's review; #5470 adds `pins release X`): the comment
+ * THE MOVABLE SENTENCES THAT RESTATE A PIN'S RELEASE IN WORDS (#5291, `ceo` on #5283's review; #5470 adds `pins release X`; #5553 adds
+ * `The release is tagged \`a11ign@X\` and the commit ...`): the comment
  * under a pin, `# Pinned to the full 40-character commit of release X, so your CI ...`, and the one after the Quickstart fence, `(\`a11ign@X\`
  * is the tag the pin above names)`. #5283 re-pinned README to 0.10.2 and both still said 0.9.0 until a reviewer caught it. EXACT TEMPLATES,
  * and only for a release a pin in the same doc moved away from. A doc also says "`latest` read 0.9.0 on 2026-10-11" or "the 0.9.0 source
