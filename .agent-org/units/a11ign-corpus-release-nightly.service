@@ -50,7 +50,7 @@ Environment=GH_CONFIG_DIR=/home/agent/leads/gh
 # systemd's generic "Failed to load environment files".
 EnvironmentFile=-%h/.config/a11ign/fleet.env
 
-# WHERE THE SCRIPT FINDS THE CONTROL LAYER'S `ansible/lab-fetch.yml` AND `ansible.cfg`, NAMED (#5501). The core no longer holds `packages/control`, and the script ran its
+# WHERE THE SCRIPT FINDS THE CONTROL LAYER'S `ansible/lab-fetch.yml` AND `ansible.cfg`, NAMED (#5501). The core no longer holds the control layer's tree, and the script ran its
 # playbook from the working directory, so a firing failed after the load check passed. The script defaults to the checkout beside the lab's; the unit states it anyway.
 Environment=A11Y_CONTROL_DIR=%h/repos/control
 
