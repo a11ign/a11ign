@@ -1,3 +1,4 @@
+// no-token: none -- the step tests run the workflow's shell behind a fake `gh` and `node` put first on PATH, with a made-up token; nothing reaches GitHub.
 /**
  * `scripts/dependency-changeset.ts` derives what a dependency pull request owes the changelog FROM ITS MANIFESTS' DIFF (#3159). Four
  * things have to hold or a consumer-visible change ships with no entry, or a human-visible one is waved through:
@@ -14,13 +15,17 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { parse as parseYaml } from "yaml";
 import type { Derivation } from "../../../scripts/dependency-changeset.ts";
 import { withGitSandbox } from "@a11ign/toolchain/lib/git-sandbox";
 
 const changeset = await import("../../../scripts/dependency-changeset.ts");
-const { RUNTIME_SECTIONS, refusalFor, entriesFor, deriveDependencyChangeset, renderEntry, parseEntry, checkEntries, compile, check, settleRefusal } = changeset;
+const { RUNTIME_SECTIONS, refusalFor, entriesFor, deriveDependencyChangeset, renderEntry, parseEntry, checkEntries, compile, check, settleRefusal, clearedBy } = changeset;
 
 type Change = {
   path: string; package: string; private: boolean; section: string; dependency: string; from: string | null; to: string | null;
@@ -348,7 +353,7 @@ test("check stays refused with today's message when the refused bump has no appr
     const reviews = writeReviews(git.dir, []);
     const { passed, printed } = checkIn(git.dir, base, reviews, head);
     assert.equal(passed, false);
-    assert.equal(printed, `REFUSED: this dependency pull request waits for a human who looks.\n  - ${REFUSAL}`);
+    assert.equal(printed, `REFUSED: this dependency pull request waits for a human who looks.\n  - ${REFUSAL}\nCleared-by: review`);
   });
 });
 
@@ -363,7 +368,42 @@ test("check stays refused when the only approval is of an earlier head that a la
     const { passed, printed } = checkIn(git.dir, base, reviews, head);
     assert.equal(passed, false);
     assert.match(printed, /^REFUSED: this dependency pull request waits for a human who looks\./);
+    assert.match(printed, /\nCleared-by: review$/, "the review outlived its head and settles nothing, so a review is still what clears it");
   });
+});
+
+test("check prints `Cleared-by: edit` when an owed entry is not carried, with or without an approval on the head", () => {
+  withGitSandbox((git) => {
+    const { base } = refusedDependencyBranch(git);
+    git.run(["rm", "-q", ".changeset/a-judge-peer-range.md"]);
+    git.commit("deps: drop the entry");
+    const head = git.run(["rev-parse", "HEAD"]).trim();
+    for (const reviews of [[], [approved(head)]]) {
+      const { passed, printed } = checkIn(git.dir, base, writeReviews(git.dir, reviews), head);
+      assert.equal(passed, false);
+      assert.match(printed, /\nCleared-by: edit$/);
+      assert.doesNotMatch(printed, /Cleared-by: review/);
+    }
+  });
+});
+
+test("check prints exactly one marker, last, and none on an accepted or a settled diff", () => {
+  withGitSandbox((git) => {
+    const { base, head } = refusedDependencyBranch(git);
+    const refused = checkIn(git.dir, base, writeReviews(git.dir, []), head).printed;
+    assert.equal(refused.match(/Cleared-by:/g)?.length, 1);
+    const settled = checkIn(git.dir, base, writeReviews(git.dir, [approved(head)]), head).printed;
+    assert.doesNotMatch(settled, /Cleared-by:/);
+  });
+});
+
+test("clearedBy answers `review` only where an approval on the head would settle, so it follows settleRefusal", () => {
+  const owed = [{ package: "@a11ign/lab", bump: "patch" as const, text: "t" }];
+  const carried = [carriedFor(".changeset/a.md", "@a11ign/lab")];
+  assert.equal(clearedBy({ owed, carried, head: "h1" }), "review");
+  assert.equal(clearedBy({ owed, carried: [], head: "h1" }), "edit");
+  assert.equal(clearedBy({ owed: [], carried, head: "h1" }), "edit", "a diff that owes no entry is not one a review settles");
+  assert.equal(clearedBy({ owed, carried, head: undefined }), "edit");
 });
 
 test("check stays refused without a reviews file, however the carried entry reads", () => {
@@ -454,5 +494,96 @@ test("compile skips a package with no release tag and a private package", () => 
     git.commit("no tags");
     git.run(["tag", "@a11ign/hidden@0.0.1"]);
     assert.match(compileIn(git.dir, { dryRun: false }), /^no published package's third-party runtime ranges moved/);
+  });
+});
+
+// ---- the workflow step that turns the marker into an annotation (a11ign#5573) -------------------------------------
+//
+// THE MARKER ONLY HELPS IF THE JOB SAYS IT WHERE THE GATE READS: `check` prints `Cleared-by: review|edit`, and the `dependency` step of
+// `ci.yml` re-emits it as an `::error title=changeset::` annotation and still fails the job. That is shell, and a unit test of `check`
+// cannot see it break. So this runs THAT STEP, taken out of the parsed `ci.yml` and never retyped here, against the REAL `check` in a
+// throwaway repository: only `node` (the path made absolute) and `gh` (one scripted reviews read) are put first on PATH.
+
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+const CI_WORKFLOW = parseYaml(readFileSync(join(REPO_ROOT, ".github/workflows/ci.yml"), "utf8")) as {
+  jobs: Record<string, { steps?: { id?: string; run?: string }[] }>;
+};
+const DEPENDENCY_STEP = CI_WORKFLOW.jobs.changeset?.steps?.find((step) => step.id === "dependency")?.run;
+const NODE_WITH_ABSOLUTE_SCRIPT = `#!/bin/sh
+script="$1"; shift
+exec ${process.execPath} "${REPO_ROOT}/$script" "$@"
+`;
+const GH_WITH_THE_REVIEWS = `#!/bin/sh
+cat "$REVIEWS_FILE"
+`;
+const PULL_NUMBER = "7";
+const EXECUTABLE = 0o755;
+
+/** Runs the step's shell under `bash -e`, as the runner does, in `dir`, with `reviews` as what the live reviews read answers. */
+function runDependencyStep(dir: string, base: string, head: string, reviews: unknown[]) {
+  assert.ok(DEPENDENCY_STEP, "ci.yml job `changeset` has no step with id `dependency`; this test would be running nothing");
+  const bin = mkdtempSync(join(tmpdir(), "dependency-step-"));
+  for (const [name, text] of [["node", NODE_WITH_ABSOLUTE_SCRIPT], ["gh", GH_WITH_THE_REVIEWS]] as const) {
+    writeFileSync(join(bin, name), text);
+    chmodSync(join(bin, name), EXECUTABLE);
+  }
+  const reviewsFile = join(bin, "reviews.jsonl");
+  writeFileSync(reviewsFile, reviews.map((review) => JSON.stringify(review)).join("\n"));
+  const script = join(bin, "step.sh");
+  writeFileSync(script, DEPENDENCY_STEP);
+  const output = join(bin, "github-output");
+  const result = spawnSync("bash", ["-e", script], {
+    cwd: dir,
+    encoding: "utf8",
+    env: {
+      PATH: `${bin}:${process.env.PATH}`, REPO: "a11ign/a11ign", BASE: base, SINCE: "", PULL_NUMBER, HEAD_SHA: head, QUEUE_REF: "",
+      GH_TOKEN: "fake", RUNNER_TEMP: bin, REVIEWS_FILE: reviewsFile, GITHUB_OUTPUT: output,
+    },
+  });
+  return { code: result.status, out: result.stdout, settled: existsSync(output) && readFileSync(output, "utf8").includes("settled=true") };
+}
+const ANNOTATIONS = (out: string) => out.split("\n").filter((line) => line.startsWith("::error title=changeset::"));
+
+test("the dependency step annotates `Cleared-by: review` and still fails the job, so the gate can read what clears it", () => {
+  withGitSandbox((git) => {
+    const { base, head } = refusedDependencyBranch(git);
+    const result = runDependencyStep(git.dir, base, head, []);
+    assert.equal(result.code, 1, "the refusal must still fail the job");
+    assert.deepEqual(ANNOTATIONS(result.out), ["::error title=changeset::Cleared-by: review"]);
+    assert.match(result.out, /REFUSED: this dependency pull request waits for a human who looks\./, "the refusal text is still printed");
+    assert.equal(result.settled, false, "a refused step never sets `settled`");
+  });
+});
+
+test("the dependency step annotates `Cleared-by: edit` when an entry is owed, even with an approval on the head", () => {
+  withGitSandbox((git) => {
+    const { base } = refusedDependencyBranch(git);
+    git.run(["rm", "-q", ".changeset/a-judge-peer-range.md"]);
+    git.commit("deps: drop the entry");
+    const head = git.run(["rev-parse", "HEAD"]).trim();
+    const result = runDependencyStep(git.dir, base, head, [approved(head)]);
+    assert.equal(result.code, 1);
+    assert.deepEqual(ANNOTATIONS(result.out), ["::error title=changeset::Cleared-by: edit"]);
+  });
+});
+
+test("controls: a review at the head settles the step with no annotation, exit 0 and `settled=true`", () => {
+  withGitSandbox((git) => {
+    const { base, head } = refusedDependencyBranch(git);
+    const result = runDependencyStep(git.dir, base, head, [approved(head)]);
+    assert.equal(result.code, 0, result.out);
+    assert.deepEqual(ANNOTATIONS(result.out), []);
+    assert.equal(result.settled, true);
+    assert.match(result.out, /^ACCEPTED \(refused, settled by a human\)/);
+  });
+});
+
+test("controls: a failure that prints no marker is annotated with nothing and still exits non-zero", () => {
+  withGitSandbox((git) => {
+    const { head } = refusedDependencyBranch(git);
+    const result = runDependencyStep(git.dir, "no-such-ref", head, []);
+    assert.notEqual(result.code, 0, "a crash of `check` must not be swallowed by the marker extraction");
+    assert.deepEqual(ANNOTATIONS(result.out), []);
+    assert.equal(result.settled, false);
   });
 });

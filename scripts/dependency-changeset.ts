@@ -243,6 +243,19 @@ export function settleRefusal({ owed, carried, reviews, head }: { owed: Entry[];
   return approval ? { files: [...new Set(covering)], review: approval.id, sha: head } : null;
 }
 
+/**
+ * What clears a refusal that is still standing, for the gate to read (a11ign#5573): `review` when the entries are carried and the
+ * approval on the head is the only thing missing, `edit` when anything else is owed (an entry, or a diff no review can settle).
+ * Asked of `settleRefusal` itself with an approval on the head assumed, so the marker cannot drift from what actually settles.
+ * With no head to compare against no review can settle it either, and that reads `edit`.
+ * @param {{ owed: Entry[], carried: Carried[], head: string | undefined }} input
+ * @returns {"review" | "edit"}
+ */
+export function clearedBy({ owed, carried, head }: { owed: Entry[]; carried: Carried[]; head: string | undefined; }): "review" | "edit" {
+  const assumed: Review[] = head ? [{ id: 0, state: "APPROVED", commit_id: head }] : [];
+  return settleRefusal({ owed, carried, reviews: assumed, head }) ? "review" : "edit";
+}
+
 /** The line `check` prints for a settled refusal, so it reads apart from an accepted diff and from an unexamined refusal. */
 export function settlementText(reasons: string[], settled: Settlement): string {
   return `ACCEPTED (refused, settled by a human): the derivation was refused for ${reasons.join("; ")} and settled by carried entry ${settled.files.join(", ")} and review ${settled.review} on ${settled.sha}.`;
@@ -294,8 +307,9 @@ export function check(base: string, since?: string, reviewsPath?: string, head?:
     return problems.length === 0;
   }
   const reviews: Review[] = reviewsPath ? JSON.parse(readFileSync(reviewsPath, "utf8")) : [];
-  const settled = settleRefusal({ owed: entriesFor(readManifests(manifests).changes), carried, reviews, head });
-  report(derived, settled ? [] : derived.reasons, settled);
+  const owed = entriesFor(readManifests(manifests).changes);
+  const settled = settleRefusal({ owed, carried, reviews, head });
+  report(derived, settled ? [] : derived.reasons, settled, settled ? undefined : clearedBy({ owed, carried, head }));
   return settled !== null;
 }
 
@@ -303,10 +317,12 @@ export function check(base: string, since?: string, reviewsPath?: string, head?:
  * @param {Derivation} derived
  * @param {string[]} problems
  * @param {Settlement | null} [settled] a refusal a human settled: `problems` is empty then, and the line names what settled it
+ * @param {"review" | "edit"} [cleared] what clears a refusal that stands, printed LAST as `Cleared-by: <it>`: the first line is the
+ *   same for both, so nothing reading the log could otherwise tell a wait for a reviewer from a push that is owed
  */
-function report(derived: Derivation, problems: string[], settled?: Settlement | null) {
+function report(derived: Derivation, problems: string[], settled?: Settlement | null, cleared?: "review" | "edit") {
   const lines = problems.length
-    ? ["REFUSED: this dependency pull request waits for a human who looks.", ...problems.map((p) => `  - ${p}`)]
+    ? ["REFUSED: this dependency pull request waits for a human who looks.", ...problems.map((p) => `  - ${p}`), ...(cleared ? [`Cleared-by: ${cleared}`] : [])]
     : settled ? [settlementText(derived.reasons, settled)]
     : [`ACCEPTED (${derived.verdict}): the entry is compiled when the version is made, from the manifests at the last release.`,
        ...derived.entries.map((e) => `  - ${e.package}: ${e.bump} -- ${e.text.replaceAll("\n", " ")}`)];
