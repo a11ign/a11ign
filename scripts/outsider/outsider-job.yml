@@ -92,8 +92,8 @@ jobs:
       pull-requests: write         # for the PR comment below; omit it and the report still runs, only quieter
     steps:
       - uses: actions/checkout@v7
-      - uses: a11ign/a11ign@9511d783e85cc88f8bf9359c0f85f51a369274ef # v0.10.11
-        # Pinned to the full 40-character commit of release 0.10.11, so your CI does not move when a newer
+      - uses: a11ign/a11ign@b037533e6fe94b5e761f0eb1fc46308da8fbc4ca # v0.10.12
+        # Pinned to the full 40-character commit of release 0.10.12, so your CI does not move when a newer
         # one is published. `v0.1.0` predates the `summary-md` output used below.
         id: a11ign
         with:
@@ -139,7 +139,7 @@ jobs:
           - docs/try-it.md: "The other route: run it from the repository", and the authenticated run behind a login
 
           ### Substitutions: every line that differs from README.md's fence
-          - README.md line 178: `- uses: a11ign/a11ign@<the release's full commit sha, as pinned on that line of this file>   # the commit of the release tagged a11ign@0.10.11` became `- uses: a11ign/a11ign@<the release's full commit sha, as pinned on that line of this file>`
+          - README.md line 178: `- uses: a11ign/a11ign@<the release's full commit sha, as pinned on that line of this file>   # the commit of the release tagged a11ign@0.10.12` became `- uses: a11ign/a11ign@<the release's full commit sha, as pinned on that line of this file>`
           - README.md line 183: `url: https://example.com/contact` became `url: https://www.w3.org/WAI/demos/bad/before/home.html`
           - README.md line 184: `task: Send an enquiry` became `task: Find the main navigation and reach the survey.`
           - added: `needs: [pin]` under the job's key, so it waits for the pin check
