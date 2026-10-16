@@ -1,0 +1,18 @@
+# Trust policy for agent-org's scheduled `outside-sweep` job, which arms a11ign's approved pull requests from OUTSIDE this repository
+# (agent-org#1573, epic "agent-org stands alone"; row a11ign#5619). Octo STS v0.11.2 reads the policy from the TARGET repository's default
+# branch, so the identity `outside-arm` minted with `scope: a11ign/a11ign` needs this file HERE. Nothing mints from it while agent-org's
+# `outside.arm` flag is off: the workflow reads the flag first.
+#
+# `sub` carries IMMUTABLE ids (`repo:<owner>@<id>/<repo>@<id>`), read 2026-10-16: owner 320310787, agent-org 1388747923 (#4191).
+#
+# WHAT BINDS IT TO `main`: `job_workflow_ref` pinned to `@refs/heads/main`, so a branch that edits the workflow cannot mint.
+# `event_name: schedule` admits only the scheduled sweep; the pull-request event and the approval are the host gate's, which holds its
+# own identity. Same permissions as `auto-arm.sts.yaml` (enable auto-merge, and the merge itself), on this repository only.
+issuer: https://token.actions.githubusercontent.com
+subject_pattern: repo:a11ign@320310787/agent-org@1388747923:ref:refs/heads/main
+claim_pattern:
+  job_workflow_ref: a11ign/agent-org/\.github/workflows/auto-arm\.yml@refs/heads/main
+  event_name: schedule
+permissions:
+  pull_requests: write
+  contents: write

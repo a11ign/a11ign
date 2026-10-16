@@ -13,9 +13,10 @@
 # WHAT BINDS IT TO `main`: `job_workflow_ref` pinned to `@refs/heads/main` is the run of the home's file AS IT IS ON `main`, so a branch
 # that edits the workflow cannot mint. The home mints only when `outside.nightly` is on (a11ign/a11ign#5609), so this file may land first.
 #
-# THE UNESCAPED DOT in `outside-nightly.yml` is deliberate: the row's Acceptance is a literal `grep -F outside-nightly.yml@refs/heads/main`,
-# which an escaped `\.` cannot satisfy. An unescaped `.` also matches any one character, so the pattern admits a lookalike file name on
+# THE UNESCAPED DOT in the workflow file name below is deliberate: the row's Acceptance greps this file for the workflow's literal path,
+# which an escaped `\.` cannot match. An unescaped `.` also matches any one character, so the pattern admits a lookalike file name on
 # agent-org's `main` as well as the real one; that is the only thing given up, and the repository id and the `main` ref still bind it.
+# The `job_workflow_ref` line below is the ONLY place the literal path appears, so a change to it turns the Acceptance red.
 issuer: https://token.actions.githubusercontent.com
 subject_pattern: repo:a11ign@320310787/agent-org@1388747923:ref:refs/heads/main
 claim_pattern:
