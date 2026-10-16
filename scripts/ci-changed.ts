@@ -77,6 +77,12 @@ export function knownPackages(repoRoot: string) {
     .sort();
 }
 
+/**
+ * The reusable build-and-test workflow is what `ci.yml`'s `ts` and `python` jobs CALL, so a change to it changes what they run. Named, not
+ * a glob over `.github/workflows/`, so `reusable-acceptance.yml` (which no `ts` job calls) stays `ts=false` (#5583).
+ */
+const REUSABLE_BUILD_TEST = ".github/workflows/reusable-build-test.yml";
+
 /** Root-level files a change to which must be treated as "every TS/JS package changed". */
 // "Root configuration" is one fact, so `classify` below is its only reader rather than a second hand-typed list.
 const ROOT_TS_FILES = new Set([
@@ -85,6 +91,8 @@ const ROOT_TS_FILES = new Set([
   // The `ts` job is the only one running `generate-consumer-gate.test.ts`, whose stale-pin guard (#4162) must fire
   // in the very PR that edits `action.yml` and so makes the pin stale (#4164).
   "action.yml",
+  // The same reasoning as `action.yml`: the `ts` job runs what this file defines, so a PR that edits it must run `ts` (#5583).
+  REUSABLE_BUILD_TEST,
 ]);
 
 // Exported: `scripts/board-only-check.mjs` needs the identical set to decide "is this a doc-touching
@@ -426,9 +434,10 @@ export function classify(files: string[], allPackages: string[] = knownPackages(
   // `requirements-ci.txt` is the CI subset; the lab's own full environment lives at
   // `packages/scorer/requirements.txt` (NOT a root `requirements.txt` — `python-ci-requirements.test.ts`
   // already pins the two equal at every shared constraint, so a change to either is a reason to re-run).
+  // The `python` job runs the reusable workflow too, so a change to that file is a reason to run it (#5583).
   const python = files.some((f) =>
     /^packages\/[^/]+\/(python|tests)\/.*\.py$/.test(f)
-    || f === "requirements-ci.txt" || f === "packages/scorer/requirements.txt");
+    || f === "requirements-ci.txt" || f === "packages/scorer/requirements.txt" || f === REUSABLE_BUILD_TEST);
 
   const docsFiles = files.filter((f) => f.startsWith("docs/") || DOC_ROOT_FILES.has(f));
   // `board` is true, and `docs` FALSE, only when EVERY doc-touching file in the diff is a board file --
