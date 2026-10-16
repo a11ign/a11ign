@@ -8,5 +8,6 @@
   "routing.haikuDefault": true,
   "worktree.rebuildCheck": true,
   "outside.acceptance": true,
-  "outside.arm": true
+  "outside.arm": true,
+  "outside.trunk": true
 }

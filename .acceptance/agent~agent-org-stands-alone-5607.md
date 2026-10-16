@@ -1,0 +1,3 @@
+`.agent-org/decisions.json` carries `"outside.trunk": true` as a flat boolean key (row #5607, epic #5602). It is the switch that turns on the outside home of trunk for a11ign, set only after that home was built and released (agent-org#1576, closed) and after the sibling switch row #5603 (`outside.arm`) closed on the same file. Its canary (signals, window, revert) is on the row. Done-when 2 and 3 moved to #5608, since they need the key live on `main`. Revert: set the key to `false`.
+
+Acceptance: node -e 'process.exit(JSON.parse(require("fs").readFileSync(".agent-org/decisions.json","utf8"))["outside.trunk"]===true?0:1)'
