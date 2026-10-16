@@ -4,4 +4,4 @@ The CLI's `left-origin` message no longer says an identity-provider redirect is 
 
 The row's Acceptance as first written (`node --test ...`) does not run: the `.js` to `.ts` import is not resolved by plain `node --test`. The command below runs the repo's own test runner (rstest, as `test:ts` does).
 
-Acceptance: ! git grep -q "which v1 does not do" -- packages/cli/src && pnpm exec rstest run --config scripts/rstest/rstest.config.ts packages/cli/src/auth/interpreter.test.ts packages/cli/src/auth/idp-origins.test.ts
+Acceptance: pnpm exec rstest run --config scripts/rstest/rstest.config.ts packages/cli/src/auth/interpreter.test.ts packages/cli/src/auth/idp-origins.test.ts
