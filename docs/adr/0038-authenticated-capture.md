@@ -267,7 +267,7 @@ differs from the sentence, the difference is named below.
    JSON, or is the wrong shape, is refused naming the path and the reason and never quoting the file** (a parser's message
    quotes a fragment of the text it choked on). `validateAuthRequest`'s key list gains `state`; a worker that predates it
    refuses the unknown key, which is what fails closed. **A remote worker still refuses any authentication**
-   (Constraint 1, and Constraint 6's MFA and SSO stay out of v1: a state is how a person who has signed in through SSO by
+   (Constraint 1, and Constraint 6's SSO stays unsupported: a state is how a person who has signed in through SSO by
    hand gets a run past it, and the tool still never signs in through a provider). `--auth-state` without `--flows` and
    `--login-flow` beside it is refused as `--login-flow` alone is, since the `expect:` that decides the state lives in the flow.
 6. **The Action.** `auth-state:` is an input and names a path. On a runner the file has to exist there, so the workflow
@@ -538,14 +538,15 @@ lower-cases the value and treats an empty string as `local`, and a second spelli
 first time one of them changed. The Action's *Check the judge is usable* step repeats the check in shell
 for the same reason it already exists, which is to fail before NVDA is installed.
 
-## Constraint 6: MFA, SSO and CAPTCHA are out of v1
+<a id="constraint-6-mfa-sso-and-captcha-are-out-of-v1"></a>
+## Constraint 6: Sign-in scope: a password form and an authenticator-app code (TOTP) from v3; SSO, push, SMS, a security key and a CAPTCHA are not supported
 
-> **MFA, SSO and CAPTCHA are OUT of v1, recorded as a known gap** (`docs/known-gaps.md`), with "use a dedicated test
-> account without MFA" as the stated route (the advice BrowserStack and LambdaTest give).
-
-**Amendment 10 (#4976, 2026-10-15): MFA by an authenticator-app seed (TOTP) is IN scope from v3; the rest of this constraint stands.**
-Authority: the chairman's direction on #4084 (2026-10-11, "Signing in through a hosted provider WITH MFA is in v3"). The quote above
-is the v1 ruling and is kept as written; this paragraph is what changed, and a reader should take the two together.
+**A run signs in with a username and password on a form, and, from v3 and on the command line, with an authenticator-app code (TOTP); it does
+not get past SSO, a push approval, an SMS or emailed code, a security key or a CAPTCHA, and "use a dedicated test account without MFA" is
+the route for all of those.** The TOTP path is not yet in the Action and has been read on one provider (Auth0). The table of statuses, each
+no stronger than the run it cites, is in one place: [`docs/try-it.md`, "What sign-in covers"](../try-it.md#what-sign-in-covers). The v1
+ruling this constraint began as is kept under [History (v1)](#history-v1) at the end of this section. Authority for the change (amendment 10,
+#4976, 2026-10-15): the chairman's direction on #4084 (2026-10-11, "Signing in through a hosted provider WITH MFA is in v3").
 
 - **In scope:** a login whose second factor is a time-based one-time code from an authenticator app (RFC 6238), computed from the
   seed the account was enrolled with. The `login:` block of a flows file names the variable holding it (`totp: AUTH0_TOTP_SEED`).
@@ -570,8 +571,6 @@ is the v1 ruling and is kept as written; this paragraph is what changed, and a r
   testing only).** Okta's, Entra ID's and any other provider's pages are not read, and the screen loop is a reader of pages it was
   built against.
 
-*Outside the quote:* the known-gaps entry is its own row (#2275), filed with the build and not before.
-
 **What the design does with it.** Nothing to build, and three things to make true.
 
 - **The known-gaps entry is the build's row, filed with the build**, as the ruling says. This ADR does not
@@ -592,6 +591,16 @@ is the v1 ruling and is kept as written; this paragraph is what changed, and a r
 
 The evidence is the digests': every hosted tool that supports login excludes or leaves undocumented OTP, SMS,
 CAPTCHA and OAuth-only flows, and none is documented as handling them unattended.
+
+### History (v1)
+
+**The ruling this constraint was written as, kept as the ruling it was.** It is v1's scope, superseded by amendment 10 for MFA by an
+authenticator-app seed and unchanged for everything else; the current scope is the lead above.
+
+> **MFA, SSO and CAPTCHA are OUT of v1, recorded as a known gap** (`docs/known-gaps.md`), with "use a dedicated test
+> account without MFA" as the stated route (the advice BrowserStack and LambdaTest give).
+
+*Outside the quote:* the known-gaps entry is its own row (#2275), filed with the build and not before.
 
 ## Constraint 7: `probe-forms` presses buttons, and a login makes the buttons real
 
@@ -862,7 +871,7 @@ runners whose addresses change, and the change would be to the user's network an
 - **A real login the chairman's outsider needs cannot be written in the closed vocabulary**, for instance a
   custom widget with no accessible name or a step that must wait on script. Measure it on the second outsider
   run: how many of the first logins written were expressible.
-- **An outsider's product signs in with SSO.** Then v1 does not reach them, and the known gap is the first
+- **An outsider's product signs in with SSO.** Then this tool does not reach them (Constraint 6), and the known gap is the first
   thing they meet and not a footnote. The estimate would have to be redone around mechanism 3.
 - **A login form the script cannot address by accessible name.** That is a real 4.1.2 failure of the
   product under test, and a tool that cannot get past it cannot report on anything behind it. If an

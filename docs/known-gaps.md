@@ -33,7 +33,7 @@ entry names what is missing, what it would cost, and what would tell you it is f
 - [§47](#47-the-walk-alone-is-177-seconds-on-a-926-trip-page-so-no-probe-budget-can-rescue-it-and-the-report-has-to-say-what-it-did-not-walk) THE WALK ALONE IS 177 SECONDS ON A 926-TRIP PAGE, so no probe budget can rescue it and the report has to say what it did not walk
 - [§48](#48-a-reviewer-can-act-as-a11ign-bot-through-any-shell-wrapper-and-no-path-shim-can-change-that-accepted-by-ceo-2026-09-24-2402) A REVIEWER CAN ACT AS a11ign-bot THROUGH ANY SHELL WRAPPER, AND NO PATH SHIM CAN CHANGE THAT — ACCEPTED by ceo, 2026-09-24 (#2402)
 - [§49](#49-reviewer-auth-failure-is-detected-from-text-nobody-has-seen-render-and-the-refresh-race-is-unmeasured-open-by-design-2401) REVIEWER AUTH FAILURE IS DETECTED FROM TEXT NOBODY HAS SEEN RENDER, and the refresh race is UNMEASURED — OPEN, by design (#2401)
-- [§51](#51-a-run-cannot-get-past-mfa-sso-or-a-captcha-and-nothing-in-the-tool-detects-the-third-out-of-v1-by-ruling-2275-2262) A RUN CANNOT GET PAST MFA, SSO OR A CAPTCHA, AND NOTHING IN THE TOOL DETECTS THE THIRD — OUT OF v1, by ruling (#2275, #2262)
+- [§51](#51-sign-in-a-run-gets-past-a-password-form-and-an-authenticator-app-code-totp-from-v3-and-not-past-sso-push-sms-a-security-key-or-a-captcha-open-one-provider-read-2275-2262-4976) SIGN-IN: A RUN GETS PAST A PASSWORD FORM AND AN AUTHENTICATOR-APP CODE (TOTP, FROM v3) AND NOT PAST SSO, PUSH, SMS, A SECURITY KEY OR A CAPTCHA — OPEN, one provider read (#2275, #2262, #4976)
 - [§52](#52-a-claim-that-does-not-move-is-read-from-one-fast-week-and-the-interrupted-pane-needle-was-never-seen-render-open-by-design-2470) A CLAIM THAT DOES NOT MOVE IS READ FROM ONE FAST WEEK, AND THE INTERRUPTED-PANE NEEDLE WAS NEVER SEEN RENDER — OPEN, by design (#2470)
 - [§53](#53-the-413-status-heads-are-at-the-limit-of-their-input-and-their-false-positives-and-misses-are-accepted-by-enumeration-accepted-by-ceo-2026-09-25-2258-2527) THE 4.1.3 STATUS HEADS ARE AT THE LIMIT OF THEIR INPUT, AND THEIR FALSE POSITIVES AND MISSES ARE ACCEPTED BY ENUMERATION — ACCEPTED by ceo, 2026-09-25 (#2258, #2527)
 - [§54](#54-the-thrash-guard-needle-was-never-seen-render-open-by-design-2745) THE THRASH-GUARD NEEDLE WAS NEVER SEEN RENDER — OPEN, by design (#2745)
@@ -3410,21 +3410,32 @@ verifies it and a fresh host would not have it.** Re-run `zsh -c 'echo $NODE_COM
 - **The cache directory is unbounded** under the home too, and has no sweep: it costs the same inodes on a
   persistent disk, where nothing ages it out. A per-checkout key is why it grows with the number of worktrees.
 
-## 51. A RUN CANNOT GET PAST MFA, SSO OR A CAPTCHA, AND NOTHING IN THE TOOL DETECTS THE THIRD — OUT OF v1, by ruling (#2275, #2262)
+<a id="51-a-run-cannot-get-past-mfa-sso-or-a-captcha-and-nothing-in-the-tool-detects-the-third-out-of-v1-by-ruling-2275-2262"></a>
+## 51. SIGN-IN: A RUN GETS PAST A PASSWORD FORM AND AN AUTHENTICATOR-APP CODE (TOTP, FROM v3) AND NOT PAST SSO, PUSH, SMS, A SECURITY KEY OR A CAPTCHA — OPEN, one provider read (#2275, #2262, #4976)
 
-**Amended 2026-10-15 (#4976, [ADR 0038](adr/0038-authenticated-capture.md#constraint-6-mfa-sso-and-captcha-are-out-of-v1), amendment 10): MFA
-by an authenticator-app seed (TOTP) is IN scope from v3, and everything else in this entry's title still is not.** A `login:` block
-in a flows file names the variable that holds the seed (`totp: AUTH0_TOTP_SEED`), and a scan that is given the file and no `--login-flow`
-(`a11ign <url> --flows <file>`) types the code the login asks for. **Push approval, SMS, an emailed code, a security key and a CAPTCHA
-are not answered**, and "a dedicated test account without MFA" is still the route for them. **What was read: one end-to-end run, on one
-provider.** The Auth0 tenant of the private `a11ign/auth-capture-check`, on `a11ign@0.10.8` (a11ign#5293, 2026-10-15): the ordinary run,
-https://github.com/a11ign/auth-capture-check/actions/runs/38769795554, ended `success`, and the falsifier run (a random seed),
-https://github.com/a11ign/auth-capture-check/actions/runs/38770567987, ended `auth-login-failed` as its workflow requires. **Not read:**
-any other provider's pages (Okta, Entra ID, Cognito, a self-hosted one), another factor on Auth0, a seed in another form than the
-authenticator app's text key or `otpauth://` URI, and **the GitHub Action**: its `flows` and `login-flow` inputs are both required, so the
-Action runs a named flow and does not read the `login:` block (the run above is the command-line form on a Windows runner). The
-paragraphs below are the v1 entry, kept for what each one measured; **where one says MFA cannot be answered, read it as "other than
-TOTP, on the path above".**
+**What is true now:** a run signs in with a username and password on a form, and, from v3 and on the command line, with an authenticator-app
+code (TOTP) from a `login:` block (`totp: AUTH0_TOTP_SEED` names the variable that holds the seed; `a11ign <url> --flows <file>` with no
+`--login-flow` types the code the login asks for). **Push approval, SMS, an emailed code, a security key, SSO to a provider the flow does not
+name, and a CAPTCHA are not answered**; a CAPTCHA is detected only where a login step has already failed, and is named and never solved.
+"A dedicated test account without MFA" is still the route for everything not answered. The one table of statuses, each no stronger than
+the run it cites, is [`docs/try-it.md`, "What sign-in covers"](./try-it.md#what-sign-in-covers); this entry does not restate it. The decision
+is [ADR 0038 Constraint 6](adr/0038-authenticated-capture.md#constraint-6-sign-in-scope-a-password-form-and-an-authenticator-app-code-totp-from-v3-sso-push-sms-a-security-key-and-a-captcha-are-not-supported)
+(amendment 10, #4976, 2026-10-15).
+
+**What was read: one end-to-end run, on one provider.** The Auth0 tenant of the private `a11ign/auth-capture-check`, on `a11ign@0.10.8`
+(a11ign#5293, 2026-10-15): the ordinary run, https://github.com/a11ign/auth-capture-check/actions/runs/38769795554, ended `success`, and the
+falsifier run (a random seed), https://github.com/a11ign/auth-capture-check/actions/runs/38770567987, ended `auth-login-failed` as its
+workflow requires. **Not read:** any other provider's pages (Okta, Entra ID, Cognito, a self-hosted one), another factor on Auth0, a seed in
+another form than the authenticator app's text key or `otpauth://` URI, an Auth0 tenant with Bot Detection set to Always
+([§61](#61-a-run-against-an-auth0-tenant-with-bot-detection-set-to-always-is-untested-and-bot-challenge-is-a-fixture-only-outcome-known-in-the-code-as-auth-challenge-detected-open-by-design-4084)),
+and **the GitHub Action**: its `flows` and `login-flow` inputs are both required, so the Action runs a named flow and does not read the
+`login:` block (the run above is the command-line form on a Windows runner).
+
+### History (v1)
+
+**The v1 entry, kept for what each paragraph measured.** `ceo`'s v1 ruling (below) put MFA, SSO and CAPTCHA out of v1; the amendment of
+2026-10-15 brought MFA by an authenticator-app seed into scope and left the rest. **Where a paragraph below says MFA cannot be answered, read
+it as "other than TOTP, on the path above"**, and read the current scope from the lead, not from this section.
 
 `ceo` ruled (#2262, "c. Auth", clause 6) that **MFA, SSO and CAPTCHA are OUT of v1 and recorded here**, with
 **"use a dedicated test account without MFA"** as the stated route. The capability that makes this true is the form
