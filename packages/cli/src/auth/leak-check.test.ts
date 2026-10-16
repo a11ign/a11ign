@@ -232,8 +232,8 @@ const inspected = (root: string): string[] => [
 ];
 
 /** The writers, each with its reason. `leak-check.ts` writes its own scrubbed output into the temp directory it was handed, and no state.
- *  `auth-trail.ts` writes the sign-in loop's trail (#5510): only the file the CALLER names, holding each loop's screens, controls pressed and
- *  outcome, never a value (its own test pins that), and nothing reads it back as state. */
+ *  `auth-trail.ts` writes the sign-in loop's trail (#5510): only the file the CALLER names, holding each loop's screens, the alerts and
+ *  controls each showed (role and name, #5674), the control pressed and outcome, never a value (its own test pins that), and nothing reads it back as state. */
 const ALLOWED = [
   { file: `${AUTH_DIR}/leak-check.ts`, kind: "call" }, { file: `${AUTH_DIR}/leak-check.ts`, kind: "import" },
   { file: `${AUTH_DIR}/auth-trail.ts`, kind: "call" }, { file: `${AUTH_DIR}/auth-trail.ts`, kind: "import" },

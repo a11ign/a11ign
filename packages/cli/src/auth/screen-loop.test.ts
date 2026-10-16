@@ -198,6 +198,18 @@ describe("runLoop: act, observe, repeat, within one budget", () => {
 
 });
 
+describe("runLoop: what a branch records of its screen (#5674)", () => {
+  test("POSITIVE CONTROL: a branch records the alert its screen showed and the controls beside it, and a screen with none records an empty list", async () => {
+    const r = rig();
+    const result = await r.run([IDENTIFIER, BLOCKED]);
+    assert.deepEqual(result.branches[0].alerts, []);
+    const stop = result.branches.at(-1);
+    assert.equal(stop?.kind, "stop");
+    assert.deepEqual(stop?.alerts, [{ role: "alert", name: "Your account has been blocked." }]);
+    assert.deepEqual(stop?.controls, BLOCKED.controls);
+  });
+});
+
 describe("runLoop: the landing screen, the app's own signed-out page", () => {
   test("POSITIVE CONTROL: a landing screen with one Sign in button presses it, and the login continues from there", async () => {
     assert.equal(classifyScreen(LANDING), "landing");
