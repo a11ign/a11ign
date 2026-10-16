@@ -3,6 +3,6 @@
 - **Measured:** the Acceptance grep returns `0` for "out of v1" in `action.yml`; `action.yml` parses as YAML with the new description; the CLI action tests that read `action.yml` pass (129 of 129, across the six files that import it) after `pnpm run build`.
 - **Read, not run:** each scope claim is read off `docs/try-it.md`'s "What sign-in covers" section and `docs/github-action.md` line 488 and 554 at this commit. The Action itself was not run against a login.
 
-Acceptance: grep -c "out of v1" action.yml | grep -qx 0 && grep -q "cannot get past an MFA prompt" action.yml && grep -q "a CAPTCHA or a one-time code" action.yml && grep -q "SSO is not supported unless" action.yml && grep -q "authenticator-app code works on the command" action.yml && grep -q "docs/try-it.md" action.yml
+Acceptance: grep -c "out of v1" action.yml | grep -qx 0 && tr '\n' ' ' < action.yml | tr -s ' ' | grep -Fq "A login cannot get past an MFA prompt, a CAPTCHA or a one-time code. SSO is not supported unless it is a username and password on a form at an origin you name, and an authenticator-app code works on the command line only, not in this Action." && grep -Fq "docs/try-it.md" action.yml
 
 Closes #5643
