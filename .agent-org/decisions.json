@@ -6,5 +6,6 @@
   "duplicate-row": true,
   "review-depth": true,
   "routing.haikuDefault": true,
-  "worktree.rebuildCheck": true
+  "worktree.rebuildCheck": true,
+  "outside.acceptance": true
 }
