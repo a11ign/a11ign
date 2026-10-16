@@ -20,4 +20,4 @@
 - Done-when 2 of the row (the policy exercised by a run of `outside-nightly`, linked on a11ign/a11ign#5609) cannot happen until #5609 sets `outside.nightly` on. Nothing in this change can reach it.
 - Nothing has minted a token against this policy, so the policy is untested in Octo STS itself; the file is validated only by the guards above and by the row's grep.
 
-Acceptance: test -f .github/chainguard/outside-nightly.sts.yaml && grep -qF 'outside-nightly.yml@refs/heads/main' .github/chainguard/outside-nightly.sts.yaml
+Acceptance: grep -qF 'outside-nightly.yml@refs/heads/main' .github/chainguard/outside-nightly.sts.yaml
