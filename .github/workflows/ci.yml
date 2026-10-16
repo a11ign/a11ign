@@ -578,8 +578,11 @@ jobs:
       pull-requests: read
     steps:
       - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
-        with: { node-version: 22 }
+        with: { node-version: 22, cache: pnpm }
+      # The test imports `@a11ign/toolchain/refusal-owners-are-open` from the installed package (agent-org#1497), so the job installs first.
+      - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Every owner a refusal names is an open issue
         env:
           A11Y_CHECK_REFUSAL_OWNERS: "1"
