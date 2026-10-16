@@ -8,7 +8,7 @@
  *   1. Neither package is in the workspace: `pnpm-workspace.yaml`'s globs match no directory of either name, and no workspace manifest
  *      carries either package's name (so a copy under a different directory is caught too).
  *   2. `pnpm-lock.yaml` holds no `link:` to either, and no importer under their old paths.
- *   3. The `@a11ign/screenreader-worker` entry is a REGISTRY entry: `version: 0.13.4` under every importer that declares it, and a
+ *   3. The `@a11ign/screenreader-worker` entry is a REGISTRY entry: `version: 0.13.5` under every importer that declares it, and a
  *      `packages:` entry whose `resolution` carries an `integrity`. A version with no integrity is a version nobody verified.
  *   4. No pending changeset names either package. `.changeset/README.md` is prose and may name them; an entry's frontmatter may not,
  *      because `changeset version` would then try to version a package this workspace does not have.
@@ -32,7 +32,7 @@ import { parse } from "yaml";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const CONSUMED = "@a11ign/screenreader-worker";
-const CONSUMED_VERSION = "0.13.4";
+const CONSUMED_VERSION = "0.13.5";
 /** The two directories that left, and every name either has been published or reserved under. */
 const DEPARTED_DIRECTORIES = ["nvda-worker", "nvda-speech"] as const;
 /** The worker's directory, built from its name so the core's live files do not spell it (ADR 0045 cut 6, #5084): the guard still knows it until `layers.json` goes. */
@@ -172,7 +172,7 @@ test("pnpm-lock.yaml holds no link: to either package and no importer under eith
   assert.deepEqual(linkRefusals(read(REPO_ROOT, "pnpm-lock.yaml")), []);
 });
 
-test("pnpm-lock.yaml holds @a11ign/screenreader-worker at version 0.13.4 with an integrity, under every importer that declares it", () => {
+test("pnpm-lock.yaml holds @a11ign/screenreader-worker at version 0.13.5 with an integrity, under every importer that declares it", () => {
   const lockfile = read(REPO_ROOT, "pnpm-lock.yaml");
   assert.deepEqual(registryEntryRefusals(lockfile), []);
   // Derived a second way: the manifests that declare it are the importers the lockfile must resolve, so a lockfile that lost one is not "enough".
@@ -194,6 +194,32 @@ test("POSITIVE CONTROL: a clean registry entry passes, and a missing, malformed 
   assert.deepEqual(registryEntryRefusals(lockfileWith({ version: CONSUMED_VERSION })), [`${CONSUMED}@${CONSUMED_VERSION} has no sha512 integrity in packages:`]);
   assert.deepEqual(registryEntryRefusals(lockfileWith({ version: CONSUMED_VERSION, integrity: "sha512-placeholder" })), [`${CONSUMED}@${CONSUMED_VERSION} has no sha512 integrity in packages:`]);
   assert.deepEqual(registryEntryRefusals("lockfileVersion: '9.0'\n\nimporters:\n  .: {}\n"), [`no importer declares ${CONSUMED}`]);
+});
+
+// ---- 3b. the manifests pin the same version the lockfile resolves -----------------------------------------------
+
+/** What is wrong with the root manifest's pins: the range a dependency declares and the override that holds it at the consumed version. */
+function manifestPinRefusals(manifest: { dependencies?: Record<string, string>; pnpm?: { overrides?: Record<string, string> } }): string[] {
+  const refusals: string[] = [];
+  if (manifest.dependencies?.[CONSUMED] !== `^${CONSUMED_VERSION}`) refusals.push(`dependencies declare ${CONSUMED} as ${manifest.dependencies?.[CONSUMED] ?? "nothing"}, not ^${CONSUMED_VERSION}`);
+  if (manifest.pnpm?.overrides?.[CONSUMED] !== CONSUMED_VERSION) refusals.push(`pnpm.overrides hold ${CONSUMED} at ${manifest.pnpm?.overrides?.[CONSUMED] ?? "nothing"}, not ${CONSUMED_VERSION}`);
+  return refusals;
+}
+
+test("package.json pins @a11ign/screenreader-worker at the consumed version, in dependencies and in pnpm.overrides", () => {
+  assert.deepEqual(manifestPinRefusals(JSON.parse(read(REPO_ROOT, "package.json"))), []);
+});
+
+test("POSITIVE CONTROL: a manifest with either pin missing or moved is REFUSED, naming it", () => {
+  assert.deepEqual(manifestPinRefusals({ dependencies: { [CONSUMED]: `^${CONSUMED_VERSION}` }, pnpm: { overrides: { [CONSUMED]: CONSUMED_VERSION } } }), []);
+  assert.deepEqual(manifestPinRefusals({ dependencies: { [CONSUMED]: "^0.13.4" }, pnpm: { overrides: {} } }), [
+    `dependencies declare ${CONSUMED} as ^0.13.4, not ^${CONSUMED_VERSION}`,
+    `pnpm.overrides hold ${CONSUMED} at nothing, not ${CONSUMED_VERSION}`,
+  ]);
+  assert.deepEqual(manifestPinRefusals({ pnpm: { overrides: { [CONSUMED]: "0.13.4" } } }), [
+    `dependencies declare ${CONSUMED} as nothing, not ^${CONSUMED_VERSION}`,
+    `pnpm.overrides hold ${CONSUMED} at 0.13.4, not ${CONSUMED_VERSION}`,
+  ]);
 });
 
 // ---- 4. no changeset names either package ------------------------------------------------------------------
