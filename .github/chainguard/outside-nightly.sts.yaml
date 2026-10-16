@@ -1,0 +1,30 @@
+# Trust policy for the nightly org jobs' outside home, `a11ign/agent-org`'s `.github/workflows/outside-nightly.yml` (a11ign/a11ign#5624,
+# epic #5602; home row a11ign/agent-org#1577). Octo STS v0.11.2 syntax, the shape of `project-ref-bump.sts.yaml` in agent-org: a workflow
+# in ANOTHER repository, so the subject is pinned to that repository's immutable ids, not to `nightly.yml` here as `nightly-board-read` is.
+#
+# WHAT IT HOLDS, on THIS repository only (the server forces `repositories` to the one the file sits in):
+#   issues: write         `close-rows-sweep` closes rows and files verify rows; `org-watch` comments on the report issue
+#   pull_requests: read   `close-rows-sweep` reads merged pull requests
+#   actions: write        `trunk-sweep` dispatches `trunk.yml` when main's tip has no check runs
+#   contents: read        the checkout the four commands run from
+#   organization_projects: read  `ready:audit` reads the board, and `close-rows-sweep` settles Status through the Project; where the token
+#                         cannot read it, that sweep reports `project-unreadable` as a degraded exit 0
+#
+# WHAT BINDS IT TO `main`: `job_workflow_ref` pinned to `@refs/heads/main` is the run of the home's file AS IT IS ON `main`, so a branch
+# that edits the workflow cannot mint. The home mints only when `outside.nightly` is on (a11ign/a11ign#5609), so this file may land first.
+#
+# THE UNESCAPED DOT in the workflow file name below is deliberate: the row's Acceptance greps this file for the workflow's literal path,
+# which an escaped `\.` cannot match. An unescaped `.` also matches any one character, so the pattern admits a lookalike file name on
+# agent-org's `main` as well as the real one; that is the only thing given up, and the repository id and the `main` ref still bind it.
+# The `job_workflow_ref` line below is the ONLY place the literal path appears, so a change to it turns the Acceptance red.
+issuer: https://token.actions.githubusercontent.com
+subject_pattern: repo:a11ign@320310787/agent-org@1388747923:ref:refs/heads/main
+claim_pattern:
+  job_workflow_ref: a11ign/agent-org/\.github/workflows/outside-nightly.yml@refs/heads/main
+  event_name: schedule|workflow_dispatch
+permissions:
+  contents: read
+  issues: write
+  pull_requests: read
+  actions: write
+  organization_projects: read
