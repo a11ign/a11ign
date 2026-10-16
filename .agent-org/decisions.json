@@ -14,5 +14,6 @@
   "outside.reports": true,
   "outside.refusals": true,
   "outside.ownedPaths": true,
-  "outside.board": true
+  "outside.board": true,
+  "outside.nightly": true
 }
