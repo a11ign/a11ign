@@ -277,6 +277,35 @@ throwaway script, not a repository file (the records are the evidence, and `gh r
 these pages, and not the saving a cut would give (no capture was run with a probe off here either, so each figure is an upper bound as in the section above).
 
 
+## Target: a runner's capture time
+
+Two targets, from ceo's proposal on #5654, set against the runner reading above and kept as proposed:
+
+- the default run, `survey.html` with the Action's defaults (run 3): **≤ 150 s**, from **205.4 s**, a cut of **55.4 s**;
+- `probe-forms: "true"`, `survey.html` (run 1): **≤ 220 s**, from **327.9 s**, a cut of **107.9 s**.
+
+**The costliest phases, in seconds.** Run 3 (default): focus order (the Tab walk) 47.4, readThrough 32.9, sweep link 22.0, route-change probe 19.0, focus context 18.5, between probes 17.7, focus reveal 16.2, sweep formField 14.2. Run 1 (`probe-forms`): sweep formField 122.8, focus order 48.3, readThrough 31.8, sweep link 22.1, between probes 19.6.
+
+**The default run: 150 s is not reached by a lever that leaves the evidence unchanged.** The Tab walk reads 2.1.2, focus context reads 3.2.1, focus reveal reads the Dismissable bullet of 1.4.13, and the route-change probe reads 2.4.1 and 2.4.2. readThrough and the sweeps are the reading itself, not levers. So:
+
+- the Tab walk alone (47.4 s): 205.4 − 47.4 = **158.0 s**, which misses 150 by 8.0 s;
+- the three focus probes together (82.1 s): 205.4 − 82.1 = **123.3 s**, which meets it, and turns off the reads of 3.2.1, 1.4.13 and 2.1.2 (`probe-focus: false`);
+- the route-change probe alone (19.0 s): 205.4 − 19.0 = **186.4 s**, which misses.
+
+**`probe-forms: "true"`: 220 s is reached only in projection.** formField must fall from 122.8 s to 14.9 s or less (122.8 − 107.9). Run 3 read formField at 14.2 s with the input off, so the projection is 327.9 − 122.8 + 14.2 = **219.3 s**. That takes run 3's formField from a different run order, so it is confounded and n=1; it is not a reading with the input on.
+
+**What a saving counts as.** A saving counted from one phase's seconds is an upper bound until a probe-off run is read. The time since the previous entry is charged to the later entry, so a cut can move seconds into a neighbouring phase, and the phase's own seconds are the most the cut can save, not what it will save.
+
+**This is a target, not a second-run reading.** Both targets are set against this one run, n=1 per command, and no measurement in this section meets them. Whether a lever reaches 150 s or 220 s is decided by the recapture its row names, not by the arithmetic above.
+
+**The levers.** Each lever the arithmetic depends on is a filed row in [a11ign/agent-org](https://github.com/a11ign/agent-org/issues), with its own Region and recapture plan. A lever's `### Lever` heading is added by its recapture when the reading exists, so none is here yet.
+
+| lever | what it is | row | what its recapture reads |
+|---|---|---|---|
+| A | the `probe-forms` sweep's cost: `formField`, 122.8 s of the 327.9 s run (`ACTIVATION_SHARE_OF_REMAINING`, the per-round-trip cost) | [agent-org#1643](https://github.com/a11ign/agent-org/issues/1643) | the same page with and without the cut, on two `windows-2022` runs |
+| B | `MAX_SWEEP_STEPS` (250). It does not bind on either target command; it bounds the fleet ceiling on pages like ikea (`formField` ended on `cap` in 7 of 8 captures) | [agent-org#1644](https://github.com/a11ign/agent-org/issues/1644) | the ikea command with the cap changed, and the runner `survey.html` re-read once to show it is unchanged |
+| C | the fixed probes: `FOCUS_CONTEXT_STOPS` and `FOCUS_REVEAL_STOPS` (8 each), `FOCUS_PROBE_BUDGET_MS` (120 s, the Tab walk), and the route-change probe behind `probe-navigation` | [agent-org#1645](https://github.com/a11ign/agent-org/issues/1645) | the verdicts of 2.1.2, 2.4.1, 2.4.2, 3.2.1 and 1.4.13 before and after each change |
+
 ## What this does not show
 
 - **One day, one build, one runner image, ten fleet boxes.** Not variance over days, builds, hours or Edge versions.
