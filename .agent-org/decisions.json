@@ -12,5 +12,6 @@
   "outside.trunk": true,
   "outside.guards": true,
   "outside.reports": true,
-  "outside.refusals": true
+  "outside.refusals": true,
+  "outside.ownedPaths": true
 }
