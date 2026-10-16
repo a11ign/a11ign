@@ -1,0 +1,21 @@
+# Trust policy for agent-org's `board-outside.yml` workflow, which acts on this repository from OUTSIDE it through the Octo STS identity
+# `outside-board` (agent-org#1574, the outside home of board report; epic a11ign#5602; row agent-org#1581). Octo STS v0.11.2 reads the policy
+# from the TARGET repository's default branch, so it cannot ride agent-org#1574's pull request. Until this file is on `main` the workflow's
+# mint step is red, and only when agent-org's `outside.board` flag is on (a11ign#5605); shipped off, nothing mints.
+#
+# `sub` carries IMMUTABLE ids (`repo:<owner>@<id>/<repo>@<id>`), read 2026-10-16: owner 320310787, agent-org 1388747923 (#4191).
+#
+# WHAT BINDS IT TO `main`: `job_workflow_ref` pinned to `@refs/heads/main`, so a branch that edits the workflow cannot mint.
+# The grant is what `board-report.yml` holds today, plus `pull_requests: read` for the board's PR reads. Whether the Octo STS app holds
+# `discussions: write` is UNVERIFIED; the first live run with the flag on reads it.
+issuer: https://token.actions.githubusercontent.com
+subject: repo:a11ign@320310787/agent-org@1388747923:ref:refs/heads/main
+claim_pattern:
+  job_workflow_ref: a11ign/agent-org/\.github/workflows/board-outside\.yml@refs/heads/main
+  ref: refs/heads/main
+  event_name: schedule|workflow_dispatch
+permissions:
+  issues: write
+  discussions: write
+  pull_requests: read
+  contents: read
