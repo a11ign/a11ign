@@ -1,7 +1,8 @@
 /**
  * The sign-in loop's trail, written to a file the caller names (a11ign#5510, under a11ign#5495): for each loop step the screen
- * and the control pressed, and each loop's outcome. Nothing typed is in it. The interpreter maps every branch to `{ screen, kind }`
- * before it marks, and this writer maps again, so a value a later mark carried would still not reach the file.
+ * and the control pressed, the alerts and controls each screen showed, and each loop's outcome. Nothing typed is in it. The interpreter
+ * maps every branch to `{ screen, kind, alerts, controls }` before it marks, and this writer maps again, so a value a later mark
+ * carried would still not reach the file.
  *
  * Named by `A11Y_AUTH_TRAIL_FILE`. Unset (or empty), no file is written and the mark does nothing.
  */
@@ -11,11 +12,23 @@ import type { Environment, Mark } from "./interpreter.js";
 
 export const AUTH_TRAIL_ENV = "A11Y_AUTH_TRAIL_FILE";
 
-export interface TrailBranch { readonly screen: string; readonly kind: string }
+/** A control or alert as the screen showed it: its role and accessible name, and nothing else (a field's value is never one of these). */
+export interface TrailShown { readonly role: string; readonly name: string }
+export interface TrailBranch {
+  readonly screen: string;
+  readonly kind: string;
+  /** The screen's alerts, so a rejected code is visible as the page said it (#5674); empty when the screen showed none. */
+  readonly alerts: readonly TrailShown[];
+  /** Every control the screen showed when the branch was taken, so a field error that is not an alert is visible beside it. */
+  readonly controls: readonly TrailShown[];
+}
 export interface TrailLoop { readonly phase: string; readonly index: number; readonly outcome: string; readonly branches: readonly TrailBranch[] }
 
 /** The loops written so far, per file: a scan signs in once per page, and every sign-in's loops join the same file. */
 const loopsByFile = new Map<string, TrailLoop[]>();
+
+/** Role and name only: a mark that carried more about a control (a value, say) is cut down here, not passed on. */
+const shownOnly = (nodes: readonly TrailShown[]): TrailShown[] => nodes.map(({ role, name }) => ({ role, name }));
 
 function loopOf(detail: Record<string, unknown>): TrailLoop {
   const branches = detail.branches as readonly TrailBranch[];
@@ -23,7 +36,7 @@ function loopOf(detail: Record<string, unknown>): TrailLoop {
     phase: String(detail.phase),
     index: Number(detail.index),
     outcome: String(detail.outcome),
-    branches: branches.map(({ screen, kind }) => ({ screen, kind })),
+    branches: branches.map(({ screen, kind, alerts, controls }) => ({ screen, kind, alerts: shownOnly(alerts), controls: shownOnly(controls) })),
   };
 }
 

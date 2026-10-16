@@ -312,6 +312,9 @@ export interface Branch {
   readonly kind: Action["kind"];
   readonly note?: string;
   readonly outcome?: LoginOutcome;
+  /** What the screen showed when the branch was taken (#5674): the trail writes these beside it, role and name only. */
+  readonly alerts: readonly ScreenControl[];
+  readonly controls: readonly ScreenControl[];
 }
 
 export interface LoopResult {
@@ -366,14 +369,20 @@ function noteUnmatched(o: ScreenObservation, kind: "unknown-screen" | "ambiguous
   return settled ? unknownEnd(o, state.branches) : undefined;
 }
 
+/** An alert is a control the page marks as one, so the shown alerts are read off the same controls. */
+function shownBy(o: ScreenObservation): Pick<Branch, "alerts" | "controls"> {
+  return { alerts: o.controls.filter((c) => c.role === "alert"), controls: o.controls };
+}
+
 async function actOn(screen: Screen, o: ScreenObservation, options: LoopOptions, state: LoopState): Promise<LoopResult | undefined> {
   const action = nextAction(screen, options.config, o);
+  const shown = shownBy(o);
   if (action.kind === "stop") {
-    state.branches.push({ screen, kind: "stop", outcome: action.outcome });
+    state.branches.push({ screen, kind: "stop", outcome: action.outcome, ...shown });
     return { outcome: action.outcome, branches: state.branches, remedy: action.remedy };
   }
   const note = "note" in action ? action.note : undefined;
-  state.branches.push(note ? { screen, kind: action.kind, note } : { screen, kind: action.kind });
+  state.branches.push(note ? { screen, kind: action.kind, note, ...shown } : { screen, kind: action.kind, ...shown });
   await options.act(action);
   state.lastActed = screen;
   return undefined;
