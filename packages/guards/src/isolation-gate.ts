@@ -552,17 +552,6 @@ export function checkIsolation(packageDir: string) {
   }
 }
 
-/**
- * The layer checkouts discovery leaves out: none, because nothing lays one (ADR 0045 cut 9, #5087) and there is no `layers.json` to read.
- *
- * KEPT AS AN EXPORT, and only for the name: this file is a COPY of `@a11ign/toolchain/lib/isolation-gate`, which still exports it (0.9.0, where it reads
- * `layers.json`), and `bootstrap-copies-gate-match-toolchain.test.ts` compares the two by NAME and by behaviour. It goes with the toolchain's
- * version that drops it, and the comparison tells that day by naming the export as present on one side only.
- */
-export function leftOutLayerCheckouts(): string[] {
-  return [];
-}
-
 /** Every real package, so neither the gate nor the build can run against a stale hand-written list. */
 export function allPackages() {
   const root = fileURLToPath(new URL("../../", import.meta.url));

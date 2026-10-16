@@ -11,8 +11,8 @@
  * `bootstrap-copies-changed-match-toolchain.test.ts` (#4719).
  *
  * THE FIXTURE: `isolation-gate` reads the repository it sits in from its OWN location (`../../../` for the copy, `../../` for the toolchain's
- * file), so each side is placed at the depth that makes both resolve to the same throwaway repository, which holds packages, an EMPTY
- * `layers.json` (the toolchain's copy still reads one; the core's no longer does, #5087) and tracked test files for the probes to read.
+ * file), so each side is placed at the depth that makes both resolve to the same throwaway repository, which holds packages and tracked test
+ * files for the probes to read. Neither side reads a `layers.json` any more (the toolchain's gate stopped at 0.10.0, the core's at #5087).
  *
  * NOT PROBED, and why: `checkIsolation` is probed only down to its two refusals before any pack or install, because a full run packs and installs
  * from the registry; the real consumer install is `packages/guards/nightly/isolation-gate-real-consumer.test.ts`'s. The copy's command-line entry
@@ -94,10 +94,6 @@ async function fixtureRepo(options: { alter?: (path: string, text: string) => st
   put("packages/alpha/src/unshipped.ts", "export {};\n");
   put("packages/layer-only/package.json", `${JSON.stringify({ name: "@a11ign/layer-only", version: "1.0.0" })}\n`);
   put("package.json", `${JSON.stringify({ name: "fixture-root", private: true, workspaces: ["packages/*"] })}\n`);
-  // THE TOOLCHAIN'S PUBLISHED COPY STILL READS A `layers.json` AT THE ROOT it sits in (0.9.0) and throws without one; the core's copy no longer does
-  // (ADR 0045 cut 9, #5087: nothing is laid, so there is no declaration). The fixture therefore declares NO layers, which is the state of this
-  // repository, and both copies agree on it. The line goes the day the toolchain publishes a gate that reads none.
-  put("layers.json", `${JSON.stringify({ layers: {} })}\n`);
   put("packages/alpha/src/names.test.ts", 'const SITES = [{ file: "README.md" }, { file: \'docs/guide.md\' }];\n');
   put("packages/gamma/src/reads.test.ts", 'readFileSync("docs/guide.md");\n');
   put("packages/gamma/src/plain.test.ts", "assert.equal(1, 1);\n");
@@ -196,7 +192,6 @@ function probesFor(stem: Stem): Probes {
         (m, repo) => call(m, "checkIsolation", pkg(repo, "gamma")),
       ],
       allPackages: [(m) => call(m, "allPackages")],
-      leftOutLayerCheckouts: [(m) => call(m, "leftOutLayerCheckouts")],
       packedFiles: [(m, repo) => [...(call(m, "packedFiles", pkg(repo, "alpha")) as Set<string>)].sort()],
     };
   }
@@ -278,9 +273,8 @@ for (const stem of STEMS) {
 test("the fixture is observable: the comparisons above do not pass on two empty answers", async () => {
   const fixture = await track();
   const gate = await fixture.module("toolchain", "isolation-gate");
-  // `worker` is a package the OLD declaration left out as a layer's checkout: it being present is the control that the empty declaration is read.
+  // `worker` is a package the OLD declaration left out as a layer's checkout: it being present is the control that no declaration is read.
   assert.deepEqual((call(gate, "allPackages") as string[]).map((dir) => dir.split("/").pop()).sort(), ["alpha", "broken", "gamma", "layer-only", "worker"]);
-  assert.deepEqual(call(gate, "leftOutLayerCheckouts"), [], "the declaration holds no layer, so nothing is left out; the packages probe above carries the control");
   assert.equal(call(gate, "satisfies", "0.2.0", "^0.1.2"), false);
   assert.deepEqual(call(gate, "internalDependencies", pkg(fixture.dir, "alpha")), [pkg(fixture.dir, "beta")]);
   const packed = [...(call(gate, "packedFiles", pkg(fixture.dir, "alpha")) as Set<string>)];
