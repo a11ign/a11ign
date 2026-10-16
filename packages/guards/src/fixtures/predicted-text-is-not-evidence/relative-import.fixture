@@ -1,0 +1,1 @@
+import "../../nvda-speech/src/own.ts";

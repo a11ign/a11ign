@@ -130,16 +130,16 @@ test("nothing in the evidence package or the CLI reaches the speech layer or the
   assert.deepEqual(boundaryFindings(boundedFiles()), []);
 });
 
+/**
+ * Each reach is an on-disk fixture, not a string here: `layer-edges` (`packages/guards/src/layer-edges.ts`) reads an import written in a
+ * test's source as a real edge, and exempts only paths under `fixtures/`. The `.fixture` extension keeps every tool that reads code away from them.
+ */
+const REACH_FIXTURES = ["static-import", "relative-import", "re-export", "dynamic-import", "require"];
+
 test("a source file or manifest that reaches the speech layer is refused, however it reaches it", () => {
-  const reaches = [
-    'import { x } from "@a11ign/nvda-speech";',
-    'import "../../nvda-speech/src/own.ts";',
-    'export { y } from "@a11ign/nvda-speech/src/own.ts";',
-    'const z = await import("@a11ign/some-emulator");',
-    'const w = require("nvda-speech");',
-  ];
-  for (const source of reaches) {
-    assert.equal(boundaryFindings(new Map([["packages/evidence/src/x.ts", source]])).length, 1, source);
+  for (const name of REACH_FIXTURES) {
+    const source = readFileSync(join(REPO, "packages/guards/src/fixtures/predicted-text-is-not-evidence", `${name}.fixture`), "utf8");
+    assert.equal(boundaryFindings(new Map([["packages/evidence/src/x.ts", source]])).length, 1, name);
   }
   const manifest = JSON.stringify({ devDependencies: { "@a11ign/nvda-speech": "^1.0.0" } });
   assert.equal(boundaryFindings(new Map([["packages/cli/package.json", manifest]])).length, 1, "a declared dependency");
