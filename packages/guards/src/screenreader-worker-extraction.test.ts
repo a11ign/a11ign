@@ -196,6 +196,32 @@ test("POSITIVE CONTROL: a clean registry entry passes, and a missing, malformed 
   assert.deepEqual(registryEntryRefusals("lockfileVersion: '9.0'\n\nimporters:\n  .: {}\n"), [`no importer declares ${CONSUMED}`]);
 });
 
+// ---- 3b. the manifests pin the same version the lockfile resolves -----------------------------------------------
+
+/** What is wrong with the root manifest's pins: the range a dependency declares and the override that holds it at the consumed version. */
+function manifestPinRefusals(manifest: { dependencies?: Record<string, string>; pnpm?: { overrides?: Record<string, string> } }): string[] {
+  const refusals: string[] = [];
+  if (manifest.dependencies?.[CONSUMED] !== `^${CONSUMED_VERSION}`) refusals.push(`dependencies declare ${CONSUMED} as ${manifest.dependencies?.[CONSUMED] ?? "nothing"}, not ^${CONSUMED_VERSION}`);
+  if (manifest.pnpm?.overrides?.[CONSUMED] !== CONSUMED_VERSION) refusals.push(`pnpm.overrides hold ${CONSUMED} at ${manifest.pnpm?.overrides?.[CONSUMED] ?? "nothing"}, not ${CONSUMED_VERSION}`);
+  return refusals;
+}
+
+test("package.json pins @a11ign/screenreader-worker at the consumed version, in dependencies and in pnpm.overrides", () => {
+  assert.deepEqual(manifestPinRefusals(JSON.parse(read(REPO_ROOT, "package.json"))), []);
+});
+
+test("POSITIVE CONTROL: a manifest with either pin missing or moved is REFUSED, naming it", () => {
+  assert.deepEqual(manifestPinRefusals({ dependencies: { [CONSUMED]: `^${CONSUMED_VERSION}` }, pnpm: { overrides: { [CONSUMED]: CONSUMED_VERSION } } }), []);
+  assert.deepEqual(manifestPinRefusals({ dependencies: { [CONSUMED]: "^0.13.4" }, pnpm: { overrides: {} } }), [
+    `dependencies declare ${CONSUMED} as ^0.13.4, not ^${CONSUMED_VERSION}`,
+    `pnpm.overrides hold ${CONSUMED} at nothing, not ${CONSUMED_VERSION}`,
+  ]);
+  assert.deepEqual(manifestPinRefusals({ pnpm: { overrides: { [CONSUMED]: "0.13.4" } } }), [
+    `dependencies declare ${CONSUMED} as nothing, not ^${CONSUMED_VERSION}`,
+    `pnpm.overrides hold ${CONSUMED} at 0.13.4, not ${CONSUMED_VERSION}`,
+  ]);
+});
+
 // ---- 4. no changeset names either package ------------------------------------------------------------------
 
 /** A changeset entry's frontmatter is the block between its first two `---` lines; the names it versions are that block's keys. */
