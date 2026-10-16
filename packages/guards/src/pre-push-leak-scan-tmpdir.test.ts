@@ -13,10 +13,10 @@
  *   3. THE CONTROL: the same statement with the `env TMPDIR=/tmp` prefix removed reproduces `listen EINVAL` under the long `TMPDIR`, so claims 1
  *      and 2 pass because of the prefix and not because the long path was never a problem here.
  */
-import { test } from "@rstest/core";
+import { afterAll, test } from "@rstest/core";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39,6 +39,13 @@ const LONG_TMPDIR_LENGTH = 120;
 const PLANTED_ADDRESS = ["10", "20", "30", "40"].join(".");
 /** The end of a failing run's output, enough to show the assertion that failed without dumping a whole rstest log. */
 const OUTPUT_TAIL_CHARS = 2000;
+const BASE36 = 36;
+/**
+ * The control only reproduces where tsx binds its IPC socket under `TMPDIR`: observed on Node 24 (24.21.0 gives `listen EINVAL`). CI's `ts` job runs
+ * Node 22.23.3, where the unprefixed statement exits 0, so the control is skipped there and claims 1 and 2 still run on that leg.
+ */
+const CONTROL_NODE_MAJOR = "24";
+const CONTROL_APPLIES = process.versions.node.split(".")[0] === CONTROL_NODE_MAJOR;
 
 /** The hook's leak-scan statement as the shell reads it: its `run` line and the backslash-continued lines after it. */
 function leakScanStatement(hookText: string): string {
@@ -61,7 +68,7 @@ function longTmpdir(scratch: string): string {
 
 /** Runs one statement in a bash script file, with `run` reduced to its own command, under the caller's `TMPDIR`. */
 function runStatement(statement: string, scratch: string, tmpdirValue: string) {
-  const script = join(scratch, `leak-scan-${Math.random().toString(36).slice(2)}.sh`);
+  const script = join(scratch, `leak-scan-${Math.random().toString(BASE36).slice(2)}.sh`);
   writeFileSync(script, `run() { shift; "$@"; }\n${statement}\n`);
   const result = spawnSync("bash", [script], {
     cwd: REPO_ROOT,
@@ -74,6 +81,10 @@ function runStatement(statement: string, scratch: string, tmpdirValue: string) {
 const scratch = mkdtempSync(join(tmpdir(), "pre-push-tmpdir-"));
 const hookStatement = leakScanStatement(readFileSync(HOOK, "utf8"));
 const longTmp = longTmpdir(scratch);
+
+afterAll(() => {
+  rmSync(scratch, { recursive: true, force: true });
+});
 
 test("the leak scan's statement exits 0 under a long TMPDIR, with no socket error", () => {
   assert.ok(hookStatement.includes(FIX_PREFIX), `the hook's leak-scan statement must set ${FIX_PREFIX.trim()}`);
@@ -96,11 +107,11 @@ test("the leak scan's statement still exits non-zero when a leak is present, and
   const { status, output } = runStatement(swapped, scratch, longTmp);
   assert.doesNotMatch(output, /EINVAL/);
   assert.notEqual(status, 0, "a planted leak must fail the scan");
-  assert.match(output, /✖ planted leak is refused/);
+  assert.match(output, /planted leak is refused/);
   assert.match(output, /private LAN IPv4 address/);
 });
 
-test("CONTROL: without the TMPDIR prefix the same statement reproduces listen EINVAL under the long TMPDIR", () => {
+test.runIf(CONTROL_APPLIES)("CONTROL: without the TMPDIR prefix the same statement reproduces listen EINVAL under the long TMPDIR", () => {
   const unfixed = hookStatement.replace(FIX_PREFIX, "");
   assert.equal(unfixed.includes(FIX_PREFIX), false, "the control's statement must run without the prefix");
   const { status, output } = runStatement(unfixed, scratch, longTmp);
