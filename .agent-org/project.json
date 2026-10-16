@@ -31,7 +31,7 @@
     { "repo": "a11ign/control", "release": { "kind": "tag" }, "releasablePaths": ["src/", "ansible/", "layers.json", "deploy-pins.json"], "adopterFacing": false },
     { "repo": "a11ign/toolchain", "release": { "kind": "npm", "package": "@a11ign/toolchain" }, "releasablePaths": ["src/"], "adopterFacing": false }
   ],
-  "_units": "The unit files this project installs from the tool's own templates are named `<prefix><name>`; the project's OWN units (its corpus and fleet clocks) live in `.agent-org/units/` and `own` lists them, which is the project's half of the partition `host-units.mjs` records the tool's half of. `boardReportWorkflow` is the workflow the tool's board-report unit dispatches on the first tracker's repository (#2620, child 3f of #69; ADR 0040, decision 9).",
+  "_units": "The unit files this project installs from the tool's own templates are named `<prefix><name>`; the project's OWN units (its corpus and fleet clocks) live in `.agent-org/units/` and `own` lists them, which is the project's half of the partition `host-units.mjs` records the tool's half of. `boardReportWorkflow` is the workflow the tool's board-report unit dispatches on the first tracker's repository (#2620, child 3f of #69; ADR 0040, decision 9). `reports` (#5632) declares the scripts `agent-org outside-reports <name>` runs: `script` is a path inside this checkout and `args` come before the command line's own. Declaring one does not run it, and the host timers still run `token-cost` and `weekly-review` directly.",
   "units": {
     "prefix": "a11ign-",
     "boardReportWorkflow": "board-report.yml",
@@ -51,7 +51,13 @@
       "a11ign-token-cost-weekly.timer",
       "a11ign-weekly-review.service",
       "a11ign-weekly-review.timer"
-    ]
+    ],
+    "reports": {
+      "ci-health": { "script": "scripts/ci-health.ts", "args": ["--post"] },
+      "outsider-verdict": { "script": "scripts/outsider/verdict-job.ts", "args": [] },
+      "token-cost": { "script": "scripts/token-cost.ts", "args": ["--post"] },
+      "weekly-review": { "script": "scripts/weekly-review.ts", "args": [] }
+    }
   },
   "_roles": "Where this project's role briefs live (ADR 0040, decision 1, surface 3; #2621, child 3e of #69), read by `src/project-roles.mjs` of a11ign/agent-org. The tool ships none of its own; `sessions.json` and every `<role>.md` are a11ign's, at `dir`.",
   "roles": { "dir": ".agent-org/roles" },
