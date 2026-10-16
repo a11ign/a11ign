@@ -152,7 +152,7 @@ is stated below.
 
 ## What sign-in covers
 
-**Read this before you spend an afternoon on a login.** It is the scope in three lists; the sections after it are the how. It was read against release `a11ign@0.10.8` at its tag (the examples now pin `a11ign@0.10.9`, whose source was not read again for this page): the CLI's `packages/cli/src/auth/` (`flows.ts`, `interpreter.ts`), the worker it pins (`@a11ign/screenreader-worker` 0.13.2, read from its published `auth-flow` code) and `docs/known-gaps.md` [§51](./known-gaps.md#51-a-run-cannot-get-past-mfa-sso-or-a-captcha-and-nothing-in-the-tool-detects-the-third-out-of-v1-by-ruling-2275-2262), and where a thing was only run on a fixture it says so. Each list item says whether its claim was re-read at 0.10.8 or carried over from an earlier reading.
+**Read this before you spend an afternoon on a login.** It is the scope in three lists; the sections after it are the how. It was read against release `a11ign@0.10.8` at its tag (the examples now pin `a11ign@0.10.9`, whose source was not read again for this page): the CLI's `packages/cli/src/auth/` (`flows.ts`, `interpreter.ts`), the worker it pinned (`@a11ign/screenreader-worker` 0.13.2, read from its published `auth-flow` code) and `docs/known-gaps.md` [§51](./known-gaps.md#51-a-run-cannot-get-past-mfa-sso-or-a-captcha-and-nothing-in-the-tool-detects-the-third-out-of-v1-by-ruling-2275-2262), and where a thing was only run on a fixture it says so. Each list item says whether its claim was re-read at 0.10.8 or carried over from an earlier reading.
 
 ### Supported
 
@@ -305,7 +305,7 @@ flows:
       - expect: { heading: "Dashboard" }       # on YOUR origin, as before
 ```
 
-What release `a11ign@0.10.8` does with it, read off `packages/cli/src/auth/flows.ts`, `packages/cli/src/auth/interpreter.ts` and `docs/known-gaps.md` §51 at that tag (each bullet cites its line; the worker the pin runs applies the same entry rules in `validateIdpOrigins`):
+What release `a11ign@0.10.8` does with it, read off `packages/cli/src/auth/flows.ts`, `packages/cli/src/auth/interpreter.ts` and `docs/known-gaps.md` §51 at that tag (each bullet cites its line; the worker that release ran applies the same entry rules in `validateIdpOrigins`):
 
 - **Each entry must be an exact `http` or `https` origin.** The file is refused when it loads if an entry "holds a wildcard; list each origin exactly", "carries a path, query or fragment", "carries a username or password", or "is the app's own origin, which needs no allowance". The key is optional, and a file without it behaves as before. (`flows.ts` 211–217 and 227–230; an absent key is an empty list, 111–112.)
 - **The declared origins are allowed only between the login's steps.** The last step is an `expect:` on the app's origin (the flows rules guarantee it), so a login that ends parked on the provider is `left-origin`; and nothing is typed into an origin that is not declared. (`interpreter.ts` 315–321 and `allowedOrigins` at 345.)
