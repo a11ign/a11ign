@@ -18,9 +18,9 @@ jobs:
       pull-requests: write       # for the PR comment below; omit it and the report still runs, only quieter
     steps:
       - uses: actions/checkout@v7
-      - uses: a11ign/a11ign@691322a7db0ad2a979014bfc931befecfa830df5   # the commit of the release tagged a11ign@0.10.3
-        # Pinned to the full 40-character commit of release 0.10.3 (`npm view a11ign dist-tags` read `latest`
-        # 0.10.3 on 2026-10-13; `next` was 0.10.4), so your CI does not move when a
+      - uses: a11ign/a11ign@b403bc726b3ba0896ba94284240fa8ba4a5ecf92   # the commit of the release tagged a11ign@0.10.8
+        # Pinned to the full 40-character commit of the release named on the line above (`npm view a11ign dist-tags`
+        # read `latest` as that release on 2026-10-15; `next` was one patch ahead), so your CI does not move when a
         # newer one is published -- GitHub
         # refuses an abbreviated SHA outright, it does not just discourage it.
         id: a11ign
@@ -46,13 +46,13 @@ no log and no artifact, and any diagnostic step you add with `if: always()` does
 [the account of one, and what to do about it](./try-it.md#the-fastest-route-a-github-actions-run) in
 `docs/try-it.md`.
 
-> **This pins release `0.10.3`, by its commit.** The release is tagged `a11ign@0.10.3` and the commit is the one the tag
+> **This pins release `0.10.8`, by its commit.** The release is tagged `a11ign@0.10.8` and the commit is the one the tag
 > names; every `0.x` release is a deliberate step ADR 0007 commits this project to until `1.0.0` (a breaking change
 > costs a minor bump, not a major-version apology). The full 40-character commit is the pin because it cannot move,
 > and GitHub refuses an abbreviated one outright rather than merely discouraging it
 > (`uses: a11ign/a11ign@<sha>`); it is what GitHub itself recommends for third-party actions. **Do not write
 > `a11ign/a11ign@v0`:** that tag exists (`git ls-remote --tags https://github.com/a11ign/a11ign refs/tags/v0`
-> printed the `0.10.3` commit on 2026-10-13) but it moves, so a workflow on it takes a newer release unasked. To take a newer release, read its number from `npm view a11ign dist-tags` and its
+> printed the `0.10.8` commit on 2026-10-15) but it moves, so a workflow on it takes a newer release unasked. To take a newer release, read its number from `npm view a11ign dist-tags` and its
 > commit from `git ls-remote https://github.com/a11ign/a11ign 'refs/tags/a11ign@*'`. See
 > [ADR 0007](./adr/0007-versioning-and-release.md).
 
@@ -139,7 +139,7 @@ gh api "repos/<owner>/<repo>/actions/artifacts/$artifact_id/zip" > result.zip
 ```
 
 Either way what comes back is a directory holding the file
-`result-json` names (and, where the pinned release has the `summary-md` output, as `0.10.3` does, `a11ign-summary.md`, the exact rendered
+`result-json` names (and, where the pinned release has the `summary-md` output, `a11ign-summary.md`, the exact rendered
 report the job summary carries, once the upload step lists it), the schema below (`verdict.findings`, `verdict.taskCompletable`,
 `captureVerified`, ...) — the transcript behind every finding. Neither needs a browser or
 `pull-requests: write` permission.
@@ -353,8 +353,8 @@ error handling most needs reviewing. On such a page 3.3.1, 3.3.3 and 4.1.3 are n
 `forms` names a config that says how to operate it (ADR 0024):
 
 ```yaml
-- uses: a11ign/a11ign@691322a7db0ad2a979014bfc931befecfa830df5   # the commit of the release tagged a11ign@0.10.3
-  # Pinned to the full 40-character commit of release 0.10.3, so your CI does not move when a newer one
+- uses: a11ign/a11ign@b403bc726b3ba0896ba94284240fa8ba4a5ecf92   # the commit of the release tagged a11ign@0.10.8
+  # Pinned to the full 40-character commit of release 0.10.8, so your CI does not move when a newer one
   # is published -- GitHub refuses an abbreviated SHA outright, it does not just discourage it.
   with:
     url: https://staging.example.com/signup
@@ -410,7 +410,7 @@ Give `urls` instead of `url` to test more than one page in one run. **Exactly on
 refused before any setup is billed.
 
 ```yaml
-      - uses: a11ign/a11ign@691322a7db0ad2a979014bfc931befecfa830df5   # the commit of the release tagged a11ign@0.10.3
+      - uses: a11ign/a11ign@b403bc726b3ba0896ba94284240fa8ba4a5ecf92   # the commit of the release tagged a11ign@0.10.8
         with:
           urls: |
             https://example.com/
@@ -485,7 +485,9 @@ first: the run holds a credential, and this section is only how to use it.**
 
 **Starting from nothing? [`docs/try-it.md`](./try-it.md#behind-a-login-an-authenticated-run-on-a-private-repository) is the path in order, from a login-walled app to a green run; this section is the reference for its mechanism.**
 
-**What sign-in covers and does not, in three lists (supported, not supported, and if your app needs MFA): [`docs/try-it.md`](./try-it.md#what-sign-in-covers).** A redirect login through `idp-origins:` is shown on a fixture only, and MFA and SSO are out of scope.
+**What sign-in covers and does not, in three lists (supported, not supported, and if your app needs MFA): [`docs/try-it.md`](./try-it.md#what-sign-in-covers).** A redirect login through `idp-origins:` is shown on a fixture only, and SSO is out of scope unless it is a username and password on a form at an origin you can name.
+
+**A login with MFA by authenticator-app seed (TOTP) is not an input of this Action.** `flows` and `login-flow` are both required and name a flow, and a flow has no one-time-code step; the sign-in that types the code is a `login:` block in the flows file (`totp: <variable name>`), run by the command line as `a11ign <url> --flows <file>` with no `--login-flow`. It has been read once, end to end, on an Auth0 tenant (a11ign#5293, 2026-10-15). Where the seed comes from (the authenticator app's "Trouble scanning?" text key, copied once at enrolment), its YAML and its limits are in [`docs/try-it.md`](./try-it.md#a-login-with-mfa-an-authenticator-app-seed), and **a run in CI needs a private repository** (`auth-refused-public-repository`, ADR 0038 amendment 3; the test bed is the private `a11ign/auth-capture-check`, whose `auth0-e2e` workflow is that run).
 
 ```yaml
 # .github/workflows/a11y.yml — the repository MUST be private (see below)
@@ -495,7 +497,7 @@ jobs:
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v7
-      - uses: a11ign/a11ign@691322a7db0ad2a979014bfc931befecfa830df5   # a full commit SHA: the commit of release a11ign@0.10.3; v0.1.0 predates the login flow
+      - uses: a11ign/a11ign@b403bc726b3ba0896ba94284240fa8ba4a5ecf92   # a full commit SHA: the commit of release a11ign@0.10.8; v0.1.0 predates the login flow
         env:                                   # the credential enters HERE, from GitHub Secrets, and nowhere else
           APP_TEST_USER: ${{ secrets.APP_TEST_USER }}
           APP_TEST_PASSWORD: ${{ secrets.APP_TEST_PASSWORD }}
@@ -520,7 +522,7 @@ flows:
       - expect: { heading: "Dashboard" }       # REQUIRED as the last step of a login flow
 ```
 
-**Steps** are `goto`, `fill`, `choose`, `check`, `press`, `expect` and `capture`, and nothing else in a file a worker runs (the 0.10.2 source also accepts `dismiss-if-shown` and `auto`, and `when:` and `optional:` modifiers, which the changelog says the worker does not know): no script step, no
+**Steps** are `goto`, `fill`, `choose`, `check`, `press`, `expect`, `capture` and `dismiss-if-shown`, with `when:` and `optional:` modifiers where each takes them, and nothing else in a file a worker runs. `auto` is refused by the worker by name, so leave it out. The worker the `a11ign@0.10.8` pin runs (`@a11ign/screenreader-worker` 0.13.2) reads the list this way; the key-by-key statement and its limits are in [`try-it.md`](./try-it.md#3-the-flows-file). No script step, no
 evaluated expression, no fixed sleep (`expect` waits for a condition, and its wait is bounded). A control is named by the
 name a screen reader announces, never by selector, and `within:` and `nth:` tell two of the same name apart. **A login's
 `fill` takes `from-env:` only**; a literal in the login flow is refused, and so is a literal typed into a password field in
@@ -531,7 +533,7 @@ that is a real 4.1.2 failure of your login form, and nothing behind it can be ex
 
 | | |
 |---|---|
-| **Use** | A dedicated test account **without MFA or SSO**, on staging. Its username and password must each be **at least 8 characters and not an ordinary word** (`a11y-audit-7f3c`, not `admin`): a shorter value is refused, because hiding it would rewrite your page's own text. MFA, SSO and CAPTCHA are out of v1: a login step that fails on a page showing a reCAPTCHA, hCaptcha or Turnstile widget ends in `auth-challenge-detected`, which names the challenge and never answers it. |
+| **Use** | A dedicated test account **without MFA or SSO**, on staging. Its username and password must each be **at least 8 characters and not an ordinary word** (`a11y-audit-7f3c`, not `admin`): a shorter value is refused, because hiding it would rewrite your page's own text. A second factor other than an authenticator-app seed (push, SMS, an emailed code, a security key), SSO that is not a form at a named origin, and CAPTCHA are out of scope (an authenticator-app seed is in, by a `login:` block and not by this Action: see above): a login step that fails on a page showing a reCAPTCHA, hCaptcha or Turnstile widget ends in `auth-challenge-detected`, which names the challenge and never answers it. |
 | **Private repositories only** | A run on a repository that is **not private is refused before NVDA is installed** (`auth-refused-public-repository`), whichever of `comment-on-pr`, the job log and the artifact you meant to use: all of them, and the job summary, are readable by anyone on a public repository. |
 | **What it presses** | Only what your files name. `probe-forms` and `probe-navigation` are turned off for an authenticated run **whatever you set** (an input's default cannot be told from a choice), and the run says so before it starts. The report and `result-json` list **What this run pressed**, by control name, and that list is the whole list. |
 | **The judge** | `judge-backend: local` (the default). `anthropic` or `openai` is refused for an authenticated run unless you also set `send-authenticated-transcript-to-judge-vendor: "true"`, which names the vendor in the log before the judge runs. |
@@ -624,7 +626,7 @@ browsers. [The reading, with run ids →](adr/0038-authenticated-capture.md)
 | `findings` | Count of lived-experience findings (summed over the captured pages, for `urls`). |
 | `task-completable` | Whether the judge thinks a screen-reader user could finish the stated task. On the default `local` backend this only means nothing scored as a blocker, a coarse proxy. |
 | `result-json` | Path to the full result, including the transcript. Worth uploading as an artifact — the transcript is the evidence behind every finding. |
-| `summary-md` | Path to the rendered report — the same markdown written to the job summary. **Not in `v0.1.0`**: a workflow pinned to that tag reads it as an empty string, and an artifact upload that lists it silently drops it. Release `0.3.0` has it (#1369), and so does the `0.10.3` pin here. Where the pinned ref has it, upload it alongside `result-json`: it is the route a CI-only consumer, with no access to the job summary, has to the human-readable report. |
+| `summary-md` | Path to the rendered report — the same markdown written to the job summary. **Not in `v0.1.0`**: a workflow pinned to that tag reads it as an empty string, and an artifact upload that lists it silently drops it. Release `0.3.0` has it (#1369), and so does the `0.10.8` pin here. Where the pinned ref has it, upload it alongside `result-json`: it is the route a CI-only consumer, with no access to the job summary, has to the human-readable report. |
 | `evidence-pack` | Path to the [evidence pack](./evidence-pack.md): the per-criterion outcomes with the NVDA announcements behind them, as one Markdown file for an assessor to attach to a conformance report. It is evidence and not a VPAT or ACR, and states no conformance. **Empty** for a run of a `urls` list, a `forms` config or a PDF, which write none, so guard an upload on it. Upload it alongside `result-json`: `path: ${{ steps.a11ign.outputs.evidence-pack }}`. Not in any release before the one that carries this row. |
 
 `findings` counts every lived-experience finding, referred ones included; `fail-on` counts only the asserted ones. The log's count line splits them:

@@ -543,6 +543,33 @@ for the same reason it already exists, which is to fail before NVDA is installed
 > **MFA, SSO and CAPTCHA are OUT of v1, recorded as a known gap** (`docs/known-gaps.md`), with "use a dedicated test
 > account without MFA" as the stated route (the advice BrowserStack and LambdaTest give).
 
+**Amendment 10 (#4976, 2026-10-15): MFA by an authenticator-app seed (TOTP) is IN scope from v3; the rest of this constraint stands.**
+Authority: the chairman's direction on #4084 (2026-10-11, "Signing in through a hosted provider WITH MFA is in v3"). The quote above
+is the v1 ruling and is kept as written; this paragraph is what changed, and a reader should take the two together.
+
+- **In scope:** a login whose second factor is a time-based one-time code from an authenticator app (RFC 6238), computed from the
+  seed the account was enrolled with. The `login:` block of a flows file names the variable holding it (`totp: AUTH0_TOTP_SEED`).
+- **Still out:** push approval, SMS, an emailed code, a security key or passkey, and a CAPTCHA (`auth-challenge-detected` names
+  one and never answers it). "Use a dedicated test account without MFA" remains the route for all of them.
+- **The seed's handling is Constraint 2's, not a new rule.** It is an environment variable and never a value in the flows file
+  (a literal in `totp:` is refused as `login-literal`, and the refusal prints no value); the CLI sends the variable's NAME to the
+  worker, which reads the value from its own process environment, so the seed is never on the wire; and a code is made at the moment
+  it is typed and never recorded (`assertNoTotpCode`). **The seed is redacted like a password:** its value goes into the same scrub set
+  as the username and the password (`planSignIn` names it with them, `resolveAuthentication` and `a11ign login --check` build the set
+  from those names), so every spelling of it is replaced in the output and a value that survives ends the run (Constraint 2's
+  rescan); the floor is the password's, a value under 8 characters is refused as `auth-credential-too-short`, and
+  `totp.test.ts` pins that the seed is a scrub value. What the scrub cannot hide is a six-digit code, below the floor on purpose,
+  which is why a code is never recorded rather than scrubbed.
+- **"A login that stops at a challenge fails its `expect:`" (below) now holds for every factor not named in scope.** An account
+  whose factor is an authenticator code is answered by the run; a prompt for any other factor is still an unmet `expect:`.
+- **Evidence, read once, on one provider.** The Auth0 end-to-end run on `a11ign@0.10.8` in the private `a11ign/auth-capture-check`:
+  the ordinary run, https://github.com/a11ign/auth-capture-check/actions/runs/38769795554, ended `success` (a real NVDA worker
+  signed in through Universal Login and the authenticator-code step and read the page it reached), and the falsifier run, a
+  random seed, https://github.com/a11ign/auth-capture-check/actions/runs/38770567987, ended `auth-login-failed` as the workflow
+  requires (both read on a11ign#5293, 2026-10-15). **That is one tenant, one provider and one plan (Auth0's Free plan, where MFA is for
+  testing only).** Okta's, Entra ID's and any other provider's pages are not read, and the screen loop is a reader of pages it was
+  built against.
+
 *Outside the quote:* the known-gaps entry is its own row (#2275), filed with the build and not before.
 
 **What the design does with it.** Nothing to build, and three things to make true.

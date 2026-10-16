@@ -1,0 +1,6 @@
+Sets `guard` on the `shared-failure-held-then-released` failure class (#5580) to the stop that is in force: a11ign/agent-org#1559 (merged as `ef2fb8c`, closing agent-org#1557), which removes the `expired` release in `standingOf` (`src/ci-failure-class.ts`, agent-org). That release woke every held pull request of an open, unclaimed incident row 15 minutes after the row opened. The guard names the stop and says what is still not covered (the second count, `shared-failure-not-same`), and `guardNote` is cleared to `null`. Hand-written: the change is one class entry in `.agent-org/failure-classes.json`.
+
+Acceptance:
+node -e "const c=JSON.parse(require('node:fs').readFileSync('.agent-org/failure-classes.json','utf8')).classes.find((c)=>c.id==='shared-failure-held-then-released'); const h=require('node:crypto').createHash('sha1').update(String(c.guard)).digest('hex'); process.exit(c.guard!==null&&h!=='973bf7c0ec9a3e57d57406086ff12aa5555e972d'?0:1)"
+
+Evidence: the same predicate against `HEAD:.agent-org/failure-classes.json` exits 1 (the guard hashes to `973bf7c0...`); against the edited file it exits 0 (`803bdd89...`). Mutation: reword the guard so it no longer names `agent-org#1559` -> the Acceptance still exits 0, which is why Done-when 2 is reviewer-read (the PR body names the stop and the release condition it met).

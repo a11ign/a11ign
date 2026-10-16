@@ -3412,6 +3412,20 @@ verifies it and a fresh host would not have it.** Re-run `zsh -c 'echo $NODE_COM
 
 ## 51. A RUN CANNOT GET PAST MFA, SSO OR A CAPTCHA, AND NOTHING IN THE TOOL DETECTS THE THIRD — OUT OF v1, by ruling (#2275, #2262)
 
+**Amended 2026-10-15 (#4976, [ADR 0038](adr/0038-authenticated-capture.md#constraint-6-mfa-sso-and-captcha-are-out-of-v1), amendment 10): MFA
+by an authenticator-app seed (TOTP) is IN scope from v3, and everything else in this entry's title still is not.** A `login:` block
+in a flows file names the variable that holds the seed (`totp: AUTH0_TOTP_SEED`), and a scan that is given the file and no `--login-flow`
+(`a11ign <url> --flows <file>`) types the code the login asks for. **Push approval, SMS, an emailed code, a security key and a CAPTCHA
+are not answered**, and "a dedicated test account without MFA" is still the route for them. **What was read: one end-to-end run, on one
+provider.** The Auth0 tenant of the private `a11ign/auth-capture-check`, on `a11ign@0.10.8` (a11ign#5293, 2026-10-15): the ordinary run,
+https://github.com/a11ign/auth-capture-check/actions/runs/38769795554, ended `success`, and the falsifier run (a random seed),
+https://github.com/a11ign/auth-capture-check/actions/runs/38770567987, ended `auth-login-failed` as its workflow requires. **Not read:**
+any other provider's pages (Okta, Entra ID, Cognito, a self-hosted one), another factor on Auth0, a seed in another form than the
+authenticator app's text key or `otpauth://` URI, and **the GitHub Action**: its `flows` and `login-flow` inputs are both required, so the
+Action runs a named flow and does not read the `login:` block (the run above is the command-line form on a Windows runner). The
+paragraphs below are the v1 entry, kept for what each one measured; **where one says MFA cannot be answered, read it as "other than
+TOTP, on the path above".**
+
 `ceo` ruled (#2262, "c. Auth", clause 6) that **MFA, SSO and CAPTCHA are OUT of v1 and recorded here**, with
 **"use a dedicated test account without MFA"** as the stated route. The capability that makes this true is the form
 login of [ADR 0038](adr/0038-authenticated-capture.md) (`--flows <file> --login-flow <name>`), built by #2359 in
@@ -3422,7 +3436,7 @@ this commit, not against the ADR's prose.**
 **What a run does, measured by reading `packages/cli/src/auth/`, not by running a login against an identity provider:**
 
 - **The login is a form login and nothing else.** It types into controls by accessible name in a closed vocabulary, on
-  ONE pinned `origin:`. There is no one-time-code step, no way to wait for a person, no tool that MAKES a storage state (**mechanism
+  ONE pinned `origin:`. There is no one-time-code step in a `flow:` (a `login:` block types an authenticator code: see the amendment above), no way to wait for a person, no tool that MAKES a storage state (**mechanism
   2 is built as of #2632: `--auth-state <file>` LOADS one a person saved by hand, through both interpreters and the worker, and
   ends one that no longer holds as `auth-state-expired`. Its limits are the file's: `sessionStorage` is not in it and IndexedDB is
   not loaded, so a site that keeps its session there cannot be carried; only the run's own origin's cookies and `localStorage` are
@@ -3534,7 +3548,8 @@ above are pinned by tests, and both tests are of a page written to behave that w
   `A11Y_TEST_CHROMIUM`, so by the workflow files (read, not observed in a CI log) **the real-Chromium redirect is not run in
   CI**. The real-browser reading is a dev-host one.
 
-**NOT MEASURED:** that a real identity provider produces `left-origin` on a real run, or that a real MFA prompt (a real
+**NOT MEASURED (as of 2026-09-26; the 2026-10-15 amendment above reads one authenticator-code prompt on Auth0, and the rest of this
+paragraph is unchanged):** that a real identity provider produces `left-origin` on a real run, or that a real MFA prompt (a real
 one-time-code page, an authenticator push, a redirect with a state parameter) fails a real `expect:`. The authenticated
 captures behind every reading above were fixture pages (#2399, `a11y-worker-3`). **One full Action run against a page that
 is not a fixture now exists (#2561, 2026-09-26, run 36226049347 in the private `a11ign/auth-capture-check`, `windows-2022`,

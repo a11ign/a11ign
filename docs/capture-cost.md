@@ -201,19 +201,81 @@ This section measured; nothing was cut, and **no capture was run with a probe of
   (ikea 16.2 only because the deadline cut them), so the sentence was out of date or measured on a page that stops at once. `action.yml` now states that range and points back to this section.
 - **A cut to the fixed probes does not shorten the captures the worst-case model is built on.** The 460 s figure is a deadline-bound capture, where the probes got 13.0 s (`A-ikea-4`), so removing
   them would leave the deadline where it is and let `graphic` and `link` finish instead (A-ikea: 0-71 s and 0-38 s, depending on how long `formField` took). For a nightly priced at the worst case
-  the lever inside the capture is `formField`, bounded by `MAX_SWEEP_STEPS` and the 420 s budget. **For a nightly of pages that finish early, the lever is the fixed 68 s.** Which of the two a given
-  nightly is depends on its pages, and the row's list of ten was not read here.
+  the lever inside the capture is `formField`, bounded by `MAX_SWEEP_STEPS` and the 420 s budget. **For a nightly of pages that finish early, the lever is the fixed 68 s on the fleet.** **On a runner the two were read at protocol 24 and neither is that figure** (run `38797684887`, [the section below](#a-runner-capture-per-phase-a11ign4084-outcome-6)): the three fixed probes are **48.9-53.7 s** (26-29% of a capture that was not probing forms), and `formField` is **4.8-14.2 s unless `probe-forms` is on, when it is 122.8 s**, which is more than twice the fixed probes and is paid by the form activations, not by the cap or the deadline (both sweeps ended `exhausted`, no capture reached the deadline). **So a runner's nightly on the Action's default (`probe-forms` off) pays on the fixed probes and the Tab walk they sit beside, and one that asks for `probe-forms` pays on `formField` first.** Which of the two a given nightly is depends on that input and on its pages, and the row's list of ten was not read here.
 
 **Limitations specific to this section.**
 
-- **Fleet, not runner.** The Action section above found a runner within 10% of the fleet on two pages and the Action runs the same capture code, but **no runner-side record survives to split**: `action-smoke.yml`
-  uploads only `a11ign-result.json` and `a11ign-summary.md`, none of the 8 `action-smoke` runs listed (7 finished) holds an artifact, and run `35976874484`'s log (856 lines) carries no `atMs`. A per-phase reading on a
-  runner needs a run that keeps the capture record (or `--debug`, which prints `diagnostics` to stderr), which is a run on the Action and a change to `action-smoke.yml`, so it is
-  routed to `orchestrator` on #4095 and not worked around here.
+- **Fleet, not runner, until #5559.** This section is read from fleet records. A runner's per-phase reading is [the section below](#a-runner-capture-per-phase-a11ign4084-outcome-6), split from the capture records run `38797684887` kept (`action-smoke.yml`'s `action-smoke-capture` artifact, #5559), at protocol 24 and not 21: the two are not one build, so a figure here is not a figure there. Before #5559 `action-smoke.yml` uploaded only `a11ign-result.json` and `a11ign-summary.md`, on failure, and none of the 8 runs listed held an artifact.
 - **Constants were read in the worker source, not observed at runtime.** `DEFAULT_BUDGET_MS`, `POST_READ_RESERVE_MS`, `MAX_SWEEP_STEPS` (250), `MAX_TAB_STOPS` (150), `FOCUS_PROBE_BUDGET_MS` (120 s), `DEFAULT_STEPS` (150)
   and the two `*_STOPS` (8) are identical at `50d52e750` and `dd84eee`. No record reached `MAX_TAB_STOPS` or the 120 s walk budget (the longest walk is 108 stops, 82.6-88.3 s on hubspot).
 - **One day, one build, ten boxes, as above.** The spread inside a cell is small for the fixed probes and the page-ended phases (on the four deadline-free pages every phase is within 4.1 s of its min across repeats, except hubspot's Tab walk at 5.6 s: 82.6-88.3 s) and large for the deadline-bound
   ones (`A-ikea` formField 226.5-319.4 s).
+
+## A runner capture, per phase (a11ign#4084 outcome 6)
+
+Measured 2026-10-15 for #5559, **read from the capture records of ONE green `action-smoke` run, `38797684887`**
+(`workflow_dispatch` on `agent/a-green-action-smoke-5559` at `a46618a22`; job `consumer`, `success`, 19:54:46Z to 20:11:04Z). Its
+`action-smoke-capture` artifact holds the three records the CLI writes before judging (`runs/witness/<stamp>-<slug>.json`, `capture.diagnostics`),
+and `gh run download 38797684887 -n action-smoke-capture` retrieves them. The workflow change that keeps them is the only change to
+`action-smoke.yml`; `action.yml` and the CLI are untouched: the capture was already being written on every run, and nothing uploaded it.
+
+```
+Protocol: 24 (captureProtocol in each record's environment), workerCode b7bb1eddbe4d6f14, provisionRevision "unstamped" (the Action starts the worker from the checkout)
+Runner: windows-2022 as the record reports it: Microsoft Windows Server 2022 Datacenter 10.0.20348 (build 20348.5622), NVDA 2026.1.1, Edge 155.0.4283.45, guidepup 0.31.0, 1024x768
+```
+
+**The three captures are the workflow's own three runs, in job order.** Run 1 asks for `probe-forms: "true"`; runs 2 and 3 do not (the
+Action's default is off since #4089). So run 1 and run 3 are the same page and task and differ in that one input, and run 2 is another page.
+
+| phase, in seconds | run 1: `survey.html`, `probe-forms: true` | run 2: `home.html`, default | run 3: `survey.html`, default |
+|---|---:|---:|---:|
+| before the first announcement | 12.8 | 6.4 | 6.2 |
+| readThrough | 31.8 | 34.1 | 32.9 |
+| sweep formField | **122.8** | 4.8 | 14.2 |
+| sweep link | 22.1 | 28.4 | 22.0 |
+| sweep graphic | 3.4 | 5.8 | 3.7 |
+| sweep heading + landmark | 5.1 | 1.4 | 5.1 |
+| sweep list + frame + postSubmit | 9.6 | 1.8 | 2.5 |
+| between probes (browse-mode set-up, page-state reads) | 19.6 | 18.1 | 17.7 |
+| focus context (8 Tab stops) | 20.4 | 17.7 | 18.5 |
+| focus reveal (8 Tab stops) | 16.1 | 15.5 | 16.2 |
+| focus order (the Tab walk) | 48.3 | 19.7 | 47.4 |
+| route-change probe | 16.0 | 15.7 | 19.0 |
+| **total (last `atMs`)** | **327.9** | **169.2** | **205.4** |
+| the three fixed probes (focus context + reveal + route-change) | 52.5 (16%) | 48.9 (29%) | 53.7 (26%) |
+| announcements | 89 | 85 | 89 |
+
+**How it was split:** by the method of the section above, unchanged (the time since the previous entry is charged to the LATER entry; `titleSource`
+marks belong to the closing mark that follows them). **In all three records the phases sum to the last `atMs` exactly**, and the split is a
+throwaway script, not a repository file (the records are the evidence, and `gh run download` gets them back).
+
+**Reading it.**
+
+- **No capture was bound by the deadline.** `readBudget`'s `readDeadlineInMs` was 352.5-356.3 s and the longest capture ended at 327.9 s; every sweep stopped `exhausted` (none on `cap`, none on the deadline), and the
+  Tab walk ended `cycled` (59 and 58 stops) or `stalled` (16 stops on home). So the second lever of the section above, `formField` ended by `MAX_SWEEP_STEPS` and the 420 s budget, **was not observed on a runner**: no
+  page like ikea was run there.
+- **`formField` is 122.8 s with `probe-forms` on and 14.2 s without, on the same page and task.** In run 1 the sweep's next-direction pass took 117.9 s over 61 round trips (1.9 s a trip) and `activationBudget` records
+  98.2 s spent of 187.6 s; in run 3 the same sweep took 9.4 s over 31 trips and the budget spent 5.9 s. The fleet read 124.7 s for this page under the same command as run 1 (A-w3survey-3 above; every phase of its cell was within 4.1 s of its min),
+  so run 1 is the one that agrees with an earlier reading and run 3 is the one that differs by the input. **Run 1 is also the job's first capture and run 3 its last, so the order is confounded with the input, and each side of the comparison is n=1.**
+- **The fixed probes are 48.9-53.7 s on a runner, not the 68 s of the fleet** (67.6-68.0 s on the four deadline-free fleet pages at protocol 21). The difference is in two of the three: against A-w3survey-3,
+  `focus context` is 20.4 s here and 29.2 s there, and `focus reveal` 16.1 s and 21.8 s; the route-change probe is 16.0 s and 16.9 s. The record's `focus context` holds nine `titleSource` marks 1.2-3.0 s apart.
+  **Why is not known:** the protocol, the worker revision, the Edge version and the machine all differ from the fleet reading, and no capture here isolated one of them.
+- **Against the fleet, run 1 is within 3% of its twin** (327.9 s against A-w3survey-3's 336.7 s, the median of 331.7-340.4 s). Phase by phase, the ones that differ by more than 3.3 s are `focus context` (-8.8 s), `focus reveal` (-5.7 s) and `between probes` (+5.5 s); `before the first announcement` is +3.3 s,
+  and `readThrough`, every sweep and the Tab walk are within 1.9 s. Run 2 has no fleet twin: the fleet's `home.html` captures ran with `--probe-forms` and this one did not, so the totals (188.1 and 169.2 s) are different commands and are not compared.
+- **The job's wall-clock is not the capture's.** The three `uses: ./` steps took 487, 221 and 254 s as GitHub timed them, against occupancies of 327.9, 169.2 and 205.4 s: 159, 52 and 49 s more. That remainder holds
+  the Action's own setup (the first step installs and starts everything), axe and the judge, and was not split here. The whole job, checkout to post-steps, was 978 s (16.3 minutes).
+
+**Which lever a runner's nightly pays on, from this one run.**
+
+| nightly asks for | biggest phase it can cut | the number | what removes it |
+|---|---|---|---|
+| `probe-forms: "true"` | `formField`, 37% of the capture | 122.8 s of 327.9 s | not asking for `probe-forms` (the sweep was 14.2 s on the same page); it stopped `exhausted`, so no cap bounded it |
+| the Action's default | the Tab walk and the two probes beside it, 31-40% | 52.9 s of 169.2 s (home) and 82.1 s of 205.4 s (survey) | `probe-focus: false`, which removes `focus context`, `focus reveal` and `focus order` together and with them 3.2.1, 1.4.13's Dismissable bullet and the Tab walk's reading |
+| either | the three fixed probes, 16-29% | 48.9-53.7 s | not separable: nothing turns off `focus reveal` alone (the section above), and `probe-navigation: false` removes only the 15.7-19.0 s route-change probe |
+
+**The cut itself is the next row, and this table names what it would act on.** It is a reading of one job on one day at one build, two pages, n=1 per command: it says WHICH phase a runner's nightly pays on for
+these pages, and not the saving a cut would give (no capture was run with a probe off here either, so each figure is an upper bound as in the section above).
+
 
 ## What this does not show
 

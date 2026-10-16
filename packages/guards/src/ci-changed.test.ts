@@ -532,3 +532,27 @@ test("CLI: merge_group with --precise keeps changeset as the diff's answer, so a
     assert.equal(outputsOf(run.stdout).ts, "true");
   });
 });
+
+const REUSABLE_BUILD_TEST = ".github/workflows/reusable-build-test.yml";
+
+test("classify: a change to the reusable build-and-test workflow turns ts and python on, and an unrelated workflow turns neither (#5583)", () => {
+  withGitSandbox((sandbox) => {
+    trackFixtureRepo(sandbox);
+    const reusable = classifyIn(sandbox.dir, [REUSABLE_BUILD_TEST]);
+    assert.equal(reusable.ts, true);
+    assert.equal(reusable.python, true);
+    const unrelated = classifyIn(sandbox.dir, [".github/workflows/board-report.yml"]);
+    assert.equal(unrelated.ts, false);
+    assert.equal(unrelated.python, false);
+  });
+});
+
+test("CLI: a pull request that edits only the reusable build-and-test workflow runs ts and python (#5583)", () => {
+  withGitSandbox((sandbox) => {
+    branchEditing(sandbox, REUSABLE_BUILD_TEST);
+    const pr = runCli(["--event=pull_request", `--base=${BASE_REF}`, `--repo=${sandbox.dir}`]);
+    assert.equal(pr.status, 0, pr.stderr);
+    assert.equal(outputsOf(pr.stdout).ts, "true");
+    assert.equal(outputsOf(pr.stdout).python, "true");
+  });
+});

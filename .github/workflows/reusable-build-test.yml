@@ -69,8 +69,12 @@ jobs:
         with:
           fetch-depth: 0
       - uses: pnpm/action-setup@v6
+      # #5581: NODE 24, because the `agent-org` clone below declares `engines: node >=24` (ADR 0043 DECISION 8 runs un-bundled code
+      # on 24). Under 22 every `pnpm install` of it printed `Unsupported engine`, and the one statement #5579 gates to Node 24
+      # (`listen EINVAL` under a long TMPDIR) was skipped on `ts`. Pinned here, in the one reusable file, so `ts`, `python` and
+      # `trunk.yml`'s caller move together and match `ci-health.yml`.
       - uses: actions/setup-node@v7
-        with: { node-version: 22, cache: pnpm }
+        with: { node-version: 24, cache: pnpm }
       # #2298: NO DEDICATED `node_modules` CACHE. `ts` used to restore `node_modules` itself, keyed on the npm
       # lockfile, and skip the install on a hit. What is cached now is pnpm's STORE (setup-node's `cache: pnpm`,
       # keyed on pnpm-lock.yaml, for every caller), and the install always runs: it links from the store, so a
