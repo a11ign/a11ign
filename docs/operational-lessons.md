@@ -2553,3 +2553,29 @@ the same outage with a log line attached: the guard did its job and the org did 
 - **Where the chat side is written down:** `.agent-org/roles/liaison.md` is the brief of the session that relays the conversation, and
   `docs/chairman-messaging.md` the commands. The liaison's own rule is plain English, short, the reference last, so a row written as a brief can be
   passed on without being rewritten.
+
+## What `main` requires, and whether the agent-org split changes it: required checks after agent-org stands alone (#5622)
+
+**Read 2026-10-16T11:27Z at `bbf6da6dd`, as `a11ign-workers[bot]` (`gh api user --jq .login`), a NON-ADMIN identity.** Every read below is
+the instrument that identity holds; the admin read (`branches/main/protection`) returned 403 here.
+
+| Surface | What was read, and what it can answer | What `main` requires | Which function rows touch it | Edit needed? |
+|---|---|---|---|---|
+| `merge-queue-main` ruleset `23681721` | `rules/branches/main` and `rulesets/23681721`. Answers for this identity only; `current_user_can_bypass: "never"`, and `bypass_actors` is withheld from it, so it does not say who else is exempt | `required_status_checks`: the context **`gate`** (integration `15368`, GitHub Actions). Also `pull_request` requiring 1 approval, `merge_queue`, `deletion`, `non_fast_forward` | None names or renames `gate`. The rows that take org jobs out of `gate`'s `needs` change what `gate` waits for, not its name | **No** |
+| Classic `branches/main/protection` | `branches/main` only: `protected: true`, `required_status_checks` reads `checks: []`, `contexts: []`, `enforcement_level: "off"`. The `protection` endpoint itself is 403 for this identity, so this cannot be checked against the admin read | `gate` alone, per ADR 0039 step 4, the header of `ci.yml`, and `auto-arm.yml` ("`main`'s protection requires exactly one context, `gate`") | Same as above | **No** on any reading. **Unresolved:** the `branches/main` field says classic requires nothing, which contradicts the three documents above. An admin read (`A11Y_CHECK_BRANCH_PROTECTION=1`) would settle it; no org-only name is required on either reading, so the answer here does not change |
+
+**The function rows, against `gate`'s `needs` in `ci.yml`** (`bodyEdit, changed, ts, python, changeset, rulesFitness, guardSweep, deliberateRefusals, acceptance, ownedPaths, release-dry-run, refusalOwners`):
+
+- **Leave `gate`'s `needs`:** `deliberateRefusals` (#5611 switch, #5612 delete), `acceptance` (#5614), `guardSweep` (#5615 switch, #5616 delete), `ownedPaths` (#5549, re-parented under #5602). Each changes what `gate` checks, and none renames it.
+- **Stay in `gate`'s `needs`, product checks:** `ts`, `python`, `changed`, `changeset`, `rulesFitness`, `release-dry-run`, `refusalOwners` (#928's plan lists it as "not A", and its test imports `@a11ign/toolchain`, not agent-org). `bodyEdit` was not checked in this pass.
+- **Not in `gate`'s `needs` at all:** `trunk.yml` (#5607, #5608), `auto-arm.yml` (#5603, #5604), `board-report.yml` (#5605, #5606), `nightly.yml` (#5609, #5610), the reports (#5617, #5618), and the clone step (#5623). A required-check change cannot come from these.
+
+**Verdict: no edit to either surface is needed.** `main` requires the one context `gate` before and after the split, and no planned row
+removes or renames it, so no `needs:chairman` brief is due. **The meaning of `gate` does change**, and that is what the rows have to respect:
+once the org's jobs leave `gate`'s `needs`, nothing on `main` refuses an org pull request whose refusals or acceptance are red. The plan
+on #928 (section 6, decision 1) moves that refusal into the host, which must refuse to arm such a pull request, and #5612 requires that the
+host do so before `deliberateRefusals` leaves `gate`'s `needs`. The cost, which that plan names and `ceo` owns: anyone with write access who
+enables auto-merge by hand merges past the org's checks, where `gate` stops them today.
+
+**When this must be re-read:** if any row would remove `gate` itself, rename it, or require a context other than `gate`. That is the point
+at which the brief becomes due: a `needs:chairman` brief, because a classic or ruleset edit is a human admin act.
