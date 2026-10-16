@@ -13,5 +13,6 @@
   "outside.guards": true,
   "outside.reports": true,
   "outside.refusals": true,
-  "outside.ownedPaths": true
+  "outside.ownedPaths": true,
+  "outside.board": true
 }
