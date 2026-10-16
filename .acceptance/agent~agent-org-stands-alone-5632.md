@@ -1,0 +1,6 @@
+The four reports `agent-org outside-reports` may run are now declared in `.agent-org/project.json` under `units.reports`: `ci-health` (`scripts/ci-health.ts --post`), `outsider-verdict` (`scripts/outsider/verdict-job.ts`, no arguments, as the `outsider` job runs it), `token-cost` (`scripts/token-cost.ts --post`, which defaults its week) and `weekly-review` (`scripts/weekly-review.ts`). Each argument list is read from the workflow or unit that runs the script today, not from the row's prose.
+
+- **Real reader, both states:** agent-org's own `declaredReport` (its `src/outside-reports.ts`) returns the script and arguments for all four names at this head, and `undeclared` for every one at `HEAD` before the change.
+- **Positive control:** a name the project does not declare (`not-a-report`) still reads `undeclared`, and removing `weekly-review`'s entry from the text flips that one name back to `undeclared`.
+
+Acceptance: node -e 'const r=JSON.parse(require("fs").readFileSync(".agent-org/project.json","utf8")).units.reports; const fs=require("fs"); const names=["ci-health","outsider-verdict","token-cost","weekly-review"]; process.exit(names.every(n=>r&&r[n]&&fs.existsSync(r[n].script)&&Array.isArray(r[n].args))?0:1)'
