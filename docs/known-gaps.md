@@ -3931,3 +3931,9 @@ installation permissions measured by an admin, puts the read back on an Octo STS
 **What it does not show:** that Auth0's Bot Detection presents a widget this tool recognises. The test pins that a source the vendor list does not name is not treated as a challenge (`interpreter.test.ts`, the positive control near line 366), so an unnamed challenge is not reported as `auth-challenge-detected`.
 
 **What would settle it:** a tenant on a plan that carries Bot Detection, one run against it with Bot Detection set to Always, and the outcome that run printed. Until then the Auth0 case is untested, not passing.
+
+---
+
+## 62. THE ACTION HAS NOT BEEN RUN ON A SELF-HOSTED WINDOWS RUNNER — OPEN, by design (#5655, #4084)
+
+**Not run on a self-hosted machine.** `docs/github-action.md` ("Running on a self-hosted Windows runner") says how to point the Action at one, and every claim in it is read from `action.yml` and GitHub's pages, none run. *Not measured:* that the Action completes on such a runner; that a runner needs an interactive desktop session (inferred from the `ForegroundLockTimeout` and NVDA steps); that the Edge policy step needs administrator rights (read from the `HKLM` write); the versions of Windows, NVDA and Edge such a machine would record; what the machine costs. *Cost:* an adopter who follows the page meets any failure first. *Fixed when:* one run on a self-hosted Windows runner, with the runner's session type and the versions its record printed, posted on #5655's successor row.

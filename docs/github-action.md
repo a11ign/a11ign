@@ -176,6 +176,63 @@ that fix. Both artifacts predate it — `interaction.leftSite` is absent in each
 as #1363's acceptance fixtures (`packages/cli/src/left-site-acceptance.test.ts`). This table row's own claim
 was never wrong; the rehearsal account read it as covering an escape it does not name.
 
+## Running on a self-hosted Windows runner
+
+**Not run on a self-hosted machine.** Nobody has run this Action on one, so everything below is read from `action.yml` and from
+GitHub's pages, and none of it is a measurement. The section exists so the claim can be made and checked, not because it was.
+
+**Why.** A GitHub-hosted Windows runner costs more per minute than a Linux one: [`capture-cost.md`](./capture-cost.md) quotes
+GitHub's prices of $0.010 a minute for Windows 2-core and $0.006 for Linux 2-core, and records that GitHub's pages state no minute
+multiplier, so this page states none either. GitHub states that Actions usage on self-hosted runners is free (the sentence is
+quoted in `capture-cost.md`), which makes a self-hosted Windows machine the way to avoid the hosted Windows rate. You then pay
+for the machine and its upkeep instead; that cost was not measured here.
+
+**The `runs-on:` line.** Replace `windows-2022` with your runner's labels, and keep `windows` among them:
+
+```yaml
+    runs-on: [self-hosted, windows, x64]    # the labels YOUR runner registered with
+```
+
+The Action's first step refuses any runner whose `RUNNER_OS` is not `Windows`, so a Linux self-hosted runner fails fast.
+
+**What the machine must hold.** `windows-2022` arrives with some of this already present, and a self-hosted machine has only what you
+put on it. Read from `action.yml`, step by step:
+
+| Step | What the machine needs |
+|---|---|
+| Node, then `pnpm install --frozen-lockfile` | Network access to the npm registry; `actions/setup-node` installs Node itself. |
+| Cache the NVDA install, `Set up NVDA` | Network access to fetch NVDA, and a writable `%LOCALAPPDATA%\guidepup` (or `GUIDEPUP_SCREEN_READERS_PATH`). The cache is keyed on the runner's OS and the lockfile, not on the machine, so a persistent runner keeps its own copy. |
+| `Disable the NVDA Speech Viewer` | The NVDA install above, whose `nvda.ini` the step edits. It throws if it finds none. |
+| `Suppress Edge's first-run experience` | **Microsoft Edge installed, and the runner service allowed to write `HKLM:\SOFTWARE\Policies\Microsoft\Edge`, which means administrator rights.** A service account without them fails this step. The policy it sets (`HideFirstRunExperience`, `BrowserSignin`) stays on the machine afterwards, for every Edge user of that machine. |
+| Python for the local scorer | A `python` on `PATH` that can `pip install` the pinned wheels; the action does not create a virtual environment on Windows. |
+| `Allow Edge to be forced into the foreground` | **An interactive desktop session.** The step sets `ForegroundLockTimeout` to 0 with `SystemParametersInfo`, which needs the interactive session, and throws if the value is not 0 afterwards. |
+| `Capture and judge` | A free port 8765 on 127.0.0.1 (the worker starts in this one step and ends with it), and NVDA able to start, which the step waits for by polling `/health.ready`. |
+
+**What a self-hosted runner changes about the evidence.** The Windows build, the NVDA build and the Edge version come from
+that machine, not from `windows-2022`. A persistent machine also keeps state between runs that a fresh hosted VM never does: an Edge
+profile, the NVDA configuration, the registry policy above. So **read the versions from the record, not from this page or from
+the workflow**: the report reads NVDA's version from the capture itself, and the result's `result-json` carries what ran. Two
+runs on two self-hosted machines are not the same measurement, and neither is the same as a hosted run. The shipped scorer was
+trained on the fleet's NVDA, so a different NVDA build is a distribution shift that nothing here measures.
+
+**What to confirm first.** Whether the runner runs in an interactive desktop session is the open question, and the one most likely to
+fail: a runner installed as a Windows service normally runs in session 0 with no desktop, and the foreground step above and NVDA's
+speech both need one. If you have not confirmed it, a first run is the test, not a guarantee. Whether a given runner is
+configured to auto-log-on and run the runner interactively is yours to arrange; it is not documented here because it was not run.
+
+**Run and read.**
+
+| Claim | Status |
+|---|---|
+| The setup steps and what each needs | **Read** from `action.yml`, not run on a self-hosted machine |
+| A hosted Windows minute costs more than a Linux one | **Read** from GitHub's pricing page via `capture-cost.md`, as of the date there |
+| Self-hosted usage is free | **Read** from GitHub's billing page; your machine's own cost is not counted |
+| The Action completes on a self-hosted Windows runner | **Not run** |
+| The runner needs an interactive desktop session | **Inferred** from the foreground and NVDA steps, **not run** |
+| Administrator rights are needed for the Edge policy | **Read** (the step writes `HKLM`), **not run** |
+
+The gap is recorded in [`known-gaps.md`](./known-gaps.md) (#62).
+
 ## What is verified, and what is not
 
 Verified locally: 12 tests over the renderer and the pass/fail policy; the exit contract exercised four
