@@ -7,5 +7,6 @@
   "review-depth": true,
   "routing.haikuDefault": true,
   "worktree.rebuildCheck": true,
-  "outside.acceptance": true
+  "outside.acceptance": true,
+  "outside.arm": true
 }
