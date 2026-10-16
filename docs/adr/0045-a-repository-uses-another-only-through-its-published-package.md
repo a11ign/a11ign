@@ -111,13 +111,21 @@ branches: **the org keeps its process, and an outside PR never meets it.**
 | `changeset` | **Keep.** Replace the `no-release:` body line with an empty changeset (`changeset --empty`), the tool's standard. |
 | `rulesFitness` | **Keep** as a product-quality check, once it no longer needs `lab`'s source. |
 | `acceptance` (runs bash from the PR body; fails with no block) | **Agent PRs only.** |
-| `ownedPaths` (body sign-off of paths) | **Replace** with CODEOWNERS review. |
+| `ownedPaths` (body sign-off of paths) | **Agent PRs only** (amended 2026-10-16, below). Was: replace with CODEOWNERS review. |
 | `deliberateRefusals` (merge-guard, Closes format) | **Agent PRs only.** |
 | `guardSweep` (about 24 org guards) | **Move what matters into ESLint rules; the rest is agent PRs only.** |
 | `board` | **Move to agent-org.** |
 | `ansible` (checks control's playbooks inside a11ign) | **Delete;** `control` checks its own. |
 | `gate`'s second-run agreement (#3211) | **Drop:** a description or label edit must never change a verdict. |
 | `auto-arm` | **Agent PRs,** or opt-in by label. |
+
+**Amendment 2026-10-16 (ceo ruling on a11ign#5549, option 2): `ownedPaths` moves to the org side as an agent-PR check, and there is no CODEOWNERS
+replacement.** The row above named a reviewer that does not exist: `CODEOWNERS` has no entry on purpose (an App cannot meet a code-owner review,
+a11ign#4981; the chairman's direction on #5044 is no more machine accounts than GitHub's terms allow) and `require_code_owner_review` is false on
+`merge-queue-main`. An outside PR over a path of `docs/owned-path-facts.json` therefore meets no code-owner request and no sign-off block. It is
+still not unguarded: it reaches `main` only through the merge queue's required approving review (`main-review-requirement`, a11ign#2022), which
+this amendment does not change. The job is not deleted with this paragraph: its receiver is agent-org's own check over the same file
+(a11ign/agent-org#1598), which runs in shadow beside the job first and lets the job go only after a clean reading (epic a11ign#5602, a11ign#5549).
 
 Also: the git hooks `prepare` installs are opt-in and never block normal git use (for example an unlabelled `git stash`); the PR template is
 short and opens with "what changes and why"; `CONTRIBUTING.md` describes every check a contributor can meet. Anyone, human or AI, can contribute
