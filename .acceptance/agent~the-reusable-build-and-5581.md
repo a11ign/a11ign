@@ -4,7 +4,7 @@ One value in the one reusable file, so `ts`, `python` and `trunk.yml`'s caller m
 
 ## What this PR can and cannot show before merge
 
-`scripts/ci-changed.ts` classifies a diff touching only `.github/workflows/` as `ts=false python=false` (measured: `node scripts/ci-changed.ts --event=pull_request --base=origin/main` on this head prints both `false`), so no CI run on this PR calls the reusable file. The row's done-when 1 and 2 are therefore post-merge readings by their own wording ("a `ci` run at a head containing it"): `trunk.yml` calls the same file on `main` after the merge, and the run id and the `grep -c` result are posted on the row then. Open-check at `85515e7c`, from the row: `gh run view 38830026487 --repo a11ign/a11ign --log | grep -c "Unsupported engine"` printed `4`.
+`scripts/ci-changed.ts` classifies a diff touching only `.github/workflows/` as `ts=false python=false` (measured: `node scripts/ci-changed.ts --event=pull_request --base=origin/main` on this head prints both `false`; the gap is a11ign#5583), so no CI run on this PR calls the reusable file. The row's two done-when readings, a `ci` run at a head containing the pin showing `0` `Unsupported engine` lines and the Node-24-gated control running on `ts`, are owned by **a11ign#5584** by ruling on a11ign#5581 (amended Done-when 2) and are **not claimed here**. This PR's own deliverable is the pin on `main`, value-checked by the Acceptance below. Open-check at `85515e7c`, from the row: `gh run view 38830026487 --repo a11ign/a11ign --log | grep -c "Unsupported engine"` printed `4`.
 
 ## Mutation
 
