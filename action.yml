@@ -154,7 +154,10 @@ inputs:
       `password:` input on purpose (an input is interpolated into the workflow's shell text).
 
       **Use a dedicated test account without MFA or SSO**, and a username and password of at least 8 characters that are
-      not ordinary words. MFA, SSO and CAPTCHA are out of v1. **Refused on a repository that is not private:** the
+      not ordinary words. A login cannot get past an MFA prompt, a CAPTCHA or a one-time code. SSO is not supported unless
+      it is a username and password on a form at an origin you name, and an authenticator-app code works on the command
+      line only, not in this Action. The scope is the table in `docs/try-it.md`, "What sign-in covers".
+      **Refused on a repository that is not private:** the
       comment, the job log, the artifact and the job summary would all show text from behind the login to anyone.
 
       An authenticated run presses ONLY what its files name: `probe-forms` and `probe-navigation` are turned off for it,
