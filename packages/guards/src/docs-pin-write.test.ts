@@ -230,3 +230,15 @@ test("a re-pin leaves the consumer gate's pin comment naming the promoted releas
   assert.equal(gate.consumerGateIsStale(committedGate, regenerated), true, "the committed file is not stale for the re-pinned README: the writer has nothing to hand on");
   assert.equal(gate.consumerGateIsStale(regenerated, gate.generate(text, "e".repeat(PROMOTED_SHA.length))), false);
 });
+
+// The pattern is `acceptance-commands`' own `HISTORY_FULL_PATTERN` (agent-org): a whole line, nothing else on it.
+const HISTORY_FULL_LINE = /^\s*(?:\*\*|__)?History:\s*full(?:\*\*|__)?\s*$/im;
+
+test("the acceptance file the writer adds declares `History: full`, because it runs a test that reads the pin's commit (#5651)", () => {
+  const written = /<<EOF\n([\s\S]*?)\n\s*EOF\n/.exec(read(".github/workflows/docs-pin-write.yml").split("acceptance_file=")[1] ?? "");
+  assert.ok(written, "the heredoc that writes the acceptance file moved: the control is gone");
+  const [, body] = written;
+  assert.match(body, /generate-consumer-gate\.test\.ts/, "the acceptance no longer runs the real-tree case that needs the pin's commit: this test has nothing to guard");
+  assert.match(body, HISTORY_FULL_LINE, "run 38947499906: a depth-1 clone cannot hold the pin (`fatal: bad object`), so `acceptance` went red on a green re-pin");
+  assert.doesNotMatch(body.replace(/^\s*History:\s*full\s*$/im, ""), HISTORY_FULL_LINE, "the control: the same body without the line must not match");
+});
