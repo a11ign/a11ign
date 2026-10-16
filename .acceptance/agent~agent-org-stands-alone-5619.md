@@ -9,3 +9,5 @@ Mutation: not applicable (a configuration file with no guard of its own); the Ac
 platform: Octo STS policy file, the platform's own trust mechanism.
 
 Closes #5619
+
+Outside-Region: packages/guards/src/force-rerun-triggers-cover-the-27.test.ts -- it pins the count of `.github/chainguard` policies (7 to 8), which the merge queue's full `gate` run found red after this file was added; the count is the tree's, not an opinion.
