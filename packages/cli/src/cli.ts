@@ -193,7 +193,8 @@ const USAGE =
   + "[--forms <file>] [--flows <file> --login-flow <name> [--auth-state <file>] [--send-authenticated-transcript-to-judge-vendor]] "
   + "[--emit-form-config] [--plan] "
   + "[--no-axe] [--axe-results <file>] [--evidence-pack <file.md> (needs --json)] [--no-keep] "
-  + "[--compare-axe (one <url>: what a11ign adds to axe, what it repeats)] [--help]";
+  + "[--compare-axe (one <url>: what a11ign adds to axe, what it repeats)] [--help]"
+  + "\n--probe-forms submits forms and presses buttons. Use only against a seeded test organisation or account.";
 
 function defaultArgs(): Args {
   return {
