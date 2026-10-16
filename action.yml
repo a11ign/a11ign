@@ -102,7 +102,7 @@ inputs:
   probe-forms:
     description: >-
       Submit forms with no valid input to hear whether errors are announced (3.3.1, 4.1.3), and activate
-      the button your task names.
+      the button your task names. Use only against a seeded test organisation or account.
 
       OFF by default, here and in the CLI (ADR 0024, amended 2026-10-08 on the chairman's direction in #4084).
       A default run submits no form and presses no button the `task` names, so pointing the Action at a

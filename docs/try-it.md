@@ -79,7 +79,7 @@ Save it as `.github/workflows/a11ign.yml`. It runs on every pull request, and `w
 **Not on a pull request, no comment.** A run started by hand or by a push has nothing to comment on: the log's last line is the count (`a11ign: N finding(s)`), with a line before it for anything that bounds that count (an examination that ended early, a capture spanning more than one document, criteria resting on an examination known to be partial), and another for the criteria axe-core FAILED (`a11ign: N criteria FAILED by the rule layer (axe-core)`), which sit beside the count rather than in it, and the full result, transcript included, is in the `a11ign-result` artifact the upload step saves above. The rendered report is in the pull-request comment and the run's job summary, and a CLI-only reader has no route to the job summary; the pinned release has the `summary-md` output, so the upload step above puts the same report in the artifact beside the result, and the artifact is the one that works headlessly ([`docs/github-action.md`](./github-action.md#why-it-looks-like-this) has the reason and the `gh` commands).
 
 **`task` is load-bearing, but the word match it enables is not the guard on what gets operated.** It is
-what a user is trying to *do*, in plain words. On this shipped default (`probe-forms` on), a run always
+what a user is trying to *do*, in plain words. With `probe-forms` on (off by default), a run always
 expands disclosures and submits submit-like buttons, whatever the task says, and toggles checkboxes and
 radio buttons with no task-word test either; it activates any OTHER button only if its announced name
 shares a meaningful word with the task — so *"show only bags"* activates a **Bags** button and never a
@@ -93,8 +93,8 @@ site — for a first look before choosing anything of your own. We have already 
 ([`docs/github-action.md`](./github-action.md#tested-against-real-sites-in-the-wild)): 141 announcements,
 and the same 3 findings on every measurement taken — axe-core's rule layer flags three `4.1.2` violations
 inside the page's embedded YouTube player, none from the trained scorer — a real, reproducible result
-rather than an untested placeholder. It is informational, with nothing to submit, so a `task` about learning something on the page (`"Learn about web accessibility"`) is enough. **The Action still operates controls on it, and the task word only gates one of them.** With the
-defaults, a run against this exact page and task activated five controls: one button whose name happened
+rather than an untested placeholder. It is informational, with nothing to submit, so a `task` about learning something on the page (`"Learn about web accessibility"`) is enough. **The Action still operates controls on it, and the task word only gates one of them.** With
+`probe-forms` on (its default until #4089), a run against this exact page and task activated five controls: one button whose name happened
 to share the word "Web" with the task, and — with no task-word test at all — three submissions of the
 search form (landing on an empty query) and a followed link to a different page. On a site you do not own,
 that is someone else's application being submitted to and navigated on your behalf. The CLI defaults
