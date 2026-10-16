@@ -10,5 +10,6 @@
   "outside.acceptance": true,
   "outside.arm": true,
   "outside.trunk": true,
-  "outside.guards": true
+  "outside.guards": true,
+  "outside.reports": true
 }
