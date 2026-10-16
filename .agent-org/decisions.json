@@ -9,5 +9,6 @@
   "worktree.rebuildCheck": true,
   "outside.acceptance": true,
   "outside.arm": true,
-  "outside.trunk": true
+  "outside.trunk": true,
+  "outside.guards": true
 }
