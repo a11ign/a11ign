@@ -175,8 +175,8 @@ jobs:
       pull-requests: write         # for the PR comment below; omit it and the report still runs, only quieter
     steps:
       - uses: actions/checkout@v7
-      - uses: a11ign/a11ign@b403bc726b3ba0896ba94284240fa8ba4a5ecf92   # the commit of the release tagged a11ign@0.10.8
-        # Pinned to the full 40-character commit of release 0.10.8, so your CI does not move when a newer
+      - uses: a11ign/a11ign@e0a79ce0195546585982992f3538e84faa8b8d6f   # the commit of the release tagged a11ign@0.10.9
+        # Pinned to the full 40-character commit of release 0.10.9, so your CI does not move when a newer
         # one is published. `v0.1.0` predates the `summary-md` output used below.
         id: a11ign
         with:
@@ -195,7 +195,7 @@ jobs:
           if-no-files-found: warn
 ```
 
-**A release is tagged `a11ign@<version>`** (`a11ign@0.10.8` is the tag the pin above names), and every published version has one; that is the form to look for, and `node --import tsx scripts/release-tags-complete.ts` prints any published version that lacks it. The `v<version>` tags are not that contract: the release job writes them only so Dependabot can see the Action, and not every version has one. `a11ign/a11ign@v0` is the Action's major tag, which follows the newest qualified release. **Which channel is stable (`latest`), what a version number promises before 1.0, and where the changelog is** (the GitHub Release for the tag, not the packages' `CHANGELOG.md`) are in [the release policy](./docs/release-policy.md), checked there against the last ten releases. **Pin the Action by SHA, as above, and stay on it:** `v0` moves on every promotion, and a 0.x minor may change an input or a default.
+**A release is tagged `a11ign@<version>`** (`a11ign@0.10.9` is the tag the pin above names), and every published version has one; that is the form to look for, and `node --import tsx scripts/release-tags-complete.ts` prints any published version that lacks it. The `v<version>` tags are not that contract: the release job writes them only so Dependabot can see the Action, and not every version has one. `a11ign/a11ign@v0` is the Action's major tag, which follows the newest qualified release. **Which channel is stable (`latest`), what a version number promises before 1.0, and where the changelog is** (the GitHub Release for the tag, not the packages' `CHANGELOG.md`) are in [the release policy](./docs/release-policy.md), checked there against the last ten releases. **Pin the Action by SHA, as above, and stay on it:** `v0` moves on every promotion, and a 0.x minor may change an input or a default.
 
 **That is the job, not yet a workflow file.** Put it in `.github/workflows/a11ign.yml` under two more lines, `name: a11ign` and a trigger such as `on: [pull_request, workflow_dispatch]`; the whole runnable file, trigger included, is at the top of [the Action guide](./docs/github-action.md).
 
