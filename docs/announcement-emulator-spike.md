@@ -1,7 +1,7 @@
 # Announcement-emulator spike (row #5661)
 
 **Status: in progress. Q1 answered (yes, with gaps). Q2 stage 1 passed (NVDA's own Python imports and speaks on Linux); Q2 stage 2 is
-running: 28 of the 47 system tests, 107 exact-speech assertions, 83 exact, 20 tests exact on every assertion (see Q2; a fit to fixtures read, not the gate number). Q3 not run.** This page is the spike's deliverable ([ADR 0047](./adr/0047-an-nvda-faithful-announcement-emulator-is-a-separate-repository-and-its-predictions-are-advisory.md), Decision 7). The spike's code
+running: 28 of the 47 system tests, 107 exact-speech assertions, 89 exact, 22 tests exact on every assertion (see Q2; a fit to fixtures read, not the gate number). Q3 not run.** This page is the spike's deliverable ([ADR 0047](./adr/0047-an-nvda-faithful-announcement-emulator-is-a-separate-repository-and-its-predictions-are-advisory.md), Decision 7). The spike's code
 lives **outside any a11ign repository**, on the host that ran it at `~/spikes/announcement-emulator-5661`; nothing here is a prediction
 and nothing was written to an evidence field.
 
@@ -53,13 +53,13 @@ checked*. A reading is a moment.
   as such (`restriction` exists). **There is no `hypertext` string**: layer 2 has to build it from `children`, `name` and `value`.
 - **Sufficiency for layers 2 and 3, reading so far** (*measured* in Q2 stage 2, 28 tests): for roles, states, names, descriptions,
   levels, links, landmarks, relations (labelled-by, error message, details), table coordinates, spelling/grammar markers and text-field state
-  the fields were enough to match 83 of 107 exact-speech assertions. What the run found missing or different: (1) node identity is not exposed (`node.id` is undefined), so relations
+  the fields were enough to match 89 of 107 exact-speech assertions. What the run found missing or different: (1) node identity is not exposed (`node.id` is undefined), so relations
   are resolved by object identity within one walk (the extractor numbers nodes and emits `labelledByIx`, `labelForIx`, `errorMessageForIx`);
   (2) there is no author `role` string, so IA2 `xml-roles` cannot be read and is reconstructed (see Q2); (3) the API has no text-attribute
   runs as IAccessibleText gives them, but `markers` (spelling, grammar) and per-node `language` were enough to rebuild the two attributes
   the suite reads; (4)
-  `textSelStart`/`textSelEnd` give the caret in a text field, but a rich editable's text interleaved with child objects is not
-  reconstructed yet; (5) the tree differs from what Chrome gives NVDA on Windows where the browser consults the OS (the image-description
+  `textSelStart`/`textSelEnd` give the caret in a text field, but line and word boundaries across a rich editable's embedded children
+  have to be composed from per-node offsets; (5) the tree differs from what Chrome gives NVDA on Windows where the browser consults the OS (the image-description
   prompt). The 507-test check against `ax_platform_node_win.cc` has **not** been run.
 
 ## Q2. Does NVDA's own Python, at the fleet's release, run on Linux with stubs?
@@ -112,7 +112,7 @@ the speech code **executes**; they are not a comparison against anything, and `h
   import), and the speech synth (`getSynth().name` is read by spelling speech). Three build artefacts are absent from the source tree
   and had to be supplied: the generated `comInterfaces`, `locale/en/cldr.dic` (an **empty** file in the spike's overlay `appDir`, so
   emoji and CLDR symbol names are not covered), and the test run's NVDA settings.
-- **Stage 2 (*measured*, 2026-10-17): 28 of the 47 system tests run, 107 exact-speech assertions, 83 exact; 20 tests agree on every assertion.**
+- **Stage 2 (*measured*, 2026-10-17): 28 of the 47 system tests run, 107 exact-speech assertions, 89 exact; 22 tests agree on every assertion.**
   What runs, layer by layer (the code is `~/spikes/announcement-emulator-5661/emu/` on the spike host, outside every a11ign repository):
   - **Layer 0, driver:** a live Chrome 155 launched with the allowlisted companion extension, keys sent over the DevTools protocol
     (`Input.dispatchKeyEvent`: Tab, Shift+Tab, Enter, Space move focus in the real browser), the tree and `getFocus()` re-read after each key.
@@ -138,32 +138,35 @@ the speech code **executes**; they are not a comparison against anything, and `h
   |---|---|---|
   | `test_ariaErrorMessage` | 10 / 10 | |
   | `test_focusTargetReporting` | 9 / 9 | |
-  | `test_tableNavigationWithMergedColumns`, `test_ensureNoBrowseModeDescription` | 5 / 5 each | |
-  | `test_i13307`, `test_ariaDescription_browseMode` | 4 / 4 each | |
+  | `test_tableNavigationWithMergedColumns`, `test_ensureNoBrowseModeDescription`, `test_ariaRoleDescription_block_contentEditable` | 5 / 5 each | |
+  | `test_i13307`, `test_ariaDescription_browseMode`, `test_ariaDescription_focusMode` | 4 / 4 each | |
   | `test_ariaRoleDescription_focus`, `_block_browseMode`, `preventDuplicateSpeechFromDescription_focus`, `test_quickNavTargetReporting` | 3 / 3 each | |
   | `test_mark_focus`, `test_i12147`, `test_focus_mode_on_focusable_read_only_lists`, `test_preventDuplicateSpeechFromDescription_browse_tab`, `test_tableInStyleDisplayTable`, `test_i10840`, `ARIAInvalid_spellingAndGrammar` | 2 / 2 each | |
   | `test_reportLanguageDisabled`, `test_reportNotSupportedLanguageWithoutOtherLanguages`, `checkbox_labelled_by_inner_element` | 1 / 1 each | |
-  | `test_ariaDescription_focusMode`, `test_mark_aria_details_role`, `test_ariaRoleDescription_block_contentEditable` | 3 / 4, 3 / 4, 4 / 5 | the IA2 text interface in a rich editable (below) |
-  | `test_ariaRoleDescription_inline_contentEditable` | 1 / 5 | one of the same, three of the image prompt |
-  | `announce_list_item_when_moving_by_word_or_character` | 4 / 10 | rich editable |
-  | `test_i7562`, `test_pr11606` | 1 / 5 each | rich editable: line text, the list marker, "out of list" |
+  | `test_mark_aria_details_role` | 3 / 4 | the text of a rich editable composed from its children |
+  | `test_i7562` | 3 / 5 | same: "out of list", a list announced again on the next item |
+  | `test_ariaRoleDescription_inline_contentEditable` | 2 / 5 | three of the image prompt |
+  | `announce_list_item_when_moving_by_word_or_character` | 5 / 10 | focus-mode caret movement (below) |
+  | `test_pr11606` | 1 / 5 | focus-mode caret movement and the same composition |
   | `test_ariaRoleDescription_inline_browseMode` | 0 / 3 | the image prompt |
-  | **total, 28 tests** | **83 / 107** | |
+  | **total, 28 tests** | **89 / 107** | |
 
-  **The 24 misses are of two kinds, neither yet a measured Windows-only behaviour.** (a) **6 are the browser's output differing**: the
+  **The 18 misses are of two kinds, neither yet a measured Windows-only behaviour.** (a) **6 are the browser's output differing**: the
   expected line carries Chrome's image-description prompt ("To get missing image descriptions, open the context menu."), which the
   headless Linux tree does not (its cause, probably Chrome's screen-reader detection and an image-label preference, is not isolated).
-  (b) **18 are the emulator being incomplete**: the IA2 text interface is implemented for a node whose hypertext is its own text, not for
-  a rich editable (contenteditable) whose text interleaves embedded children, which NVDA's `MozillaCompoundTextInfo` reads through child
-  offsets; every miss is a line read in focus mode inside such an editable.
+  (b) **12 are the emulator being incomplete**: 7 are focus-mode caret movement (in focus mode NVDA lets an arrow key reach the page, the
+  browser moves the caret, and NVDA reads the new position; the stand-in does not yet forward the key and re-read the caret), and 5 are
+  the composition of a rich editable's text from its children (line and word boundaries across embedded objects, which are modelled from
+  the per-node offsets the API gives and are not Chromium's own).
 
-  **83 of 107 is a fit to fixtures I read, not a prediction, and it is not the gate.** Everything below was added or changed **after
+  **89 of 107 is a fit to fixtures I read, not a prediction, and it is not the gate.** Everything below was added or changed **after
   reading the expected strings**: the tests' NVDA settings, `description-from`, the `ChromeVBuf` buffer class (the first runs used the
   Firefox class), the real `cldr.dic` (an empty one gave "list    frogs" for a bullet), related-element lookups, aria details and error
-  messages, `IAccessibleText`, non-atomic text fields counting as text fields, layout tables and the table half of `fillVBuf`, and
-  spelling/grammar markers as text attributes. Twenty-eight tests is 28 of 47, and 107 of the 217 assertion executions the extractor
-  evaluates (193 call sites; a helper that asserts is counted once per call); the gate is exact agreement on real pages' top 10 shapes
-  against fleet transcripts, which is Q3 and is not started.
+  messages, `IAccessibleText`, `IAccessibleHypertext` and the content-descendant search, non-atomic text fields counting as text fields,
+  list markers counting as text, layout tables and the table half of `fillVBuf`, and spelling/grammar markers as text attributes.
+  Twenty-eight tests is 28 of 47, and 107 of the 217 assertion executions the extractor evaluates (193 call sites; a helper that asserts
+  is counted once per call); the gate is exact agreement on real pages' top 10 shapes against fleet transcripts, which is Q3 and is not
+  started.
 - **Reconstructed, not read:** IA2 `xml-roles` is Chromium's `kRole` string, `chrome.automation` does not expose it, and NVDA reads it to
   tell an article, figure, region, switch or landmark from a plain document or group (`gecko_ia2.py:180-200`). The stand-in fills it from
   the automation role for those roles, which over-reports where Chromium sets no `kRole` for a native element; it is an inference, and
