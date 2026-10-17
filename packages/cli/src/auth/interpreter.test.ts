@@ -918,13 +918,35 @@ test("POSITIVE CONTROL: auto: hands control to the loop, which types the credent
   assert.equal(loop?.detail.outcome, "signed-in");
   // What each screen showed is written beside its branch: no alert here, and the controls the screen had.
   assert.deepEqual(loop?.detail.branches, [
-    { screen: "identifier-and-password", kind: "type", alerts: [], controls: [{ role: "textbox", name: "Email address" }, { role: "textbox", name: "Password" }, { role: "button", name: "Continue" }] },
-    { screen: "one-time-code", kind: "type", alerts: [], controls: [{ role: "textbox", name: "Verification code" }, { role: "button", name: "Continue" }] },
-    { screen: "passkey-nudge", kind: "skip", alerts: [], controls: [{ role: "button", name: "Create passkey" }, { role: "button", name: "Not now" }] },
+    { screen: "identifier-and-password", kind: "type", alerts: [], controls: [{ role: "textbox", name: "Email address" }, { role: "textbox", name: "Password" }, { role: "button", name: "Continue" }], reobserved: 0 },
+    { screen: "one-time-code", kind: "type", alerts: [], controls: [{ role: "textbox", name: "Verification code" }, { role: "button", name: "Continue" }], reobserved: 0 },
+    { screen: "passkey-nudge", kind: "skip", alerts: [], controls: [{ role: "button", name: "Create passkey" }, { role: "button", name: "Not now" }], reobserved: 0 },
   ]);
   assert.ok(run.marks.some((m) => m.event === "authApplied"));
   // A mark names screens and verbs and never a value.
   for (const secret of [FAKE_USER, FAKE_SECRET, SEED, totpCode(SEED, CLOCK)]) assert.ok(!JSON.stringify(run.marks).includes(secret));
+});
+
+test("POSITIVE CONTROL: the authLoop mark carries the re-observations of the branch it acted on, with what the screen showed last; a branch never seen again has 0 and no lastSeen (#5690)", async () => {
+  // The code is typed, Continue leaves the same form up with an alert, and the loop sees that form again instead of moving on. The
+  // alert's wording is not a rejected code (that ends the loop as totp-rejected), so the form stays the branch the loop acted on.
+  const stillThere = scriptedSite({
+    ...AUTH0_SITE,
+    mfa: { ...AUTH0_SITE.mfa, goes: { Continue: "mfa-again" } },
+    "mfa-again": { nodes: [["heading", "Verify your identity"], ["alert", "Something went wrong"], ["textbox", "Verification code"], ["button", "Continue"]] },
+  }, "login");
+  const run = await runCli({ site: stillThere, auto: AUTO, login: [{ goto: "/login" }, { auto: true }, expectDashboard] });
+  const loop = run.marks.find((m) => m.event === "authLoop");
+  const [identifier, code] = loop?.detail.branches as Array<Record<string, unknown>>;
+  assert.equal(identifier.screen, "identifier-and-password");
+  assert.equal(identifier.reobserved, 0, "acted on, and its page was never seen again");
+  assert.equal("lastSeen" in identifier, false, "no reading is written where the screen was never seen again");
+  assert.equal(code.screen, "one-time-code");
+  assert.ok((code.reobserved as number) > 0, "polled after the action, so seen again");
+  assert.deepEqual(code.lastSeen, {
+    alerts: [{ role: "alert", name: "Something went wrong" }],
+    controls: [{ role: "alert", name: "Something went wrong" }, { role: "textbox", name: "Verification code" }, { role: "button", name: "Continue" }],
+  });
 });
 
 test("NEGATIVE CONTROL: auto: ends the login on a rejected credential, a missing seed and an unrecognised screen, each with its remedy, and types nothing more", async () => {
