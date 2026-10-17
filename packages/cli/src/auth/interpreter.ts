@@ -503,7 +503,7 @@ async function runAuto(run: RunContext, { where, index }: { where: string; index
     ...run.pacing,
     config: { organization: run.auto.organization, totpSeedConfigured: totp !== undefined && (run.env[totp] ?? "") !== "" },
   });
-  run.mark("authLoop", { phase: run.phase, index, outcome: result.outcome, branches: result.branches.map(({ screen, kind, alerts, controls, reobserved, lastSeen }) => ({ screen, kind, alerts, controls, reobserved, lastSeen })) });
+  run.mark("authLoop", { phase: run.phase, index, outcome: result.outcome, branches: result.branches.map(({ screen, kind, alerts, controls }) => ({ screen, kind, alerts, controls })) });
   if (result.outcome !== "signed-in") throw loopEnded(result, where);
 }
 
