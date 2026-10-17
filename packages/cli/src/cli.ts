@@ -38,7 +38,7 @@ import { pressedByThisRun, resolveAuthentication } from "./auth/resolve.js";
 import { buildScrubSet, redactionNotice, scrubArtifact, type ScrubSet } from "./auth/scrub.js";
 import { FlowsError, parseFlowsFile, resolveLoginFlow, EXPECT_DEFAULT_SECONDS, type FlowsFile, type PageCondition } from "./auth/flows.js";
 import {
-  assertCredentialsPresent, runSteps, normalise, LoginFailedError, BIND_TIMEOUT_MS, AUTO_BUDGET_MS,
+  assertCredentialsPresent, runSteps, normalise, textUnder, LoginFailedError, BIND_TIMEOUT_MS, AUTO_BUDGET_MS,
   type AuthDriver, type AuthPlan, type AxNode, type Environment,
 } from "./auth/interpreter.js";
 import { LOGIN_EXIT_CODES, LOGIN_OUTCOMES, retryDecision, type LoginOutcome } from "./auth/login-outcomes.js";
@@ -1790,18 +1790,8 @@ type CheckOutcome = "signed-in" | LoginOutcome | "left-origin";
 
 const SCREEN_ROLES = new Set(["textbox", "password", "searchbox", "button", "link", "radio", "option", "menuitem", "checkbox", "combobox", "alert"]);
 
-/**
- * The text an unnamed alert shows. An alert takes no name from its content, so its words sit on the text nodes beneath it (measured
- * 2026-10-11 on the cross-origin fixture: `alert ""` with a `StaticText "Wrong email or password."` child), and without them a
- * rejected credential reads as an ordinary form.
- */
-function textUnder(parent: AxNode, nodes: readonly AxNode[]): string {
-  const children = nodes.filter((node) => node.parentId === parent.id && !node.ignored);
-  return children.map((child) => (child.role === "StaticText" ? child.name : textUnder(child, nodes))).join(" ");
-}
-
 /** The page as the screen loop reads it: by accessible name, never by CSS. */
-function screenOf(nodes: readonly AxNode[]): ScreenObservation {
+export function screenOf(nodes: readonly AxNode[]): ScreenObservation {
   const named = nodes.map((node) => (node.role === "alert" && normalise(node.name) === "" ? { ...node, name: textUnder(node, nodes) } : node));
   const live = named.filter((node) => !node.ignored && normalise(node.name) !== "");
   return {
