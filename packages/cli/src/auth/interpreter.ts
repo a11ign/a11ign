@@ -23,7 +23,7 @@ import { assertLiteralIsNotSecret, STEP_MODIFIERS, type FlowStep, type PageCondi
 import { parseTotpSecret } from "./otpauth.js";
 import type { StateCookie, StateEntries } from "./scrub.js";
 import {
-  runLoop, type Action, type LoopOptions, type LoopResult, type ScreenControl, type ScreenObservation, type FieldSource,
+  runLoop, type Action, type Branch, type LoopOptions, type LoopResult, type ScreenControl, type ScreenObservation, type FieldSource,
 } from "./screen-loop.js";
 import { codeForUse } from "./totp.js";
 
@@ -487,6 +487,14 @@ function loopEnded(result: LoopResult, where: string): AuthError {
 }
 
 /**
+ * A branch as the loop's mark carries it: what the screen showed, and the re-observations written on the branch the loop acted on
+ * (#5690). `lastSeen` is carried only where the loop wrote it, so a branch whose screen was never seen again has none.
+ */
+const markedBranch = ({ screen, kind, alerts, controls, reobserved, lastSeen }: Branch): Record<string, unknown> => ({
+  screen, kind, alerts, controls, reobserved, ...(lastSeen && { lastSeen }),
+});
+
+/**
  * `auto: true`: the built-in loop takes the screen until the `expect:` that follows it holds (the flows rules guarantee one
  * does), then the flow resumes at that `expect:`, which still runs, so a loop that stopped early is not believed. The loop
  * has no secret of its own: it names where a value comes from and this file supplies it at the moment of typing.
@@ -503,7 +511,7 @@ async function runAuto(run: RunContext, { where, index }: { where: string; index
     ...run.pacing,
     config: { organization: run.auto.organization, totpSeedConfigured: totp !== undefined && (run.env[totp] ?? "") !== "" },
   });
-  run.mark("authLoop", { phase: run.phase, index, outcome: result.outcome, branches: result.branches.map(({ screen, kind, alerts, controls }) => ({ screen, kind, alerts, controls })) });
+  run.mark("authLoop", { phase: run.phase, index, outcome: result.outcome, branches: result.branches.map(markedBranch) });
   if (result.outcome !== "signed-in") throw loopEnded(result, where);
 }
 

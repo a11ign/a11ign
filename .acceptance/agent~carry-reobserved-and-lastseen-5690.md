@@ -1,0 +1,13 @@
+The sign-in interpreter's `authLoop` mark carries each branch's `reobserved` count and `lastSeen` reading through to the trail, where before it stripped both (#5690, split from #5689). `lastSeen` is carried only where the loop wrote it, so a branch whose screen was never seen again has none. The loop's actions and outcomes are unchanged.
+
+**Measured at this head:** `interpreter.test.ts` run alone with `tsx --test`: 54 of 54 pass, 53 before the change. `pnpm run typecheck` exits 0. `pnpm run lint` reports 0 errors. `pnpm run verify` exits 0.
+
+**The two cases, each with a negative control** (`interpreter.test.ts`): the AUTH0 sign-in pins `reobserved: 0` on all three branches, none re-observed, so every one reaches the mark without a `lastSeen`. The new case drives a one-time-code form that stays up with an alert after Continue: its branch carries `reobserved` above 0 and the `lastSeen` it last showed, and the branch the loop never saw again has `reobserved` 0 and no `lastSeen` key at all.
+
+Mutation: the mapper restored to its pre-change form, `lastSeen` carried unconditionally, and `reobserved` dropped: each run of `interpreter.test.ts` (filtered to the two cases) goes 0 pass and 2 fail. `interpreter.ts` was copied aside and restored byte-identical after each.
+
+**Not done here:** reading the alert (#5679); the third wrong-code falsifier dispatch (orchestrator, #5564).
+
+Acceptance: git grep -q "reobserved" -- packages/cli/src/auth/interpreter.ts && git grep -q "reobserved" -- packages/cli/src/auth/interpreter.test.ts
+
+Closes #5690
