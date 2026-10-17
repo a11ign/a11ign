@@ -1,7 +1,7 @@
 # Announcement-emulator spike (row #5661)
 
 **Status: in progress. Q1 answered (yes, with gaps). Q2 stage 1 passed (NVDA's own Python imports and speaks on Linux); Q2 stage 2 is
-running: 28 of the 47 system tests, 107 exact-speech assertions, 97 exact, 23 tests exact on every assertion (see Q2; a fit to fixtures read, not the gate number). Q3 not run.** This page is the spike's deliverable ([ADR 0047](./adr/0047-an-nvda-faithful-announcement-emulator-is-a-separate-repository-and-its-predictions-are-advisory.md), Decision 7). The spike's code
+running: 30 of the 47 system tests, 139 exact-speech assertions, 129 exact, 25 tests exact on every assertion (see Q2; a fit to fixtures read, not the gate number). Q3 not run.** This page is the spike's deliverable ([ADR 0047](./adr/0047-an-nvda-faithful-announcement-emulator-is-a-separate-repository-and-its-predictions-are-advisory.md), Decision 7). The spike's code
 lives **outside any a11ign repository**, on the host that ran it at `~/spikes/announcement-emulator-5661`; nothing here is a prediction
 and nothing was written to an evidence field.
 
@@ -51,9 +51,9 @@ checked*. A reading is a moment.
   IA2 object attributes NVDA reads from ARIA, such as `xml-roles`, must be rebuilt from `role` plus the typed fields),
   `textAlign`/`textDirection`/`textPosition`/`textStyle`/`listStyle`, `keyShortcuts`, `ariaAtomic` as such (`liveAtomic` exists), `readOnly`
   as such (`restriction` exists). **There is no `hypertext` string**: layer 2 has to build it from `children`, `name` and `value`.
-- **Sufficiency for layers 2 and 3, reading so far** (*measured* in Q2 stage 2, 28 tests): for roles, states, names, descriptions,
+- **Sufficiency for layers 2 and 3, reading so far** (*measured* in Q2 stage 2, 30 tests): for roles, states, names, descriptions,
   levels, links, landmarks, relations (labelled-by, error message, details), table coordinates, spelling/grammar markers and text-field state
-  the fields were enough to match 97 of 107 exact-speech assertions. What the run found missing or different: (1) node identity is not exposed (`node.id` is undefined), so relations
+  the fields were enough to match 129 of 139 exact-speech assertions. What the run found missing or different: (1) node identity is not exposed (`node.id` is undefined), so relations
   are resolved by object identity within one walk (the extractor numbers nodes and emits `labelledByIx`, `labelForIx`, `errorMessageForIx`);
   (2) there is no author `role` string, so IA2 `xml-roles` cannot be read and is reconstructed (see Q2); (3) the API has no text-attribute
   runs as IAccessibleText gives them, but `markers` (spelling, grammar) and per-node `language` were enough to rebuild the two attributes
@@ -112,7 +112,7 @@ the speech code **executes**; they are not a comparison against anything, and `h
   import), and the speech synth (`getSynth().name` is read by spelling speech). Three build artefacts are absent from the source tree
   and had to be supplied: the generated `comInterfaces`, `locale/en/cldr.dic` (an **empty** file in the spike's overlay `appDir`, so
   emoji and CLDR symbol names are not covered), and the test run's NVDA settings.
-- **Stage 2 (*measured*, 2026-10-17): 28 of the 47 system tests run, 107 exact-speech assertions, 97 exact; 23 tests agree on every assertion.**
+- **Stage 2 (*measured*, 2026-10-17): 30 of the 47 system tests run, 139 exact-speech assertions, 129 exact; 25 tests agree on every assertion.**
   What runs, layer by layer (the code is `~/spikes/announcement-emulator-5661/emu/` on the spike host, outside every a11ign repository):
   - **Layer 0, driver:** a live Chrome 155 launched with the allowlisted companion extension, keys sent over the DevTools protocol
     (`Input.dispatchKeyEvent`: Tab, Shift+Tab, Enter, Space move focus in the real browser), the tree and `getFocus()` re-read after each key.
@@ -151,11 +151,13 @@ the speech code **executes**; they are not a comparison against anything, and `h
   | `test_reportLanguageDisabled`, `test_reportNotSupportedLanguageWithoutOtherLanguages`, `checkbox_labelled_by_inner_element` | 1 / 1 each | |
   | `test_mark_aria_details_role` | 3 / 4 | the `has details` words of a rich editable's focus announcement are missing (emulator incomplete) |
   | `test_i7562` | 5 / 5 | |
+  | `test_styleNav` | 17 / 17 | |
+  | `test_textParagraphNavigation` | 15 / 15 | |
   | `test_ariaRoleDescription_inline_contentEditable` | 2 / 5 | the image prompt (three) |
   | `announce_list_item_when_moving_by_word_or_character` | 8 / 10 | **Ctrl+Right** from the start of \"small cat\" lands at the end of \"small\" in Linux Chrome (NVDA reads \"small\", expected \"cat\"), and the next Right follows from it; cause **read in Chromium's source** (2026-10-17): `EditingBehavior::ShouldSkipSpaceWhenMovingRight()` is true only for `kEditingWindowsBehavior`; the header's own comment says Ctrl+Right moves to "abc |def" on Windows and to "abc| def" on Mac and Linux (`third_party/blink/renderer/core/editing/editing_behavior.h`, main). The second miss is the same move: the caret sits one word earlier, so the next Right reads "c" not "a" |
   | `test_pr11606` | 4 / 5 | `NVDA+upArrow` speaks \"list\" before the bullet line where the expectation does not (emulator incomplete; not isolated) |
   | `test_ariaRoleDescription_inline_browseMode` | 0 / 3 | the image prompt |
-  | **total, 28 tests** | **97 / 107** | |
+  | **total, 30 tests** | **129 / 139** | |
 
   **The 10 misses are of three kinds, and one is a Windows-only behaviour of Chromium, read in its source.** (a) **6 are the browser's output differing**:
   the expected line carries Chrome's image-description prompt ("To get missing image descriptions, open the context menu."), which the
@@ -165,13 +167,24 @@ the speech code **executes**; they are not a comparison against anything, and `h
   browse-mode buffer, which is not what NVDA does: they passed `test_ariaDescription_focusMode` by that wrong route, and the real route
   (page caret, NVDA's `EditableText`) needed the line-composition fix above before it agreed again.
 
-  **97 of 107 is a fit to fixtures I read, not a prediction, and it is not the gate.** Everything below was added or changed **after
+  **Slice 13 (2026-10-17): +2 tests, +32 assertions, all exact, no earlier assertion changed.** `test_styleNav` and `test_textParagraphNavigation` run
+  NVDA's own style and paragraph navigation. Getting there found four emulator faults, none in NVDA: (1) the page wrapper declared no charset, so
+  Cyrillic and Chinese text reached the buffer as mojibake (`ChromeLib._writeTestFile` writes UTF-8 without one and Windows Chrome detects it;
+  the emulator's wrapper now carries `<meta charset="UTF-8">`, a deliberate deviation); (2) `textUtils.WideStringOffsetConverter` sizes an index by
+  `ctypes.sizeof(c_wchar)`, 2 on Windows and 4 on Linux, so every wide offset came out halved on Linux (`moveToCodepointOffset(3)` gave 1); the
+  boot restores the Windows 2; (3) the stand-in produced no font, size, colour or style text attributes, so every paragraph read as one style;
+  they are now Chromium's `ComputeTextAttributes` (`ax_platform_node_base.cc:2516`: `font-family`, `font-size` in points rounded to 0.5,
+  `font-weight`, `font-style`, `color`, `background-color`, the line-through and underline styles); (4) the extractor did not unroll `for` loops
+  nor apply `spy.assignGesture` (the user gesture map NVDA's own `scriptHandler` reads). Three Windows-only imports are stubbed to get past
+  `appModules.kindle` and `NVDAObjects.UIA.wordDocument` (`pycaw`, `cffi`, `cryptography`); the stub ledger lists them.
+
+  **129 of 139 is a fit to fixtures I read, not a prediction, and it is not the gate.** Everything below was added or changed **after
   reading the expected strings**: the tests' NVDA settings, `description-from`, the `ChromeVBuf` buffer class (the first runs used the
   Firefox class), the real `cldr.dic` (an empty one gave "list    frogs" for a bullet), related-element lookups, aria details and error
   messages, `IAccessibleText`, `IAccessibleHypertext` and the content-descendant search, non-atomic text fields counting as text fields,
-  list markers counting as text, layout tables and the table half of `fillVBuf`, and spelling/grammar markers as text attributes, the tree-selection caret and the same-line rule for line starts.
-  Twenty-eight tests is 28 of 47, and 107 of the 217 assertion executions the extractor evaluates (193 call sites; a helper that asserts
-  is counted once per call); the gate is exact agreement on real pages' top 10 shapes against fleet transcripts, which is Q3 and is not
+  list markers counting as text, layout tables and the table half of `fillVBuf`, and spelling/grammar markers as text attributes, the tree-selection caret and the same-line rule for line starts, and (slice 13) Chromium's text style attributes.
+  Thirty tests is 30 of 47, and 139 of the 227 assertion executions the extractor evaluates (it now unrolls a test's `for` loops, which is why the
+  denominator grew from 217; a helper that asserts is counted once per call); the gate is exact agreement on real pages' top 10 shapes against fleet transcripts, which is Q3 and is not
   started.
 - **Reconstructed, not read:** IA2 `xml-roles` is Chromium's `kRole` string, `chrome.automation` does not expose it, and NVDA reads it to
   tell an article, figure, region, switch or landmark from a plain document or group (`gecko_ia2.py:180-200`). The stand-in fills it from
