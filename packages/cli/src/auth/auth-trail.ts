@@ -21,6 +21,10 @@ export interface TrailBranch {
   readonly alerts: readonly TrailShown[];
   /** Every control the screen showed when the branch was taken, so a field error that is not an alert is visible beside it. */
   readonly controls: readonly TrailShown[];
+  /** On the branch the loop acted on: how many times its screen was seen again. `0` is a loop that did not look (#5689). */
+  readonly reobserved?: number;
+  /** The screen as it last showed when seen again; absent when `reobserved` is 0 (#5689). */
+  readonly lastSeen?: { readonly alerts: readonly TrailShown[]; readonly controls: readonly TrailShown[] };
 }
 export interface TrailLoop { readonly phase: string; readonly index: number; readonly outcome: string; readonly branches: readonly TrailBranch[] }
 
@@ -30,13 +34,23 @@ const loopsByFile = new Map<string, TrailLoop[]>();
 /** Role and name only: a mark that carried more about a control (a value, say) is cut down here, not passed on. */
 const shownOnly = (nodes: readonly TrailShown[]): TrailShown[] => nodes.map(({ role, name }) => ({ role, name }));
 
+/** A branch as the trail keeps it: role and name wherever a control or alert is named, and the count and `lastSeen` only where the loop wrote them. */
+const trailBranchOf = ({ screen, kind, alerts, controls, reobserved, lastSeen }: TrailBranch): TrailBranch => ({
+  screen,
+  kind,
+  alerts: shownOnly(alerts),
+  controls: shownOnly(controls),
+  reobserved,
+  lastSeen: lastSeen && { alerts: shownOnly(lastSeen.alerts), controls: shownOnly(lastSeen.controls) },
+});
+
 function loopOf(detail: Record<string, unknown>): TrailLoop {
   const branches = detail.branches as readonly TrailBranch[];
   return {
     phase: String(detail.phase),
     index: Number(detail.index),
     outcome: String(detail.outcome),
-    branches: branches.map(({ screen, kind, alerts, controls }) => ({ screen, kind, alerts: shownOnly(alerts), controls: shownOnly(controls) })),
+    branches: branches.map(trailBranchOf),
   };
 }
 

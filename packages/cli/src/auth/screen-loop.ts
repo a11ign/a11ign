@@ -316,6 +316,10 @@ export interface Branch {
   /** What the screen showed when the branch was taken (#5674): the trail writes these beside it, role and name only. */
   readonly alerts: readonly ScreenControl[];
   readonly controls: readonly ScreenControl[];
+  /** On the branch the loop acted on: how many observations after the action showed its screen again. `0` is a reading too (#5689). */
+  readonly reobserved?: number;
+  /** On the same branch, once `reobserved` is above 0: what the screen showed at the last of those observations, equal or not (#5689). */
+  readonly lastSeen?: Pick<Branch, "alerts" | "controls">;
 }
 
 export interface LoopResult {
@@ -345,6 +349,8 @@ export const UNKNOWN_SETTLE_OBSERVATIONS = 3;
 interface LoopState {
   readonly branches: Branch[];
   lastActed: Screen | undefined;
+  /** Where the branch the loop last acted on sits in `branches`, so its count can be written again as the screen is seen (#5689). */
+  actedAt: number;
   /** The reading (`readingOf`) last written to `branches`: a re-observed screen is written again only when it has moved from this. */
   lastRecorded: string;
   /** The last page that matched nothing or more than one screen, for the budget's ending. */
@@ -394,7 +400,8 @@ async function actOn(screen: Screen, o: ScreenObservation, options: LoopOptions,
     return { outcome: action.outcome, branches: state.branches, remedy: action.remedy };
   }
   const note = "note" in action ? action.note : undefined;
-  state.branches.push(note ? { screen, kind: action.kind, note, ...shown } : { screen, kind: action.kind, ...shown });
+  state.branches.push(note ? { screen, kind: action.kind, note, ...shown, reobserved: 0 } : { screen, kind: action.kind, ...shown, reobserved: 0 });
+  state.actedAt = state.branches.length - 1;
   state.lastRecorded = readingOf(o);
   await options.act(action);
   state.lastActed = screen;
@@ -402,11 +409,21 @@ async function actOn(screen: Screen, o: ScreenObservation, options: LoopOptions,
 }
 
 /**
+ * The branch the loop acted on is written again each time its screen is seen: the count, and what the screen shows now, equal or
+ * not. A count of 0 says the loop did not look, which a wrong-code run must tell apart from a page that looked the same (#5689).
+ */
+function noteReobserved(o: ScreenObservation, state: LoopState): void {
+  const acted = state.branches[state.actedAt];
+  state.branches[state.actedAt] = { ...acted, reobserved: (acted.reobserved ?? 0) + 1, lastSeen: shownBy(o) };
+}
+
+/**
  * The screen just acted on is not acted on again, but a rejection lands there: a wrong code leaves the one-time-code form on
  * the page with an alert beside it (#5683). What it shows is written once per change, so the trail holds the page as it came
- * back and a poll that sees the same page again adds nothing.
+ * back; a poll that sees the same page again adds no branch, only the count on the acted one (#5689).
  */
 function recordReshown(screen: Screen, o: ScreenObservation, state: LoopState): undefined {
+  noteReobserved(o, state);
   const reading = readingOf(o);
   if (reading === state.lastRecorded) return undefined;
   state.lastRecorded = reading;
@@ -450,6 +467,7 @@ export async function runLoop(options: LoopOptions): Promise<LoopResult> {
   const state: LoopState = {
     branches: [],
     lastActed: undefined,
+    actedAt: -1,
     lastRecorded: "",
     unmatched: undefined,
     unmatchedKey: "",

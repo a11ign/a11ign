@@ -159,3 +159,59 @@ test("every loop of a run joins the one file, in the order the sign-ins ran (a s
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("POSITIVE CONTROL: the count and the last reading seen are written beside the branch the loop acted on (#5689)", () => {
+  const dir = trailDir();
+  try {
+    const file = join(dir, "trail.json");
+    const looked = {
+      ...LOOP,
+      outcome: "signed-in-check-never-matched",
+      branches: [{
+        screen: "one-time-code",
+        kind: "type",
+        alerts: [],
+        controls: [{ role: "textbox", name: "Verification code" }],
+        reobserved: 4,
+        lastSeen: { alerts: [{ role: "alert", name: "The code you entered is invalid" }], controls: [{ role: "textbox", name: "Verification code" }] },
+      }],
+    };
+    authTrailMark({ [AUTH_TRAIL_ENV]: file })("authLoop", looked);
+    assert.deepEqual(readTrail(file), { loops: [looked] });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("NEGATIVE CONTROL: a count of 0 is written as 0, and a lastSeen that carries a value is cut to role and name (#5689)", () => {
+  const dir = trailDir();
+  try {
+    const file = join(dir, "trail.json");
+    const carrying = {
+      ...LOOP,
+      branches: [
+        { screen: "one-time-code", kind: "type", alerts: [], controls: [], reobserved: 0 },
+        {
+          screen: "one-time-code",
+          kind: "type",
+          alerts: [],
+          controls: [],
+          reobserved: 2,
+          lastSeen: { alerts: [{ role: "alert", name: "Wrong code", value: FAKE_SECRET }], controls: [{ role: "textbox", name: "Verification code", value: FAKE_SECRET }] },
+        },
+      ],
+    };
+    authTrailMark({ [AUTH_TRAIL_ENV]: file })("authLoop", carrying);
+    const written = readFileSync(file, "utf8");
+    assert.ok(!written.includes(FAKE_SECRET), "the trail must not hold a typed value");
+    const [never, seen] = (readTrail(file) as { loops: { branches: Record<string, unknown>[] }[] }).loops[0].branches;
+    assert.equal(never.reobserved, 0, "a loop that did not look is written as 0, not left out");
+    assert.equal(never.lastSeen, undefined, "no reading when the screen was never seen again");
+    assert.deepEqual(seen.lastSeen, {
+      alerts: [{ role: "alert", name: "Wrong code" }],
+      controls: [{ role: "textbox", name: "Verification code" }],
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

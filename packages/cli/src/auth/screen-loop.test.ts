@@ -256,6 +256,32 @@ describe("runLoop: a re-observed last-acted screen whose alerts change (#5683)",
   });
 });
 
+describe("runLoop: the acted-on branch counts the observations of its screen after the action (#5689)", () => {
+  const WRONG_CODE: ScreenControl = { role: "alert", name: "Something went wrong" };
+  const REJECTED_CODE = screen(OTP.headings, [...OTP.controls, WRONG_CODE]);
+
+  test("NEGATIVE CONTROL: a screen the loop never sees again is counted 0, with no lastSeen", async () => {
+    const result = await rig().run([OTP, SIGNED_IN]);
+    assert.equal(result.branches.length, 1);
+    assert.equal(result.branches[0].reobserved, 0, "acted on, and the page was never observed again");
+    assert.equal(result.branches[0].lastSeen, undefined);
+  });
+
+  test("POSITIVE CONTROL: a screen seen again unchanged is counted with what it showed, and adds no observed branch", async () => {
+    const result = await rig().run([OTP], { budgetMillis: 5_000 });
+    assert.deepEqual(result.branches.map((b) => b.kind), ["type"]);
+    assert.ok((result.branches[0].reobserved ?? 0) > 0, "polled after the action, so seen again");
+    assert.deepEqual(result.branches[0].lastSeen, { alerts: [], controls: OTP.controls });
+  });
+
+  test("POSITIVE CONTROL: a screen seen again with an alert is counted, and its lastSeen carries the alert beside the observed branch", async () => {
+    const result = await rig().run([OTP, REJECTED_CODE], { budgetMillis: 5_000 });
+    assert.deepEqual(result.branches.map((b) => b.kind), ["type", "observed"]);
+    assert.ok((result.branches[0].reobserved ?? 0) > 0);
+    assert.deepEqual(result.branches[0].lastSeen, { alerts: [WRONG_CODE], controls: REJECTED_CODE.controls });
+  });
+});
+
 describe("runLoop: the landing screen, the app's own signed-out page", () => {
   test("POSITIVE CONTROL: a landing screen with one Sign in button presses it, and the login continues from there", async () => {
     assert.equal(classifyScreen(LANDING), "landing");
