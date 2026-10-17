@@ -16,6 +16,7 @@ human or agent, *working on* the repo rather than using it.
 | [github-action.md](./github-action.md) | you want it in CI against your own app |
 | [licence-faq.md](./licence-faq.md) | you are asking whether you may run an unmodified a11ign in CI against your own app, or what section 13 of the AGPL asks — answered by quoting the licence |
 | [capture-cost.md](./capture-cost.md) | you need to know **what a capture costs**: seconds per page on the fleet, minutes per Action run split into once-per-job and per-capture, and the multi-page cap basis (#2271) |
+| [announcement-emulator-spike.md](./announcement-emulator-spike.md) | you want to know how far the NVDA-faithful announcement emulator spike (#5661, ADR 0047) has got: Q1 (the Linux tree), Q2 (NVDA's own Python on Linux), Q3 (agreement with the fleet) and the 98% gate. **In progress; predictions are advisory, never evidence** |
 
 ## What is not done yet
 

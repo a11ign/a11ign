@@ -1,0 +1,6 @@
+`docs/announcement-emulator-spike.md` is the spike's write-up in progress (#5661): Q1 answered with the browser build, the allowlist control and the field inventory; Q2 stage 1 with the NVDA release, its commit and the stub ledger; Q3 and the gate stated as not run. No code in any a11ign repository: the spike's code is on the host, outside the repositories, and no evidence field was written with a prediction.
+
+- **Measured** (this row, 2026-10-17): Chrome for Testing 149.0.7827.55 and 155.0.8059.84, `chrome.automation` present with `--allowlisted-extension-id` and `undefined` without it, `getTree` absent and `getDesktop` present; NVDA release-2026.1.1 (5d92106f1) imports `speech`, `browseMode`, `virtualBuffers` on CPython 3.13.16 with 33 stubbed names and 0 files modified; `chromeTests.robot` holds 47 test cases against the ADR's quoted 51.
+- **Not measured, and the page says so:** Q2 stage 2 (the buffer builder and the system tests' pass count), Q3 (the agreement table), the gate number.
+
+Acceptance: bash -c 'grep -q "^## Gate" docs/announcement-emulator-spike.md && grep -q "^## Q1" docs/announcement-emulator-spike.md && grep -q "^## Q2" docs/announcement-emulator-spike.md && grep -q "^## Q3" docs/announcement-emulator-spike.md && grep -q "announcement-emulator-spike.md" docs/README.md'
