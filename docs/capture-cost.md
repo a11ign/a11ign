@@ -352,6 +352,33 @@ Run 1 is `survey.html` with `probe-forms: "true"`, the command the 220 s target 
 
 The `formField` figures are the span from the `pageState` mark `beforeProbe: sweep:formField` to the `sweep` entry for `formField` (equal to that entry's `prevMs` plus `nextMs` to 0.1 s); the split is a throwaway script, not a repository file.
 
+### Lever A, second cut
+
+Measured 2026-10-17 for [agent-org#1687](https://github.com/a11ign/agent-org/issues/1687), the recapture that reads the split of one sweep round trip ([agent-org#1685](https://github.com/a11ign/agent-org/issues/1685)), **read from one `action-smoke` run**: run [`39000496869`](https://github.com/a11ign/a11ign/actions/runs/39000496869), `workflow_dispatch`, job `consumer`, `windows-2022`, probe-forms on `survey.html`, the same command as run 1 above. The record is that run's `action-smoke-capture` artifact.
+
+**One run of n=1 is one reading.** It gives the three buckets of each sweep's two directions, not a spread; nothing here is a mean.
+
+The pin: `@a11ign/screenreader-worker` `0.13.9`, the release that carries the trip split (`tripPerformMs`, `tripLogMs`, `tripQuietMs`), set by commit `439f81e0a` on branch `agent/recapture-for-lever-a-second-cut-agent-org-1687` (not for merge). The record's workerCode is `033505cc2ccc2fa1`, captureProtocol 24. Capture time (last `atMs`): **321.7 s**, against 312.6 s on the 0.13.8 cut run above (+9.1 s). That is a difference between two single readings and is not read as a change.
+
+**`sweep formField`, by direction** (the sweep a cut would target):
+
+| | previous pass | next pass |
+|---|---:|---:|
+| span (`prevMs` / `nextMs`) | 4.861 s | 102.772 s |
+| trips | 7 | 61 |
+| seconds a trip (span / trips) | 0.69 s | 1.68 s |
+| `tripPerformMs` | 1.889 s | 20.496 s |
+| `tripLogMs` | 0 | 0 |
+| `tripQuietMs` | 0 | 0 |
+| **in no bucket** | **2.972 s** | **82.276 s** |
+
+**Reading it.**
+
+- **The buckets do not add up to the trip.** On the next pass the three buckets hold 20.5 s of 102.8 s; 82.3 s (about 80%) is in no bucket. Per trip, the buckets sum to 0.34 s against a trip of 1.68 s. The other seven sweeps of this record sum to their spans within 1 ms, so the gap is specific to the `formField` path, or to the instrument.
+- **`tripLogMs` and `tripQuietMs` read zero on every sweep, in both directions.** A pass that makes log queries and silence retries should not read zero there, and the worker's test pins the subtraction on hand-built input, not the accumulation at runtime. The zeros are therefore read as an instrument fault, not a finding about the page. The fault is to be filed against agent-org#1685's code (worker lane, `src/capture-probes.ts` and `src/sweep-step.test.ts`); at the time this was written that row was not yet filed.
+- **No cut row is filed, because no bucket can be named.** A cut would come from the log queries or the quiet waits inside the 82.3 s, and the split cannot say which. The silence waits are not to be cut (they decide what silence means for 4.1.2 and 4.1.3), so a cut cannot be written until the split can separate them from the log queries.
+- **The ceiling is not reached by either bucket alone.** Outside `formField` this run is 214.1 s (321.7 − 107.6), against 205.2 s on the cut run. At that figure, 220 s needs `formField` at 5.9 s, against 107.6 s now. The perform bucket on the next pass (20.5 s) is already larger than that, so cutting perform alone cannot reach it.
+
 ## What this does not show
 
 - **One day, one build, one runner image, ten fleet boxes.** Not variance over days, builds, hours or Edge versions.
