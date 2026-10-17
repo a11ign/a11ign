@@ -918,9 +918,9 @@ test("POSITIVE CONTROL: auto: hands control to the loop, which types the credent
   assert.equal(loop?.detail.outcome, "signed-in");
   // What each screen showed is written beside its branch: no alert here, and the controls the screen had.
   assert.deepEqual(loop?.detail.branches, [
-    { screen: "identifier-and-password", kind: "type", alerts: [], controls: [{ role: "textbox", name: "Email address" }, { role: "textbox", name: "Password" }, { role: "button", name: "Continue" }] },
-    { screen: "one-time-code", kind: "type", alerts: [], controls: [{ role: "textbox", name: "Verification code" }, { role: "button", name: "Continue" }] },
-    { screen: "passkey-nudge", kind: "skip", alerts: [], controls: [{ role: "button", name: "Create passkey" }, { role: "button", name: "Not now" }] },
+    { screen: "identifier-and-password", kind: "type", alerts: [], controls: [{ role: "textbox", name: "Email address" }, { role: "textbox", name: "Password" }, { role: "button", name: "Continue" }], reobserved: 0, lastSeen: undefined },
+    { screen: "one-time-code", kind: "type", alerts: [], controls: [{ role: "textbox", name: "Verification code" }, { role: "button", name: "Continue" }], reobserved: 0, lastSeen: undefined },
+    { screen: "passkey-nudge", kind: "skip", alerts: [], controls: [{ role: "button", name: "Create passkey" }, { role: "button", name: "Not now" }], reobserved: 0, lastSeen: undefined },
   ]);
   assert.ok(run.marks.some((m) => m.event === "authApplied"));
   // A mark names screens and verbs and never a value.
