@@ -182,7 +182,7 @@ the speech code **executes**; they are not a comparison against anything, and `h
   (1) **Tab, Enter and Space in browse mode are NVDA's own scripts** (`script_tab`, `_tabOverride`, `script_activatePosition`): focus is moved by
   `obj.setFocus()` through `IAccessible::accSelect`, which the harness hands to the browser (`AutomationNode.focus()`), and an action by
   `IAccessibleAction::doAction` (`doDefault()`); (2) **Chromium does implement `IAccessibleAction`**: the name of action 0 is the node's default action
-  verb, and NVDA's `click` makes a node clickable (my earlier note that it did not was wrong, and the table of how it was missed is in the stub ledger);
+  verb, and NVDA's `click` makes a node clickable (my earlier note in the stand-in that it did not was wrong; it was read from the Chromium source in `browser_accessibility_com_win.cc`);
   (3) NVDA's fallback for an object with no action is a mouse click at its centre, delivered with `Input.dispatchMouseEvent` after converting the node's
   screen coordinates to viewport ones; (4) `scrollTo` scrolls the browser (`makeVisible()`), because a node outside a 300x150 iframe is offscreen and
   then has no action; (5) after an input that does not move focus, Chromium's state-change events are raised on the focused node and its ancestors
