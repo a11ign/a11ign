@@ -53,8 +53,8 @@ jobs:
       pull-requests: write       # for the PR comment below; omit it and the report still runs, only quieter
     steps:
       - uses: actions/checkout@v7
-      - uses: a11ign/a11ign@493b0285acc150251d6fb9a05114e87f98fb3159   # the commit of the release tagged a11ign@0.10.14
-        # Pinned to the full 40-character commit of release 0.10.14, so your CI does not move when a newer
+      - uses: a11ign/a11ign@5ebf8c5b5981afd1265385f6ae6f1f2f988ca2ae   # the commit of the release tagged a11ign@0.10.15
+        # Pinned to the full 40-character commit of release 0.10.15, so your CI does not move when a newer
         # one is published -- GitHub refuses an abbreviated SHA outright, it does not just discourage it.
         # To take a newer release, read `npm view a11ign dist-tags` for its number and
         # `git ls-remote https://github.com/a11ign/a11ign 'refs/tags/a11ign@*'` for its commit.
@@ -351,7 +351,7 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v7
-      - uses: a11ign/a11ign@493b0285acc150251d6fb9a05114e87f98fb3159   # the commit of the release tagged a11ign@0.10.14
+      - uses: a11ign/a11ign@5ebf8c5b5981afd1265385f6ae6f1f2f988ca2ae   # the commit of the release tagged a11ign@0.10.15
         id: a11ign
         env:                                     # the credential enters HERE, on the step that calls the Action
           APP_TEST_USER: ${{ secrets.APP_TEST_USER }}

@@ -57,7 +57,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: a11ign/a11ign@43c5d9d696e44aabc9ef4ff8ad2dc1da2a6abe61   # the commit this file was regenerated at, not a release tag (node scripts/generate-consumer-gate.ts)
-        # Pinned to the full 40-character commit this file was regenerated at (README's is the commit of release 0.10.14), so your CI does not move when a newer
+        # Pinned to the full 40-character commit this file was regenerated at (README's is the commit of release 0.10.15), so your CI does not move when a newer
         # one is published. `v0.1.0` predates the `summary-md` output used below.
         id: a11ign
         with:
