@@ -4,7 +4,7 @@ The sign-in interpreter's `authLoop` mark carries each branch's `reobserved` cou
 
 **The two cases, each with a negative control** (`interpreter.test.ts`): the AUTH0 sign-in pins `reobserved: 0` on all three branches, none re-observed, so every one reaches the mark without a `lastSeen`. The new case drives a one-time-code form that stays up with an alert after Continue: its branch carries `reobserved` above 0 and the `lastSeen` it last showed, and the branch the loop never saw again has `reobserved` 0 and no `lastSeen` key at all.
 
-**Mutation evidence:** with the mapper restored to its pre-change form, both tests fail. With `lastSeen` carried unconditionally, both fail. With `reobserved` dropped, both fail. The file was restored byte-identical after each.
+Mutation: the mapper restored to its pre-change form, `lastSeen` carried unconditionally, and `reobserved` dropped: each run of `interpreter.test.ts` (filtered to the two cases) goes 0 pass and 2 fail. `interpreter.ts` was copied aside and restored byte-identical after each.
 
 **Not done here:** reading the alert (#5679); the third wrong-code falsifier dispatch (orchestrator, #5564).
 
