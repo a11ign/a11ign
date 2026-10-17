@@ -447,9 +447,14 @@ export function textUnder(parent: AxNode, nodes: readonly AxNode[]): string {
   return children.map((child) => (child.role === "StaticText" ? child.name : textUnder(child, nodes))).join(" ");
 }
 
+/** The one predicate both screen readers use to decide an alert must be named from the text beneath it. */
+export function isUnnamedAlert(node: AxNode): boolean {
+  return node.role === "alert" && normalise(node.name) === "";
+}
+
 export async function observeScreen(driver: AuthDriver, stop: PageCondition): Promise<ScreenObservation> {
   const nodes = await driver.axNodes();
-  const named = nodes.map((node) => (node.role === "alert" && normalise(node.name) === "" ? { ...node, name: textUnder(node, nodes) } : node));
+  const named = nodes.map((node) => (isUnnamedAlert(node) ? { ...node, name: textUnder(node, nodes) } : node));
   const live = named.filter((node) => !node.ignored && normalise(node.name) !== "");
   return {
     controls: live.filter((node) => SCREEN_ROLES.has(node.role)).map((node) => ({ role: node.role, name: normalise(node.name) })),

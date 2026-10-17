@@ -38,7 +38,7 @@ import { pressedByThisRun, resolveAuthentication } from "./auth/resolve.js";
 import { buildScrubSet, redactionNotice, scrubArtifact, type ScrubSet } from "./auth/scrub.js";
 import { FlowsError, parseFlowsFile, resolveLoginFlow, EXPECT_DEFAULT_SECONDS, type FlowsFile, type PageCondition } from "./auth/flows.js";
 import {
-  assertCredentialsPresent, runSteps, normalise, textUnder, LoginFailedError, BIND_TIMEOUT_MS, AUTO_BUDGET_MS,
+  assertCredentialsPresent, runSteps, normalise, textUnder, isUnnamedAlert, LoginFailedError, BIND_TIMEOUT_MS, AUTO_BUDGET_MS,
   type AuthDriver, type AuthPlan, type AxNode, type Environment,
 } from "./auth/interpreter.js";
 import { LOGIN_EXIT_CODES, LOGIN_OUTCOMES, retryDecision, type LoginOutcome } from "./auth/login-outcomes.js";
@@ -1792,7 +1792,7 @@ const SCREEN_ROLES = new Set(["textbox", "password", "searchbox", "button", "lin
 
 /** The page as the screen loop reads it: by accessible name, never by CSS. */
 export function screenOf(nodes: readonly AxNode[]): ScreenObservation {
-  const named = nodes.map((node) => (node.role === "alert" && normalise(node.name) === "" ? { ...node, name: textUnder(node, nodes) } : node));
+  const named = nodes.map((node) => (isUnnamedAlert(node) ? { ...node, name: textUnder(node, nodes) } : node));
   const live = named.filter((node) => !node.ignored && normalise(node.name) !== "");
   return {
     controls: live.filter((node) => SCREEN_ROLES.has(node.role)).map((node) => ({ role: node.role, name: normalise(node.name) })),

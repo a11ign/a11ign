@@ -1,6 +1,6 @@
 The screen loop's `observeScreen` (`packages/cli/src/auth/interpreter.ts`) now names an unnamed `alert` from the `StaticText` beneath it, as the CLI's `screenOf` (`packages/cli/src/cli.ts`) already did. `textUnder` moves to `interpreter.ts` and both readers import it, so the rule lives in one place. Nothing user-visible changes: the alert gains a name the loop can read, and `screenOf` keeps its behaviour.
 
-**Known caveat:** the alert predicate (`node.role === "alert" && normalise(node.name) === ""`) is written once in each reader, one line apiece. A future change to one reader can drift from the other. The `THE HELPERS, through both` test catches a drift in the observed controls and headings, not in the predicate text.
+**Shared:** the alert predicate is `isUnnamedAlert` in `interpreter.ts`, and both readers call it. Each reader keeps its own one-line `map` that names the matching nodes from `textUnder`, so a change to the naming step itself still needs both lines edited. The `THE HELPERS, through both` test catches a drift in the observed controls and headings.
 
 **Measured at this head:** the Acceptance command below passes, 99 tests across `interpreter.test.ts` and `screen-loop.test.ts`. `pnpm run lint` exits 0 (0 errors, 677 pre-existing warnings). `pnpm run typecheck` exits 0.
 
