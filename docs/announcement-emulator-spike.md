@@ -90,8 +90,15 @@ the speech code **executes**; they are not a comparison against anything, and `h
   are **219** by grep (160 `strings_match`, 31 `speech_matches`, 2 `speech_contains`, 24 `braille_matches`, 2 `braille_contains`), so
   **193 speech and 26 braille**, against the quoted "about 220 exact-speech". The 51 may be another release; **the row's number is the
   checkout's, 47 tests and 193 speech assertions, until shown otherwise.**
-- **Stage 2 (not started):** the Windows mapping and the buffer builder, then those tests' pages driven through them, with the pass count
-  and each failed exact-speech assertion pasted here.
+- **The seam is 13 native functions plus one handle type** (*measured*: `grep -o "localLib\.VBuf[A-Za-z_]*"` over
+  `source/virtualBuffers/__init__.py`): `VBuf_createBuffer, destroyBuffer, getTextLength, getTextInRange` (called with `useMarkup` true and
+  false), `getLineOffsets, getFieldNodeOffsets, getSelectionOffsets, setSelectionOffsets, locateControlFieldNodeAtOffset,
+  locateTextFieldNodeAtOffset, getControlFieldNodeWithIdentifier, getIdentifierFromControlFieldNode, findNodeByAttributes` and
+  `VBufRemote_bufferHandle_t`. `gecko_ia2.py` itself calls none of them: everything NVDA does with a buffer goes through that one module
+  object, so **stage 2 is a Python stand-in for `NVDAHelper.localLib` that builds its buffer from the Q1 tree**, and the XML parsing,
+  field handling and speech above it stay NVDA's.
+- **Stage 2 (not started):** that stand-in (layers 2 and 3), then those tests' pages driven through it, with the pass count and each
+  failed exact-speech assertion pasted here.
 
 ## Q3. How closely does it agree with fleet transcripts on the real-page corpus?
 
