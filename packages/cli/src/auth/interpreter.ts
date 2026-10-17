@@ -437,9 +437,25 @@ function nameForMark(step: FlowStep): string | undefined {
 /** What the loop sees of a page: interactive controls and alerts by accessible name, headings apart, and whether the next `expect:` holds. */
 const SCREEN_ROLES = new Set([...FILL_ROLES, ...CHECK_ROLES, ...PRESS_ROLES, "password", "alert"]);
 
-async function observeScreen(driver: AuthDriver, stop: PageCondition): Promise<ScreenObservation> {
+/**
+ * The text an unnamed alert shows. An alert takes no name from its content, so its words sit on the text nodes beneath it (measured
+ * 2026-10-11 on the cross-origin fixture: `alert ""` with a `StaticText "Wrong email or password."` child), and without them a
+ * rejected credential reads as an ordinary form. The CLI's `screenOf` reads the page the same way, from this function.
+ */
+export function textUnder(parent: AxNode, nodes: readonly AxNode[]): string {
+  const children = nodes.filter((node) => node.parentId === parent.id && !node.ignored);
+  return children.map((child) => (child.role === "StaticText" ? child.name : textUnder(child, nodes))).join(" ");
+}
+
+/** The one predicate both screen readers use to decide an alert must be named from the text beneath it. */
+export function isUnnamedAlert(node: AxNode): boolean {
+  return node.role === "alert" && normalise(node.name) === "";
+}
+
+export async function observeScreen(driver: AuthDriver, stop: PageCondition): Promise<ScreenObservation> {
   const nodes = await driver.axNodes();
-  const live = nodes.filter((node) => !node.ignored && normalise(node.name) !== "");
+  const named = nodes.map((node) => (isUnnamedAlert(node) ? { ...node, name: textUnder(node, nodes) } : node));
+  const live = named.filter((node) => !node.ignored && normalise(node.name) !== "");
   return {
     controls: live.filter((node) => SCREEN_ROLES.has(node.role)).map((node) => ({ role: node.role, name: normalise(node.name) })),
     headings: live.filter((node) => node.role === "heading").map((node) => normalise(node.name)),

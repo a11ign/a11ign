@@ -25,9 +25,10 @@ import {
   withLoadedState,
 } from "@a11ign/screenreader-worker/auth-flow";
 import {
-  challengeVendor, controlsNamed, cookieParam, expectationMet, FRAME_SOURCES_EXPRESSION, requiredEnvNames, SET_LOCAL_STORAGE_FUNCTION,
-  signIn as cliSignIn, type AuthDriver, type AuthPlan, type AxNode, type LoopPacing,
+  challengeVendor, controlsNamed, cookieParam, expectationMet, FRAME_SOURCES_EXPRESSION, observeScreen, requiredEnvNames,
+  SET_LOCAL_STORAGE_FUNCTION, signIn as cliSignIn, type AuthDriver, type AuthPlan, type AxNode, type LoopPacing,
 } from "./interpreter.js";
+import { screenOf } from "../cli.js";
 import type { FlowStep } from "./flows.js";
 import { stateEntriesFor, type StateCookie, type StorageState } from "./scrub.js";
 import { parseStorageState, stateShapeProblem } from "./state-file.js";
@@ -718,7 +719,8 @@ import { parseFlowsFile } from "./flows.js";
 import { totpCode } from "./totp.js";
 
 interface ScriptedScreen {
-  nodes: Array<[role: string, name: string]>;
+  /** A node's role and name, and the index in this list of the node it sits under (a text node beneath an alert, #5704). */
+  nodes: Array<[role: string, name: string, under?: number]>;
   /** The screen a click on the named control goes to. A control with no entry does nothing. */
   goes?: Record<string, string>;
   /** Where the page is, or a function of how many times it has been asked (a page that moves on its own, after a step's check). */
@@ -732,10 +734,10 @@ function scriptedSite(screens: Record<string, ScriptedScreen>, start: string) {
   let reads = 0;
   let asked = 0;
   const ids = new Map<number, string>();
-  const nodes = (): AxNode[] => screens[current].nodes.map(([role, name], index) => {
+  const nodes = (): AxNode[] => screens[current].nodes.map(([role, name, under], index) => {
     const backendId = index + 1;
     ids.set(backendId, name);
-    return { id: String(backendId), role, name, backendId, ignored: false };
+    return { id: String(backendId), role, name, backendId, ignored: false, ...(under === undefined ? {} : { parentId: String(under + 1) }) };
   });
   const driver: AuthDriver = {
     navigate: async (url) => { current = new URL(url).pathname === "/login" ? "login" : current; return { ok: true }; },
@@ -943,6 +945,59 @@ test("POSITIVE CONTROL: the authLoop mark carries the re-observations of the bra
   assert.equal("lastSeen" in identifier, false, "no reading is written where the screen was never seen again");
   assert.equal(code.screen, "one-time-code");
   assert.ok((code.reobserved as number) > 0, "polled after the action, so seen again");
+  assert.deepEqual(code.lastSeen, {
+    alerts: [{ role: "alert", name: "Something went wrong" }],
+    controls: [{ role: "alert", name: "Something went wrong" }, { role: "textbox", name: "Verification code" }, { role: "button", name: "Continue" }],
+  });
+});
+
+// An alert takes no name from its content: a rejected sign-in's words sit on the text beneath it (#5704). The loop reads the page through
+// `observeScreen` and the CLI through `screenOf`; both are pinned here, and against each other.
+const UNDER_ALERT: AxNode[] = [
+  { id: "1", role: "alert", name: "", ignored: false },
+  { id: "2", role: "StaticText", name: "Wrong email", parentId: "1", ignored: false },
+  { id: "3", role: "StaticText", name: "or password.", parentId: "1", ignored: false },
+  { id: "4", role: "textbox", name: "Email address", ignored: false },
+  { id: "5", role: "heading", name: "Log in", ignored: false },
+];
+const observed = (nodes: AxNode[]) => observeScreen({ axNodes: async () => nodes } as AuthDriver, { kind: "heading", name: "Dashboard" });
+
+test("POSITIVE CONTROL: an unnamed alert is read from the text beneath it, so the loop sees the words a rejected sign-in shows (#5704)", async () => {
+  const { controls } = await observed(UNDER_ALERT);
+  assert.deepEqual(controls, [{ role: "alert", name: "Wrong email or password." }, { role: "textbox", name: "Email address" }]);
+});
+
+test("NEGATIVE CONTROL: a named alert keeps its own name, text that is not beneath an alert is not made one, and an unnamed textbox is still dropped (#5704)", async () => {
+  const named: AxNode[] = [
+    { id: "1", role: "alert", name: "Session expired", ignored: false },
+    { id: "2", role: "StaticText", name: "Please try again", parentId: "1", ignored: false },
+    { id: "3", role: "StaticText", name: "Loose text", ignored: false },
+    { id: "4", role: "textbox", name: "", ignored: false },
+    { id: "5", role: "StaticText", name: "Typed value", parentId: "4", ignored: false },
+  ];
+  const { controls, headings } = await observed(named);
+  assert.deepEqual(controls, [{ role: "alert", name: "Session expired" }]);
+  assert.deepEqual(headings, []);
+});
+
+test("THE HELPERS, through both: the loop's observeScreen and the CLI's screenOf read the same controls and headings off an unnamed alert, and off no page", async () => {
+  for (const tree of [UNDER_ALERT, []]) {
+    const loop = await observed(tree);
+    const cli = screenOf(tree);
+    assert.deepEqual(loop.controls, cli.controls, "controls disagree");
+    assert.deepEqual(loop.headings, cli.headings, "headings disagree");
+  }
+});
+
+test("POSITIVE CONTROL: the authLoop mark carries an alert read from the text beneath it in lastSeen, and only its role and name (#5704)", async () => {
+  const stillThere = scriptedSite({
+    ...AUTH0_SITE,
+    mfa: { ...AUTH0_SITE.mfa, goes: { Continue: "mfa-again" } },
+    "mfa-again": { nodes: [["heading", "Verify your identity"], ["alert", ""], ["StaticText", "Something went wrong", 1], ["textbox", "Verification code"], ["button", "Continue"]] },
+  }, "login");
+  const run = await runCli({ site: stillThere, auto: AUTO, login: [{ goto: "/login" }, { auto: true }, expectDashboard] });
+  const loop = run.marks.find((m) => m.event === "authLoop");
+  const [, code] = loop?.detail.branches as Array<Record<string, unknown>>;
   assert.deepEqual(code.lastSeen, {
     alerts: [{ role: "alert", name: "Something went wrong" }],
     controls: [{ role: "alert", name: "Something went wrong" }, { role: "textbox", name: "Verification code" }, { role: "button", name: "Continue" }],
