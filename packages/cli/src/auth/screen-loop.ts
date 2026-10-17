@@ -309,7 +309,8 @@ export function unknownScreenStep(observation: ScreenObservation): string {
 
 export interface Branch {
   readonly screen: Screen;
-  readonly kind: Action["kind"];
+  /** `observed`: the screen the loop acted on, seen again with what it shows changed (#5683). It is recorded, never acted on. */
+  readonly kind: Action["kind"] | "observed";
   readonly note?: string;
   readonly outcome?: LoginOutcome;
   /** What the screen showed when the branch was taken (#5674): the trail writes these beside it, role and name only. */
@@ -344,6 +345,8 @@ export const UNKNOWN_SETTLE_OBSERVATIONS = 3;
 interface LoopState {
   readonly branches: Branch[];
   lastActed: Screen | undefined;
+  /** The reading (`readingOf`) last written to `branches`: a re-observed screen is written again only when it has moved from this. */
+  lastRecorded: string;
   /** The last page that matched nothing or more than one screen, for the budget's ending. */
   unmatched: ScreenObservation | undefined;
   unmatchedKey: string;
@@ -374,6 +377,15 @@ function shownBy(o: ScreenObservation): Pick<Branch, "alerts" | "controls"> {
   return { alerts: o.controls.filter((c) => c.role === "alert"), controls: o.controls };
 }
 
+/**
+ * What a screen shows, as the trail would write it: the role and name of its alerts and controls. A value is not part of
+ * it, so a field that has been typed into reads the same as one that has not.
+ */
+const readingOf = (o: ScreenObservation): string => {
+  const { alerts, controls } = shownBy(o);
+  return JSON.stringify([alerts, controls].map((nodes) => nodes.map(({ role, name }) => [role, name])));
+};
+
 async function actOn(screen: Screen, o: ScreenObservation, options: LoopOptions, state: LoopState): Promise<LoopResult | undefined> {
   const action = nextAction(screen, options.config, o);
   const shown = shownBy(o);
@@ -383,8 +395,22 @@ async function actOn(screen: Screen, o: ScreenObservation, options: LoopOptions,
   }
   const note = "note" in action ? action.note : undefined;
   state.branches.push(note ? { screen, kind: action.kind, note, ...shown } : { screen, kind: action.kind, ...shown });
+  state.lastRecorded = readingOf(o);
   await options.act(action);
   state.lastActed = screen;
+  return undefined;
+}
+
+/**
+ * The screen just acted on is not acted on again, but a rejection lands there: a wrong code leaves the one-time-code form on
+ * the page with an alert beside it (#5683). What it shows is written once per change, so the trail holds the page as it came
+ * back and a poll that sees the same page again adds nothing.
+ */
+function recordReshown(screen: Screen, o: ScreenObservation, state: LoopState): undefined {
+  const reading = readingOf(o);
+  if (reading === state.lastRecorded) return undefined;
+  state.lastRecorded = reading;
+  state.branches.push({ screen, kind: "observed", ...shownBy(o) });
   return undefined;
 }
 
@@ -394,7 +420,7 @@ async function step(o: ScreenObservation, options: LoopOptions, state: LoopState
   state.unmatched = undefined;
   state.unmatchedStreak = 0;
   state.unmatchedKey = "";
-  if (screen === state.lastActed) return undefined;
+  if (screen === state.lastActed) return recordReshown(screen, o, state);
   if (screen === "landing" && landingAlreadyPressed(state)) return undefined;
   return actOn(screen, o, options, state);
 }
@@ -421,7 +447,14 @@ function budgetEnd(state: LoopState): LoopResult {
  */
 export async function runLoop(options: LoopOptions): Promise<LoopResult> {
   const started = options.now();
-  const state: LoopState = { branches: [], lastActed: undefined, unmatched: undefined, unmatchedKey: "", unmatchedStreak: 0 };
+  const state: LoopState = {
+    branches: [],
+    lastActed: undefined,
+    lastRecorded: "",
+    unmatched: undefined,
+    unmatchedKey: "",
+    unmatchedStreak: 0,
+  };
   const withinBudget = (): boolean => options.now() - started < options.budgetMillis;
   while (withinBudget()) {
     const observation = await options.observe();
