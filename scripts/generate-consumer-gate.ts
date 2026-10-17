@@ -203,13 +203,26 @@ export function pinActionRef(yamlText: string, sha: string): string {
 export const PIN_COMMENT = "the commit this file was regenerated at, not a release tag (node scripts/generate-consumer-gate.ts)";
 
 /**
- * Replaces the trailing comment on the Action's `uses:` line with `PIN_COMMENT`; a line with no comment gains none.
+ * README's sentence under the pin, "Pinned to the full 40-character commit of release x.y.z,": the same claim as the trailing comment, and
+ * false of this file's pin for the same reason (#5686). It named a release this file's sha is not, in every regeneration since #4153 fixed
+ * only the line above it.
+ *
+ * Restated rather than dropped: the release is what changes in this sentence when `docs-pin-write.yml` re-pins README, and the sha is masked
+ * by `consumerGateIsStale`, so it is the writer's only signal that the committed gate is stale (#5468, `docs-pin-write.test.ts`). It now
+ * says whose release it is.
+ */
+const PIN_SENTENCE = /(Pinned to the full 40-character commit) of (release \d+\.\d+\.\d+(?:-[\w.]+)?),/;
+
+/**
+ * Replaces the trailing comment on the Action's `uses:` line with `PIN_COMMENT`, and the sentence under it with one that says whose release it names; a line with no comment gains none.
  *
  * @param {string} yamlText
  * @returns {string}
  */
 export function restatePinComment(yamlText: string): string {
-  return yamlText.replace(new RegExp(`(${ACTION_USES}@[^\\s]+[ \\t]+)#[^\n]*`, "i"), (_whole, head) => `${head}# ${PIN_COMMENT}`);
+  return yamlText
+    .replace(new RegExp(`(${ACTION_USES}@[^\\s]+[ \\t]+)#[^\n]*`, "i"), (_whole, head) => `${head}# ${PIN_COMMENT}`)
+    .replace(PIN_SENTENCE, "$1 this file was regenerated at (README's is the commit of $2),");
 }
 
 /**
