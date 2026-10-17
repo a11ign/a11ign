@@ -156,14 +156,16 @@ test("generate: the real README's pin line carries PIN_COMMENT, not README's rel
   assert.ok(!workflow.includes("release tagged"));
 });
 
-test("restatePinComment: the sentence under the pin names no release, whichever one README's pin is (#5686)", () => {
+test("restatePinComment: the sentence under the pin says the release is README's, not this file's, and still names it (#5686, #5468)", () => {
   for (const release of ["0.3.0", "0.10.13", "1.0.0-rc.1"]) {
     const readme = FENCE.replace("      - uses: a11ign/a11ign@v0.1.0", `      - uses: a11ign/a11ign@v0.1.0\n        # Pinned to the full 40-character commit of release ${release}, so your CI does not move`);
     const restated = restatePinComment(pinActionRef(readme, SHA));
-    assert.ok(restated.includes("# Pinned to the full 40-character commit this file was regenerated at, so your CI does not move"), restated);
-    assert.ok(!restated.includes(release), `release ${release} is README's pin, which this file's is not`);
+    assert.ok(restated.includes(`# Pinned to the full 40-character commit this file was regenerated at (README's is the commit of release ${release}), so your CI does not move`), restated);
+    assert.ok(!restated.includes(`40-character commit of release ${release}`), `the file's own pin is not release ${release}`);
   }
-  assert.ok(!(generate(readFileSync(README_PATH, "utf8"), SHA) as string).includes("commit of release"), "the real README's sentence, regenerated");
+  const real: string = generate(readFileSync(README_PATH, "utf8"), SHA);
+  assert.ok(!real.includes("40-character commit of release"), "the real README's sentence, regenerated");
+  assert.match(real, /\(README's is the commit of release \d+\.\d+\.\d+\)/, "the positive control: the sentence was found and restated, and still names the release the writer reads");
 });
 
 test("extractPinnedSha: reads back what pinActionRef baked, and refuses a block that was never pinned", () => {
