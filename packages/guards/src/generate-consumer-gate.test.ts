@@ -156,6 +156,16 @@ test("generate: the real README's pin line carries PIN_COMMENT, not README's rel
   assert.ok(!workflow.includes("release tagged"));
 });
 
+test("restatePinComment: the sentence under the pin names no release, whichever one README's pin is (#5686)", () => {
+  for (const release of ["0.3.0", "0.10.13", "1.0.0-rc.1"]) {
+    const readme = FENCE.replace("      - uses: a11ign/a11ign@v0.1.0", `      - uses: a11ign/a11ign@v0.1.0\n        # Pinned to the full 40-character commit of release ${release}, so your CI does not move`);
+    const restated = restatePinComment(pinActionRef(readme, SHA));
+    assert.ok(restated.includes("# Pinned to the full 40-character commit this file was regenerated at, so your CI does not move"), restated);
+    assert.ok(!restated.includes(release), `release ${release} is README's pin, which this file's is not`);
+  }
+  assert.ok(!(generate(readFileSync(README_PATH, "utf8"), SHA) as string).includes("commit of release"), "the real README's sentence, regenerated");
+});
+
 test("extractPinnedSha: reads back what pinActionRef baked, and refuses a block that was never pinned", () => {
   assert.equal(extractPinnedSha(pinActionRef(FENCE, SHA)), SHA);
   assert.equal(extractPinnedSha(pinActionRef(FENCE.replace("a11ign/a11ign", PRE_TRANSFER), OTHER_SHA)), OTHER_SHA);
