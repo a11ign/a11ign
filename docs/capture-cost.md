@@ -299,13 +299,58 @@ Two targets, from ceo's proposal on #5654, set against the runner reading above 
 
 **This is a target, not a second-run reading.** Both targets are set against this one run, n=1 per command, and no measurement in this section meets them. Whether a lever reaches 150 s or 220 s is decided by the recapture its row names, not by the arithmetic above.
 
-**The levers.** Each lever the arithmetic depends on is a filed row in [a11ign/agent-org](https://github.com/a11ign/agent-org/issues), with its own Region and recapture plan. A lever's `### Lever` heading is added by its recapture when the reading exists, so none is here yet.
+**The levers.** Each lever the arithmetic depends on is a filed row in [a11ign/agent-org](https://github.com/a11ign/agent-org/issues), with its own Region and recapture plan. A lever's `### Lever` heading is added by its recapture when the reading exists: [Lever A](#lever-a) is read below, B and C have none yet.
 
 | lever | what it is | row | what its recapture reads |
 |---|---|---|---|
 | A | the `probe-forms` sweep's cost: `formField`, 122.8 s of the 327.9 s run (`ACTIVATION_SHARE_OF_REMAINING`, the per-round-trip cost) | [agent-org#1643](https://github.com/a11ign/agent-org/issues/1643) | the same page with and without the cut, on two `windows-2022` runs |
 | B | `MAX_SWEEP_STEPS` (250). It does not bind on either target command; it bounds the fleet ceiling on pages like ikea (`formField` ended on `cap` in 7 of 8 captures) | [agent-org#1644](https://github.com/a11ign/agent-org/issues/1644) | the ikea command with the cap changed, and the runner `survey.html` re-read once to show it is unchanged |
 | C | the fixed probes: `FOCUS_CONTEXT_STOPS` and `FOCUS_REVEAL_STOPS` (8 each), `FOCUS_PROBE_BUDGET_MS` (120 s, the Tab walk), and the route-change probe behind `probe-navigation` | [agent-org#1645](https://github.com/a11ign/agent-org/issues/1645) | the verdicts of 2.1.2, 2.4.1, 2.4.2, 3.2.1 and 1.4.13 before and after each change |
+
+### Lever A
+
+Measured 2026-10-17 for [agent-org#1679](https://github.com/a11ign/agent-org/issues/1679), the recapture of [agent-org#1643](https://github.com/a11ign/agent-org/issues/1643), **read from the capture records of two `action-smoke` runs** (`workflow_dispatch`, job `consumer`, `windows-2022`, both started 01:43Z and both `success`). The records are each run's `action-smoke-capture` artifact (`gh run download <id> -n action-smoke-capture`).
+
+**The two sides differ in one thing, the worker pin.** Both branches are the CLI at `265a1484c` (main); `@a11ign/screenreader-worker` is installed from the registry by the Action's `pnpm install --frozen-lockfile`, so "with and without the cut" is `0.13.8` against `0.13.7` (0.13.8 is 0.13.7 plus worker PR #71 alone: `ACTIVATION_SHARE_OF_REMAINING` 0.5 to 0.25, read in the published tarballs). The branches are not for merge.
+
+| | uncut: worker `0.13.7` (share 0.5) | cut: worker `0.13.8` (share 0.25) |
+|---|---|---|
+| run id | [`38992044416`](https://github.com/a11ign/a11ign/actions/runs/38992044416), branch `agent/lever-a-recapture-uncut-agent-org-1679` | [`38992042444`](https://github.com/a11ign/a11ign/actions/runs/38992042444), branch `agent/lever-a-recapture-cut-agent-org-1679` |
+| workerCode (the record's) | `024afcf76564f73b` | `4a6e56678e0b7e87` |
+
+Run 1 is `survey.html` with `probe-forms: "true"`, the command the 220 s target is set on. Protocol 24 and 89 announcements on both sides.
+
+| run 1, `survey.html`, `probe-forms: "true"` | uncut | cut | difference |
+|---|---:|---:|---:|
+| **capture time (last `atMs`)** | **326.6 s** | **312.6 s** | **-14.0 s** (4.3%) |
+| `sweep formField` | 122.6 s | 107.4 s | -15.2 s |
+| its next-direction pass | 117.7 s over 61 trips (1.93 s a trip) | 102.5 s over 61 trips (1.68 s a trip) | -15.2 s, same trip count |
+| everything outside `formField` | 204.0 s | 205.2 s | +1.2 s |
+| `activationBudget`: budget, spent | 189.3 s, 98.2 s | 94.5 s, 84.8 s | |
+| `activationBudget`: fields, allowed, **left unactivated (`skipped`)** | 18, 18, **0** | 18, 16, **2** | |
+| `activationBudget.exhausted` | no | yes | |
+| fields the form probe activated | 11 | 10 | -1 |
+
+**Fields left unactivated on `survey.html`: 0 in the uncut run and 2 in the cut run** (of 18 form fields; `activationBudget.skipped`). In run 3 (`survey.html`, the Action's default, no `probe-forms`) both sides read `skipped` 0 of 15.
+
+**Is 220 s reached? No.** The cut run's 312.6 s is 92.6 s above 220 s. The uncut run (326.6 s, `formField` 122.6 s, budget spent 98.2 s) reads within 1.3 s of the earlier run 1 (327.9 s, 122.8 s, 98.2 s), so the baseline held two days after the first reading (run `38797684887`, 2026-10-15).
+
+**Two runs of n=1 are one reading,** not two measurements of a mean: each side is one capture, run once, concurrently on separate runners. The 14.0 s is a difference between two single readings, with no spread behind it; the only measure of run-to-run spread here is the two records that the cut does not touch (below), which differ by 0.8 s and 1.6 s. Run 1 is also the first capture of its job on both sides, so the order is the same on both and cancels in the difference but not in the absolute figure.
+
+**Reading it.**
+
+- **The cut took 14.0 s, and it bit.** The uncut run spent 98.2 s of a 189.3 s budget; a share of 0.25 allows 94.5 s, just under that, so the cut run ended `exhausted` with two fields never activated and one fewer activation made (10, not 11). The budget is therefore not where 92.6 s more can come from: the uncut run spent only 98.2 s on activations in all, and the share was not tried below 0.25.
+- **The trip count did not move (61 on both sides); the cost of a trip did (1.93 s to 1.68 s).** The record does not say where a trip's time goes, so the next cut cannot be sized from it. The next cut is [agent-org#1685](https://github.com/a11ign/agent-org/issues/1685): the sweep round trip, 61 trips at 1.7-1.9 s, starting with a split of the trip into `perform`, `spokenPhraseLog` and the quiet waits (the silence waits stay: they decide what silence means for 4.1.2 and 4.1.3).
+- **The ceiling on the trip cost is stated there.** With the trip count unchanged, 220 s needs `formField` at about 14.8 s or less, the figure the default run reads without the input; the whole next-direction pass is 102.5 s, so a trip would have to fall from 1.68 s to about 0.2 s. A cut of the per-trip cost alone is unlikely to do that. If the split shows it cannot, the target for `probe-forms` is the thing to move, and that is `ceo`'s (proposed on #5654), not a lever's.
+- **The default and the other page are not touched by the cut,** as they should not be: run 3 (`survey.html`, default) reads 203.2 s cut against 201.6 s uncut, and run 2 (`home.html`) 171.9 s against 172.7 s. Those differences (1.6 s and 0.8 s) are the nearest thing to spread this reading has.
+
+| the records the cut should not move | uncut | cut |
+|---|---:|---:|
+| run 2, `home.html`, default: capture | 172.7 s | 171.9 s |
+| run 3, `survey.html`, default: capture | 201.6 s | 203.2 s |
+| run 3: `sweep formField` | 14.2 s | 14.4 s |
+
+The `formField` figures are the span from the `pageState` mark `beforeProbe: sweep:formField` to the `sweep` entry for `formField` (equal to that entry's `prevMs` plus `nextMs` to 0.1 s); the split is a throwaway script, not a repository file.
 
 ## What this does not show
 
