@@ -6,7 +6,11 @@
 // loop that works from one that acts on everything.
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
+import { AUTH_TRAIL_ENV, authTrailMark } from "./auth-trail.js";
 import {
   classifyScreen,
   nextAction,
@@ -207,6 +211,48 @@ describe("runLoop: what a branch records of its screen (#5674)", () => {
     assert.equal(stop?.kind, "stop");
     assert.deepEqual(stop?.alerts, [{ role: "alert", name: "Your account has been blocked." }]);
     assert.deepEqual(stop?.controls, BLOCKED.controls);
+  });
+});
+
+describe("runLoop: a re-observed last-acted screen whose alerts change (#5683)", () => {
+  const WRONG_CODE: ScreenControl = { role: "alert", name: "Something went wrong" };
+  const REJECTED_CODE = screen(OTP.headings, [...OTP.controls, WRONG_CODE]);
+
+  test("records the alert the last-acted screen shows after the action, once per distinct reading", async () => {
+    const r = rig();
+    const result = await r.run([OTP, REJECTED_CODE]);
+    assert.deepEqual(result.branches.map((b) => [b.screen, b.kind]), [
+      ["one-time-code", "type"],
+      ["one-time-code", "observed"],
+    ]);
+    assert.deepEqual(result.branches.at(-1)?.alerts, [WRONG_CODE]);
+    assert.equal(r.acted.length, 1, "the code is typed once, never again");
+    assert.equal(result.outcome, "signed-in-check-never-matched");
+  });
+
+  test("the trail written for that loop carries the alert's role and name and no value", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "screen-loop-trail-"));
+    try {
+      const file = join(dir, "trail.json");
+      const result = await rig().run([OTP, REJECTED_CODE]);
+      authTrailMark({ [AUTH_TRAIL_ENV]: file })("authLoop", { phase: "login", index: 1, outcome: result.outcome, branches: result.branches });
+      const written = JSON.parse(readFileSync(file, "utf8")) as { loops: { branches: unknown[] }[] };
+      assert.deepEqual(written.loops[0].branches.at(-1), {
+        screen: "one-time-code",
+        kind: "observed",
+        alerts: [{ role: "alert", name: "Something went wrong" }],
+        controls: REJECTED_CODE.controls.map(({ role, name }) => ({ role, name })),
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("NEGATIVE CONTROL: a last-acted screen that comes back unchanged adds no record, however often it is polled", async () => {
+    const r = rig();
+    const result = await r.run([OTP], { budgetMillis: 5_000 });
+    assert.equal(result.branches.length, 1, "no record for a reading already recorded");
+    assert.equal(r.acted.length, 1);
   });
 });
 
