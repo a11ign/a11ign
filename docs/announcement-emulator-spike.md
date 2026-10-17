@@ -1,7 +1,7 @@
 # Announcement-emulator spike (row #5661)
 
-**Status: in progress. Q1 answered (yes, with gaps). Q2 stage 1 passed (NVDA's own Python imports and speaks on Linux); stage 2 not
-started. Q3 not run.** This page is the spike's deliverable ([ADR 0047](./adr/0047-an-nvda-faithful-announcement-emulator-is-a-separate-repository-and-its-predictions-are-advisory.md), Decision 7). The spike's code
+**Status: in progress. Q1 answered (yes, with gaps). Q2 stage 1 passed (NVDA's own Python imports and speaks on Linux); Q2 stage 2 is
+running: a first slice of 4 system tests, 13 exact-speech assertions, 10 exact matches (see Q2; this is not the gate number). Q3 not run.** This page is the spike's deliverable ([ADR 0047](./adr/0047-an-nvda-faithful-announcement-emulator-is-a-separate-repository-and-its-predictions-are-advisory.md), Decision 7). The spike's code
 lives **outside any a11ign repository**, on the host that ran it at `~/spikes/announcement-emulator-5661`; nothing here is a prediction
 and nothing was written to an evidence field.
 
@@ -51,8 +51,12 @@ checked*. A reading is a moment.
   IA2 object attributes NVDA reads from ARIA, such as `xml-roles`, must be rebuilt from `role` plus the typed fields),
   `textAlign`/`textDirection`/`textPosition`/`textStyle`/`listStyle`, `keyShortcuts`, `ariaAtomic` as such (`liveAtomic` exists), `readOnly`
   as such (`restriction` exists). **There is no `hypertext` string**: layer 2 has to build it from `children`, `name` and `value`.
-- **Not yet tested**: that these fields are *sufficient* for layers 2 and 3. Q1 so far shows what the API offers, not that the mapping built
-  on it reproduces `ax_platform_node_win.cc` (the 507-test check). That is the next step before Q3.
+- **Sufficiency for layers 2 and 3, first reading** (*measured* in Q2 stage 2, slice 1): for the roles, states, names, descriptions,
+  levels, links and landmarks in the 7 matching assertions the fields were enough. Three things the slice found: node identity is not
+  exposed (`node.id` is undefined), so label and described-by relations had to be resolved by object identity within one walk (the
+  extractor now numbers nodes and emits `labelledByIx`, `labelForIx`); there is no author `role` string, so the IA2 `xml-roles` attribute
+  cannot be read (reconstructed for article, figure, region, switch and the landmarks; the slice needed it once, see below); and the platform tree differs from what Chrome gives NVDA on Windows where the
+  browser consults the OS (the image-description prompt above). The 507-test check against `ax_platform_node_win.cc` has **not** been run.
 
 ## Q2. Does NVDA's own Python, at the fleet's release, run on Linux with stubs?
 
@@ -97,8 +101,50 @@ the speech code **executes**; they are not a comparison against anything, and `h
   `VBufRemote_bufferHandle_t`. `gecko_ia2.py` itself calls none of them: everything NVDA does with a buffer goes through that one module
   object, so **stage 2 is a Python stand-in for `NVDAHelper.localLib` that builds its buffer from the Q1 tree**, and the XML parsing,
   field handling and speech above it stay NVDA's.
-- **Stage 2 (not started):** that stand-in (layers 2 and 3), then those tests' pages driven through it, with the pass count and each
-  failed exact-speech assertion pasted here.
+- **The seam is wider than the 13 above** (*measured* while building stage 2). Running a key press through NVDA's real browse-mode scripts
+  also reaches `localLib.calculateWordOffsets` and `calculateCharacterOffsets` (`textInfos/offsets.py`), so the native surface is **15
+  functions**, and two of the pieces the first count treated as stubs are not inert: `IAccessibleHandler`'s role and state tables
+  (`_normalizeControlField` calls them, so the stand-in has to feed NVDA the real `oleacc`/`IAccessible2` constants and let that module
+  import), and the speech synth (`getSynth().name` is read by spelling speech). Three build artefacts are absent from the source tree
+  and had to be supplied: the generated `comInterfaces`, `locale/en/cldr.dic` (an **empty** file in the spike's overlay `appDir`, so
+  emoji and CLDR symbol names are not covered), and the test run's NVDA settings.
+- **Stage 2, slice 1 (*measured*, 2026-10-17).** Layers 2 and 3 are a Python stand-in, `emu/standin.py` on the spike host (about 745 lines):
+  layer 2 maps a `chrome.automation` node to what Chromium's `AXPlatformNodeWin` gives NVDA, with the role tables **generated** from
+  Chromium 155.0.8059.84 `ax_platform_node_win.cc` (205 MSAA roles, 83 IA2 overrides) and the IA2 constants from `ia2_api_all.idl`;
+  layer 3 is a port of `gecko_ia2.cpp` `fillVBuf` and `storage.cpp` (markup, offsets, line offsets, `findNodeByAttributes`). Above the
+  seam it is NVDA's own `virtualBuffers`, `textInfos`, `cursorManager`, `browseMode` and `speech` code, unmodified (*measured*:
+  `git status` over the NVDA checkout is clean after the run). The pages, keys and expected strings are **taken from
+  `tests/system/robot/chromeTests.py` by AST** (not retyped), the page wrapper is `ChromeLib._writeTestFile`, the speech is captured as
+  `speechSpyGlobalPlugin` does (each sequence joined, stripped, sequences joined by newline), and NVDA runs under the tests' own
+  `standard-dontShowWelcomeDialog.ini`.
+
+  | test | assertions | exact | what a miss is |
+  |---|---|---|---|
+  | `test_ariaRoleDescription_block_browseMode` | 3 | 3 | |
+  | `test_ariaDescription_browseMode` | 4 | 4 | |
+  | `test_quickNavTargetReporting` | 3 | 3 | |
+  | `test_ariaRoleDescription_inline_browseMode` | 3 | 0 | the expected line contains Chrome's image-description prompt ("To get missing image descriptions, open the context menu."); the Linux headless tree carries `aria-roledescription` and no prompt. This is the **browser's output differing** (it depends on Chrome's screen-reader detection and an image-label preference, cause not yet isolated), not the emulator; the next two assertions (word movement) start from that line |
+  | **total** | **13** | **10** | |
+
+  **The 10 of 13 is a fit, not a prediction, and it is not the gate.** The first run was 4 of 7 (before the fourth test was wired). Three
+  fixes were made **after reading the expected strings**: the harness (the tests run with `unicodeNormalization = DISABLED` and
+  `reportLinkType = False`, which I had not loaded; the extractor now also replays the tests' `set_configValue` calls), a missing
+  layer-2 attribute (`description-from`, so NVDA did not speak aria-descriptions), and `xml-roles`. **`xml-roles` is reconstructed, not
+  read**: it is Chromium's `kRole` string, `chrome.automation` does not expose it, and NVDA reads it to tell an article, figure, region,
+  switch or landmark from a plain document or group (`gecko_ia2.py:180-200`). The stand-in fills it from the automation role for those
+  roles, which over-reports where Chromium sets no `kRole` for a native element; that is an inference, not a reading, and the one
+  assertion that needed it (`article  A bunch of text.`) now passes on it. Four tests is 4 of 43; the gate is exact agreement on real
+  pages' top 10 shapes against fleet transcripts, which is Q3 and is not started.
+- **What the 43 tests need** (*measured*, `classify.py` over the AST; 160 `strings_match`, 31 `speech_matches` and 2 `speech_contains` =
+  **193 speech assertions**, as in Q2 above). A test can need several things, so these counts overlap: **16 tests (77 steps) press `tab`,
+  `NVDA+space` or `enter`, which need layer 5 and an NVDAObject for the focused element**, the largest piece not yet started; 6 need
+  table navigation, 4 say-all, 2 the review cursor, 4 assert braille, and 18 have a page or expectation the extractor cannot evaluate
+  yet (the five `reportLanguage*` tests also depend on Windows locale names from `languageHandler.getLanguageDescription`, an OS
+  dependency). Only 4 tests (13 steps) need nothing but buffer keys and quick navigation, which the stand-in now runs (all four are in the
+  table above). `tab` alone is 29 of the 145 key actions.
+- **A new OS dependency the ADR does not list:** word movement uses Uniscribe's `ScriptBreak` (`nvdaHelper/local/textUtils.cpp`). The
+  control flow of `_calculateUniscribeOffsets` is ported; the break attributes are an approximation of Unicode word stops. Any
+  word-unit result is therefore Windows-OS-dependent when it differs.
 
 ## Q3. How closely does it agree with fleet transcripts on the real-page corpus?
 
@@ -117,3 +163,7 @@ write-up. Nothing beyond the spike is built before the gate passes.
   and writes what the extension heard. The negative control is `run.mjs noallow`. Chrome needs libraries the host lacks (`libatk`,
   `libasound`, `libXdamage`, `libavahi`, ...), unpacked without root under `libs/root` and put on `LD_LIBRARY_PATH`.
 - Q2: `~/spikes/announcement-emulator-5661/q2/run-import.sh <modules and script>` (the stub list is in the script).
+- Q2 stage 2: `cd ~/spikes/announcement-emulator-5661/emu && ../q2/venv/bin/python run_cases.py` captures each in-scope test's page in
+  Chrome 155 (`capture.py`, cached under `emu/captures/`), builds the buffer (`standin.py`), presses the test's keys through NVDA's own
+  scripts (`driver.py`) and prints each exact-string comparison; `classify.py` prints the table of what the other tests need;
+  `gen_tables.py` regenerates the role tables from the Chromium and NVDA sources. The code is outside every a11ign repository.
