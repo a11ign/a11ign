@@ -152,15 +152,15 @@ the speech code **executes**; they are not a comparison against anything, and `h
   | `test_mark_aria_details_role` | 3 / 4 | the `has details` words of a rich editable's focus announcement are missing (emulator incomplete) |
   | `test_i7562` | 5 / 5 | |
   | `test_ariaRoleDescription_inline_contentEditable` | 2 / 5 | the image prompt (three) |
-  | `announce_list_item_when_moving_by_word_or_character` | 8 / 10 | **Ctrl+Right** from the start of \"small cat\" lands at the end of \"small\" in Linux Chrome (NVDA reads \"small\", expected \"cat\"), and the next Right follows from it; a Windows-only editing behaviour of the browser is the likely cause (Windows skips the space and stops at the next word's start), **not verified in Chromium's source** |
+  | `announce_list_item_when_moving_by_word_or_character` | 8 / 10 | **Ctrl+Right** from the start of \"small cat\" lands at the end of \"small\" in Linux Chrome (NVDA reads \"small\", expected \"cat\"), and the next Right follows from it; cause **read in Chromium's source** (2026-10-17): `EditingBehavior::ShouldSkipSpaceWhenMovingRight()` is true only for `kEditingWindowsBehavior`; the header's own comment says Ctrl+Right moves to "abc |def" on Windows and to "abc| def" on Mac and Linux (`third_party/blink/renderer/core/editing/editing_behavior.h`, main). The second miss is the same move: the caret sits one word earlier, so the next Right reads "c" not "a" |
   | `test_pr11606` | 4 / 5 | `NVDA+upArrow` speaks \"list\" before the bullet line where the expectation does not (emulator incomplete; not isolated) |
   | `test_ariaRoleDescription_inline_browseMode` | 0 / 3 | the image prompt |
   | **total, 28 tests** | **97 / 107** | |
 
-  **The 10 misses are of three kinds, and only one is a candidate for a Windows-only behaviour.** (a) **6 are the browser's output differing**:
+  **The 10 misses are of three kinds, and one is a Windows-only behaviour of Chromium, read in its source.** (a) **6 are the browser's output differing**:
   the expected line carries Chrome's image-description prompt ("To get missing image descriptions, open the context menu."), which the
   headless Linux tree does not (its cause, probably Chrome's screen-reader detection and an image-label preference, is not isolated).
-  (b) **2 are a possible Windows-only editing behaviour** (word movement with Ctrl+Right, above; unverified). (c) **2 are the emulator being
+  (b) **2 are a Windows-only editing behaviour of Chromium** (Ctrl+Right skips the space on Windows only; one cause, above; source read, but the Windows result itself is not reproduced here, since there is no Windows Chrome in this spike). (c) **2 are the emulator being
   incomplete** (`test_mark_aria_details_role`, `test_pr11606`). The earlier reading of 89 counted focus-mode arrow keys as moves of the
   browse-mode buffer, which is not what NVDA does: they passed `test_ariaDescription_focusMode` by that wrong route, and the real route
   (page caret, NVDA's `EditableText`) needed the line-composition fix above before it agreed again.
