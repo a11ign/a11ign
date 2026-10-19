@@ -18,7 +18,8 @@
     { "key": "control", "repo": "a11ign/control" },
     { "key": "lab", "repo": "a11ign/lab" },
     { "key": "toolchain", "repo": "a11ign/toolchain" },
-    { "key": "github", "repo": "a11ign/.github" }
+    { "key": "github", "repo": "a11ign/.github" },
+    { "key": "plugin", "repo": "a11ign/plugin" }
   ],
   "_dora": "The seven repositories the daily DORA reading measures (ADR 0041, decision 7; #3138) and `toolchain` (#3719, ADR 0043), read by `src/dora.mjs` of a11ign/agent-org. Each is listed from the day it exists, EVEN WHEN EMPTY, so the page shows it as unfinished until it has released. `release.kind` is `npm` (the registry's publish time is the release) or `tag` (a GitHub Release is). The reader takes ONE `package` per npm repository, so a11ign names `a11ign`, the command, which releases with the three libraries `evidence`, `judge` and `scorer` in one version pull request; `releasablePaths` are the directories whose change counts as releasable. WHEN A PACKAGE MOVES, ITS MOVE ROW UPDATES ITS ENTRY HERE (packages/guards/src/dora-declaration.test.ts reads each against its manifest). EVERY `code` repository has an entry here or a reason it has none (dora-declaration.test.ts, #3719).",
   "dora": [
