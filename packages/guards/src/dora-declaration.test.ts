@@ -87,8 +87,8 @@ const BEYOND_THE_ADR: AdrRepository[] = [{ repo: TOOLCHAIN, kind: "npm", source:
  */
 const NO_DORA_READING: Record<string, string> = {
   "a11ign/.github": "it releases nothing: it holds the org-wide community-health files and the Octo STS trust policies, which take effect on merge and are never published as a package, tag or Release (#4190)",
-};
   "a11ign/plugin": "it is a private plugin repository, copied from nbl-ui and never published: nothing in it is released as a package, tag or Release, so there is no release to measure (A11-126)",
+};
 
 /** The rows of ADR 0041's "The seven repositories" table: the repository and how its "release mechanism" cell publishes. */
 function adrRepositories(adr: string): AdrRepository[] {
