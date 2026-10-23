@@ -14,5 +14,5 @@ grep -qE "^\| 1 \| \*\*Tree source\*\* \|.*chrome\.automation\.getDesktop\(\)" "
 [ "$(grep -cF "$url" "$f")" -ge 2 ]
 [ "$(grep -cF "51 tests" "$f")" -eq 1 ]
 [ "$(git diff --name-only origin/main...HEAD | grep -vE "^\.(acceptance|changeset)/")" = "$f" ]
-! git diff -U0 origin/main...HEAD -- "$f" | grep -E "^-" | grep -v "^---" | grep -vE "^-\| 1 \| \*\*Tree source\*\* \||^-  \(`tests/system/robot/chromeTests\.py`"
+! git diff -U0 origin/main...HEAD -- "$f" | grep -E "^-" | grep -v "^---" | grep -vE "^-\| 1 \| \*\*Tree source\*\* \||^-  \(.tests/system/robot/chromeTests\.py"
 echo PASS'
