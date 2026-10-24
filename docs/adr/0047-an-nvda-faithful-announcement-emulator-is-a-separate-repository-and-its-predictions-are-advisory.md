@@ -60,7 +60,7 @@ with an agreement rate against the fleet that is measured and published.** Seven
 | # | Layer | What it is |
 |---|---|---|
 | 0 | **Driver** | Edge at the fleet's pinned version, so the oracle and the emulator see the same engine (the Chrome preset has never taken a capture, quoted). Launched with `--force-renderer-accessibility`, since Blink otherwise leaves out content a screen reader would get. Windows user agent, 1024x768 window, keys sent over CDP. |
-| 1 | **Tree source** | `chrome.automation` through a companion extension allowlisted with `--allowlisted-extension-id`: nearly the full internal tree, plus events. CDP `getFullAXTree` is a **fallback only**; it lacks table indices, set position and size, hypertext, text attributes, `lang` and `display` (quoted). |
+| 1 | **Tree source** | `chrome.automation` through a companion extension allowlisted with `--allowlisted-extension-id`, read with `chrome.automation.getDesktop()`: nearly the full internal tree, plus events. CDP `getFullAXTree` is a **fallback only**; it lacks table indices, set position and size, hypertext, text attributes, `lang` and `display` (quoted). *Corrected 2026-10-23 (A11-177):* the call is `getDesktop()`, under which the page's tree hangs; `getTree()` is not in the API of Chrome for Testing 155, the fleet Edge's milestone (*measured* in the [spike's write-up](https://github.com/a11ign/announcement-emulator/blob/40b2d3bb19b7a39546001272bd003de3d655f528/docs/announcement-emulator-spike.md), Q1). |
 | 2 | **Windows mapping** | The subset of Chromium's `ax_platform_node_win.cc` and `ax_platform_node_base.cc` that NVDA reads: IA2 role, states, object attributes, hypertext. Checked against the **507** Chromium accessibility tests that carry both `-expected-blink.txt` and `-expected-win.txt` (quoted). |
 | 3 | **Buffer builder** | The line logic of NVDA's `gecko_ia2.cpp` `fillVBuf` and `vbufBase/storage.cpp`, emitting the marked-up text `VBuf_getTextInRange(useMarkup=True)` returns. **That text is the seam.** |
 | 4 | **NVDA's own code, above the seam** | NVDA's Python, **unmodified**, at the fleet's NVDA release, with its Windows modules stubbed: `browseMode`, `speech`, `virtualBuffers`, `controlTypes`, `characterProcessing` with its symbol and CLDR data, `speechDictHandler` with `builtin.dic`, `configSpec`. **It is not translated:** NVDA ships three or four releases a year and a translation drifts, so a new release is a version bump followed by a re-measure. |
@@ -122,7 +122,9 @@ A spike of **2 to 3 weeks, after #2568** (quoted), asking:
 - **Q1.** Can a browser we launch on Linux give the full tree through `chrome.automation`? Does the allowlist switch work in the build used?
   Do the fields cover what layers 2 and 3 need?
 - **Q2.** Does NVDA's own Python, at the fleet's release, run on Linux with stubs? It must pass NVDA's own Chrome system tests
-  (`tests/system/robot/chromeTests.py`: **51 tests, about 220 exact-speech assertions**, quoted, not checked), under the settings those tests use.
+  (`tests/system/robot/chromeTests.py`: **47 tests, 193 speech assertions (227 exact-speech assertion executions)**, quoted from
+  the [spike's write-up](https://github.com/a11ign/announcement-emulator/blob/40b2d3bb19b7a39546001272bd003de3d655f528/docs/announcement-emulator-spike.md), Q2, where they are *measured* at NVDA 2026.1.1;
+  *corrected 2026-10-23 (A11-177)* from the "51 tests, about 220 exact-speech assertions" first quoted here, not checked), under the settings those tests use.
 - **Q3.** How closely does it agree with fleet transcripts on the real-page corpus, for headings, links, buttons, form fields, landmarks, lists?
 
 **Gate: at least 98% exact agreement on the 10 most common announcement shapes** (`nvda-speech` counts 33 shapes; the top 10 make up **94.3%**
