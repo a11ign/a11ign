@@ -7,7 +7,13 @@
 #
 # WHAT BINDS IT TO `main`: `job_workflow_ref` pinned to `@refs/heads/main`, so a branch that edits the workflow cannot mint.
 # `event_name: schedule` admits only the scheduled sweep; the pull-request event and the approval are the host gate's, which holds its
-# own identity. Same permissions as `auto-arm.sts.yaml` (enable auto-merge, and the merge itself), on this repository only.
+# own identity. Same permissions as `auto-arm.sts.yaml` (enable auto-merge, the merge itself and `workflows` write), on this repository
+# only.
+#
+# WHY `workflows`: GitHub refuses `enablePullRequestAutoMerge` to an app without `workflows` on a pull request that changes a file under
+# `.github/workflows/` (a11ign/lab#150, and lab#148 in lab's auto-arm run 40092564867). Approved workflow changes merge like any other,
+# with no person, by the chairman's decision on 2026-10-24 (A11-203). The `main` binding above is what limits this write to the scheduled
+# sweep of agent-org's `auto-arm.yml` as it is on `main`.
 issuer: https://token.actions.githubusercontent.com
 subject_pattern: repo:a11ign@320310787/agent-org@1388747923:ref:refs/heads/main
 claim_pattern:
@@ -16,3 +22,4 @@ claim_pattern:
 permissions:
   pull_requests: write
   contents: write
+  workflows: write
