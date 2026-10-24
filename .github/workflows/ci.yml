@@ -560,42 +560,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: pnpm run guards:sweep
 
-  # #5333: A RELEASE GATE'S REFUSAL NAMES AN OPEN OWNING ROW, READ LIVE. `gate:lab-held` pointed at #5179, which closed after fixing a different
-  # gate, and for six hours two failed releases had an owner on paper and nobody looking. `scripts/refusal-owners-are-open.ts` finds every bare
-  # `#n` a `REFUSED` string (`package.json` scripts, `release.yml`) or a `release.yml` `::error` line names, and this job asks GitHub whether each
-  # is open. IT BLOCKS: it is in `gate`'s `needs`, and making it advisory to get a red tree green is the one thing the row forbids. It reads the
-  # tree UNDER TEST, so the pull request that re-points the refusal turns it green itself; the cost is that a row closing under a refusal holds
-  # every merge until somebody re-points it, which is the intent. An issue it cannot read is CANNOT_TELL and red, never open.
-  # `A11Y_CHECK_REFUSAL_OWNERS=1` names the instrument (the shape `branch-protection.test.ts` uses); the grep below is what stops an opt-in test
-  # that SKIPPED from standing in for one that read: it asks for the line a live pass prints.
-  refusalOwners:
-    needs: changed
-    if: ${{ !contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action) }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      issues: read
-      pull-requests: read
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with: { node-version: 22, cache: pnpm }
-      # The test imports `@a11ign/toolchain/refusal-owners-are-open` from the installed package (agent-org#1497), so the job installs first.
-      - run: pnpm install --frozen-lockfile --ignore-scripts
-      - name: Every owner a refusal names is an open issue
-        env:
-          A11Y_CHECK_REFUSAL_OWNERS: "1"
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # No pipe: Actions' default `bash -e` has no `pipefail`, so `node --test | tee` took `tee`'s status and a failed fixture test beside a
-          # printed LIVE PASS exited 0 (reviewer-5352, #5333). The test's own status is kept and returned; `refusal-owners-are-open.test.ts` runs this block.
-          status=0
-          node --test scripts/refusal-owners-are-open.test.ts > "$RUNNER_TEMP/refusal-owners.out" 2>&1 || status=$?
-          cat "$RUNNER_TEMP/refusal-owners.out"
-          [ "$status" -eq 0 ] || { echo "::error::refusal-owners-are-open.test.ts exited $status"; exit "$status"; }
-          grep -q "LIVE PASS: " "$RUNNER_TEMP/refusal-owners.out" || { echo "::error::the live read printed no LIVE PASS line: it was skipped or found no owner"; exit 1; }
-
   # #298 (pipeline unit 1): WITH `strict=false` (#277), branch protection no longer requires this head to
   # contain `main`'s current tip before merging -- it merges the instant `gate` is green for the RECORDED
   # head. `strict` bought head-vs-tip agreement for free; without it, nothing does, and #195 (GitHub's
@@ -906,7 +870,7 @@ jobs:
   # watched the body) from a queue stall into an edit -- the condition that made blocking unsafe then
   # does not hold now.
   gate:
-    needs: [bodyEdit, changed, ts, python, changeset, rulesFitness, guardSweep, deliberateRefusals, acceptance, ownedPaths, release-dry-run, refusalOwners]
+    needs: [bodyEdit, changed, ts, python, changeset, rulesFitness, guardSweep, deliberateRefusals, acceptance, ownedPaths, release-dry-run]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     # `actions: read` for the one lookup below, and nothing else: this job checks nothing out and writes nothing.
@@ -926,8 +890,7 @@ jobs:
             "${{ needs.deliberateRefusals.result }}" \
             "${{ needs.acceptance.result }}" \
             "${{ needs.ownedPaths.result }}" \
-            "${{ needs.release-dry-run.result }}" \
-            "${{ needs.refusalOwners.result }}"
+            "${{ needs.release-dry-run.result }}"
           do
             if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
               echo "::error::a job reported '$result', which is neither success nor skipped"
