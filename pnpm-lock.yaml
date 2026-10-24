@@ -22,13 +22,13 @@ importers:
         version: link:packages/scorer
       '@a11ign/screenreader-fleet':
         specifier: ^0.11.0
-        version: 0.11.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.133.0)(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.5))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)
+        version: 0.11.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.137.0)(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.5))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)
       '@a11ign/screenreader-worker':
         specifier: 0.13.13
         version: 0.13.13
       '@anthropic-ai/sdk':
-        specifier: ^0.133.0
-        version: 0.133.0
+        specifier: ^0.137.0
+        version: 0.137.0
       '@guidepup/guidepup':
         specifier: ^0.31.0
         version: 0.31.0
@@ -102,7 +102,7 @@ importers:
         version: link:../scorer
       '@a11ign/screenreader-fleet':
         specifier: ^0.11.0
-        version: 0.11.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.133.0)(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.5))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)
+        version: 0.11.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.137.0)(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.5))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)
     devDependencies:
       '@a11ign/documents':
         specifier: ^0.1.2
@@ -130,7 +130,7 @@ importers:
     dependencies:
       '@a11ign/screenreader-fleet':
         specifier: ^0.11.0
-        version: 0.11.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.133.0)(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.5))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)
+        version: 0.11.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.137.0)(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.5))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)
 
   packages/judge:
     dependencies:
@@ -219,8 +219,8 @@ packages:
       typescript:
         optional: true
 
-  '@anthropic-ai/sdk@0.133.0':
-    resolution: {integrity: sha512-jlqUN8p8ESTJj+GJnA4KjzbEfF1waEoGzRT8jwytlYGFFgv+/DUQOxlYGvYw10UzhD1kwLqYzxvA3FrTB2YWuQ==}
+  '@anthropic-ai/sdk@0.137.0':
+    resolution: {integrity: sha512-YpEnbPz8kWF1BWthwUCnRhci7OvDLSUO8NFKoevoPkjNkK9CJeibZITgxr9vhqOP8Le61e5tNDHFTxw1dc6Png==}
     hasBin: true
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
@@ -663,6 +663,10 @@ packages:
     peerDependencies:
       '@emnapi/core': ^1.7.1
       '@emnapi/runtime': ^1.7.1
+
+  '@opentelemetry/api@1.10.0':
+    resolution: {integrity: sha512-lMkyes8iHrG+mk6WH7X70MdCLI2RS0FwNBY1PyQ8UemaijE2m5mv5A0Niy3HtbYTFrgkUEQjFMXmSAk2hQDuPQ==}
+    engines: {node: '>=8.0.0'}
 
   '@pdf-lib/standard-fonts@1.0.0':
     resolution: {integrity: sha512-hU30BK9IUN/su0Mn9VdlVKsWBS6GyhVfqjwl1FjZN4TxP6cCw0jP2w7V3Hf5uX7M0AZJ16vey9yE0ny7Sa59ZA==}
@@ -1945,16 +1949,16 @@ snapshots:
 
   '@a11ign/evidence@0.3.2': {}
 
-  '@a11ign/judge@0.5.1(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.133.0)':
+  '@a11ign/judge@0.5.1(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.137.0)':
     dependencies:
       '@a11ign/evidence': 0.3.2
       '@a11ign/scorer': link:packages/scorer
     optionalDependencies:
-      '@anthropic-ai/sdk': 0.133.0
+      '@anthropic-ai/sdk': 0.137.0
 
-  '@a11ign/screenreader-fleet@0.11.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.133.0)(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.5))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)':
+  '@a11ign/screenreader-fleet@0.11.0(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.137.0)(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.5))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)':
     dependencies:
-      '@a11ign/judge': 0.5.1(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.133.0)
+      '@a11ign/judge': 0.5.1(@a11ign/scorer@packages+scorer)(@anthropic-ai/sdk@0.137.0)
       '@a11ign/screenreader-worker': 0.13.13
       '@a11ign/toolchain': 0.5.0(@rslib/core@1.0.3(@microsoft/api-extractor@7.59.4(@types/node@26.6.5))(typescript@6.0.3))(@rstest/core@0.12.3)(@rstest/coverage-v8@0.12.3(@rstest/core@0.12.3))(typescript@6.0.3)
     transitivePeerDependencies:
@@ -1986,8 +1990,9 @@ snapshots:
       '@rstest/coverage-v8': 0.12.3(@rstest/core@0.12.3)
       typescript: 6.0.3
 
-  '@anthropic-ai/sdk@0.133.0':
+  '@anthropic-ai/sdk@0.137.0':
     dependencies:
+      '@opentelemetry/api': 1.10.0
       json-schema-to-ts: 3.1.1
       standardwebhooks: 1.1.1
 
@@ -2414,6 +2419,8 @@ snapshots:
       '@emnapi/runtime': 1.11.3
       '@tybys/wasm-util': 0.10.4
     optional: true
+
+  '@opentelemetry/api@1.10.0': {}
 
   '@pdf-lib/standard-fonts@1.0.0':
     dependencies:
