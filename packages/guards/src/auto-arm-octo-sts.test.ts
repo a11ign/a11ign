@@ -3,8 +3,8 @@
  * #4198: `auto-arm.yml` ARMS WITH AN OCTO STS TOKEN, AND THE POLICY BEHIND IT HOLDS ONLY WHAT ARMING NEEDS.
  *
  * Two halves, each with the control that shows it can fail:
- *   - the POLICY (`.github/chainguard/auto-arm.sts.yaml`): grants pull-request write and contents write and nothing else, and its patterns
- *     accept the `push`, `workflow_dispatch` and `pull_request_target` claims of main's copy of this workflow and refuse the ones measured on #4191 that are not.
+ *   - the POLICY (`.github/chainguard/auto-arm.sts.yaml`): grants pull-request write, contents write and workflows write (A11-203) and nothing else,
+ *     and its patterns accept the `push`, `workflow_dispatch` and `pull_request_target` claims of main's copy of this workflow and refuse the ones measured on #4191 that are not.
  *     Octo STS matches every pattern against the WHOLE claim (v0.11.2 README), which `fullMatch` reproduces.
  *   - the WORKFLOW: `arm` and `sweep` each mint before they use, hold `id-token: write` and no other write, and no step falls back to
  *     `github.token` (the fallback is #416's defect restored quietly).
@@ -36,8 +36,8 @@ function mints(policy: Policy, claims: { sub: string; job_workflow_ref: string; 
 const policyOf = (text: string) => parseYaml(text) as Policy;
 const POLICY = policyOf(read(".github/chainguard/auto-arm.sts.yaml"));
 
-test("#4198: the policy grants pull-request write and contents write, and nothing else", () => {
-  assert.deepEqual(POLICY.permissions, { pull_requests: "write", contents: "write" });
+test("#4198: the policy grants pull-request write, contents write and workflows write (A11-203), and nothing else", () => {
+  assert.deepEqual(POLICY.permissions, { pull_requests: "write", contents: "write", workflows: "write" });
 });
 
 test("#4198: the policy mints for the three runs of main's copy of this workflow and refuses the ones that are not its own", () => {
