@@ -12,6 +12,8 @@
  *     ("this cannot affect a consumer") would be false;
  *   - a diff that moves only `devDependencies` (or a private package, which ships nothing) is EMPTY, recorded
  *     explicitly rather than inferred from silence;
+ *   - the pip requirement files (`requirements-ci.txt`, `packages/<name>/requirements.txt`) are manifests too (A11-269): a pinned
+ *     `name==x.y.z` that moves is a bump the same rules judge, and it ships nothing to an npm consumer, so it is EMPTY;
  *   - it is REFUSED, and the log names why, for a major bump, a 0.x minor (`.changeset/README.md`: before 1.0,
  *     breaking is a minor), an added or removed dependency, anything in a manifest that is not a dependency
  *     range, any path that is not a manifest or the lockfile, and any path in `docs/owned-path-facts.json`.
@@ -45,6 +47,11 @@ const DEPENDENCY_SECTIONS = [...RUNTIME_SECTIONS, "devDependencies"];
 /** @type {Record<string, string>} */
 const SECTION_LABEL: Record<string, string> = { dependencies: "dependency", peerDependencies: "peer dependency", optionalDependencies: "optional dependency" };
 const MANIFEST_PATH = /^(?:packages\/[^/]+\/)?package\.json$/;
+/** The pip requirement files `dependabot.yml`'s `pip` ecosystem updates: the root CI subset and each package's own. */
+const REQUIREMENTS_PATH = /^(?:requirements-ci\.txt|packages\/[^/]+\/requirements\.txt)$/;
+/** A requirement line a machine can compare: a name, optionally pinned `==` to one version. Anything else is not a version bump. */
+const PINNED_REQUIREMENT = /^([A-Za-z0-9][A-Za-z0-9._-]*)\s*(?:==\s*([^\s;#,]+))?\s*$/;
+const REQUIREMENTS_SECTION = "requirements";
 const ENTRY_PATH = /^\.changeset\/[^/]+\.md$/;
 /** A range this derivation can compare: an exact version, optionally under `^` or `~`. */
 const PLAIN_RANGE = /^[\^~]?(\d+)\.(\d+)\.(\d+)$/;
@@ -55,6 +62,9 @@ export type Derivation = { verdict: "entries" | "empty" | "refused", entries: En
 
 /** A parsed `package.json`: JSON, so its fields are read through `rangesIn` and checked where they are used. */
 export type Manifest = Record<string, unknown>;
+
+/** A requirements file's text on each side of the diff; `null` is a side where the file does not exist. */
+export type Requirements = Record<string, { before: string | null, after: string | null }>;
 
 /** The `name -> range` map a manifest holds under `section`, empty when it has none. */
 const rangesIn = (manifest: Manifest, section: string) => (manifest[section] ?? {}) as Record<string, string>;
@@ -81,6 +91,43 @@ function rangeChanges(path: string, before: Manifest, after: Manifest): Change[]
         from: was[dependency] ?? null, to: now[dependency] ?? null,
       }));
   });
+}
+
+/** pip treats `_`, `.` and `-` alike and ignores case, so `Foo_Bar` and `foo-bar` are one distribution. */
+const distributionName = (name: string) => name.toLowerCase().replace(/[-_.]+/g, "-");
+
+/**
+ * What a requirements file pins, and every line that is not a pin: a comment, an option, a range, an extra, a marker. Those are kept
+ * as text so that a change to one is "something other than a dependency range", as it is for a `package.json`.
+ * @param {string} text
+ * @returns {{ pins: Record<string, string>, other: string[] }}
+ */
+function readRequirements(text: string): { pins: Record<string, string>; other: string[] } {
+  const pins: Record<string, string> = {};
+  const other = [];
+  for (const line of text.split("\n").map((l) => l.trim()).filter(Boolean)) {
+    const match = PINNED_REQUIREMENT.exec(line);
+    if (match) pins[distributionName(match[1])] = match[2] ?? "";
+    else other.push(line);
+  }
+  return { pins, other };
+}
+
+/**
+ * Every pin that differs between two versions of a requirements file. A `Change` names its `package`, and a requirements file has
+ * none, so `package` holds the file's path; the section is outside `RUNTIME_SECTIONS`, so no entry is ever written for it.
+ * @param {string} path
+ * @param {{ pins: Record<string, string> }} before
+ * @param {{ pins: Record<string, string> }} after
+ * @returns {Change[]}
+ */
+function pinChanges(path: string, before: { pins: Record<string, string> }, after: { pins: Record<string, string> }): Change[] {
+  return [...new Set([...Object.keys(before.pins), ...Object.keys(after.pins)])]
+    .filter((dependency) => before.pins[dependency] !== after.pins[dependency])
+    .map((dependency) => ({
+      path, package: path, private: false, section: REQUIREMENTS_SECTION, dependency,
+      from: before.pins[dependency] ?? null, to: after.pins[dependency] ?? null,
+    }));
 }
 
 /** @param {string} range @returns {number[] | null} */
@@ -120,7 +167,7 @@ function isBefore(a: number[], b: number[]) {
  * @returns {string[]}
  */
 function pathReasons(files: string[], owned: string[]): string[] {
-  const foreign = files.filter((file) => !MANIFEST_PATH.test(file) && file !== "pnpm-lock.yaml" && !ENTRY_PATH.test(file));
+  const foreign = files.filter((file) => !MANIFEST_PATH.test(file) && !REQUIREMENTS_PATH.test(file) && file !== "pnpm-lock.yaml" && !ENTRY_PATH.test(file));
   const owning = files.filter((file) => owned.some((prefix) => file.startsWith(prefix)));
   return [
     ...foreign.map((file) => `${file} is not a manifest or the lockfile, so this is not a dependency-only diff`),
@@ -148,6 +195,25 @@ function readManifests(manifests: Record<string, { before: Manifest | null; afte
 }
 
 /**
+ * @param {Requirements} requirements
+ * @returns {{ changes: Change[], reasons: string[] }}
+ */
+function readRequirementFiles(requirements: Requirements): { changes: Change[]; reasons: string[] } {
+  const changes = [];
+  const reasons = [];
+  for (const [path, { before, after }] of Object.entries(requirements)) {
+    if (before === null || after === null) {
+      reasons.push(`${path} was ${before === null ? "added" : "deleted"}, which is not a dependency bump`);
+      continue;
+    }
+    const [was, now] = [readRequirements(before), readRequirements(after)];
+    if (JSON.stringify(was.other) !== JSON.stringify(now.other)) reasons.push(`${path} changes something other than a dependency range`);
+    else changes.push(...pinChanges(path, was, now));
+  }
+  return { changes, reasons };
+}
+
+/**
  * One `patch` entry per PUBLISHED package whose runtime ranges moved; the text is the diff restated, nothing else.
  * @param {Change[]} changes
  * @returns {Entry[]}
@@ -163,11 +229,13 @@ export function entriesFor(changes: Change[]): Entry[] {
 
 /**
  * What a dependency pull request owes the changelog, from its files and its manifests before and after.
- * @param {{ files: string[], manifests: Parameters<typeof readManifests>[0], owned: string[] }} input
+ * @param {{ files: string[], manifests: Parameters<typeof readManifests>[0], requirements?: Requirements, owned: string[] }} input
  * @returns {Derivation}
  */
-export function deriveDependencyChangeset({ files, manifests, owned }: { files: string[]; manifests: Parameters<typeof readManifests>[0]; owned: string[]; }): Derivation {
-  const { changes, reasons } = readManifests(manifests);
+export function deriveDependencyChangeset({ files, manifests, requirements = {}, owned }: { files: string[]; manifests: Parameters<typeof readManifests>[0]; requirements?: Requirements; owned: string[]; }): Derivation {
+  const [fromManifests, fromRequirements] = [readManifests(manifests), readRequirementFiles(requirements)];
+  const changes = [...fromManifests.changes, ...fromRequirements.changes];
+  const reasons = [...fromManifests.reasons, ...fromRequirements.reasons];
   const refusals = [...pathReasons(files, owned), ...reasons, ...changes.map(refusalFor).filter((r) => r !== null)];
   const entries = refusals.length ? [] : entriesFor(changes);
   const privatePackages = [...new Set(changes.filter((c) => c.private).map((c) => c.package))];
@@ -268,12 +336,23 @@ function git(args: string[]) {
   return execFileSync("git", args, { env: sandboxGitEnv(), encoding: "utf8", maxBuffer: MAX_GIT_OUTPUT_BYTES });
 }
 
-/** @param {string} ref @param {string} path */
-function manifestAt(ref: string, path: string) {
+/** @param {string} ref @param {string} path @returns {string | null} the file's text at `ref`, or null where it does not exist */
+function textAt(ref: string, path: string): string | null {
   try {
-    return JSON.parse(git(["show", `${ref}:${path}`]));
+    return git(["show", `${ref}:${path}`]);
   } catch {
     // A path that does not exist on that side is an ADDED or DELETED manifest, which the derivation refuses by name.
+    return null;
+  }
+}
+
+/** @param {string} ref @param {string} path */
+function manifestAt(ref: string, path: string) {
+  const text = textAt(ref, path);
+  try {
+    return text === null ? null : JSON.parse(text);
+  } catch {
+    // A manifest that does not parse is as unreadable as one that is missing: refused by name, never waved through.
     return null;
   }
 }
@@ -297,8 +376,9 @@ export function check(base: string, since?: string, reviewsPath?: string, head?:
   // #3157's head against today's `main`: the root manifest read as "changes something other than a dependency range").
   const forkPoint = git(["merge-base", from, "HEAD"]).trim();
   const manifests = Object.fromEntries(files.filter((f) => MANIFEST_PATH.test(f)).map((f) => [f, { before: manifestAt(forkPoint, f), after: manifestAt("HEAD", f) }]));
+  const requirements = Object.fromEntries(files.filter((f) => REQUIREMENTS_PATH.test(f)).map((f) => [f, { before: textAt(forkPoint, f), after: textAt("HEAD", f) }]));
   const owned = JSON.parse(readFileSync("docs/owned-path-facts.json", "utf8")).owned;
-  const derived = deriveDependencyChangeset({ files, manifests, owned });
+  const derived = deriveDependencyChangeset({ files, manifests, requirements, owned });
   const carried = files.filter((f) => ENTRY_PATH.test(f) && f !== ".changeset/README.md" && existsSync(f))
     .map((f) => ({ file: f, ...parseEntry(readFileSync(f, "utf8")) }));
   if (derived.verdict !== "refused") {

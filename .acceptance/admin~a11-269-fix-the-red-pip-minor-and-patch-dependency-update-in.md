@@ -1,0 +1,8 @@
+Closes A11-269
+
+Dependabot's grouped pip update (a11ign#5725) was red because two checks knew only a single-package npm update. `dependency-pr-body.yml` wrote the `Acceptance:` body only for a `deps: bump <package> from <x> to <y>` title over `package.json` and the lockfile, so `acceptance` printed `ACCEPTANCE: MISSING`; `scripts/dependency-changeset.ts` called each pip requirements file "not a manifest or the lockfile", so `changeset` printed `Cleared-by: edit`. Both now treat `requirements-ci.txt` and `packages/<name>/requirements.txt` as manifests, and the body writer accepts Dependabot's grouped title, proving each update in the group from the diff (never from the group's name): one major, a `0.x` minor, a downgrade, an added or removed pin, or a line that is not a plain `name==x.y.z` pin writes nothing, and so does a file outside the manifests or an owned path.
+
+What the command proves: `dependency-pr-body.test.ts` runs the workflow step's own shell against a stub `gh` (the grouped title writes the fixed fragment naming numpy, onnxruntime and torch; each refusal is the same pull request with one thing changed; the single-package cases still hold; no checkout, the body never read), and `dependency-changeset.test.ts` holds the requirements-file cases and runs `check` over a throwaway repository with the grouped pip diff. The new cases fail on the base `dependency-pr-body.yml` and `dependency-changeset.ts`; the single-package controls and the static no-checkout test pass there too.
+
+Acceptance:
+pnpm exec rstest run --config=scripts/rstest/rstest.config.ts --include packages/guards/src/dependency-pr-body.test.ts --include packages/guards/src/dependency-changeset.test.ts
