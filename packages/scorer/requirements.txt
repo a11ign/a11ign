@@ -12,7 +12,7 @@
 # replace -- not chosen, not guessed. Each one already satisfies its old range, so pinning changes
 # nothing that works today, and both the ONNX and the torch-fallback encode paths were run directly
 # against these exact versions and produced real embeddings (384-d, float32) from each.
-huggingface-hub==0.36.2
+huggingface-hub==2.2.0
 numpy==2.5.1
 # The encoder's DEFAULT path, not an optional accelerator. `_encode` takes the ONNX branch whenever
 # `onnx/model.onnx` exists -- which is whenever the encoder has been fetched -- and its torch fallback
