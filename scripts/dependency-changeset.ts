@@ -49,8 +49,8 @@ const SECTION_LABEL: Record<string, string> = { dependencies: "dependency", peer
 const MANIFEST_PATH = /^(?:packages\/[^/]+\/)?package\.json$/;
 /** The pip requirement files `dependabot.yml`'s `pip` ecosystem updates: the root CI subset and each package's own. */
 const REQUIREMENTS_PATH = /^(?:requirements-ci\.txt|packages\/[^/]+\/requirements\.txt)$/;
-/** A requirement line a machine can compare: a name, optionally pinned `==` to one version. Anything else is not a version bump. */
-const PINNED_REQUIREMENT = /^([A-Za-z0-9][A-Za-z0-9._-]*)\s*(?:==\s*([^\s;#,]+))?\s*$/;
+/** A requirement line a machine can compare: a name pinned `==` to one version. Anything else (a bare `pytest` too) is not a version bump. */
+const PINNED_REQUIREMENT = /^([A-Za-z0-9][A-Za-z0-9._-]*)\s*==\s*([^\s;#,]+)\s*$/;
 const REQUIREMENTS_SECTION = "requirements";
 const ENTRY_PATH = /^\.changeset\/[^/]+\.md$/;
 /** A range this derivation can compare: an exact version, optionally under `^` or `~`. */
@@ -97,8 +97,8 @@ function rangeChanges(path: string, before: Manifest, after: Manifest): Change[]
 const distributionName = (name: string) => name.toLowerCase().replace(/[-_.]+/g, "-");
 
 /**
- * What a requirements file pins, and every line that is not a pin: a comment, an option, a range, an extra, a marker. Those are kept
- * as text so that a change to one is "something other than a dependency range", as it is for a `package.json`.
+ * What a requirements file pins, and every line that is not a pin: a comment, an option, a range, an extra, a marker, a name with no
+ * version. Those are kept verbatim as text so that a change to one is "something other than a dependency range", as it is for a `package.json`.
  * @param {string} text
  * @returns {{ pins: Record<string, string>, other: string[] }}
  */
@@ -107,7 +107,7 @@ function readRequirements(text: string): { pins: Record<string, string>; other: 
   const other = [];
   for (const line of text.split("\n").map((l) => l.trim()).filter(Boolean)) {
     const match = PINNED_REQUIREMENT.exec(line);
-    if (match) pins[distributionName(match[1])] = match[2] ?? "";
+    if (match) pins[distributionName(match[1])] = match[2];
     else other.push(line);
   }
   return { pins, other };

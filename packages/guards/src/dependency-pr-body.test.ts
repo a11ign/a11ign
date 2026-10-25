@@ -140,20 +140,25 @@ test("a downgrade, an added pin and a removed pin are not minor or patch bumps, 
   const added = [{ filename: "requirements-ci.txt", patch: "@@ -1 +1,2 @@\n numpy==2.5.1\n+scipy==1.0.0" }];
   writesNothing(runWriter({ title: GROUP_TITLE, files: added }), /no pinned version moves in the diff/);
   const removed = [{ filename: "requirements-ci.txt", patch: "@@ -1,2 +1 @@\n numpy==2.5.1\n-scipy==1.0.0" }];
-  writesNothing(runWriter({ title: GROUP_TITLE, files: removed }), cannotProve);
+  writesNothing(runWriter({ title: GROUP_TITLE, files: removed }), /scipy was added or removed, which is not a version bump/);
+  const swapped = [{ filename: "requirements-ci.txt", patch: "@@ -1,2 +1,2 @@\n-scipy==1.0.0\n+numpy==2.5.4" }];
+  writesNothing(runWriter({ title: GROUP_TITLE, files: swapped }), /(scipy|numpy) was added or removed, which is not a version bump/);
   const unmoved = [{ filename: "requirements-ci.txt", patch: patchOf(["numpy==2.5.1", "numpy==2.5.1"]) }];
   writesNothing(runWriter({ title: GROUP_TITLE, files: unmoved }), /numpy stays at 2\.5\.1/);
   const twice = [{ filename: "requirements-ci.txt", patch: patchOf(["numpy==2.5.1", "numpy==2.5.4"], ["numpy==2.5.1", "numpy==2.5.5"]) }];
   writesNothing(runWriter({ title: GROUP_TITLE, files: twice }), /numpy is pinned twice in requirements-ci\.txt/);
+  const removedTwice = [{ filename: "requirements-ci.txt", patch: "@@ -1,2 +1 @@\n-numpy==2.5.1\n-numpy==2.5.1\n+numpy==2.5.4" }];
+  writesNothing(runWriter({ title: GROUP_TITLE, files: removedTwice }), /numpy is pinned twice in requirements-ci\.txt/);
 });
 
 test("a group whose diff the step cannot read pin by pin writes nothing: no patch, a changed comment, a range, an unplain version", () => {
-  const cannotProve = /cannot prove is a minor or patch bump/;
-  writesNothing(runWriter({ title: GROUP_TITLE, files: [{ filename: "requirements-ci.txt", patch: null }] }), cannotProve);
-  writesNothing(runWriter({ title: GROUP_TITLE, files: [{ filename: "requirements-ci.txt", patch: "@@ -1 +1 @@\n-# old note\n+# new note" }] }), cannotProve);
-  writesNothing(runWriter({ title: GROUP_TITLE, files: [{ filename: "requirements-ci.txt", patch: patchOf(["numpy>=2.5.1", "numpy>=2.5.4"]) }] }), cannotProve);
-  writesNothing(runWriter({ title: GROUP_TITLE, files: [{ filename: "requirements-ci.txt", patch: patchOf(["numpy==2.5.1", "numpy==2.5.4rc1"]) }] }), cannotProve);
-  writesNothing(runWriter({ title: GROUP_TITLE, files: [{ filename: "requirements-ci.txt", patch: patchOf() }] }), cannotProve);
+  const notAPin = /requirements-ci\.txt changes a line that is not a plain 'name==x\.y\.z' pin/;
+  writesNothing(runWriter({ title: GROUP_TITLE, files: [{ filename: "requirements-ci.txt", patch: null }] }), /requirements-ci\.txt has no diff to read/);
+  writesNothing(runWriter({ title: GROUP_TITLE, files: [{ filename: "requirements-ci.txt", patch: "@@ -1 +1 @@\n-# old note\n+# new note" }] }), notAPin);
+  writesNothing(runWriter({ title: GROUP_TITLE, files: [{ filename: "requirements-ci.txt", patch: patchOf(["numpy>=2.5.1", "numpy>=2.5.4"]) }] }), notAPin);
+  writesNothing(runWriter({ title: GROUP_TITLE, files: [{ filename: "requirements-ci.txt", patch: patchOf(["numpy==2.5.1", "numpy==2.5.4rc1"]) }] }), notAPin);
+  writesNothing(runWriter({ title: GROUP_TITLE, files: [{ filename: "requirements-ci.txt", patch: patchOf(["pytest", "PYTEST"]) }] }), notAPin);
+  writesNothing(runWriter({ title: GROUP_TITLE, files: [{ filename: "requirements-ci.txt", patch: patchOf() }] }), /no pinned version moves in the diff/);
 });
 
 test("a group that also touches a file outside the manifests writes nothing", () => {
@@ -204,6 +209,8 @@ test("a single-package title is not declared over a requirements file: nothing r
 test("controls: a single major, a single 0.x minor and a single stray file still write nothing", () => {
   writesNothing(runWriter({ title: "deps: bump yaml from 2.9.0 to 3.0.0", files: [{ filename: "package.json" }] }), /a major bump/);
   writesNothing(runWriter({ title: "deps: bump yaml from 0.8.0 to 0.9.0", files: [{ filename: "package.json" }] }), /a major bump/);
+  const zeroPatch = runWriter({ title: "deps: bump yaml from 0.8.0 to 0.8.1", files: [{ filename: "package.json" }] });
+  assert.match(zeroPatch.body ?? zeroPatch.out, /bump yaml from 0\.8\.0 to 0\.8\.1\./, "the control: a 0.x patch is declared");
   writesNothing(runWriter({ title: "deps: bump yaml from 2.9.0 to 2.9.1", files: [{ filename: "package.json" }, { filename: "src/index.ts" }] }), /touches something other than the manifests/);
 });
 

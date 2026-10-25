@@ -222,7 +222,7 @@ test("deriveDependencyChangeset: a grouped pip update over the two requirements 
 test("deriveDependencyChangeset: a requirements file is a path it knows, but only the two shapes `dependabot.yml` updates", () => {
   const unchanged = requirementsMoved([CI_PINS, CI_PINS], [SCORER_PINS, SCORER_PINS]);
   assert.equal(deriveDependencyChangeset({ files: REQUIREMENT_FILES, manifests: {}, requirements: unchanged, owned: [] }).verdict, "empty");
-  for (const stray of ["requirements.txt", "docs/requirements.txt", "packages/scorer/tests/requirements.txt", "packages/scorer/requirements-dev.txt"]) {
+  for (const stray of ["requirements.txt", "docs/requirements.txt", "packages/scorer/tests/requirements.txt", "packages/scorer/requirements-dev.txt", "docs/requirements-ci.txt", "requirements-ci.txt.bak", "old/packages/scorer/requirements.txt", "packages/scorer/requirements.txt.orig"]) {
     const derived = deriveDependencyChangeset({ files: [...REQUIREMENT_FILES, stray], manifests: {}, requirements: GROUP_BUMP, owned: [] });
     assert.deepEqual(derived.reasons, [`${stray} is not a manifest or the lockfile, so this is not a dependency-only diff`], stray);
   }
@@ -260,6 +260,17 @@ test("deriveDependencyChangeset: a pin added or removed, a range, an edited comm
   assert.equal(only(CI_PINS, CI_PINS.replace("numpy==2.5.1", "numpy==2.5.4")).verdict, "empty", "the control: the same file with a patch bump");
 });
 
+test("deriveDependencyChangeset: a changed line that pins no version is refused, however it is spelled, beside the unpinned line left alone", () => {
+  const only = (after: string) =>
+    deriveDependencyChangeset({ files: ["requirements-ci.txt"], owned: [], manifests: {}, requirements: { "requirements-ci.txt": { before: CI_PINS, after } } });
+  const refused = ["requirements-ci.txt changes something other than a dependency range"];
+  assert.deepEqual(only(CI_PINS.replace("pytest", "PYTEST")).reasons, refused, "pip reads the case as the same name, but a machine cannot say what changed");
+  assert.deepEqual(only(CI_PINS.replace("pytest", "pytest==8.0.0")).reasons, refused, "a pin appearing where there was none");
+  assert.deepEqual(only(CI_PINS.replace("pytest", "")).reasons, refused, "an unpinned line removed");
+  assert.deepEqual(only(`${CI_PINS}scipy\n`).reasons, refused, "an unpinned line added");
+  assert.equal(only(CI_PINS).verdict, "empty", "the control: the same file with the unpinned line untouched");
+});
+
 test("deriveDependencyChangeset: a pin is named the way pip names it, so a respelling is a bump and not an add and a remove", () => {
   const derived = deriveDependencyChangeset({
     files: ["requirements-ci.txt"], owned: [], manifests: {},
@@ -277,6 +288,20 @@ test("deriveDependencyChangeset: requirements beside a package.json bump still o
   assert.deepEqual(mixed.entries.map((e) => e.package), ["@a11ign/lab"]);
   const owned = deriveDependencyChangeset({ files: REQUIREMENT_FILES, manifests: {}, requirements: GROUP_BUMP, owned: ["packages/scorer/"] });
   assert.deepEqual(owned.reasons, ["packages/scorer/requirements.txt is an owned path: a human states the capture-cache facts for it (docs/owned-path-facts.json)"]);
+});
+
+test("check refuses a requirements file a pull request adds, naming it, beside the accepted grouped update", () => {
+  withGitSandbox((git) => {
+    const bumped = GROUP_BUMP["packages/scorer/requirements.txt"].after;
+    const { base } = pipGroupBranch(git, { ci: GROUP_BUMP["requirements-ci.txt"].after, scorer: bumped });
+    mkdirSync(join(git.dir, "packages/other"), { recursive: true });
+    writeFileSync(join(git.dir, "packages/other/requirements.txt"), "numpy==2.5.4\n");
+    git.run(["add", "-A"]);
+    git.commit("deps: add a requirements file");
+    const result = checkIn(git.dir, base, undefined, git.run(["rev-parse", "HEAD"]).trim());
+    assert.equal(result.passed, false);
+    assert.match(result.printed, /packages\/other\/requirements\.txt was added, which is not a dependency bump/);
+  });
 });
 
 /** A `main` holding both requirements files, then a `deps:` branch that changes them as Dependabot's grouped pip update does. */
