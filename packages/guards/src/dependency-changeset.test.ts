@@ -196,6 +196,154 @@ test("deriveDependencyChangeset refuses an added dependency", () => {
   assert.deepEqual(derived.reasons, ["zod in packages/example/package.json was added, which is not a version bump"]);
 });
 
+// ---- pip requirement files are manifests (A11-269) --------------------------------------------------------------
+//
+// Dependabot's grouped pip update changes `requirements-ci.txt` and `packages/scorer/requirements.txt` only. Both used to be "not a
+// manifest or the lockfile", so every pip update was refused and waited for a person. A pin that moves is judged by the rules a
+// `package.json` range is, and ships nothing to an npm consumer, so an accepted one is EMPTY.
+
+const REQUIREMENT_FILES = ["requirements-ci.txt", "packages/scorer/requirements.txt"];
+const CI_PINS = "# the subset CI needs\nnumpy==2.5.1\nsafetensors==0.8.0\npytest\n";
+const SCORER_PINS = "# the lab\nhuggingface-hub==2.3.0\nnumpy==2.5.1\nonnxruntime==1.28.0\ntorch==2.13.0\npytest\n";
+const requirementsMoved = (ci: [string, string], scorer: [string, string]) => ({
+  "requirements-ci.txt": { before: ci[0], after: ci[1] },
+  "packages/scorer/requirements.txt": { before: scorer[0], after: scorer[1] },
+});
+const GROUP_BUMP = requirementsMoved(
+  [CI_PINS, CI_PINS.replace("numpy==2.5.1", "numpy==2.5.4")],
+  [SCORER_PINS, SCORER_PINS.replace("numpy==2.5.1", "numpy==2.5.4").replace("onnxruntime==1.28.0", "onnxruntime==1.28.2").replace("torch==2.13.0", "torch==2.13.1")],
+);
+
+test("deriveDependencyChangeset: a grouped pip update over the two requirements files is empty, not refused", () => {
+  const derived = deriveDependencyChangeset({ files: REQUIREMENT_FILES, manifests: {}, requirements: GROUP_BUMP, owned: [] });
+  assert.deepEqual(derived, { verdict: "empty", entries: [], privatePackages: [], reasons: [] });
+});
+
+test("deriveDependencyChangeset: a requirements file is a path it knows, but only the two shapes `dependabot.yml` updates", () => {
+  const unchanged = requirementsMoved([CI_PINS, CI_PINS], [SCORER_PINS, SCORER_PINS]);
+  assert.equal(deriveDependencyChangeset({ files: REQUIREMENT_FILES, manifests: {}, requirements: unchanged, owned: [] }).verdict, "empty");
+  for (const stray of ["requirements.txt", "docs/requirements.txt", "packages/scorer/tests/requirements.txt", "packages/scorer/requirements-dev.txt", "docs/requirements-ci.txt", "requirements-ci.txt.bak", "old/packages/scorer/requirements.txt", "packages/scorer/requirements.txt.orig"]) {
+    const derived = deriveDependencyChangeset({ files: [...REQUIREMENT_FILES, stray], manifests: {}, requirements: GROUP_BUMP, owned: [] });
+    assert.deepEqual(derived.reasons, [`${stray} is not a manifest or the lockfile, so this is not a dependency-only diff`], stray);
+  }
+});
+
+test("deriveDependencyChangeset: a pin's major, 0.x minor and downgrade are refused, beside the minor that is not", () => {
+  const torchMovedTo = (version: string) => deriveDependencyChangeset({
+    files: REQUIREMENT_FILES, owned: [], manifests: {},
+    requirements: requirementsMoved([CI_PINS, CI_PINS], [SCORER_PINS, SCORER_PINS.replace("torch==2.13.0", `torch==${version}`)]),
+  });
+  assert.equal(torchMovedTo("2.14.0").verdict, "empty", "a minor is accepted");
+  assert.match(torchMovedTo("3.0.0").reasons[0], /^torch in packages\/scorer\/requirements\.txt: 2\.13\.0 -> 3\.0\.0 is a MAJOR bump$/);
+  const zeroMinor = deriveDependencyChangeset({
+    files: ["requirements-ci.txt"], owned: [], manifests: {},
+    requirements: { "requirements-ci.txt": { before: CI_PINS, after: CI_PINS.replace("safetensors==0.8.0", "safetensors==0.9.0") } },
+  });
+  assert.match(zeroMinor.reasons[0], /^safetensors in requirements-ci\.txt: 0\.8\.0 -> 0\.9\.0 is a 0\.x MINOR bump/);
+  const downgrade = deriveDependencyChangeset({
+    files: ["requirements-ci.txt"], owned: [], manifests: {},
+    requirements: { "requirements-ci.txt": { before: CI_PINS, after: CI_PINS.replace("numpy==2.5.1", "numpy==2.4.0") } },
+  });
+  assert.match(downgrade.reasons[0], /numpy in requirements-ci\.txt: 2\.5\.1 -> 2\.4\.0 is a downgrade/);
+});
+
+test("deriveDependencyChangeset: a pin added or removed, a range, an edited comment and a file added or deleted are refused", () => {
+  const only = (before: string | null, after: string | null) =>
+    deriveDependencyChangeset({ files: ["requirements-ci.txt"], owned: [], manifests: {}, requirements: { "requirements-ci.txt": { before, after } } });
+  assert.deepEqual(only(CI_PINS, `${CI_PINS}scipy==1.0.0\n`).reasons, ["scipy in requirements-ci.txt was added, which is not a version bump"]);
+  assert.deepEqual(only(CI_PINS, CI_PINS.replace("safetensors==0.8.0\n", "")).reasons, ["safetensors in requirements-ci.txt was removed, which is not a version bump"]);
+  assert.deepEqual(only(CI_PINS, CI_PINS.replace("numpy==2.5.1", "numpy>=2.5.1")).reasons, ["requirements-ci.txt changes something other than a dependency range"]);
+  assert.deepEqual(only(CI_PINS, CI_PINS.replace("the subset", "a subset")).reasons, ["requirements-ci.txt changes something other than a dependency range"]);
+  assert.deepEqual(only(null, CI_PINS).reasons, ["requirements-ci.txt was added, which is not a dependency bump"]);
+  assert.deepEqual(only(CI_PINS, null).reasons, ["requirements-ci.txt was deleted, which is not a dependency bump"]);
+  assert.match(only(CI_PINS, CI_PINS.replace("numpy==2.5.1", "numpy==2.5.4rc1")).reasons[0], /2\.5\.1 -> 2\.5\.4rc1 is not a plain version a machine can compare/);
+  assert.equal(only(CI_PINS, CI_PINS.replace("numpy==2.5.1", "numpy==2.5.4")).verdict, "empty", "the control: the same file with a patch bump");
+});
+
+test("deriveDependencyChangeset: a changed line that pins no version is refused, however it is spelled, beside the unpinned line left alone", () => {
+  const only = (after: string) =>
+    deriveDependencyChangeset({ files: ["requirements-ci.txt"], owned: [], manifests: {}, requirements: { "requirements-ci.txt": { before: CI_PINS, after } } });
+  const refused = ["requirements-ci.txt changes something other than a dependency range"];
+  assert.deepEqual(only(CI_PINS.replace("pytest", "PYTEST")).reasons, refused, "pip reads the case as the same name, but a machine cannot say what changed");
+  assert.deepEqual(only(CI_PINS.replace("pytest", "pytest==8.0.0")).reasons, refused, "a pin appearing where there was none");
+  assert.deepEqual(only(CI_PINS.replace("pytest", "")).reasons, refused, "an unpinned line removed");
+  assert.deepEqual(only(`${CI_PINS}scipy\n`).reasons, refused, "an unpinned line added");
+  assert.equal(only(CI_PINS).verdict, "empty", "the control: the same file with the unpinned line untouched");
+});
+
+test("deriveDependencyChangeset: a pin is named the way pip names it, so a respelling is a bump and not an add and a remove", () => {
+  const derived = deriveDependencyChangeset({
+    files: ["requirements-ci.txt"], owned: [], manifests: {},
+    requirements: { "requirements-ci.txt": { before: "Foo_Bar==1.0.0\n", after: "foo-bar==1.0.1\n" } },
+  });
+  assert.deepEqual(derived, { verdict: "empty", entries: [], privatePackages: [], reasons: [] });
+});
+
+test("deriveDependencyChangeset: requirements beside a package.json bump still owe the published package its entry, and an owned requirements file is refused", () => {
+  const mixed = deriveDependencyChangeset({
+    files: [...manifestFiles, ...REQUIREMENT_FILES], owned: [],
+    manifests: moved(manifest(), manifest({ dependencies: { yaml: "^2.9.1" } })), requirements: GROUP_BUMP,
+  });
+  assert.equal(mixed.verdict, "entries");
+  assert.deepEqual(mixed.entries.map((e) => e.package), ["@a11ign/lab"]);
+  const owned = deriveDependencyChangeset({ files: REQUIREMENT_FILES, manifests: {}, requirements: GROUP_BUMP, owned: ["packages/scorer/"] });
+  assert.deepEqual(owned.reasons, ["packages/scorer/requirements.txt is an owned path: a human states the capture-cache facts for it (docs/owned-path-facts.json)"]);
+});
+
+test("check refuses a requirements file a pull request adds, naming it, beside the accepted grouped update", () => {
+  withGitSandbox((git) => {
+    const bumped = GROUP_BUMP["packages/scorer/requirements.txt"].after;
+    const { base } = pipGroupBranch(git, { ci: GROUP_BUMP["requirements-ci.txt"].after, scorer: bumped });
+    mkdirSync(join(git.dir, "packages/other"), { recursive: true });
+    writeFileSync(join(git.dir, "packages/other/requirements.txt"), "numpy==2.5.4\n");
+    git.run(["add", "-A"]);
+    git.commit("deps: add a requirements file");
+    const result = checkIn(git.dir, base, undefined, git.run(["rev-parse", "HEAD"]).trim());
+    assert.equal(result.passed, false);
+    assert.match(result.printed, /packages\/other\/requirements\.txt was added, which is not a dependency bump/);
+  });
+});
+
+/** A `main` holding both requirements files, then a `deps:` branch that changes them as Dependabot's grouped pip update does. */
+function pipGroupBranch(git: { run(args: string[]): string; commit(message: string): string; dir: string }, after: { ci: string; scorer: string }) {
+  mkdirSync(join(git.dir, "docs"));
+  mkdirSync(join(git.dir, "packages/scorer"), { recursive: true });
+  writeFileSync(join(git.dir, "docs/owned-path-facts.json"), JSON.stringify({ owned: [] }));
+  writeFileSync(join(git.dir, "requirements-ci.txt"), CI_PINS);
+  writeFileSync(join(git.dir, "packages/scorer/requirements.txt"), SCORER_PINS);
+  git.run(["add", "-A"]);
+  git.commit("main");
+  const base = git.run(["rev-parse", "HEAD"]).trim();
+  git.run(["checkout", "-q", "-b", "dependabot/pip/pip-minor-and-patch"]);
+  writeFileSync(join(git.dir, "requirements-ci.txt"), after.ci);
+  writeFileSync(join(git.dir, "packages/scorer/requirements.txt"), after.scorer);
+  git.run(["add", "-A"]);
+  git.commit("deps: bump the pip-minor-and-patch group across 2 directories with 3 updates");
+  return { base, head: git.run(["rev-parse", "HEAD"]).trim() };
+}
+
+test("check accepts Dependabot's grouped pip update from the diff, and does not print the `not a manifest or the lockfile` refusal", () => {
+  withGitSandbox((git) => {
+    const bumped = GROUP_BUMP["packages/scorer/requirements.txt"].after;
+    const { base, head } = pipGroupBranch(git, { ci: GROUP_BUMP["requirements-ci.txt"].after, scorer: bumped });
+    const result = checkIn(git.dir, base, undefined, head);
+    assert.equal(result.passed, true, result.printed);
+    assert.match(result.printed, /^ACCEPTED \(empty\)/);
+    assert.doesNotMatch(result.printed, /not a manifest or the lockfile|Cleared-by/);
+  });
+});
+
+test("check still refuses a grouped pip update that holds a major, and says `Cleared-by: edit`", () => {
+  withGitSandbox((git) => {
+    const major = SCORER_PINS.replace("torch==2.13.0", "torch==3.0.0");
+    const { base, head } = pipGroupBranch(git, { ci: GROUP_BUMP["requirements-ci.txt"].after, scorer: major });
+    const result = checkIn(git.dir, base, undefined, head);
+    assert.equal(result.passed, false);
+    assert.match(result.printed, /torch in packages\/scorer\/requirements\.txt: 2\.13\.0 -> 3\.0\.0 is a MAJOR bump/);
+    assert.match(result.printed, /Cleared-by: edit$/);
+  });
+});
+
 test("renderEntry writes the changeset front matter and the text; parseEntry reads it back", () => {
   const entry = { package: "@a11ign/lab", bump: "patch" as const, text: "Updates the `yaml` dependency range from `2.9.0` to `2.9.1`." };
   const markdown = renderEntry(entry);

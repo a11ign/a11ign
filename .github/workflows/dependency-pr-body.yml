@@ -22,12 +22,20 @@ name: dependency-pr-body
 # ## What it writes, and what it will not
 #
 # A FIXED fragment: the title's package and versions (through the pattern, nothing else from the title), a
-# `Closes: none` declaration and the repository's own manifest verification as the `Acceptance:` command. Dependabot's
+# `Closes: none` declaration and the repository's own manifest verification as the `Acceptance:` command.
+#
+# A GROUPED title ("deps: bump the pip-minor-and-patch group across 2 directories with 3 updates", A11-269) names no package and
+# no version, so the group's name is never trusted to mean "minor and patch": each update is read from the diff of the
+# pip requirement files (`requirements-ci.txt`, `packages/<name>/requirements.txt`; the files API's `patch`, so still nothing
+# checked out) and every one must be a minor or patch move of a plain `name==x.y.z` pin (a `0.0.x` move counts as breaking here, as
+# it does in `scripts/dependency-changeset.ts`). A group is declared only over those files; one that changes a `package.json` or the
+# lockfile waits, because those diffs do not say which section a range sits in. A single-package title is declared only over
+# `package.json` and the lockfile, as before: nothing reads its requirements diff. The fragment names the updates the DIFF holds. Dependabot's
 # original body (release notes quoting `Closes #123` lines of OTHER projects) is deliberately dropped: kept, it could
 # close a row here or duplicate the `Acceptance:` section.
 #
 # It writes NOTHING, and says why in the log, for a MAJOR bump (a `0.x` minor counts: below 1.0 it is the breaking
-# one), for a pull request touching anything but the manifests and the lockfile, or for one touching an OWNED path
+# one; in a group, for ANY one update that is), for a pull request touching anything but the manifests and the lockfile, or for one touching an OWNED path
 # (the worker's `package.json`, in `a11ign/screenreader-worker`: the NVDA driver). An owned path's body must state `CAPTURE_PROTOCOL_VERSION`,
 # `provisionRevision`, `environmentKey` and `weights`, and a fixed fragment cannot truthfully say `unchanged` for them, so
 # it states none of the four. The list is `docs/owned-path-facts.json`, the orchestrator's data, read through the API at
@@ -81,20 +89,72 @@ jobs:
         run: |
           set -euo pipefail
           title_pattern='^deps: [Bb]ump ([@A-Za-z0-9._/-]+) from (([0-9]+)\.([0-9]+)[0-9A-Za-z.+-]*) to (([0-9]+)\.([0-9]+)[0-9A-Za-z.+-]*)( in /[A-Za-z0-9._/-]*)?$'
-          allowed_files='^(package\.json|packages/[^/]+/package\.json|pnpm-lock\.yaml)$'
-          if [[ ! "$PR_TITLE" =~ $title_pattern ]]; then
-            echo "::notice::not auto-declared: the title is not 'deps: [Bb]ump <package> from <x.y.z> to <x.y.z>', so it waits like any other pull request"
+          group_title_pattern='^deps: [Bb]ump the ([A-Za-z0-9._-]+) group( in /[A-Za-z0-9._/-]*| across [0-9]+ directories)? with [0-9]+ updates?$'
+          requirements_files='^(requirements-ci\.txt|packages/[^/]+/requirements\.txt)$'
+          manifest_files='^(package\.json|packages/[^/]+/package\.json|pnpm-lock\.yaml)$'
+          pin_line='^([A-Za-z0-9][A-Za-z0-9._-]*)==([0-9]+)\.([0-9]+)\.([0-9]+)$'
+          # A group's title names no package and no version, so each update is read from the diff of the requirements files
+          # (the files API's `patch`, never a checkout). On success it prints one `name old -> new` line per update. It prints
+          # the reason instead, and returns 2 for a major bump or 1 for anything else it cannot prove is a minor or patch bump of
+          # a pin it can compare: a line that is not a pin, a pin added or removed, a downgrade, a file with no diff to read.
+          group_updates() {
+            local lines file sign content name version key was_version now_version removed=0
+            local -A was now
+            local -a keys out o n
+            lines="$(jq -r '.[] | .filename as $f | if .patch == null then "\($f)\tNOPATCH\t" else (.patch | split("\n")[] | select(test("^[-+]")) | "\($f)\t\(.[0:1])\t\(.[1:])") end' <<< "$pr_files")"
+            while IFS=$'\t' read -r file sign content; do
+              [ -n "$file" ] || continue
+              if [ "$sign" = NOPATCH ]; then echo "$file has no diff to read"; return 1; fi
+              content="$(sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' <<< "$content")"
+              if [[ ! "$content" =~ $pin_line ]]; then echo "$file changes a line that is not a plain 'name==x.y.z' pin"; return 1; fi
+              # pip reads case and runs of `-`, `_` and `.` as one name
+              name="$(tr 'A-Z' 'a-z' <<< "${BASH_REMATCH[1]}" | sed -E 's/[-_.]+/-/g')"; key="$file $name"
+              version="${BASH_REMATCH[2]}.${BASH_REMATCH[3]}.${BASH_REMATCH[4]}"
+              if [ "$sign" = - ]; then
+                [[ -z "${was[$key]:-}" ]] || { echo "$name is pinned twice in $file"; return 1; }
+                was[$key]="$version"; removed=$((removed + 1))
+              else
+                [[ -z "${now[$key]:-}" ]] || { echo "$name is pinned twice in $file"; return 1; }
+                now[$key]="$version"
+              fi
+              keys+=("$key")
+            done <<< "$lines"
+            [ "$removed" -gt 0 ] || { echo "no pinned version moves in the diff"; return 1; }
+            for key in "${keys[@]}"; do
+              was_version="${was[$key]:-}"; now_version="${now[$key]:-}"
+              [[ -n "$was_version" && -n "$now_version" ]] || { echo "${key#* } was added or removed, which is not a version bump"; return 1; }
+              IFS=. read -r -a o <<< "$was_version"; IFS=. read -r -a n <<< "$now_version"
+              if [ "${o[0]}" != "${n[0]}" ] || { [ "${o[0]}" = 0 ] && [ "${o[1]}" != "${n[1]}" ]; } || { [ "${o[0]}.${o[1]}" = 0.0 ] && [ "${o[2]}" != "${n[2]}" ]; }; then
+                echo "${key#* } goes from $was_version to $now_version, a major bump"; return 2
+              fi
+              [ "$was_version" != "$now_version" ] || { echo "${key#* } stays at $now_version"; return 1; }
+              if [ "$(printf '%s\n%s\n' "$was_version" "$now_version" | sort -V | head -n1)" != "$was_version" ]; then
+                echo "${key#* } goes from $was_version to $now_version, a downgrade"; return 1
+              fi
+              out+=("${key#* } $was_version -> $now_version")
+            done
+            printf '%s\n' "${out[@]}" | sort -u
+          }
+          if [[ "$PR_TITLE" =~ $title_pattern ]]; then
+            name="${BASH_REMATCH[1]}"; old="${BASH_REMATCH[2]}"; new="${BASH_REMATCH[5]}"
+            old_major="${BASH_REMATCH[3]}"; old_minor="${BASH_REMATCH[4]}"; new_major="${BASH_REMATCH[6]}"; new_minor="${BASH_REMATCH[7]}"
+            if [ "$old_major" != "$new_major" ] || { [ "$old_major" = 0 ] && [ "$old_minor" != "$new_minor" ]; }; then
+              echo "::notice::not auto-declared: $name goes from $old to $new, a major bump, so it waits for a human like any other pull request"
+              exit 0
+            fi
+            subject="$name"; summary="bump $name from $old to $new"
+            allowed_files="$manifest_files"; allowed_what="the manifests and the lockfile"
+          elif [[ "$PR_TITLE" =~ $group_title_pattern ]]; then
+            subject="the ${BASH_REMATCH[1]} group"
+            allowed_files="$requirements_files"; allowed_what="the pip requirement files, whose updates can be read one by one from the diff"
+          else
+            echo "::notice::not auto-declared: the title is not 'deps: [Bb]ump <package> from <x.y.z> to <x.y.z>' or 'deps: [Bb]ump the <group> group ... with <n> updates', so it waits like any other pull request"
             exit 0
           fi
-          name="${BASH_REMATCH[1]}"; old="${BASH_REMATCH[2]}"; new="${BASH_REMATCH[5]}"
-          old_major="${BASH_REMATCH[3]}"; old_minor="${BASH_REMATCH[4]}"; new_major="${BASH_REMATCH[6]}"; new_minor="${BASH_REMATCH[7]}"
-          if [ "$old_major" != "$new_major" ] || { [ "$old_major" = 0 ] && [ "$old_minor" != "$new_minor" ]; }; then
-            echo "::notice::not auto-declared: $name goes from $old to $new, a major bump, so it waits for a human like any other pull request"
-            exit 0
-          fi
-          files="$(gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/files" --jq '.[].filename')"
+          pr_files="$(gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/files")"
+          files="$(jq -r '.[].filename' <<< "$pr_files")"
           if [ -z "$files" ] || grep -qvE "$allowed_files" <<< "$files"; then
-            echo "::notice::not auto-declared: $name touches something other than the manifests and the lockfile, so it waits like any other pull request"
+            echo "::notice::not auto-declared: $subject touches something other than $allowed_what, so it waits like any other pull request"
             exit 0
           fi
           owned="$(gh api "repos/$REPO/contents/docs/owned-path-facts.json?ref=$BASE_SHA" -H 'Accept: application/vnd.github.raw+json' --jq '.owned[]' || true)"
@@ -105,14 +165,25 @@ jobs:
           while IFS= read -r changed; do
             while IFS= read -r prefix; do
               if [[ "$changed" == "${prefix%/}" || "$changed" == "${prefix%/}"/* ]]; then
-                echo "::notice::not auto-declared: $name touches an owned path ($prefix), whose body must state facts a fixed fragment cannot truthfully state, so it waits for a human"
+                echo "::notice::not auto-declared: $subject touches an owned path ($prefix), whose body must state facts a fixed fragment cannot truthfully state, so it waits for a human"
                 exit 0
               fi
             done <<< "$owned"
           done <<< "$files"
+          if [ -z "${summary:-}" ]; then
+            status=0; updates="$(group_updates)" || status=$?
+            if [ "$status" = 2 ]; then
+              echo "::notice::not auto-declared: the group holds a major ($updates), so it waits for a human like any other pull request"
+              exit 0
+            elif [ "$status" != 0 ]; then
+              echo "::notice::not auto-declared: $subject has an update this cannot prove is a minor or patch bump ($updates), so it waits like any other pull request"
+              exit 0
+            fi
+            summary="bump $subject: $(paste -sd, - <<< "$updates" | sed 's/,/, /g')"
+          fi
           body_file="$(mktemp)"
           cat > "$body_file" <<EOF
-          Dependency update by dependabot[bot] (ADR 0041): bump $name from $old to $new.
+          Dependency update by dependabot[bot] (ADR 0041): $summary.
 
           Acceptance:
           pnpm exec rstest run --config=scripts/rstest/rstest.config.ts --include packages/guards/src/one-package-manager.test.ts
@@ -120,4 +191,4 @@ jobs:
           Closes: none -- dependency update by dependabot[bot] (ADR 0041)
           EOF
           GH_TOKEN="$EDIT_TOKEN" gh api --method PATCH "repos/$REPO/pulls/$PR_NUMBER" -F body=@"$body_file" --silent
-          echo "::notice::wrote the fixed body fragment for $name $old -> $new"
+          echo "::notice::wrote the fixed body fragment: $summary"
