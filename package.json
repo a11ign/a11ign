@@ -63,7 +63,7 @@
     "@a11ign/scorer": "0.2.1",
     "@a11ign/screenreader-fleet": "^0.11.0",
     "@a11ign/screenreader-worker": "^0.13.13",
-    "@anthropic-ai/sdk": "^0.133.0",
+    "@anthropic-ai/sdk": "^1.1.0",
     "@guidepup/guidepup": "^0.31.0",
     "a11ign": "0.2.7"
   },
