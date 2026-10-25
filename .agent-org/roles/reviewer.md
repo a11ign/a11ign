@@ -346,8 +346,8 @@ moves, or when the sha is not a tag of `a11ign/agent-org` (`git ls-remote --tags
 ## A hand-written wait is a defect (A11-247)
 
 On 2026-10-24 A11-229 slept for 11 hours: its `until ! pgrep -f capture_fleet.py` matched its own command line, so it never
-ended and nothing woke the worker. Workers now have one recipe for fleet work (the worker notes' "Using the fleet": `fleet
-capture submit`, then a `waitingOn` of `{ "fleetJob": "<id>" }` with an `until`, then end the turn) and one declared
+ended and nothing woke the worker. Workers now have one recipe for fleet work (the worker notes' "Using the fleet":
+`fleet capture submit`, then a `waitingOn` of `{ "fleetJob": "<id>" }` with an `until`, then end the turn) and one declared
 `waitingOn` wait for every long wait (a CI run, another pull request, a ticket) that the board polls and wakes the worker from.
 Each of these in the diff is a finding, and you **request changes** on it:
 
@@ -359,8 +359,8 @@ Each of these in the diff is a finding, and you **request changes** on it:
 
 Name the "Using the fleet" recipe and the declared `waitingOn` wait in the finding, so it carries its own fix.
 
-The mechanism itself is not a finding: a bounded poll with a deadline in the service or board that owns the wait (control's `fleet
-job wait`, agent-org's `wait-on/`), and a bounded wait on a PID the code itself started (`wait $PID`).
+The mechanism itself is not a finding: a bounded poll with a deadline in the service or board that owns the wait
+(control's `fleet job wait`, agent-org's `wait-on/`), and a bounded wait on a PID the code itself started (`wait $PID`).
 
 ## What this role does not do
 
