@@ -134,7 +134,6 @@ test("a 0.0.x move is breaking under a caret range, as the changeset check holds
 });
 
 test("a downgrade, an added pin and a removed pin are not minor or patch bumps, so a group holding one writes nothing", () => {
-  const cannotProve = /has an update this cannot prove is a minor or patch bump/;
   const downgrade = [{ filename: "requirements-ci.txt", patch: patchOf(["numpy==2.5.4", "numpy==2.5.1"]) }];
   writesNothing(runWriter({ title: GROUP_TITLE, files: downgrade }), /numpy goes from 2\.5\.4 to 2\.5\.1, a downgrade/);
   const added = [{ filename: "requirements-ci.txt", patch: "@@ -1 +1,2 @@\n numpy==2.5.1\n+scipy==1.0.0" }];
