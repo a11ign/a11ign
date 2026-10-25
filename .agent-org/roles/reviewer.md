@@ -360,7 +360,7 @@ Each of these in the diff is a finding, and you **request changes** on it:
 Name the "Using the fleet" recipe and the declared `waitingOn` wait in the finding, so it carries its own fix.
 
 The mechanism itself is not a finding: a bounded poll with a deadline in the service or board that owns the wait
-(control's `fleet job wait`, agent-org's `wait-on/`), and a bounded wait on a PID the code itself started (`wait $PID`).
+(control's `fleet job wait`, agent-org's `wait-on/`), and a bounded wait on a PID the code itself started (`wait $PID`, for an Ansible play say). A read-back after a fleet play is not a loop over fleet jobs.
 
 ## What this role does not do
 
