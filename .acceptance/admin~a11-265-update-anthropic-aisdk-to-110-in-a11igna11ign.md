@@ -4,7 +4,7 @@ Acceptance:
 
 ```bash
 pnpm install --frozen-lockfile --ignore-scripts
-test "$(node -p "require('./node_modules/@anthropic-ai/sdk/package.json').version")" = 1.1.0
+node -e "const version = require('./node_modules/@anthropic-ai/sdk/package.json').version; console.log({ version }); process.exit(version === '1.1.0' ? 0 : 1)"
 grep -n '"@anthropic-ai/sdk": ">=0.106.0",' packages/judge/package.json
 node --input-type=module -e "import { satisfies } from './packages/guards/src/isolation-gate.ts'; import { readFileSync } from 'node:fs'; const peer = JSON.parse(readFileSync('packages/judge/package.json', 'utf8')).peerDependencies['@anthropic-ai/sdk']; const accepted = ['0.106.0', '0.133.0', '1.1.0', '1.1.9'].every((v) => satisfies(v, peer) === true); const refusesBelowFloor = satisfies('0.105.0', peer) === false; console.log({ peer, accepted, refusesBelowFloor }); process.exit(accepted && refusesBelowFloor ? 0 : 1)"
 pnpm --filter @a11ign/evidence --filter @a11ign/scorer run build
