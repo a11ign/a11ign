@@ -72,6 +72,44 @@ def mean_pool(hidden, mask):
     return pooled / np.linalg.norm(pooled, axis=1, keepdims=True)
 
 
+def export_onnx(model, batch, output: Path) -> None:
+    """Trace `model` over `batch` into an ONNX file whose one output is `last_hidden_state`.
+
+    Traced through a module whose forward takes EXACTLY the three inputs, not the model itself. The
+    TorchScript exporter passes every defaulted parameter of the traced forward POSITIONALLY, `use_cache`
+    among them, and from transformers 5 BertModel's forward is wrapped by `merge_with_config_defaults`,
+    which passes `use_cache` again as a keyword: "got multiple values for argument 'use_cache'". Under
+    4.57.6 the model traced directly; this exports the same `last_hidden_state` under both.
+    """
+    import torch
+
+    names = ["input_ids", "attention_mask", "token_type_ids"]
+
+    class NamedInputs(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.model = model
+
+        def forward(self, input_ids, attention_mask, token_type_ids):
+            return self.model(
+                input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids,
+            ).last_hidden_state
+
+    torch.onnx.export(
+        NamedInputs().eval(),
+        tuple(batch[name] for name in names),
+        str(output),
+        input_names=names,
+        output_names=["last_hidden_state"],
+        # Batch AND sequence must both be dynamic: captures are batched in varying sizes and the
+        # per-unit path encodes short single announcements alongside whole documents.
+        dynamic_axes={name: {0: "batch", 1: "sequence"} for name in [*names, "last_hidden_state"]},
+        opset_version=17,
+        do_constant_folding=True,
+        dynamo=False,
+    )
+
+
 def main() -> int:
     import numpy as np
     import torch
@@ -84,21 +122,8 @@ def main() -> int:
     tokenizer = AutoTokenizer.from_pretrained(ENCODER, local_files_only=True)
     model = AutoModel.from_pretrained(ENCODER, local_files_only=True, use_safetensors=True).eval()
     batch = tokenizer(sample_texts(), padding=True, truncation=True, max_length=256, return_tensors="pt")
-    names = ["input_ids", "attention_mask", "token_type_ids"]
 
-    torch.onnx.export(
-        model,
-        tuple(batch[name] for name in names),
-        str(OUTPUT),
-        input_names=names,
-        output_names=["last_hidden_state"],
-        # Batch AND sequence must both be dynamic: captures are batched in varying sizes and the
-        # per-unit path encodes short single announcements alongside whole documents.
-        dynamic_axes={name: {0: "batch", 1: "sequence"} for name in [*names, "last_hidden_state"]},
-        opset_version=17,
-        do_constant_folding=True,
-        dynamo=False,
-    )
+    export_onnx(model, batch, OUTPUT)
     print(f"exported {OUTPUT.name}: {OUTPUT.stat().st_size / 1024 / 1024:.1f} MB")
 
     with torch.no_grad():
