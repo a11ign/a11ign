@@ -1,0 +1,10 @@
+{
+  "github-actions": {
+    "ignore": [
+      {
+        "name": "a11ign/a11ign",
+        "reason": "`consumer-gate.yml` is generated and calls it at a sha held at four sites that its own `check-pin` job compares; Dependabot rewrites only one (#3804)"
+      }
+    ]
+  }
+}
