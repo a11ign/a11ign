@@ -4,9 +4,9 @@ Acceptance:
 
 ```bash
 grep -n '"@anthropic-ai/sdk": ">=0.106.0",' packages/judge/package.json
-! grep -n '"@anthropic-ai/sdk": ".*<' packages/judge/package.json
+node -e "process.exit(/[<^~]/.test(require('./packages/judge/package.json').peerDependencies['@anthropic-ai/sdk']) ? 1 : 0)"
 pnpm install --frozen-lockfile --ignore-scripts
 pnpm exec rstest run --config scripts/rstest/rstest.config.ts --include 'packages/guards/src/{dependency-changeset,declared-versions-match-lockfile,lockfile-in-sync,pnpm-workspace}*.test.ts'
 ```
 
-**What the block shows:** the first grep finds the floor-only peer, the second finds no `<` ceiling on the SDK peer, the frozen install accepts the lockfile unchanged, and the four guards that read manifests and the lockfile pass (58 tests).
+**What the block shows:** the first grep finds the floor-only peer, the `node -e` exits 0 only when the SDK peer holds no `<`, `^` or `~` cap, the frozen install accepts the lockfile unchanged, and the four guards that read manifests and the lockfile pass (58 tests).
