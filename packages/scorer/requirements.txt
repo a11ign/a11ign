@@ -17,16 +17,16 @@
 # `huggingface-hub>=1.31.0,<3.0`, so 0.36.2 cannot be installed beside it. 2.3.0 is what pip resolved for
 # that range on 2026-10-25. Both encode paths gave bit-identical embeddings to 4.57.6's on the same text.
 huggingface-hub==2.3.0
-numpy==2.5.1
+numpy==2.5.4
 # The encoder's DEFAULT path, not an optional accelerator. `_encode` takes the ONNX branch whenever
 # `onnx/model.onnx` exists -- which is whenever the encoder has been fetched -- and its torch fallback
 # is guarded on the FILE being absent, not on the MODULE being importable. So an undeclared
 # onnxruntime does not degrade to the slower path, it raises ModuleNotFoundError and the lab cannot
 # score at all. It went unnoticed because it was installed by hand in one developer's venv and
 # declared nowhere; the first box built from this file found it immediately.
-onnxruntime==1.28.0
+onnxruntime==1.31.0
 safetensors==0.8.0
-torch==2.13.0
+torch==2.14.1
 transformers==5.20.1
 
 # Test runner. Added 2026-08-23, and the reason is worth recording: `packages/nvda-speech/tests/
