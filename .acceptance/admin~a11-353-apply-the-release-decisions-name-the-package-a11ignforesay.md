@@ -1,0 +1,28 @@
+A11-353. ADR 0047 is amended with the chairman's NV Access decision of 2026-10-27 (A11-233's Decisions): "The name, and NV Access's position" item 2 moves from the first published release to the first non-preview release and names the chairman, not `ceo`, as the sender; a new "Amendment, 2026-10-27" section defines preview (a `-preview.N` suffix, the npm dist-tag `preview`, never `latest`) and says item 3 and the falsifier stay. Nothing else in the ADR changes. The package, licence and runtime changes are in the `a11ign/announcement-emulator` pull request.
+
+Acceptance (reads the one ADR; needs no network):
+
+```bash
+set -euo pipefail
+f=$(ls docs/adr/0047-*.md)
+# item 2 is the Move text, names the chairman, and no longer names ceo as the sender
+item2=$(awk '/^2\. \*\*Someone asks NV Access/{f=1} /^3\. /{f=0} f' "$f")
+grep -qF 'before the first non-preview release' <<<"$item2"
+grep -qF 'the sender is **the chairman**' <<<"$item2"
+grep -qF 'Preview releases may be published before it is asked' <<<"$item2"
+before=$(sed '/\*(Amended/,$d' <<<"$item2")
+! grep -qF 'ceo' <<<"$before"
+# the definition of preview, and the chairman as the sender, in the amendment
+amend=$(awk '/^## Amendment, 2026-10-27/{f=1;next} /^## Consequences/{f=0} f' "$f")
+grep -qF -e '-preview.N' <<<"$amend"
+grep -qF 'dist-tag `preview` and never under' <<<"$amend"
+grep -qF '`latest`' <<<"$amend"
+grep -qF '**The sender is the chairman**' <<<"$amend"
+grep -qF 'linear.app/a11ign/issue/A11-233' <<<"$amend"
+# item 3 and the falsifier are unchanged
+grep -qF 'If NV Access replies that the name is welcome, renaming to include it is a one-row change.' "$f"
+grep -qF '**NV Access objecting to the name or the derived use** (see above): the name changes; the architecture does not depend on it.' "$f"
+# only the ADR changed
+[ "$(git diff --name-only origin/main...HEAD | grep -vE '^\.(acceptance|changeset)/')" = "$f" ]
+echo PASS
+```
