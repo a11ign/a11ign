@@ -31,7 +31,7 @@
   },
   "devDependencies": {
     "@a11ign/documents": "^0.1.2",
-    "@a11ign/toolchain": "0.11.0",
+    "@a11ign/toolchain": "0.13.0",
     "axe-core": "^4.14.0",
     "yaml": "^2.9.1"
   },
