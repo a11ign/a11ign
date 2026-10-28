@@ -67,8 +67,10 @@ name: ci
 # explicitly, from `needs.*.result`, so branch protection has ONE always-reporting context to require and
 # the real logic lives in a file this repo tests, not in an assumption about how GitHub renders a skip.
 on:
+  # NO `branches:` FILTER ON `pull_request`, SO A STACKED PULL REQUEST HAS CHECKS (a11ign/agent-org A11-370). `branches` filters on the pull request's BASE, and a pull request stacked on another branch has that branch as its base: with `[main]` it got no
+  # run at all, its reviewer (which starts on green checks) never started, and nothing said why (agent-org#1984 on #1982, 2026-10-28). `main` stays behind the merge queue, whose `merge_group` run below is the merge condition. The `changed` job reads the
+  # base from `github.base_ref`, so a stacked pull request is classified against its own base.
   pull_request:
-    branches: [main]
     # `edited` IS LOAD-BEARING, and its absence deadlocked the queue for eight hours -- 2026-09-07.
     #
     # GitHub's default `pull_request` types are `opened, synchronize, reopened`. Unit 2's `acceptance` job
@@ -97,7 +99,10 @@ on:
     #
     # What re-runs for a label is `changed`, `deliberateRefusals` (it reads the label and the body),
     # `acceptance`, `ownedPaths` and `gate`.
-    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+    #
+    # `ready_for_review` (A11-370 review): a draft pull request does not run `ts` (below), so marking it
+    # ready must start the run that does.
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled, ready_for_review]
   # #156: a merge queue CANNOT be turned on without this. GitHub's own docs are explicit -- "You must use
   # the merge_group event to trigger your GitHub Actions workflow when a pull request is added to a merge
   # queue ... Otherwise, status checks will not be triggered" -- and an entry whose checks never report is
@@ -261,9 +266,12 @@ jobs:
   # header for why (its `trunkGate` sibling in trunk.yml used to duplicate most of this job's steps
   # independently, and chairman's own comment here used to note the two ran "the SAME suite" -- now true
   # by construction, not by two authors keeping two copies equal).
+  # A DRAFT PULL REQUEST DOES NOT RUN `ts`, `python`, `board` OR `rulesFitness` (A11-370 review): the jobs that build. A stacked pull request is often a draft while
+  # the one below it is reviewed; `ready_for_review` above starts its full run, and the merge queue's
+  # `merge_group` run is still the merge condition. `gate` reads a skipped job as not failing.
   ts:
     needs: changed
-    if: needs.changed.outputs.ts == 'true' && !contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action)
+    if: needs.changed.outputs.ts == 'true' && !contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action) && !(github.event_name == 'pull_request' && github.event.pull_request.draft)
     uses: ./.github/workflows/reusable-build-test.yml
     with:
       run-lint-typecheck: true
@@ -278,7 +286,7 @@ jobs:
   # deliberately "off" for exactly this reason: opting IN to extra work, never opting OUT of it.
   python:
     needs: changed
-    if: needs.changed.outputs.python == 'true' && !contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action)
+    if: needs.changed.outputs.python == 'true' && !contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action) && !(github.event_name == 'pull_request' && github.event.pull_request.draft)
     uses: ./.github/workflows/reusable-build-test.yml
     with:
       run-python-tests: true
@@ -290,7 +298,7 @@ jobs:
 
   board:
     needs: changed
-    if: needs.changed.outputs.board == 'true' && !contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action)
+    if: needs.changed.outputs.board == 'true' && !contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action) && !(github.event_name == 'pull_request' && github.event.pull_request.draft)
     uses: ./.github/workflows/reusable-board.yml
 
   # THE RULES FITNESS GATE, ITS OWN JOB -- chairman's direction, 2026-09-06. Used to run inside `ts`
@@ -298,7 +306,7 @@ jobs:
   # `packages/judge` or `packages/evidence` changed, the only two paths that can move its answer.
   rulesFitness:
     needs: changed
-    if: needs.changed.outputs.rulesFitness == 'true' && !contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action)
+    if: needs.changed.outputs.rulesFitness == 'true' && !contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action) && !(github.event_name == 'pull_request' && github.event.pull_request.draft)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
