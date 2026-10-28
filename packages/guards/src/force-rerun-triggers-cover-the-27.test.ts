@@ -58,8 +58,8 @@ const NAMED_FILES = [
 const chainguard = list(CHAINGUARD_DIR);
 const octoSts = list("scripts/fixtures", (name) => name.startsWith("octo-sts-"));
 const consumerGate = list(CONSUMER_GATE_DIR);
-/** What the row and the lab count: ten STS policies (`acceptance-sweep` joined the five on #4570, `docs-pin-write` on #5224, `outside-arm` on #5619, `outside-nightly` on #5624, `outside-board` on agent-org#1581), six `octo-sts-*` fixtures, ten gate fixtures at least, and 30 in all. */
-const EXPECTED = { chainguard: 10, octoSts: 6, consumerGateAtLeast: 10, total: 30, triggersAtLeast: 100 };
+/** What the row and the lab count: twelve STS policies (`acceptance-sweep` joined the five on #4570, `docs-pin-write` on #5224, `outside-arm` on #5619, `outside-nightly` on #5624, `outside-board` on agent-org#1581, `dependabot-approve` and `dependabot-guard` on #5732), six `octo-sts-*` fixtures, ten gate fixtures at least, and 30 in all. */
+const EXPECTED = { chainguard: 12, octoSts: 6, consumerGateAtLeast: 10, total: 32, triggersAtLeast: 100 };
 const THE_27 = [...chainguard, ...NAMED_FILES, ...octoSts, ...consumerGate];
 
 test("positive control: the population is read from a tree that has the files the row names", () => {
