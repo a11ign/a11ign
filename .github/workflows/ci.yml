@@ -266,7 +266,7 @@ jobs:
   # header for why (its `trunkGate` sibling in trunk.yml used to duplicate most of this job's steps
   # independently, and chairman's own comment here used to note the two ran "the SAME suite" -- now true
   # by construction, not by two authors keeping two copies equal).
-  # A DRAFT PULL REQUEST DOES NOT RUN `ts` (A11-370 review). A stacked pull request is often a draft while
+  # A DRAFT PULL REQUEST DOES NOT RUN `ts`, `python`, `board` OR `rulesFitness` (A11-370 review): the jobs that build. A stacked pull request is often a draft while
   # the one below it is reviewed; `ready_for_review` above starts its full run, and the merge queue's
   # `merge_group` run is still the merge condition. `gate` reads a skipped job as not failing.
   ts:
@@ -286,7 +286,7 @@ jobs:
   # deliberately "off" for exactly this reason: opting IN to extra work, never opting OUT of it.
   python:
     needs: changed
-    if: needs.changed.outputs.python == 'true' && !contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action)
+    if: needs.changed.outputs.python == 'true' && !contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action) && !(github.event_name == 'pull_request' && github.event.pull_request.draft)
     uses: ./.github/workflows/reusable-build-test.yml
     with:
       run-python-tests: true
@@ -298,7 +298,7 @@ jobs:
 
   board:
     needs: changed
-    if: needs.changed.outputs.board == 'true' && !contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action)
+    if: needs.changed.outputs.board == 'true' && !contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action) && !(github.event_name == 'pull_request' && github.event.pull_request.draft)
     uses: ./.github/workflows/reusable-board.yml
 
   # THE RULES FITNESS GATE, ITS OWN JOB -- chairman's direction, 2026-09-06. Used to run inside `ts`
@@ -306,7 +306,7 @@ jobs:
   # `packages/judge` or `packages/evidence` changed, the only two paths that can move its answer.
   rulesFitness:
     needs: changed
-    if: needs.changed.outputs.rulesFitness == 'true' && !contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action)
+    if: needs.changed.outputs.rulesFitness == 'true' && !contains(fromJSON('["edited","labeled","unlabeled"]'), github.event.action) && !(github.event_name == 'pull_request' && github.event.pull_request.draft)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

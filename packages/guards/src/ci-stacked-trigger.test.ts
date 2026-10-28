@@ -24,7 +24,20 @@ function stackedGap(triggers: Triggers): string | null {
   return branches.some((pattern) => pattern !== "main") ? null : `pull_request is filtered to base ${branches.join(", ")}, so a pull request stacked on another branch gets no checks`;
 }
 
-const ci = triggersOf(readFileSync(resolve(ROOT, ".github/workflows/ci.yml"), "utf8"));
+const ciText = readFileSync(resolve(ROOT, ".github/workflows/ci.yml"), "utf8");
+const ci = triggersOf(ciText);
+const jobsOf = (text: string): Record<string, { if?: string }> => parseYaml(text).jobs;
+
+/** The jobs that build: a draft pull request must not run them (A11-370 review). */
+const HEAVY = ["ts", "python", "board", "rulesFitness"] as const;
+const DRAFT_SKIP = "!(github.event_name == 'pull_request' && github.event.pull_request.draft)";
+
+/** Why a draft pull request would run a job that builds, or why marking it ready would start no run of them; null when neither. */
+function draftGap(triggers: Triggers, jobs: Record<string, { if?: string }>): string | null {
+  const running = HEAVY.filter((name) => !(jobs[name]?.if ?? "").includes(DRAFT_SKIP));
+  if (running.length > 0) return `a draft pull request runs ${running.join(", ")}`;
+  return triggers.pull_request?.types?.includes("ready_for_review") ? null : "marking a draft ready starts no run, so its jobs that build never run";
+}
 
 test("ci.yml runs on a pull request whose base is not main, so a stacked pull request has checks", () => {
   assert.equal(stackedGap(ci), null);
@@ -39,4 +52,14 @@ test("the check sees the filter that left a stacked pull request with no CI", ()
 test("main stays behind the merge queue: merge_group keeps its filter on main, and the pull_request types still carry edited", () => {
   assert.deepEqual(ci.merge_group?.branches, ["main"]);
   assert.ok(ci.pull_request?.types?.includes("edited"), "a body edit re-reads the changeset line");
+});
+
+test("a draft pull request runs none of the jobs that build, and marking it ready starts the run that does", () => {
+  assert.equal(draftGap(ci, jobsOf(ciText)), null);
+});
+
+test("the draft check sees a job without the skip, and a trigger without ready_for_review", () => {
+  const jobs = jobsOf(ciText);
+  for (const name of HEAVY) assert.match(draftGap(ci, { ...jobs, [name]: { if: String(jobs[name]?.if).replace(DRAFT_SKIP, "true") } }) ?? "", new RegExp(`runs ${name}`));
+  assert.match(draftGap({ ...ci, pull_request: { types: ["opened", "synchronize"] } }, jobs) ?? "", /starts no run/);
 });
