@@ -7,6 +7,9 @@
 touches, and says what would falsify it. It does not re-decide it. **It changes no code in any repository and creates no repository:** the
 repository is created by the spike's own row, after #2568. `ceo` reviews.
 
+**Amended 2026-10-27 (A11-353):** item 2 of "The name, and NV Access's position" moves from the first published release to the first
+non-preview release, names the chairman as the sender, and a preview is defined. See "Amendment, 2026-10-27".
+
 **Where a number comes from is marked on the number:** *measured* (the author ran a command in this row), *quoted* (copied from the
 chairman's direction or from a script header, and not re-run by the author) or *not checked*. A reading is a moment.
 
@@ -166,10 +169,35 @@ the word. So the ADR decides on the safe side and leaves the question open to th
    `a11ign/announcement-emulator`, package `@a11ign/announcement-emulator`); the spike row confirms the name is free on the registry
    (**not checked**). Documentation may say, factually, that it *predicts what NVDA would speak*; it does not use the NVDA logo, and does not
    say it is NVDA, endorsed by NV Access, or "NVDA-compatible".
-2. **Someone asks NV Access** before the first published release, and the answer goes on the spike's row. That is an outward-facing message
-   from the organisation, so it is `ceo`'s to send or delegate; this ADR does not send it.
+2. **Someone asks NV Access before the first non-preview release**, and the answer goes on the release row. That is an outward-facing message
+   from the organisation, and the sender is **the chairman**; this ADR does not send it. Preview releases may be published before it is asked.
+   *(Amended 2026-10-27, A11-353: see "Amendment, 2026-10-27" below. It read "before the first published release ... on the spike's row ...
+   `ceo`'s to send or delegate".)*
 3. If NV Access replies that the name is welcome, renaming to include it is a one-row change. If it objects to the use at all, that is a
    falsifier (below).
+
+## Amendment, 2026-10-27: NV Access is asked before the first non-preview release
+
+**The chairman's decision of 2026-10-27**, recorded in A11-233's Decisions
+([Decisions (the chairman, 2026-10-27, NV Access)](https://linear.app/a11ign/issue/A11-233/prepare-the-release-decisions-for-the-chairman-package-name-candidates)),
+from the three options (keep, drop, move) that `docs/release-decisions.md` §4 in `a11ign/announcement-emulator` prepared: **Move.** This
+amendment changes item 2 above and nothing else in this ADR.
+
+- **The requirement.** Someone asks NV Access **before the first non-preview release**, and the answer goes on the release row. Preview releases
+  may be published before then. It was "before the first published release", and so held the preview too.
+- **Preview means** a release whose version has a `-preview.N` suffix and that is published under the npm dist-tag `preview` and never under
+  `latest`. **The first release published as `latest` is the first non-preview release.**
+- **The sender is the chairman**, not `ceo`. No message is due now: the chairman has no reason to reach out before that release, and this ADR
+  drafts none.
+- **The wording rules of item 1 apply from the first preview**: no "NVDA" as the identifier, no logo, and no claim that it is NVDA, is endorsed
+  by NV Access, or is "NVDA-compatible". A preview is published with the description "Predicts what the NVDA screen reader would say, built
+  on NVDA's open-source code. Not affiliated with NV Access."
+- **Unchanged:** item 3, and the falsifier "NV Access objecting to the name or the derived use". An objection after a preview still changes the
+  name; the architecture does not depend on it.
+
+The name (Foresay, `@a11ign/foresay`) and the licence (the package Apache-2.0; the runtime `GPL-3.0-or-later`, downloaded separately) were
+decided on the same day and are recorded in `docs/release-decisions.md`, "Decisions", in `a11ign/announcement-emulator`. They are not
+amendments to Decision 3 or to item 1 here, which keep the working name and the licence as they were written.
 
 ## Consequences
 
