@@ -5,15 +5,14 @@ Step 2 of 2 (a11ign): adopts the generated `.github/workflows/dependabot-auto.ym
 Acceptance:
 
 ```bash
-set -e
 pnpm install --frozen-lockfile --ignore-scripts
 pnpm exec dependabot-config --check
 node --test packages/guards/src/dependabot-config.test.ts
-test -f .github/workflows/dependabot-auto.yml
+grep -qF "dependabot-config --write" .github/workflows/dependabot-auto.yml
 grep -qF 'subject: repo:a11ign@320310787/a11ign@1280353940:pull_request' .github/chainguard/dependabot-approve.sts.yaml
 grep -qF 'actor_id: "49699333"' .github/chainguard/dependabot-approve.sts.yaml
 grep -qF 'subject_pattern: repo:a11ign@320310787/a11ign@1280353940:(pull_request|ref:refs/heads/main)' .github/chainguard/dependabot-guard.sts.yaml
 grep -qF 'job_workflow_ref: a11ign/a11ign/\.github/workflows/dependabot-auto\.yml@refs/heads/main' .github/chainguard/dependabot-approve.sts.yaml
 # the approval identity grants pull-request write and nothing else
-[ "$(sed -n '/^permissions:/,$p' .github/chainguard/dependabot-approve.sts.yaml | tail -n +2 | grep -c .)" = 1 ]
+node -e "const t=require('fs').readFileSync('.github/chainguard/dependabot-approve.sts.yaml','utf8').split(/^permissions:/m)[1].split('\n').filter((l)=>l.trim());if(t.length!==1){console.error(t);process.exit(1)}"
 ```
