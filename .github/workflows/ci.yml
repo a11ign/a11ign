@@ -67,8 +67,10 @@ name: ci
 # explicitly, from `needs.*.result`, so branch protection has ONE always-reporting context to require and
 # the real logic lives in a file this repo tests, not in an assumption about how GitHub renders a skip.
 on:
+  # NO `branches:` FILTER ON `pull_request`, SO A STACKED PULL REQUEST HAS CHECKS (a11ign/agent-org A11-370). `branches` filters on the pull request's BASE, and a pull request stacked on another branch has that branch as its base: with `[main]` it got no
+  # run at all, its reviewer (which starts on green checks) never started, and nothing said why (agent-org#1984 on #1982, 2026-10-28). `main` stays behind the merge queue, whose `merge_group` run below is the merge condition. The `changed` job reads the
+  # base from `github.base_ref`, so a stacked pull request is classified against its own base.
   pull_request:
-    branches: [main]
     # `edited` IS LOAD-BEARING, and its absence deadlocked the queue for eight hours -- 2026-09-07.
     #
     # GitHub's default `pull_request` types are `opened, synchronize, reopened`. Unit 2's `acceptance` job
