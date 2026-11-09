@@ -24,7 +24,8 @@ name: dependency-pr-body
 # A FIXED fragment: the title's package and versions (through the pattern, nothing else from the title), a
 # `Closes: none` declaration and the repository's own manifest verification as the `Acceptance:` command.
 #
-# A GROUPED title ("deps: bump the pip-minor-and-patch group across 2 directories with 3 updates", A11-269) names no package and
+# A GROUPED title ("deps: bump the pip-minor-and-patch group across 2 directories with 3 updates", A11-269; "... across 1 directory with 4 updates",
+# A11-421: Dependabot writes the singular when the group spans one directory) names no package and
 # no version, so the group's name is never trusted to mean "minor and patch": each update is read from the diff of the
 # pip requirement files (`requirements-ci.txt`, `packages/<name>/requirements.txt`; the files API's `patch`, so still nothing
 # checked out) and every one must be a minor or patch move of a plain `name==x.y.z` pin (a `0.0.x` move counts as breaking here, as
@@ -89,7 +90,7 @@ jobs:
         run: |
           set -euo pipefail
           title_pattern='^deps: [Bb]ump ([@A-Za-z0-9._/-]+) from (([0-9]+)\.([0-9]+)[0-9A-Za-z.+-]*) to (([0-9]+)\.([0-9]+)[0-9A-Za-z.+-]*)( in /[A-Za-z0-9._/-]*)?$'
-          group_title_pattern='^deps: [Bb]ump the ([A-Za-z0-9._-]+) group( in /[A-Za-z0-9._/-]*| across [0-9]+ directories)? with [0-9]+ updates?$'
+          group_title_pattern='^deps: [Bb]ump the ([A-Za-z0-9._-]+) group( in /[A-Za-z0-9._/-]*| across [0-9]+ director(y|ies))? with [0-9]+ updates?$'
           requirements_files='^(requirements-ci\.txt|packages/[^/]+/requirements\.txt)$'
           manifest_files='^(package\.json|packages/[^/]+/package\.json|pnpm-lock\.yaml)$'
           pin_line='^([A-Za-z0-9][A-Za-z0-9._-]*)==([0-9]+)\.([0-9]+)\.([0-9]+)$'

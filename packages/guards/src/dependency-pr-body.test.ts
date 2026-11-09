@@ -111,6 +111,23 @@ test("a group in one directory, with or without the ` in /dir` part, is read the
   }
 });
 
+test("A11-421: a group over one directory, titled `across 1 directory` in the singular, is declared like the plural one", () => {
+  const title = "deps: bump the pip-minor-and-patch group across 1 directory with 4 updates";
+  const files = [{
+    filename: "packages/scorer/requirements.txt",
+    patch: patchOf(["huggingface-hub==2.3.0", "huggingface-hub==2.4.0"], ["onnxruntime==1.31.0", "onnxruntime==1.31.1"], ["torch==2.14.1", "torch==2.15.0"], ["transformers==5.20.2", "transformers==5.22.1"]),
+  }];
+  const run = runWriter({ title, files });
+  assert.match(run.body ?? run.out, /^Dependency update by dependabot\[bot\] \(ADR 0041\): bump the pip-minor-and-patch group: huggingface-hub 2\.3\.0 -> 2\.4\.0, onnxruntime 1\.31\.0 -> 1\.31\.1, torch 2\.14\.1 -> 2\.15\.0, transformers 5\.20\.2 -> 5\.22\.1\.$/m);
+  assert.equal(run.body?.match(/^Acceptance:$/gm)?.length, 1);
+  assert.equal(run.token, "token=edit-token\n");
+});
+
+test("A11-421: a one-directory group holding a major writes nothing, and the log says the group holds a major", () => {
+  const files = [{ filename: "packages/scorer/requirements.txt", patch: patchOf(["onnxruntime==1.31.0", "onnxruntime==1.31.1"], ["torch==2.14.1", "torch==3.0.0"]) }];
+  writesNothing(runWriter({ title: "deps: bump the pip-minor-and-patch group across 1 directory with 2 updates", files }), /the group holds a major \(torch goes from 2\.14\.1 to 3\.0\.0, a major bump\)/);
+});
+
 test("a pin name is read the way pip reads it: case and `_` `.` `-` do not make a second package", () => {
   const files = [{ filename: "requirements-ci.txt", patch: patchOf(["Foo_Bar==1.0.0", "foo.-bar==1.0.1"]) }];
   assert.match(runWriter({ title: GROUP_TITLE, files }).body ?? "", /: foo-bar 1\.0\.0 -> 1\.0\.1\.$/m);
