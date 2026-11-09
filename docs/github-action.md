@@ -18,7 +18,7 @@ jobs:
       pull-requests: write       # for the PR comment below; omit it and the report still runs, only quieter
     steps:
       - uses: actions/checkout@v7
-      - uses: a11ign/a11ign@5ebf8c5b5981afd1265385f6ae6f1f2f988ca2ae   # the commit of the release tagged a11ign@0.10.15
+      - uses: a11ign/a11ign@1292aea00e06b50bdba79c6e2d1ac4c9c3c48d42   # the commit of the release tagged a11ign@0.10.19
         # Pinned to the full 40-character commit of the release named on the line above (`npm view a11ign dist-tags`
         # read `latest` as that release on 2026-10-16; `next` was one patch ahead), so your CI does not move when a
         # newer one is published -- GitHub
@@ -46,7 +46,7 @@ no log and no artifact, and any diagnostic step you add with `if: always()` does
 [the account of one, and what to do about it](./try-it.md#the-fastest-route-a-github-actions-run) in
 `docs/try-it.md`.
 
-> **This pins release `0.10.15`, by its commit.** The release is tagged `a11ign@0.10.15` and the commit is the one the tag
+> **This pins release `0.10.19`, by its commit.** The release is tagged `a11ign@0.10.19` and the commit is the one the tag
 > names; every `0.x` release is a deliberate step ADR 0007 commits this project to until `1.0.0` (a breaking change
 > costs a minor bump, not a major-version apology). The full 40-character commit is the pin because it cannot move,
 > and GitHub refuses an abbreviated one outright rather than merely discouraging it
@@ -410,8 +410,8 @@ error handling most needs reviewing. On such a page 3.3.1, 3.3.3 and 4.1.3 are n
 `forms` names a config that says how to operate it (ADR 0024):
 
 ```yaml
-- uses: a11ign/a11ign@5ebf8c5b5981afd1265385f6ae6f1f2f988ca2ae   # the commit of the release tagged a11ign@0.10.15
-  # Pinned to the full 40-character commit of release 0.10.15, so your CI does not move when a newer one
+- uses: a11ign/a11ign@1292aea00e06b50bdba79c6e2d1ac4c9c3c48d42   # the commit of the release tagged a11ign@0.10.19
+  # Pinned to the full 40-character commit of release 0.10.19, so your CI does not move when a newer one
   # is published -- GitHub refuses an abbreviated SHA outright, it does not just discourage it.
   with:
     url: https://staging.example.com/signup
@@ -467,7 +467,7 @@ Give `urls` instead of `url` to test more than one page in one run. **Exactly on
 refused before any setup is billed.
 
 ```yaml
-      - uses: a11ign/a11ign@5ebf8c5b5981afd1265385f6ae6f1f2f988ca2ae   # the commit of the release tagged a11ign@0.10.15
+      - uses: a11ign/a11ign@1292aea00e06b50bdba79c6e2d1ac4c9c3c48d42   # the commit of the release tagged a11ign@0.10.19
         with:
           urls: |
             https://example.com/
@@ -554,7 +554,7 @@ jobs:
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v7
-      - uses: a11ign/a11ign@5ebf8c5b5981afd1265385f6ae6f1f2f988ca2ae   # a full commit SHA: the commit of release a11ign@0.10.15; v0.1.0 predates the login flow
+      - uses: a11ign/a11ign@1292aea00e06b50bdba79c6e2d1ac4c9c3c48d42   # a full commit SHA: the commit of release a11ign@0.10.19; v0.1.0 predates the login flow
         env:                                   # the credential enters HERE, from GitHub Secrets, and nowhere else
           APP_TEST_USER: ${{ secrets.APP_TEST_USER }}
           APP_TEST_PASSWORD: ${{ secrets.APP_TEST_PASSWORD }}
